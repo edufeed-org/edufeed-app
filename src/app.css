@@ -183,6 +183,15 @@
  * exceeds the default height, while matching native select otherwise.
  * Hides the DaisyUI CSS chevron since custom dropdowns render their own.
  */
+/* Ensure readable code blocks in prose across all themes */
+.prose pre {
+  color: var(--color-base-content);
+}
+
+.prose :where(code):not(:where(pre *)) {
+  color: var(--color-base-content);
+}
+
 .select.select-trigger {
   height: auto;
   min-height: var(--size);
