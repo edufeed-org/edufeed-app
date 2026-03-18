@@ -24,7 +24,7 @@ const defaultConfig = {
   // App-specific relays (content goes here IN ADDITION to user's outbox)
   appRelays: {
     calendar: [], // kinds 31922-31925
-    communikey: [], // kinds 10222, 30222, 30382
+    communikey: [], // kinds 10222, 30222
     educational: [], // kind 30142
     longform: [], // kind 30023
     kanban: [] // kinds 30301, 30302, 8571

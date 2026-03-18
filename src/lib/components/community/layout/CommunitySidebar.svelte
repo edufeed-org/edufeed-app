@@ -1,5 +1,5 @@
 <script>
-  import { getDisplayName, getProfilePicture, getTagValue } from 'applesauce-core/helpers';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -41,37 +41,34 @@
   class="fixed top-16 left-0 hidden h-[calc(100vh-8rem)] w-16 flex-col overflow-x-hidden overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
 >
   <div class="flex flex-col items-center space-y-3 py-4">
-    {#each sortedCommunities as community (community.id)}
-      {@const communityPubKey = getTagValue(community, 'd') || ''}
+    {#each sortedCommunities as communityPubKey (communityPubKey)}
       {@const getCommunityProfile = useUserProfile(communityPubKey)}
       {@const communityProfile = getCommunityProfile()}
       {@const isActive = currentCommunityId === communityPubKey}
 
-      {#if communityPubKey}
-        <div class="tooltip tooltip-right" data-tip={getDisplayName(communityProfile)}>
-          <button
-            onclick={() => handleCommunityClick(communityPubKey)}
-            class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
-              ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
-              : ''}"
-          >
-            <div class="avatar">
-              <div class="h-12 w-12 rounded-full">
-                <img
-                  src={getProfilePicture(communityProfile) ||
-                    `https://robohash.org/${communityPubKey}`}
-                  alt={getDisplayName(communityProfile)}
-                  class="rounded-full object-cover"
-                  onerror={(e) => {
-                    const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
-                    if (img) img.src = `https://robohash.org/${communityPubKey}`;
-                  }}
-                />
-              </div>
+      <div class="tooltip tooltip-right" data-tip={getDisplayName(communityProfile)}>
+        <button
+          onclick={() => handleCommunityClick(communityPubKey)}
+          class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
+            ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
+            : ''}"
+        >
+          <div class="avatar">
+            <div class="h-12 w-12 rounded-full">
+              <img
+                src={getProfilePicture(communityProfile) ||
+                  `https://robohash.org/${communityPubKey}`}
+                alt={getDisplayName(communityProfile)}
+                class="rounded-full object-cover"
+                onerror={(e) => {
+                  const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
+                  if (img) img.src = `https://robohash.org/${communityPubKey}`;
+                }}
+              />
             </div>
-          </button>
-        </div>
-      {/if}
+          </div>
+        </button>
+      </div>
     {/each}
   </div>
 
@@ -120,38 +117,34 @@
   </div>
 
   <div class="flex-1 space-y-2 overflow-y-auto p-4">
-    {#each sortedCommunities as community (community.id)}
-      {@const communityPubKey = getTagValue(community, 'd') || ''}
+    {#each sortedCommunities as communityPubKey (communityPubKey)}
       {@const getCommunityProfile = useUserProfile(communityPubKey)}
       {@const communityProfile = getCommunityProfile()}
       {@const isActive = currentCommunityId === communityPubKey}
 
-      {#if communityPubKey}
-        <button
-          onclick={() => handleCommunityClick(communityPubKey)}
-          class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {isActive
-            ? 'bg-primary text-primary-content'
-            : 'hover:bg-base-300'}"
-        >
-          <div class="avatar">
-            <div class="h-10 w-10 rounded-full">
-              <img
-                src={getProfilePicture(communityProfile) ||
-                  `https://robohash.org/${communityPubKey}`}
-                alt={getDisplayName(communityProfile)}
-                class="rounded-full object-cover"
-                onerror={(e) => {
-                  const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
-                  if (img) img.src = `https://robohash.org/${communityPubKey}`;
-                }}
-              />
-            </div>
+      <button
+        onclick={() => handleCommunityClick(communityPubKey)}
+        class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {isActive
+          ? 'bg-primary text-primary-content'
+          : 'hover:bg-base-300'}"
+      >
+        <div class="avatar">
+          <div class="h-10 w-10 rounded-full">
+            <img
+              src={getProfilePicture(communityProfile) || `https://robohash.org/${communityPubKey}`}
+              alt={getDisplayName(communityProfile)}
+              class="rounded-full object-cover"
+              onerror={(e) => {
+                const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
+                if (img) img.src = `https://robohash.org/${communityPubKey}`;
+              }}
+            />
           </div>
-          <span class="font-community flex-1 truncate text-left text-sm font-medium">
-            {getDisplayName(communityProfile)}
-          </span>
-        </button>
-      {/if}
+        </div>
+        <span class="font-community flex-1 truncate text-left text-sm font-medium">
+          {getDisplayName(communityProfile)}
+        </span>
+      </button>
     {/each}
 
     {#if joinedCommunities.length === 0}

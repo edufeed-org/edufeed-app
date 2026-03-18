@@ -1,59 +1,53 @@
+import { AddUserToFollowSet, RemoveUserFromFollowSet } from 'applesauce-actions/actions';
+import { actionRunner } from '$lib/stores/action-runner.svelte.js';
 import { EventFactory } from 'applesauce-core/event-factory';
-import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
-import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
+
+const COMMUNITIES_SET_ID = 'communities';
 
 /**
- * Join a community by creating a relationship event (kind 30382)
- * @param {string} communityPubkey - The pubkey of the community to join
- * @param {Object} [options] - Optional configuration
- * @param {string[]} [options.relays] - Relays to publish to
- * @returns {Promise<{success: boolean, event?: any, error?: string}>}
+ * Ensure the kind 30000 follow set with d="communities" exists in EventStore.
+ * Works around an applesauce bug where AddUserToFollowSet generates a random
+ * d-tag when auto-creating a non-existent follow set.
  */
-export async function joinCommunity(communityPubkey, options = {}) {
-  const account = manager.active;
+export async function ensureFollowSetExists() {
+  if (!manager.active) return;
+  const pubkey = manager.active.pubkey;
 
-  if (!account?.signer) {
-    return { success: false, error: 'No account or signer available. Please login first.' };
-  }
+  const existing = await new Promise((resolve) => {
+    /** @type {import('rxjs').Subscription | undefined} */
+    let sub;
+    sub = eventStore.replaceable(30000, pubkey, COMMUNITIES_SET_ID).subscribe((event) => {
+      if (sub) sub.unsubscribe();
+      resolve(event);
+    });
+  });
 
+  if (existing) return;
+
+  const factory = new EventFactory({ signer: manager.active.signer });
+  const template = await factory.build({ kind: 30000, tags: [['d', COMMUNITIES_SET_ID]] });
+  const signed = await factory.sign(template);
+  await publishEvent(signed);
+  eventStore.add(signed);
+}
+
+/**
+ * Join a community by adding its pubkey to the user's follow set (kind 30000, d="communities")
+ * @param {string} communityPubkey - The pubkey of the community to join
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function joinCommunity(communityPubkey) {
   if (!communityPubkey) {
     return { success: false, error: 'Community pubkey is required' };
   }
 
   try {
-    const factory = new EventFactory({ signer: account.signer });
-
-    // Get relay hint for the community for discoverability
-    const relayHint = await getPrimaryWriteRelay(communityPubkey);
-
-    // Create relationship event (kind 30382)
-    // Tags: d (identifier), n (relationship type), p (community pubkey with relay hint)
-    const relationshipEventTemplate = {
-      kind: 30382,
-      content: '',
-      tags: [
-        ['d', communityPubkey], // Use community pubkey as identifier
-        ['n', 'follow'], // Relationship type: follow
-        ['p', communityPubkey, relayHint] // Reference to community with relay hint
-      ],
-      created_at: Math.floor(Date.now() / 1000)
-    };
-
-    const signedEvent = await factory.sign(relationshipEventTemplate);
-
-    // Publish using outbox model + communikey relays (for kind 30382)
-    const result = await publishEvent(signedEvent, [communityPubkey], {
-      additionalRelays: options.relays || []
-    });
-
-    if (result.success) {
-      // Add to EventStore to trigger automatic updates
-      eventStore.add(signedEvent);
-    }
-
-    return { ...result, event: signedEvent };
+    await ensureFollowSetExists();
+    await actionRunner.run(AddUserToFollowSet, communityPubkey, COMMUNITIES_SET_ID);
+    return { success: true };
   } catch (error) {
     console.error('Failed to join community:', error);
     return {
@@ -64,64 +58,19 @@ export async function joinCommunity(communityPubkey, options = {}) {
 }
 
 /**
- * Leave a community by deleting the relationship event
+ * Leave a community by removing its pubkey from the user's follow set (kind 30000, d="communities")
  * @param {string} communityPubkey - The pubkey of the community to leave
- * @param {Object} [options] - Optional configuration
- * @param {string[]} [options.relays] - Relays to publish to
- * @returns {Promise<{success: boolean, event?: any, error?: string}>}
+ * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function leaveCommunity(communityPubkey, options = {}) {
-  const account = manager.active;
-
-  if (!account?.signer) {
-    return { success: false, error: 'No account or signer available. Please login first.' };
-  }
-
+export async function leaveCommunity(communityPubkey) {
   if (!communityPubkey) {
     return { success: false, error: 'Community pubkey is required' };
   }
 
   try {
-    // Use model to find the relationship event to delete
-    const { CommunityRelationshipModel } = await import('$lib/models/community-relationship');
-
-    const relationshipEvents = await new Promise((resolve) => {
-      eventStore.model(CommunityRelationshipModel, account.pubkey).subscribe({
-        next: (events) => {
-          resolve(events);
-        },
-        error: () => {
-          resolve([]);
-        }
-      });
-    });
-
-    // Find the specific relationship event for this community
-    const relationshipEvent = relationshipEvents.find((/** @type {any} */ event) => {
-      const dTag = event.tags.find((/** @type {any} */ tag) => tag[0] === 'd')?.[1];
-      return dTag === communityPubkey;
-    });
-
-    if (!relationshipEvent) {
-      return { success: false, error: 'No relationship found to delete' };
-    }
-
-    const factory = new EventFactory({ signer: account.signer });
-
-    // Create deletion event (kind 5)
-    const deleteEventTemplate = await factory.delete([relationshipEvent]);
-    const deleteEvent = await factory.sign(deleteEventTemplate);
-
-    // Publish deletion using outbox model
-    const result = await publishEvent(deleteEvent, [], {
-      additionalRelays: options.relays || []
-    });
-
-    if (result.success) {
-      eventStore.add(deleteEvent);
-    }
-
-    return { ...result, event: deleteEvent };
+    await ensureFollowSetExists();
+    await actionRunner.run(RemoveUserFromFollowSet, communityPubkey, COMMUNITIES_SET_ID);
+    return { success: true };
   } catch (error) {
     console.error('Failed to leave community:', error);
     return {

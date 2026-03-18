@@ -7,7 +7,9 @@
   let { data } = $props();
 
   // selectedContentType is driven by the layout via $page.data.contentView or ?view= param
-  let selectedContentType = $derived($page.data.contentView || 'home');
+  let selectedContentType = $derived(
+    $page.data.contentView || $page.url.searchParams.get('view') || 'home'
+  );
 
   /**
    * Handle navigation from content type kind number

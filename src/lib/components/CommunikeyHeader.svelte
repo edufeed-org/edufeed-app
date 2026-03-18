@@ -1,10 +1,7 @@
 <script>
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
-  import { EventFactory } from 'applesauce-core/event-factory';
-  import { manager } from '$lib/stores/accounts.svelte';
-  import { publishEvent } from '$lib/services/publish-service.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { joinCommunity as joinCommunityHelper } from '$lib/helpers/community';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -69,25 +66,7 @@
    * Join the community
    */
   async function joinCommunity() {
-    const factory = new EventFactory({ signer: manager.active?.signer });
-    const joinEvent = await factory.build({
-      kind: 30382,
-      tags: [
-        ['d', communikeyEvent.pubkey],
-        ['n', 'follow']
-      ]
-    });
-    // Sign the event
-    const signedEvent = await factory.sign(joinEvent);
-    console.log('Signed Join Event:', signedEvent);
-
-    // Publish using outbox model + communikey relays (for kind 30382)
-    const result = await publishEvent(signedEvent, [communikeyEvent.pubkey]);
-
-    if (result.success) {
-      eventStore.add(signedEvent);
-    }
-
+    const result = await joinCommunityHelper(communikeyEvent.pubkey);
     return result.success;
   }
 </script>

@@ -13,7 +13,6 @@
   import { TimelineModel } from 'applesauce-core/models';
   import { publishEvent } from '$lib/services/publish-service.js';
   import {
-    getTagValue,
     getDisplayName,
     getAddressPointerForEvent,
     getReplaceableIdentifier,
@@ -383,12 +382,9 @@
    * Select all communities that don't already have shares
    */
   function selectAllCommunities() {
-    const availableCommunities = joinedCommunities
-      .filter((community) => {
-        const pubkey = getTagValue(community, 'd') || '';
-        return !communitiesWithShares.has(pubkey);
-      })
-      .map((community) => getTagValue(community, 'd') || '');
+    const availableCommunities = joinedCommunities.filter(
+      (pubkey) => !communitiesWithShares.has(pubkey)
+    );
     selectedCommunityIds = availableCommunities;
   }
 
@@ -435,8 +431,7 @@
       </div>
     {:else if joinedCommunities.length > 0}
       <div class="max-h-40 overflow-y-auto rounded-lg border border-base-300 p-3">
-        {#each joinedCommunities as community (community.id)}
-          {@const communityPubKey = getTagValue(community, 'd') || ''}
+        {#each joinedCommunities as communityPubKey (communityPubKey)}
           {@const isAlreadyShared = communitiesWithShares.has(communityPubKey)}
           {@const isSelected = selectedCommunityIds.includes(communityPubKey)}
           {@const getCommunityProfile = useUserProfile(communityPubKey)}

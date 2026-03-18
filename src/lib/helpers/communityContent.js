@@ -125,13 +125,13 @@ export function filterContentByCommunity(
 /**
  * Get community display info for the filter dropdown
  * @param {any[]} allCommunities - Array of community events (kind 10222)
- * @param {any[]} joinedCommunities - Array of joined community relationship events (kind 30382)
+ * @param {string[]} joinedCommunities - Array of joined community pubkeys
  * @param {Map<string, any>} communityProfiles - Map of community pubkey → profile
  * @returns {{ joined: Array<{pubkey: string, name: string}>, discover: Array<{pubkey: string, name: string}> }}
  */
 export function getCommunityFilterOptions(allCommunities, joinedCommunities, communityProfiles) {
-  // Get set of joined community pubkeys
-  const joinedPubkeys = new Set(joinedCommunities.map((rel) => getTagValue(rel, 'd')));
+  // Get set of joined community pubkeys (already strings from follow set)
+  const joinedPubkeys = new Set(joinedCommunities);
 
   const joined = [];
   const discover = [];

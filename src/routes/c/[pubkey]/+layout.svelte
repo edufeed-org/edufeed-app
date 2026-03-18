@@ -36,6 +36,7 @@
     'boards',
     'articles',
     'forum',
+    'wikis',
     'activity',
     'settings'
   ]);

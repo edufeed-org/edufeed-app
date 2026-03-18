@@ -281,10 +281,8 @@
   let hasMoreCommunities = $state(true);
   let displayedCommunitiesCount = $state(20);
 
-  // Get joined community pubkeys for filtering
-  const joinedCommunityPubkeys = $derived(
-    joinedCommunities.map((rel) => getTagValue(rel, 'd')).filter(Boolean)
-  );
+  // Get joined community pubkeys for filtering (already strings from follow set)
+  const joinedCommunityPubkeys = $derived(joinedCommunities);
 
   // Build content-to-community map from targeted publications
   const contentToCommunityMap = $derived(buildContentToCommunityMap(targetedPubs));

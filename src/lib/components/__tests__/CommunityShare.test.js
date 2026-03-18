@@ -15,24 +15,8 @@ import CommunityShare from '../shared/CommunityShare.svelte';
 const mockCommunityPubkey1 = 'aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222';
 const mockCommunityPubkey2 = 'bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333';
 
-const mockCommunityEvents = [
-  {
-    id: 'community-event-1',
-    kind: 30382,
-    pubkey: 'user-pubkey',
-    tags: [['d', mockCommunityPubkey1]],
-    created_at: 1700000000,
-    content: ''
-  },
-  {
-    id: 'community-event-2',
-    kind: 30382,
-    pubkey: 'user-pubkey',
-    tags: [['d', mockCommunityPubkey2]],
-    created_at: 1700000001,
-    content: ''
-  }
-];
+// Joined communities are now string[] (pubkeys from kind 30000 follow set)
+const mockJoinedCommunities = [mockCommunityPubkey1, mockCommunityPubkey2];
 
 const mockEvent = {
   id: 'event-123',
@@ -65,7 +49,7 @@ const mockShareEvent = {
 };
 
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
-  useJoinedCommunitiesList: () => () => mockCommunityEvents
+  useJoinedCommunitiesList: () => () => mockJoinedCommunities
 }));
 
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({

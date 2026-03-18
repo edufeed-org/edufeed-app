@@ -447,34 +447,17 @@
       // Sign the community event
       const signedCommunityEvent = await signer.signEvent(communityEvent);
 
-      // Create relationship event (kind:30382)
-      const relationshipEvent = {
-        kind: 30382,
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [
-          ['d', account.pubkey],
-          ['n', 'follow']
-        ],
-        content: '',
-        pubkey: account.pubkey
-      };
-
-      // Sign the relationship event
-      const signedRelationshipEvent = await signer.signEvent(relationshipEvent);
-
       // Publish community event (kind 10222) - uses communikey relays
       const communityResult = await publishEvent(signedCommunityEvent);
       if (communityResult.success) {
         eventStore.add(signedCommunityEvent);
       }
 
-      // Publish relationship event (kind 30382) - uses communikey relays
-      const relationshipResult = await publishEvent(signedRelationshipEvent, [account.pubkey]);
-      if (relationshipResult.success) {
-        eventStore.add(signedRelationshipEvent);
-      }
+      // Join the community using follow set (kind 30000)
+      const { joinCommunity } = await import('$lib/helpers/community');
+      const joinResult = await joinCommunity(account.pubkey);
 
-      if (communityResult.success || relationshipResult.success) {
+      if (communityResult.success || joinResult.success) {
         console.log('CreateCommunityModal: Successfully created community');
 
         // Navigate to the newly created community

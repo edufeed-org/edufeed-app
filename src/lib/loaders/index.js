@@ -20,11 +20,7 @@ export {
 } from './calendar.js';
 
 // Community loaders
-export {
-  communikeyTimelineLoader,
-  createRelationshipLoader,
-  createCommunityMembersLoader
-} from './community.js';
+export { communikeyTimelineLoader } from './community.js';
 
 // Profile utilities
 export { profileLoader, loadUserProfile, kind1Loader } from './profile.js';

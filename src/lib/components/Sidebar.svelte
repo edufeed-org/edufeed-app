@@ -2,7 +2,7 @@
   import { resolve } from '$app/paths';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { getDisplayName, getTagValue, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
@@ -48,12 +48,11 @@
 </div>
 
 <div class="space-y-2">
-  {#each joinedCommunities.sort() as community (community.id)}
-    {@const communityPubKey = getTagValue(community, 'd')}
+  {#each [...joinedCommunities].sort() as communityPubKey (communityPubKey)}
     {@const getCommunityProfile = useUserProfile(communityPubKey)}
     {@const communityProfile = getCommunityProfile()}
     <a
-      href={resolve(`/c/${communityPubKey ? hexToNpub(communityPubKey) || communityPubKey : '#'}`)}
+      href={resolve(`/c/${hexToNpub(communityPubKey) || communityPubKey}`)}
       class="flex transform cursor-pointer items-center gap-2 rounded-lg border border-base-200 bg-base-100 p-3 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:border-primary/20 hover:shadow-md"
     >
       <div class="avatar">
@@ -61,8 +60,7 @@
           class="h-8 w-8 rounded-full ring-2 ring-base-300 transition-colors duration-300 hover:ring-primary/50"
         >
           <img
-            src={getProfilePicture(communityProfile) ||
-              `https://robohash.org/${getTagValue(community, 'd')}`}
+            src={getProfilePicture(communityProfile) || `https://robohash.org/${communityPubKey}`}
             alt="Community"
             class="rounded-full object-cover"
           />

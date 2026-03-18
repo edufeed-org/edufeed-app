@@ -5,7 +5,7 @@
 
 <script>
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
-  import { getTagValue, getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
 
   /**
    * @typedef {Object} Community
@@ -37,9 +37,9 @@
    * Select all communities that don't already have shares
    */
   function selectAllCommunities() {
-    const availableCommunities = communities
-      .map((community) => getTagValue(community, 'd') || '')
-      .filter((pubkey) => pubkey && !communitiesWithShares.has(pubkey));
+    const availableCommunities = communities.filter(
+      (pubkey) => pubkey && !communitiesWithShares.has(pubkey)
+    );
     selectedCommunityIds = availableCommunities;
   }
 
@@ -80,8 +80,7 @@
 
   <!-- Community Checkboxes -->
   <div class="max-h-40 overflow-y-auto rounded-lg border border-base-300 p-3">
-    {#each communities as community (community.id)}
-      {@const communityPubKey = getTagValue(community, 'd') || ''}
+    {#each communities as communityPubKey (communityPubKey)}
       {@const isAlreadyShared = communitiesWithShares.has(communityPubKey)}
       {@const isSelected = selectedCommunityIds.includes(communityPubKey)}
       {@const getCommunityProfile = useUserProfile(communityPubKey)}

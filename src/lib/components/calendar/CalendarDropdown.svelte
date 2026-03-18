@@ -25,7 +25,7 @@
   import PeopleIcon from '$lib/components/icons/social/People.svelte';
   import ChevronDownIcon from '$lib/components/icons/ui/ChevronDownIcon.svelte';
   import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils';
-  import { getTagValue, getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { nip19 } from 'nostr-tools';
   import * as m from '$paraglide/messages';
 
@@ -222,8 +222,7 @@
             {#if joinedCommunities.length > 0}
               <hr class="my-1 border-base-300" />
 
-              {#each joinedCommunities as community (getTagValue(community, 'd'))}
-                {@const communityPubkey = getTagValue(community, 'd')}
+              {#each joinedCommunities as communityPubkey (communityPubkey)}
                 {#if communityPubkey}
                   {@const getCommunityProfile = useUserProfile(communityPubkey)}
                   {@const communityProfile = getCommunityProfile()}

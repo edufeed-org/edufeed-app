@@ -3,7 +3,6 @@
   import { getCommunityAvailableContentTypes } from '$lib/helpers/contentTypes.js';
 
   // Import stat components
-  import MembersStat from '$lib/components/community/stats/MembersStat.svelte';
   import CalendarEventsStat from '$lib/components/community/stats/CalendarEventsStat.svelte';
   import MessagesStat from '$lib/components/community/stats/MessagesStat.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -29,8 +28,7 @@
     <!-- Main Content -->
     <div class="container mx-auto max-w-4xl px-4 py-8">
       <!-- Quick Stats -->
-      <div class="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <MembersStat {communityId} />
+      <div class="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
         <CalendarEventsStat {communityId} />
         <MessagesStat {communityId} />
       </div>
