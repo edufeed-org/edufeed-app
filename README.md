@@ -268,7 +268,7 @@ The `.env.example` file contains all available configuration options. Key catego
 
 - `FALLBACK_RELAYS`: Fallback relays for event discovery (used when gated mode is off)
 - `CALENDAR_RELAYS`: App-specific relays for calendar events (kinds 31922-31925)
-- `COMMUNIKEY_RELAYS`: App-specific relays for community events (kinds 10222, 30222, 30382)
+- `COMMUNIKEY_RELAYS`: App-specific relays for community events (kinds 10222, 30222)
 - `AMB_RELAYS`: Educational content relays with NIP-50 search support (kind 30142)
 - `LONGFORM_CONTENT_RELAY`: App-specific relay for articles (kind 30023)
 
@@ -374,28 +374,28 @@ docker compose logs -f
 
 Comcal uses the following Nostr event kinds:
 
-| Kind  | NIP        | Description                      |
-| ----- | ---------- | -------------------------------- |
-| 0     | NIP-01     | User profile (metadata)          |
-| 3     | NIP-02     | Contact list                     |
-| 5     | NIP-09     | Deletion event                   |
-| 7     | NIP-25     | Reaction                         |
-| 8     | NIP-58     | Badge award                      |
-| 9     | —          | Chat message                     |
-| 1111  | NIP-22     | Comment                          |
-| 10002 | NIP-65     | Relay list (outbox model)        |
-| 10063 | —          | Blossom server list              |
-| 10222 | Communikey | Community definition             |
-| 30002 | NIP-51     | Relay set (user relay overrides) |
-| 30009 | NIP-58     | Badge definition                 |
-| 30142 | AMB        | Educational resource (OER)       |
-| 30222 | Communikey | Targeted publication             |
-| 30301 | —          | Kanban board                     |
-| 30382 | Communikey | Community relationship           |
-| 31922 | NIP-52     | Date-based calendar event        |
-| 31923 | NIP-52     | Time-based calendar event        |
-| 31924 | NIP-52     | Calendar collection              |
-| 31925 | NIP-52     | Calendar RSVP                    |
+| Kind  | NIP        | Description                       |
+| ----- | ---------- | --------------------------------- |
+| 0     | NIP-01     | User profile (metadata)           |
+| 3     | NIP-02     | Contact list                      |
+| 5     | NIP-09     | Deletion event                    |
+| 7     | NIP-25     | Reaction                          |
+| 8     | NIP-58     | Badge award                       |
+| 9     | —          | Chat message                      |
+| 1111  | NIP-22     | Comment                           |
+| 10002 | NIP-65     | Relay list (outbox model)         |
+| 10063 | —          | Blossom server list               |
+| 10222 | Communikey | Community definition              |
+| 30002 | NIP-51     | Relay set (user relay overrides)  |
+| 30009 | NIP-58     | Badge definition                  |
+| 30142 | AMB        | Educational resource (OER)        |
+| 30222 | Communikey | Targeted publication              |
+| 30301 | —          | Kanban board                      |
+| 30000 | NIP-51     | Follow set (community membership) |
+| 31922 | NIP-52     | Date-based calendar event         |
+| 31923 | NIP-52     | Time-based calendar event         |
+| 31924 | NIP-52     | Calendar collection               |
+| 31925 | NIP-52     | Calendar RSVP                     |
 
 See `CLAUDE.md` for the full reference including implementation details.
 

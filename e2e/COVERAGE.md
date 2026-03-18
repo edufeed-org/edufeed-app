@@ -535,11 +535,11 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 
 #### Creation Flow (3 tests)
 
-| Test                                   | What it verifies                  |
-| -------------------------------------- | --------------------------------- |
-| can advance to confirmation step       | Next button navigates to step 2   |
-| can complete community creation        | Creation navigates to /c/[pubkey] |
-| created community shows user as joined | Auto-join works (kind 30382)      |
+| Test                                   | What it verifies                        |
+| -------------------------------------- | --------------------------------------- |
+| can advance to confirmation step       | Next button navigates to step 2         |
+| can complete community creation        | Creation navigates to /c/[pubkey]       |
+| created community shows user as joined | Auto-join works (kind 30000 follow set) |
 
 #### Error Handling (1 test)
 
