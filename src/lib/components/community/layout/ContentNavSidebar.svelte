@@ -3,8 +3,7 @@
     HomeIcon,
     ChatIcon,
     CalendarIcon,
-    BellIcon,
-    SettingsIcon,
+    InfoIcon,
     BookIcon,
     KanbanIcon,
     ScrollTextIcon,
@@ -38,8 +37,7 @@
     articles: ScrollTextIcon,
     forum: ForumIcon,
     wikis: BookIcon,
-    activity: BellIcon,
-    settings: SettingsIcon
+    about: InfoIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -52,8 +50,7 @@
     articles: () => m.community_layout_bottom_tab_bar_articles(),
     forum: () => m.community_layout_bottom_tab_bar_forum(),
     wikis: () => m.community_wikis_title(),
-    activity: () => m.community_layout_bottom_tab_bar_activity(),
-    settings: () => m.community_layout_bottom_tab_bar_settings()
+    about: () => m.community_layout_bottom_tab_bar_about()
   };
 
   const contentTypes = getDefaultCommunityTabs().map((id) => ({

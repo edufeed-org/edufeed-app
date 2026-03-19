@@ -13,8 +13,7 @@ export async function load({ url }) {
     'boards',
     'articles',
     'forum',
-    'activity',
-    'settings'
+    'about'
   ]);
 
   const viewParam = url.searchParams.get('view');

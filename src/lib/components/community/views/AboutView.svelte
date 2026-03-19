@@ -1,6 +1,8 @@
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
-  import { SettingsIcon } from '$lib/components/icons';
+  import { InfoIcon } from '$lib/components/icons';
+  import CalendarEventsStat from '$lib/components/community/stats/CalendarEventsStat.svelte';
+  import MessagesStat from '$lib/components/community/stats/MessagesStat.svelte';
   import { leaveCommunity } from '$lib/helpers/community';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -67,8 +69,8 @@
   <div class="p-6">
     <div class="container mx-auto max-w-4xl">
       <div class="mb-6 flex items-center gap-3">
-        <SettingsIcon class_="w-6 h-6 text-primary" />
-        <h1 class="text-2xl font-bold">{m.community_views_settings_title()}</h1>
+        <InfoIcon class_="w-6 h-6 text-primary" />
+        <h1 class="text-2xl font-bold">{m.community_views_about_title()}</h1>
       </div>
 
       {#if profileEvent && communikeyEvent}
@@ -111,6 +113,12 @@
               {/if}
             </div>
           </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <CalendarEventsStat {communityId} />
+          <MessagesStat {communityId} />
         </div>
 
         <!-- Community Actions -->

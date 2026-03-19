@@ -3,8 +3,7 @@
     HomeIcon,
     ChatIcon,
     CalendarIcon,
-    BellIcon,
-    SettingsIcon,
+    InfoIcon,
     BookIcon,
     KanbanIcon,
     ScrollTextIcon,
@@ -35,8 +34,7 @@
     articles: ScrollTextIcon,
     forum: ForumIcon,
     wikis: BookIcon,
-    activity: BellIcon,
-    settings: SettingsIcon
+    about: InfoIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -47,7 +45,8 @@
     boards: () => m.community_layout_bottom_tab_bar_boards(),
     articles: () => m.community_layout_bottom_tab_bar_articles(),
     forum: () => m.community_layout_bottom_tab_bar_forum(),
-    wikis: () => m.community_wikis_title()
+    wikis: () => m.community_wikis_title(),
+    about: () => m.community_layout_bottom_tab_bar_about()
   };
 
   // State for scroll indicators
@@ -91,7 +90,7 @@
 
     // Ensure all default tabs are present (replaces per-type forced blocks)
     for (const tabId of getDefaultCommunityTabs()) {
-      if (tabId === 'home' || tabId === 'activity' || tabId === 'settings') continue;
+      if (tabId === 'home' || tabId === 'about') continue;
       if (!types.some((t) => t.id === tabId)) {
         types.push({
           id: tabId,
@@ -101,11 +100,12 @@
       }
     }
 
-    // Add common types at the end
-    types.push(
-      { id: 'activity', label: m.community_layout_bottom_tab_bar_activity(), icon: BellIcon },
-      { id: 'settings', label: m.community_layout_bottom_tab_bar_settings(), icon: SettingsIcon }
-    );
+    // Add about tab at the end
+    types.push({
+      id: 'about',
+      label: m.community_layout_bottom_tab_bar_about(),
+      icon: InfoIcon
+    });
 
     return types;
   }

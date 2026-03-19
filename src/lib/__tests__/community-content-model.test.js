@@ -15,7 +15,8 @@ import {
   CommunityAMBResourceModel,
   CommunityCalendarEventModel,
   CommunityArticleModel,
-  CommunityWikiModel
+  CommunityWikiModel,
+  CommunityActivityModel
 } from '$lib/models/community-content.js';
 
 const COMMUNITY_PUBKEY = 'community123';
@@ -814,6 +815,43 @@ describe('CommunityWikiModel', () => {
     expect(result[0].id).toBe('wiki-shared');
   });
 
+  it('resolves shared wikis via NIP-18 reposts', () => {
+    const wiki = mockEvent({
+      id: 'wiki-reposted',
+      kind: 30818,
+      pubkey: 'author1',
+      tags: [['d', 'reposted-topic']]
+    });
+    const repost = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'wiki-reposted'],
+        ['a', '30818:author1:reposted-topic'],
+        ['k', '30818'],
+        ['h', COMMUNITY_PUBKEY],
+        ['p', 'author1']
+      ]
+    });
+
+    const store = {
+      model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([repost]);
+        if (filter.kinds?.includes(30222)) return of([]);
+        if (filter['#h']) return of([]);
+        return of([wiki]);
+      }
+    };
+
+    /** @type {any} */
+    let result;
+    CommunityWikiModel(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe(
+      (items) => (result = items)
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('wiki-reposted');
+  });
+
   it('combines direct and shared wikis with deduplication', () => {
     const wiki = mockEvent({
       id: 'wiki-both',
@@ -849,5 +887,68 @@ describe('CommunityWikiModel', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('wiki-both');
+  });
+});
+
+describe('CommunityActivityModel', () => {
+  it('returns events across multiple kinds', () => {
+    const amb = mockEvent({ kind: 30142, tags: [['h', COMMUNITY_PUBKEY]] });
+    const cal = mockEvent({ kind: 31923, tags: [['h', COMMUNITY_PUBKEY]] });
+    const article = mockEvent({ kind: 30023, tags: [['h', COMMUNITY_PUBKEY]] });
+
+    const store = {
+      model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
+        if (filter.kinds?.includes(30222)) return of([]);
+        if (filter['#h']) return of([amb, cal, article]);
+        return of([amb, cal, article]);
+      }
+    };
+
+    /** @type {any} */
+    let result;
+    CommunityActivityModel(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe(
+      (items) => (result = items)
+    );
+
+    expect(result).toHaveLength(3);
+    const kinds = result.map((/** @type {any} */ r) => r.kind);
+    expect(kinds).toContain(30142);
+    expect(kinds).toContain(31923);
+    expect(kinds).toContain(30023);
+  });
+
+  it('deduplicates across kinds — same event in direct + repost', () => {
+    const event = mockEvent({
+      id: 'activity-dup',
+      kind: 30142,
+      tags: [['h', COMMUNITY_PUBKEY]]
+    });
+    const repost = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'activity-dup'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = {
+      model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([repost]);
+        if (filter.kinds?.includes(30222)) return of([]);
+        if (filter['#h']) return of([event]);
+        return of([event]);
+      }
+    };
+
+    /** @type {any} */
+    let result;
+    CommunityActivityModel(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe(
+      (items) => (result = items)
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('activity-dup');
   });
 });
