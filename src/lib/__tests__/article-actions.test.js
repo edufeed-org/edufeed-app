@@ -12,8 +12,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let lastSignedEvent = null;
 /** @type {any} */
 let _lastPublishCall = null;
-/** @type {any} */
-let _lastTargetedPubCall = null;
 
 // Mock dependencies
 vi.mock('applesauce-core/event-factory', () => {
@@ -50,15 +48,8 @@ vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   getAppRelaysForCategory: vi.fn(() => ['wss://longform.relay'])
 }));
 
-vi.mock('$lib/services/targeted-publication.js', () => ({
-  createTargetedPublication: vi.fn(async (...args) => {
-    _lastTargetedPubCall = args;
-  })
-}));
-
 import { manager } from '$lib/stores/accounts.svelte';
 import { createArticle, updateArticle } from '../stores/article-actions.svelte.js';
-import { createTargetedPublication } from '$lib/services/targeted-publication.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 
@@ -67,7 +58,6 @@ describe('createArticle', () => {
     vi.clearAllMocks();
     lastSignedEvent = null;
     _lastPublishCall = null;
-    _lastTargetedPubCall = null;
 
     // Set up active user
     /** @type {any} */ (manager).active = {
@@ -145,22 +135,18 @@ describe('createArticle', () => {
     expect(hTag).toEqual(['h', 'community-pubkey-123']);
   });
 
-  it('creates targeted publication when community is specified', async () => {
+  it('does not create kind 30222 targeted publication (removed in new spec)', async () => {
     /** @type {any} */
     const communityEvent = { id: 'ce1', kind: 10222, pubkey: 'community-pubkey-123' };
     await createArticle({ title: 'Test', content: 'Body' }, 'community-pubkey-123', communityEvent);
 
-    expect(createTargetedPublication).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'event-id-123' }),
-      'community-pubkey-123',
-      communityEvent
+    // Only the content event should be published, no separate 30222 wrapper
+    expect(publishEventOptimistic).toHaveBeenCalledTimes(1);
+    expect(publishEventOptimistic).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 30023 }),
+      [],
+      { communityEvent }
     );
-  });
-
-  it('does not create targeted publication without community', async () => {
-    await createArticle({ title: 'Test', content: 'Body' });
-
-    expect(createTargetedPublication).not.toHaveBeenCalled();
   });
 
   it('validates required title', async () => {

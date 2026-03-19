@@ -321,26 +321,19 @@
         // the JavaScript context
         await invalidateAll();
       } else {
-        // Create new event
-        resultEvent = await calendarActions.createEvent(formData, communityPubkey);
+        // Merge current community + selected communities into one array of h-tags
+        const allCommunityPubkeys = [communityPubkey, ...selectedCommunityIds].filter(Boolean);
 
-        // Only proceed with calendar/community operations if event was created successfully
+        // Create new event with all h-tags at creation time
+        resultEvent = await calendarActions.createEvent(formData, allCommunityPubkeys);
+
+        // Only proceed with calendar operations if event was created successfully
         if (resultEvent && resultEvent.id) {
           // Add event to selected calendars (event already has dTag from createEvent)
           if (calendarManagement && selectedCalendarIds.length > 0) {
             await Promise.all(
               selectedCalendarIds.map((calendarId) =>
                 calendarManagement?.addEventToCalendar(calendarId, resultEvent)
-              )
-            );
-          }
-
-          // Share event with selected communities
-          if (selectedCommunityIds.length > 0 && calendarActions) {
-            const actions = calendarActions;
-            await Promise.all(
-              selectedCommunityIds.map((communityPubkey) =>
-                actions.createTargetedPublication(resultEvent.id, communityPubkey)
               )
             );
           }

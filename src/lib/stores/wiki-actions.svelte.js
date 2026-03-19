@@ -9,7 +9,6 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
-import { createTargetedPublication } from '$lib/services/targeted-publication.js';
 
 /** Kind number for NIP-54 wiki articles */
 const WIKI_KIND = 30818;
@@ -92,10 +91,6 @@ export async function createWiki(formData, communityPubkey, communityEvent = nul
   publishEventOptimistic(wikiEvent, [], { communityEvent });
 
   const naddr = encodeEventToNaddr(wikiEvent, getAppRelaysForCategory('communikey'));
-
-  if (communityPubkey) {
-    await createTargetedPublication(wikiEvent, communityPubkey, communityEvent);
-  }
 
   return { event: wikiEvent, naddr };
 }

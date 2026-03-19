@@ -64,6 +64,16 @@
         curatedReady = true;
       });
   });
+
+  // Check for community membership migration (old kind 30382 → kind 30000)
+  $effect(() => {
+    if (!browser) return;
+    import('$lib/services/migration-check-service.svelte.js').then(
+      ({ checkCommunityMigration }) => {
+        checkCommunityMigration();
+      }
+    );
+  });
 </script>
 
 <svelte:head>

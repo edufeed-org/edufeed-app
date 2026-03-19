@@ -39,14 +39,9 @@ vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   getAppRelaysForCategory: vi.fn().mockReturnValue(['wss://relay.example.com'])
 }));
 
-vi.mock('$lib/services/targeted-publication.js', () => ({
-  createTargetedPublication: vi.fn()
-}));
-
 const { createWiki, updateWiki } = await import('$lib/stores/wiki-actions.svelte.js');
 const { manager } = await import('$lib/stores/accounts.svelte');
 const { publishEventOptimistic } = await import('$lib/services/publish-service.js');
-const { createTargetedPublication } = await import('$lib/services/targeted-publication.js');
 
 /** @type {any} */
 let lastSignedEvent = null;
@@ -140,16 +135,11 @@ describe('createWiki', () => {
     expect(hTag?.[1]).toBe('community123');
   });
 
-  it('creates targeted publication when communityPubkey provided', async () => {
+  it('does not create kind 30222 targeted publication (removed in new spec)', async () => {
     await createWiki({ title: 'Test', content: 'Content', topic: 'test' }, 'community123');
 
-    expect(createTargetedPublication).toHaveBeenCalledOnce();
-  });
-
-  it('does not create targeted publication without communityPubkey', async () => {
-    await createWiki({ title: 'Test', content: 'Content', topic: 'test' });
-
-    expect(createTargetedPublication).not.toHaveBeenCalled();
+    // Only the content event should be published, no separate 30222 wrapper
+    expect(publishEventOptimistic).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -2,6 +2,7 @@
  * Content type configuration for community features
  * Maps event kinds to UI metadata and implementation status
  */
+import { parseCommunityContentTypes } from './communityRelays.js';
 
 /**
  * @typedef {Object} ContentTypeConfig
@@ -128,7 +129,7 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
   const processedKinds = new Set();
 
   // Parse community's defined content types
-  const definedContentTypes = getCommunityContentTypes(communikeyEvent);
+  const definedContentTypes = parseCommunityContentTypes(communikeyEvent);
 
   // Check if community has any calendar-related kinds
   let hasCalendarKinds = false;
@@ -264,89 +265,4 @@ export function getDefaultCommunityTabs() {
 
   tabs.push('activity', 'settings');
   return tabs;
-}
-
-/**
- * @typedef {Object} ContentTypeBadges
- * @property {string|null} read - Badge address required to read this content type
- * @property {string|null} write - Badge address required to write/publish this content type
- */
-
-/**
- * @typedef {Object} CommunityContentType
- * @property {string} name - The name of the content type
- * @property {number[]} kinds - Array of numeric kinds
- * @property {boolean} exclusive - Whether content must have h-tag (community-exclusive)
- * @property {string[]} roles - Role-based access (legacy)
- * @property {{amount: string, unit: string}=} fee - Optional fee
- * @property {ContentTypeBadges} badges - Badge requirements for read/write access
- * @property {string[]} relays - Per-content-type relay URLs
- */
-
-/**
- * Parse community content type definitions from a Nostr event's tags.
- * Supports badge-based access control and per-content-type relays.
- *
- * Tag structure:
- * - ["content", "Name"] - Start new content type section
- * - ["k", "30023"] - Add kind to current section
- * - ["a", "30009:pubkey:badge-id", "write"] - Write access badge
- * - ["a", "30009:pubkey:badge-id", "read"] - Read access badge
- * - ["r", "wss://relay.example.com", "content"] - Per-content-type relay
- * - ["fee", "amount", "unit"] - Publishing fee
- * - ["exclusive", "true"] - Requires h-tag
- * - ["role", "role1", "role2"] - Legacy role-based access
- *
- * @param {any} event
- * @returns {CommunityContentType[]}
- */
-function getCommunityContentTypes(event) {
-  /** @type {CommunityContentType[]} */
-  const contentTypes = [];
-  /** @type {CommunityContentType|null} */
-  let currentContentType = null;
-
-  if (!event || !Array.isArray(event.tags)) return contentTypes;
-
-  for (const tag of event.tags) {
-    if (!Array.isArray(tag) || tag.length === 0) continue;
-    const key = tag[0];
-
-    if (key === 'content') {
-      if (currentContentType) contentTypes.push(currentContentType);
-      currentContentType = {
-        name: tag[1],
-        kinds: [],
-        exclusive: false,
-        roles: [],
-        badges: { read: null, write: null },
-        relays: []
-      };
-    } else if (key === 'k' && currentContentType) {
-      const kind = parseInt(tag[1], 10);
-      if (!Number.isNaN(kind)) currentContentType.kinds.push(kind);
-    } else if (key === 'fee' && currentContentType) {
-      currentContentType.fee = { amount: tag[1], unit: tag[2] || 'sat' };
-    } else if (key === 'exclusive' && currentContentType) {
-      currentContentType.exclusive = tag[1] === 'true';
-    } else if (key === 'role' && currentContentType) {
-      currentContentType.roles = tag.slice(1);
-    }
-    // Parse badge requirements (NIP-58 badge addresses)
-    else if (key === 'a' && currentContentType && tag[1]?.startsWith('30009:')) {
-      const qualifier = tag[2] || 'write'; // Default to write if no qualifier
-      if (qualifier === 'read') {
-        currentContentType.badges.read = tag[1];
-      } else {
-        currentContentType.badges.write = tag[1];
-      }
-    }
-    // Parse per-content-type relays (distinguished by 'content' marker)
-    else if (key === 'r' && currentContentType && tag[2] === 'content') {
-      currentContentType.relays.push(tag[1]);
-    }
-  }
-
-  if (currentContentType) contentTypes.push(currentContentType);
-  return contentTypes;
 }

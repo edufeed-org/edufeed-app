@@ -10,6 +10,7 @@
   import EditCommunityModal from './EditCommunityModal.svelte';
   import WebcalQRCodeModal from './calendar/WebcalQRCodeModal.svelte';
   import EditProfileModal from './EditProfileModal.svelte';
+  import CommunityMigrationModal from './CommunityMigrationModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -35,6 +36,7 @@
   const createCommunityModalId = 'create-community-modal';
   const editCommunityModalId = 'edit-community-modal';
   const editProfileModalId = 'edit-profile-modal';
+  const communityMigrationModalId = 'community-migration-modal';
 
   /**
    * Reactive effect to handle modal opening/closing based on store state
@@ -83,6 +85,13 @@
       if (editProfileModal && editProfileModal.open) {
         console.log('ModalManager: Closing edit profile modal');
         editProfileModal.close();
+      }
+      const communityMigrationModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(communityMigrationModalId)
+      );
+      if (communityMigrationModal && communityMigrationModal.open) {
+        console.log('ModalManager: Closing community migration modal');
+        communityMigrationModal.close();
       }
     } else if (currentModal === 'login') {
       // Open login modal
@@ -134,6 +143,15 @@
         console.log('ModalManager: Opening edit community modal');
         editCommunityModal.showModal();
       }
+    } else if (currentModal === 'communityMigration') {
+      // Open community migration modal
+      const communityMigrationModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(communityMigrationModalId)
+      );
+      if (communityMigrationModal && !communityMigrationModal.open) {
+        console.log('ModalManager: Opening community migration modal');
+        communityMigrationModal.showModal();
+      }
     }
   });
 
@@ -175,4 +193,6 @@
   <CalendarCreationModal />
 {:else if modal.activeModal === 'calendarEvent'}
   <CalendarEventModal />
+{:else if modal.activeModal === 'communityMigration'}
+  <CommunityMigrationModal modalId={communityMigrationModalId} />
 {/if}

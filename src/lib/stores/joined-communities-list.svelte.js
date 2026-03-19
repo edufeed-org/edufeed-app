@@ -2,7 +2,8 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getProfilePointersFromList } from 'applesauce-common/helpers';
-import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 
 const COMMUNITIES_SET_ID = 'communities';
 
@@ -31,9 +32,13 @@ export function useJoinedCommunitiesList() {
     }
 
     const pubkey = activeUser.pubkey;
-    const relays = getCommunikeyRelays();
+    // Use all lookup relays as initial set
+    const relays = getAllLookupRelays();
 
-    // 1. Fetch the follow set from relays
+    /** @type {import('rxjs').Subscription | undefined} */
+    let writeRelaySub;
+
+    // 1. Fetch the follow set from app/lookup relays
     const loaderSubscription = addressLoader({
       kind: 30000,
       pubkey,
@@ -41,7 +46,22 @@ export function useJoinedCommunitiesList() {
       relays
     }).subscribe();
 
-    // 2. Subscribe to EventStore for reactive updates
+    // 2. Also fetch from user's NIP-65 write relays (outbox model)
+    // The follow set is a user-owned event that may only exist on their write relays,
+    // which may not overlap with app relays (especially in gated mode)
+    getWriteRelays(pubkey).then((writeRelays) => {
+      const newRelays = writeRelays.filter((r) => !relays.includes(r));
+      if (newRelays.length > 0) {
+        writeRelaySub = addressLoader({
+          kind: 30000,
+          pubkey,
+          identifier: COMMUNITIES_SET_ID,
+          relays: newRelays
+        }).subscribe();
+      }
+    });
+
+    // 3. Subscribe to EventStore for reactive updates
     const modelSubscription = eventStore
       .replaceable(30000, pubkey, COMMUNITIES_SET_ID)
       .subscribe((event) => {
@@ -55,6 +75,7 @@ export function useJoinedCommunitiesList() {
 
     return () => {
       loaderSubscription.unsubscribe();
+      writeRelaySub?.unsubscribe();
       modelSubscription.unsubscribe();
     };
   });

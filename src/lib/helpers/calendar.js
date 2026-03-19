@@ -232,19 +232,6 @@ export function groupEventsByDate(events) {
 }
 
 /**
- * Create targeting tags for community-specific events
- * @param {string} communityPubkey - Community public key
- * @returns {string[][]} Array of tag arrays for Nostr event
- */
-export function createEventTargetingTags(communityPubkey) {
-  return [
-    ['a', `34550:${communityPubkey}:communikey`], // Target the community
-    ['k', '34550'], // Reference community kind
-    ['p', communityPubkey] // Tag community pubkey
-  ];
-}
-
-/**
  * Validate event form data
  * @param {EventFormData} formData - Form data to validate
  * @returns {string[]} Array of validation error messages
@@ -733,7 +720,7 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
  * @param {EventFormData} formData - Raw form data (startDate as "YYYY-MM-DD")
  * @param {Partial<CalendarEvent>} eventData - Converted event data from convertFormDataToEvent
  * @param {string} dTag - The d-tag identifier
- * @param {string} [hTag] - Optional community h-tag
+ * @param {string | string[]} [hTag] - Optional community h-tag(s)
  * @returns {string[][]} Array of NIP-52 compliant tags
  */
 export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
@@ -743,9 +730,12 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
   // d-tag (addressable/replaceable event identifier)
   tags.push(['d', dTag]);
 
-  // h-tag for community targeting (Communikey spec)
+  // h-tag(s) for community targeting (Communikey spec)
   if (hTag) {
-    tags.push(['h', hTag]);
+    const hTags = Array.isArray(hTag) ? hTag : [hTag];
+    for (const h of hTags) {
+      if (h) tags.push(['h', h]);
+    }
   }
 
   // Title

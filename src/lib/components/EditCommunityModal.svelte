@@ -7,6 +7,7 @@
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
   import ContentTypeBadgeConfig from './shared/ContentTypeBadgeConfig.svelte';
+  import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
 
   let { modalId } = $props();
 
@@ -290,101 +291,14 @@
         );
       }
 
-      // Build community tags
-      const communityTags = [];
-
-      // Add global relays
-      communityData.relays.forEach((relay) => {
-        communityTags.push(['r', relay]);
-      });
-
-      // Add blossom servers
-      communityData.blossomServers.forEach((server) => {
-        communityTags.push(['blossom', server]);
-      });
-
-      // Add optional location
-      if (communityData.location?.trim()) {
-        communityTags.push(['location', communityData.location.trim()]);
-      }
-
-      // Add optional description
-      if (communityData.description?.trim()) {
-        communityTags.push(['description', communityData.description.trim()]);
-      }
-
-      // Add content types with badge requirements and per-content-type relays
-      if (communityData.contentTypes.calendar.enabled) {
-        communityTags.push(['content', 'Calendar']);
-        communityTags.push(['k', '31922']);
-        communityTags.push(['k', '31923']);
-        if (communityData.contentTypes.calendar.badges.write) {
-          communityTags.push(['a', communityData.contentTypes.calendar.badges.write, 'write']);
-        }
-        if (communityData.contentTypes.calendar.badges.read) {
-          communityTags.push(['a', communityData.contentTypes.calendar.badges.read, 'read']);
-        }
-        communityData.contentTypes.calendar.relays.forEach((r) => {
-          communityTags.push(['r', r, 'content']);
-        });
-      }
-
-      if (communityData.contentTypes.chat.enabled) {
-        communityTags.push(['content', 'Chat']);
-        communityTags.push(['k', '9']);
-        if (communityData.contentTypes.chat.badges.write) {
-          communityTags.push(['a', communityData.contentTypes.chat.badges.write, 'write']);
-        }
-        if (communityData.contentTypes.chat.badges.read) {
-          communityTags.push(['a', communityData.contentTypes.chat.badges.read, 'read']);
-        }
-        communityData.contentTypes.chat.relays.forEach((r) => {
-          communityTags.push(['r', r, 'content']);
-        });
-      }
-
-      if (communityData.contentTypes.articles.enabled) {
-        communityTags.push(['content', 'Articles']);
-        communityTags.push(['k', '30023']);
-        if (communityData.contentTypes.articles.badges.write) {
-          communityTags.push(['a', communityData.contentTypes.articles.badges.write, 'write']);
-        }
-        if (communityData.contentTypes.articles.badges.read) {
-          communityTags.push(['a', communityData.contentTypes.articles.badges.read, 'read']);
-        }
-        communityData.contentTypes.articles.relays.forEach((r) => {
-          communityTags.push(['r', r, 'content']);
-        });
-      }
-
-      if (communityData.contentTypes.posts.enabled) {
-        communityTags.push(['content', 'Posts']);
-        communityTags.push(['k', '1']);
-        communityTags.push(['k', '11']);
-        if (communityData.contentTypes.posts.badges.write) {
-          communityTags.push(['a', communityData.contentTypes.posts.badges.write, 'write']);
-        }
-        if (communityData.contentTypes.posts.badges.read) {
-          communityTags.push(['a', communityData.contentTypes.posts.badges.read, 'read']);
-        }
-        communityData.contentTypes.posts.relays.forEach((r) => {
-          communityTags.push(['r', r, 'content']);
-        });
-      }
-
-      if (communityData.contentTypes.wikis.enabled) {
-        communityTags.push(['content', 'Wikis']);
-        communityTags.push(['k', '30818']);
-        if (communityData.contentTypes.wikis.badges.write) {
-          communityTags.push(['a', communityData.contentTypes.wikis.badges.write, 'write']);
-        }
-        if (communityData.contentTypes.wikis.badges.read) {
-          communityTags.push(['a', communityData.contentTypes.wikis.badges.read, 'read']);
-        }
-        communityData.contentTypes.wikis.relays.forEach((r) => {
-          communityTags.push(['r', r, 'content']);
-        });
-      }
+      // Detect old-spec: community has badge a-tags → preserve old format
+      const hasBadges = Object.values(communityData.contentTypes).some(
+        (ct) => ct.badges.read || ct.badges.write
+      );
+      const communityTags = buildCommunityDefinitionTags(
+        communityData,
+        hasBadges ? {} : { communityPubkey: communityEvent.pubkey }
+      );
 
       const communityUpdateEvent = {
         kind: 10222,

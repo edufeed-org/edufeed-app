@@ -9,7 +9,6 @@ import { manager } from '$lib/stores/accounts.svelte';
 import {
   validateEventForm,
   convertFormDataToEvent,
-  createEventTargetingTags,
   buildCalendarEventTags
 } from '../helpers/calendar.js';
 import { calendarStore } from './calendar-events.svelte.js';
@@ -38,11 +37,11 @@ export function createCalendarActions(_communityPubkey) {
     /**
      * Create a new calendar event
      * @param {EventFormData} formData - Event form data
-     * @param {string} targetCommunityPubkey - Target community public key
+     * @param {string | string[]} communityPubkeys - Target community public key(s)
      * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
      * @returns {Promise<any>}
      */
-    async createEvent(formData, targetCommunityPubkey, communityEvent = null) {
+    async createEvent(formData, communityPubkeys, communityEvent = null) {
       // Validate form data
       const validationErrors = validateEventForm(formData);
       if (validationErrors.length > 0) {
@@ -55,8 +54,13 @@ export function createCalendarActions(_communityPubkey) {
         throw new Error('No account selected. Please log in to create events.');
       }
 
-      // Convert form data to event object
-      const eventData = convertFormDataToEvent(formData, targetCommunityPubkey);
+      // Normalize to array
+      const pubkeys = Array.isArray(communityPubkeys)
+        ? communityPubkeys.filter(Boolean)
+        : [communityPubkeys].filter(Boolean);
+
+      // Convert form data to event object (uses first pubkey for backward compat)
+      const eventData = convertFormDataToEvent(formData, pubkeys[0] || '');
 
       try {
         // Generate unique d-tag for the calendar event
@@ -65,12 +69,12 @@ export function createCalendarActions(_communityPubkey) {
         // Create the calendar event using EventFactory
         const eventFactory = new EventFactory();
 
-        // Build NIP-52 compliant tags
+        // Build NIP-52 compliant tags with all community h-tags
         const tags = buildCalendarEventTags(
           formData,
           eventData,
           dTag,
-          targetCommunityPubkey || undefined
+          pubkeys.length > 0 ? pubkeys : undefined
         );
 
         // Build and sign the calendar event
@@ -221,46 +225,6 @@ export function createCalendarActions(_communityPubkey) {
         console.error('Error deleting calendar event:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Failed to delete calendar event: ${errorMessage}`);
-      }
-    },
-
-    /**
-     * Create a targeted publication event to associate calendar event with community
-     * @param {string} eventId - Calendar event ID
-     * @param {string} targetCommunityPubkey - Target community public key
-     * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
-     * @returns {Promise<void>}
-     */
-    async createTargetedPublication(eventId, targetCommunityPubkey, communityEvent = null) {
-      // Get current account
-      const currentAccount = manager.active;
-      if (!currentAccount) {
-        throw new Error('No account selected. Please log in to create targeted publications.');
-      }
-
-      try {
-        // Create targeting event using Communikey spec (kind 30222)
-        const eventFactory = new EventFactory();
-
-        // Build targeting tags with relay hints for discoverability
-        const targetingTags = createEventTargetingTags(targetCommunityPubkey);
-        const eTagWithHint = await buildETagWithHint(eventId, currentAccount.pubkey);
-        targetingTags.push(eTagWithHint);
-        targetingTags.push(['d', eventId]);
-
-        const eventTemplate = await eventFactory.build({
-          kind: 30222,
-          content: '',
-          tags: targetingTags
-        });
-
-        // Sign and publish the targeting event (kind 30222 uses communikey relays)
-        const targetingEvent = await currentAccount.signEvent(eventTemplate);
-        await publishEvent(targetingEvent, [targetCommunityPubkey], { communityEvent });
-      } catch (error) {
-        console.error('Error creating targeted publication:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to create targeted publication: ${errorMessage}`);
       }
     },
 

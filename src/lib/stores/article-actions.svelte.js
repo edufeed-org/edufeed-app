@@ -8,7 +8,6 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
-import { createTargetedPublication } from '$lib/services/targeted-publication.js';
 
 /** Kind number for NIP-23 long-form articles */
 const ARTICLE_KIND = 30023;
@@ -102,10 +101,6 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
   publishEventOptimistic(articleEvent, [], { communityEvent });
 
   const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
-
-  if (communityPubkey) {
-    await createTargetedPublication(articleEvent, communityPubkey, communityEvent);
-  }
 
   return { event: articleEvent, naddr };
 }

@@ -121,10 +121,9 @@
 
 /**
  * @typedef {Object} CalendarActions
- * @property {function(EventFormData, string): Promise<any>} createEvent - Create new event
+ * @property {function(EventFormData, string | string[]): Promise<any>} createEvent - Create new event with community pubkey(s)
  * @property {function(EventFormData, any): Promise<any>} updateEvent - Update event with form data and existing event
  * @property {function(string): Promise<void>} deleteEvent - Delete event
- * @property {function(string, string): Promise<void>} createTargetedPublication - Create targeted publication
  * @property {function(string, string=): Promise<any>} createCalendar - Create new calendar (returns full event object)
  * @property {function(any, 'accepted' | 'declined' | 'tentative', string=, 'free' | 'busy'=): Promise<any>} createRsvp - Create or update RSVP for calendar event
  * @property {function(string): Promise<CalendarEvent[]>} loadEvents - Load community events
