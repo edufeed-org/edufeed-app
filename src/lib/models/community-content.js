@@ -2,7 +2,7 @@
  * Generic Community Content Model Factory
  *
  * Creates models that combine direct community content (h-tagged events) with
- * content referenced by targeted publications (kind 30222).
+ * content referenced by targeted publications (kind 30222) and NIP-18 reposts (kind 6/16).
  *
  * This model ONLY reads from EventStore — it does NOT fetch data.
  * The loader must populate EventStore with the relevant events.
@@ -35,7 +35,7 @@ export function createCommunityContentModel(contentKinds, options = {}) {
         limit: 100
       });
 
-      // Stream 2: Targeted publications referencing this content type
+      // Stream 2: Legacy targeted publications (kind 30222)
       const shares$ = eventStore.model(TimelineModel, {
         kinds: [30222],
         '#p': [communityPubkey],
@@ -43,14 +43,21 @@ export function createCommunityContentModel(contentKinds, options = {}) {
         limit: 100
       });
 
-      // Stream 3: All events of this kind (for resolving references)
+      // Stream 3: NIP-18 reposts (kind 6/16 with h-tag targeting this community)
+      const reposts$ = eventStore.model(TimelineModel, {
+        kinds: [6, 16],
+        '#h': [communityPubkey],
+        limit: 100
+      });
+
+      // Stream 4: All events of this kind (for resolving references)
       const all$ = eventStore.model(TimelineModel, {
         kinds: contentKinds,
         limit: 500
       });
 
-      return combineLatest(/** @type {any[]} */ ([direct$, shares$, all$])).pipe(
-        map((/** @type {any[]} */ [directEvents, shareEvents, allEvents]) => {
+      return combineLatest(/** @type {any[]} */ ([direct$, shares$, reposts$, all$])).pipe(
+        map((/** @type {any[]} */ [directEvents, shareEvents, repostEvents, allEvents]) => {
           // Build lookup map by ID and address
           const lookup = new Map();
           for (const event of allEvents || []) {
@@ -64,15 +71,25 @@ export function createCommunityContentModel(contentKinds, options = {}) {
           const resultMap = new Map();
           const fmt = transform || ((e) => e);
 
-          // Add direct events first (priority)
+          // Add direct events first (highest priority)
           for (const event of directEvents) {
             resultMap.set(event.id, fmt(event));
           }
 
-          // Resolve targeted publication references
+          // Resolve legacy targeted publication references
           for (const share of shareEvents || []) {
             const eTag = getTagValue(share, 'e');
             const aTag = getTagValue(share, 'a');
+            const resolved = (eTag && lookup.get(eTag)) || (aTag && lookup.get(aTag));
+            if (resolved && !resultMap.has(resolved.id)) {
+              resultMap.set(resolved.id, fmt(resolved));
+            }
+          }
+
+          // Resolve NIP-18 repost references (lowest priority)
+          for (const repost of repostEvents || []) {
+            const eTag = getTagValue(repost, 'e');
+            const aTag = getTagValue(repost, 'a');
             const resolved = (eTag && lookup.get(eTag)) || (aTag && lookup.get(aTag));
             if (resolved && !resultMap.has(resolved.id)) {
               resultMap.set(resolved.id, fmt(resolved));

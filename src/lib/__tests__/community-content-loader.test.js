@@ -2,7 +2,8 @@
  * Community Content Loader Factory Tests
  *
  * Tests createCommunityContentLoader — the generic factory that extracts
- * the shared 3-step community loading pattern.
+ * the shared loading pattern: direct content, legacy 30222, NIP-18 reposts,
+ * and reference resolution.
  *
  * Uses mocked modules for relay/store infrastructure.
  *
@@ -126,6 +127,19 @@ describe('createCommunityContentLoader', () => {
     );
   });
 
+  it('creates repost loader for kind 6/16 with h-tag', () => {
+    const loader = createCommunityContentLoader([30142], getRelays);
+    loader(COMMUNITY_PK);
+
+    // Should create a loader for NIP-18 reposts targeting this community
+    expect(createTimelineLoader).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Array),
+      { kinds: [6, 16], '#h': [COMMUNITY_PK] },
+      expect.objectContaining({ eventStore: expect.any(Object), limit: 50 })
+    );
+  });
+
   it('applies filterFn to direct content filter when provided', () => {
     const filterFn = vi.fn((/** @type {any} */ f) => ({ ...f, authors: ['curated1'] }));
     const loader = createCommunityContentLoader([30142], getRelays, { filterFn });
@@ -147,7 +161,7 @@ describe('createCommunityContentLoader', () => {
     expect(communityTargetedPublicationsLoader).toHaveBeenCalledWith(COMMUNITY_PK, [30301]);
   });
 
-  it('subscribes to EventStore model for reference resolution', () => {
+  it('subscribes to EventStore model for legacy 30222 reference resolution', () => {
     const loader = createCommunityContentLoader([30023], getRelays);
     loader(COMMUNITY_PK);
 
@@ -159,14 +173,27 @@ describe('createCommunityContentLoader', () => {
     });
   });
 
-  it('creates 3 subscriptions (direct, targeted, referenced)', () => {
+  it('subscribes to EventStore model for repost reference resolution', () => {
+    const loader = createCommunityContentLoader([30142], getRelays);
+    loader(COMMUNITY_PK);
+
+    expect(eventStore.model).toHaveBeenCalledWith('TimelineModel', {
+      kinds: [6, 16],
+      '#h': [COMMUNITY_PK],
+      limit: 100
+    });
+  });
+
+  it('creates 5 subscriptions (direct, reposts, targeted, legacyReferenced, repostReferenced)', () => {
     const loader = createCommunityContentLoader([30142], getRelays);
     const { subscriptions } = loader(COMMUNITY_PK);
 
     expect(subscriptions.has('direct')).toBe(true);
+    expect(subscriptions.has('reposts')).toBe(true);
     expect(subscriptions.has('targetedPublications')).toBe(true);
-    expect(subscriptions.has('referenced')).toBe(true);
-    expect(subscriptions.size).toBe(3);
+    expect(subscriptions.has('legacyReferenced')).toBe(true);
+    expect(subscriptions.has('repostReferenced')).toBe(true);
+    expect(subscriptions.size).toBe(5);
   });
 
   it('cleanup unsubscribes all subscriptions and clears the map', () => {

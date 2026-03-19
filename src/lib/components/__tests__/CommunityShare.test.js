@@ -1,8 +1,8 @@
 /**
  * CommunityShare Component Tests
  *
- * Regression tests for the infinite loop bug (effect_update_depth_exceeded)
- * caused by SvelteMap/SvelteSet reactive collections inside $effect callbacks.
+ * Tests for NIP-18 repost (kind 6/16) community sharing with h-tags,
+ * plus backward-compat detection of legacy kind 30222 shares.
  *
  * @vitest-environment jsdom
  */
@@ -15,7 +15,6 @@ import CommunityShare from '../shared/CommunityShare.svelte';
 const mockCommunityPubkey1 = 'aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222';
 const mockCommunityPubkey2 = 'bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333';
 
-// Joined communities are now string[] (pubkeys from kind 30000 follow set)
 const mockJoinedCommunities = [mockCommunityPubkey1, mockCommunityPubkey2];
 
 const mockEvent = {
@@ -32,8 +31,24 @@ const mockActiveUser = {
   signer: { sign: vi.fn() }
 };
 
-// Share event: user shared mockEvent with community1
-const mockShareEvent = {
+// NIP-18 repost: user shared mockEvent with community1 via kind 16 + h-tag
+const mockRepostEvent = {
+  id: 'repost-event-1',
+  kind: 16,
+  pubkey: 'user-pubkey',
+  tags: [
+    ['e', 'event-123'],
+    ['a', '30142:author-pubkey:test-resource-id'],
+    ['k', '30142'],
+    ['p', 'author-pubkey'],
+    ['h', mockCommunityPubkey1]
+  ],
+  created_at: 1700000100,
+  content: JSON.stringify(mockEvent)
+};
+
+// Legacy kind 30222 share: user shared mockEvent with community2
+const mockLegacyShareEvent = {
   id: 'share-event-1',
   kind: 30222,
   pubkey: 'user-pubkey',
@@ -42,7 +57,7 @@ const mockShareEvent = {
     ['a', '30142:author-pubkey:test-resource-id'],
     ['e', 'event-123'],
     ['k', '30142'],
-    ['p', mockCommunityPubkey1]
+    ['p', mockCommunityPubkey2]
   ],
   created_at: 1700000100,
   content: ''
@@ -60,7 +75,6 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     model: vi.fn(() => ({
       subscribe: (/** @type {Function} */ cb) => {
-        // Emit synchronously (this is what triggers the infinite loop bug)
         cb([]);
         return { unsubscribe: vi.fn() };
       }
@@ -87,6 +101,8 @@ vi.mock('applesauce-core/event-factory', () => ({
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: vi.fn()
 }));
+
+vi.mock('applesauce-common/blueprints', () => ({}));
 
 vi.mock('applesauce-core/helpers', () => ({
   getTagValue: (/** @type {any} */ event, /** @type {string} */ tag) =>
@@ -138,8 +154,6 @@ describe('CommunityShare', () => {
   });
 
   it('renders community checkboxes without effect_update_depth_exceeded', () => {
-    // This test would fail with the SvelteMap bug: the synchronous model emission
-    // inside $effect triggers read→write→re-run→infinite loop
     const { container } = render(CommunityShare, {
       props: {
         event: mockEvent,
@@ -151,15 +165,15 @@ describe('CommunityShare', () => {
     expect(checkboxes.length).toBe(2);
   });
 
-  it('shows existing shares as checked when model emits share events', async () => {
+  it('detects existing NIP-18 reposts (kind 16) with h-tag as shared', async () => {
     const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
 
-    // Make model emit share events synchronously (simulates cached data)
+    // Model emits NIP-18 repost events (kind 16 with h-tag)
     vi.mocked(eventStore.model).mockImplementation(
       () =>
         /** @type {any} */ ({
           subscribe: (/** @type {Function} */ cb) => {
-            cb([mockShareEvent]);
+            cb([mockRepostEvent]);
             return { unsubscribe: vi.fn() };
           }
         })
@@ -172,16 +186,66 @@ describe('CommunityShare', () => {
       }
     });
 
-    // The first community should show as shared
+    // Community1 should show as shared (via h-tag on the repost)
     const sharedLabels = container.querySelectorAll('.text-success');
     expect(sharedLabels.length).toBe(1);
     expect(sharedLabels[0].textContent).toContain('Shared');
   });
 
+  it('detects legacy kind 30222 shares (backward compat)', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    // Model emits legacy share events (kind 30222 with p-tag)
+    vi.mocked(eventStore.model).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([mockLegacyShareEvent]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+
+    const { container } = render(CommunityShare, {
+      props: {
+        event: mockEvent,
+        activeUser: mockActiveUser
+      }
+    });
+
+    // Community2 should show as shared (via legacy p-tag)
+    const sharedLabels = container.querySelectorAll('.text-success');
+    expect(sharedLabels.length).toBe(1);
+    expect(sharedLabels[0].textContent).toContain('Shared');
+  });
+
+  it('detects both NIP-18 reposts and legacy 30222 shares simultaneously', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    // Model emits both types
+    vi.mocked(eventStore.model).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([mockRepostEvent, mockLegacyShareEvent]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+
+    const { container } = render(CommunityShare, {
+      props: {
+        event: mockEvent,
+        activeUser: mockActiveUser
+      }
+    });
+
+    // Both communities should show as shared
+    const sharedLabels = container.querySelectorAll('.text-success');
+    expect(sharedLabels.length).toBe(2);
+  });
+
   it('renders with synchronous model emissions without infinite loop', async () => {
-    // Regression: with SvelteMap, synchronous emission of non-empty share events
-    // caused effect_update_depth_exceeded because loadedShares.has() (read) and
-    // loadedShares.set() (write) in the same callback triggered re-runs
     const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
 
     let emissionCount = 0;
@@ -190,8 +254,7 @@ describe('CommunityShare', () => {
         /** @type {any} */ ({
           subscribe: (/** @type {Function} */ cb) => {
             emissionCount++;
-            // Emit synchronously with share events (this triggered the bug)
-            cb([mockShareEvent]);
+            cb([mockRepostEvent]);
             return { unsubscribe: vi.fn() };
           }
         })
@@ -204,10 +267,8 @@ describe('CommunityShare', () => {
       }
     });
 
-    // Should render without hitting effect depth limit
     const checkboxes = container.querySelectorAll('input[type="checkbox"]');
     expect(checkboxes.length).toBe(2);
-    // Model subscription should only happen once (no re-runs from reactive cycle)
     expect(emissionCount).toBe(1);
   });
 
@@ -219,9 +280,7 @@ describe('CommunityShare', () => {
       }
     });
 
-    // Component should not be stuck in infinite loading state
     const spinners = container.querySelectorAll('.loading-spinner');
-    // No spinner visible (isCheckingShares should be false after model emits)
     expect(spinners.length).toBe(0);
   });
 });

@@ -1,7 +1,7 @@
 <!--
   CommunityShare Component
-  Reusable component for sharing any content type with communities using kind 30222 targeted publications
-  Follows the Communikey NIP pattern for targeted content sharing
+  Reusable component for sharing any content type with communities using NIP-18 reposts (kind 6/16)
+  with h-tag community targeting. Also detects legacy kind 30222 shares for backward compat.
 -->
 
 <script>
@@ -15,16 +15,16 @@
   import {
     getDisplayName,
     getAddressPointerForEvent,
-    getReplaceableIdentifier,
     getReplaceableAddress
   } from 'applesauce-core/helpers';
+  import 'applesauce-common/blueprints';
   import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
   /**
    * @typedef {Object} Props
-   * @property {any} event - Event to share (any kind: calendar, article, etc.)
+   * @property {any} event - Raw Nostr event to share (any kind: calendar, article, etc.)
    * @property {any} activeUser - Current active user
    * @property {boolean} [compact=false] - Use compact layout
    * @property {string} [shareButtonText='Apply Changes'] - Custom button text
@@ -52,8 +52,6 @@
 
   /**
    * Get community name for logging purposes
-   * Note: We use truncated pubkey here instead of profile lookup because
-   * useUserProfile() uses $effect internally which cannot be called from async handlers
    * @param {string} communityPubkey
    * @returns {string}
    */
@@ -62,8 +60,8 @@
   }
 
   /**
-   * Check which communities already have sharing events for this content
-   * Uses loader/model pattern with proper deduplication and cleanup
+   * Check which communities already have sharing events for this content.
+   * Detects both NIP-18 reposts (kind 6/16 with h-tag) and legacy 30222 shares.
    */
   $effect(() => {
     if (!activeUser || !event || !joinedCommunities.length) {
@@ -74,57 +72,90 @@
 
     isCheckingShares = true;
 
-    // Create loader to FETCH user's targeted publications from relays
-    const loader = createTimelineLoader(
+    // Load user's shares from relays (both NIP-18 reposts and legacy 30222)
+    const repostLoader = createTimelineLoader(
       pool,
       runtimeConfig.fallbackRelays || [],
-      {
-        kinds: [30222],
-        authors: [activeUser.pubkey]
-      },
+      { kinds: [6, 16], authors: [activeUser.pubkey] },
+      { eventStore, limit: 100 }
+    );
+    const legacyLoader = createTimelineLoader(
+      pool,
+      runtimeConfig.fallbackRelays || [],
+      { kinds: [30222], authors: [activeUser.pubkey] },
       { eventStore, limit: 100 }
     );
 
-    // Start fetching from relays
-    const loaderSub = loader().subscribe({
-      error: (err) => console.warn('🔗 CommunityShare: Loader error:', err)
+    const repostLoaderSub = repostLoader().subscribe({
+      error: (err) => console.warn('CommunityShare: Repost loader error:', err)
+    });
+    const legacyLoaderSub = legacyLoader().subscribe({
+      error: (err) => console.warn('CommunityShare: Legacy loader error:', err)
     });
 
-    // Subscribe to EventStore for reactive updates
-    // Recompute full shares set on each emission (TimelineModel emits the complete list)
+    // Subscribe to combined model for reactive updates
     const modelSub = eventStore
       .model(TimelineModel, {
-        kinds: [30222],
+        kinds: [6, 16, 30222],
         authors: [activeUser.pubkey]
       })
       .subscribe((shareEvents) => {
         // eslint-disable-next-line svelte/prefer-svelte-reactivity -- assigned to $state.raw, not reactive
         const shares = new Set();
         for (const shareEvent of shareEvents || []) {
-          // Check if this share references our event
-          const aTag = shareEvent.tags.find((t) => t[0] === 'a');
-          const eTag = shareEvent.tags.find((t) => t[0] === 'e');
+          if (shareEvent.kind === 6 || shareEvent.kind === 16) {
+            // NIP-18 repost: check e/a tag matches our event, extract h-tag for community
+            const eTag = shareEvent.tags.find((t) => t[0] === 'e');
+            const aTag = shareEvent.tags.find((t) => t[0] === 'a');
 
-          if (aTag) {
-            const eventPointer = getAddressPointerForEvent(event);
-            const sharePointer = parseAddressPointerFromATag(aTag);
+            let matchesEvent = false;
+            if (eTag && eTag[1] === event.id) {
+              matchesEvent = true;
+            } else if (aTag) {
+              const eventPointer = getAddressPointerForEvent(event);
+              const sharePointer = parseAddressPointerFromATag(aTag);
+              if (eventPointer && sharePointer) {
+                matchesEvent =
+                  eventPointer.identifier === sharePointer.identifier &&
+                  eventPointer.kind === sharePointer.kind &&
+                  eventPointer.pubkey === sharePointer.pubkey;
+              }
+            }
 
-            if (!sharePointer || !eventPointer) continue;
+            if (matchesEvent) {
+              // Extract all h-tags (community targets)
+              for (const tag of shareEvent.tags) {
+                if (tag[0] === 'h' && tag[1]) {
+                  shares.add(tag[1]);
+                }
+              }
+            }
+          } else if (shareEvent.kind === 30222) {
+            // Legacy targeted publication: check e/a tag matches, extract p-tag for community
+            const aTag = shareEvent.tags.find((t) => t[0] === 'a');
+            const eTag = shareEvent.tags.find((t) => t[0] === 'e');
 
-            const idMatch = eventPointer.identifier === sharePointer.identifier;
-            const kindMatch = eventPointer.kind === sharePointer.kind;
-            const pubkeyMatch = eventPointer.pubkey === sharePointer.pubkey;
+            if (aTag) {
+              const eventPointer = getAddressPointerForEvent(event);
+              const sharePointer = parseAddressPointerFromATag(aTag);
 
-            if (idMatch && kindMatch && pubkeyMatch) {
+              if (!sharePointer || !eventPointer) continue;
+
+              const idMatch = eventPointer.identifier === sharePointer.identifier;
+              const kindMatch = eventPointer.kind === sharePointer.kind;
+              const pubkeyMatch = eventPointer.pubkey === sharePointer.pubkey;
+
+              if (idMatch && kindMatch && pubkeyMatch) {
+                const pTag = shareEvent.tags.find((t) => t[0] === 'p');
+                if (pTag?.[1]) {
+                  shares.add(pTag[1]);
+                }
+              }
+            } else if (eTag && eTag[1] === event.id) {
               const pTag = shareEvent.tags.find((t) => t[0] === 'p');
               if (pTag?.[1]) {
                 shares.add(pTag[1]);
               }
-            }
-          } else if (eTag && eTag[1] === event.id) {
-            const pTag = shareEvent.tags.find((t) => t[0] === 'p');
-            if (pTag?.[1]) {
-              shares.add(pTag[1]);
             }
           }
         }
@@ -133,15 +164,14 @@
       });
 
     return () => {
-      loaderSub.unsubscribe();
+      repostLoaderSub.unsubscribe();
+      legacyLoaderSub.unsubscribe();
       modelSub.unsubscribe();
     };
   });
 
   /**
-   * Create a community sharing event (kind 30222)
-   * Uses addressable event reference ('a' tag) for replaceable events
-   * Uses event ID ('e' tag) for non-replaceable events
+   * Create a NIP-18 repost (kind 6/16) with h-tag for community targeting
    * @param {string} communityPubkey
    * @returns {Promise<boolean>}
    */
@@ -150,119 +180,95 @@
       signer: activeUser.signer
     });
 
-    // Determine if this is a replaceable event (kinds 30000-39999)
-    const isReplaceable = event.kind >= 30000 && event.kind < 40000;
+    // Use applesauce ShareBlueprint — creates kind 6 (for kind 1) or kind 16 (generic)
+    // Auto-adds e, a, p, k tags with relay hints and embeds event as JSON
+    const template = await factory.share(event);
 
-    // Generate tags based on event type
-    const tags = [
-      ['d', isReplaceable ? getReplaceableIdentifier(event) : event.id],
-      ['k', event.kind.toString()],
-      ['p', communityPubkey]
-    ];
+    // Append h-tag for community targeting
+    template.tags = [...template.tags, ['h', communityPubkey]];
 
-    // Add appropriate reference tag
-    if (isReplaceable) {
-      const eventAddress = getReplaceableAddress(event);
-      if (eventAddress) {
-        tags.push(['a', eventAddress]); // Addressable reference (persistent across edits)
-        tags.push(['e', event.id]); // Also include event ID for compatibility
-      }
-    } else {
-      tags.push(['e', event.id]); // Regular event ID reference
-    }
+    const signedEvent = await factory.sign(template);
 
-    console.log(`🔗 CommunityShare: Creating share event with tags:`, tags);
-
-    // Create and sign the sharing event
-    const shareEvent = await factory.build({ kind: 30222, tags });
-    const signedEvent = await factory.sign(shareEvent);
-
-    console.log(`🔗 CommunityShare: Publishing share using outbox model + communikey relays`);
-
-    // Publish using outbox model + communikey relays (for kind 30222)
     const result = await publishEvent(signedEvent, [communityPubkey]);
 
     if (result.success) {
       eventStore.add(signedEvent);
-      console.log('✅ CommunityShare: Share created successfully');
-    } else {
-      console.error('❌ CommunityShare: Share creation failed');
     }
 
     return result.success;
   }
 
   /**
-   * Delete a community sharing event
+   * Delete a community share — finds the repost (kind 6/16 with matching h-tag)
+   * or legacy 30222 and deletes it.
    * @param {string} communityPubkey
    * @returns {Promise<boolean>}
    */
   async function deleteShare(communityPubkey) {
-    console.log(
-      `🔗 CommunityShare: Deleting share for community ${communityPubkey.slice(0, 8)}...`
-    );
-
     if (!activeUser || !event) {
       throw new Error('Missing user or event data');
     }
-
-    // Determine identifier based on event type
-    const isReplaceable = event.kind >= 30000 && event.kind < 40000;
-    const identifier = isReplaceable ? getReplaceableIdentifier(event) : event.id;
 
     return new Promise((resolve) => {
       /** @type {import('rxjs').Subscription | undefined} */
       let sub;
       sub = eventStore
-        .replaceable({
-          kind: 30222,
-          pubkey: activeUser.pubkey,
-          identifier: identifier
+        .timeline({
+          kinds: [6, 16, 30222],
+          authors: [activeUser.pubkey]
         })
-        .subscribe(async (shareEvent) => {
+        .subscribe(async (allShares) => {
           if (sub) sub.unsubscribe();
 
-          if (shareEvent) {
-            console.log('🔗 CommunityShare: Found share event, creating deletion');
-            const success = await performDeletion(shareEvent);
+          // Find matching share (prefer NIP-18 repost, fall back to legacy 30222)
+          let matchingShare = null;
+          let legacyMatch = null;
+
+          for (const share of allShares) {
+            if (share.kind === 6 || share.kind === 16) {
+              // NIP-18 repost: match by e-tag + h-tag
+              const eTag = share.tags.find((t) => t[0] === 'e');
+              const aTag = share.tags.find((t) => t[0] === 'a');
+              const hasHTag = share.tags.some((t) => t[0] === 'h' && t[1] === communityPubkey);
+
+              if (!hasHTag) continue;
+
+              if (eTag?.[1] === event.id) {
+                matchingShare = share;
+                break;
+              }
+              if (aTag) {
+                const isReplaceable = event.kind >= 30000 && event.kind < 40000;
+                if (isReplaceable && aTag[1] === getReplaceableAddress(event)) {
+                  matchingShare = share;
+                  break;
+                }
+              }
+            } else if (share.kind === 30222) {
+              // Legacy 30222: match by p-tag + e/a-tag
+              const pTag = share.tags.find((t) => t[0] === 'p');
+              const eTag = share.tags.find((t) => t[0] === 'e');
+              const aTag = share.tags.find((t) => t[0] === 'a');
+
+              if (pTag?.[1] !== communityPubkey) continue;
+
+              const isReplaceable = event.kind >= 30000 && event.kind < 40000;
+              if (
+                eTag?.[1] === event.id ||
+                (isReplaceable && aTag?.[1] === getReplaceableAddress(event))
+              ) {
+                legacyMatch = share;
+              }
+            }
+          }
+
+          const toDelete = matchingShare || legacyMatch;
+
+          if (toDelete) {
+            const success = await performDeletion(toDelete);
             resolve(success);
           } else {
-            // Try manual search through all shares
-            console.log('🔗 CommunityShare: Trying manual search...');
-            /** @type {import('rxjs').Subscription | undefined} */
-            let allSharesSub;
-            allSharesSub = eventStore
-              .timeline({
-                kinds: [30222],
-                authors: [activeUser.pubkey]
-              })
-              .subscribe(async (allShares) => {
-                if (allSharesSub) allSharesSub.unsubscribe();
-
-                const matchingShare = allShares.find((share) => {
-                  const pTag = share.tags.find((t) => t[0] === 'p');
-                  const eTag = share.tags.find((t) => t[0] === 'e');
-                  const aTag = share.tags.find((t) => t[0] === 'a');
-
-                  const matchesCommunity = pTag?.[1] === communityPubkey;
-                  const matchesEventId = eTag?.[1] === event.id;
-                  const matchesEventAddress =
-                    isReplaceable && aTag?.[1] === getReplaceableAddress(event);
-
-                  return matchesCommunity && (matchesEventId || matchesEventAddress);
-                });
-
-                if (matchingShare) {
-                  console.log('🔗 CommunityShare: Found share through manual search');
-                  const success = await performDeletion(matchingShare);
-                  resolve(success);
-                } else {
-                  console.warn(
-                    `🔗 CommunityShare: No share event found for community ${communityPubkey}`
-                  );
-                  resolve(true); // Consider successful if already gone
-                }
-              });
+            resolve(true); // Consider successful if already gone
           }
         });
     });
@@ -274,8 +280,6 @@
    * @returns {Promise<boolean>}
    */
   async function performDeletion(shareEvent) {
-    console.log('🔗 CommunityShare: Creating deletion event for share:', shareEvent.id);
-
     const factory = new EventFactory({
       signer: activeUser.signer
     });
@@ -283,14 +287,10 @@
     const deleteEventTemplate = await factory.delete([shareEvent]);
     const deleteEvent = await factory.sign(deleteEventTemplate);
 
-    // Publish deletion using outbox model
     const result = await publishEvent(deleteEvent);
 
     if (result.success) {
       eventStore.add(deleteEvent);
-      console.log('✅ CommunityShare: Share deleted successfully');
-    } else {
-      console.error('❌ CommunityShare: Share deletion failed');
     }
 
     return result.success;
@@ -301,7 +301,6 @@
    */
   async function handleApplyShares() {
     if (selectedCommunityIds.length === 0 || !activeUser || !event) {
-      console.log('🔗 CommunityShare: Nothing to apply');
       return;
     }
 
@@ -309,8 +308,6 @@
     shareError = '';
     shareSuccess = '';
     shareResults = { successful: [], failed: [] };
-
-    console.log(`🔗 CommunityShare: Processing ${selectedCommunityIds.length} communities`);
 
     try {
       for (const communityPubkey of selectedCommunityIds) {
@@ -320,10 +317,8 @@
         try {
           let success = false;
           if (isAlreadyShared) {
-            console.log(`🔗 CommunityShare: Removing share for "${communityName}"`);
             success = await deleteShare(communityPubkey);
           } else {
-            console.log(`🔗 CommunityShare: Creating share for "${communityName}"`);
             success = await createShare(communityPubkey);
           }
 
@@ -333,10 +328,7 @@
             shareResults.failed.push(communityName);
           }
         } catch (error) {
-          console.error(
-            `🔗 CommunityShare: Failed to process share for ${communityPubkey}:`,
-            error
-          );
+          console.error(`CommunityShare: Failed to process share for ${communityPubkey}:`, error);
           shareResults.failed.push(communityName);
         }
       }
@@ -354,12 +346,8 @@
       }
 
       selectedCommunityIds = [];
-
-      console.log(
-        `🔗 CommunityShare: Processing complete - ${successfulCount} successful, ${failedCount} failed`
-      );
     } catch (error) {
-      console.error('🔗 CommunityShare: Error applying shares:', error);
+      console.error('CommunityShare: Error applying shares:', error);
       shareError = error instanceof Error ? error.message : 'Failed to apply sharing changes';
     } finally {
       isProcessingShares = false;

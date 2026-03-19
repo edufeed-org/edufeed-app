@@ -1,7 +1,8 @@
 /**
  * Community Content Model Factory Tests
  *
- * Tests the generic createCommunityContentModel factory and CommunityBoardModel.
+ * Tests the generic createCommunityContentModel factory and concrete models.
+ * Covers direct content, legacy 30222 shares, and NIP-18 reposts (kind 6/16).
  * Pure RxJS logic — no DOM, no network, no relays.
  *
  * @vitest-environment node
@@ -36,19 +37,26 @@ function mockEvent(overrides = {}) {
 
 /**
  * Create a mock EventStore that returns predefined observables for model() calls.
+ * Now supports 4 streams: direct, legacy shares (30222), reposts (6/16), and all events.
  *
  * @param {Object} opts
  * @param {any[]} opts.direct - Direct community events (h-tagged)
- * @param {any[]} opts.shares - Targeted publication events (kind 30222)
+ * @param {any[]} [opts.shares] - Legacy targeted publication events (kind 30222)
+ * @param {any[]} [opts.reposts] - NIP-18 repost events (kind 6/16 with h-tag)
  * @param {any[]} opts.all - All events of the content kind
  */
-function createMockEventStore({ direct = [], shares = [], all = [] }) {
+function createMockEventStore({ direct = [], shares = [], reposts = [], all = [] }) {
   return {
     model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
-      // Detect which stream based on filter
+      // Repost stream: kinds [6, 16] with #h
+      if (filter.kinds?.includes(6) && filter.kinds?.includes(16) && filter['#h']) {
+        return of(reposts);
+      }
+      // Legacy share stream: kind 30222 with #k
       if (filter.kinds?.includes(30222) || filter['#k']) {
         return of(shares);
       }
+      // Direct stream: content kinds with #h
       if (filter['#h']) {
         return of(direct);
       }
@@ -138,7 +146,71 @@ describe('createCommunityContentModel', () => {
     expect(result[0].id).toBe('event-xyz');
   });
 
-  it('deduplicates — direct content takes priority over shares', () => {
+  it('resolves NIP-18 repost references by event ID (e-tag)', () => {
+    const referencedEvent = mockEvent({ id: 'reposted-event', kind: 30142 });
+    const repostEvent = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'reposted-event'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY],
+        ['p', 'author1']
+      ],
+      content: JSON.stringify(referencedEvent)
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [],
+      reposts: [repostEvent],
+      all: [referencedEvent]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('reposted-event');
+  });
+
+  it('resolves NIP-18 repost references by address (a-tag)', () => {
+    const referencedEvent = mockEvent({
+      id: 'reposted-addr',
+      kind: 30142,
+      pubkey: 'author1',
+      tags: [['d', 'reposted-resource']]
+    });
+    const repostEvent = mockEvent({
+      kind: 16,
+      tags: [
+        ['a', '30142:author1:reposted-resource'],
+        ['e', 'reposted-addr'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY],
+        ['p', 'author1']
+      ],
+      content: JSON.stringify(referencedEvent)
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [],
+      reposts: [repostEvent],
+      all: [referencedEvent]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('reposted-addr');
+  });
+
+  it('deduplicates — direct content takes priority over shares and reposts', () => {
     const event = mockEvent({
       id: 'dup-event',
       kind: 30142,
@@ -155,10 +227,19 @@ describe('createCommunityContentModel', () => {
         ['k', '30142']
       ]
     });
+    const repostEvent = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'dup-event'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
 
     const store = createMockEventStore({
       direct: [event],
       shares: [shareEvent],
+      reposts: [repostEvent],
       all: [event]
     });
 
@@ -167,9 +248,44 @@ describe('createCommunityContentModel', () => {
     let result;
     Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
 
-    // Should appear only once despite being both direct and shared
+    // Should appear only once despite being direct, shared, and reposted
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('dup-event');
+  });
+
+  it('deduplicates — legacy shares take priority over reposts', () => {
+    const event = mockEvent({ id: 'shared-reposted', kind: 30142 });
+    const shareEvent = mockEvent({
+      kind: 30222,
+      tags: [
+        ['p', COMMUNITY_PUBKEY],
+        ['e', 'shared-reposted'],
+        ['k', '30142']
+      ]
+    });
+    const repostEvent = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'shared-reposted'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [shareEvent],
+      reposts: [repostEvent],
+      all: [event]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('shared-reposted');
   });
 
   it('applies optional transform function', () => {
@@ -219,6 +335,35 @@ describe('createCommunityContentModel', () => {
     expect(result[0].transformed).toBe(true);
   });
 
+  it('applies transform to repost-resolved events', () => {
+    const referencedEvent = mockEvent({ id: 'repost-resolved', kind: 30142 });
+    const repostEvent = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'repost-resolved'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [],
+      reposts: [repostEvent],
+      all: [referencedEvent]
+    });
+
+    const transform = (/** @type {any} */ e) => ({ ...e, transformed: true });
+    const Model = createCommunityContentModel([30142], { transform });
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0].transformed).toBe(true);
+    expect(result[0].id).toBe('repost-resolved');
+  });
+
   it('returns empty array when no content exists', () => {
     const store = createMockEventStore({
       direct: [],
@@ -257,6 +402,31 @@ describe('createCommunityContentModel', () => {
 
     expect(result).toEqual([]);
   });
+
+  it('ignores repost events whose references are not in the store', () => {
+    const repostEvent = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'nonexistent-repost'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [],
+      reposts: [repostEvent],
+      all: []
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toEqual([]);
+  });
 });
 
 describe('CommunityBoardModel', () => {
@@ -278,6 +448,7 @@ describe('CommunityBoardModel', () => {
 
     // Override mock store to handle kind 30301 filters correctly
     store.model = (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+      if (filter.kinds?.includes(6)) return of([]);
       if (filter.kinds?.includes(30222)) return of([]);
       if (filter['#h']) return of([board]);
       return of([board]);
@@ -310,6 +481,7 @@ describe('CommunityBoardModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([share]);
         if (filter['#h']) return of([]);
         return of([board]);
@@ -387,6 +559,41 @@ describe('CommunityAMBResourceModel', () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('amb-shared');
   });
+
+  it('resolves AMB resources via NIP-18 reposts', () => {
+    const resource = mockEvent({
+      id: 'amb-reposted',
+      kind: 30142,
+      pubkey: 'author1',
+      tags: [['d', 'reposted-res']]
+    });
+    const repost = mockEvent({
+      kind: 16,
+      tags: [
+        ['e', 'amb-reposted'],
+        ['a', '30142:author1:reposted-res'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY],
+        ['p', 'author1']
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [],
+      reposts: [repost],
+      all: [resource]
+    });
+
+    /** @type {any} */
+    let result;
+    CommunityAMBResourceModel(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe(
+      (items) => (result = items)
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('amb-reposted');
+  });
 });
 
 describe('CommunityCalendarEventModel', () => {
@@ -412,6 +619,7 @@ describe('CommunityCalendarEventModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([]);
         if (filter['#h']) return of([dateEvent, timeEvent]);
         return of([dateEvent, timeEvent]);
@@ -452,6 +660,7 @@ describe('CommunityCalendarEventModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([share]);
         if (filter['#h']) return of([]);
         return of([calEvent]);
@@ -483,6 +692,7 @@ describe('CommunityArticleModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([]);
         if (filter['#h']) return of([article]);
         return of([article]);
@@ -519,6 +729,7 @@ describe('CommunityArticleModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([share]);
         if (filter['#h']) return of([]);
         return of([article]);
@@ -550,6 +761,7 @@ describe('CommunityWikiModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([]);
         if (filter['#h']) return of([wiki]);
         return of([wiki]);
@@ -585,6 +797,7 @@ describe('CommunityWikiModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([share]);
         if (filter['#h']) return of([]);
         return of([wiki]);
@@ -621,6 +834,7 @@ describe('CommunityWikiModel', () => {
 
     const store = {
       model: (/** @type {any} */ ModelClass, /** @type {any} */ filter) => {
+        if (filter.kinds?.includes(6)) return of([]);
         if (filter.kinds?.includes(30222)) return of([share]);
         if (filter['#h']) return of([wiki]);
         return of([wiki]);
