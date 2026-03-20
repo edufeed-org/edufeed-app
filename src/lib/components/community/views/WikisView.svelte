@@ -7,7 +7,6 @@
   import { useWikiCommunityLoader } from '$lib/loaders/wiki.js';
   import { CommunityWikiModel } from '$lib/models/community-content.js';
   import WikiCard from '$lib/components/wiki/WikiCard.svelte';
-  import WikiFAB from '$lib/components/wiki/WikiFAB.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -32,9 +31,5 @@
         <WikiCard {wiki} authorProfile={authorProfiles.get(wiki.pubkey) || null} />
       {/each}
     </div>
-  {/snippet}
-
-  {#snippet fab()}
-    <WikiFAB {communityPubkey} />
   {/snippet}
 </CommunityContentView>

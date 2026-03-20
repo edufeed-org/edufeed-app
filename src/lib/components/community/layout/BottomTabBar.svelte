@@ -5,6 +5,7 @@
     CalendarIcon,
     SettingsIcon,
     BookIcon,
+    GraduationCapIcon,
     KanbanIcon,
     ScrollTextIcon,
     ForumIcon
@@ -29,7 +30,7 @@
     home: HomeIcon,
     chat: ChatIcon,
     calendar: CalendarIcon,
-    learning: BookIcon,
+    learning: GraduationCapIcon,
     boards: KanbanIcon,
     articles: ScrollTextIcon,
     forum: ForumIcon,

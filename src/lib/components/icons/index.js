@@ -30,6 +30,7 @@ export { default as RelayIcon } from './ui/RelayIcon.svelte';
 export { default as SearchIcon } from './ui/SearchIcon.svelte';
 export { default as TagIcon } from './ui/TagIcon.svelte';
 export { default as BookIcon } from './ui/BookIcon.svelte';
+export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
 export { default as InfoIcon } from './ui/InfoIcon.svelte';
 

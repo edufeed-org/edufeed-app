@@ -6,7 +6,9 @@
   import ModalManager from '$lib/components/ModalManager.svelte';
   import Footer from '$lib/components/Footer.svelte';
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
+  import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { manager } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
   import { browser } from '$app/environment';
 
@@ -108,3 +110,6 @@
   <Footer />
 </div>
 <PublishStatusToast />
+{#if manager.active}
+  <GlobalFAB />
+{/if}

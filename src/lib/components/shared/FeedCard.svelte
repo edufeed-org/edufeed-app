@@ -2,6 +2,7 @@
   import {
     CalendarIcon,
     BookIcon,
+    GraduationCapIcon,
     KanbanIcon,
     ScrollTextIcon,
     ForumIcon
@@ -42,7 +43,7 @@
   /** @type {Record<string, { label: () => string, icon: any }>} */
   const typeMeta = {
     calendar: { label: () => m.feed_badge_calendar(), icon: CalendarIcon },
-    learning: { label: () => m.feed_badge_learning(), icon: BookIcon },
+    learning: { label: () => m.feed_badge_learning(), icon: GraduationCapIcon },
     article: { label: () => m.feed_badge_article(), icon: ScrollTextIcon },
     board: { label: () => m.feed_badge_board(), icon: KanbanIcon },
     wiki: { label: () => m.feed_badge_wiki(), icon: BookIcon },

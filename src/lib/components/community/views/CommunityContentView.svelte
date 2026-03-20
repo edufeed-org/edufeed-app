@@ -21,7 +21,7 @@
    * @property {string} emptyIconPath - SVG path for empty state icon
    */
 
-  /** @type {Props & { content: import('svelte').Snippet<[any[], Map<string, any>]>, fab?: import('svelte').Snippet }} */
+  /** @type {Props & { content: import('svelte').Snippet<[any[], Map<string, any>]> }} */
   let {
     communityPubkey,
     communityProfile: _communityProfile = null,
@@ -32,8 +32,7 @@
     emptyDescription,
     formatCount,
     emptyIconPath,
-    content,
-    fab
+    content
   } = $props();
 
   let items = $state(/** @type {any[]} */ ([]));
@@ -146,10 +145,6 @@
     </div>
   {/if}
 </div>
-
-{#if fab}
-  {@render fab()}
-{/if}
 
 <style>
   .community-content-view {

@@ -2,7 +2,7 @@
   import Icon from '../Icon.svelte';
 
   export let class_ = 'w-5 h-5';
-  export let title = 'Learning';
+  export let title = 'Wiki';
 </script>
 
 <Icon {class_} {title}>

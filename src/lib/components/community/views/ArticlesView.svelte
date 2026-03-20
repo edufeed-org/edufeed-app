@@ -7,7 +7,6 @@
   import { useArticleCommunityLoader } from '$lib/loaders/articles.js';
   import { CommunityArticleModel } from '$lib/models/community-content.js';
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
-  import ArticleFAB from '$lib/components/article/ArticleFAB.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -36,9 +35,5 @@
         />
       {/each}
     </div>
-  {/snippet}
-
-  {#snippet fab()}
-    <ArticleFAB {communityPubkey} />
   {/snippet}
 </CommunityContentView>
