@@ -80,6 +80,12 @@
   role="button"
   tabindex="0"
   {onclick}
+  onkeydown={(e) => {
+    if (onclick && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      onclick();
+    }
+  }}
   style:border-left-color={kindColor
     ? `rgb(${kindColor.r},${kindColor.g},${kindColor.b})`
     : undefined}

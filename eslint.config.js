@@ -13,7 +13,7 @@ export default [
   includeIgnoreFile(gitignorePath),
   {
     // Ignore auto-generated paraglide files
-    ignores: ['src/lib/paraglide/**']
+    ignores: ['src/lib/paraglide/**', 'src/paraglide/**']
   },
   js.configs.recommended,
   ...svelte.configs.recommended,

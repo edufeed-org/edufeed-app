@@ -144,9 +144,9 @@
           required
           disabled={isPosting}
         ></textarea>
-        <label class="label">
+        <div class="label">
           <span class="label-text-alt text-base-content/50">{m.thread_create_markdown_hint()}</span>
-        </label>
+        </div>
       </div>
 
       <!-- Tags -->
