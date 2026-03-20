@@ -3,7 +3,7 @@
     HomeIcon,
     ChatIcon,
     CalendarIcon,
-    InfoIcon,
+    SettingsIcon,
     BookIcon,
     KanbanIcon,
     ScrollTextIcon,
@@ -34,7 +34,7 @@
     articles: ScrollTextIcon,
     forum: ForumIcon,
     wikis: BookIcon,
-    about: InfoIcon
+    settings: SettingsIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -46,7 +46,7 @@
     articles: () => m.community_layout_bottom_tab_bar_articles(),
     forum: () => m.community_layout_bottom_tab_bar_forum(),
     wikis: () => m.community_wikis_title(),
-    about: () => m.community_layout_bottom_tab_bar_about()
+    settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 
   // State for scroll indicators
@@ -90,7 +90,7 @@
 
     // Ensure all default tabs are present (replaces per-type forced blocks)
     for (const tabId of getDefaultCommunityTabs()) {
-      if (tabId === 'home' || tabId === 'about') continue;
+      if (tabId === 'home' || tabId === 'settings') continue;
       if (!types.some((t) => t.id === tabId)) {
         types.push({
           id: tabId,
@@ -100,11 +100,11 @@
       }
     }
 
-    // Add about tab at the end
+    // Add settings tab at the end
     types.push({
-      id: 'about',
-      label: m.community_layout_bottom_tab_bar_about(),
-      icon: InfoIcon
+      id: 'settings',
+      label: m.community_layout_bottom_tab_bar_settings(),
+      icon: SettingsIcon
     });
 
     return types;

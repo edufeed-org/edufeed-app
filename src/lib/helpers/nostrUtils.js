@@ -469,25 +469,16 @@ export const encodeEventToNaddr = (event, relays = []) => {
 };
 
 /**
- * Generate deterministic RGB values from a pubkey (NIP-C1).
- * Algorithm:
- * 1. Convert full HEX pubkey to BigInt
- * 2. Hue = BigInt % 360
- * 3. Saturation = 70% (fixed)
- * 4. Value/Brightness: 75% for hue 32-204, 96% for 216-273, 90% otherwise
- * 5. Convert HSV to RGB
+ * NIP-C1 core: convert a hue (0-359) to RGB using fixed saturation
+ * and adaptive brightness. Shared by pubkey and kind color functions.
  *
- * @param {string} pubkey - Hex public key
- * @returns {{r: number, g: number, b: number}} RGB values (0-255)
+ * @param {number} hue - Hue value (0-359)
+ * @returns {{r: number, g: number, b: number}}
  */
-export function generateAuthorColorRGB(pubkey) {
-  if (!pubkey || typeof pubkey !== 'string') return { r: 128, g: 128, b: 128 };
-
-  const hue = Number(BigInt('0x' + pubkey) % 360n);
+function hueToRGB(hue) {
   const s = 0.7;
   const v = hue >= 32 && hue <= 204 ? 0.75 : hue >= 216 && hue <= 273 ? 0.96 : 0.9;
 
-  // HSV to RGB
   const c = v * s;
   const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
   const m = v - c;
@@ -504,6 +495,42 @@ export function generateAuthorColorRGB(pubkey) {
     g: Math.round((g1 + m) * 255),
     b: Math.round((b1 + m) * 255)
   };
+}
+
+/**
+ * Generate deterministic RGB values from a pubkey (NIP-C1).
+ *
+ * @param {string} pubkey - Hex public key
+ * @returns {{r: number, g: number, b: number}} RGB values (0-255)
+ */
+export function generateAuthorColorRGB(pubkey) {
+  if (!pubkey || typeof pubkey !== 'string') return { r: 128, g: 128, b: 128 };
+  const hue = Number(BigInt('0x' + pubkey) % 360n);
+  return hueToRGB(hue);
+}
+
+/**
+ * Generate deterministic RGB values from a Nostr event kind number.
+ * Uses Knuth multiplicative hash for good hue distribution of small integers.
+ *
+ * @param {number} kind - Nostr event kind
+ * @returns {{r: number, g: number, b: number}}
+ */
+export function generateKindColorRGB(kind) {
+  if (kind === undefined || kind === null) return { r: 128, g: 128, b: 128 };
+  const hue = Number((BigInt(kind) * 2654435761n) % 360n);
+  return hueToRGB(hue);
+}
+
+/**
+ * Generate a deterministic CSS color string from a Nostr event kind number.
+ *
+ * @param {number} kind - Nostr event kind
+ * @returns {string} CSS rgb() color string
+ */
+export function generateKindColor(kind) {
+  const { r, g, b } = generateKindColorRGB(kind);
+  return `rgb(${r},${g},${b})`;
 }
 
 /**

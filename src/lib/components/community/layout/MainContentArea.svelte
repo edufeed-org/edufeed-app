@@ -12,7 +12,7 @@
   import ForumView from '../views/ForumView.svelte';
   import WikisView from '../views/WikisView.svelte';
   import HomeView from '../views/HomeView.svelte';
-  import AboutView from '../views/AboutView.svelte';
+  import SettingsView from '../views/SettingsView.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -150,8 +150,8 @@
         <ForumView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'wikis'}
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
-      {:else if selectedContentType === 'about'}
-        <AboutView
+      {:else if selectedContentType === 'settings'}
+        <SettingsView
           communityId={selectedCommunityId}
           {communikeyEvent}
           profileEvent={communityProfile}

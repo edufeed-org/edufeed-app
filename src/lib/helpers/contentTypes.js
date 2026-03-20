@@ -263,6 +263,6 @@ export function getDefaultCommunityTabs() {
     }
   }
 
-  tabs.push('about');
+  tabs.push('settings');
   return tabs;
 }

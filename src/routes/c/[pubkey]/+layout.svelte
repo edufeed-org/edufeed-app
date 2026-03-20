@@ -37,7 +37,7 @@
     'articles',
     'forum',
     'wikis',
-    'about'
+    'settings'
   ]);
 
   // Sync selectedContentType from child page data or ?view= param

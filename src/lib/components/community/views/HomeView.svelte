@@ -1,17 +1,12 @@
 <script>
-  import CommunikeyHeader from '$lib/components/CommunikeyHeader.svelte';
+  import CommunityProfileHero from './CommunityProfileHero.svelte';
+  import FeedCard from '$lib/components/shared/FeedCard.svelte';
+  import { getFeedCardData } from '$lib/helpers/feedCardData.js';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
   import { CommunityActivityModel } from '$lib/models/community-content.js';
-  import { formatAMBResource } from '$lib/helpers/educational/index.js';
-  import { getCalendarEventMetadata } from '$lib/helpers/eventUtils';
-  import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
-  import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
-  import ArticleCard from '$lib/components/article/ArticleCard.svelte';
-  import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
-  import WikiCard from '$lib/components/wiki/WikiCard.svelte';
-  import ThreadCard from '$lib/components/thread/ThreadCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { communikeyEvent, profileEvent, communityId, onKindNavigation } = $props();
@@ -75,27 +70,16 @@
 
 {#if profileEvent && communikeyEvent}
   <div class="bg-base-100">
-    <!-- Community Header -->
-    <CommunikeyHeader
+    <!-- Community Profile Hero -->
+    <CommunityProfileHero
+      {communityId}
       {communikeyEvent}
-      profile={profileEvent}
-      communikeyContentTypes={[]}
-      activeTab={undefined}
-      onTabChange={onKindNavigation}
+      {profileEvent}
+      onNavigateToAbout={() => onKindNavigation?.('settings')}
     />
 
     <!-- Main Content -->
     <div class="container mx-auto max-w-4xl px-4 py-8">
-      <!-- Community Description -->
-      {#if communikeyEvent?.content}
-        <div class="card mb-8 bg-base-200 shadow-xl">
-          <div class="card-body">
-            <h2 class="card-title">{m.community_views_home_about_title()}</h2>
-            <p class="text-base-content/80">{communikeyEvent.content}</p>
-          </div>
-        </div>
-      {/if}
-
       <!-- Recent Activity Feed -->
       <div>
         <h2 class="mb-4 text-xl font-bold">{m.community_views_home_recent_activity_title()}</h2>
@@ -117,23 +101,18 @@
           <div class="space-y-4">
             {#each feedItems as event (event.id)}
               {@const profile = authorProfiles.get(event.pubkey)}
-              {#if event.kind === 31922 || event.kind === 31923}
-                <CalendarEventCard event={getCalendarEventMetadata(event)} compact />
-              {:else if event.kind === 30142}
-                <AMBResourceCard
-                  resource={formatAMBResource(event)}
-                  authorProfile={profile}
-                  compact
-                />
-              {:else if event.kind === 30023}
-                <ArticleCard article={event} authorProfile={profile} compact />
-              {:else if event.kind === 30301}
-                <KanbanBoardCard board={event} authorProfile={profile} compact />
-              {:else if event.kind === 30818}
-                <WikiCard wiki={event} authorProfile={profile} compact />
-              {:else if event.kind === 11}
-                <ThreadCard thread={event} authorProfile={profile} />
-              {/if}
+              {@const cardData = getFeedCardData(event)}
+              <FeedCard
+                title={cardData.title}
+                subtitle={cardData.subtitle}
+                typeKey={cardData.typeKey}
+                kind={event.kind}
+                tags={cardData.tags}
+                description={cardData.description}
+                authorName={profile ? getDisplayName(profile) : undefined}
+                authorAvatar={profile ? getProfilePicture(profile) : undefined}
+                timestamp={event.created_at}
+              />
             {/each}
           </div>
         {/if}

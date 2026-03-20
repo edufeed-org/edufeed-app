@@ -12,15 +12,21 @@
   );
 
   /**
-   * Handle navigation from content type kind number
-   * @param {number} kind - The content type kind number
+   * Handle navigation from content type kind number or string tab name
+   * @param {number|string} kindOrType - Kind number or content type string
    */
-  function handleKindNavigation(kind) {
-    const kindMap = /** @type {{ [key: number]: string }} */ ({
-      9: 'chat',
-      31923: 'calendar'
-    });
-    const contentType = kindMap[kind];
+  function handleKindNavigation(kindOrType) {
+    /** @type {string|undefined} */
+    let contentType;
+    if (typeof kindOrType === 'string') {
+      contentType = kindOrType;
+    } else {
+      const kindMap = /** @type {{ [key: number]: string }} */ ({
+        9: 'chat',
+        31923: 'calendar'
+      });
+      contentType = kindMap[kindOrType];
+    }
     if (contentType) {
       // Sync URL query param
       const url = new URL($page.url);
