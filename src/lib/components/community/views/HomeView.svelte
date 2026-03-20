@@ -2,12 +2,35 @@
   import CommunityProfileHero from './CommunityProfileHero.svelte';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
   import { CommunityActivityModel } from '$lib/models/community-content.js';
+  import { goto } from '$app/navigation';
+  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
+
+  /** Navigate to the detail view for a feed event
+   * @param {import('nostr-tools').Event} event */
+  function navigateToEvent(event) {
+    const isAddressable = event.kind >= 30000 && event.kind < 40000;
+    const isCalendar = event.kind === 31922 || event.kind === 31923;
+
+    if (isAddressable) {
+      const naddr = encodeEventToNaddr(event);
+      if (!naddr) return;
+      goto(isCalendar ? `/calendar/event/${naddr}` : `/${naddr}`);
+    } else if (event.kind === 11) {
+      const relays = getSeenRelays(event);
+      const nevent = nip19.neventEncode({
+        id: event.id,
+        relays: relays ? Array.from(relays).slice(0, 3) : []
+      });
+      goto(`/${nevent}`);
+    }
+  }
 
   let { communikeyEvent, profileEvent, communityId, onKindNavigation } = $props();
 
@@ -112,6 +135,7 @@
                 authorName={profile ? getDisplayName(profile) : undefined}
                 authorAvatar={profile ? getProfilePicture(profile) : undefined}
                 timestamp={event.created_at}
+                onclick={() => navigateToEvent(event)}
               />
             {/each}
           </div>

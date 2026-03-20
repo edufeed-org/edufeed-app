@@ -94,12 +94,17 @@
 
   <div class="min-w-0 flex-1">
     {#if authorName}
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5">
         <span class="truncate text-sm font-medium text-base-content">{authorName}</span>
-        <span class="ml-auto shrink-0 text-xs text-base-content/50">
+        <span class="text-base-content/30">&middot;</span>
+        <span class="shrink-0 text-xs text-base-content/50">
           {formatRelativeTime(timestamp)}
         </span>
       </div>
+    {:else if timestamp}
+      <span class="text-xs text-base-content/50">
+        {formatRelativeTime(timestamp)}
+      </span>
     {/if}
 
     <h3 class="mt-0.5 line-clamp-2 text-base font-bold text-base-content">{title}</h3>
