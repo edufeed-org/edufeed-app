@@ -32,6 +32,9 @@
   <li>
     {getProfile()?.name || account.pubkey.slice(0, 8) + '...'}
 
+    {#if account.type === 'nostr-connect'}
+      <span class="ml-1 badge badge-outline badge-sm">{m.auth_bunker_account_type()}</span>
+    {/if}
     {#if account === activeAccount}
       {m.account_profile_active_status()}
     {/if}

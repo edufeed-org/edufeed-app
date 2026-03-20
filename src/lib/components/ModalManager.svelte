@@ -2,6 +2,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import LoginModal from './LoginModal.svelte';
   import LoginWithPrivateKey from './LoginWithPrivateKey.svelte';
+  import LoginWithBunker from './LoginWithBunker.svelte';
   import SignupModal from './SignupModal.svelte';
   import CalendarEventDetailsModal from './calendar/CalendarEventDetailsModal.svelte';
   import CalendarCreationModal from './calendar/CalendarCreationModal.svelte';
@@ -32,6 +33,7 @@
   // Generate unique modal IDs for each modal instance
   const loginModalId = 'global-login-modal';
   const privateKeyModalId = 'global-private-key-modal';
+  const bunkerModalId = 'global-bunker-modal';
   const signupModalId = 'global-signup-modal';
   const createCommunityModalId = 'create-community-modal';
   const editCommunityModalId = 'edit-community-modal';
@@ -69,6 +71,11 @@
       if (privateKeyModal && privateKeyModal.open) {
         console.log('ModalManager: Closing private key modal');
         privateKeyModal.close();
+      }
+      const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
+      if (bunkerModal && bunkerModal.open) {
+        console.log('ModalManager: Closing bunker modal');
+        bunkerModal.close();
       }
       if (signupModal && signupModal.open) {
         console.log('ModalManager: Closing signup modal');
@@ -108,6 +115,12 @@
       if (privateKeyModal && !privateKeyModal.open) {
         console.log('ModalManager: Opening private key modal');
         privateKeyModal.showModal();
+      }
+    } else if (currentModal === 'bunker') {
+      const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
+      if (bunkerModal && !bunkerModal.open) {
+        console.log('ModalManager: Opening bunker modal');
+        bunkerModal.showModal();
       }
     } else if (currentModal === 'signup') {
       // Open signup modal
@@ -170,13 +183,35 @@
   function handleAccountCreated() {
     modal.transitionModal('privateKey', 'login');
   }
+
+  function handleBunkerTransition() {
+    modal.transitionModal('login', 'bunker');
+  }
+
+  function handleBunkerBack() {
+    modal.transitionModal('bunker', 'login');
+  }
+
+  function handleBunkerAccountCreated() {
+    modal.transitionModal('bunker', 'login');
+  }
 </script>
 
 <!-- Render modals based on active modal state -->
 {#if modal.activeModal === 'login'}
-  <LoginModal modalId={loginModalId} onNSECTransition={handleNSECTransition} />
+  <LoginModal
+    modalId={loginModalId}
+    onNSECTransition={handleNSECTransition}
+    onBunkerTransition={handleBunkerTransition}
+  />
 {:else if modal.activeModal === 'privateKey'}
   <LoginWithPrivateKey modalId={privateKeyModalId} onAccountCreated={handleAccountCreated} />
+{:else if modal.activeModal === 'bunker'}
+  <LoginWithBunker
+    modalId={bunkerModalId}
+    onAccountCreated={handleBunkerAccountCreated}
+    onBack={handleBunkerBack}
+  />
 {:else if modal.activeModal === 'signup'}
   <SignupModal modalId={signupModalId} />
 {:else if modal.activeModal === 'eventDetails'}
