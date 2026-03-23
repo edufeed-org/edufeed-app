@@ -13,6 +13,7 @@ import {
  * @param {string} text - Highlighted text (goes in content)
  * @param {object} [opts]
  * @param {string} [opts.context] - Context tag value
+ * @param {{prefix: string, suffix: string}} [opts.textquoteselector] - W3C TextQuoteSelector prefix/suffix
  * @param {string} [opts.pubkey]
  * @param {string} [opts.id]
  */
@@ -20,6 +21,14 @@ function makeHighlight(text, opts = {}) {
   /** @type {string[][]} */
   const tags = [];
   if (opts.context) tags.push(['context', opts.context]);
+  if (opts.textquoteselector) {
+    tags.push([
+      'textquoteselector',
+      '-',
+      opts.textquoteselector.prefix,
+      opts.textquoteselector.suffix
+    ]);
+  }
   return {
     id: opts.id || Math.random().toString(36).slice(2),
     kind: 9802,
@@ -99,6 +108,34 @@ describe('matchHighlights', () => {
       matched: [],
       unmatched: []
     });
+  });
+
+  it('uses textquoteselector prefix/suffix to disambiguate when no context tag exists', () => {
+    const article =
+      'The word test appears here. And in a different paragraph the word test appears again.';
+    const hl = makeHighlight('test', {
+      textquoteselector: { prefix: 'the word ', suffix: ' appears again' }
+    });
+    const result = matchHighlights(article, [hl]);
+
+    expect(result.matched).toHaveLength(1);
+    // Should match the second occurrence (disambiguated by textquoteselector)
+    expect(result.matched[0].start).toBeGreaterThan(30);
+  });
+
+  it('prefers context tag over textquoteselector when both present', () => {
+    const article =
+      'The word test appears here. And in a different paragraph the word test appears again.';
+    // context points to the SECOND occurrence, textquoteselector prefix/suffix would point to the FIRST
+    const hl = makeHighlight('test', {
+      context: 'different paragraph the word test appears again',
+      textquoteselector: { prefix: 'The word ', suffix: ' appears here' }
+    });
+    const result = matchHighlights(article, [hl]);
+
+    expect(result.matched).toHaveLength(1);
+    // Should match the second occurrence (context wins over textquoteselector)
+    expect(result.matched[0].start).toBeGreaterThan(30);
   });
 
   it('handles highlight with empty content', () => {

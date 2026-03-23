@@ -60,7 +60,15 @@ export function matchHighlights(articleText, highlights) {
 
     // If multiple matches and context exists, disambiguate
     if (positions.length > 1) {
-      const context = getHighlightContext(event);
+      let context = getHighlightContext(event);
+      if (!context) {
+        const tqsTag = event.tags?.find(
+          (/** @type {string[]} */ t) => t[0] === 'textquoteselector'
+        );
+        if (tqsTag) {
+          context = (tqsTag[2] || '') + normalizedText + (tqsTag[3] || '');
+        }
+      }
       if (context) {
         const normalizedContext = normalizeWhitespace(context);
         let bestScore = -1;

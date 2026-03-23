@@ -7,7 +7,7 @@
   import { HighlightBlueprint } from 'applesauce-common/blueprints';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { extractContext } from '$lib/helpers/highlightOverlay.js';
+  import { extractContext, normalizeWhitespace } from '$lib/helpers/highlightOverlay.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -117,6 +117,21 @@
       const draft = await factory.create(HighlightBlueprint, selectedText, articleUrl, {
         context: context || undefined
       });
+
+      // Add W3C TextQuoteSelector tag for Lantern interop
+      if (context) {
+        const normCtx = normalizeWhitespace(context);
+        const normSel = normalizeWhitespace(selectedText);
+        const idx = normCtx.indexOf(normSel);
+        if (idx !== -1) {
+          draft.tags.push([
+            'textquoteselector',
+            '-',
+            normCtx.slice(0, idx),
+            normCtx.slice(idx + normSel.length)
+          ]);
+        }
+      }
 
       // Add community h-tag
       if (communityPubkey) {
