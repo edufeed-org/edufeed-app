@@ -11,6 +11,7 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
+  import EventDeleteButton from '$lib/components/shared/EventDeleteButton.svelte';
 
   /**
    * @type {{
@@ -66,6 +67,7 @@
     {#if timestamp}
       <span class="text-xs text-base-content/40">· {timestamp}</span>
     {/if}
+    <EventDeleteButton {event} {activeUser} />
   </div>
 </div>
 

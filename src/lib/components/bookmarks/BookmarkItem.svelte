@@ -7,6 +7,7 @@
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import { ChatIcon } from '$lib/components/icons';
+  import EventDeleteButton from '$lib/components/shared/EventDeleteButton.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -49,6 +50,7 @@
     {#if timestamp}
       <span class="text-xs text-base-content/40">· {timestamp}</span>
     {/if}
+    <EventDeleteButton {event} {activeUser} />
     {#if expanded}
       <button
         class="btn ml-auto gap-1 text-base-content/50 btn-ghost btn-xs"
