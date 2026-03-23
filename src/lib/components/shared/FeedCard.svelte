@@ -5,7 +5,8 @@
     GraduationCapIcon,
     KanbanIcon,
     ScrollTextIcon,
-    ForumIcon
+    ForumIcon,
+    BookmarkIcon
   } from '$lib/components/icons';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
@@ -47,7 +48,10 @@
     article: { label: () => m.feed_badge_article(), icon: ScrollTextIcon },
     board: { label: () => m.feed_badge_board(), icon: KanbanIcon },
     wiki: { label: () => m.feed_badge_wiki(), icon: BookIcon },
-    thread: { label: () => m.feed_badge_thread(), icon: ForumIcon }
+    thread: { label: () => m.feed_badge_thread(), icon: ForumIcon },
+    bookmark: { label: () => m.feed_badge_bookmark(), icon: BookmarkIcon },
+    highlight: { label: () => m.feed_badge_highlight(), icon: BookmarkIcon },
+    note: { label: () => m.feed_badge_note(), icon: BookmarkIcon }
   };
 
   let meta = $derived(typeMeta[typeKey]);

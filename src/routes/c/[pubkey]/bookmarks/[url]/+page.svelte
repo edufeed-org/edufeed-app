@@ -101,6 +101,12 @@
     return normalizedUrl;
   });
 
+  // Extract target highlight ID from URL fragment (e.g. #highlight-abc123)
+  const targetHighlightId = $derived.by(() => {
+    const hash = $page.url.hash;
+    return hash.startsWith('#highlight-') ? hash.slice('#highlight-'.length) : null;
+  });
+
   function goBack() {
     goto(resolve(`/c/${$page.params.pubkey}?view=social-bookmarks`));
   }
@@ -171,6 +177,7 @@
         {profiles}
         {communityPubkey}
         activeUser={getActiveUser()}
+        {targetHighlightId}
         onerror={() => {
           readerFailed = true;
         }}

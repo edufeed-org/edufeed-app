@@ -70,6 +70,35 @@ export function getFeedCardData(event) {
         description: excerpt
       };
     }
+    case 39701: {
+      const dTag = getTag('d');
+      const url = dTag ? (dTag.startsWith('http') ? dTag : `https://${dTag}`) : undefined;
+      return {
+        title: getTag('title') || url || 'Bookmark',
+        subtitle: url,
+        typeKey: 'bookmark',
+        tags,
+        description: truncate(event.content, 120)
+      };
+    }
+    case 9802: {
+      const text = truncate(event.content, 120);
+      return {
+        title: text || 'Highlight',
+        subtitle: getTag('r'),
+        typeKey: 'highlight',
+        tags
+      };
+    }
+    case 1111: {
+      const noteText = truncate(event.content, 120);
+      return {
+        title: noteText || 'Note',
+        subtitle: getTag('K') === 'web' ? getTag('I') : getTag('r'),
+        typeKey: 'note',
+        tags
+      };
+    }
     default:
       return { title: 'Untitled', typeKey: 'unknown', tags };
   }

@@ -21,7 +21,8 @@
    *   profiles: Map<string, any>,
    *   onerror: () => void,
    *   communityPubkey?: string,
-   *   activeUser?: any
+   *   activeUser?: any,
+   *   targetHighlightId?: string | null
    * }}
    */
   let {
@@ -32,7 +33,8 @@
     profiles,
     onerror,
     communityPubkey,
-    activeUser
+    activeUser,
+    targetHighlightId = null
   } = $props();
 
   let isLoading = $state(true);
@@ -161,6 +163,31 @@
       if (matched.length > 0) {
         injectHighlightMarks(container, matched, profiles);
       }
+    }
+  });
+
+  // Scroll to target highlight when navigating from activity feed
+  $effect(() => {
+    if (!targetHighlightId || !container || matchedHighlights.length === 0) return;
+
+    // Find the <mark> containing this highlight ID
+    const mark = /** @type {HTMLElement | null} */ (
+      container.querySelector(`mark[data-highlight-ids*="${targetHighlightId}"]`)
+    );
+    if (mark) {
+      // Small delay to ensure layout is settled after highlight injection
+      requestAnimationFrame(() => {
+        mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clearActiveMarkStyle();
+        mark.classList.add('reader-highlight-active');
+        activeHighlightId = targetHighlightId;
+
+        const containerRect = container?.parentElement?.getBoundingClientRect();
+        const markRect = mark.getBoundingClientRect();
+        if (containerRect) {
+          panelTop = markRect.bottom - containerRect.top + 8;
+        }
+      });
     }
   });
 

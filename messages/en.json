@@ -1091,6 +1091,8 @@
   "delete_confirm_text": "Are you sure you want to delete",
   "delete_confirm_cannot_undo": "This action cannot be undone.",
   "delete_confirm_deleting": "Deleting...",
+  "event_delete_success": "Deleted successfully",
+  "event_delete_error": "Failed to delete",
   "community_layout_bottom_tab_bar_forum": "Forum",
   "community_forum_title": "Forum",
   "community_forum_description": "Forum discussions in this community",
@@ -1188,5 +1190,8 @@
   "feed_badge_article": "Article",
   "feed_badge_board": "Board",
   "feed_badge_wiki": "Wiki",
-  "feed_badge_thread": "Thread"
+  "feed_badge_thread": "Thread",
+  "feed_badge_bookmark": "Bookmark",
+  "feed_badge_highlight": "Highlight",
+  "feed_badge_note": "Note"
 }

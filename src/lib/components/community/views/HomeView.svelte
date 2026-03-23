@@ -3,12 +3,17 @@
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
+  import { extractUrlFromEvent } from '$lib/helpers/urlGrouping.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
-  import { CommunityActivityModel } from '$lib/models/community-content.js';
+  import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
+  import {
+    CommunityActivityModel,
+    CommunitySocialBookmarkModel
+  } from '$lib/models/community-content.js';
   import { goto } from '$app/navigation';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
 
@@ -17,8 +22,16 @@
   function navigateToEvent(event) {
     const isAddressable = event.kind >= 30000 && event.kind < 40000;
     const isCalendar = event.kind === 31922 || event.kind === 31923;
+    const isBookmarkKind = event.kind === 39701 || event.kind === 9802 || event.kind === 1111;
 
-    if (isAddressable) {
+    if (isBookmarkKind) {
+      const rawUrl = extractUrlFromEvent(event);
+      if (!rawUrl || !communityId) return;
+      const displayUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+      const npub = hexToNpub(communityId);
+      const fragment = event.kind === 9802 ? `#highlight-${event.id}` : '';
+      goto(`/c/${npub}/bookmarks/${encodeURIComponent(displayUrl)}${fragment}`);
+    } else if (isAddressable) {
       const naddr = encodeEventToNaddr(event);
       if (!naddr) return;
       goto(isCalendar ? `/calendar/event/${naddr}` : `/${naddr}`);
@@ -63,13 +76,33 @@
       return;
     }
 
-    const { cleanup } = useCommunityActivityLoader(pubkey);
+    const { cleanup: activityCleanup } = useCommunityActivityLoader(pubkey);
+    const { cleanup: bookmarkCleanup } = useSocialBookmarksCommunityLoader(pubkey);
 
-    const modelSub = eventStore.model(CommunityActivityModel, pubkey).subscribe({
+    /** @type {any[]} */
+    let activityItems = [];
+    /** @type {any[]} */
+    let bookmarkItems = [];
+
+    function mergeAndUpdate() {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local dedup, not reactive
+      const seen = new Set();
+      const merged = [...activityItems, ...bookmarkItems]
+        .filter((e) => {
+          if (seen.has(e.id)) return false;
+          seen.add(e.id);
+          return true;
+        })
+        .sort((a, b) => b.created_at - a.created_at)
+        .slice(0, 15);
+      feedItems = merged;
+      isLoadingFeed = false;
+    }
+
+    const activitySub = eventStore.model(CommunityActivityModel, pubkey).subscribe({
       next: (loaded) => {
-        const sorted = [...(loaded || [])].sort((a, b) => b.created_at - a.created_at).slice(0, 10);
-        feedItems = sorted;
-        isLoadingFeed = false;
+        activityItems = loaded || [];
+        mergeAndUpdate();
       },
       error: (err) => {
         console.error('HomeView: Error loading activity feed:', err);
@@ -77,9 +110,21 @@
       }
     });
 
+    const bookmarkSub = eventStore.model(CommunitySocialBookmarkModel, pubkey).subscribe({
+      next: (loaded) => {
+        bookmarkItems = loaded || [];
+        mergeAndUpdate();
+      },
+      error: (err) => {
+        console.error('HomeView: Error loading bookmark feed:', err);
+      }
+    });
+
     loaderCleanup = () => {
-      modelSub.unsubscribe();
-      cleanup();
+      activitySub.unsubscribe();
+      bookmarkSub.unsubscribe();
+      activityCleanup();
+      bookmarkCleanup();
     };
 
     return () => {
