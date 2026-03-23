@@ -18,6 +18,7 @@
    * @property {string} emptyTitle
    * @property {string} emptyDescription
    * @property {(count: number) => string} formatCount - Function to format the item count
+   * @property {(items: any[]) => number} [countTransform] - Optional transform to derive display count from items
    * @property {string} emptyIconPath - SVG path for empty state icon
    */
 
@@ -31,6 +32,7 @@
     emptyTitle,
     emptyDescription,
     formatCount,
+    countTransform = /** @type {any[]} */ (items) => items.length,
     emptyIconPath,
     content
   } = $props();
@@ -141,7 +143,7 @@
     {@render content(items, authorProfiles)}
 
     <div class="mt-6 text-center text-sm text-base-content/60">
-      {formatCount(items.length)}
+      {formatCount(countTransform(items))}
     </div>
   {/if}
 </div>

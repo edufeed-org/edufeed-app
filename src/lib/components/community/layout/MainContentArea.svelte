@@ -11,6 +11,7 @@
   import ArticlesView from '../views/ArticlesView.svelte';
   import ForumView from '../views/ForumView.svelte';
   import WikisView from '../views/WikisView.svelte';
+  import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
   import HomeView from '../views/HomeView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -150,6 +151,8 @@
         <ForumView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'wikis'}
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
+      {:else if selectedContentType === 'social-bookmarks'}
+        <SocialBookmarksView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'settings'}
         <SettingsView
           communityId={selectedCommunityId}

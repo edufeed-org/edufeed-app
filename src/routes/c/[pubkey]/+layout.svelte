@@ -37,6 +37,7 @@
     'articles',
     'forum',
     'wikis',
+    'social-bookmarks',
     'settings'
   ]);
 

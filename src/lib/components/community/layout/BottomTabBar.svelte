@@ -8,7 +8,8 @@
     GraduationCapIcon,
     KanbanIcon,
     ScrollTextIcon,
-    ForumIcon
+    ForumIcon,
+    BookmarkShareIcon
   } from '$lib/components/icons';
   import {
     getCommunityAvailableContentTypes,
@@ -35,6 +36,7 @@
     articles: ScrollTextIcon,
     forum: ForumIcon,
     wikis: BookIcon,
+    'social-bookmarks': BookmarkShareIcon,
     settings: SettingsIcon
   };
 
@@ -47,6 +49,7 @@
     articles: () => m.community_layout_bottom_tab_bar_articles(),
     forum: () => m.community_layout_bottom_tab_bar_forum(),
     wikis: () => m.community_wikis_title(),
+    'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
     settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 

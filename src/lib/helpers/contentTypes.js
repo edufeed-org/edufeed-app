@@ -104,6 +104,22 @@ export const CONTENT_TYPE_CONFIG = {
     component: 'WikisView',
     description: 'Collaborative wiki articles (NIP-54)'
   },
+  39701: {
+    kind: 39701,
+    name: 'Social Bookmarks',
+    icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z',
+    supported: true,
+    component: 'SocialBookmarksView',
+    description: 'Web bookmarks, highlights, and page notes'
+  },
+  9802: {
+    kind: 9802,
+    name: 'Social Bookmarks',
+    icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z',
+    supported: true,
+    component: 'SocialBookmarksView',
+    description: 'Web highlights'
+  },
   11: {
     kind: 11,
     name: 'Forum',
@@ -233,6 +249,7 @@ export function kindToContentType(kind) {
   const mapping = {
     9: 'chat',
     11: 'forum',
+    9802: 'social-bookmarks',
     30023: 'articles',
     30142: 'learning',
     30301: 'boards',
@@ -240,7 +257,8 @@ export function kindToContentType(kind) {
     31923: 'calendar',
     31922: 'calendar',
     31924: 'calendar',
-    31925: 'calendar'
+    31925: 'calendar',
+    39701: 'social-bookmarks'
   };
   return mapping[kind] || null;
 }
