@@ -11,11 +11,27 @@ import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-import { onlyEvents } from 'applesauce-relay/operators';
-import { mapEventsToStore } from 'applesauce-core/observable';
+import { tap } from 'rxjs';
 import { addressLoader, timedPool } from './base.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+
+/**
+ * Fetch events by IDs using a one-shot pool.request().
+ * Unlike singleton loaders (eventLoader/addressLoader), this bypasses deduplication
+ * caches — critical when relay connections may not be ready during early requests.
+ * @param {string[]} ids
+ * @param {string[]} relays
+ */
+function fetchEventsByIds(ids, relays) {
+  if (ids.length === 0) return;
+  const sub = pool
+    .request(relays, [{ ids }], /** @type {any} */ ({ timeout: 5000 }))
+    .pipe(tap((event) => eventStore.add(event)))
+    .subscribe();
+  return sub;
+}
 
 /**
  * Create a community content loader for any content type.
@@ -44,6 +60,9 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
     const communityRelays = getCommunityGlobalRelays(communityEvent);
     const relays = [...new Set([...appRelays, ...communityRelays])];
 
+    // Broad relay set for reference resolution — includes all app + fallback relays
+    const lookupRelays = [...new Set([...getAllLookupRelays(), ...communityRelays])];
+
     // 1. Direct community content (events with h-tag matching community)
     const directFilter = { kinds, '#h': [communityPubkey] };
     const finalDirectFilter = filterFn ? filterFn(directFilter) : directFilter;
@@ -54,9 +73,11 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
     subscriptions.set('direct', directLoader().subscribe());
 
     // 2. NIP-18 reposts (kind 6/16 with h-tag targeting this community)
+    // Reposts are published to the author's write relays (outbox model), not content-type relays.
+    // Use broad relay set to discover them.
     const repostLoader = createTimelineLoader(
       timedPool,
-      relays,
+      lookupRelays,
       { kinds: [6, 16], '#h': [communityPubkey] },
       { eventStore, limit: 50 }
     );
@@ -82,8 +103,6 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
       })
       .subscribe((shareEvents) => {
         const newEventIds = [];
-        /** @type {Array<{kind: number, pubkey: string, identifier: string}>} */
-        const newAddressRefs = [];
 
         for (const shareEvent of shareEvents) {
           const eTag = getTagValue(shareEvent, 'e');
@@ -97,32 +116,18 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
             loadedAddresses.add(aTag);
             const parsed = parseAddressPointerFromATag(aTag);
             if (parsed) {
-              newAddressRefs.push({
+              addressLoader({
                 kind: parsed.kind,
                 pubkey: parsed.pubkey,
-                identifier: parsed.identifier
-              });
+                identifier: parsed.identifier,
+                relays: lookupRelays
+              }).subscribe();
             }
           }
         }
 
-        if (newEventIds.length > 0) {
-          const sub = pool
-            .subscription(relays, { ids: newEventIds })
-            .pipe(onlyEvents(), mapEventsToStore(eventStore))
-            .subscribe();
-          subscriptions.set(`refById-${Date.now()}`, sub);
-        }
-
-        if (newAddressRefs.length > 0) {
-          for (const ref of newAddressRefs) {
-            addressLoader({
-              kind: ref.kind,
-              pubkey: ref.pubkey,
-              identifier: ref.identifier
-            }).subscribe();
-          }
-        }
+        const sub = fetchEventsByIds(newEventIds, lookupRelays);
+        if (sub) subscriptions.set(`refById-${Date.now()}`, sub);
       });
     subscriptions.set('legacyReferenced', legacyReferencedSub);
 
@@ -138,8 +143,6 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
       })
       .subscribe((repostEvents) => {
         const newEventIds = [];
-        /** @type {Array<{kind: number, pubkey: string, identifier: string}>} */
-        const newAddressRefs = [];
 
         for (const repostEvent of repostEvents) {
           const eTag = getTagValue(repostEvent, 'e');
@@ -153,11 +156,12 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
             repostLoadedAddresses.add(aTag);
             const parsed = parseAddressPointerFromATag(aTag);
             if (parsed) {
-              newAddressRefs.push({
+              addressLoader({
                 kind: parsed.kind,
                 pubkey: parsed.pubkey,
-                identifier: parsed.identifier
-              });
+                identifier: parsed.identifier,
+                relays: lookupRelays
+              }).subscribe();
             }
           }
 
@@ -174,23 +178,8 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
           }
         }
 
-        if (newEventIds.length > 0) {
-          const sub = pool
-            .subscription(relays, { ids: newEventIds })
-            .pipe(onlyEvents(), mapEventsToStore(eventStore))
-            .subscribe();
-          subscriptions.set(`repostRefById-${Date.now()}`, sub);
-        }
-
-        if (newAddressRefs.length > 0) {
-          for (const ref of newAddressRefs) {
-            addressLoader({
-              kind: ref.kind,
-              pubkey: ref.pubkey,
-              identifier: ref.identifier
-            }).subscribe();
-          }
-        }
+        const sub = fetchEventsByIds(newEventIds, lookupRelays);
+        if (sub) subscriptions.set(`repostRefById-${Date.now()}`, sub);
       });
     subscriptions.set('repostReferenced', repostReferencedSub);
 

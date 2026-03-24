@@ -1,6 +1,6 @@
 /**
  * Relay Warming Service
- * Pre-establishes relay connections and authenticates before publish time
+ * Pre-establishes relay connections before publish time
  * to make publishing feel instant.
  */
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -12,7 +12,6 @@ import { getAllCommunityRelays } from '$lib/helpers/communityRelays.js';
 /**
  * @typedef {Object} WarmStatus
  * @property {boolean} connected - Whether relay is connected
- * @property {boolean} authenticated - Whether NIP-42 auth completed
  * @property {number} lastSuccess - Timestamp of last successful connection
  * @property {number} [lastAttempt] - Timestamp of last warming attempt
  */
@@ -59,18 +58,17 @@ function waitForConnection(relay, timeout = WARM_TIMEOUT) {
 }
 
 /**
- * Warm a single relay (connect and optionally authenticate)
+ * Warm a single relay (establish connection)
  * @param {string} url - Relay URL
- * @param {any} signer - Optional signer for NIP-42 auth
  * @returns {Promise<boolean>} - Whether warming succeeded
  */
-async function warmRelay(url, signer = null) {
+async function warmRelay(url) {
   // Skip if already warm and fresh
   if (isWarm(url)) {
     return true;
   }
 
-  const status = warmStatus.get(url) || { connected: false, authenticated: false, lastSuccess: 0 };
+  const status = warmStatus.get(url) || { connected: false, lastSuccess: 0 };
   status.lastAttempt = Date.now();
   warmStatus.set(url, status);
 
@@ -87,28 +85,10 @@ async function warmRelay(url, signer = null) {
 
     status.connected = true;
     status.lastSuccess = Date.now();
-
-    // Authenticate if signer provided
-    if (signer) {
-      try {
-        await Promise.race([
-          relay.authenticate(signer),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Auth timeout')), WARM_TIMEOUT)
-          )
-        ]);
-        status.authenticated = true;
-      } catch {
-        // Auth failed but connection is still warm
-        status.authenticated = false;
-      }
-    }
-
     warmStatus.set(url, status);
     return true;
   } catch (_err) {
     status.connected = false;
-    status.authenticated = false;
     warmStatus.set(url, status);
     return false;
   }
@@ -117,12 +97,11 @@ async function warmRelay(url, signer = null) {
 /**
  * Warm multiple relays in parallel
  * @param {string[]} urls - Relay URLs to warm
- * @param {any} signer - Optional signer for NIP-42 auth
  * @returns {Promise<void>}
  */
-export async function warmRelays(urls, signer = null) {
+export async function warmRelays(urls) {
   const uniqueUrls = [...new SvelteSet(urls)].filter(Boolean);
-  await Promise.allSettled(uniqueUrls.map((url) => warmRelay(url, signer)));
+  await Promise.allSettled(uniqueUrls.map((url) => warmRelay(url)));
 }
 
 /**
@@ -134,19 +113,6 @@ export function isWarm(url) {
   const status = warmStatus.get(url);
   if (!status) return false;
   return status.connected && Date.now() - status.lastSuccess < WARM_FRESHNESS;
-}
-
-/**
- * Check if a relay is warm and authenticated
- * @param {string} url - Relay URL
- * @returns {boolean}
- */
-export function isWarmAndAuthenticated(url) {
-  const status = warmStatus.get(url);
-  if (!status) return false;
-  return (
-    status.connected && status.authenticated && Date.now() - status.lastSuccess < WARM_FRESHNESS
-  );
 }
 
 /**
@@ -179,17 +145,15 @@ export function markCold(url) {
   const status = warmStatus.get(url);
   if (status) {
     status.connected = false;
-    status.authenticated = false;
     warmStatus.set(url, status);
   }
 }
 
 /**
  * Warm all app-specific relays
- * @param {any} signer - Optional signer for NIP-42 auth
  * @returns {Promise<void>}
  */
-export async function warmAppRelays(signer = null) {
+export async function warmAppRelays() {
   const allAppRelays = new SvelteSet();
 
   for (const category of Object.keys(CATEGORIES)) {
@@ -197,32 +161,30 @@ export async function warmAppRelays(signer = null) {
     relays.forEach((r) => allAppRelays.add(r));
   }
 
-  await warmRelays(Array.from(allAppRelays), signer);
+  await warmRelays(Array.from(allAppRelays));
 }
 
 /**
  * Warm a user's write relays (for publishing their events)
  * @param {string} pubkey - User's public key
- * @param {any} signer - Optional signer for NIP-42 auth
  * @returns {Promise<void>}
  */
-export async function warmUserRelays(pubkey, signer = null) {
+export async function warmUserRelays(pubkey) {
   const relayList = await fetchRelayList(pubkey);
   if (relayList && relayList.writeRelays && relayList.writeRelays.length > 0) {
-    await warmRelays(relayList.writeRelays, signer);
+    await warmRelays(relayList.writeRelays);
   }
 }
 
 /**
  * Warm all relays for a community
  * @param {Object} communityEvent - Kind 10222 community definition event
- * @param {any} signer - Optional signer for NIP-42 auth
  * @returns {Promise<void>}
  */
-export async function warmCommunityRelays(communityEvent, signer = null) {
+export async function warmCommunityRelays(communityEvent) {
   if (!communityEvent) return;
   const relays = getAllCommunityRelays(communityEvent);
-  await warmRelays(relays, signer);
+  await warmRelays(relays);
 }
 
 /**
@@ -254,12 +216,10 @@ function healthCheck() {
         const relay = pool.relay(url);
         if (!relay.connected) {
           status.connected = false;
-          status.authenticated = false;
           warmStatus.set(url, status);
         }
       } catch {
         status.connected = false;
-        status.authenticated = false;
         warmStatus.set(url, status);
       }
     }

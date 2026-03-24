@@ -92,8 +92,7 @@
   $effect(() => {
     if (communikeyEvent) {
       import('$lib/services/relay-warming-service.svelte.js').then(({ warmCommunityRelays }) => {
-        const signer = activeUser()?.signer || null;
-        warmCommunityRelays(communikeyEvent, signer);
+        warmCommunityRelays(communikeyEvent);
       });
     }
   });

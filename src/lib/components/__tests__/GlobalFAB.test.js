@@ -50,10 +50,10 @@ describe('GlobalFAB', () => {
     expect(mainButton).toBeTruthy();
   });
 
-  it('renders all 6 action buttons', () => {
+  it('renders all 7 action buttons', () => {
     const { container } = render(GlobalFAB);
     const actionButtons = container.querySelectorAll('.fab > button');
-    expect(actionButtons.length).toBe(6);
+    expect(actionButtons.length).toBe(7);
   });
 
   it('has create event button', () => {
@@ -142,5 +142,20 @@ describe('GlobalFAB', () => {
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Add Bookmark"]'));
     await fireEvent.click(btn);
     expect(mockOpenModal).toHaveBeenCalledWith('addBookmark', expect.objectContaining({}));
+  });
+
+  it('has share existing content button', () => {
+    const { container } = render(GlobalFAB);
+    const btn = container.querySelector('[aria-label="Share existing content with community"]');
+    expect(btn).toBeTruthy();
+  });
+
+  it('opens share by naddr modal on share existing click', async () => {
+    const { container } = render(GlobalFAB);
+    const btn = /** @type {Element} */ (
+      container.querySelector('[aria-label="Share existing content with community"]')
+    );
+    await fireEvent.click(btn);
+    expect(mockOpenModal).toHaveBeenCalledWith('shareByNaddr', expect.objectContaining({}));
   });
 });

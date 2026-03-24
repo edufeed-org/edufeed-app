@@ -141,9 +141,9 @@ async function initializeAccountPersistence() {
         clearWarmStatus: _clearWarmStatus
       } = await import('$lib/services/relay-warming-service.svelte.js');
 
-      // Warm user's write relays and app relays with authentication
-      warmUserRelays(account.pubkey, account.signer);
-      warmAppRelays(account.signer);
+      // Warm relay connections (WebSocket only, no NIP-42 auth)
+      warmUserRelays(account.pubkey);
+      warmAppRelays();
     } else {
       // User logged out - clear warm status
       const { clearWarmStatus } = await import('$lib/services/relay-warming-service.svelte.js');

@@ -7,7 +7,8 @@
     CalendarIcon,
     GraduationCapIcon,
     BookIcon,
-    BookmarkIcon
+    BookmarkIcon,
+    RepostIcon
   } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
@@ -44,6 +45,10 @@
 
   function handleAddBookmark() {
     modalStore.openModal('addBookmark', { communityPubkey });
+  }
+
+  function handleShareExisting() {
+    modalStore.openModal('shareByNaddr', { communityPubkey });
   }
 </script>
 
@@ -131,6 +136,16 @@
   >
     <BookmarkIcon class_="h-5 w-5" />
   </button>
+
+  <!-- Share Existing Content -->
+  <button
+    class="tooltip btn tooltip-left btn-circle btn-lg"
+    data-tip="Share Existing Content"
+    onclick={handleShareExisting}
+    aria-label="Share existing content with community"
+  >
+    <RepostIcon class_="h-5 w-5" />
+  </button>
 </div>
 
 <style>
@@ -177,5 +192,9 @@
 
   .fab > button:nth-child(7) {
     transition-delay: 0.3s;
+  }
+
+  .fab > button:nth-child(8) {
+    transition-delay: 0.35s;
   }
 </style>

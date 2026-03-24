@@ -8,17 +8,16 @@
   import { useJoinedCommunitiesList } from '../../stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { EventFactory } from 'applesauce-core/event-factory';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import { TimelineModel } from 'applesauce-core/models';
-  import { publishEvent } from '$lib/services/publish-service.js';
+  import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import {
     getDisplayName,
     getAddressPointerForEvent,
     getReplaceableAddress
   } from 'applesauce-core/helpers';
-  import 'applesauce-common/blueprints';
   import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
+  import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
@@ -171,34 +170,6 @@
   });
 
   /**
-   * Create a NIP-18 repost (kind 6/16) with h-tag for community targeting
-   * @param {string} communityPubkey
-   * @returns {Promise<boolean>}
-   */
-  async function createShare(communityPubkey) {
-    const factory = new EventFactory({
-      signer: activeUser.signer
-    });
-
-    // Use applesauce ShareBlueprint — creates kind 6 (for kind 1) or kind 16 (generic)
-    // Auto-adds e, a, p, k tags with relay hints and embeds event as JSON
-    const template = await factory.share(event);
-
-    // Append h-tag for community targeting
-    template.tags = [...template.tags, ['h', communityPubkey]];
-
-    const signedEvent = await factory.sign(template);
-
-    const result = await publishEvent(signedEvent, [communityPubkey]);
-
-    if (result.success) {
-      eventStore.add(signedEvent);
-    }
-
-    return result.success;
-  }
-
-  /**
    * Delete a community share — finds the repost (kind 6/16 with matching h-tag)
    * or legacy 30222 and deletes it.
    * @param {string} communityPubkey
@@ -265,35 +236,13 @@
           const toDelete = matchingShare || legacyMatch;
 
           if (toDelete) {
-            const success = await performDeletion(toDelete);
-            resolve(success);
+            const result = await deleteEvent(toDelete, activeUser);
+            resolve(result.success);
           } else {
             resolve(true); // Consider successful if already gone
           }
         });
     });
-  }
-
-  /**
-   * Perform the actual deletion of a share event
-   * @param {any} shareEvent
-   * @returns {Promise<boolean>}
-   */
-  async function performDeletion(shareEvent) {
-    const factory = new EventFactory({
-      signer: activeUser.signer
-    });
-
-    const deleteEventTemplate = await factory.delete([shareEvent]);
-    const deleteEvent = await factory.sign(deleteEventTemplate);
-
-    const result = await publishEvent(deleteEvent);
-
-    if (result.success) {
-      eventStore.add(deleteEvent);
-    }
-
-    return result.success;
   }
 
   /**
@@ -310,25 +259,37 @@
     shareResults = { successful: [], failed: [] };
 
     try {
-      for (const communityPubkey of selectedCommunityIds) {
-        const isAlreadyShared = communitiesWithShares.has(communityPubkey);
-        const communityName = getCommunityName(communityPubkey);
+      // Separate into creates vs deletes
+      const toCreate = selectedCommunityIds.filter((id) => !communitiesWithShares.has(id));
+      const toDelete = selectedCommunityIds.filter((id) => communitiesWithShares.has(id));
 
+      // Batch create: ONE sign call for all new shares
+      if (toCreate.length > 0) {
         try {
-          let success = false;
-          if (isAlreadyShared) {
-            success = await deleteShare(communityPubkey);
+          const success = await createCommunityReposts(event, toCreate, activeUser.signer);
+          if (success) {
+            for (const id of toCreate) shareResults.successful.push(getCommunityName(id));
           } else {
-            success = await createShare(communityPubkey);
+            for (const id of toCreate) shareResults.failed.push(getCommunityName(id));
           }
+        } catch (error) {
+          console.error('CommunityShare: Failed to batch create shares:', error);
+          for (const id of toCreate) shareResults.failed.push(getCommunityName(id));
+        }
+      }
 
+      // Deletions need individual sign calls (each targets a different event)
+      for (const communityPubkey of toDelete) {
+        const communityName = getCommunityName(communityPubkey);
+        try {
+          const success = await deleteShare(communityPubkey);
           if (success) {
             shareResults.successful.push(communityName);
           } else {
             shareResults.failed.push(communityName);
           }
         } catch (error) {
-          console.error(`CommunityShare: Failed to process share for ${communityPubkey}:`, error);
+          console.error(`CommunityShare: Failed to delete share for ${communityPubkey}:`, error);
           shareResults.failed.push(communityName);
         }
       }

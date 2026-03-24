@@ -22,7 +22,7 @@
    * @property {string} emptyIconPath - SVG path for empty state icon
    */
 
-  /** @type {Props & { content: import('svelte').Snippet<[any[], Map<string, any>]> }} */
+  /** @type {Props & { content: import('svelte').Snippet<[any[], Map<string, any>]>, headerAction?: import('svelte').Snippet }} */
   let {
     communityPubkey,
     communityProfile: _communityProfile = null,
@@ -34,7 +34,8 @@
     formatCount,
     countTransform = /** @type {any[]} */ (items) => items.length,
     emptyIconPath,
-    content
+    content,
+    headerAction
   } = $props();
 
   let items = $state(/** @type {any[]} */ ([]));
@@ -97,6 +98,12 @@
 </script>
 
 <div class="community-content-view p-4">
+  {#if headerAction}
+    <div class="mb-4 flex justify-end">
+      {@render headerAction()}
+    </div>
+  {/if}
+
   <!-- Loading State -->
   {#if isLoading}
     <div class="flex flex-col items-center justify-center py-16">

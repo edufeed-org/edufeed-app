@@ -17,6 +17,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
   const modelSubject = new Subject();
   return {
     pool: {
+      request: vi.fn(() => of()),
       subscription: vi.fn(() => ({
         pipe: vi.fn(() => ({
           subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
@@ -60,14 +61,6 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
   })
 }));
 
-vi.mock('applesauce-relay/operators', () => ({
-  onlyEvents: vi.fn(() => (/** @type {any} */ source) => source)
-}));
-
-vi.mock('applesauce-core/observable', () => ({
-  mapEventsToStore: vi.fn(() => (/** @type {any} */ source) => source)
-}));
-
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),
   addressLoader: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) }))
@@ -83,6 +76,14 @@ vi.mock('$lib/helpers/communityRelays.js', () => ({
   getCommunityGlobalRelays: vi.fn(() => [])
 }));
 
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getAllLookupRelays: vi.fn(() => [
+    'wss://lookup1.example.com',
+    'wss://lookup2.example.com',
+    'wss://relay1.example.com'
+  ])
+}));
+
 // Import after mocks
 const { createCommunityContentLoader } = await import('$lib/loaders/community-content-loader.js');
 const { createTimelineLoader } = await import('applesauce-loaders/loaders');
@@ -90,6 +91,9 @@ const { communityTargetedPublicationsLoader } = await import(
   '$lib/loaders/targeted-publications.js'
 );
 const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+const { addressLoader } = await import('$lib/loaders/base.js');
+const { getAllLookupRelays: _getAllLookupRelays } = await import('$lib/helpers/relay-helper.js');
+const { pool } = await import('$lib/stores/nostr-infrastructure.svelte');
 
 const COMMUNITY_PK = 'abc123def456';
 
@@ -138,6 +142,27 @@ describe('createCommunityContentLoader', () => {
       { kinds: [6, 16], '#h': [COMMUNITY_PK] },
       expect.objectContaining({ eventStore: expect.any(Object), limit: 50 })
     );
+  });
+
+  it('uses broad relay set (getAllLookupRelays + community relays) for repost loader', () => {
+    const loader = createCommunityContentLoader([30142], getRelays);
+    loader(COMMUNITY_PK);
+
+    // Find the repost loader call (kind 6/16 filter)
+    const repostCall = /** @type {any} */ (createTimelineLoader).mock.calls.find(
+      (/** @type {any[]} */ call) => {
+        const filter = call[2];
+        return filter.kinds?.includes(6) && filter.kinds?.includes(16);
+      }
+    );
+    expect(repostCall).toBeDefined();
+
+    const repostRelays = repostCall[1];
+    // Must include getAllLookupRelays() relays (broad discovery)
+    expect(repostRelays).toContain('wss://lookup1.example.com');
+    expect(repostRelays).toContain('wss://lookup2.example.com');
+    // Must NOT be limited to just the content-type relays
+    expect(repostRelays.length).toBeGreaterThan(getRelays().length);
   });
 
   it('applies filterFn to direct content filter when provided', () => {
@@ -231,6 +256,95 @@ describe('createCommunityContentLoader', () => {
       'TimelineModel',
       expect.objectContaining({
         '#k': ['31922', '31923']
+      })
+    );
+  });
+
+  it('uses pool.request for e-tag and addressLoader for a-tag when resolving repost references', () => {
+    // Set up model mock to emit repost events on the second call (repost watcher)
+    const legacySubject = new Subject();
+    const repostSubject = new Subject();
+    let modelCallCount = 0;
+    /** @type {any} */ (eventStore.model).mockImplementation(() => {
+      modelCallCount++;
+      // First model call = legacy 30222 watcher, second = repost watcher
+      return modelCallCount === 1 ? legacySubject : repostSubject;
+    });
+
+    const loader = createCommunityContentLoader([30142], getRelays);
+    loader(COMMUNITY_PK);
+
+    // Emit a repost event that references via both e-tag and a-tag
+    repostSubject.next([
+      {
+        id: 'repost1',
+        kind: 16,
+        tags: [
+          ['e', 'referenced-event-id'],
+          ['a', '30142:author1:wiki-slug'],
+          ['h', COMMUNITY_PK]
+        ],
+        content: ''
+      }
+    ]);
+
+    // e-tag resolved via pool.request (one-shot, no deduplication)
+    expect(pool.request).toHaveBeenCalledWith(
+      expect.any(Array),
+      [{ ids: ['referenced-event-id'] }],
+      expect.any(Object)
+    );
+
+    // a-tag resolved via addressLoader
+    expect(addressLoader).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 30142,
+        pubkey: 'author1',
+        identifier: 'wiki-slug'
+      })
+    );
+  });
+
+  it('uses pool.request and addressLoader when resolving legacy 30222 references', () => {
+    const legacySubject = new Subject();
+    const repostSubject = new Subject();
+    let modelCallCount = 0;
+    /** @type {any} */ (eventStore.model).mockImplementation(() => {
+      modelCallCount++;
+      return modelCallCount === 1 ? legacySubject : repostSubject;
+    });
+
+    const loader = createCommunityContentLoader([30142], getRelays);
+    loader(COMMUNITY_PK);
+
+    // Emit a legacy share event that references via both e-tag and a-tag
+    legacySubject.next([
+      {
+        id: 'share1',
+        kind: 30222,
+        tags: [
+          ['e', 'legacy-ref-id'],
+          ['a', '30142:author2:article-slug'],
+          ['p', COMMUNITY_PK],
+          ['k', '30142']
+        ],
+        content: ''
+      }
+    ]);
+
+    // e-tag resolved via pool.request (one-shot)
+    expect(pool.request).toHaveBeenCalledWith(
+      expect.any(Array),
+      [{ ids: ['legacy-ref-id'] }],
+      expect.any(Object)
+    );
+
+    // a-tag resolved via addressLoader
+    expect(addressLoader).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 30142,
+        pubkey: 'author2',
+        identifier: 'article-slug'
       })
     );
   });

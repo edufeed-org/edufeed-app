@@ -13,6 +13,7 @@
   import EditProfileModal from './EditProfileModal.svelte';
   import CommunityMigrationModal from './CommunityMigrationModal.svelte';
   import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
+  import ShareByNaddrModal from './shared/ShareByNaddrModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -41,6 +42,7 @@
   const editProfileModalId = 'edit-profile-modal';
   const communityMigrationModalId = 'community-migration-modal';
   const addBookmarkModalId = 'add-bookmark-modal';
+  const shareByNaddrModalId = 'share-by-naddr-modal';
 
   /**
    * Reactive effect to handle modal opening/closing based on store state
@@ -107,6 +109,12 @@
       );
       if (addBookmarkModal && addBookmarkModal.open) {
         addBookmarkModal.close();
+      }
+      const shareByNaddrModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(shareByNaddrModalId)
+      );
+      if (shareByNaddrModal && shareByNaddrModal.open) {
+        shareByNaddrModal.close();
       }
     } else if (currentModal === 'login') {
       // Open login modal
@@ -180,6 +188,13 @@
       if (addBookmarkModal && !addBookmarkModal.open) {
         addBookmarkModal.showModal();
       }
+    } else if (currentModal === 'shareByNaddr') {
+      const shareByNaddrModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(shareByNaddrModalId)
+      );
+      if (shareByNaddrModal && !shareByNaddrModal.open) {
+        shareByNaddrModal.showModal();
+      }
     }
   });
 
@@ -247,4 +262,6 @@
   <CommunityMigrationModal modalId={communityMigrationModalId} />
 {:else if modal.activeModal === 'addBookmark'}
   <AddBookmarkModal modalId={addBookmarkModalId} />
+{:else if modal.activeModal === 'shareByNaddr'}
+  <ShareByNaddrModal modalId={shareByNaddrModalId} />
 {/if}
