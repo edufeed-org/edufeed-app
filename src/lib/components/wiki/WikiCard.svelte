@@ -19,10 +19,11 @@
    * @property {any} wiki - Wiki event (kind 30818)
    * @property {any} [authorProfile] - Author's profile
    * @property {boolean} [compact=false] - Compact display mode
+   * @property {string} [communityNpub] - Community npub for route construction
    */
 
   /** @type {Props} */
-  let { wiki, authorProfile = null, compact = false } = $props();
+  let { wiki, authorProfile = null, compact = false, communityNpub = undefined } = $props();
 
   const title = $derived.by(() => {
     const titleTag = wiki.tags?.find((/** @type {any} */ t) => t[0] === 'title');
@@ -67,11 +68,22 @@
   });
 
   /**
+   * Build the resolved route for this wiki.
+   * @returns {string | null}
+   */
+  function getWikiHref() {
+    if (!wikiNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/wiki/${wikiNaddr}`);
+    return resolve(`/${wikiNaddr}`);
+  }
+
+  /**
    * @param {MouseEvent} e
    */
   function handleClick(e) {
-    if (wikiNaddr && e.target instanceof HTMLElement && !e.target.closest('button, a')) {
-      goto(resolve(`/${wikiNaddr}`));
+    const href = getWikiHref();
+    if (href && e.target instanceof HTMLElement && !e.target.closest('button, a')) {
+      goto(href);
     }
   }
 
@@ -79,9 +91,10 @@
    * @param {KeyboardEvent} e
    */
   function handleKeydown(e) {
-    if ((e.key === 'Enter' || e.key === ' ') && wikiNaddr) {
+    const href = getWikiHref();
+    if ((e.key === 'Enter' || e.key === ' ') && href) {
       e.preventDefault();
-      goto(resolve(`/${wikiNaddr}`));
+      goto(href);
     }
   }
 </script>
@@ -139,13 +152,9 @@
     {/if}
 
     <!-- Read More -->
-    {#if wikiNaddr}
+    {#if getWikiHref()}
       <div class="pt-2">
-        <a
-          href={resolve(`/${wikiNaddr}`)}
-          class="btn btn-sm btn-primary"
-          onclick={(e) => e.stopPropagation()}
-        >
+        <a href={getWikiHref()} class="btn btn-sm btn-primary" onclick={(e) => e.stopPropagation()}>
           {m.wiki_card_read()}
         </a>
       </div>

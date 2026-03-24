@@ -5,11 +5,9 @@
 <script>
   import { browser } from '$app/environment';
   import DOMPurify from 'dompurify';
-  import { matchHighlights, injectHighlightMarks } from '$lib/helpers/highlightOverlay.js';
   import BookmarkChip from './BookmarkChip.svelte';
-  import HighlightItem from './HighlightItem.svelte';
-  import HighlightSelectionTooltip from './HighlightSelectionTooltip.svelte';
   import PageNoteItem from './PageNoteItem.svelte';
+  import HighlightOverlay from '$lib/components/shared/HighlightOverlay.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -43,29 +41,6 @@
       null
     )
   );
-  /** @type {HTMLElement | undefined} */
-  let container = $state();
-  let unmatchedHighlights = $state.raw(/** @type {any[]} */ ([]));
-
-  // Active highlight state for comment thread overlay
-  /** @type {string | null} */
-  let activeHighlightId = $state(null);
-  let panelTop = $state(0);
-
-  /** @type {Array<{start: number, end: number, events: any[]}>} */
-  let matchedHighlights = $state.raw([]);
-
-  // Derive active highlight events from the matched data
-  const activeHighlightEvents = $derived.by(() => {
-    if (!activeHighlightId) return [];
-    for (const match of matchedHighlights) {
-      const event = match.events.find((e) => e.id === activeHighlightId);
-      if (event) return match.events;
-    }
-    // Check unmatched highlights too
-    const unmatchedEvent = unmatchedHighlights.find((e) => e.id === activeHighlightId);
-    return unmatchedEvent ? [unmatchedEvent] : [];
-  });
 
   // Fetch article
   $effect(() => {
@@ -95,7 +70,7 @@
     return () => abortController.abort();
   });
 
-  // Track sanitized HTML separately so highlight injection can re-run without resetting HTML
+  // Sanitize fetched HTML
   let sanitizedHtml = $derived.by(() => {
     if (!article?.content || !browser) return '';
     if (typeof DOMPurify?.sanitize === 'function') {
@@ -141,109 +116,6 @@
     }
     return article.content;
   });
-
-  // Render HTML and inject highlight marks
-  $effect(() => {
-    if (!container || !sanitizedHtml) return;
-
-    // Reset active highlight when content changes
-    activeHighlightId = null;
-
-    // Set sanitized article HTML
-    /* eslint-disable svelte/no-dom-manipulating -- safe: sanitized with DOMPurify, required for reader view */
-    container.innerHTML = sanitizedHtml;
-    /* eslint-enable svelte/no-dom-manipulating */
-
-    // Match and inject highlights using DOM text as single source of truth
-    const containerText = container.textContent || '';
-    if (highlights.length > 0 && containerText) {
-      const { matched, unmatched } = matchHighlights(containerText, highlights);
-      matchedHighlights = matched;
-      unmatchedHighlights = unmatched;
-      if (matched.length > 0) {
-        injectHighlightMarks(container, matched, profiles);
-      }
-    }
-  });
-
-  // Scroll to target highlight when navigating from activity feed
-  $effect(() => {
-    if (!targetHighlightId || !container || matchedHighlights.length === 0) return;
-
-    // Find the <mark> containing this highlight ID
-    const mark = /** @type {HTMLElement | null} */ (
-      container.querySelector(`mark[data-highlight-ids*="${targetHighlightId}"]`)
-    );
-    if (mark) {
-      // Small delay to ensure layout is settled after highlight injection
-      requestAnimationFrame(() => {
-        mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        clearActiveMarkStyle();
-        mark.classList.add('reader-highlight-active');
-        activeHighlightId = targetHighlightId;
-
-        const containerRect = container?.parentElement?.getBoundingClientRect();
-        const markRect = mark.getBoundingClientRect();
-        if (containerRect) {
-          panelTop = markRect.bottom - containerRect.top + 8;
-        }
-      });
-    }
-  });
-
-  /**
-   * Handle click on inline <mark> elements — delegated on container.
-   * @param {MouseEvent} e
-   */
-  function handleMarkClick(e) {
-    const mark = /** @type {HTMLElement | null} */ (
-      /** @type {HTMLElement} */ (e.target).closest('mark.reader-highlight')
-    );
-    if (!mark) return;
-
-    const ids = mark.dataset.highlightIds;
-    if (!ids) return;
-
-    const firstId = ids.split(',')[0];
-
-    // Toggle: if same highlight clicked, close; otherwise open
-    if (activeHighlightId === firstId) {
-      activeHighlightId = null;
-      clearActiveMarkStyle();
-      return;
-    }
-
-    activeHighlightId = firstId;
-
-    // Compute panel position relative to the article wrapper
-    clearActiveMarkStyle();
-    mark.classList.add('reader-highlight-active');
-    const containerRect = container?.parentElement?.getBoundingClientRect();
-    const markRect = mark.getBoundingClientRect();
-    if (containerRect) {
-      panelTop = markRect.bottom - containerRect.top + 8;
-    }
-  }
-
-  function clearActiveMarkStyle() {
-    if (!container) return;
-    container
-      .querySelectorAll('mark.reader-highlight-active')
-      .forEach((el) => el.classList.remove('reader-highlight-active'));
-  }
-
-  /**
-   * Handle click on unmatched highlight card — toggle expanded state.
-   * @param {string} eventId
-   */
-  function handleUnmatchedHighlightClick(eventId) {
-    if (activeHighlightId === eventId) {
-      activeHighlightId = null;
-    } else {
-      clearActiveMarkStyle();
-      activeHighlightId = eventId;
-    }
-  }
 </script>
 
 <div class="reader-view">
@@ -294,54 +166,16 @@
     {/if}
 
     <!-- Article body with inline highlights -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="relative" onclick={handleMarkClick}>
-      <article class="prose max-w-none" bind:this={container}></article>
-      {#if activeUser && container && communityPubkey}
-        <HighlightSelectionTooltip {container} {articleUrl} {communityPubkey} {activeUser} />
-      {/if}
-
-      <!-- Inline comment thread overlay for matched highlights -->
-      {#if activeHighlightId && activeHighlightEvents.length > 0 && matchedHighlights.some( (m) => m.events.some((e) => e.id === activeHighlightId) )}
-        <div class="absolute right-0 left-0 z-10" style:top="{panelTop}px">
-          <div class="rounded-lg border border-base-300 bg-base-100 shadow-lg">
-            <HighlightItem
-              event={activeHighlightEvents[0]}
-              authorProfile={profiles.get(activeHighlightEvents[0].pubkey)}
-              expanded={true}
-              {activeUser}
-              {communityPubkey}
-              onclick={() => {
-                activeHighlightId = null;
-                clearActiveMarkStyle();
-              }}
-            />
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Unmatched highlights -->
-    {#if unmatchedHighlights.length > 0}
-      <section class="mt-8 border-t border-base-300 pt-6">
-        <h2 class="mb-3 text-sm font-semibold text-base-content/70">
-          {m.reader_additional_highlights()}
-        </h2>
-        <div class="flex flex-col gap-3">
-          {#each unmatchedHighlights as highlight (highlight.id)}
-            <HighlightItem
-              event={highlight}
-              authorProfile={profiles.get(highlight.pubkey)}
-              expanded={activeHighlightId === highlight.id}
-              {activeUser}
-              {communityPubkey}
-              onclick={() => handleUnmatchedHighlightClick(highlight.id)}
-            />
-          {/each}
-        </div>
-      </section>
-    {/if}
+    <HighlightOverlay
+      htmlContent={sanitizedHtml}
+      {highlights}
+      {profiles}
+      source={articleUrl}
+      {activeUser}
+      {communityPubkey}
+      {targetHighlightId}
+      class="prose max-w-none"
+    />
 
     <!-- Page notes -->
     {#if pageNotes.length > 0}
@@ -358,21 +192,3 @@
     {/if}
   {/if}
 </div>
-
-<style>
-  .reader-view :global(mark.reader-highlight) {
-    background-color: oklch(0.9 0.1 95 / 0.4);
-    border-radius: 2px;
-    padding: 1px 0;
-    cursor: pointer;
-    transition: background-color 0.15s;
-  }
-
-  .reader-view :global(mark.reader-highlight:hover) {
-    background-color: oklch(0.85 0.13 95 / 0.6);
-  }
-
-  .reader-view :global(mark.reader-highlight-active) {
-    background-color: oklch(0.85 0.13 95 / 0.6);
-  }
-</style>

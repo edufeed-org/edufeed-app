@@ -6,8 +6,9 @@
 <script>
   import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
   import { CommunitySocialBookmarkModel } from '$lib/models/community-content.js';
-  import { filterSocialBookmarks, groupByUrl } from '$lib/helpers/urlGrouping.js';
+  import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
+  import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -24,15 +25,28 @@
   emptyTitle={m.community_social_bookmarks_empty_title()}
   emptyDescription={m.community_social_bookmarks_empty_description()}
   formatCount={(count) => m.community_social_bookmarks_count({ count })}
-  countTransform={(items) => groupByUrl(filterSocialBookmarks(items)).length}
+  countTransform={(items) =>
+    groupByUrl(filterSocialBookmarks(items)).length + groupByEventRef(items).length}
   emptyIconPath="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
 >
   {#snippet content(items, authorProfiles)}
-    {@const filtered = filterSocialBookmarks(items)}
-    {@const urlGroups = groupByUrl(filtered)}
+    {@const urlGroups = groupByUrl(filterSocialBookmarks(items))}
+    {@const eventRefGroups = groupByEventRef(items)}
+    {@const urlMap = new Map(urlGroups.map((g) => [g.url, g]))}
+    {@const refMap = new Map(eventRefGroups.map((g) => [g.aTagValue, g]))}
+    {@const sortedKeys = [
+      ...urlGroups.map((g) => ({ type: 'url', key: g.url, ts: g.latestActivity })),
+      ...eventRefGroups.map((g) => ({ type: 'ref', key: g.aTagValue, ts: g.latestActivity }))
+    ].toSorted((a, b) => b.ts - a.ts)}
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {#each urlGroups as group (group.url)}
-        <UrlCard {group} {authorProfiles} {communityPubkey} />
+      {#each sortedKeys as item (item.key)}
+        {#if item.type === 'url'}
+          {@const group = urlMap.get(item.key)}
+          <UrlCard {group} {authorProfiles} {communityPubkey} />
+        {:else}
+          {@const group = refMap.get(item.key)}
+          <EventHighlightCard {group} {authorProfiles} {communityPubkey} />
+        {/if}
       {/each}
     </div>
   {/snippet}

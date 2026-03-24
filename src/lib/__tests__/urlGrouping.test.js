@@ -4,7 +4,9 @@ import {
   normalizeUrl,
   extractUrlFromEvent,
   filterSocialBookmarks,
-  groupByUrl
+  groupByUrl,
+  extractEventRefFromHighlight,
+  groupByEventRef
 } from '$lib/helpers/urlGrouping.js';
 
 describe('normalizeUrl', () => {
@@ -300,5 +302,227 @@ describe('groupByUrl', () => {
     };
     const groups = groupByUrl([bookmark, other]);
     expect(groups).toHaveLength(2);
+  });
+});
+
+describe('extractEventRefFromHighlight', () => {
+  // Valid 64-char hex pubkeys for applesauce helpers
+  const hexPub1 = 'a'.repeat(64);
+
+  it('returns AddressPointer for kind 9802 with a-tag and no r-tag', () => {
+    const event = {
+      kind: 9802,
+      tags: [['a', `30023:${hexPub1}:my-article`]],
+      content: 'highlighted text',
+      created_at: 1000
+    };
+    const result = extractEventRefFromHighlight(event);
+    expect(result).toMatchObject({ kind: 30023, pubkey: hexPub1, identifier: 'my-article' });
+  });
+
+  it('returns undefined for kind 9802 with r-tag (URL highlight)', () => {
+    const event = {
+      kind: 9802,
+      tags: [
+        ['r', 'https://example.com/post'],
+        ['a', `30023:${hexPub1}:my-article`]
+      ],
+      content: 'highlighted text',
+      created_at: 1000
+    };
+    expect(extractEventRefFromHighlight(event)).toBeUndefined();
+  });
+
+  it('returns undefined for non-9802 kinds', () => {
+    const event = {
+      kind: 39701,
+      tags: [['a', `30023:${hexPub1}:my-article`]],
+      content: '',
+      created_at: 1000
+    };
+    expect(extractEventRefFromHighlight(event)).toBeUndefined();
+  });
+
+  it('returns undefined for kind 9802 without a-tag', () => {
+    const event = {
+      kind: 9802,
+      tags: [['p', 'somepubkey']],
+      content: 'highlighted text',
+      created_at: 1000
+    };
+    expect(extractEventRefFromHighlight(event)).toBeUndefined();
+  });
+
+  it('handles wiki highlights (kind 30818)', () => {
+    const event = {
+      kind: 9802,
+      tags: [['a', `30818:${hexPub1}:my-wiki-page`]],
+      content: 'wiki text',
+      created_at: 1000
+    };
+    const result = extractEventRefFromHighlight(event);
+    expect(result).toMatchObject({ kind: 30818, pubkey: hexPub1, identifier: 'my-wiki-page' });
+  });
+
+  it('returns undefined for null/undefined input', () => {
+    expect(extractEventRefFromHighlight(null)).toBeUndefined();
+    expect(extractEventRefFromHighlight(undefined)).toBeUndefined();
+  });
+});
+
+describe('groupByEventRef', () => {
+  // Valid 64-char hex pubkeys for applesauce helpers
+  const hexPub1 = 'a'.repeat(64);
+  const hexPub2 = 'b'.repeat(64);
+  const authorPub1 = 'c'.repeat(64);
+  const authorPub2 = 'd'.repeat(64);
+
+  const articleHighlight1 = {
+    id: 'h1',
+    kind: 9802,
+    pubkey: hexPub1,
+    tags: [['a', `30023:${authorPub1}:my-article`]],
+    content: 'first highlight',
+    created_at: 1000
+  };
+
+  const articleHighlight2 = {
+    id: 'h2',
+    kind: 9802,
+    pubkey: hexPub2,
+    tags: [['a', `30023:${authorPub1}:my-article`]],
+    content: 'second highlight',
+    created_at: 2000
+  };
+
+  const wikiHighlight = {
+    id: 'h3',
+    kind: 9802,
+    pubkey: hexPub1,
+    tags: [['a', `30818:${authorPub2}:wiki-page`]],
+    content: 'wiki highlight',
+    created_at: 3000
+  };
+
+  const urlHighlight = {
+    id: 'h4',
+    kind: 9802,
+    pubkey: hexPub1,
+    tags: [['r', 'https://example.com']],
+    content: 'url highlight',
+    created_at: 4000
+  };
+
+  it('groups highlights by a-tag value', () => {
+    const groups = groupByEventRef([articleHighlight1, articleHighlight2]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].highlights).toHaveLength(2);
+  });
+
+  it('creates separate groups for different a-tags', () => {
+    const groups = groupByEventRef([articleHighlight1, wikiHighlight]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it('ignores URL highlights (with r-tag)', () => {
+    const groups = groupByEventRef([urlHighlight, articleHighlight1]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].highlights).toHaveLength(1);
+  });
+
+  it('ignores non-9802 events', () => {
+    const bookmark = {
+      id: 'b1',
+      kind: 39701,
+      pubkey: hexPub1,
+      tags: [['d', 'example.com']],
+      content: '',
+      created_at: 1000
+    };
+    const groups = groupByEventRef([bookmark, articleHighlight1]);
+    expect(groups).toHaveLength(1);
+  });
+
+  it('tracks latestActivity from most recent highlight', () => {
+    const groups = groupByEventRef([articleHighlight1, articleHighlight2]);
+    expect(groups[0].latestActivity).toBe(2000);
+  });
+
+  it('collects unique contributors', () => {
+    const groups = groupByEventRef([articleHighlight1, articleHighlight2]);
+    expect(groups[0].contributors).toEqual(expect.arrayContaining([hexPub1, hexPub2]));
+    expect(groups[0].contributors).toHaveLength(2);
+  });
+
+  it('sorts groups by latestActivity descending', () => {
+    const groups = groupByEventRef([articleHighlight1, wikiHighlight]);
+    expect(groups[0].aTagValue).toBe(`30818:${authorPub2}:wiki-page`);
+    expect(groups[1].aTagValue).toBe(`30023:${authorPub1}:my-article`);
+  });
+
+  it('stores parsed kind, pubkey, identifier on each group', () => {
+    const groups = groupByEventRef([articleHighlight1]);
+    expect(groups[0].kind).toBe(30023);
+    expect(groups[0].pubkey).toBe(authorPub1);
+    expect(groups[0].identifier).toBe('my-article');
+  });
+
+  it('collects relay hints from a-tag position [2]', () => {
+    const withHint = {
+      id: 'h5',
+      kind: 9802,
+      pubkey: hexPub1,
+      tags: [['a', `30023:${authorPub1}:my-article`, 'wss://relay.example.com']],
+      content: 'highlighted text',
+      created_at: 1000
+    };
+    const withHint2 = {
+      id: 'h6',
+      kind: 9802,
+      pubkey: hexPub2,
+      tags: [['a', `30023:${authorPub1}:my-article`, 'wss://other.relay.com']],
+      content: 'more text',
+      created_at: 2000
+    };
+    const groups = groupByEventRef([withHint, withHint2]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].relayHints).toEqual(
+      expect.arrayContaining(['wss://relay.example.com', 'wss://other.relay.com'])
+    );
+    expect(groups[0].relayHints).toHaveLength(2);
+  });
+
+  it('deduplicates relay hints', () => {
+    const h1 = {
+      id: 'h7',
+      kind: 9802,
+      pubkey: hexPub1,
+      tags: [['a', `30023:${authorPub1}:my-article`, 'wss://relay.example.com']],
+      content: 'text1',
+      created_at: 1000
+    };
+    const h2 = {
+      id: 'h8',
+      kind: 9802,
+      pubkey: hexPub2,
+      tags: [['a', `30023:${authorPub1}:my-article`, 'wss://relay.example.com']],
+      content: 'text2',
+      created_at: 2000
+    };
+    const groups = groupByEventRef([h1, h2]);
+    expect(groups[0].relayHints).toHaveLength(1);
+  });
+
+  it('returns empty relayHints when no a-tag relay hint present', () => {
+    const groups = groupByEventRef([articleHighlight1]);
+    expect(groups[0].relayHints).toEqual([]);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(groupByEventRef([])).toEqual([]);
+  });
+
+  it('returns empty array when no event-ref highlights exist', () => {
+    expect(groupByEventRef([urlHighlight])).toEqual([]);
   });
 });

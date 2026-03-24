@@ -1,7 +1,11 @@
 /**
  * URL grouping helpers for Social Bookmarks.
  * Groups bookmark (39701), highlight (9802), and page note (1111) events by URL.
+ * Also groups event-ref highlights (kind 9802 with a-tag) by address pointer.
  */
+
+import { getHighlightSourceUrl } from 'applesauce-common/helpers';
+import { getSeenRelays } from 'applesauce-core/helpers';
 
 /**
  * @typedef {Object} UrlGroup
@@ -171,6 +175,109 @@ export function groupByUrl(events) {
       bookmarks: data.bookmarks,
       highlights: data.highlights,
       pageNotes: data.pageNotes,
+      latestActivity: data.latestActivity,
+      contributors: Array.from(data.contributorSet)
+    }))
+    .sort((a, b) => b.latestActivity - a.latestActivity);
+}
+
+/**
+ * @typedef {Object} EventRefGroup
+ * @property {string} aTagValue - Raw a-tag value (e.g. "30023:pubkey:identifier")
+ * @property {number} kind - Event kind from the address pointer
+ * @property {string} pubkey - Author pubkey from the address pointer
+ * @property {string} identifier - d-tag identifier from the address pointer
+ * @property {string[]} relayHints - Relay hints from a-tag position [2]
+ * @property {any[]} highlights - Kind 9802 events referencing this event
+ * @property {number} latestActivity - Most recent created_at
+ * @property {string[]} contributors - Unique pubkeys
+ */
+
+/**
+ * Extract an AddressPointer from a kind 9802 highlight that references
+ * a Nostr event (via a-tag) rather than a URL (via r-tag).
+ * @param {any} event
+ * @returns {import('nostr-tools/nip19').AddressPointer | undefined}
+ */
+export function extractEventRefFromHighlight(event) {
+  if (!event || event?.kind !== 9802) return undefined;
+  // URL highlights have an r-tag — those belong in URL groups, not here
+  if (getHighlightSourceUrl(event)) return undefined;
+  // Manual a-tag parsing to avoid getOrComputeCachedValue mutation
+  // (causes state_unsafe_mutation in Svelte 5 template expressions)
+  const aTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'a');
+  if (!aTag?.[1]) return undefined;
+  const value = aTag[1];
+  const firstColon = value.indexOf(':');
+  const secondColon = value.indexOf(':', firstColon + 1);
+  if (firstColon === -1 || secondColon === -1) return undefined;
+  const kind = parseInt(value.substring(0, firstColon), 10);
+  const pubkey = value.substring(firstColon + 1, secondColon);
+  const identifier = value.substring(secondColon + 1);
+  if (isNaN(kind) || !pubkey) return undefined;
+  return { kind, pubkey, identifier };
+}
+
+/**
+ * Group kind 9802 event-ref highlights by their a-tag address pointer.
+ * @param {any[]} events - All events (will be filtered internally)
+ * @returns {EventRefGroup[]} Sorted by latestActivity descending
+ */
+export function groupByEventRef(events) {
+  /** @type {Map<string, { kind: number, pubkey: string, identifier: string, highlights: any[], latestActivity: number, contributorSet: Set<string>, relayHintSet: Set<string> }>} */
+  const groups = new Map();
+
+  for (const event of events) {
+    const pointer = extractEventRefFromHighlight(event);
+    if (!pointer) continue;
+
+    const key = `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        kind: pointer.kind,
+        pubkey: pointer.pubkey,
+        identifier: pointer.identifier,
+        highlights: [],
+        latestActivity: 0,
+        contributorSet: new Set(),
+        relayHintSet: new Set()
+      });
+    }
+
+    const group = /** @type {NonNullable<ReturnType<typeof groups.get>>} */ (groups.get(key));
+    group.highlights.push(event);
+
+    // Collect relay hint from a-tag position [2]
+    const aTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'a');
+    if (aTag?.[2]) {
+      group.relayHintSet.add(aTag[2]);
+    }
+
+    // Fallback: collect relays this highlight was seen on (relay provenance)
+    const seenRelays = getSeenRelays(event);
+    if (seenRelays) {
+      for (const relay of seenRelays) {
+        group.relayHintSet.add(relay);
+      }
+    }
+
+    if (event.created_at > group.latestActivity) {
+      group.latestActivity = event.created_at;
+    }
+    if (event.pubkey) {
+      group.contributorSet.add(event.pubkey);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([aTagValue, data]) => ({
+      aTagValue,
+      kind: data.kind,
+      pubkey: data.pubkey,
+      identifier: data.identifier,
+      relayHints: Array.from(data.relayHintSet),
+      highlights: data.highlights,
       latestActivity: data.latestActivity,
       contributors: Array.from(data.contributorSet)
     }))

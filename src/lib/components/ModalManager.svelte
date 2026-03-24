@@ -12,6 +12,7 @@
   import WebcalQRCodeModal from './calendar/WebcalQRCodeModal.svelte';
   import EditProfileModal from './EditProfileModal.svelte';
   import CommunityMigrationModal from './CommunityMigrationModal.svelte';
+  import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -39,6 +40,7 @@
   const editCommunityModalId = 'edit-community-modal';
   const editProfileModalId = 'edit-profile-modal';
   const communityMigrationModalId = 'community-migration-modal';
+  const addBookmarkModalId = 'add-bookmark-modal';
 
   /**
    * Reactive effect to handle modal opening/closing based on store state
@@ -99,6 +101,12 @@
       if (communityMigrationModal && communityMigrationModal.open) {
         console.log('ModalManager: Closing community migration modal');
         communityMigrationModal.close();
+      }
+      const addBookmarkModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(addBookmarkModalId)
+      );
+      if (addBookmarkModal && addBookmarkModal.open) {
+        addBookmarkModal.close();
       }
     } else if (currentModal === 'login') {
       // Open login modal
@@ -165,6 +173,13 @@
         console.log('ModalManager: Opening community migration modal');
         communityMigrationModal.showModal();
       }
+    } else if (currentModal === 'addBookmark') {
+      const addBookmarkModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(addBookmarkModalId)
+      );
+      if (addBookmarkModal && !addBookmarkModal.open) {
+        addBookmarkModal.showModal();
+      }
     }
   });
 
@@ -230,4 +245,6 @@
   <CalendarEventModal />
 {:else if modal.activeModal === 'communityMigration'}
   <CommunityMigrationModal modalId={communityMigrationModalId} />
+{:else if modal.activeModal === 'addBookmark'}
+  <AddBookmarkModal modalId={addBookmarkModalId} />
 {/if}

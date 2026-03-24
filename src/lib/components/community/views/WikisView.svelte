@@ -4,6 +4,7 @@
 -->
 
 <script>
+  import { page } from '$app/stores';
   import { useWikiCommunityLoader } from '$lib/loaders/wiki.js';
   import { CommunityWikiModel } from '$lib/models/community-content.js';
   import WikiCard from '$lib/components/wiki/WikiCard.svelte';
@@ -12,6 +13,8 @@
 
   /** @type {{ communityPubkey: string, communityProfile?: any }} */
   let { communityPubkey, communityProfile = null } = $props();
+
+  const communityNpub = $derived($page.data.npub);
 </script>
 
 <CommunityContentView
@@ -28,7 +31,7 @@
   {#snippet content(items, authorProfiles)}
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each items as wiki (wiki.id)}
-        <WikiCard {wiki} authorProfile={authorProfiles.get(wiki.pubkey) || null} />
+        <WikiCard {wiki} authorProfile={authorProfiles.get(wiki.pubkey) || null} {communityNpub} />
       {/each}
     </div>
   {/snippet}

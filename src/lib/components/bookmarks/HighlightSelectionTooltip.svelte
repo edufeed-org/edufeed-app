@@ -6,6 +6,7 @@
   import { EventFactory } from 'applesauce-core/event-factory';
   import { HighlightBlueprint } from 'applesauce-common/blueprints';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
+  import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { extractContext, normalizeWhitespace } from '$lib/helpers/highlightOverlay.js';
   import * as m from '$lib/paraglide/messages';
@@ -13,12 +14,12 @@
   /**
    * @type {{
    *   container: HTMLElement,
-   *   articleUrl: string,
+   *   source: import('nostr-tools/nip19').AddressPointer | string,
    *   communityPubkey: string,
    *   activeUser: any
    * }}
    */
-  let { container, articleUrl, communityPubkey, activeUser } = $props();
+  let { container, source, communityPubkey, activeUser } = $props();
 
   let visible = $state(false);
   let isSaving = $state(false);
@@ -114,9 +115,18 @@
         ? extractContext(container.textContent || '', selectedText)
         : undefined;
 
-      const draft = await factory.create(HighlightBlueprint, selectedText, articleUrl, {
+      const draft = await factory.create(HighlightBlueprint, selectedText, source, {
         context: context || undefined
       });
+
+      // Add relay hint to a-tag for discoverability
+      const aTagIdx = draft.tags.findIndex((t) => t[0] === 'a');
+      if (aTagIdx !== -1 && typeof source === 'object' && source.pubkey) {
+        const relayHint = await getPrimaryWriteRelay(source.pubkey);
+        if (relayHint) {
+          draft.tags[aTagIdx] = [...draft.tags[aTagIdx].slice(0, 2), relayHint];
+        }
+      }
 
       // Add W3C TextQuoteSelector tag for Lantern interop
       if (context) {

@@ -35,6 +35,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   wiki_fab_write: () => 'Write Wiki'
 }));
 
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  npubToHex: (/** @type {string} */ npub) => npub
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -46,10 +50,10 @@ describe('GlobalFAB', () => {
     expect(mainButton).toBeTruthy();
   });
 
-  it('renders all 5 action buttons', () => {
+  it('renders all 6 action buttons', () => {
     const { container } = render(GlobalFAB);
     const actionButtons = container.querySelectorAll('.fab > button');
-    expect(actionButtons.length).toBe(5);
+    expect(actionButtons.length).toBe(6);
   });
 
   it('has create event button', () => {
@@ -125,5 +129,18 @@ describe('GlobalFAB', () => {
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Write Wiki"]'));
     await fireEvent.click(btn);
     expect(mockGoto).toHaveBeenCalledWith('/create/wiki');
+  });
+
+  it('has add bookmark button', () => {
+    const { container } = render(GlobalFAB);
+    const btn = container.querySelector('[aria-label="Add Bookmark"]');
+    expect(btn).toBeTruthy();
+  });
+
+  it('opens add bookmark modal on bookmark button click', async () => {
+    const { container } = render(GlobalFAB);
+    const btn = /** @type {Element} */ (container.querySelector('[aria-label="Add Bookmark"]'));
+    await fireEvent.click(btn);
+    expect(mockOpenModal).toHaveBeenCalledWith('addBookmark', expect.objectContaining({}));
   });
 });

@@ -4,6 +4,7 @@
 -->
 
 <script>
+  import { page } from '$app/stores';
   import { useArticleCommunityLoader } from '$lib/loaders/articles.js';
   import { CommunityArticleModel } from '$lib/models/community-content.js';
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
@@ -12,6 +13,8 @@
 
   /** @type {{ communityPubkey: string, communityProfile?: any }} */
   let { communityPubkey, communityProfile = null } = $props();
+
+  const communityNpub = $derived($page.data.npub);
 </script>
 
 <CommunityContentView
@@ -32,6 +35,7 @@
           {article}
           authorProfile={authorProfiles.get(article.pubkey) || null}
           compact={false}
+          {communityNpub}
         />
       {/each}
     </div>

@@ -1,6 +1,6 @@
 <!--
   WikiView Component
-  Full wiki article display for detail pages (kind 30818 / NIP-54)
+  Full wiki article display for detail pages (kind 30818 / NIP-54) with optional highlight support
 -->
 
 <script>
@@ -11,9 +11,14 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { TrashIcon } from '$lib/components/icons';
+  import { renderMarkdown } from '$lib/helpers/markdown.js';
   import { preprocessWikilinks } from '$lib/helpers/markdownNostr.js';
-  import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import { loadEventHighlights } from '$lib/loaders/event-highlights.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { TimelineModel } from 'applesauce-core/models';
+  import { TrashIcon } from '$lib/components/icons';
+  import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
@@ -23,10 +28,11 @@
   /**
    * @typedef {Object} Props
    * @property {any} event - Wiki event (kind 30818)
+   * @property {string} [communityPubkey] - Community context for highlights
    */
 
   /** @type {Props} */
-  let { event } = $props();
+  let { event, communityPubkey = undefined } = $props();
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
@@ -41,14 +47,19 @@
     return titleTag?.[1] || dTag?.[1] || 'Untitled Wiki';
   });
 
+  const dTag = $derived.by(() => {
+    const tag = event.tags?.find((/** @type {any} */ t) => t[0] === 'd');
+    return tag?.[1] || '';
+  });
+
   const summary = $derived.by(() => {
     const summaryTag = event.tags?.find((/** @type {any} */ t) => t[0] === 'summary');
     return summaryTag?.[1] || '';
   });
 
   const topic = $derived.by(() => {
-    const dTag = event.tags?.find((/** @type {any} */ t) => t[0] === 'd');
-    return dTag?.[1] || '';
+    const tag = event.tags?.find((/** @type {any} */ t) => t[0] === 'd');
+    return tag?.[1] || '';
   });
 
   const publishedAt = $derived(new Date(event.created_at * 1000));
@@ -73,6 +84,50 @@
   let isDeleting = $state(false);
 
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
+
+  // Render markdown to HTML (with wikilink preprocessing)
+  const htmlContent = $derived(renderMarkdown(preprocessWikilinks(event.content)));
+
+  // Address pointer for this wiki
+  const addressPointer = $derived.by(() => ({
+    kind: /** @type {number} */ (30818),
+    pubkey: event.pubkey,
+    identifier: dTag
+  }));
+
+  // Load highlights
+  let highlights = $state.raw(/** @type {any[]} */ ([]));
+
+  $effect(() => {
+    if (!event.pubkey || !dTag) return;
+
+    const aTagValue = `${30818}:${event.pubkey}:${dTag}`;
+
+    /** @type {import('nostr-tools').Filter} */
+    const filter = { kinds: [9802], '#a': [aTagValue] };
+    if (communityPubkey) {
+      filter['#h'] = [communityPubkey];
+    }
+
+    const { loader, cleanup } = loadEventHighlights(
+      { kind: 30818, pubkey: event.pubkey, identifier: dTag },
+      communityPubkey
+    );
+    loader();
+
+    const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
+      highlights = events || [];
+    });
+
+    return () => {
+      cleanup();
+      modelSub.unsubscribe();
+    };
+  });
+
+  // Load highlight author profiles
+  const getHighlightProfiles = useProfileMap(() => highlights.map((h) => h.pubkey));
+  const highlightProfiles = $derived(getHighlightProfiles());
 
   async function handleDelete() {
     if (!activeUser || !event) return;
@@ -163,10 +218,15 @@
     {/if}
   </header>
 
-  <!-- Wiki Content -->
+  <!-- Wiki Content with Highlights -->
   <div class="mb-8">
-    <MarkdownRenderer
-      content={preprocessWikilinks(event.content)}
+    <HighlightOverlay
+      {htmlContent}
+      {highlights}
+      profiles={highlightProfiles}
+      source={addressPointer}
+      {activeUser}
+      {communityPubkey}
       class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50 prose-pre:rounded-lg prose-pre:bg-base-200 prose-img:rounded-lg"
     />
   </div>

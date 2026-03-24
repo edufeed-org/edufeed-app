@@ -22,10 +22,17 @@
    * @property {any} [authorProfile] - Author's profile
    * @property {boolean} [compact=false] - Compact display mode
    * @property {'card'|'list'} [variant='card'] - Display variant
+   * @property {string} [communityNpub] - Community npub for route construction
    */
 
   /** @type {Props} */
-  let { article, authorProfile = null, compact = false, variant = 'card' } = $props();
+  let {
+    article,
+    authorProfile = null,
+    compact = false,
+    variant = 'card',
+    communityNpub = undefined
+  } = $props();
 
   const isList = $derived(variant === 'list');
 
@@ -77,12 +84,23 @@
   });
 
   /**
+   * Build the resolved route for this article.
+   * @returns {string | null}
+   */
+  function getArticleHref() {
+    if (!articleNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/article/${articleNaddr}`);
+    return resolve(`/${articleNaddr}`);
+  }
+
+  /**
    * Handle card click
    * @param {MouseEvent} e
    */
   function handleClick(e) {
-    if (articleNaddr && e.target instanceof HTMLElement && !e.target.closest('button, a')) {
-      goto(resolve(`/${articleNaddr}`));
+    const href = getArticleHref();
+    if (href && e.target instanceof HTMLElement && !e.target.closest('button, a')) {
+      goto(href);
     }
   }
 
@@ -91,9 +109,10 @@
    * @param {KeyboardEvent} e
    */
   function handleKeydown(e) {
-    if ((e.key === 'Enter' || e.key === ' ') && articleNaddr) {
+    const href = getArticleHref();
+    if ((e.key === 'Enter' || e.key === ' ') && href) {
       e.preventDefault();
-      goto(resolve(`/${articleNaddr}`));
+      goto(href);
     }
   }
 </script>
@@ -207,10 +226,10 @@
       {/if}
 
       <!-- Read More Button -->
-      {#if articleNaddr}
+      {#if getArticleHref()}
         <div class="pt-2">
           <a
-            href={resolve(`/${articleNaddr}`)}
+            href={getArticleHref()}
             class="btn btn-sm btn-primary"
             onclick={(e) => e.stopPropagation()}
           >

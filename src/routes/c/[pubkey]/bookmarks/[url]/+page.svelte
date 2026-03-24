@@ -10,6 +10,8 @@
   import { CommunitySocialBookmarkModel } from '$lib/models/community-content.js';
   import { extractUrlFromEvent, normalizeUrl } from '$lib/helpers/urlGrouping.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { EventFactory } from 'applesauce-core/event-factory';
+  import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import BookmarkItem from '$lib/components/bookmarks/BookmarkItem.svelte';
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
   import PageNoteItem from '$lib/components/bookmarks/PageNoteItem.svelte';
@@ -106,6 +108,38 @@
     const hash = $page.url.hash;
     return hash.startsWith('#highlight-') ? hash.slice('#highlight-'.length) : null;
   });
+
+  // Page note creation
+  let noteContent = $state('');
+  let isPostingNote = $state(false);
+
+  async function postPageNote() {
+    const user = getActiveUser();
+    if (!user || !noteContent.trim() || isPostingNote) return;
+
+    isPostingNote = true;
+    try {
+      const factory = new EventFactory({ signer: user.signer });
+      const draft = await factory.build({
+        kind: 1111,
+        content: noteContent.trim(),
+        tags: [
+          ['K', 'web'],
+          ['I', decodedUrl],
+          ['r', decodedUrl],
+          ['h', communityPubkey]
+        ]
+      });
+      const signed = await factory.sign(draft);
+      eventStore.add(signed);
+      publishEventOptimistic(signed);
+      noteContent = '';
+    } catch (err) {
+      console.error('Failed to post page note:', err);
+    } finally {
+      isPostingNote = false;
+    }
+  }
 
   function goBack() {
     goto(resolve(`/c/${$page.params.pubkey}?view=social-bookmarks`));
@@ -212,7 +246,13 @@
           </h2>
           <div class="flex flex-col gap-3">
             {#each highlights as highlight (highlight.id)}
-              <HighlightItem event={highlight} authorProfile={profiles.get(highlight.pubkey)} />
+              <HighlightItem
+                event={highlight}
+                authorProfile={profiles.get(highlight.pubkey)}
+                expanded={true}
+                activeUser={getActiveUser()}
+                {communityPubkey}
+              />
             {/each}
           </div>
         </section>
@@ -226,9 +266,51 @@
           </h2>
           <div class="flex flex-col gap-3">
             {#each pageNotes as note (note.id)}
-              <PageNoteItem event={note} authorProfile={profiles.get(note.pubkey)} />
+              <PageNoteItem
+                event={note}
+                authorProfile={profiles.get(note.pubkey)}
+                expanded={true}
+                activeUser={getActiveUser()}
+                {communityPubkey}
+              />
             {/each}
           </div>
+        </section>
+      {/if}
+
+      <!-- Add page note -->
+      {#if getActiveUser()}
+        <section class="mb-6">
+          <h2 class="mb-3 text-sm font-semibold text-base-content/70">
+            {m.social_bookmarks_add_page_note()}
+          </h2>
+          <form
+            onsubmit={(e) => {
+              e.preventDefault();
+              postPageNote();
+            }}
+            class="space-y-2"
+          >
+            <textarea
+              bind:value={noteContent}
+              placeholder={m.social_bookmarks_page_note_placeholder()}
+              class="textarea-bordered textarea w-full"
+              rows="3"
+              disabled={isPostingNote}
+            ></textarea>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                class="btn btn-sm btn-primary"
+                disabled={!noteContent.trim() || isPostingNote}
+              >
+                {#if isPostingNote}
+                  <span class="loading loading-xs loading-spinner"></span>
+                {/if}
+                {m.comments_input_post_button()}
+              </button>
+            </div>
+          </form>
         </section>
       {/if}
 

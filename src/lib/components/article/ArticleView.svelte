@@ -1,6 +1,6 @@
 <!--
   ArticleView Component
-  Full article display for detail pages
+  Full article display for detail pages with optional highlight support
 -->
 
 <script>
@@ -15,9 +15,14 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
+  import { renderMarkdown } from '$lib/helpers/markdown.js';
+  import { loadEventHighlights } from '$lib/loaders/event-highlights.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { TimelineModel } from 'applesauce-core/models';
   import { EditIcon, TrashIcon } from '$lib/components/icons';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
-  import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
@@ -27,10 +32,11 @@
   /**
    * @typedef {Object} Props
    * @property {any} event - Article event (kind 30023)
+   * @property {string} [communityPubkey] - Community context for highlights
    */
 
   /** @type {Props} */
-  let { event } = $props();
+  let { event, communityPubkey = undefined } = $props();
 
   // Get active user (reactive to login/logout)
   const getActiveUser = useActiveUser();
@@ -43,6 +49,11 @@
   // Extract article metadata
   const title = $derived(getArticleTitle(event) || 'Untitled Article');
   const image = $derived(getArticleImage(event));
+
+  const dTag = $derived.by(() => {
+    const tag = event.tags?.find((/** @type {any} */ t) => t[0] === 'd');
+    return tag?.[1] || '';
+  });
 
   // Get summary
   const summary = $derived.by(() => {
@@ -84,6 +95,50 @@
   let isDeleting = $state(false);
 
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
+
+  // Render markdown to HTML
+  const htmlContent = $derived(renderMarkdown(event.content));
+
+  // Address pointer for this article
+  const addressPointer = $derived.by(() => ({
+    kind: /** @type {number} */ (30023),
+    pubkey: event.pubkey,
+    identifier: dTag
+  }));
+
+  // Load highlights for this article
+  let highlights = $state.raw(/** @type {any[]} */ ([]));
+
+  $effect(() => {
+    if (!event.pubkey || !dTag) return;
+
+    const aTagValue = `${30023}:${event.pubkey}:${dTag}`;
+
+    /** @type {import('nostr-tools').Filter} */
+    const filter = { kinds: [9802], '#a': [aTagValue] };
+    if (communityPubkey) {
+      filter['#h'] = [communityPubkey];
+    }
+
+    const { loader, cleanup } = loadEventHighlights(
+      { kind: 30023, pubkey: event.pubkey, identifier: dTag },
+      communityPubkey
+    );
+    loader();
+
+    const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
+      highlights = events || [];
+    });
+
+    return () => {
+      cleanup();
+      modelSub.unsubscribe();
+    };
+  });
+
+  // Load highlight author profiles
+  const getHighlightProfiles = useProfileMap(() => highlights.map((h) => h.pubkey));
+  const highlightProfiles = $derived(getHighlightProfiles());
 
   /**
    * Handle article deletion
@@ -200,10 +255,15 @@
     </div>
   {/if}
 
-  <!-- Article Content -->
+  <!-- Article Content with Highlights -->
   <div class="mb-8">
-    <MarkdownRenderer
-      content={event.content}
+    <HighlightOverlay
+      {htmlContent}
+      {highlights}
+      profiles={highlightProfiles}
+      source={addressPointer}
+      {activeUser}
+      {communityPubkey}
       class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50 prose-pre:rounded-lg prose-pre:bg-base-200 prose-img:rounded-lg"
     />
   </div>

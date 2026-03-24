@@ -1,5 +1,6 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
+import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
@@ -56,7 +57,7 @@ export async function GET({ url }) {
     const response = await fetch(articleUrl, {
       signal: controller.signal,
       headers: {
-        Accept: 'text/html',
+        Accept: 'text/html, application/pdf',
         'User-Agent': 'Mozilla/5.0 (compatible; ReaderBot/1.0)'
       }
     });
@@ -75,6 +76,42 @@ export async function GET({ url }) {
       return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
     }
 
+    // PDF branch
+    if (isPdfResponse(response.headers, articleUrl)) {
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > MAX_SIZE) {
+        return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
+      }
+
+      const pdfArticle = await extractPdfContent(buffer);
+
+      if (!pdfArticle.textContent) {
+        return Response.json(
+          { success: false, error: 'Could not extract text from PDF (may be image-only)' },
+          { status: 422 }
+        );
+      }
+
+      return Response.json(
+        {
+          success: true,
+          article: {
+            title: pdfArticle.title,
+            content: pdfArticle.content,
+            textContent: pdfArticle.textContent,
+            byline: pdfArticle.byline,
+            siteName: parsedUrl.hostname
+          }
+        },
+        {
+          headers: {
+            'Cache-Control': 'public, max-age=3600'
+          }
+        }
+      );
+    }
+
+    // HTML branch
     const html = await response.text();
     if (html.length > MAX_SIZE) {
       return Response.json({ success: false, error: 'Content too large' }, { status: 502 });

@@ -8,11 +8,13 @@
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { manager } from '$lib/stores/accounts.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
   import { browser } from '$app/environment';
 
   let { children, data } = $props();
+
+  const getActiveUser = useActiveUser();
 
   // Initialize runtime config synchronously before any child components render.
   // The initialized guard inside initializeConfig() prevents double-initialization.
@@ -110,6 +112,6 @@
   <Footer />
 </div>
 <PublishStatusToast />
-{#if manager.active}
+{#if getActiveUser()}
   <GlobalFAB />
 {/if}

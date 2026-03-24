@@ -2,12 +2,21 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
-  import { PlusIcon, CalendarIcon, GraduationCapIcon, BookIcon } from '$lib/components/icons';
+  import {
+    PlusIcon,
+    CalendarIcon,
+    GraduationCapIcon,
+    BookIcon,
+    BookmarkIcon
+  } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { npubToHex } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
-  // Detect community context from route
-  let communityPubkey = $derived($page.route.id?.startsWith('/c/') ? $page.params.pubkey : '');
+  // Detect community context from route (convert npub param to hex for consistent matching)
+  let communityPubkey = $derived(
+    $page.route.id?.startsWith('/c/') ? (npubToHex($page.params.pubkey) ?? '') : ''
+  );
 
   function handleCreateEvent() {
     modalStore.openModal('calendarEvent', {
@@ -31,6 +40,10 @@
 
   function handleCreateWiki() {
     goto(resolve(`/create/wiki${communityPubkey ? `?community=${communityPubkey}` : ''}`));
+  }
+
+  function handleAddBookmark() {
+    modalStore.openModal('addBookmark', { communityPubkey });
   }
 </script>
 
@@ -108,6 +121,16 @@
   >
     <BookIcon class_="h-5 w-5" />
   </button>
+
+  <!-- Add Bookmark -->
+  <button
+    class="tooltip btn tooltip-left btn-circle btn-lg"
+    data-tip="Add Bookmark"
+    onclick={handleAddBookmark}
+    aria-label="Add Bookmark"
+  >
+    <BookmarkIcon class_="h-5 w-5" />
+  </button>
 </div>
 
 <style>
@@ -150,5 +173,9 @@
 
   .fab > button:nth-child(6) {
     transition-delay: 0.25s;
+  }
+
+  .fab > button:nth-child(7) {
+    transition-delay: 0.3s;
   }
 </style>

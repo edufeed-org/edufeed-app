@@ -83,9 +83,20 @@ export function getFeedCardData(event) {
     }
     case 9802: {
       const text = truncate(event.content, 120);
+      let subtitle = getTag('r');
+      if (!subtitle) {
+        const aTag = getTag('a');
+        if (aTag) {
+          const parts = aTag.split(':');
+          const kind = parts[0] ? parseInt(parts[0]) : 0;
+          const identifier = parts.slice(2).join(':');
+          const label = kind === 30818 ? 'Wiki' : 'Article';
+          subtitle = `${label}: ${identifier}`;
+        }
+      }
       return {
         title: text || 'Highlight',
-        subtitle: getTag('r'),
+        subtitle,
         typeKey: 'highlight',
         tags
       };

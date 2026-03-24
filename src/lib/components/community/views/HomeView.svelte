@@ -3,7 +3,7 @@
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
-  import { extractUrlFromEvent } from '$lib/helpers/urlGrouping.js';
+  import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
@@ -26,11 +26,25 @@
 
     if (isBookmarkKind) {
       const rawUrl = extractUrlFromEvent(event);
-      if (!rawUrl || !communityId) return;
-      const displayUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-      const npub = hexToNpub(communityId);
-      const fragment = event.kind === 9802 ? `#highlight-${event.id}` : '';
-      goto(`/c/${npub}/bookmarks/${encodeURIComponent(displayUrl)}${fragment}`);
+      if (rawUrl && communityId) {
+        const displayUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+        const npub = hexToNpub(communityId);
+        const fragment = event.kind === 9802 ? `#highlight-${event.id}` : '';
+        goto(`/c/${npub}/bookmarks/${encodeURIComponent(displayUrl)}${fragment}`);
+        return;
+      }
+      // Event-ref highlight (a-tag, no r-tag) — navigate to article/wiki detail
+      const pointer = extractEventRefFromHighlight(event);
+      if (pointer && communityId) {
+        const npub = hexToNpub(communityId);
+        const routePrefix = pointer.kind === 30818 ? 'wiki' : 'article';
+        const naddr = nip19.naddrEncode({
+          kind: pointer.kind,
+          pubkey: pointer.pubkey,
+          identifier: pointer.identifier
+        });
+        goto(`/c/${npub}/${routePrefix}/${naddr}`);
+      }
     } else if (isAddressable) {
       const naddr = encodeEventToNaddr(event);
       if (!naddr) return;

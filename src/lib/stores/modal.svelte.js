@@ -1,5 +1,5 @@
 /**
- * @typedef {'none' | 'login' | 'privateKey' | 'bunker' | 'settings' | 'profile' | 'eventDetails' | 'createCalendar' | 'calendarEvent' | 'signup' | 'createCommunity' | 'editCommunity' | 'webcalQRCode' | 'communityMigration'} ModalType
+ * @typedef {'none' | 'login' | 'privateKey' | 'bunker' | 'settings' | 'profile' | 'eventDetails' | 'createCalendar' | 'calendarEvent' | 'signup' | 'createCommunity' | 'editCommunity' | 'webcalQRCode' | 'communityMigration' | 'addBookmark'} ModalType
  */
 
 /**

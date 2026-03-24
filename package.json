@@ -77,7 +77,8 @@
     "qrcode": "^1.5.4",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5",
-    "svelte-maplibre": "^1.2.3"
+    "svelte-maplibre": "^1.2.3",
+    "unpdf": "^1.4.0"
   },
   "lint-staged": {
     "*.{js,svelte}": [
