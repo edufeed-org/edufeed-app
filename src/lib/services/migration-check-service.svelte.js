@@ -142,15 +142,18 @@ export async function checkCommunityMigration() {
 
     // Wait for active user (with timeout)
     const account = await new Promise((resolve) => {
+      /** @type {import('rxjs').Subscription | undefined} */
+      let sub;
+
       const timeout = setTimeout(() => {
-        sub.unsubscribe();
+        sub?.unsubscribe();
         resolve(null);
       }, 10_000);
 
-      const sub = manager.active$.subscribe((active) => {
+      sub = manager.active$.subscribe((active) => {
         if (active) {
           clearTimeout(timeout);
-          sub.unsubscribe();
+          sub?.unsubscribe();
           resolve(active);
         }
       });
