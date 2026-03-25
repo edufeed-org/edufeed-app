@@ -1,11 +1,13 @@
 <script>
   import CommunityProfileHero from './CommunityProfileHero.svelte';
+  import PinnedSection from '../PinnedSection.svelte';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
   import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
   import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
   import {
@@ -43,7 +45,7 @@
           pubkey: pointer.pubkey,
           identifier: pointer.identifier
         });
-        goto(`/c/${npub}/${routePrefix}/${naddr}`);
+        goto(`/c/${npub}/${routePrefix}/${naddr}#highlight-${event.id}`);
       }
     } else if (isAddressable) {
       const naddr = encodeEventToNaddr(event);
@@ -60,6 +62,10 @@
   }
 
   let { communikeyEvent, profileEvent, communityId, onKindNavigation } = $props();
+
+  const getActiveUser = useActiveUser();
+  let activeUser = $derived(getActiveUser());
+  let isAdmin = $derived(activeUser?.pubkey === communityId);
 
   // Activity feed state — use $state.raw for event arrays (Symbol-based relay provenance)
   /** @type {any[]} */
@@ -162,6 +168,8 @@
 
     <!-- Main Content -->
     <div class="container mx-auto max-w-4xl px-4 py-8">
+      <PinnedSection {communityId} {isAdmin} onNavigateToEvent={navigateToEvent} />
+
       <!-- Recent Activity Feed -->
       <div>
         <h2 class="mb-4 text-xl font-bold">{m.community_views_home_recent_activity_title()}</h2>
