@@ -105,7 +105,13 @@
     const mark = /** @type {HTMLElement | null} */ (
       /** @type {HTMLElement} */ (e.target).closest('mark.reader-highlight')
     );
-    if (!mark) return;
+    if (!mark) {
+      if (activeHighlightId) {
+        activeHighlightId = null;
+        clearActiveMarkStyle();
+      }
+      return;
+    }
 
     const ids = mark.dataset.highlightIds;
     if (!ids) return;
@@ -136,6 +142,16 @@
       .forEach((el) => el.classList.remove('reader-highlight-active'));
   }
 
+  /** @param {MouseEvent} e */
+  function handleWindowClick(e) {
+    if (!activeHighlightId) return;
+    const target = /** @type {HTMLElement} */ (e.target);
+    // If click is inside our overlay container, handleMarkClick handles it
+    if (container?.parentElement?.contains(target)) return;
+    activeHighlightId = null;
+    clearActiveMarkStyle();
+  }
+
   /** @param {string} eventId */
   function handleUnmatchedHighlightClick(eventId) {
     if (activeHighlightId === eventId) {
@@ -146,6 +162,8 @@
     }
   }
 </script>
+
+<svelte:window onclick={handleWindowClick} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
