@@ -205,7 +205,7 @@
             {showShareUI ? m.common_close() : m.common_share()}
           </button>
         {/if}
-        <EventContextMenu {event} />
+        <EventContextMenu {event} {communityPubkey} />
       </div>
     </div>
 

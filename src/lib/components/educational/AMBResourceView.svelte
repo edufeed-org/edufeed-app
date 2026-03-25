@@ -42,10 +42,11 @@
    * @typedef {Object} Props
    * @property {any} event - Raw Nostr event (kind 30142)
    * @property {any} resource - Formatted resource object (from formatAMBResource)
+   * @property {string} [communityPubkey] - Community context for pin action
    */
 
   /** @type {Props} */
-  let { event, resource } = $props();
+  let { event, resource, communityPubkey = undefined } = $props();
 
   // Reactive SKOS concepts for URI-to-label resolution
   const resourceTypeConcepts = $derived(getCachedConcepts('learningResourceType'));
@@ -346,7 +347,7 @@
             {showShareUI ? m.common_close() : m.common_share()}
           </button>
         {/if}
-        <EventContextMenu {event} />
+        <EventContextMenu {event} {communityPubkey} />
       </div>
     </div>
 
