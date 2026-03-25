@@ -31,6 +31,7 @@
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { EditIcon, TrashIcon } from '$lib/components/icons';
+  import EventContextMenu from '../shared/EventContextMenu.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
@@ -321,7 +322,7 @@
       </div>
 
       <!-- Actions -->
-      <div class="flex gap-2">
+      <div class="flex items-center gap-2">
         {#if isOwner}
           <button
             class="btn btn-outline btn-sm"
@@ -345,6 +346,7 @@
             {showShareUI ? m.common_close() : m.common_share()}
           </button>
         {/if}
+        <EventContextMenu {event} />
       </div>
     </div>
 

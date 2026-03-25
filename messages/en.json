@@ -1224,5 +1224,11 @@
   "profile_follow_success": "Now following this user",
   "profile_unfollow_success": "Unfollowed this user",
   "profile_follow_error": "Failed to update follow status",
-  "profile_content_count": "{count} items"
+  "profile_content_count": "{count} items",
+  "event_menu_copy_event_id": "Copy event ID",
+  "event_menu_copy_share_link": "Copy share link",
+  "event_menu_view_raw_event": "View raw event",
+  "event_menu_raw_event_title": "Raw Event",
+  "event_menu_event_id_copied": "Event ID copied!",
+  "event_menu_share_link_copied": "Share link copied!"
 }

@@ -13,7 +13,6 @@
   }
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
-  import { showToast } from '$lib/helpers/toast.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import {
@@ -21,9 +20,9 @@
     ClockIcon,
     LocationIcon,
     UserIcon,
-    CopyIcon,
     ExternalLinkIcon
   } from '$lib/components/icons';
+  import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
   import AddToCalendarDropdown from '$lib/components/calendar/AddToCalendarDropdown.svelte';
   import EventTags from '$lib/components/calendar/EventTags.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -152,23 +151,6 @@
   }
 
   /**
-   * Copy event naddr to clipboard
-   */
-  async function copyNaddr() {
-    if (rawEvent) {
-      try {
-        const naddr = encodeEventToNaddr(rawEvent);
-        await navigator.clipboard.writeText(naddr);
-        console.log('Event naddr copied to clipboard:', naddr);
-        showToast('Event link copied to clipboard!', 'success');
-      } catch (err) {
-        console.error('Failed to copy event naddr:', err);
-        showToast('Failed to copy link', 'error');
-      }
-    }
-  }
-
-  /**
    * Handle edit action - open edit modal
    */
   function handleEdit() {
@@ -232,14 +214,14 @@
 
     <!-- Title Row with Copy Icon, Add to Calendar, and Edit -->
     <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <!-- Event Title with Copy Icon -->
+      <!-- Event Title with Context Menu -->
       <div class="flex flex-1 items-start gap-2">
         <h1 class="text-4xl font-bold text-base-content">
           {event.title}
         </h1>
-        <button class="btn btn-square btn-ghost btn-sm" onclick={copyNaddr} title="Copy event link">
-          <CopyIcon />
-        </button>
+        {#if rawEvent}
+          <EventContextMenu event={rawEvent} />
+        {/if}
       </div>
 
       <!-- Actions (right side) -->

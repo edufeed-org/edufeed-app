@@ -18,6 +18,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { TimelineModel } from 'applesauce-core/models';
   import { TrashIcon } from '$lib/components/icons';
+  import EventContextMenu from '../shared/EventContextMenu.svelte';
   import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
@@ -29,10 +30,11 @@
    * @typedef {Object} Props
    * @property {any} event - Wiki event (kind 30818)
    * @property {string} [communityPubkey] - Community context for highlights
+   * @property {string | null} [targetHighlightId] - Auto-scroll to this highlight
    */
 
   /** @type {Props} */
-  let { event, communityPubkey = undefined } = $props();
+  let { event, communityPubkey = undefined, targetHighlightId = null } = $props();
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
@@ -187,7 +189,7 @@
       </div>
 
       <!-- Actions -->
-      <div class="flex gap-2">
+      <div class="flex items-center gap-2">
         {#if isAuthor}
           <button
             class="btn btn-outline btn-sm btn-error"
@@ -203,6 +205,7 @@
             {showShareUI ? m.common_close() : m.common_share()}
           </button>
         {/if}
+        <EventContextMenu {event} />
       </div>
     </div>
 
@@ -227,6 +230,7 @@
       source={addressPointer}
       {activeUser}
       {communityPubkey}
+      {targetHighlightId}
       class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50 prose-pre:rounded-lg prose-pre:bg-base-200 prose-img:rounded-lg"
     />
   </div>

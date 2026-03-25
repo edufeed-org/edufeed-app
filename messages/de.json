@@ -1224,5 +1224,11 @@
   "reader_additional_highlights": "Weitere Markierungen",
   "highlight_button": "Markieren",
   "highlight_saving": "Wird gespeichert…",
-  "highlight_error": "Markierung konnte nicht gespeichert werden"
+  "highlight_error": "Markierung konnte nicht gespeichert werden",
+  "event_menu_copy_event_id": "Event-ID kopieren",
+  "event_menu_copy_share_link": "Teilen-Link kopieren",
+  "event_menu_view_raw_event": "Rohdaten anzeigen",
+  "event_menu_raw_event_title": "Rohdaten",
+  "event_menu_event_id_copied": "Event-ID kopiert!",
+  "event_menu_share_link_copied": "Teilen-Link kopiert!"
 }

@@ -41,7 +41,19 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_all_contributors: () => 'Contributors',
   amb_resource_related_resources: () => 'Related',
   amb_resource_uploaded_files: () => 'Uploaded Files',
-  amb_resource_discussion: () => 'Discussion'
+  amb_resource_discussion: () => 'Discussion',
+  common_edit: () => 'Edit',
+  common_delete: () => 'Delete',
+  common_share: () => 'Share',
+  common_close: () => 'Close',
+  common_copy: () => 'Copy',
+  common_copied: () => 'Copied',
+  event_menu_copy_event_id: () => 'Copy event ID',
+  event_menu_copy_share_link: () => 'Copy share link',
+  event_menu_view_raw_event: () => 'View raw event',
+  event_menu_raw_event_title: () => 'Raw Event',
+  event_menu_event_id_copied: () => 'Event ID copied!',
+  event_menu_share_link_copied: () => 'Share link copied!'
 }));
 vi.mock('$lib/paraglide/runtime.js', () => ({
   getLocale: () => 'en'
@@ -89,6 +101,9 @@ vi.mock('$lib/helpers/eventDeletion.js', () => ({
 vi.mock('$lib/helpers/toast.js', () => ({
   showToast: vi.fn()
 }));
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  encodeEventToNaddr: vi.fn(() => 'naddr1test')
+}));
 // Mock heavy sub-components
 vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
 vi.mock('../comments/CommentList.svelte', () => ({ default: () => ({}) }));
@@ -96,9 +111,10 @@ vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/CommunityShare.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
-vi.mock('$lib/components/icons', () => ({
-  TrashIcon: () => ({})
-}));
+vi.mock('$lib/components/icons', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual };
+});
 
 const mockEvent = {
   id: 'a'.repeat(64),
