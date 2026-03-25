@@ -1,3 +1,5 @@
+import { nip19 } from 'nostr-tools';
+
 /**
  * @typedef {Object} FormField
  * @property {string} id
@@ -111,4 +113,124 @@ export function generateFieldId(label, existingIds) {
     suffix++;
   }
   return `${base}-${suffix}`;
+}
+
+/**
+ * Validate a field value against its constraints.
+ * @param {FormField} field
+ * @param {string} value
+ * @returns {string | null} Error message or null if valid
+ */
+export function validateField(field, value) {
+  const { options = {} } = field;
+  const label = field.label;
+
+  // Required check
+  if (options.required) {
+    if (field.type === 'checkbox' && value !== 'true') return `${label} is required`;
+    if (field.type !== 'checkbox' && !value) return `${label} is required`;
+  }
+
+  // Skip further checks if empty and not required
+  if (!value) return null;
+
+  // Min/max for text types (character length)
+  if (
+    (field.type === 'text' || field.type === 'textarea') &&
+    options.min &&
+    value.length < options.min
+  ) {
+    return `${label} must be at least ${options.min} characters`;
+  }
+  if (
+    (field.type === 'text' || field.type === 'textarea') &&
+    options.max &&
+    value.length > options.max
+  ) {
+    return `${label} must be at most ${options.max} characters`;
+  }
+
+  // Min/max for number type (numeric value)
+  if (field.type === 'number') {
+    const num = Number(value);
+    if (options.min !== undefined && num < options.min)
+      return `${label} must be at least ${options.min}`;
+    if (options.max !== undefined && num > options.max)
+      return `${label} must be at most ${options.max}`;
+  }
+
+  // Email format
+  if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return `${label} must be a valid email address`;
+  }
+
+  // URL format
+  if (field.type === 'url') {
+    try {
+      new URL(value);
+    } catch {
+      return `${label} must be a valid URL`;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Build response tags from field values.
+ * @param {Record<string, string>} values - field ID to value
+ * @returns {string[][]}
+ */
+export function buildResponseTags(values) {
+  return Object.entries(values).map(([id, value]) => ['response', id, value]);
+}
+
+/**
+ * Parse response tags into a values map.
+ * @param {string[][]} tags
+ * @returns {Record<string, string>}
+ */
+export function parseResponseTags(tags) {
+  /** @type {Record<string, string>} */
+  const values = {};
+  for (const tag of tags) {
+    if (tag[0] === 'response' && tag.length >= 3) {
+      values[tag[1]] = tag[2];
+    }
+  }
+  return values;
+}
+
+/**
+ * Convert a form coordinate (30168:pubkey:d-tag) to an naddr.
+ * @param {string} coordinate
+ * @param {string[]} relays
+ * @returns {string}
+ */
+export function formCoordinateToNaddr(coordinate, relays) {
+  const parts = coordinate.split(':');
+  if (parts.length < 3) throw new Error(`Invalid form coordinate: ${coordinate}`);
+  const [kindStr, pubkey, ...identifierParts] = parts;
+  return nip19.naddrEncode({
+    kind: Number(kindStr),
+    pubkey,
+    identifier: identifierParts.join(':'),
+    relays
+  });
+}
+
+/**
+ * Convert a form event to an naddr string.
+ * @param {{ kind: number, pubkey: string, tags: string[][], content: string, created_at: number }} event
+ * @param {string[]} relays
+ * @returns {string}
+ */
+export function formEventToNaddr(event, relays) {
+  const dTag = event.tags.find((t) => t[0] === 'd')?.[1] || '';
+  return nip19.naddrEncode({
+    kind: event.kind,
+    pubkey: event.pubkey,
+    identifier: dTag,
+    relays
+  });
 }

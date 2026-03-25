@@ -1,6 +1,15 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { buildFormTemplateTags, parseFormTemplate, generateFieldId } from '../helpers/forms.js';
+import {
+  buildFormTemplateTags,
+  parseFormTemplate,
+  generateFieldId,
+  validateField,
+  buildResponseTags,
+  parseResponseTags,
+  formCoordinateToNaddr,
+  formEventToNaddr
+} from '../helpers/forms.js';
 
 describe('forms — tag building', () => {
   it('builds minimal form template tags', () => {
@@ -147,5 +156,115 @@ describe('forms — field ID generation', () => {
 
   it('handles empty label', () => {
     expect(generateFieldId('', [])).toBe('field-1');
+  });
+});
+
+describe('forms — field validation', () => {
+  it('required field with empty value fails', () => {
+    const field = { id: 'name', type: 'text', label: 'Name', options: { required: true } };
+    expect(validateField(field, '')).toBe('Name is required');
+  });
+
+  it('required field with value passes', () => {
+    const field = { id: 'name', type: 'text', label: 'Name', options: { required: true } };
+    expect(validateField(field, 'Bob')).toBeNull();
+  });
+
+  it('optional field with empty value passes', () => {
+    const field = { id: 'name', type: 'text', label: 'Name', options: {} };
+    expect(validateField(field, '')).toBeNull();
+  });
+
+  it('textarea min length check', () => {
+    const field = {
+      id: 'reason',
+      type: 'textarea',
+      label: 'Reason',
+      options: { required: true, min: 10 }
+    };
+    expect(validateField(field, 'short')).toBe('Reason must be at least 10 characters');
+    expect(validateField(field, 'this is long enough')).toBeNull();
+  });
+
+  it('textarea max length check', () => {
+    const field = { id: 'bio', type: 'textarea', label: 'Bio', options: { max: 5 } };
+    expect(validateField(field, 'toolong')).toBe('Bio must be at most 5 characters');
+  });
+
+  it('number min/max check', () => {
+    const field = { id: 'age', type: 'number', label: 'Age', options: { min: 18, max: 120 } };
+    expect(validateField(field, '17')).toBe('Age must be at least 18');
+    expect(validateField(field, '121')).toBe('Age must be at most 120');
+    expect(validateField(field, '25')).toBeNull();
+  });
+
+  it('email format check', () => {
+    const field = { id: 'email', type: 'email', label: 'Email', options: { required: true } };
+    expect(validateField(field, 'notanemail')).toBe('Email must be a valid email address');
+    expect(validateField(field, 'user@example.com')).toBeNull();
+  });
+
+  it('url format check', () => {
+    const field = { id: 'website', type: 'url', label: 'Website', options: { required: true } };
+    expect(validateField(field, 'notaurl')).toBe('Website must be a valid URL');
+    expect(validateField(field, 'https://example.com')).toBeNull();
+  });
+
+  it('checkbox required must be true', () => {
+    const field = { id: 'terms', type: 'checkbox', label: 'Terms', options: { required: true } };
+    expect(validateField(field, 'false')).toBe('Terms is required');
+    expect(validateField(field, 'true')).toBeNull();
+  });
+
+  it('select required must have value', () => {
+    const field = { id: 'tier', type: 'select', label: 'Tier', options: { required: true } };
+    expect(validateField(field, '')).toBe('Tier is required');
+    expect(validateField(field, 'Premium')).toBeNull();
+  });
+});
+
+describe('forms — response tags', () => {
+  it('builds response tags from field values', () => {
+    const values = { 'full-name': 'Bob', reason: 'I want in' };
+    const tags = buildResponseTags(values);
+    expect(tags).toContainEqual(['response', 'full-name', 'Bob']);
+    expect(tags).toContainEqual(['response', 'reason', 'I want in']);
+  });
+
+  it('parses response tags back to values', () => {
+    const tags = [
+      ['response', 'full-name', 'Bob'],
+      ['response', 'reason', 'I want in']
+    ];
+    const values = parseResponseTags(tags);
+    expect(values).toEqual({ 'full-name': 'Bob', reason: 'I want in' });
+  });
+});
+
+describe('forms — coordinate conversion', () => {
+  it('converts form coordinate to naddr', () => {
+    const naddr = formCoordinateToNaddr(
+      '30168:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890:my-form',
+      ['wss://relay.example.com']
+    );
+    expect(naddr).toMatch(/^naddr1/);
+  });
+
+  it('throws on invalid coordinate format', () => {
+    expect(() => formCoordinateToNaddr('invalid', [])).toThrow();
+  });
+});
+
+describe('forms — event to naddr', () => {
+  it('converts a form event to naddr', () => {
+    const event = {
+      kind: 30168,
+      pubkey: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      tags: [['d', 'my-form']],
+      content: '',
+      created_at: 1
+    };
+    const naddr = formEventToNaddr(event, ['wss://relay.example.com']);
+    expect(naddr).toMatch(/^naddr1/);
   });
 });
