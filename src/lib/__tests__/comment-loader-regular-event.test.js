@@ -146,7 +146,7 @@ describe('createCommentLoaderForEvent', () => {
     expect(relays).toContain('wss://extra.relay/');
   });
 
-  it('uses #E for kind 1 (short text note)', () => {
+  it('creates dual-filter loader for kind 1 (NIP-22 + NIP-10)', () => {
     const event = {
       id: 'note123',
       kind: 1,
@@ -156,10 +156,41 @@ describe('createCommentLoaderForEvent', () => {
       content: 'Hello world'
     };
 
+    const result = createCommentLoaderForEvent(event);
+
+    // Should create two timeline loaders
+    const calls = /** @type {any} */ (createTimelineLoader).mock.calls;
+    const lastTwoCalls = calls.slice(-2);
+
+    // One for NIP-22 (kind 1111, #E)
+    const nip22Call = lastTwoCalls.find((c) => c[2].kinds[0] === 1111);
+    expect(nip22Call).toBeDefined();
+    expect(nip22Call[2]['#E']).toEqual(['note123']);
+
+    // One for NIP-10 (kind 1, #e)
+    const nip10Call = lastTwoCalls.find((c) => c[2].kinds[0] === 1);
+    expect(nip10Call).toBeDefined();
+    expect(nip10Call[2]['#e']).toEqual(['note123']);
+
+    // Result should be a function (merged loader)
+    expect(typeof result).toBe('function');
+  });
+
+  it('uses single #E filter for non-kind-1 regular events', () => {
+    const event = {
+      id: 'thread1',
+      kind: 11,
+      pubkey: 'author7',
+      tags: [],
+      created_at: 1700000000,
+      content: 'Forum thread'
+    };
+
     createCommentLoaderForEvent(event);
 
     const filter = /** @type {any} */ (createTimelineLoader).mock.calls.at(-1)[2];
-    expect(filter['#E']).toEqual(['note123']);
-    expect(filter).not.toHaveProperty('#A');
+    expect(filter.kinds).toEqual([1111]);
+    expect(filter['#E']).toEqual(['thread1']);
+    expect(filter).not.toHaveProperty('#e');
   });
 });

@@ -13,7 +13,7 @@
    * @type {{
    *   group: import('$lib/helpers/urlGrouping.js').UrlGroup,
    *   authorProfiles: Map<string, any>,
-   *   communityPubkey: string
+   *   communityPubkey?: string
    * }}
    */
   let { group, authorProfiles, communityPubkey } = $props();
@@ -39,9 +39,14 @@
   }
 
   function handleClick() {
-    const npub = hexToNpub(communityPubkey);
-    const encodedUrl = encodeURIComponent(group.displayUrl);
-    goto(resolve(`/c/${npub}/bookmarks/${encodedUrl}`));
+    if (communityPubkey) {
+      const npub = hexToNpub(communityPubkey);
+      const encodedUrl = encodeURIComponent(group.displayUrl);
+      goto(resolve(`/c/${npub}/bookmarks/${encodedUrl}`));
+    } else {
+      // No community context — open the URL directly
+      window.open(group.displayUrl, '_blank', 'noopener,noreferrer');
+    }
   }
 </script>
 

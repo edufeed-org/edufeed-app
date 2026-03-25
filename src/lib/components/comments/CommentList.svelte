@@ -4,7 +4,7 @@
   /* eslint-disable svelte/prefer-svelte-reactivity -- Map used intentionally to avoid infinite loops */
   import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { CommentsModel } from 'applesauce-common/models';
+  import { RepliesModel } from 'applesauce-common/models';
   import {
     buildCommentTree,
     countComments,
@@ -24,6 +24,7 @@
    * @property {boolean} [collapsedReplies] - When true, replies start collapsed with expand toggle
    * @property {string|null} [initialFocusCommentId] - Comment ID to auto-focus on mount (deep-linking)
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
+   * @property {string[]} [extraRelays] - Additional relays to query for comments
    */
 
   /** @type {CommentListProps} */
@@ -32,7 +33,8 @@
     activeUser,
     collapsedReplies = false,
     initialFocusCommentId = null,
-    communityPubkey = undefined
+    communityPubkey = undefined,
+    extraRelays = undefined
   } = $props();
 
   let flatComments = $state(/** @type {any[]} */ ([]));
@@ -108,7 +110,7 @@
     // Don't subscribe if we already have a subscription for this comment
     if (modelSubscriptions.has(comment.id)) return;
 
-    const subscription = eventStore.model(CommentsModel, comment).subscribe((replies) => {
+    const subscription = eventStore.model(RepliesModel, comment).subscribe((replies) => {
       let hasChanges = false;
 
       // Process each reply
@@ -160,7 +162,7 @@
     subscribeToCommentReplies(rootEvent);
 
     // Source: Loader fetches ALL comments from relays and adds to EventStore
-    const commentLoader = createCommentLoaderForEvent(rootEvent);
+    const commentLoader = createCommentLoaderForEvent(rootEvent, extraRelays);
     loaderSubscription = commentLoader().subscribe({
       next: (/** @type {any} */ comment) => {
         // Add to our loaded comments map

@@ -186,6 +186,95 @@ describe('buildCommentTree', () => {
   });
 });
 
+describe('buildCommentTree with kind 1 NIP-10 replies', () => {
+  /**
+   * Helper: create a kind 1 reply event with NIP-10 e-tags
+   * @param {string} id
+   * @param {number} created_at
+   * @param {string} content
+   * @param {{ rootId: string, parentId?: string, useMarkers?: boolean }} opts
+   */
+  function makeKind1Reply(id, created_at, content, opts) {
+    const { rootId, parentId, useMarkers = true } = opts;
+    const tags = [];
+
+    if (useMarkers) {
+      tags.push(['e', rootId, '', 'root']);
+      if (parentId) {
+        tags.push(['e', parentId, '', 'reply']);
+      }
+    } else {
+      // Legacy positional: first = root, last = reply-to
+      tags.push(['e', rootId]);
+      if (parentId) {
+        tags.push(['e', parentId]);
+      }
+    }
+
+    return { id, kind: 1, created_at, content, tags, pubkey: 'testpub', sig: 'testsig' };
+  }
+
+  it('treats kind 1 with only root marker as top-level', () => {
+    const replies = [makeKind1Reply('r1', 100, 'direct reply', { rootId: 'root1' })];
+
+    const tree = buildCommentTree(replies);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('r1');
+  });
+
+  it('nests kind 1 reply with reply marker under parent', () => {
+    const replies = [
+      makeKind1Reply('r1', 100, 'direct reply', { rootId: 'root1' }),
+      makeKind1Reply('r2', 200, 'reply to r1', { rootId: 'root1', parentId: 'r1' })
+    ];
+
+    const tree = buildCommentTree(replies);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('r1');
+    expect(tree[0].replies).toHaveLength(1);
+    expect(tree[0].replies[0].id).toBe('r2');
+  });
+
+  it('handles legacy positional e-tags (no markers)', () => {
+    const replies = [
+      makeKind1Reply('r1', 100, 'direct reply', { rootId: 'root1', useMarkers: false }),
+      makeKind1Reply('r2', 200, 'reply to r1', {
+        rootId: 'root1',
+        parentId: 'r1',
+        useMarkers: false
+      })
+    ];
+
+    const tree = buildCommentTree(replies);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('r1');
+    expect(tree[0].replies).toHaveLength(1);
+    expect(tree[0].replies[0].id).toBe('r2');
+  });
+
+  it('treats single legacy e-tag as top-level', () => {
+    const replies = [
+      makeKind1Reply('r1', 100, 'direct reply', { rootId: 'root1', useMarkers: false })
+    ];
+
+    const tree = buildCommentTree(replies);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('r1');
+  });
+
+  it('mixes kind 1111 and kind 1 replies in the same tree', () => {
+    const comments = [
+      makeComment('c1', 100, 'NIP-22 comment', { rootEventId: 'root1', rootKind: 1 }),
+      makeKind1Reply('r1', 200, 'NIP-10 reply', { rootId: 'root1' })
+    ];
+
+    const tree = buildCommentTree(comments);
+    expect(tree).toHaveLength(2);
+    // Both are top-level
+    expect(tree.map((c) => c.id).sort()).toEqual(['c1', 'r1']);
+  });
+});
+
 describe('getPlainTextExcerpt', () => {
   it('returns empty string for null/undefined/empty', () => {
     expect(getPlainTextExcerpt(null)).toBe('');

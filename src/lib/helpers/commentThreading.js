@@ -60,6 +60,10 @@ export function buildCommentTree(comments) {
  * Gets the parent comment ID from a comment event.
  * Returns null if the comment is a top-level comment (parent is root event).
  *
+ * Handles both NIP-22 (kind 1111) and NIP-10 (kind 1) threading:
+ * - Kind 1111: Uses k/e tags per NIP-22 spec
+ * - Kind 1: Uses NIP-10 e-tag markers (root/reply) or legacy positional parsing
+ *
  * Pure function — no applesauce caching helpers (those use getOrComputeCachedValue
  * which mutates the event, causing state_unsafe_mutation in $derived contexts).
  *
@@ -67,14 +71,39 @@ export function buildCommentTree(comments) {
  * @returns {string|null} Parent comment ID or null
  */
 function getParentCommentId(comment) {
-  // NIP-22: lowercase 'k' tag = parent kind, lowercase 'e' tag = parent event id
-  // If parent kind is 1111, this is a reply to another comment
-  const parentKindTag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'k');
-  const parentKind = parentKindTag ? parseInt(parentKindTag[1]) : null;
+  if (comment.kind === 1111) {
+    // NIP-22: lowercase 'k' tag = parent kind, lowercase 'e' tag = parent event id
+    // If parent kind is 1111, this is a reply to another comment
+    const parentKindTag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'k');
+    const parentKind = parentKindTag ? parseInt(parentKindTag[1]) : null;
 
-  if (parentKind === 1111) {
-    const parentETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'e');
-    return parentETag ? parentETag[1] : null;
+    if (parentKind === 1111) {
+      const parentETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'e');
+      return parentETag ? parentETag[1] : null;
+    }
+    return null;
+  }
+
+  if (comment.kind === 1) {
+    const eTags = comment.tags.filter((/** @type {any[]} */ t) => t[0] === 'e');
+    if (eTags.length === 0) return null;
+
+    // NIP-10 preferred: marked tags
+    const replyTag = eTags.find((/** @type {any[]} */ t) => t[3] === 'reply');
+    if (replyTag) return replyTag[1];
+
+    // If there's a root marker but no reply marker, this is a direct reply to root
+    const rootTag = eTags.find((/** @type {any[]} */ t) => t[3] === 'root');
+    if (rootTag) return null;
+
+    // Legacy (no markers): single e-tag = direct reply to root
+    const hasMarkers = eTags.some((/** @type {any[]} */ t) => t[3]);
+    if (!hasMarkers && eTags.length === 1) return null;
+
+    // Legacy (no markers, multiple e-tags): last e-tag is reply-to parent
+    if (!hasMarkers && eTags.length >= 2) return eTags[eTags.length - 1][1];
+
+    return null;
   }
 
   return null;

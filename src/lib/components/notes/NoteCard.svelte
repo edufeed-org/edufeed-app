@@ -1,73 +1,99 @@
 <script>
-  import { getProfilePicture } from 'applesauce-core/helpers';
-  import { formatCalendarDate } from '$lib/helpers/calendar.js';
+  import { resolve } from '$app/paths';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { TimelineModel } from 'applesauce-core/models';
+  import { debounceTime } from 'rxjs';
+  import { formatRelativeTime } from '$lib/helpers/calendar.js';
+  import { hexToNpub } from '$lib/helpers/nostrUtils';
   import { ChatIcon, RepostIcon, LightningIcon, BookmarkIcon } from '$lib/components/icons';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
+  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import CommentList from '$lib/components/comments/CommentList.svelte';
+  import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import * as m from '$lib/paraglide/messages';
 
-  /** @type {any} */
-  let { note, profileEvent = null } = $props();
+  /** @type {{ note: any, authorProfile?: any, activeUser?: any, communityPubkey?: string, extraRelays?: string[] }} */
+  let {
+    note,
+    authorProfile = null,
+    activeUser = null,
+    communityPubkey = undefined,
+    extraRelays = undefined
+  } = $props();
 
-  /**
-   * Format timestamp for display
-   * @param {number} timestamp
-   */
-  function formatTimestamp(timestamp) {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  let showComments = $state(false);
+  let commentCount = $state(0);
+  let profileHref = $derived(resolve(`/p/${hexToNpub(note.pubkey) || note.pubkey}`));
 
-    if (diffMinutes < 1) return 'now';
-    if (diffMinutes < 60) return `${diffMinutes}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    if (diffDays < 7) return `${diffDays}d`;
+  // Eagerly fetch comments so counts are visible before expanding
+  $effect(() => {
+    if (!note?.id) return;
+    const loader = createCommentLoaderForEvent(note, extraRelays);
+    const sub = loader().subscribe();
+    return () => sub.unsubscribe();
+  });
 
-    return formatCalendarDate(date, 'short');
-  }
+  $effect(() => {
+    if (!note?.id) return;
 
-  /**
-   * Get display name from profile
-   * @param {any} profile
-   */
-  function getDisplayName(profile) {
-    if (!profile) return 'Anonymous';
-    return profile.name || profile.display_name || 'Anonymous';
-  }
+    let nip22Comments = [];
+    let nip10Replies = [];
 
-  /**
-   * Get username from profile
-   * @param {any} profile
-   */
-  function getUsername(profile) {
-    if (!profile) return 'anonymous';
-    return profile.display_name || profile.name || 'anonymous';
-  }
+    // NIP-22 comments (kind 1111 with uppercase #E tag)
+    const nip22Sub = eventStore
+      .model(TimelineModel, { kinds: [1111], '#E': [note.id] })
+      .pipe(debounceTime(100))
+      .subscribe((comments) => {
+        nip22Comments = comments || [];
+        commentCount = nip22Comments.length + nip10Replies.length;
+      });
+
+    // NIP-10 replies (kind 1 with lowercase #e tag) — only for kind 1 notes
+    /** @type {import('rxjs').Subscription | undefined} */
+    let nip10Sub;
+    if (note.kind === 1) {
+      nip10Sub = eventStore
+        .model(TimelineModel, { kinds: [1], '#e': [note.id] })
+        .pipe(debounceTime(100))
+        .subscribe((replies) => {
+          nip10Replies = replies || [];
+          commentCount = nip22Comments.length + nip10Replies.length;
+        });
+    }
+
+    return () => {
+      nip22Sub.unsubscribe();
+      nip10Sub?.unsubscribe();
+    };
+  });
 </script>
 
-<div class="rounded-lg border border-gray-700 bg-gray-800 p-4">
+<div class="rounded-lg border border-base-300 bg-base-100 p-4">
   <div class="flex items-start gap-3">
     <!-- Profile Picture -->
-    <div class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full">
+    <a href={profileHref} class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full">
       <img
-        src={getProfilePicture(profileEvent) || `https://robohash.org/${note.pubkey}`}
+        src={getProfilePicture(authorProfile) || `https://robohash.org/${note.pubkey}`}
         alt="Profile"
         class="h-full w-full object-cover"
       />
-    </div>
+    </a>
 
     <!-- Note Content -->
-    <div class="flex-1">
+    <div class="min-w-0 flex-1">
       <!-- Header -->
       <div class="mb-2 flex items-center gap-2">
-        <span class="font-medium text-white">{getDisplayName(profileEvent)}</span>
-        <span class="text-sm text-gray-400">@{getUsername(profileEvent)}</span>
-        <span class="text-sm text-gray-500">• {formatTimestamp(note.created_at)}</span>
+        <a href={profileHref} class="font-medium text-base-content hover:underline">
+          {getDisplayName(authorProfile) || `${note.pubkey.slice(0, 8)}...${note.pubkey.slice(-4)}`}
+        </a>
+        <span class="text-sm text-base-content/50">· {formatRelativeTime(note.created_at)}</span>
       </div>
 
       <!-- Note Text -->
-      <p class="mb-3 break-words whitespace-pre-wrap text-gray-200">{note.content}</p>
+      <div class="mb-3 text-base-content/80">
+        <NostrContentRenderer event={note} />
+      </div>
 
       <!-- Reactions -->
       <div class="mb-3">
@@ -75,27 +101,40 @@
       </div>
 
       <!-- Actions -->
-      <div class="flex items-center gap-6 text-sm text-gray-400">
-        <!-- Reply -->
-        <button class="flex items-center gap-1 transition-colors hover:text-blue-400">
+      <div class="flex items-center gap-6 text-sm text-base-content/50">
+        <button
+          class="flex items-center gap-1 transition-colors hover:text-primary {showComments
+            ? 'text-primary'
+            : ''}"
+          onclick={() => (showComments = !showComments)}
+        >
           <ChatIcon class_="w-4 h-4" />
+          <span class="text-xs"
+            >{showComments
+              ? m.comments_hide()
+              : commentCount > 0
+                ? commentCount === 1
+                  ? m.comments_count_one()
+                  : m.comments_count_other({ count: commentCount })
+                : m.comments_show()}</span
+          >
         </button>
-
-        <!-- Repost -->
-        <button class="flex items-center gap-1 transition-colors hover:text-green-400">
+        <button class="flex items-center gap-1 transition-colors hover:text-primary">
           <RepostIcon class_="w-4 h-4" />
         </button>
-
-        <!-- Like/Zap -->
-        <button class="flex items-center gap-1 transition-colors hover:text-yellow-400">
+        <button class="flex items-center gap-1 transition-colors hover:text-primary">
           <LightningIcon class_="w-4 h-4" />
         </button>
-
-        <!-- Bookmark -->
-        <button class="flex items-center gap-1 transition-colors hover:text-gray-200">
+        <button class="flex items-center gap-1 transition-colors hover:text-primary">
           <BookmarkIcon class_="w-4 h-4" />
         </button>
       </div>
     </div>
   </div>
+
+  {#if showComments}
+    <div class="mt-3 border-t border-base-300 pt-3">
+      <CommentList rootEvent={note} {activeUser} {communityPubkey} {extraRelays} />
+    </div>
+  {/if}
 </div>

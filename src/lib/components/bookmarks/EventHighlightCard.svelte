@@ -17,7 +17,7 @@
    * @type {{
    *   group: import('$lib/helpers/urlGrouping.js').EventRefGroup,
    *   authorProfiles: Map<string, any>,
-   *   communityPubkey: string
+   *   communityPubkey?: string
    * }}
    */
   let { group, authorProfiles, communityPubkey } = $props();
@@ -73,14 +73,25 @@
   }
 
   function handleClick() {
-    const npub = hexToNpub(communityPubkey);
-    const naddr = nip19.naddrEncode({
-      kind: group.kind,
-      pubkey: group.pubkey,
-      identifier: group.identifier,
-      relays: group.relayHints.slice(0, 3)
-    });
-    goto(resolve(`/c/${npub}/${routePrefix}/${naddr}`));
+    if (communityPubkey) {
+      const npub = hexToNpub(communityPubkey);
+      const naddr = nip19.naddrEncode({
+        kind: group.kind,
+        pubkey: group.pubkey,
+        identifier: group.identifier,
+        relays: group.relayHints.slice(0, 3)
+      });
+      goto(resolve(`/c/${npub}/${routePrefix}/${naddr}`));
+    } else {
+      // No community context — navigate to the event directly
+      const naddr = nip19.naddrEncode({
+        kind: group.kind,
+        pubkey: group.pubkey,
+        identifier: group.identifier,
+        relays: group.relayHints.slice(0, 3)
+      });
+      goto(resolve(`/${naddr}`));
+    }
   }
 </script>
 
