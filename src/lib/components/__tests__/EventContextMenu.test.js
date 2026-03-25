@@ -27,7 +27,21 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   event_menu_share_link_copied: () => 'Share link copied!',
   common_copy: () => 'Copy',
   common_copied: () => 'Copied',
-  common_close: () => 'Close'
+  common_close: () => 'Close',
+  pin_to_community: () => 'Pin to community',
+  unpin_from_community: () => 'Unpin from community',
+  pinned_added_toast: () => 'Pinned to community!',
+  pinned_removed_toast: () => 'Unpinned from community'
+}));
+
+vi.mock('$lib/services/pin-list-service.js', () => ({
+  pinEvent: vi.fn().mockResolvedValue(undefined),
+  unpinEvent: vi.fn().mockResolvedValue(undefined),
+  isPinned: vi.fn(() => false)
+}));
+
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  useActiveUser: () => () => ({ pubkey: 'aa'.repeat(32) })
 }));
 
 vi.mock('$lib/components/icons', async (importOriginal) => {
@@ -106,5 +120,30 @@ describe('EventContextMenu', () => {
     const pre = document.querySelector('pre');
     expect(pre?.textContent).toContain('"id": "abc123"');
     expect(pre?.textContent).toContain('"kind": 30023');
+  });
+
+  describe('pin integration', () => {
+    const communityPubkey = 'aa'.repeat(32);
+
+    it('shows Pin to community when communityPubkey matches active user', () => {
+      render(EventContextMenu, {
+        props: { event: mockEvent, communityPubkey }
+      });
+      expect(screen.getByText('Pin to community')).toBeTruthy();
+    });
+
+    it('hides pin option when no communityPubkey provided', () => {
+      render(EventContextMenu, { props: { event: mockEvent } });
+      expect(screen.queryByText('Pin to community')).toBeNull();
+    });
+
+    it('shows Unpin when event is already pinned', async () => {
+      const { isPinned } = await import('$lib/services/pin-list-service.js');
+      isPinned.mockReturnValue(true);
+      render(EventContextMenu, {
+        props: { event: mockEvent, communityPubkey }
+      });
+      expect(screen.getByText('Unpin from community')).toBeTruthy();
+    });
   });
 });

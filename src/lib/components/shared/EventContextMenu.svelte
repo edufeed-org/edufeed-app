@@ -8,14 +8,22 @@
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { MoreIcon, CopyIcon, ExternalLinkIcon, InfoIcon } from '$lib/components/icons';
+  import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
 
   /**
    * @typedef {Object} Props
    * @property {import('nostr-tools').NostrEvent} event - Raw Nostr event
+   * @property {string} [communityPubkey] - Community pubkey (enables pin option for admin)
    */
 
   /** @type {Props} */
-  let { event } = $props();
+  let { event, communityPubkey = undefined } = $props();
+
+  const getActiveUser = useActiveUser();
+  let activeUser = $derived(getActiveUser());
+  let showPinOption = $derived(communityPubkey && activeUser?.pubkey === communityPubkey);
+  let eventIsPinned = $derived(showPinOption ? isPinned(event, communityPubkey) : false);
 
   /** @type {HTMLDialogElement|undefined} */
   let rawEventDialog = $state(undefined);
@@ -52,6 +60,21 @@
     rawEventDialog?.showModal();
   }
 
+  async function togglePin() {
+    try {
+      if (eventIsPinned) {
+        await unpinEvent(event);
+        showToast(m.pinned_removed_toast(), 'success');
+      } else {
+        await pinEvent(event);
+        showToast(m.pinned_added_toast(), 'success');
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed', 'error');
+    }
+    closeDropdown();
+  }
+
   async function copyRawJson() {
     try {
       await navigator.clipboard.writeText(JSON.stringify(event, null, 2));
@@ -83,6 +106,13 @@
         {m.event_menu_copy_share_link()}
       </button>
     </li>
+    {#if showPinOption}
+      <li>
+        <button onclick={togglePin}>
+          {eventIsPinned ? m.unpin_from_community() : m.pin_to_community()}
+        </button>
+      </li>
+    {/if}
     <li>
       <button onclick={viewRawEvent}>
         <InfoIcon class_="w-4 h-4" />
