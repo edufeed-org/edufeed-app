@@ -58,3 +58,6 @@ screenshots/
 
 .claude/settings.local.json
 .playwright-mcp
+
+# Git worktrees
+.worktrees/
