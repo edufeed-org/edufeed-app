@@ -1230,5 +1230,20 @@
   "event_menu_view_raw_event": "View raw event",
   "event_menu_raw_event_title": "Raw Event",
   "event_menu_event_id_copied": "Event ID copied!",
-  "event_menu_share_link_copied": "Share link copied!"
+  "event_menu_share_link_copied": "Share link copied!",
+  "pin_to_community": "Pin to community",
+  "unpin_from_community": "Unpin from community",
+  "pinned_section_title": "Pinned",
+  "pinned_edit_pins": "Edit Pins",
+  "pinned_edit_done": "Done",
+  "pinned_add_placeholder": "Paste naddr, nevent, or note...",
+  "pinned_add_button": "Add",
+  "pinned_added_toast": "Pinned to community!",
+  "pinned_removed_toast": "Unpinned from community",
+  "pinned_reordered_toast": "Pin order updated",
+  "pinned_not_found": "Could not find event",
+  "pinned_already_pinned": "Already pinned",
+  "pinned_invalid_identifier": "Invalid identifier",
+  "pinned_empty_admin": "Pin content to highlight it here",
+  "pinned_content_unavailable": "Content unavailable"
 }

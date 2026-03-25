@@ -1230,5 +1230,20 @@
   "event_menu_view_raw_event": "Rohdaten anzeigen",
   "event_menu_raw_event_title": "Rohdaten",
   "event_menu_event_id_copied": "Event-ID kopiert!",
-  "event_menu_share_link_copied": "Teilen-Link kopiert!"
+  "event_menu_share_link_copied": "Teilen-Link kopiert!",
+  "pin_to_community": "An Community anheften",
+  "unpin_from_community": "Von Community lösen",
+  "pinned_section_title": "Angeheftet",
+  "pinned_edit_pins": "Pins bearbeiten",
+  "pinned_edit_done": "Fertig",
+  "pinned_add_placeholder": "naddr, nevent oder note einfügen...",
+  "pinned_add_button": "Hinzufügen",
+  "pinned_added_toast": "An Community angeheftet!",
+  "pinned_removed_toast": "Von Community gelöst",
+  "pinned_reordered_toast": "Pin-Reihenfolge aktualisiert",
+  "pinned_not_found": "Event nicht gefunden",
+  "pinned_already_pinned": "Bereits angeheftet",
+  "pinned_invalid_identifier": "Ungültige Kennung",
+  "pinned_empty_admin": "Inhalte anheften, um sie hier hervorzuheben",
+  "pinned_content_unavailable": "Inhalt nicht verfügbar"
 }
