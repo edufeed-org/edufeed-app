@@ -10,7 +10,7 @@ export function match(param) {
   // naddr format: starts with "naddr1" followed by base32-encoded data
   // Base32 alphabet: a-z, 0-9 (lowercase only for bech32)
   // Typical length: 100-200 characters
-  const naddrPattern = /^naddr1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{90,}$/;
+  const naddrPattern = /^naddr1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,}$/;
 
   return naddrPattern.test(param);
 }

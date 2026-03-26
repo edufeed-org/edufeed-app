@@ -7,9 +7,28 @@
   import { unpinEvent, reorderPins, pinEvent } from '$lib/services/pin-list-service.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
   import { nip19 } from 'nostr-tools';
 
   let { communityId, isAdmin = false, onNavigateToEvent } = $props();
+
+  /**
+   * @param {string} startStr
+   * @returns {string}
+   */
+  function formatCalendarSubtitle(startStr) {
+    const num = Number(startStr);
+    if (!isNaN(num) && num > 0) {
+      return new Date(num * 1000).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+    return startStr;
+  }
 
   /** @type {Array<any>} */
   let pinPointers = $state.raw([]);
@@ -59,6 +78,7 @@
         const ev = resolved.get(key);
         if (ev) ordered.push(ev);
       }
+      ordered.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
       pinnedEvents = ordered;
     }
 
@@ -244,15 +264,22 @@
     {#if pinPointers.length === 0 && isAdmin}
       <p class="text-sm text-base-content/60">{m.pinned_empty_admin()}</p>
     {:else}
-      <div class="flex gap-3 overflow-x-auto pb-2">
+      <div class="flex flex-wrap gap-3">
         {#each pinnedEvents as event (event.id)}
           {@const cardData = getFeedCardData(event)}
+          {@const kindColor = generateKindColorRGB(event.kind)}
           <button
-            class="card max-w-[240px] min-w-[200px] flex-shrink-0 bg-base-200 p-3 text-left"
+            class="w-[200px] max-w-[240px] rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md"
+            style:border-left-color="rgb({kindColor.r},{kindColor.g},{kindColor.b})"
             onclick={() => onNavigateToEvent?.(event)}
           >
             <div class="text-xs font-medium text-primary">{cardData.typeKey}</div>
             <div class="mt-1 line-clamp-2 text-sm font-semibold">{cardData.title}</div>
+            {#if cardData.typeKey === 'calendar' && cardData.subtitle}
+              <div class="mt-1 text-xs text-base-content/60">
+                {formatCalendarSubtitle(cardData.subtitle)}
+              </div>
+            {/if}
             {#if cardData.description}
               <div class="mt-1 line-clamp-2 text-xs text-base-content/60">
                 {cardData.description}

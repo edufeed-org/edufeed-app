@@ -16,20 +16,36 @@
   } from '$lib/components/icons';
   import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
   /**
    * @typedef {Object} Props
    * @property {import('nostr-tools').NostrEvent} event - Raw Nostr event
-   * @property {string} [communityPubkey] - Community pubkey (enables pin option for admin)
    */
 
   /** @type {Props} */
-  let { event, communityPubkey = undefined } = $props();
+  let { event } = $props();
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
-  let showPinOption = $derived(communityPubkey && activeUser?.pubkey === communityPubkey);
-  let eventIsPinned = $derived(showPinOption ? isPinned(event, communityPubkey) : false);
+
+  // Self-detect: active user is community admin if they have a kind 10222 event
+  let isCommunityAdmin = $state(false);
+  $effect(() => {
+    if (!activeUser) {
+      isCommunityAdmin = false;
+      return;
+    }
+    const sub = eventStore.replaceable(10222, activeUser.pubkey).subscribe((evt) => {
+      isCommunityAdmin = !!evt;
+    });
+    return () => sub.unsubscribe();
+  });
+
+  let showPinOption = $derived(!!isCommunityAdmin);
+  let eventIsPinned = $derived(
+    showPinOption && activeUser ? isPinned(event, activeUser.pubkey) : false
+  );
 
   /** @type {HTMLDialogElement|undefined} */
   let rawEventDialog = $state(undefined);

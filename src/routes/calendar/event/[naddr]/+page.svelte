@@ -220,7 +220,7 @@
           {event.title}
         </h1>
         {#if rawEvent}
-          <EventContextMenu event={rawEvent} communityPubkey={event?.communityPubkey} />
+          <EventContextMenu event={rawEvent} />
         {/if}
       </div>
 

@@ -6,7 +6,8 @@
     KanbanIcon,
     ScrollTextIcon,
     ForumIcon,
-    BookmarkIcon
+    BookmarkIcon,
+    FilesIcon
   } from '$lib/components/icons';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
@@ -51,7 +52,8 @@
     thread: { label: () => m.feed_badge_thread(), icon: ForumIcon },
     bookmark: { label: () => m.feed_badge_bookmark(), icon: BookmarkIcon },
     highlight: { label: () => m.feed_badge_highlight(), icon: BookmarkIcon },
-    note: { label: () => m.feed_badge_note(), icon: BookmarkIcon }
+    note: { label: () => m.feed_badge_note(), icon: BookmarkIcon },
+    form: { label: () => m.feed_badge_form(), icon: FilesIcon }
   };
 
   let meta = $derived(typeMeta[typeKey]);
@@ -106,10 +108,12 @@
     {#if authorName}
       <div class="flex items-center gap-1.5">
         <span class="truncate text-sm font-medium text-base-content">{authorName}</span>
-        <span class="text-base-content/30">&middot;</span>
-        <span class="shrink-0 text-xs text-base-content/50">
-          {formatRelativeTime(timestamp)}
-        </span>
+        {#if timestamp}
+          <span class="text-base-content/30">&middot;</span>
+          <span class="shrink-0 text-xs text-base-content/50">
+            {formatRelativeTime(timestamp)}
+          </span>
+        {/if}
       </div>
     {:else if timestamp}
       <span class="text-xs text-base-content/50">

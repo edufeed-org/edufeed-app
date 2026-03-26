@@ -11,6 +11,12 @@
 
   const communityPubkey = $derived($page.data.pubkey);
 
+  // Extract target highlight ID from URL fragment (e.g. #highlight-abc123)
+  const targetHighlightId = $derived.by(() => {
+    const hash = $page.url.hash;
+    return hash.startsWith('#highlight-') ? hash.slice('#highlight-'.length) : null;
+  });
+
   function goBack() {
     goto(resolve(`/c/${$page.params.pubkey}?view=articles`));
   }
@@ -24,7 +30,7 @@
     </button>
 
     {#if data.event}
-      <ArticleView event={data.event} {communityPubkey} />
+      <ArticleView event={data.event} {communityPubkey} {targetHighlightId} />
     {/if}
   </div>
 </div>

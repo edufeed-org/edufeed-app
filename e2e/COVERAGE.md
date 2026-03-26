@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-02-20
-**Total tests:** 262
+**Last updated:** 2026-03-26
+**Total tests:** 266
 
 ## Quick Summary
 
@@ -13,6 +13,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `calendar.test.js`                  | 4     | No   | Calendar page, events, modal                       |
 | `calendar-creation.test.js`         | 10    | Yes  | FAB, event creation, validation, deletion          |
 | `calendar-editing.test.js`          | 10    | Yes  | Edit button, form pre-population, validation       |
+| `calendar-context-menu.test.js`     | 4     | No   | EventContextMenu in calendar modal, dropdown, raw  |
 | `calendar-date-filtering.test.js`   | 10    | No   | Date range loading, navigation, view modes         |
 | `amb-creation.test.js`              | 18    | Yes  | FAB, creation page, all 4 steps, validation        |
 | `amb-creation-full.test.js`         | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay       |
@@ -345,6 +346,22 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 | no critical JavaScript errors               | No JS errors during interaction         |
 
 **Components exercised:** CalendarView, CalendarGrid, CalendarEventBar, CalendarEventDetailsModal
+
+---
+
+### calendar-context-menu.test.js (4 tests)
+
+**Route:** `/calendar`
+**Auth required:** No
+
+| Test                                                     | What it verifies                                        |
+| -------------------------------------------------------- | ------------------------------------------------------- |
+| three-dots context menu button is visible in modal       | EventContextMenu button present in details modal        |
+| clicking context menu button opens dropdown with options | Dropdown shows Copy event ID, Copy share link, View raw |
+| view raw event opens raw event dialog                    | Raw event dialog shows JSON with kind, pubkey, tags     |
+| no critical JavaScript errors when using context menu    | No JS errors during menu interaction                    |
+
+**Components exercised:** CalendarEventDetailsModal, EventContextMenu
 
 ---
 

@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+import { BehaviorSubject } from 'rxjs';
 import EventContextMenu from '../shared/EventContextMenu.svelte';
 
 const mockShowToast = vi.fn();
@@ -40,8 +41,21 @@ vi.mock('$lib/services/pin-list-service.js', () => ({
   isPinned: vi.fn(() => false)
 }));
 
+const ACTIVE_USER_PUBKEY = 'aa'.repeat(32);
+
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: 'aa'.repeat(32) })
+  useActiveUser: () => () => ({ pubkey: ACTIVE_USER_PUBKEY })
+}));
+
+// Track the replaceable subject so tests can control what eventStore emits
+let replaceableSubject = new BehaviorSubject(undefined);
+
+const mockReplaceable = vi.fn();
+
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: {
+    replaceable: (...args) => mockReplaceable(...args)
+  }
 }));
 
 vi.mock('$lib/components/icons', async (importOriginal) => {
@@ -61,6 +75,10 @@ const mockEvent = {
 describe('EventContextMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset subject and mock implementation after clearAllMocks
+    replaceableSubject = new BehaviorSubject(undefined);
+    mockReplaceable.mockImplementation(() => replaceableSubject);
+
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined)
@@ -122,28 +140,59 @@ describe('EventContextMenu', () => {
     expect(pre?.textContent).toContain('"kind": 30023');
   });
 
-  describe('pin integration', () => {
-    const communityPubkey = 'aa'.repeat(32);
+  describe('pin self-detection', () => {
+    it('shows pin option when active user has kind 10222 in EventStore', async () => {
+      // Emit a kind 10222 event for the active user
+      replaceableSubject = new BehaviorSubject({ kind: 10222, pubkey: ACTIVE_USER_PUBKEY });
+      mockReplaceable.mockImplementation(() => replaceableSubject);
 
-    it('shows Pin to community when communityPubkey matches active user', () => {
-      render(EventContextMenu, {
-        props: { event: mockEvent, communityPubkey }
+      render(EventContextMenu, { props: { event: mockEvent } });
+      await vi.waitFor(() => {
+        expect(screen.getByText('Pin to community')).toBeTruthy();
       });
-      expect(screen.getByText('Pin to community')).toBeTruthy();
     });
 
-    it('hides pin option when no communityPubkey provided', () => {
+    it('hides pin option when active user has no kind 10222', () => {
+      // replaceableSubject emits undefined (no community event)
       render(EventContextMenu, { props: { event: mockEvent } });
       expect(screen.queryByText('Pin to community')).toBeNull();
     });
 
+    it('uses activeUser.pubkey for isPinned lookup', async () => {
+      replaceableSubject = new BehaviorSubject({ kind: 10222, pubkey: ACTIVE_USER_PUBKEY });
+      mockReplaceable.mockImplementation(() => replaceableSubject);
+
+      const { isPinned } = await import('$lib/services/pin-list-service.js');
+      isPinned.mockReturnValue(false);
+
+      render(EventContextMenu, { props: { event: mockEvent } });
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('Pin to community')).toBeTruthy();
+      });
+
+      // isPinned should be called with activeUser.pubkey, not a communityPubkey prop
+      expect(isPinned).toHaveBeenCalledWith(mockEvent, ACTIVE_USER_PUBKEY);
+    });
+
     it('shows Unpin when event is already pinned', async () => {
+      replaceableSubject = new BehaviorSubject({ kind: 10222, pubkey: ACTIVE_USER_PUBKEY });
+      mockReplaceable.mockImplementation(() => replaceableSubject);
+
       const { isPinned } = await import('$lib/services/pin-list-service.js');
       isPinned.mockReturnValue(true);
-      render(EventContextMenu, {
-        props: { event: mockEvent, communityPubkey }
+
+      render(EventContextMenu, { props: { event: mockEvent } });
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('Unpin from community')).toBeTruthy();
       });
-      expect(screen.getByText('Unpin from community')).toBeTruthy();
+    });
+
+    it('subscribes to eventStore.replaceable with kind 10222 and active user pubkey', () => {
+      render(EventContextMenu, { props: { event: mockEvent } });
+
+      expect(mockReplaceable).toHaveBeenCalledWith(10222, ACTIVE_USER_PUBKEY);
     });
   });
 });

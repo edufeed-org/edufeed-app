@@ -159,9 +159,10 @@ describe('buildCommunityDefinitionTags — old-spec (no communityPubkey)', () =>
 describe('buildCommunityDefinitionTags — new-spec (with communityPubkey)', () => {
   const opts = { communityPubkey: 'abc123' };
 
-  it('writes profile list a-tags instead of badge a-tags', () => {
+  it('writes profile list a-tags instead of badge a-tags when formRef is set', () => {
     const data = makeFormData();
     data.contentTypes.calendar.enabled = true;
+    data.contentTypes.calendar.formRef = '30168:abc123:apply-form';
     const tags = buildCommunityDefinitionTags(data, opts);
 
     // Should have profile list reference
@@ -175,6 +176,7 @@ describe('buildCommunityDefinitionTags — new-spec (with communityPubkey)', () 
     const data = makeFormData();
     data.contentTypes.articles.enabled = true;
     data.contentTypes.articles.relays = ['wss://articles.relay'];
+    data.contentTypes.articles.formRef = '30168:abc123:form';
     const tags = buildCommunityDefinitionTags(data, opts);
 
     const sectionRelays = tags.filter((t) => t[0] === 'r' && t[2] === 'content');
@@ -207,17 +209,20 @@ describe('buildCommunityDefinitionTags — new-spec (with communityPubkey)', () 
   it('profile list a-tag uses section name from contentType', () => {
     const data = makeFormData();
     data.contentTypes.posts.enabled = true;
+    data.contentTypes.posts.formRef = '30168:abc123:form';
     data.contentTypes.wikis.enabled = true;
+    data.contentTypes.wikis.formRef = '30168:abc123:form';
     const tags = buildCommunityDefinitionTags(data, opts);
 
     expect(tags).toContainEqual(['a', '30000:abc123:Posts']);
     expect(tags).toContainEqual(['a', '30000:abc123:Wikis']);
   });
 
-  it('ignores badge data even if provided', () => {
+  it('ignores badge data even if formRef is provided', () => {
     const data = makeFormData();
     data.contentTypes.chat.enabled = true;
     data.contentTypes.chat.badges.write = '30009:pub:writer';
+    data.contentTypes.chat.formRef = '30168:abc123:form';
     const tags = buildCommunityDefinitionTags(data, opts);
 
     const badgeTags = tags.filter((t) => t[0] === 'a' && t[1]?.startsWith('30009:'));

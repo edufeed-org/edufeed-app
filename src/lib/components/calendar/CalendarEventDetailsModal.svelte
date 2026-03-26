@@ -31,6 +31,7 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import ProfileCard from '../shared/ProfileCard.svelte';
   import EventManagementActions from './EventManagementActions.svelte';
+  import EventContextMenu from '../shared/EventContextMenu.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
 
   /**
@@ -252,6 +253,9 @@
                 onEdit={handleEdit}
                 onDeleteSuccess={handleDeleteSuccess}
               />
+            {/if}
+            {#if event?.originalEvent}
+              <EventContextMenu event={event.originalEvent} />
             {/if}
             <a
               href={resolve(eventDetailUrl)}

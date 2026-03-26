@@ -11,6 +11,7 @@
  * @property {boolean} enabled
  * @property {{read: string|null, write: string|null}} badges - Old-spec badge addresses
  * @property {string[]} relays - Per-section relays (old-spec only)
+ * @property {string} [formRef] - Form template coordinate (new-spec: gates section when set)
  */
 
 /**
@@ -102,8 +103,8 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
       }
     }
 
-    if (isNewSpec) {
-      // New-spec: profile list a-tag per section
+    if (isNewSpec && ct.formRef) {
+      // New-spec: profile list a-tag per section (only when gated with a form)
       tags.push(['a', `30000:${communityPubkey}:${ct.name}`]);
     } else {
       // Old-spec: badge a-tags
