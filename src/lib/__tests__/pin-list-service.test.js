@@ -90,6 +90,14 @@ describe('pin-list-service', () => {
       expect(mockFactory.build).not.toHaveBeenCalled();
     });
 
+    it('pins addressable event using addAddressPointerTag', async () => {
+      mockEventStore.getReplaceable.mockReturnValue(null);
+      await pinEvent(addressableEvent);
+      expect(mockFactory.build).toHaveBeenCalled();
+      expect(mockFactory.sign).toHaveBeenCalled();
+      expect(mockPublishEvent).toHaveBeenCalled();
+    });
+
     it('rejects duplicate pins', async () => {
       const existing = {
         kind: 10001,
@@ -103,7 +111,7 @@ describe('pin-list-service', () => {
   });
 
   describe('unpinEvent', () => {
-    it('modifies existing pin list to remove event', async () => {
+    it('modifies existing pin list to remove regular event', async () => {
       const existing = {
         kind: 10001,
         tags: [['e', 'event123']],
@@ -112,6 +120,19 @@ describe('pin-list-service', () => {
       };
       mockEventStore.getReplaceable.mockReturnValue(existing);
       await unpinEvent(regularEvent);
+      expect(mockFactory.modify).toHaveBeenCalled();
+      expect(mockPublishEvent).toHaveBeenCalled();
+    });
+
+    it('modifies existing pin list to remove addressable event', async () => {
+      const existing = {
+        kind: 10001,
+        tags: [['a', `30023:${'cc'.repeat(32)}:my-article`]],
+        content: '',
+        created_at: 1699999999
+      };
+      mockEventStore.getReplaceable.mockReturnValue(existing);
+      await unpinEvent(addressableEvent);
       expect(mockFactory.modify).toHaveBeenCalled();
       expect(mockPublishEvent).toHaveBeenCalled();
     });

@@ -7,7 +7,13 @@
   import * as m from '$lib/paraglide/messages.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { MoreIcon, CopyIcon, ExternalLinkIcon, InfoIcon } from '$lib/components/icons';
+  import {
+    MoreIcon,
+    CopyIcon,
+    ExternalLinkIcon,
+    InfoIcon,
+    BookmarkIcon
+  } from '$lib/components/icons';
   import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
 
@@ -109,6 +115,7 @@
     {#if showPinOption}
       <li>
         <button onclick={togglePin}>
+          <BookmarkIcon class_="w-4 h-4" />
           {eventIsPinned ? m.unpin_from_community() : m.pin_to_community()}
         </button>
       </li>

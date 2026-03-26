@@ -47,103 +47,85 @@
 
     /** @type {Array<import('rxjs').Subscription>} */
     const subs = [];
-    /** @type {Record<string, any>} */
-    const resolved = {};
-    let resolvedCount = 0;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to $effect, not reactive
+    const resolved = new Map();
+    let unresolvedEventPointers = 0;
+
+    function rebuildPinnedEvents() {
+      /** @type {Array<any>} */
+      const ordered = [];
+      for (const pointer of pinPointers) {
+        const key = pointer.id || `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`;
+        const ev = resolved.get(key);
+        if (ev) ordered.push(ev);
+      }
+      pinnedEvents = ordered;
+    }
 
     for (const pointer of pinPointers) {
       if (pointer.id) {
-        // Event pointer - try EventStore first, then load
+        // Event pointer — load via eventLoader, check synchronously
         const existing = eventStore.getEvent(pointer.id);
         if (existing) {
-          resolved[pointer.id] = existing;
-          resolvedCount++;
+          resolved.set(pointer.id, existing);
         } else {
-          const sub = eventLoader(pointer.id, pointer.relays).subscribe();
-          subs.push(sub);
+          unresolvedEventPointers++;
+          const loaderSub = eventLoader(pointer.id, pointer.relays).subscribe();
+          subs.push(loaderSub);
         }
       } else if (pointer.kind !== undefined) {
-        // Address pointer - try EventStore first, then load
-        const existing = eventStore.getReplaceable(
-          pointer.kind,
-          pointer.pubkey,
-          pointer.identifier
-        );
-        if (existing) {
-          const key = `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`;
-          resolved[key] = existing;
-          resolvedCount++;
-        } else {
-          const relays = pointer.relays?.length > 0 ? pointer.relays : getCommunikeyRelays();
-          const sub = addressLoader({
-            kind: pointer.kind,
-            pubkey: pointer.pubkey,
-            identifier: pointer.identifier,
-            relays
-          }).subscribe();
-          subs.push(sub);
-        }
+        // Address pointer — load + subscribe reactively via replaceable()
+        const relays = pointer.relays?.length > 0 ? pointer.relays : getCommunikeyRelays();
+        const loaderSub = addressLoader({
+          kind: pointer.kind,
+          pubkey: pointer.pubkey,
+          identifier: pointer.identifier,
+          relays
+        }).subscribe();
+        subs.push(loaderSub);
+        const key = `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`;
+        const modelSub = eventStore
+          .replaceable(pointer.kind, pointer.pubkey, pointer.identifier)
+          .subscribe((ev) => {
+            if (ev) {
+              resolved.set(key, ev);
+              rebuildPinnedEvents();
+            }
+          });
+        subs.push(modelSub);
       }
     }
 
-    // Build initial pinnedEvents from what we have
-    updatePinnedEvents(resolved);
+    rebuildPinnedEvents();
 
-    // Periodically check for newly loaded events (simple approach)
-    const checkInterval = setInterval(() => {
-      let changed = false;
-      for (const pointer of pinPointers) {
-        if (pointer.id) {
-          if (!(pointer.id in resolved)) {
+    // For event pointers (no observable API), poll briefly until resolved
+    /** @type {ReturnType<typeof setInterval> | undefined} */
+    let checkInterval;
+    if (unresolvedEventPointers > 0) {
+      let checks = 0;
+      checkInterval = setInterval(() => {
+        let changed = false;
+        for (const pointer of pinPointers) {
+          if (pointer.id && !resolved.has(pointer.id)) {
             const ev = eventStore.getEvent(pointer.id);
             if (ev) {
-              resolved[pointer.id] = ev;
-              resolvedCount++;
-              changed = true;
-            }
-          }
-        } else if (pointer.kind !== undefined) {
-          const key = `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`;
-          if (!(key in resolved)) {
-            const ev = eventStore.getReplaceable(pointer.kind, pointer.pubkey, pointer.identifier);
-            if (ev) {
-              resolved[key] = ev;
-              resolvedCount++;
+              resolved.set(pointer.id, ev);
+              unresolvedEventPointers--;
               changed = true;
             }
           }
         }
-      }
-      if (changed) updatePinnedEvents(resolved);
-      // Stop checking once all resolved
-      if (resolvedCount === pinPointers.length) clearInterval(checkInterval);
-    }, 500);
+        if (changed) rebuildPinnedEvents();
+        checks++;
+        if (unresolvedEventPointers === 0 || checks > 20) clearInterval(checkInterval);
+      }, 250);
+    }
 
     return () => {
       subs.forEach((s) => s.unsubscribe());
-      clearInterval(checkInterval);
+      if (checkInterval) clearInterval(checkInterval);
     };
   });
-
-  /**
-   * @param {Record<string, any>} resolved
-   */
-  function updatePinnedEvents(resolved) {
-    // Preserve pointer order
-    /** @type {Array<any>} */
-    const ordered = [];
-    for (const pointer of pinPointers) {
-      if (pointer.id) {
-        const ev = resolved[pointer.id];
-        if (ev) ordered.push(ev);
-      } else if (pointer.kind !== undefined) {
-        const key = `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`;
-        const ev = resolved[key];
-        if (ev) ordered.push(ev);
-      }
-    }
-    pinnedEvents = ordered;
-  }
 
   /**
    * @param {number} fromIndex
@@ -170,9 +152,13 @@
     }
   }
 
+  let isAdding = $state(false);
+
   async function handleAdd() {
     const input = addInput.trim();
-    if (!input) return;
+    if (!input || isAdding) return;
+
+    isAdding = true;
 
     try {
       const decoded = nip19.decode(input);
@@ -180,44 +166,67 @@
       if (decoded.type === 'naddr') {
         const { kind, pubkey, identifier } = /** @type {any} */ (decoded.data);
         const relays = getCommunikeyRelays();
-        const sub = addressLoader({ kind, pubkey, identifier, relays }).subscribe();
-
-        // Wait briefly for the event to load, then check EventStore
-        setTimeout(async () => {
-          sub.unsubscribe();
-          const event = eventStore.getReplaceable(kind, pubkey, identifier);
-          if (event) {
-            await pinEvent(event);
-            showToast(m.pinned_added_toast(), 'success');
-            addInput = '';
-          } else {
-            showToast(m.pinned_not_found(), 'error');
-          }
-        }, 2000);
+        const event = await loadAndResolve(
+          () => addressLoader({ kind, pubkey, identifier, relays }),
+          () => eventStore.getReplaceable(kind, pubkey, identifier)
+        );
+        if (event) {
+          await pinEvent(event);
+          showToast(m.pinned_added_toast(), 'success');
+          addInput = '';
+        } else {
+          showToast(m.pinned_not_found(), 'error');
+        }
       } else if (decoded.type === 'nevent' || decoded.type === 'note') {
         const id =
           decoded.type === 'nevent'
             ? /** @type {any} */ (decoded.data).id
             : /** @type {string} */ (decoded.data);
-        const sub = eventLoader(id).subscribe();
-
-        setTimeout(async () => {
-          sub.unsubscribe();
-          const event = eventStore.getEvent(id);
-          if (event) {
-            await pinEvent(event);
-            showToast(m.pinned_added_toast(), 'success');
-            addInput = '';
-          } else {
-            showToast(m.pinned_not_found(), 'error');
-          }
-        }, 2000);
+        const event = await loadAndResolve(
+          () => eventLoader(id),
+          () => eventStore.getEvent(id)
+        );
+        if (event) {
+          await pinEvent(event);
+          showToast(m.pinned_added_toast(), 'success');
+          addInput = '';
+        } else {
+          showToast(m.pinned_not_found(), 'error');
+        }
       } else {
         showToast(m.pinned_invalid_identifier(), 'error');
       }
     } catch {
       showToast(m.pinned_invalid_identifier(), 'error');
+    } finally {
+      isAdding = false;
     }
+  }
+
+  /**
+   * Start a loader and poll the EventStore until the event appears or timeout.
+   * @param {() => {subscribe: Function}} startLoader
+   * @param {() => any} getEvent
+   * @param {number} [timeout=5000]
+   * @returns {Promise<any>}
+   */
+  function loadAndResolve(startLoader, getEvent, timeout = 5000) {
+    return new Promise((resolve) => {
+      const sub = startLoader().subscribe();
+      const start = Date.now();
+      const check = setInterval(() => {
+        const ev = getEvent();
+        if (ev) {
+          clearInterval(check);
+          sub.unsubscribe();
+          resolve(ev);
+        } else if (Date.now() - start > timeout) {
+          clearInterval(check);
+          sub.unsubscribe();
+          resolve(null);
+        }
+      }, 200);
+    });
   }
 </script>
 
