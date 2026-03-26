@@ -1,5 +1,6 @@
 import { AccountManager } from 'applesauce-accounts';
 import { registerCommonAccountTypes } from 'applesauce-accounts/accounts';
+import { NostrConnectSigner } from 'applesauce-signers';
 
 /**
  * @typedef {{ name?: string }} AccountMetadata
@@ -14,14 +15,28 @@ async function initializeAccountPersistence() {
   if (typeof window === 'undefined') return; // Only run on client side
 
   try {
-    // Step 1: Load existing accounts from localStorage
+    // Step 1: Set pool on NostrConnectSigner BEFORE restoring accounts
+    // so that restored bunker signers can communicate with relays
+    const { pool } = await import('$lib/stores/nostr-infrastructure.svelte');
+    NostrConnectSigner.pool = pool;
+
+    // Step 2: Load existing accounts from localStorage
     const savedAccounts = localStorage.getItem('accounts');
     if (savedAccounts) {
       const json = JSON.parse(savedAccounts);
       await manager.fromJSON(json);
+
+      // Step 2b: Re-open relay subscriptions for restored bunker accounts
+      for (const account of manager.accounts) {
+        if (account.type === 'nostr-connect' && account.signer?.open) {
+          account.signer.open().catch((/** @type {Error} */ err) => {
+            console.warn('⚠️ Failed to reconnect bunker account:', err.message);
+          });
+        }
+      }
     }
 
-    // Step 2: Load active account from storage
+    // Step 3: Load active account from storage
     const activeAccountId = localStorage.getItem('active');
     if (activeAccountId && manager.getAccount(activeAccountId)) {
       manager.setActive(activeAccountId);
@@ -30,7 +45,7 @@ async function initializeAccountPersistence() {
     console.error('❌ Failed to load accounts from storage:', error);
   }
 
-  // Step 3: Subscribe to account changes and persist to localStorage
+  // Step 4: Subscribe to account changes and persist to localStorage
   manager.accounts$.subscribe((_accounts) => {
     try {
       const json = manager.toJSON();
@@ -40,7 +55,7 @@ async function initializeAccountPersistence() {
     }
   });
 
-  // Step 4: Subscribe to active account changes and persist
+  // Step 5: Subscribe to active account changes and persist
   manager.active$.subscribe((account) => {
     try {
       if (account) {
@@ -53,7 +68,7 @@ async function initializeAccountPersistence() {
     }
   });
 
-  // Step 5: Load user's app-specific relay sets (kind 30002) on login
+  // Step 6: Load user's app-specific relay sets (kind 30002) on login
   // Uses combineLatest pattern to wait for BOTH config AND active account to be ready
   // This fixes race condition where relay set loading runs before config is initialized
   const { combineLatest } = await import('rxjs');
@@ -129,9 +144,17 @@ async function initializeAccountPersistence() {
       identifier: 'communities',
       relays: lookupRelays
     }).subscribe();
+
+    // Load user's community definition (kind 10222) if they are a community admin
+    // Enables self-detecting pin option in EventContextMenu
+    addressLoader({
+      kind: 10222,
+      pubkey: account.pubkey,
+      relays: lookupRelays
+    }).subscribe();
   });
 
-  // Step 6: Pre-warm relays when user logs in (after relay sets loaded above)
+  // Step 7: Pre-warm relays when user logs in (after relay sets loaded above)
   manager.active$.subscribe(async (account) => {
     if (account) {
       // Use dynamic import to avoid circular dependencies
@@ -151,7 +174,7 @@ async function initializeAccountPersistence() {
     }
   });
 
-  // Step 7: Load contacts for follow list search when user logs in
+  // Step 8: Load contacts for follow list search when user logs in
   manager.active$.subscribe(async (account) => {
     // Use dynamic import to avoid circular dependencies
     const { contactsStore } = await import('./contacts.svelte.js');
@@ -163,7 +186,7 @@ async function initializeAccountPersistence() {
     }
   });
 
-  // Step 8: Set WoT user follows and active user pubkey on login/logout
+  // Step 9: Set WoT user follows and active user pubkey on login/logout
   manager.active$.subscribe(async (account) => {
     const { setUserFollows, clearUserFollows, setActiveUserPubkey, clearActiveUserPubkey } =
       await import('$lib/services/curated-authors-service.svelte.js');
