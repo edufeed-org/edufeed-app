@@ -2,6 +2,7 @@
   import CommunityProfileHero from './CommunityProfileHero.svelte';
   import PinnedSection from '../PinnedSection.svelte';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
+  import { ChevronRightIcon } from '$lib/components/icons';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
   import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
@@ -15,7 +16,8 @@
     CommunitySocialBookmarkModel
   } from '$lib/models/community-content.js';
   import { goto } from '$app/navigation';
-  import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, hexToNpub, generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
+  import { getEventStartTimestamp } from '$lib/helpers/calendar.js';
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
 
@@ -154,6 +156,14 @@
       }
     };
   });
+
+  let upcomingEvents = $derived.by(() => {
+    const now = Math.floor(Date.now() / 1000);
+    return feedItems
+      .filter((e) => (e.kind === 31922 || e.kind === 31923) && getEventStartTimestamp(e) > now)
+      .sort((a, b) => getEventStartTimestamp(a) - getEventStartTimestamp(b))
+      .slice(0, 5);
+  });
 </script>
 
 {#if profileEvent && communikeyEvent}
@@ -170,41 +180,81 @@
     <div class="container mx-auto max-w-4xl px-4 py-8">
       <PinnedSection {communityId} {isAdmin} onNavigateToEvent={navigateToEvent} />
 
-      <!-- Recent Activity Feed -->
-      <div>
-        <h2 class="mb-4 text-xl font-bold">{m.community_views_home_recent_activity_title()}</h2>
+      <!-- Recent Activity + Upcoming Events (side by side on lg) -->
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <!-- Recent Activity Feed -->
+        <div class="min-w-0 flex-1">
+          <h3 class="mb-3 text-sm font-semibold">
+            {m.community_views_home_recent_activity_title()}
+          </h3>
 
-        {#if isLoadingFeed}
-          <div class="flex flex-col items-center justify-center py-12">
-            <span class="loading loading-lg loading-spinner text-primary"></span>
-          </div>
-        {:else if feedItems.length === 0}
-          <div class="card bg-base-200 shadow-xl">
-            <div class="card-body">
-              <div class="py-8 text-center text-base-content/60">
-                <p class="text-sm">{m.community_views_home_recent_activity_empty()}</p>
-                <p class="mt-2 text-xs">{m.community_views_home_recent_activity_description()}</p>
+          {#if isLoadingFeed}
+            <div class="flex flex-col items-center justify-center py-12">
+              <span class="loading loading-lg loading-spinner text-primary"></span>
+            </div>
+          {:else if feedItems.length === 0}
+            <div class="card bg-base-200 shadow-xl">
+              <div class="card-body">
+                <div class="py-8 text-center text-base-content/60">
+                  <p class="text-sm">{m.community_views_home_recent_activity_empty()}</p>
+                  <p class="mt-2 text-xs">{m.community_views_home_recent_activity_description()}</p>
+                </div>
               </div>
             </div>
-          </div>
-        {:else}
-          <div class="space-y-4">
-            {#each feedItems as event (event.id)}
-              {@const profile = authorProfiles.get(event.pubkey)}
-              {@const cardData = getFeedCardData(event)}
-              <FeedCard
-                title={cardData.title}
-                subtitle={cardData.subtitle}
-                typeKey={cardData.typeKey}
-                kind={event.kind}
-                tags={cardData.tags}
-                description={cardData.description}
-                authorName={profile ? getDisplayName(profile) : undefined}
-                authorAvatar={profile ? getProfilePicture(profile) : undefined}
-                timestamp={event.created_at}
-                onclick={() => navigateToEvent(event)}
-              />
-            {/each}
+          {:else}
+            <div class="space-y-4">
+              {#each feedItems as event (event.id)}
+                {@const profile = authorProfiles.get(event.pubkey)}
+                {@const cardData = getFeedCardData(event)}
+                <FeedCard
+                  title={cardData.title}
+                  subtitle={cardData.subtitle}
+                  typeKey={cardData.typeKey}
+                  kind={event.kind}
+                  tags={cardData.tags}
+                  description={cardData.description}
+                  authorName={profile ? getDisplayName(profile) : undefined}
+                  authorAvatar={profile ? getProfilePicture(profile) : undefined}
+                  timestamp={event.created_at}
+                  onclick={() => navigateToEvent(event)}
+                />
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Upcoming Events Sidebar -->
+        {#if upcomingEvents.length > 0}
+          <div class="w-full shrink-0 lg:w-72">
+            <button
+              class="mb-3 flex items-center gap-1 text-sm font-semibold hover:text-primary"
+              onclick={() => onKindNavigation?.('calendar')}
+            >
+              {m.community_upcoming_events_title()}
+              <ChevronRightIcon class_="h-4 w-4" />
+            </button>
+            <div class="flex flex-row gap-3 overflow-x-auto lg:flex-col lg:overflow-x-visible">
+              {#each upcomingEvents as event (event.id)}
+                {@const cardData = getFeedCardData(event)}
+                {@const kindColor = generateKindColorRGB(event.kind)}
+                {@const startTs = getEventStartTimestamp(event)}
+                <button
+                  class="w-[200px] shrink-0 rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md lg:w-full"
+                  style:border-left-color="rgb({kindColor.r},{kindColor.g},{kindColor.b})"
+                  onclick={() => navigateToEvent(event)}
+                >
+                  <div class="text-xs font-medium text-primary">
+                    {new Date(startTs * 1000).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                  <div class="mt-1 line-clamp-2 text-sm font-semibold">{cardData.title}</div>
+                </button>
+              {/each}
+            </div>
           </div>
         {/if}
       </div>

@@ -1,6 +1,6 @@
 <script>
   import { page } from '$app/stores';
-  import { replaceState } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import MainContentArea from '$lib/components/community/layout/MainContentArea.svelte';
 
   /** @type {{ data: any }} */
@@ -35,7 +35,7 @@
       } else {
         url.searchParams.set('view', contentType);
       }
-      replaceState(url, {});
+      goto(url, { replaceState: true, noScroll: true });
     }
   }
 </script>

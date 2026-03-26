@@ -120,7 +120,7 @@
     <h3 class="mt-0.5 line-clamp-2 text-base font-bold text-base-content">{title}</h3>
 
     {#if subtitle}
-      <p class="mt-0.5 text-xs text-base-content/60">
+      <p class="mt-0.5 truncate text-xs text-base-content/60">
         {#if typeKey === 'calendar'}
           {formatCalendarSubtitle(subtitle)}
         {:else}
