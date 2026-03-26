@@ -1,8 +1,8 @@
 <script>
-  import { nip19 } from 'nostr-tools';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { decodeFormNaddr } from '$lib/helpers/forms.js';
   import FormBuilder from '$lib/components/forms/FormBuilder.svelte';
 
   /** @type {{ data: { naddr: string } }} */
@@ -13,20 +13,15 @@
   let error = $state('');
 
   $effect(() => {
-    const decoded = nip19.decode(data.naddr);
-    if (decoded.type !== 'naddr') {
-      error = 'Invalid form address';
+    const decoded = decodeFormNaddr(data.naddr);
+    if (decoded.error) {
+      error = decoded.error;
       isLoading = false;
       return;
     }
 
-    const { pubkey, identifier, kind } = decoded.data;
-    if (kind !== 30168) {
-      error = 'Not a form address';
-      isLoading = false;
-      return;
-    }
-
+    const pubkey = /** @type {string} */ (decoded.pubkey);
+    const identifier = /** @type {string} */ (decoded.identifier);
     const relays = getCommunikeyRelays();
     const loaderSub = addressLoader({ kind: 30168, pubkey, identifier, relays }).subscribe();
     const modelSub = eventStore.replaceable(30168, pubkey, identifier).subscribe((event) => {

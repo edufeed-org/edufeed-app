@@ -103,6 +103,32 @@
             >
           </div>
         {/if}
+      {:else if field.type === 'select' && field.options?.multiple}
+        <div class="mt-1 flex flex-col gap-2">
+          {#each field.options?.options || [] as opt (opt)}
+            {@const selected = (values[field.id] || '').split(',').filter(Boolean)}
+            <label class="label cursor-pointer justify-start gap-2">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                value={opt}
+                checked={selected.includes(opt)}
+                onchange={(e) => {
+                  const current = (values[field.id] || '').split(',').filter(Boolean);
+                  if (e.currentTarget.checked) {
+                    current.push(opt);
+                  } else {
+                    const idx = current.indexOf(opt);
+                    if (idx !== -1) current.splice(idx, 1);
+                  }
+                  values[field.id] = current.join(',');
+                }}
+                disabled={readonly}
+              />
+              <span class="label-text">{opt}</span>
+            </label>
+          {/each}
+        </div>
       {:else if field.type === 'select'}
         <select
           id={field.id}

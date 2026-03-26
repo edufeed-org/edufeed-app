@@ -44,6 +44,7 @@
    * @property {number | undefined} min
    * @property {number | undefined} max
    * @property {string[]} selectOptions
+   * @property {boolean} multiple
    */
 
   /** @type {FieldState[]} */
@@ -57,7 +58,8 @@
       placeholder: f.options?.placeholder || '',
       min: f.options?.min,
       max: f.options?.max,
-      selectOptions: f.options?.options || []
+      selectOptions: f.options?.options || [],
+      multiple: f.options?.multiple || false
     })) || []
   );
 
@@ -76,17 +78,17 @@
   /** @param {string} type */
   function addField(type) {
     const existingIds = fields.map((f) => f.id);
-    const label = type.charAt(0).toUpperCase() + type.slice(1);
     fields.push({
-      id: generateFieldId(label, existingIds),
+      id: generateFieldId(type, existingIds),
       type,
-      label,
+      label: '',
       defaultValue: '',
       required: false,
       placeholder: '',
       min: undefined,
       max: undefined,
-      selectOptions: type === 'select' || type === 'radio' ? ['Option 1'] : []
+      selectOptions: [],
+      multiple: false
     });
   }
 
@@ -154,7 +156,8 @@
           ...(f.min !== undefined && { min: f.min }),
           ...(f.max !== undefined && { max: f.max }),
           ...((f.type === 'select' || f.type === 'radio') &&
-            f.selectOptions.length > 0 && { options: f.selectOptions })
+            f.selectOptions.length > 0 && { options: f.selectOptions }),
+          ...(f.multiple && { multiple: true })
         }
       }));
 
@@ -263,7 +266,7 @@
               <input
                 type="text"
                 class="input-bordered input input-sm flex-1 font-semibold"
-                placeholder="Field label"
+                placeholder="Enter field name"
                 bind:value={field.label}
                 onchange={() => {
                   if (!existing) {
@@ -293,14 +296,23 @@
             </div>
 
             {#if field.type === 'text' || field.type === 'textarea' || field.type === 'number'}
+              {@const isNumeric = field.type === 'number'}
               <div class="flex items-center gap-2 text-sm">
-                <span class="text-xs text-base-content/50">Min:</span>
+                <span
+                  class="text-xs text-base-content/50"
+                  title={isNumeric ? 'Minimum allowed value' : 'Minimum character length'}
+                  >{isNumeric ? 'Min value:' : 'Min length:'}</span
+                >
                 <input
                   type="number"
                   class="input-bordered input input-xs w-16"
                   bind:value={field.min}
                 />
-                <span class="text-xs text-base-content/50">Max:</span>
+                <span
+                  class="text-xs text-base-content/50"
+                  title={isNumeric ? 'Maximum allowed value' : 'Maximum character length'}
+                  >{isNumeric ? 'Max value:' : 'Max length:'}</span
+                >
                 <input
                   type="number"
                   class="input-bordered input input-xs w-16"
@@ -322,18 +334,42 @@
                       >
                     </span>
                   {/each}
-                  <input
-                    type="text"
-                    class="input-bordered input input-xs w-24 border-dashed"
-                    placeholder="+ Add"
-                    onkeydown={(e) => {
-                      if (e.key === 'Enter' && e.currentTarget.value) {
-                        field.selectOptions.push(e.currentTarget.value);
-                        e.currentTarget.value = '';
-                      }
-                    }}
-                  />
+                  <span class="inline-flex items-center gap-0.5">
+                    <input
+                      type="text"
+                      class="input-bordered input input-xs w-24 border-dashed"
+                      placeholder="New option"
+                      onkeydown={(e) => {
+                        if (e.key === 'Enter' && e.currentTarget.value) {
+                          field.selectOptions.push(e.currentTarget.value);
+                          e.currentTarget.value = '';
+                        }
+                      }}
+                    />
+                    <button
+                      class="btn px-1 btn-ghost btn-xs"
+                      title="Add option"
+                      onclick={(e) => {
+                        const input = e.currentTarget.previousElementSibling;
+                        if (input?.value) {
+                          field.selectOptions.push(input.value);
+                          input.value = '';
+                          input.focus();
+                        }
+                      }}>+</button
+                    >
+                  </span>
                 </div>
+                {#if field.type === 'select'}
+                  <label class="label mt-1 cursor-pointer justify-start gap-1">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-xs"
+                      bind:checked={field.multiple}
+                    />
+                    <span class="label-text text-xs">Allow multiple selections</span>
+                  </label>
+                {/if}
               </div>
             {/if}
           </div>

@@ -36,7 +36,7 @@
     /** @type {import('rxjs').Subscription | undefined} */
     let modelSub;
 
-    loaderSub = formTemplateLoader(communityPubkey).subscribe();
+    loaderSub = formTemplateLoader(communityPubkey)().subscribe();
 
     modelSub = eventStore
       .model(TimelineModel, { kinds: [30168], authors: [communityPubkey] })

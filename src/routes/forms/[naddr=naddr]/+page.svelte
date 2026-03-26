@@ -1,12 +1,14 @@
 <script>
-  import { nip19 } from 'nostr-tools';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { decodeFormNaddr } from '$lib/helpers/forms.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import FormResponses from '$lib/components/forms/FormResponses.svelte';
-  import { EditIcon } from '$lib/components/icons';
+  import SendFormModal from '$lib/components/forms/SendFormModal.svelte';
+  import { EditIcon, SendIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: { naddr: string } }} */
   let { data } = $props();
@@ -20,27 +22,15 @@
   let formAddress = $state('');
 
   $effect(() => {
-    let decoded;
-    try {
-      decoded = nip19.decode(data.naddr);
-    } catch {
-      error = 'Invalid form address';
+    const decoded = decodeFormNaddr(data.naddr);
+    if (decoded.error) {
+      error = decoded.error;
       isLoading = false;
       return;
     }
 
-    if (decoded.type !== 'naddr') {
-      error = 'Invalid form address';
-      isLoading = false;
-      return;
-    }
-
-    const { pubkey, identifier, kind } = decoded.data;
-    if (kind !== 30168) {
-      error = 'Not a form address';
-      isLoading = false;
-      return;
-    }
+    const pubkey = /** @type {string} */ (decoded.pubkey);
+    const identifier = /** @type {string} */ (decoded.identifier);
 
     formAddress = `30168:${pubkey}:${identifier}`;
     const relays = getCommunikeyRelays();
@@ -64,6 +54,8 @@
   const isOwner = $derived(
     formEvent && manager.active && formEvent.pubkey === manager.active.pubkey
   );
+
+  let showSendModal = $state(false);
 </script>
 
 <div class="container mx-auto max-w-3xl p-4">
@@ -81,6 +73,10 @@
       </h1>
       <div class="flex gap-2">
         {#if isOwner}
+          <button class="btn gap-1 btn-ghost btn-sm" onclick={() => (showSendModal = true)}>
+            <SendIcon class="h-4 w-4" />
+            {m.send_form_button()}
+          </button>
           <a href="/forms/{data.naddr}/edit" class="btn gap-1 btn-ghost btn-sm">
             <EditIcon class_="w-4 h-4" /> Edit
           </a>
@@ -119,3 +115,7 @@
     {/if}
   {/if}
 </div>
+
+{#if showSendModal && formEvent}
+  <SendFormModal {formEvent} {formAddress} onclose={() => (showSendModal = false)} />
+{/if}

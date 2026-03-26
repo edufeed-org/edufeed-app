@@ -27,6 +27,18 @@ export const formTemplateLoader = (pubkey) =>
   );
 
 /**
+ * Load form requests (kind 1070) sent to a specific user.
+ * @param {string} recipientPubkey
+ */
+export const formRequestLoader = (recipientPubkey) =>
+  createTimelineLoader(
+    timedPool,
+    getCommunikeyRelays(),
+    { kinds: [1070], '#p': [recipientPubkey] },
+    { eventStore }
+  );
+
+/**
  * Load form responses (kind 1069) for a specific form.
  * @param {string} formAddress - Form coordinate: "30168:pubkey:d-tag"
  * @param {string} creatorPubkey - Form creator's pubkey (for #p filter efficiency)

@@ -1,5 +1,8 @@
 import { nip19 } from 'nostr-tools';
 
+/** Kind for form request events (peer-to-peer form sending) */
+export const FORM_REQUEST_KIND = 1070;
+
 /**
  * @typedef {Object} FormField
  * @property {string} id
@@ -217,6 +220,55 @@ export function formCoordinateToNaddr(coordinate, relays) {
     identifier: identifierParts.join(':'),
     relays
   });
+}
+
+/**
+ * Decode and validate a form naddr string.
+ * @param {string} naddrStr
+ * @returns {{ pubkey: string, identifier: string, relays: string[], error?: undefined } | { error: string, pubkey?: undefined, identifier?: undefined, relays?: undefined }}
+ */
+export function decodeFormNaddr(naddrStr) {
+  let decoded;
+  try {
+    decoded = nip19.decode(naddrStr);
+  } catch {
+    return { error: 'Invalid form address' };
+  }
+
+  if (decoded.type !== 'naddr') {
+    return { error: 'Invalid form address' };
+  }
+
+  const { pubkey, identifier, kind, relays } = decoded.data;
+  if (kind !== 30168) {
+    return { error: 'Not a form address' };
+  }
+
+  return { pubkey, identifier, relays: relays || [] };
+}
+
+/**
+ * Extract the form template a-tag coordinate from a form request event.
+ * @param {{ tags: string[][] }} event
+ * @returns {string | undefined}
+ */
+export function getFormRequestFormAddress(event) {
+  return event.tags.find((t) => t[0] === 'a')?.[1];
+}
+
+/**
+ * Parse the message from decrypted form request content.
+ * @param {string} content - Decrypted JSON string
+ * @returns {string}
+ */
+export function parseFormRequestMessage(content) {
+  if (!content) return '';
+  try {
+    const parsed = JSON.parse(content);
+    return parsed.message || '';
+  } catch {
+    return '';
+  }
 }
 
 /**

@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import {
   buildFormTemplateTags,
   parseFormTemplate,
@@ -8,7 +9,11 @@ import {
   buildResponseTags,
   parseResponseTags,
   formCoordinateToNaddr,
-  formEventToNaddr
+  formEventToNaddr,
+  FORM_REQUEST_KIND,
+  decodeFormNaddr,
+  getFormRequestFormAddress,
+  parseFormRequestMessage
 } from '../helpers/forms.js';
 
 describe('forms — tag building', () => {
@@ -266,5 +271,96 @@ describe('forms — event to naddr', () => {
     };
     const naddr = formEventToNaddr(event, ['wss://relay.example.com']);
     expect(naddr).toMatch(/^naddr1/);
+  });
+});
+
+describe('forms — FORM_REQUEST_KIND', () => {
+  it('equals 1070', () => {
+    expect(FORM_REQUEST_KIND).toBe(1070);
+  });
+});
+
+describe('forms — decodeFormNaddr', () => {
+  const pubkey = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+
+  it('returns parsed data for a valid form naddr', () => {
+    const naddr = nip19.naddrEncode({
+      kind: 30168,
+      pubkey,
+      identifier: 'my-form',
+      relays: ['wss://relay.example.com']
+    });
+    const result = decodeFormNaddr(naddr);
+    expect(result.error).toBeUndefined();
+    expect(result.pubkey).toBe(pubkey);
+    expect(result.identifier).toBe('my-form');
+    expect(result.relays).toContain('wss://relay.example.com');
+  });
+
+  it('returns error for invalid naddr string', () => {
+    const result = decodeFormNaddr('not-an-naddr');
+    expect(result.error).toBeDefined();
+  });
+
+  it('returns error for naddr with wrong kind', () => {
+    const naddr = nip19.naddrEncode({
+      kind: 30023,
+      pubkey,
+      identifier: 'article'
+    });
+    const result = decodeFormNaddr(naddr);
+    expect(result.error).toBeDefined();
+  });
+
+  it('returns error for non-naddr type (npub)', () => {
+    const npub = nip19.npubEncode(pubkey);
+    const result = decodeFormNaddr(npub);
+    expect(result.error).toBeDefined();
+  });
+});
+
+describe('forms — getFormRequestFormAddress', () => {
+  it('extracts a-tag coordinate from form request event', () => {
+    const event = {
+      kind: 1070,
+      pubkey: 'sender',
+      tags: [
+        ['p', 'recipient'],
+        ['a', '30168:creator:my-form', 'wss://relay.example.com']
+      ],
+      content: '',
+      created_at: 1
+    };
+    expect(getFormRequestFormAddress(event)).toBe('30168:creator:my-form');
+  });
+
+  it('returns undefined when no a-tag present', () => {
+    const event = {
+      kind: 1070,
+      pubkey: 'sender',
+      tags: [['p', 'recipient']],
+      content: '',
+      created_at: 1
+    };
+    expect(getFormRequestFormAddress(event)).toBeUndefined();
+  });
+});
+
+describe('forms — parseFormRequestMessage', () => {
+  it('parses message from valid JSON content', () => {
+    const content = JSON.stringify({ message: 'Please fill this out' });
+    expect(parseFormRequestMessage(content)).toBe('Please fill this out');
+  });
+
+  it('returns empty string for empty content', () => {
+    expect(parseFormRequestMessage('')).toBe('');
+  });
+
+  it('returns empty string for malformed JSON', () => {
+    expect(parseFormRequestMessage('not json')).toBe('');
+  });
+
+  it('returns empty string when message key is missing', () => {
+    expect(parseFormRequestMessage(JSON.stringify({ foo: 'bar' }))).toBe('');
   });
 });

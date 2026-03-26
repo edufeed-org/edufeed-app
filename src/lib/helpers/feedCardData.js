@@ -61,6 +61,14 @@ export function getFeedCardData(event) {
       const startStr = getTag('start');
       return { title, subtitle: startStr, typeKey: 'calendar', tags };
     }
+    case 30168: {
+      return {
+        title: getTag('name') || 'Untitled Form',
+        typeKey: 'form',
+        tags,
+        description: getTag('description')
+      };
+    }
     case 11: {
       const excerpt = truncate(event.content, 120);
       return {

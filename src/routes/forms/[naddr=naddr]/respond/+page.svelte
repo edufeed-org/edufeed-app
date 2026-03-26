@@ -1,12 +1,11 @@
 <script>
-  import { nip19 } from 'nostr-tools';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { EventFactory } from 'applesauce-core/event-factory';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { buildResponseTags } from '$lib/helpers/forms.js';
+  import { buildResponseTags, decodeFormNaddr } from '$lib/helpers/forms.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
 
   /** @type {{ data: { naddr: string } }} */
@@ -18,29 +17,21 @@
   let isSubmitting = $state(false);
   let submitted = $state(false);
 
+  /** @type {{ pubkey: string, identifier: string } | null} */
+  let decodedForm = $state(null);
+
   // Decode naddr and load form template
   $effect(() => {
-    let decoded;
-    try {
-      decoded = nip19.decode(data.naddr);
-    } catch {
-      error = 'Invalid form address';
+    const decoded = decodeFormNaddr(data.naddr);
+    if (decoded.error) {
+      error = decoded.error;
       isLoading = false;
       return;
     }
 
-    if (decoded.type !== 'naddr') {
-      error = 'Invalid form address';
-      isLoading = false;
-      return;
-    }
-
-    const { pubkey, identifier, kind } = decoded.data;
-    if (kind !== 30168) {
-      error = 'Not a form address';
-      isLoading = false;
-      return;
-    }
+    const pubkey = /** @type {string} */ (decoded.pubkey);
+    const identifier = /** @type {string} */ (decoded.identifier);
+    decodedForm = { pubkey, identifier };
 
     const relays = getCommunikeyRelays();
     const loaderSub = addressLoader({ kind: 30168, pubkey, identifier, relays }).subscribe();
@@ -62,15 +53,13 @@
 
   /** @param {Record<string, string>} values */
   async function handleSubmit(values) {
-    if (!manager.active || !formEvent) return;
+    if (!manager.active || !formEvent || !decodedForm) return;
 
     isSubmitting = true;
     error = '';
 
     try {
-      const decoded = nip19.decode(data.naddr);
-      if (decoded.type !== 'naddr') return;
-      const { pubkey: creatorPubkey, identifier } = decoded.data;
+      const { pubkey: creatorPubkey, identifier } = decodedForm;
       const formAddress = `30168:${creatorPubkey}:${identifier}`;
 
       const responseTags = buildResponseTags(values);
