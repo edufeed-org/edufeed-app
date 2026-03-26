@@ -14,6 +14,10 @@
   import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
   import HomeView from '../views/HomeView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
+  import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
+  import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
+  import { getCommunikeyRelays as getRelays } from '$lib/helpers/relay-helper.js';
+  import { manager } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -28,6 +32,24 @@
   }
 
   let { selectedCommunityId, selectedContentType, onKindNavigation } = $props();
+
+  // Profile list access checker (must be called at component initialization)
+  const profileAccess = useProfileListAccess(
+    () => communikeyEvent,
+    () => getRelays()
+  );
+
+  /** @type {Record<string, string>} */
+  const contentTypeToSection = {
+    calendar: 'Calendar',
+    chat: 'Chat',
+    articles: 'Articles',
+    forum: 'Posts',
+    wikis: 'Wikis',
+    learning: 'Learning',
+    boards: 'Boards',
+    'social-bookmarks': 'Social Bookmarks'
+  };
 
   let communikeyEvent = $state(/** @type {any} */ (null));
   let communityProfile = $state(/** @type {any} */ (null));
@@ -126,6 +148,15 @@
   {:else}
     <!-- Key block ensures views remount when community changes -->
     {#key selectedCommunityId}
+      {@const sectionName = contentTypeToSection[selectedContentType]}
+      {@const formRef = sectionName ? profileAccess.getFormRef(sectionName) : null}
+      {@const userPubkey = manager.active?.pubkey}
+      {@const canPublish = sectionName ? profileAccess.canPublish(sectionName) : true}
+
+      {#if userPubkey && !canPublish && formRef && !profileAccess.isLoading}
+        <AccessGateBanner {formRef} {sectionName} />
+      {/if}
+
       {#if selectedContentType === 'home'}
         <HomeView
           {communikeyEvent}

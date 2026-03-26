@@ -7,6 +7,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import FormLinkManager from '$lib/components/forms/FormLinkManager.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { communityId, communikeyEvent, profileEvent } = $props();
@@ -122,6 +123,11 @@
                 </p>
               </div>
             </div>
+          </div>
+
+          <!-- Form Link Manager -->
+          <div class="mt-6">
+            <FormLinkManager communityEvent={communikeyEvent} communityPubkey={communityId} />
           </div>
         {/if}
       {:else}
