@@ -1,35 +1,30 @@
 <!--
-  ContentTypeBadgeConfig Component
-  Per-content-type configuration for badge-based access control and relays
+  ContentTypeFormConfig Component
+  Per-content-type configuration for form-based access gating
 -->
 
 <script>
-  import BadgeSelector from './BadgeSelector.svelte';
   import EditableList from './EditableList.svelte';
+  import { parseFormTemplate } from '$lib/helpers/forms.js';
   import * as m from '$lib/paraglide/messages';
-
-  /**
-   * @typedef {Object} ContentTypeBadges
-   * @property {string|null} read
-   * @property {string|null} write
-   */
 
   /**
    * @typedef {Object} ContentTypeConfig
    * @property {string} name
    * @property {boolean} enabled
-   * @property {ContentTypeBadges} badges
+   * @property {{read: string|null, write: string|null}} badges
    * @property {string[]} relays
+   * @property {string} formRef
    */
 
   /**
    * @type {{
    *   contentType: ContentTypeConfig,
-   *   authorPubkey: string,
+   *   formTemplates: any[],
    *   showAdvanced?: boolean
    * }}
    */
-  let { contentType = $bindable(), authorPubkey, showAdvanced = false } = $props();
+  let { contentType = $bindable(), formTemplates, showAdvanced = false } = $props();
 
   /**
    * Validate relay URL format
@@ -54,29 +49,26 @@
 <div class="card mb-4 bg-base-200 p-4">
   <h4 class="mb-3 font-semibold">{contentType.name}</h4>
 
-  <!-- Read Badge -->
-  <div class="mb-3">
-    <BadgeSelector
-      {authorPubkey}
-      bind:selectedBadge={contentType.badges.read}
-      label={m.badge_access_read_label?.() || 'Read Access Badge'}
-      placeholder={m.badge_access_anyone?.() || 'Anyone can read'}
-    />
+  <!-- Form-based access gate -->
+  <div class="form-control">
+    <label class="label" for="form-config-{contentType.name}">
+      <span class="label-text">{m.form_config_access_label?.() || 'Access Control'}</span>
+    </label>
+    <select
+      id="form-config-{contentType.name}"
+      class="select-bordered select"
+      bind:value={contentType.formRef}
+    >
+      <option value="">{m.form_config_open?.() || 'Open — anyone can publish'}</option>
+      {#each formTemplates as template (template.id)}
+        {@const parsed = parseFormTemplate(template)}
+        <option value="{template.kind}:{template.pubkey}:{parsed.dTag}">
+          {parsed.name || parsed.dTag}
+        </option>
+      {/each}
+    </select>
     <p class="mt-1 text-xs opacity-70">
-      {m.badge_access_read_help?.() || 'Users need this badge to view this content'}
-    </p>
-  </div>
-
-  <!-- Write Badge -->
-  <div class="mb-3">
-    <BadgeSelector
-      {authorPubkey}
-      bind:selectedBadge={contentType.badges.write}
-      label={m.badge_access_write_label?.() || 'Write Access Badge'}
-      placeholder={m.badge_access_anyone?.() || 'Anyone can publish'}
-    />
-    <p class="mt-1 text-xs opacity-70">
-      {m.badge_access_write_help?.() || 'Users need this badge to publish this content'}
+      {m.form_config_help?.() || 'Select a form to require for publishing to this section'}
     </p>
   </div>
 
@@ -91,7 +83,7 @@
         itemType="relay"
         validator={validateRelayUrl}
         helpText={m.content_relay_help?.() ||
-          'Badge-gated content will use these relays instead of community relays'}
+          'Gated content will use these relays instead of community relays'}
       />
     </div>
   {/if}

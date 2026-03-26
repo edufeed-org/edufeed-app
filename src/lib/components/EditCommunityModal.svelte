@@ -6,21 +6,18 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
-  import ContentTypeBadgeConfig from './shared/ContentTypeBadgeConfig.svelte';
+  import ContentTypeFormConfig from './shared/ContentTypeFormConfig.svelte';
   import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
+  import { formTemplateLoader } from '$lib/loaders/community.js';
+  import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
+  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { addressLoader } from '$lib/loaders/base.js';
+  import { TimelineModel } from 'applesauce-core/models';
 
   let { modalId } = $props();
 
   // Get community event from modal props
   let communityEvent = $derived(/** @type {any} */ (modalStore.modalProps)?.communityEvent);
-
-  /**
-   * @typedef {Object} ContentTypeConfig
-   * @property {boolean} enabled
-   * @property {{read: string|null, write: string|null}} badges
-   * @property {string[]} relays
-   * @property {string} name
-   */
 
   // Community data state - initialized from communityEvent
   let communityData = $state({
@@ -28,29 +25,52 @@
     blossomServers: /** @type {string[]} */ ([]),
     location: '',
     description: '',
-    /** @type {Record<string, ContentTypeConfig>} */
     contentTypes: {
       calendar: {
         name: 'Calendar',
         enabled: false,
         badges: { read: null, write: null },
-        relays: []
+        relays: [],
+        formRef: ''
       },
-      chat: { name: 'Chat', enabled: false, badges: { read: null, write: null }, relays: [] },
+      chat: {
+        name: 'Chat',
+        enabled: false,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      },
       articles: {
         name: 'Articles',
         enabled: false,
         badges: { read: null, write: null },
-        relays: []
+        relays: [],
+        formRef: ''
       },
-      posts: { name: 'Posts', enabled: false, badges: { read: null, write: null }, relays: [] },
-      wikis: { name: 'Wikis', enabled: false, badges: { read: null, write: null }, relays: [] }
+      posts: {
+        name: 'Posts',
+        enabled: false,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      },
+      wikis: {
+        name: 'Wikis',
+        enabled: false,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      }
     }
   });
 
-  // Toggle for advanced badge configuration
-  let showBadgeConfig = $state(false);
+  // Toggle for access control configuration
+  let showAccessConfig = $state(false);
   let showAdvancedRelays = $state(false);
+
+  // Form templates for access gating
+  /** @type {any[]} */
+  let formTemplates = $state.raw([]);
 
   // UI state
   let isPublishing = $state(false);
@@ -93,24 +113,43 @@
     const descriptionTag = tags.find((/** @type {string[]} */ t) => t[0] === 'description');
     const description = descriptionTag ? descriptionTag[1] : '';
 
-    // Parse content types with badges and relays
-    /** @type {Record<string, ContentTypeConfig>} */
+    // Parse content types with badges, relays, and formRef
     const contentTypes = {
       calendar: {
         name: 'Calendar',
         enabled: false,
         badges: { read: null, write: null },
-        relays: []
+        relays: [],
+        formRef: ''
       },
-      chat: { name: 'Chat', enabled: false, badges: { read: null, write: null }, relays: [] },
+      chat: {
+        name: 'Chat',
+        enabled: false,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      },
       articles: {
         name: 'Articles',
         enabled: false,
         badges: { read: null, write: null },
-        relays: []
+        relays: [],
+        formRef: ''
       },
-      posts: { name: 'Posts', enabled: false, badges: { read: null, write: null }, relays: [] },
-      wikis: { name: 'Wikis', enabled: false, badges: { read: null, write: null }, relays: [] }
+      posts: {
+        name: 'Posts',
+        enabled: false,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      },
+      wikis: {
+        name: 'Wikis',
+        enabled: false,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      }
     };
 
     // Parse content sections from tags
@@ -174,9 +213,6 @@
       }
     }
 
-    // Check if any badges are configured to auto-show badge config
-    const hasBadges = Object.values(contentTypes).some((ct) => ct.badges.read || ct.badges.write);
-
     communityData = {
       relays: relays.length > 0 ? relays : ['wss://relay.edufeed.org'],
       blossomServers,
@@ -185,8 +221,77 @@
       contentTypes
     };
 
-    showBadgeConfig = hasBadges;
     isInitialized = true;
+
+    // Load existing form refs from profile list events
+    loadFormRefs(communityEvent);
+  });
+
+  /**
+   * Load form refs from existing kind 30000 profile list events
+   * @param {any} commEvent
+   */
+  function loadFormRefs(commEvent) {
+    const sections = parseCommunityContentTypes(commEvent);
+    const gatedSections = sections.filter((s) => s.profileList);
+
+    if (gatedSections.length > 0) {
+      showAccessConfig = true;
+    }
+
+    for (const section of gatedSections) {
+      if (!section.profileList) continue;
+
+      const parts = section.profileList.split(':');
+      if (parts.length < 3) continue;
+
+      const [, pubkey, ...identifierParts] = parts;
+      const identifier = identifierParts.join(':');
+
+      addressLoader({
+        kind: 30000,
+        pubkey,
+        identifier,
+        relays: getCommunikeyRelays()
+      }).subscribe();
+
+      eventStore.replaceable(30000, pubkey, identifier).subscribe((event) => {
+        if (!event) return;
+        const formTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'form');
+        if (!formTag?.[1]) return;
+
+        // Map section name back to content type key
+        const key = Object.keys(communityData.contentTypes).find(
+          (k) => communityData.contentTypes[k].name.toLowerCase() === section.name.toLowerCase()
+        );
+        if (key) {
+          communityData.contentTypes[key].formRef = formTag[1];
+        }
+      });
+    }
+  }
+
+  // Load form templates for the community
+  $effect(() => {
+    const pubkey = communityEvent?.pubkey;
+    if (!pubkey) return;
+
+    /** @type {import('rxjs').Subscription | undefined} */
+    let loaderSub;
+    /** @type {import('rxjs').Subscription | undefined} */
+    let modelSub;
+
+    loaderSub = formTemplateLoader(pubkey)().subscribe();
+    modelSub = eventStore
+      .model(TimelineModel, { kinds: [30168], authors: [pubkey] })
+      .subscribe((events) => {
+        formTemplates = events || [];
+      });
+
+    return () => {
+      loaderSub?.unsubscribe();
+      modelSub?.unsubscribe();
+    };
   });
 
   // Reset when modal closes
@@ -218,20 +323,40 @@
           name: 'Calendar',
           enabled: false,
           badges: { read: null, write: null },
-          relays: []
+          relays: [],
+          formRef: ''
         },
-        chat: { name: 'Chat', enabled: false, badges: { read: null, write: null }, relays: [] },
+        chat: {
+          name: 'Chat',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
         articles: {
           name: 'Articles',
           enabled: false,
           badges: { read: null, write: null },
-          relays: []
+          relays: [],
+          formRef: ''
         },
-        posts: { name: 'Posts', enabled: false, badges: { read: null, write: null }, relays: [] },
-        wikis: { name: 'Wikis', enabled: false, badges: { read: null, write: null }, relays: [] }
+        posts: {
+          name: 'Posts',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        wikis: {
+          name: 'Wikis',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        }
       }
     };
-    showBadgeConfig = false;
+    showAccessConfig = false;
     showAdvancedRelays = false;
     isPublishing = false;
     errors = {};
@@ -315,6 +440,29 @@
 
       if (publishResult.success) {
         eventStore.add(signedEvent);
+
+        // Create/update kind 30000 profile list events for gated sections
+        for (const [, ct] of Object.entries(communityData.contentTypes)) {
+          if (!ct.enabled || !ct.formRef) continue;
+
+          const profileListEvent = {
+            kind: 30000,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ['d', ct.name],
+              ['form', ct.formRef]
+            ],
+            content: '',
+            pubkey: account.pubkey
+          };
+
+          const signedProfileList = await signer.signEvent(profileListEvent);
+          const plResult = await publishEvent(signedProfileList);
+          if (plResult.success) {
+            eventStore.add(signedProfileList);
+          }
+        }
+
         console.log('EditCommunityModal: Successfully updated community');
         closeModal();
       } else {
@@ -542,71 +690,69 @@
           {/if}
         </div>
 
-        <!-- Badge Configuration Toggle -->
+        <!-- Access Control Toggle -->
         <div class="form-control mt-4">
           <label class="label cursor-pointer justify-start gap-3">
-            <input type="checkbox" class="toggle toggle-primary" bind:checked={showBadgeConfig} />
-            <span class="label-text"
-              >{m.badge_config_toggle?.() || 'Configure badge-based access control'}</span
-            >
+            <input type="checkbox" class="toggle toggle-primary" bind:checked={showAccessConfig} />
+            <span class="label-text">{m.form_config_toggle?.() || 'Configure access control'}</span>
           </label>
           <p class="ml-12 text-xs opacity-70">
-            {m.badge_config_toggle_help?.() ||
-              'Require badges (NIP-58) for reading or publishing specific content types'}
+            {m.form_config_toggle_help?.() ||
+              'Require a form submission for publishing to specific content types'}
           </p>
         </div>
 
-        <!-- Badge Configuration Section -->
-        {#if showBadgeConfig}
+        <!-- Access Control Section -->
+        {#if showAccessConfig}
           <div class="mt-4 space-y-4">
             <div class="flex items-center justify-between">
               <h3 class="text-lg font-semibold">
-                {m.badge_config_title?.() || 'Badge Access Control'}
+                {m.form_config_title?.() || 'Access Control'}
               </h3>
               <label class="label cursor-pointer gap-2">
                 <span class="label-text text-sm"
-                  >{m.badge_config_show_relays?.() || 'Show relay config'}</span
+                  >{m.form_config_show_relays?.() || 'Show relay config'}</span
                 >
                 <input type="checkbox" class="toggle toggle-sm" bind:checked={showAdvancedRelays} />
               </label>
             </div>
 
             {#if communityData.contentTypes.calendar.enabled}
-              <ContentTypeBadgeConfig
+              <ContentTypeFormConfig
                 bind:contentType={communityData.contentTypes.calendar}
-                authorPubkey={manager.active?.pubkey || ''}
+                {formTemplates}
                 showAdvanced={showAdvancedRelays}
               />
             {/if}
 
             {#if communityData.contentTypes.chat.enabled}
-              <ContentTypeBadgeConfig
+              <ContentTypeFormConfig
                 bind:contentType={communityData.contentTypes.chat}
-                authorPubkey={manager.active?.pubkey || ''}
+                {formTemplates}
                 showAdvanced={showAdvancedRelays}
               />
             {/if}
 
             {#if communityData.contentTypes.articles.enabled}
-              <ContentTypeBadgeConfig
+              <ContentTypeFormConfig
                 bind:contentType={communityData.contentTypes.articles}
-                authorPubkey={manager.active?.pubkey || ''}
+                {formTemplates}
                 showAdvanced={showAdvancedRelays}
               />
             {/if}
 
             {#if communityData.contentTypes.posts.enabled}
-              <ContentTypeBadgeConfig
+              <ContentTypeFormConfig
                 bind:contentType={communityData.contentTypes.posts}
-                authorPubkey={manager.active?.pubkey || ''}
+                {formTemplates}
                 showAdvanced={showAdvancedRelays}
               />
             {/if}
 
             {#if communityData.contentTypes.wikis.enabled}
-              <ContentTypeBadgeConfig
+              <ContentTypeFormConfig
                 bind:contentType={communityData.contentTypes.wikis}
-                authorPubkey={manager.active?.pubkey || ''}
+                {formTemplates}
                 showAdvanced={showAdvancedRelays}
               />
             {/if}

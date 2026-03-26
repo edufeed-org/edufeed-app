@@ -16,8 +16,11 @@
   import ProfileForm from './shared/ProfileForm.svelte';
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
-  import ContentTypeBadgeConfig from './shared/ContentTypeBadgeConfig.svelte';
+  import ContentTypeFormConfig from './shared/ContentTypeFormConfig.svelte';
   import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
+  import { formTemplateLoader } from '$lib/loaders/community.js';
+  import { parseFormTemplate } from '$lib/helpers/forms.js';
+  import { TimelineModel } from 'applesauce-core/models';
 
   let { modalId } = $props();
 
@@ -52,42 +55,98 @@
     useEncryption: false
   });
 
-  /**
-   * @typedef {Object} ContentTypeConfig
-   * @property {boolean} enabled
-   * @property {{read: string|null, write: string|null}} badges
-   * @property {string[]} relays
-   */
-
   // Community data state
   let communityData = $state({
     relays: ['wss://relay.edufeed.org'],
     blossomServers: ['blossom.edufeed.org'],
     location: '',
     description: '',
-    /** @type {Record<string, ContentTypeConfig & {name: string}>} */
     contentTypes: {
       calendar: {
         name: 'Calendar',
         enabled: true,
         badges: { read: null, write: null },
-        relays: []
+        relays: [],
+        formRef: ''
       },
-      chat: { name: 'Chat', enabled: true, badges: { read: null, write: null }, relays: [] },
+      chat: {
+        name: 'Chat',
+        enabled: true,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      },
       articles: {
         name: 'Articles',
         enabled: true,
         badges: { read: null, write: null },
-        relays: []
+        relays: [],
+        formRef: ''
       },
-      posts: { name: 'Posts', enabled: true, badges: { read: null, write: null }, relays: [] },
-      wikis: { name: 'Wikis', enabled: true, badges: { read: null, write: null }, relays: [] }
+      posts: {
+        name: 'Posts',
+        enabled: true,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      },
+      wikis: {
+        name: 'Wikis',
+        enabled: true,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      }
     }
   });
 
-  // Toggle for advanced badge configuration
-  let showBadgeConfig = $state(false);
+  // Toggle for access control configuration
+  let showAccessConfig = $state(false);
   let showAdvancedRelays = $state(false);
+
+  // Form templates for access gating
+  /** @type {any[]} */
+  let formTemplates = $state.raw([]);
+
+  // Load form templates for the community pubkey
+  $effect(() => {
+    const pubkey = useCurrentKeypair ? manager.active?.pubkey : userData.publicKey;
+    if (!pubkey) return;
+
+    /** @type {import('rxjs').Subscription | undefined} */
+    let loaderSub;
+    /** @type {import('rxjs').Subscription | undefined} */
+    let modelSub;
+
+    loaderSub = formTemplateLoader(pubkey)().subscribe();
+    modelSub = eventStore
+      .model(TimelineModel, { kinds: [30168], authors: [pubkey] })
+      .subscribe((events) => {
+        formTemplates = events || [];
+      });
+
+    return () => {
+      loaderSub?.unsubscribe();
+      modelSub?.unsubscribe();
+    };
+  });
+
+  /**
+   * Resolve a formRef ("kind:pubkey:dTag") to its display name.
+   * @param {string} ref
+   * @returns {string}
+   */
+  function getFormName(ref) {
+    if (!ref) return '';
+    const [kind, pubkey, dTag] = ref.split(':');
+    const template = formTemplates.find((t) => {
+      const parsed = parseFormTemplate(t);
+      return String(t.kind) === kind && t.pubkey === pubkey && parsed.dTag === dTag;
+    });
+    if (!template) return dTag || ref;
+    const parsed = parseFormTemplate(template);
+    return parsed.name || parsed.dTag || ref;
+  }
 
   // UI state
   let isPublishing = $state(false);
@@ -139,25 +198,40 @@
               name: 'Calendar',
               enabled: true,
               badges: { read: null, write: null },
-              relays: []
+              relays: [],
+              formRef: ''
             },
-            chat: { name: 'Chat', enabled: true, badges: { read: null, write: null }, relays: [] },
+            chat: {
+              name: 'Chat',
+              enabled: true,
+              badges: { read: null, write: null },
+              relays: [],
+              formRef: ''
+            },
             articles: {
               name: 'Articles',
               enabled: true,
               badges: { read: null, write: null },
-              relays: []
+              relays: [],
+              formRef: ''
             },
             posts: {
               name: 'Posts',
               enabled: true,
               badges: { read: null, write: null },
-              relays: []
+              relays: [],
+              formRef: ''
             },
-            wikis: { name: 'Wikis', enabled: true, badges: { read: null, write: null }, relays: [] }
+            wikis: {
+              name: 'Wikis',
+              enabled: true,
+              badges: { read: null, write: null },
+              relays: [],
+              formRef: ''
+            }
           }
         };
-        showBadgeConfig = false;
+        showAccessConfig = false;
         showAdvancedRelays = false;
         errors = {};
       }
@@ -357,12 +431,35 @@
         eventStore.add(signedCommunityEvent);
       }
 
+      // Create kind 30000 profile list events for gated sections
+      for (const [, ct] of Object.entries(communityData.contentTypes)) {
+        if (!ct.enabled || !ct.formRef) continue;
+
+        const profileListEvent = {
+          kind: 30000,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ['d', ct.name],
+            ['form', ct.formRef]
+          ],
+          content: '',
+          pubkey: account.pubkey
+        };
+
+        const signedProfileList = await signer.signEvent(profileListEvent);
+        const plResult = await publishEvent(signedProfileList);
+        if (plResult.success) {
+          eventStore.add(signedProfileList);
+        }
+      }
+
       // Join the community using follow set (kind 30000)
       const { joinCommunity } = await import('$lib/helpers/community');
       const joinResult = await joinCommunity(account.pubkey);
 
       if (communityResult.success || joinResult.success) {
         console.log('CreateCommunityModal: Successfully created community');
+        isPublishing = false;
 
         // Navigate to the newly created community
         const npub = hexToNpub(account.pubkey);
@@ -380,7 +477,6 @@
       console.error('Error creating community:', error);
       errors.publishing =
         error instanceof Error ? error.message : m.create_community_modal_error_failed();
-    } finally {
       isPublishing = false;
     }
   }
@@ -415,20 +511,40 @@
           name: 'Calendar',
           enabled: true,
           badges: { read: null, write: null },
-          relays: []
+          relays: [],
+          formRef: ''
         },
-        chat: { name: 'Chat', enabled: true, badges: { read: null, write: null }, relays: [] },
+        chat: {
+          name: 'Chat',
+          enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
         articles: {
           name: 'Articles',
           enabled: true,
           badges: { read: null, write: null },
-          relays: []
+          relays: [],
+          formRef: ''
         },
-        posts: { name: 'Posts', enabled: true, badges: { read: null, write: null }, relays: [] },
-        wikis: { name: 'Wikis', enabled: true, badges: { read: null, write: null }, relays: [] }
+        posts: {
+          name: 'Posts',
+          enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        wikis: {
+          name: 'Wikis',
+          enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        }
       }
     };
-    showBadgeConfig = false;
+    showAccessConfig = false;
     showAdvancedRelays = false;
     errors = {};
   }
@@ -680,38 +796,38 @@
             {/if}
           </div>
 
-          <!-- Badge Configuration Toggle -->
+          <!-- Access Control Toggle -->
           <div class="form-control mt-4">
             <label class="label cursor-pointer justify-start gap-3">
               <input
-                id="ccm-current-badge-config-toggle"
+                id="ccm-current-access-config-toggle"
                 type="checkbox"
                 class="toggle toggle-primary"
-                bind:checked={showBadgeConfig}
+                bind:checked={showAccessConfig}
               />
               <span class="label-text"
-                >{m.badge_config_toggle?.() || 'Configure badge-based access control'}</span
+                >{m.form_config_toggle?.() || 'Configure access control'}</span
               >
             </label>
             <p class="ml-12 text-xs opacity-70">
-              {m.badge_config_toggle_help?.() ||
-                'Require badges (NIP-58) for reading or publishing specific content types'}
+              {m.form_config_toggle_help?.() ||
+                'Require a form submission for publishing to specific content types'}
             </p>
           </div>
 
-          <!-- Badge Configuration Section -->
-          {#if showBadgeConfig}
+          <!-- Access Control Section -->
+          {#if showAccessConfig}
             <div class="mt-4 space-y-4">
               <div class="flex items-center justify-between">
                 <h3 class="text-lg font-semibold">
-                  {m.badge_config_title?.() || 'Badge Access Control'}
+                  {m.form_config_title?.() || 'Access Control'}
                 </h3>
                 <label
                   class="label cursor-pointer gap-2"
                   for="ccm-current-show-relay-config-toggle"
                 >
                   <span class="label-text text-sm"
-                    >{m.badge_config_show_relays?.() || 'Show relay config'}</span
+                    >{m.form_config_show_relays?.() || 'Show relay config'}</span
                   >
                   <input
                     id="ccm-current-show-relay-config-toggle"
@@ -723,41 +839,41 @@
               </div>
 
               {#if communityData.contentTypes.calendar.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.calendar}
-                  authorPubkey={manager.active?.pubkey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.chat.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.chat}
-                  authorPubkey={manager.active?.pubkey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.articles.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.articles}
-                  authorPubkey={manager.active?.pubkey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.posts.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.posts}
-                  authorPubkey={manager.active?.pubkey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.wikis.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.wikis}
-                  authorPubkey={manager.active?.pubkey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
@@ -823,31 +939,109 @@
                 </h3>
                 <div class="flex flex-wrap gap-2">
                   {#if communityData.contentTypes.calendar.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_calendar()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_calendar()}
+                      {#if communityData.contentTypes.calendar.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.chat.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_chat()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_chat()}
+                      {#if communityData.contentTypes.chat.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.articles.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_articles()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_articles()}
+                      {#if communityData.contentTypes.articles.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.posts.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_posts()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_posts()}
+                      {#if communityData.contentTypes.posts.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.wikis.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_wikis()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_wikis()}
+                      {#if communityData.contentTypes.wikis.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                 </div>
+                {#if Object.values(communityData.contentTypes).some((ct) => ct.enabled && ct.formRef)}
+                  <div class="mt-2 space-y-1 text-sm text-base-content/70">
+                    {#each Object.entries(communityData.contentTypes) as [_key, ct] (_key)}
+                      {#if ct.enabled && ct.formRef}
+                        <p>
+                          {ct.name}: {m.form_config_gated_summary({
+                            formName: getFormName(ct.formRef)
+                          })}
+                        </p>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
@@ -1058,35 +1252,35 @@
             {/if}
           </div>
 
-          <!-- Badge Configuration Toggle -->
+          <!-- Access Control Toggle -->
           <div class="form-control mt-4">
             <label class="label cursor-pointer justify-start gap-3">
               <input
-                id="ccm-new-badge-config-toggle"
+                id="ccm-new-access-config-toggle"
                 type="checkbox"
                 class="toggle toggle-primary"
-                bind:checked={showBadgeConfig}
+                bind:checked={showAccessConfig}
               />
               <span class="label-text"
-                >{m.badge_config_toggle?.() || 'Configure badge-based access control'}</span
+                >{m.form_config_toggle?.() || 'Configure access control'}</span
               >
             </label>
             <p class="ml-12 text-xs opacity-70">
-              {m.badge_config_toggle_help?.() ||
-                'Require badges (NIP-58) for reading or publishing specific content types'}
+              {m.form_config_toggle_help?.() ||
+                'Require a form submission for publishing to specific content types'}
             </p>
           </div>
 
-          <!-- Badge Configuration Section -->
-          {#if showBadgeConfig}
+          <!-- Access Control Section -->
+          {#if showAccessConfig}
             <div class="mt-4 space-y-4">
               <div class="flex items-center justify-between">
                 <h3 class="text-lg font-semibold">
-                  {m.badge_config_title?.() || 'Badge Access Control'}
+                  {m.form_config_title?.() || 'Access Control'}
                 </h3>
                 <label class="label cursor-pointer gap-2" for="ccm-new-show-relay-config-toggle">
                   <span class="label-text text-sm"
-                    >{m.badge_config_show_relays?.() || 'Show relay config'}</span
+                    >{m.form_config_show_relays?.() || 'Show relay config'}</span
                   >
                   <input
                     id="ccm-new-show-relay-config-toggle"
@@ -1098,41 +1292,41 @@
               </div>
 
               {#if communityData.contentTypes.calendar.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.calendar}
-                  authorPubkey={userData.publicKey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.chat.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.chat}
-                  authorPubkey={userData.publicKey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.articles.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.articles}
-                  authorPubkey={userData.publicKey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.posts.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.posts}
-                  authorPubkey={userData.publicKey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
 
               {#if communityData.contentTypes.wikis.enabled}
-                <ContentTypeBadgeConfig
+                <ContentTypeFormConfig
                   bind:contentType={communityData.contentTypes.wikis}
-                  authorPubkey={userData.publicKey || ''}
+                  {formTemplates}
                   showAdvanced={showAdvancedRelays}
                 />
               {/if}
@@ -1202,31 +1396,109 @@
                 </h3>
                 <div class="flex flex-wrap gap-2">
                   {#if communityData.contentTypes.calendar.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_calendar()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_calendar()}
+                      {#if communityData.contentTypes.calendar.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.chat.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_chat()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_chat()}
+                      {#if communityData.contentTypes.chat.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.articles.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_articles()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_articles()}
+                      {#if communityData.contentTypes.articles.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.posts.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_posts()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_posts()}
+                      {#if communityData.contentTypes.posts.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                   {#if communityData.contentTypes.wikis.enabled}
-                    <span class="badge badge-primary"
-                      >{m.create_community_modal_content_wikis()}</span
-                    >
+                    <div class="badge gap-1 badge-primary">
+                      {m.create_community_modal_content_wikis()}
+                      {#if communityData.contentTypes.wikis.formRef}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          class="h-3 w-3"
+                          ><path
+                            fill-rule="evenodd"
+                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                            clip-rule="evenodd"
+                          /></svg
+                        >
+                      {/if}
+                    </div>
                   {/if}
                 </div>
+                {#if Object.values(communityData.contentTypes).some((ct) => ct.enabled && ct.formRef)}
+                  <div class="mt-2 space-y-1 text-sm text-base-content/70">
+                    {#each Object.entries(communityData.contentTypes) as [_key, ct] (_key)}
+                      {#if ct.enabled && ct.formRef}
+                        <p>
+                          {ct.name}: {m.form_config_gated_summary({
+                            formName: getFormName(ct.formRef)
+                          })}
+                        </p>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
