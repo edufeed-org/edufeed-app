@@ -4,7 +4,7 @@
   import { getLocale, setLocale, locales } from '$lib/paraglide/runtime';
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { CalendarIcon, PeopleIcon, SearchIcon, MenuIcon } from './icons';
+  import { CalendarIcon, PeopleIcon, SearchIcon, MenuIcon, DashboardIcon } from './icons';
   import ProfileAvatar from './shared/ProfileAvatar.svelte';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -128,6 +128,10 @@
       {m.navbar_calendar()}
     </a>
     {#if activeAccount}
+      <a href={resolve('/dashboard')} class="btn btn-ghost">
+        <DashboardIcon class_="w-5 h-5" />
+        {m.navbar_dashboard()}
+      </a>
       <div class="dropdown dropdown-end">
         <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
           <ProfileAvatar pubkey={activeAccount.pubkey} size="md" fallbackType="robohash" />
@@ -189,6 +193,12 @@
 
         <!-- Auth Section -->
         {#if activeAccount}
+          <li>
+            <a href={resolve('/dashboard')} onclick={closeDropdown}>
+              <DashboardIcon class_="w-5 h-5" />
+              {m.navbar_dashboard()}
+            </a>
+          </li>
           <li>
             <a href={resolve(`/p/${activeAccount.pubkey}`)} onclick={closeDropdown}>
               <ProfileAvatar pubkey={activeAccount.pubkey} size="xs" fallbackType="robohash" />

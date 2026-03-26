@@ -32,7 +32,8 @@ vi.mock('$app/stores', () => {
 
 vi.mock('$lib/paraglide/messages', () => ({
   article_fab_write: () => 'Write Article',
-  wiki_fab_write: () => 'Write Wiki'
+  wiki_fab_write: () => 'Write Wiki',
+  fab_create_form: () => 'Create Form'
 }));
 
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
@@ -50,10 +51,10 @@ describe('GlobalFAB', () => {
     expect(mainButton).toBeTruthy();
   });
 
-  it('renders all 7 action buttons', () => {
+  it('renders all 8 action buttons', () => {
     const { container } = render(GlobalFAB);
     const actionButtons = container.querySelectorAll('.fab > button');
-    expect(actionButtons.length).toBe(7);
+    expect(actionButtons.length).toBe(8);
   });
 
   it('has create event button', () => {
@@ -129,6 +130,19 @@ describe('GlobalFAB', () => {
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Write Wiki"]'));
     await fireEvent.click(btn);
     expect(mockGoto).toHaveBeenCalledWith('/create/wiki');
+  });
+
+  it('has create form button', () => {
+    const { container } = render(GlobalFAB);
+    const btn = container.querySelector('[aria-label="Create Form"]');
+    expect(btn).toBeTruthy();
+  });
+
+  it('navigates to /forms/new on form button click', async () => {
+    const { container } = render(GlobalFAB);
+    const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create Form"]'));
+    await fireEvent.click(btn);
+    expect(mockGoto).toHaveBeenCalledWith('/forms/new');
   });
 
   it('has add bookmark button', () => {

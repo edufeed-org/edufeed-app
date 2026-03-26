@@ -33,6 +33,7 @@ export { default as BookIcon } from './ui/BookIcon.svelte';
 export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
 export { default as InfoIcon } from './ui/InfoIcon.svelte';
+export { default as DashboardIcon } from './ui/DashboardIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';
@@ -40,6 +41,7 @@ export { default as RefreshIcon } from './actions/RefreshIcon.svelte';
 export { default as ExternalLinkIcon } from './actions/ExternalLinkIcon.svelte';
 export { default as EditIcon } from './actions/EditIcon.svelte';
 export { default as TrashIcon } from './actions/TrashIcon.svelte';
+export { default as SendIcon } from './actions/SendIcon.svelte';
 
 // Social Icons
 export { default as ChatIcon } from './social/ChatIcon.svelte';

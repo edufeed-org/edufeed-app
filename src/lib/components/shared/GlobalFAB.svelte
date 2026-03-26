@@ -8,7 +8,8 @@
     GraduationCapIcon,
     BookIcon,
     BookmarkIcon,
-    RepostIcon
+    RepostIcon,
+    ScrollTextIcon
   } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
@@ -41,6 +42,10 @@
 
   function handleCreateWiki() {
     goto(resolve(`/create/wiki${communityPubkey ? `?community=${communityPubkey}` : ''}`));
+  }
+
+  function handleCreateForm() {
+    goto(resolve('/forms/new'));
   }
 
   function handleAddBookmark() {
@@ -127,6 +132,16 @@
     <BookIcon class_="h-5 w-5" />
   </button>
 
+  <!-- Create Form -->
+  <button
+    class="tooltip btn tooltip-left btn-circle btn-lg"
+    data-tip={m.fab_create_form()}
+    onclick={handleCreateForm}
+    aria-label={m.fab_create_form()}
+  >
+    <ScrollTextIcon class_="h-5 w-5" />
+  </button>
+
   <!-- Add Bookmark -->
   <button
     class="tooltip btn tooltip-left btn-circle btn-lg"
@@ -196,5 +211,9 @@
 
   .fab > button:nth-child(8) {
     transition-delay: 0.35s;
+  }
+
+  .fab > button:nth-child(9) {
+    transition-delay: 0.4s;
   }
 </style>
