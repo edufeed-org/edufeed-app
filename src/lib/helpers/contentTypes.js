@@ -264,6 +264,25 @@ export function kindToContentType(kind) {
 }
 
 /**
+ * Get tab IDs that have profile-list access restrictions
+ * @param {any} communikeyEvent - The community's kind:10222 event
+ * @returns {Set<string>} Set of restricted tab IDs
+ */
+export function getRestrictedTabIds(communikeyEvent) {
+  if (!communikeyEvent) return new Set();
+  const sections = parseCommunityContentTypes(communikeyEvent);
+  const restricted = new Set();
+  for (const section of sections) {
+    if (!section.profileList) continue;
+    for (const kind of section.kinds) {
+      const tabId = kindToContentType(kind);
+      if (tabId) restricted.add(tabId);
+    }
+  }
+  return restricted;
+}
+
+/**
  * Get the default set of community navigation tabs.
  * Includes structural tabs (home, chat) plus all supported content types, plus activity/settings.
  * @returns {string[]} Tab IDs in display order

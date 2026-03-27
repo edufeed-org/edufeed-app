@@ -9,7 +9,8 @@ import { describe, it, expect } from 'vitest';
 import {
   CONTENT_TYPE_CONFIG,
   kindToContentType,
-  getCommunityAvailableContentTypes
+  getCommunityAvailableContentTypes,
+  getRestrictedTabIds
 } from '$lib/helpers/contentTypes.js';
 
 describe('CONTENT_TYPE_CONFIG', () => {
@@ -70,5 +71,71 @@ describe('getCommunityAvailableContentTypes', () => {
     const wikiEntry = result.find((ct) => ct.kind === 30818);
 
     expect(wikiEntry).toBeUndefined();
+  });
+});
+
+describe('getRestrictedTabIds', () => {
+  it('returns empty Set when event is null', () => {
+    expect(getRestrictedTabIds(null)).toEqual(new Set());
+  });
+
+  it('returns empty Set when no sections have profileList', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+    expect(getRestrictedTabIds(event)).toEqual(new Set());
+  });
+
+  it('returns Set with correct tab IDs for sections with profileList', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9'],
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['a', '30000:abc123:approved-learners', 'wss://relay.example.com']
+      ]
+    };
+    const result = getRestrictedTabIds(event);
+    expect(result).toEqual(new Set(['learning']));
+    expect(result.has('chat')).toBe(false);
+  });
+
+  it('handles multiple restricted sections', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9'],
+        ['a', '30000:abc123:chat-members', 'wss://relay.example.com'],
+        ['content', 'Calendar'],
+        ['k', '31923'],
+        ['a', '30000:abc123:calendar-members'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+    const result = getRestrictedTabIds(event);
+    expect(result).toEqual(new Set(['chat', 'calendar']));
+    expect(result.has('learning')).toBe(false);
+  });
+
+  it('maps calendar kinds to single calendar tab ID', () => {
+    const event = {
+      tags: [
+        ['content', 'Calendar'],
+        ['k', '31922'],
+        ['k', '31923'],
+        ['k', '31924'],
+        ['k', '31925'],
+        ['a', '30000:abc123:calendar-access']
+      ]
+    };
+    const result = getRestrictedTabIds(event);
+    expect(result).toEqual(new Set(['calendar']));
   });
 });

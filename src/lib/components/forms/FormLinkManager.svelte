@@ -9,6 +9,7 @@
   import { showToast } from '$lib/helpers/toast';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { TimelineModel } from 'applesauce-core/models';
+  import { untrack } from 'svelte';
 
   let { communityEvent, communityPubkey } = $props();
 
@@ -80,7 +81,7 @@
       modelSub = eventStore.replaceable(30000, pubkey, identifier).subscribe((event) => {
         const formTag = event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'form');
         // eslint-disable-next-line svelte/prefer-svelte-reactivity -- reassignment pattern for $state.raw()
-        const newMap = new Map(currentFormLinks);
+        const newMap = new Map(untrack(() => currentFormLinks));
         newMap.set(section.name, formTag?.[1] || null);
         currentFormLinks = newMap;
       });

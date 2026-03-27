@@ -9,7 +9,8 @@
     KanbanIcon,
     ScrollTextIcon,
     ForumIcon,
-    BookmarkShareIcon
+    BookmarkShareIcon,
+    LockIcon
   } from '$lib/components/icons';
   import { getDefaultCommunityTabs } from '$lib/helpers/contentTypes.js';
   import * as m from '$lib/paraglide/messages';
@@ -19,7 +20,8 @@
     onContentTypeSelect,
     communitySelected = true,
     communityProfile = /** @type {any} */ (null),
-    communityPubkey: _communityPubkey = /** @type {string | null} */ (null)
+    communityPubkey: _communityPubkey = /** @type {string | null} */ (null),
+    restrictedTabs = /** @type {Set<string>} */ (new Set())
   } = $props();
 
   import { getProfilePicture } from 'applesauce-core/helpers';
@@ -107,6 +109,10 @@
         >
           <Icon class_="w-5 h-5" />
           <span class="text-sm font-medium">{type.label}</span>
+          {#if restrictedTabs.has(type.id)}<LockIcon
+              class_="w-3.5 h-3.5 opacity-60"
+              title={m.community_content_tab_restricted()}
+            />{/if}
         </button>
       {/each}
     </nav>

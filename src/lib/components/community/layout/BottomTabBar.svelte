@@ -9,7 +9,8 @@
     KanbanIcon,
     ScrollTextIcon,
     ForumIcon,
-    BookmarkShareIcon
+    BookmarkShareIcon,
+    LockIcon
   } from '$lib/components/icons';
   import {
     getCommunityAvailableContentTypes,
@@ -22,7 +23,8 @@
   let {
     selectedContentType = $bindable(),
     onContentTypeSelect,
-    communityEvent = null // The community's kind:10222 event
+    communityEvent = null, // The community's kind:10222 event
+    restrictedTabs = /** @type {Set<string>} */ (new Set())
   } = $props();
 
   // Icon mapping for content types
@@ -222,7 +224,17 @@
             onclick={() => handleDockClick(type.id)}
             class="snap-center"
           >
-            <Icon class_="size-[1.2em]" />
+            <span class="relative">
+              <Icon class_="size-[1.2em]" />
+              {#if restrictedTabs.has(type.id)}
+                <span
+                  class="absolute -top-1 -right-1.5"
+                  title={m.community_content_tab_restricted()}
+                >
+                  <LockIcon class_="w-2.5 h-2.5 opacity-60" />
+                </span>
+              {/if}
+            </span>
             <span class="dock-label text-xs">{type.label}</span>
           </button>
         {/each}

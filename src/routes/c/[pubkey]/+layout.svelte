@@ -15,6 +15,7 @@
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { getRestrictedTabIds } from '$lib/helpers/contentTypes.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -131,6 +132,7 @@
   );
 
   let avatarUrl = $derived(getProfilePicture(communityProfile));
+  let restrictedTabs = $derived(getRestrictedTabIds(communikeyEvent));
 
   /**
    * Handle community selection from sidebar
@@ -174,6 +176,7 @@
       communitySelected={true}
       {communityProfile}
       communityPubkey={data.pubkey}
+      {restrictedTabs}
     />
     {@render children()}
   </div>
@@ -186,6 +189,7 @@
       communitySelected={true}
       {communityProfile}
       communityPubkey={data.pubkey}
+      {restrictedTabs}
     />
     {@render children()}
   </div>
@@ -239,6 +243,7 @@
           bind:selectedContentType
           onContentTypeSelect={handleContentTypeSelect}
           communityEvent={communikeyEvent}
+          {restrictedTabs}
         />
       </div>
 
