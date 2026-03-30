@@ -18,6 +18,7 @@ vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/EventDebugPanel.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
+vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/paraglide/messages', () => ({
   event_tags_view_all_tooltip: () => '',
   event_tags_more_count: () => '',
@@ -28,6 +29,9 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 vi.mock('$app/navigation', () => ({
   goto: vi.fn()
+}));
+vi.mock('$app/paths', () => ({
+  resolve: (/** @type {string} */ path) => path
 }));
 vi.mock('applesauce-core/helpers', () => ({
   getProfilePicture: (/** @type {any} */ profile) => profile?.picture || null,

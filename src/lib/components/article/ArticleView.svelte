@@ -7,7 +7,7 @@
   import * as m from '$lib/paraglide/messages';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
@@ -29,6 +29,7 @@
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import CommunityShare from '../shared/CommunityShare.svelte';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
 
   /**
    * @typedef {Object} Props
@@ -85,10 +86,6 @@
   const authorName = $derived(
     getDisplayName(authorProfile ?? undefined, event.pubkey.slice(0, 8) + '...')
   );
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile ?? undefined) || `https://robohash.org/${event.pubkey}`
-  );
-
   // Share UI state
   let showShareUI = $state(false);
 
@@ -193,13 +190,12 @@
     <div class="flex flex-col gap-4 border-y border-base-300 py-4 md:flex-row md:items-center">
       <!-- Author -->
       <div class="flex flex-1 items-center gap-3">
-        <div class="avatar">
-          <div class="h-12 w-12 rounded-full">
-            <img src={authorAvatar} alt={authorName} />
-          </div>
-        </div>
+        <ProfileAvatar pubkey={event.pubkey} size="lg" linkToProfile />
         <div>
-          <div class="font-semibold text-base-content">{authorName}</div>
+          <a
+            href={resolve(`/p/${event.pubkey}`)}
+            class="font-semibold text-base-content hover:underline">{authorName}</a
+          >
           <div class="text-sm text-base-content/60">
             {m.article_view_published({ date: formatCalendarDate(publishedAt, 'short') })}
           </div>
