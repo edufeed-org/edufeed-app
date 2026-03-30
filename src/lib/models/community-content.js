@@ -82,7 +82,7 @@ export function createCommunityContentModel(contentKinds, options = {}) {
             const aTag = getTagValue(share, 'a');
             const resolved = (eTag && lookup.get(eTag)) || (aTag && lookup.get(aTag));
             if (resolved && !resultMap.has(resolved.id)) {
-              resultMap.set(resolved.id, fmt(resolved));
+              resultMap.set(resolved.id, { ...fmt(resolved), _sharedBy: share.pubkey });
             }
           }
 
@@ -92,7 +92,7 @@ export function createCommunityContentModel(contentKinds, options = {}) {
             const aTag = getTagValue(repost, 'a');
             const resolved = (eTag && lookup.get(eTag)) || (aTag && lookup.get(aTag));
             if (resolved && !resultMap.has(resolved.id)) {
-              resultMap.set(resolved.id, fmt(resolved));
+              resultMap.set(resolved.id, { ...fmt(resolved), _sharedBy: repost.pubkey });
             }
           }
 

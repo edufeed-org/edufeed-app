@@ -1,0 +1,51 @@
+diff --git a/dist/nast/find-and-replace.js b/dist/nast/find-and-replace.js
+index 15f63beacf5cbbf46afacd8ad974393fc5ebcd7b..3397d7a829cea5b97be8bff3ab604fe6a87899bf 100644
+--- a/dist/nast/find-and-replace.js
++++ b/dist/nast/find-and-replace.js
+@@ -2,22 +2,22 @@ import { visitParents } from "unist-util-visit-parents";
+ export function findAndReplace(tree, list) {
+     const pairs = list;
+     let pairIndex = -1;
+-    const visitor = (node, parents) => {
+-        let index = -1;
+-        /** @type {Parents | undefined} */
+-        let grandparent;
+-        while (++index < parents.length) {
+-            const parent = parents[index];
+-            // const siblings = grandparent ? grandparent.children : undefined;
+-            grandparent = parent;
+-        }
+-        if (grandparent) {
+-            return handler(node, parents);
+-        }
+-        return undefined;
+-    };
+     while (++pairIndex < pairs.length) {
+-        visitParents(tree, "text", visitor);
++        const currentPairIndex = pairIndex;
++        visitParents(tree, "text", (node, parents) => {
++            let index = -1;
++            /** @type {Parents | undefined} */
++            let grandparent;
++            while (++index < parents.length) {
++                const parent = parents[index];
++                // const siblings = grandparent ? grandparent.children : undefined;
++                grandparent = parent;
++            }
++            if (grandparent) {
++                return handler(node, parents, currentPairIndex);
++            }
++            return undefined;
++        });
+     }
+     /**
+      * Handle a text node which is not in an ignored parent.
+@@ -29,7 +29,7 @@ export function findAndReplace(tree, list) {
+      * @returns {VisitorResult}
+      *   Result.
+      */
+-    function handler(node, parents) {
++    function handler(node, parents, pairIndex) {
+         const parent = parents[parents.length - 1];
+         const find = pairs[pairIndex][0];
+         const replace = pairs[pairIndex][1];

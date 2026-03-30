@@ -15,7 +15,8 @@
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { getRestrictedTabIds } from '$lib/helpers/contentTypes.js';
+  import { getRestrictedTabIds, getAccessibleTabIds } from '$lib/helpers/contentTypes.js';
+  import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -134,6 +135,12 @@
   let avatarUrl = $derived(getProfilePicture(communityProfile));
   let restrictedTabs = $derived(getRestrictedTabIds(communikeyEvent));
 
+  const profileAccess = useProfileListAccess(
+    () => communikeyEvent,
+    () => getCommunikeyRelays()
+  );
+  let accessibleTabs = $derived(getAccessibleTabIds(communikeyEvent, profileAccess));
+
   /**
    * Handle community selection from sidebar
    * @param {string} pubkey
@@ -177,6 +184,7 @@
       {communityProfile}
       communityPubkey={data.pubkey}
       {restrictedTabs}
+      {accessibleTabs}
     />
     {@render children()}
   </div>
@@ -190,6 +198,7 @@
       {communityProfile}
       communityPubkey={data.pubkey}
       {restrictedTabs}
+      {accessibleTabs}
     />
     {@render children()}
   </div>
@@ -244,6 +253,7 @@
           onContentTypeSelect={handleContentTypeSelect}
           communityEvent={communikeyEvent}
           {restrictedTabs}
+          {accessibleTabs}
         />
       </div>
 
@@ -295,6 +305,8 @@
       bind:selectedContentType
       onContentTypeSelect={handleContentTypeSelect}
       communityEvent={communikeyEvent}
+      {restrictedTabs}
+      {accessibleTabs}
     />
   </div>
 {/if}

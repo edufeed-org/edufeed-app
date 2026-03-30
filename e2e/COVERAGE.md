@@ -2,37 +2,38 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-03-26
-**Total tests:** 266
+**Last updated:** 2026-03-27
+**Total tests:** 269
 
 ## Quick Summary
 
-| File                                | Tests | Auth | Coverage                                           |
-| ----------------------------------- | ----- | ---- | -------------------------------------------------- |
-| `account-management.test.js`        | 14    | Both | Login, logout, persistence, account switching      |
-| `calendar.test.js`                  | 4     | No   | Calendar page, events, modal                       |
-| `calendar-creation.test.js`         | 10    | Yes  | FAB, event creation, validation, deletion          |
-| `calendar-editing.test.js`          | 10    | Yes  | Edit button, form pre-population, validation       |
-| `calendar-context-menu.test.js`     | 4     | No   | EventContextMenu in calendar modal, dropdown, raw  |
-| `calendar-date-filtering.test.js`   | 10    | No   | Date range loading, navigation, view modes         |
-| `amb-creation.test.js`              | 18    | Yes  | FAB, creation page, all 4 steps, validation        |
-| `amb-creation-full.test.js`         | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay       |
-| `profile.test.js`                   | 4     | No   | Profile page, notes, not-found                     |
-| `profile-editing.test.js`           | 10    | Yes  | Edit modal, form pre-population, save flow         |
-| `event-detail.test.js`              | 4     | No   | naddr routes (articles, calendar, AMB)             |
-| `community.test.js`                 | 5     | No   | Community Learning/Chat tabs                       |
-| `community-membership.test.js`      | 12    | Both | Join/leave flows, persistence, error handling      |
-| `community-creation.test.js`        | 23    | Yes  | Both keypair flows, all steps, settings            |
-| `discover.test.js`                  | 11    | No   | Discovery tabs, infinite scroll, profiles          |
-| `discover-events-filter.test.js`    | 9     | No   | Events tab date range filter, URL persistence      |
-| `learning-search.test.js`           | 14    | No   | Search input, SKOS filters, tab visibility, layout |
-| `relay-override-pagination.test.js` | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination |
-| `comments-reactions.test.js`        | 18    | Both | Comments, reactions, auth flows                    |
-| `chat-posting.test.js`              | 8     | Both | Chat input visibility, message posting flow        |
-| `signup.test.js`                    | 15    | No   | 4-step signup wizard, key generation               |
-| `settings.test.js`                  | 20    | Both | Theme, relays, relay editing, gated/debug          |
-| `settings-blossom.test.js`          | 6     | Yes  | Blossom server management                          |
-| `mobile-navigation.test.js`         | 8     | No   | Mobile hamburger menu, responsive layout           |
+| File                                 | Tests | Auth | Coverage                                           |
+| ------------------------------------ | ----- | ---- | -------------------------------------------------- |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching      |
+| `calendar.test.js`                   | 4     | No   | Calendar page, events, modal                       |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion          |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation       |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw  |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes         |
+| `amb-creation.test.js`               | 18    | Yes  | FAB, creation page, all 4 steps, validation        |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay       |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                     |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow         |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)             |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                       |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat      |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling      |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings            |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles          |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence      |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                    |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow        |
+| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation               |
+| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug          |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                          |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout           |
 
 ## Detailed Coverage
 
@@ -457,6 +458,22 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 | no critical JavaScript errors when navigating tabs | Tab switching works cleanly                   |
 
 **Components exercised:** CommunitySidebar, LearningView, Chat, AMBResourceCard
+
+---
+
+### community-access-filtering.test.js (3 tests)
+
+**Route:** `/c/[pubkey]` (gated community)
+**Auth required:** No
+**Seed data:** Community 1 with profile-list-gated Posts section, open Chat section
+
+| Test                                               | What it verifies                                         |
+| -------------------------------------------------- | -------------------------------------------------------- |
+| shows only member threads in gated forum section   | Member thread visible, non-member thread filtered out    |
+| shows all messages in open chat section            | Both member and non-member messages visible in open chat |
+| no critical JavaScript errors when navigating tabs | Tab switching between Forum/Chat works cleanly           |
+
+**Components exercised:** MainContentArea (allowedAuthors context), CommunityContentView (displayedItems filter), Chat (displayedMessages filter), ForumView, useProfileListAccess
 
 ---
 

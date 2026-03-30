@@ -1,5 +1,20 @@
 import { nip19 } from 'nostr-tools';
 
+/**
+ * Find kind 30000 events that link to a specific form via ['form', formAddress] tag.
+ * @param {import('nostr-tools').NostrEvent[]} profileListEvents
+ * @param {string} formAddress - e.g. "30168:pubkey:d-tag"
+ * @returns {{ sectionName: string, event: import('nostr-tools').NostrEvent }[]}
+ */
+export function findLinkedProfileLists(profileListEvents, formAddress) {
+  return profileListEvents
+    .filter((e) => e.tags.some((t) => t[0] === 'form' && t[1] === formAddress))
+    .map((e) => ({
+      sectionName: e.tags.find((t) => t[0] === 'd')?.[1] || '',
+      event: e
+    }));
+}
+
 /** Kind for form request events (peer-to-peer form sending) */
 export const FORM_REQUEST_KIND = 1070;
 

@@ -5,8 +5,11 @@
 -->
 
 <script>
+  import { getContext } from 'svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+
+  const getAllowedAuthors = getContext('allowedAuthors');
 
   /**
    * @typedef {Object} Props
@@ -43,6 +46,15 @@
   let error = $state(/** @type {string | null} */ (null));
   const getAuthorProfiles = useProfileMap(() => items.map((i) => i.pubkey));
   let authorProfiles = $derived(getAuthorProfiles());
+
+  let displayedItems = $derived.by(() => {
+    const allowed = getAllowedAuthors?.();
+    if (!allowed) return items;
+    return items.filter(
+      (item) =>
+        allowed.includes(item.pubkey) || (item._sharedBy && allowed.includes(item._sharedBy))
+    );
+  });
 
   let loaderCleanup = /** @type {(() => void) | null} */ (null);
 
@@ -129,7 +141,7 @@
       <span>{error}</span>
     </div>
     <!-- Empty State -->
-  {:else if items.length === 0}
+  {:else if displayedItems.length === 0}
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <div class="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-base-200">
         <svg
@@ -147,10 +159,10 @@
     </div>
     <!-- Content -->
   {:else}
-    {@render content(items, authorProfiles)}
+    {@render content(displayedItems, authorProfiles)}
 
     <div class="mt-6 text-center text-sm text-base-content/60">
-      {formatCount(countTransform(items))}
+      {formatCount(countTransform(displayedItems))}
     </div>
   {/if}
 </div>

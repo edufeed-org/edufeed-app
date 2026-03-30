@@ -10,7 +10,8 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkShareIcon,
-    LockIcon
+    LockIcon,
+    LockOpenIcon
   } from '$lib/components/icons';
   import {
     getCommunityAvailableContentTypes,
@@ -24,7 +25,8 @@
     selectedContentType = $bindable(),
     onContentTypeSelect,
     communityEvent = null, // The community's kind:10222 event
-    restrictedTabs = /** @type {Set<string>} */ (new Set())
+    restrictedTabs = /** @type {Set<string>} */ (new Set()),
+    accessibleTabs = /** @type {Set<string>} */ (new Set())
   } = $props();
 
   // Icon mapping for content types
@@ -229,9 +231,15 @@
               {#if restrictedTabs.has(type.id)}
                 <span
                   class="absolute -top-1 -right-1.5"
-                  title={m.community_content_tab_restricted()}
+                  title={accessibleTabs.has(type.id)
+                    ? m.community_content_tab_access_granted()
+                    : m.community_content_tab_restricted()}
                 >
-                  <LockIcon class_="w-2.5 h-2.5 opacity-60" />
+                  {#if accessibleTabs.has(type.id)}
+                    <LockOpenIcon class_="w-2.5 h-2.5 text-success" />
+                  {:else}
+                    <LockIcon class_="w-2.5 h-2.5 opacity-60" />
+                  {/if}
                 </span>
               {/if}
             </span>

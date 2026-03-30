@@ -1,0 +1,2 @@
+patchedDependencies:
+  applesauce-content@5.0.0: patches/applesauce-content@5.0.0.patch

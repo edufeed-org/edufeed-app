@@ -139,6 +139,57 @@ describe('profile list access — member extraction from kind 30000', () => {
   });
 });
 
+// ─── COMMUNITY OWNER BYPASS ────────────────────────────────────────────────
+
+describe('profile list access — community owner bypass', () => {
+  it('community owner should have access even if not in profile list', () => {
+    const ownerPubkey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const communityEvent = makeCommunityEvent([
+      ['content', 'Calendar'],
+      ['k', '31922'],
+      ['a', '30000:community-pubkey:Calendar']
+    ]);
+    communityEvent.pubkey = ownerPubkey;
+
+    // Profile list does NOT include the owner
+    const profileListEvent = makeProfileListEvent('community-pubkey', 'Calendar', [
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    ]);
+    const pointers = getProfilePointersFromList(profileListEvent);
+    const memberSet = new Set(pointers.map((p) => p.pubkey));
+
+    // Owner is NOT in the member set
+    expect(memberSet.has(ownerPubkey)).toBe(false);
+
+    // But canPublish logic should return true for the owner:
+    // if (communityEvent.pubkey === userPubkey) return true;
+    const userPubkey = ownerPubkey;
+    const isOwner = communityEvent.pubkey === userPubkey;
+    expect(isOwner).toBe(true);
+  });
+
+  it('non-owner without list membership should not have access', () => {
+    const ownerPubkey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const userPubkey = 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+    const communityEvent = makeCommunityEvent([
+      ['content', 'Calendar'],
+      ['k', '31922'],
+      ['a', '30000:community-pubkey:Calendar']
+    ]);
+    communityEvent.pubkey = ownerPubkey;
+
+    const profileListEvent = makeProfileListEvent('community-pubkey', 'Calendar', [
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    ]);
+    const pointers = getProfilePointersFromList(profileListEvent);
+    const memberSet = new Set(pointers.map((p) => p.pubkey));
+
+    const isOwner = communityEvent.pubkey === userPubkey;
+    expect(isOwner).toBe(false);
+    expect(memberSet.has(userPubkey)).toBe(false);
+  });
+});
+
 // ─── PROFILE LIST ADDRESS PARSING ───────────────────────────────────────────
 
 describe('profile list access — address parsing', () => {

@@ -24,8 +24,8 @@
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{ communityPubkey: string, communityProfile?: any }} */
-  let { communityPubkey, communityProfile = null } = $props();
+  /** @type {{ communityPubkey: string, communityProfile?: any, canPublish?: boolean }} */
+  let { communityPubkey, communityProfile = null, canPublish = true } = $props();
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
@@ -159,7 +159,7 @@
     />
   </div>
 
-  {#if activeUser}
+  {#if activeUser && canPublish}
     <button
       class="btn gap-1 btn-sm btn-primary"
       onclick={() => (showCreateForm = true)}
@@ -205,7 +205,7 @@
   {/snippet}
 </CommunityContentView>
 
-{#if activeUser}
+{#if activeUser && canPublish}
   <ThreadCreateForm
     {communityPubkey}
     {activeUser}

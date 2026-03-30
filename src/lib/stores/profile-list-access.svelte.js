@@ -8,12 +8,14 @@ import { getProfilePointersFromList } from 'applesauce-common/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
+import { untrack } from 'svelte';
 import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
 
 /**
  * @typedef {Object} ProfileListAccess
  * @property {(sectionName: string) => boolean} canPublish - Whether current user can publish to a section
  * @property {(sectionName: string) => string[]} getMembers - Get member pubkeys for a section
+ * @property {(sectionName: string) => string[] | null} getAllowedAuthors - Get allowed pubkeys for filtering, or null if open
  * @property {(sectionName: string) => string | null} getFormRef - Get form/application URL from profile list
  * @property {boolean} isLoading
  */
@@ -91,8 +93,8 @@ export function useProfileListAccess(getCommunityEvent, getRelays) {
 
       // Subscribe for reactive updates
       const modelSub = eventStore.replaceable(30000, pubkey, identifier).subscribe((event) => {
-        const newMemberMap = new Map(memberMap);
-        const newFormRefMap = new Map(formRefMap);
+        const newMemberMap = new Map(untrack(() => memberMap));
+        const newFormRefMap = new Map(untrack(() => formRefMap));
 
         if (event) {
           const pointers = getProfilePointersFromList(event);
@@ -133,6 +135,10 @@ export function useProfileListAccess(getCommunityEvent, getRelays) {
       const userPubkey = manager.active?.pubkey;
       if (!userPubkey) return false;
 
+      // Community owner always has access to all sections
+      const communityEvent = getCommunityEvent();
+      if (communityEvent?.pubkey === userPubkey) return true;
+
       const members = memberMap.get(sectionName);
       // No profile list for this section → open access
       if (!members) return true;
@@ -148,6 +154,18 @@ export function useProfileListAccess(getCommunityEvent, getRelays) {
     getMembers(sectionName) {
       const members = memberMap.get(sectionName);
       return members ? Array.from(members) : [];
+    },
+    /**
+     * Get allowed author pubkeys for read-side filtering.
+     * Returns null for open sections (no profile list → no filtering).
+     * Returns string[] for restricted sections (only these pubkeys' content shown).
+     * @param {string} sectionName
+     * @returns {string[] | null}
+     */
+    getAllowedAuthors(sectionName) {
+      const members = memberMap.get(sectionName);
+      if (!members) return null;
+      return Array.from(members);
     },
     /**
      * Get form/application reference URL from the profile list event

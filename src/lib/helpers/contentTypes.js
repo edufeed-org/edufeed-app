@@ -283,6 +283,27 @@ export function getRestrictedTabIds(communikeyEvent) {
 }
 
 /**
+ * Get tab IDs where the current user has publish access (subset of restricted tabs)
+ * @param {any} communikeyEvent - The community's kind:10222 event
+ * @param {{ canPublish: (name: string) => boolean }} profileAccess
+ * @returns {Set<string>}
+ */
+export function getAccessibleTabIds(communikeyEvent, profileAccess) {
+  if (!communikeyEvent) return new Set();
+  const sections = parseCommunityContentTypes(communikeyEvent);
+  const accessible = new Set();
+  for (const section of sections) {
+    if (!section.profileList) continue;
+    if (!profileAccess.canPublish(section.name)) continue;
+    for (const kind of section.kinds) {
+      const tabId = kindToContentType(kind);
+      if (tabId) accessible.add(tabId);
+    }
+  }
+  return accessible;
+}
+
+/**
  * Get the default set of community navigation tabs.
  * Includes structural tabs (home, chat) plus all supported content types, plus activity/settings.
  * @returns {string[]} Tab IDs in display order

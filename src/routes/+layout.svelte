@@ -78,6 +78,21 @@
       }
     );
   });
+
+  // Initialize inbox on login, cleanup on logout
+  $effect(() => {
+    if (!browser) return;
+    const account = getActiveUser();
+    if (account) {
+      import('$lib/services/inbox-service.svelte.js').then(({ initializeInbox }) => {
+        initializeInbox(account.pubkey);
+      });
+    } else {
+      import('$lib/services/inbox-service.svelte.js').then(({ cleanup }) => {
+        cleanup();
+      });
+    }
+  });
 </script>
 
 <svelte:head>

@@ -10,7 +10,8 @@ import {
   CONTENT_TYPE_CONFIG,
   kindToContentType,
   getCommunityAvailableContentTypes,
-  getRestrictedTabIds
+  getRestrictedTabIds,
+  getAccessibleTabIds
 } from '$lib/helpers/contentTypes.js';
 
 describe('CONTENT_TYPE_CONFIG', () => {
@@ -137,5 +138,74 @@ describe('getRestrictedTabIds', () => {
     };
     const result = getRestrictedTabIds(event);
     expect(result).toEqual(new Set(['calendar']));
+  });
+});
+
+describe('getAccessibleTabIds', () => {
+  it('returns empty set when no community event', () => {
+    const profileAccess = { canPublish: () => true };
+    expect(getAccessibleTabIds(null, profileAccess)).toEqual(new Set());
+  });
+
+  it('returns empty set when no restricted sections', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+    const profileAccess = { canPublish: () => true };
+    expect(getAccessibleTabIds(event, profileAccess)).toEqual(new Set());
+  });
+
+  it('returns tab IDs for sections where canPublish returns true', () => {
+    const event = {
+      tags: [
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['a', '30000:abc123:approved-learners', 'wss://relay.example.com']
+      ]
+    };
+    const profileAccess = { canPublish: () => true };
+    const result = getAccessibleTabIds(event, profileAccess);
+    expect(result).toEqual(new Set(['learning']));
+  });
+
+  it('excludes tab IDs where canPublish returns false', () => {
+    const event = {
+      tags: [
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['a', '30000:abc123:approved-learners', 'wss://relay.example.com']
+      ]
+    };
+    const profileAccess = { canPublish: () => false };
+    const result = getAccessibleTabIds(event, profileAccess);
+    expect(result).toEqual(new Set());
+  });
+
+  it('handles mixed accessible/inaccessible sections', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9'],
+        ['a', '30000:abc123:chat-members', 'wss://relay.example.com'],
+        ['content', 'Calendar'],
+        ['k', '31923'],
+        ['a', '30000:abc123:calendar-members'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+    const profileAccess = {
+      /** @param {string} name */
+      canPublish: (name) => name === 'Chat'
+    };
+    const result = getAccessibleTabIds(event, profileAccess);
+    expect(result).toEqual(new Set(['chat']));
+    expect(result.has('calendar')).toBe(false);
+    expect(result.has('learning')).toBe(false);
   });
 });

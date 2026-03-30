@@ -5,10 +5,11 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
@@ -58,10 +59,6 @@
   });
 
   const authorName = $derived(getDisplayName(authorProfile, wiki.pubkey.slice(0, 8) + '...'));
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile) || `https://robohash.org/${wiki.pubkey}`
-  );
-
   const wikiNaddr = $derived.by(() => {
     const naddr = encodeEventToNaddr(wiki);
     return naddr || null;
@@ -109,14 +106,14 @@
   onkeydown={handleKeydown}
 >
   <!-- Author Header -->
-  <div class="mb-3 flex items-center gap-3">
-    <div class="avatar">
-      <div class="h-10 w-10 rounded-full">
-        <img src={authorAvatar} alt={authorName} loading="lazy" decoding="async" />
-      </div>
-    </div>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="mb-3 flex items-center gap-3" onclick={(e) => e.stopPropagation()}>
+    <ProfileAvatar pubkey={wiki.pubkey} profile={authorProfile} size="md" linkToProfile />
     <div class="min-w-0 flex-1">
-      <div class="truncate font-medium text-base-content">{authorName}</div>
+      <a
+        href={resolve(`/p/${wiki.pubkey}`)}
+        class="truncate font-medium text-base-content hover:underline">{authorName}</a
+      >
       <div class="text-sm text-base-content/60">
         {formatCalendarDate(publishedAt, 'short')}
       </div>

@@ -14,6 +14,7 @@
   import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
   import HomeView from '../views/HomeView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
+  import { setContext } from 'svelte';
   import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
   import { getCommunikeyRelays as getRelays } from '$lib/helpers/relay-helper.js';
@@ -50,6 +51,13 @@
     boards: 'Boards',
     'social-bookmarks': 'Social Bookmarks'
   };
+
+  // Compute allowed authors for read-side filtering and provide via context
+  let sectionName = $derived(contentTypeToSection[selectedContentType]);
+  let allowedAuthors = $derived(
+    sectionName && !profileAccess.isLoading ? profileAccess.getAllowedAuthors(sectionName) : null
+  );
+  setContext('allowedAuthors', () => allowedAuthors);
 
   let communikeyEvent = $state(/** @type {any} */ (null));
   let communityProfile = $state(/** @type {any} */ (null));
@@ -165,7 +173,12 @@
           {onKindNavigation}
         />
       {:else if selectedContentType === 'chat'}
-        <Chat {communikeyEvent} {communityProfile} communityPubkey={selectedCommunityId} />
+        <Chat
+          {communikeyEvent}
+          {communityProfile}
+          communityPubkey={selectedCommunityId}
+          {canPublish}
+        />
       {:else if selectedContentType === 'calendar'}
         <CalendarView
           communityPubkey={selectedCommunityId}
@@ -179,7 +192,7 @@
       {:else if selectedContentType === 'articles'}
         <ArticlesView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'forum'}
-        <ForumView communityPubkey={selectedCommunityId} {communityProfile} />
+        <ForumView communityPubkey={selectedCommunityId} {communityProfile} {canPublish} />
       {:else if selectedContentType === 'wikis'}
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'social-bookmarks'}

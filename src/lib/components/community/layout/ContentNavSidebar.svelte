@@ -10,7 +10,8 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkShareIcon,
-    LockIcon
+    LockIcon,
+    LockOpenIcon
   } from '$lib/components/icons';
   import { getDefaultCommunityTabs } from '$lib/helpers/contentTypes.js';
   import * as m from '$lib/paraglide/messages';
@@ -21,7 +22,8 @@
     communitySelected = true,
     communityProfile = /** @type {any} */ (null),
     communityPubkey: _communityPubkey = /** @type {string | null} */ (null),
-    restrictedTabs = /** @type {Set<string>} */ (new Set())
+    restrictedTabs = /** @type {Set<string>} */ (new Set()),
+    accessibleTabs = /** @type {Set<string>} */ (new Set())
   } = $props();
 
   import { getProfilePicture } from 'applesauce-core/helpers';
@@ -109,10 +111,17 @@
         >
           <Icon class_="w-5 h-5" />
           <span class="text-sm font-medium">{type.label}</span>
-          {#if restrictedTabs.has(type.id)}<LockIcon
-              class_="w-3.5 h-3.5 opacity-60"
-              title={m.community_content_tab_restricted()}
-            />{/if}
+          {#if restrictedTabs.has(type.id)}
+            {#if accessibleTabs.has(type.id)}
+              <span class="ml-auto" title={m.community_content_tab_access_granted()}>
+                <LockOpenIcon class_="w-3.5 h-3.5 text-success" />
+              </span>
+            {:else}
+              <span class="ml-auto opacity-60" title={m.community_content_tab_restricted()}>
+                <LockIcon class_="w-3.5 h-3.5" />
+              </span>
+            {/if}
+          {/if}
         </button>
       {/each}
     </nav>

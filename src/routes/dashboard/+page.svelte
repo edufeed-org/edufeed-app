@@ -5,7 +5,7 @@
   import * as m from '$lib/paraglide/messages';
   import DashboardCommunities from '$lib/components/dashboard/DashboardCommunities.svelte';
   import DashboardCommunityFeed from '$lib/components/dashboard/DashboardCommunityFeed.svelte';
-  import DashboardFormRequests from '$lib/components/dashboard/DashboardFormRequests.svelte';
+  import InboxSummaryCard from '$lib/components/inbox/InboxSummaryCard.svelte';
   import DashboardYourContent from '$lib/components/dashboard/DashboardYourContent.svelte';
 
   let activeAccount = $state(/** @type {any} */ (null));
@@ -39,7 +39,7 @@
     <div class="flex flex-col gap-8">
       <DashboardCommunities />
       <DashboardCommunityFeed />
-      <DashboardFormRequests pubkey={activeAccount.pubkey} />
+      <InboxSummaryCard />
       <DashboardYourContent pubkey={activeAccount.pubkey} />
     </div>
   </div>

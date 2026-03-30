@@ -10,13 +10,13 @@
   import { EditIcon, SendIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{ data: { naddr: string } }} */
+  /** @type {{ data: { naddr: string, initialTab: string } }} */
   let { data } = $props();
 
   let formEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   let isLoading = $state(true);
   let error = $state('');
-  let activeTab = $state('preview');
+  let activeTab = $state(data.initialTab);
 
   /** @type {string} */
   let formAddress = $state('');
