@@ -148,7 +148,12 @@
   function handleCommunitySelect(pubkey) {
     const npub = hexToNpub(pubkey);
     if (npub) {
-      goto(resolve(`/c/${npub}`));
+      const base = resolve(`/c/${npub}`);
+      if (selectedContentType && selectedContentType !== 'home') {
+        goto(`${base}?view=${selectedContentType}`);
+      } else {
+        goto(base);
+      }
     }
     leftDrawerOpen = false; // Close drawer on mobile after selection
   }

@@ -4,9 +4,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { PlusIcon } from '$lib/components/icons';
-  import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
   let { currentCommunityId, onCommunitySelect } = $props();
@@ -22,10 +20,6 @@
    * @param {string} pubkey
    */
   function handleCommunityClick(pubkey) {
-    const npub = hexToNpub(pubkey);
-    if (npub) {
-      goto(resolve(`/c/${npub}`));
-    }
     if (onCommunitySelect) {
       onCommunitySelect(pubkey);
     }
