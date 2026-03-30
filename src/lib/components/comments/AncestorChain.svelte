@@ -40,6 +40,7 @@
         data-testid="ancestor-card"
       >
         <!-- Avatar -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <span class="mt-0.5 flex-shrink-0" onclick={(e) => e.stopPropagation()}>
           <ProfileAvatar pubkey={ancestor.pubkey} size="xs" linkToProfile />
         </span>

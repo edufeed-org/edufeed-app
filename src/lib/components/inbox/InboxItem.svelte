@@ -63,6 +63,7 @@
     : 'border-l-3 border-transparent opacity-60'}"
   onclick={handleClick}
 >
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="mt-0.5 flex-shrink-0" onclick={(e) => e.stopPropagation()}>
     {#if profile}
       <ProfileAvatar pubkey={event.pubkey} {profile} size="sm" linkToProfile />
