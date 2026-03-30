@@ -78,6 +78,10 @@ vi.mock('$lib/loaders/comments.js', () => ({
   })
 }));
 
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({
+  useUserProfile: () => () => null
+}));
+
 vi.mock('$lib/paraglide/messages', () => ({
   comments_add: () => 'Add Comment',
   comments_cancel: () => 'Cancel',

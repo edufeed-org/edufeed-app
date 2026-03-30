@@ -14,6 +14,7 @@
   import { showToast } from '$lib/helpers/toast.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { resolve } from '$app/paths';
+  import { encodePointer } from 'applesauce-core/helpers';
   import { TrashIcon } from '$lib/components/icons';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import NostrContentRenderer from '../shared/NostrContentRenderer.svelte';
@@ -112,9 +113,12 @@
   <!-- Parent context for kind 1 replies -->
   {#if parentEvent}
     <div class="mb-2 text-xs text-base-content/50">{m.thread_detail_replying_to()}</div>
-    <div class="pointer-events-none mb-4 opacity-60">
+    <a
+      href={resolve(`/${encodePointer({ id: parentEvent.id, relays: [] })}`)}
+      class="mb-4 block opacity-60 transition-opacity hover:opacity-100"
+    >
       <NoteCard note={parentEvent} />
-    </div>
+    </a>
   {/if}
 
   <!-- Header: author avatar + name + date + actions -->

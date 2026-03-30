@@ -11,6 +11,7 @@
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ note: any, authorProfile?: any, activeUser?: any, communityPubkey?: string, extraRelays?: string[] }} */
@@ -21,6 +22,10 @@
     communityPubkey = undefined,
     extraRelays = undefined
   } = $props();
+
+  // Load profile internally when none provided via prop
+  const getInternalProfile = useUserProfile(() => (authorProfile ? null : note.pubkey));
+  const effectiveProfile = $derived(authorProfile ?? getInternalProfile());
 
   let showComments = $state(false);
   let commentCount = $state(0);
@@ -74,7 +79,7 @@
     <!-- Profile Picture -->
     <a href={profileHref} class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full">
       <img
-        src={getProfilePicture(authorProfile) || `https://robohash.org/${note.pubkey}`}
+        src={getProfilePicture(effectiveProfile) || `https://robohash.org/${note.pubkey}`}
         alt="Profile"
         class="h-full w-full object-cover"
       />
@@ -85,7 +90,8 @@
       <!-- Header -->
       <div class="mb-2 flex items-center gap-2">
         <a href={profileHref} class="font-medium text-base-content hover:underline">
-          {getDisplayName(authorProfile) || `${note.pubkey.slice(0, 8)}...${note.pubkey.slice(-4)}`}
+          {getDisplayName(effectiveProfile) ||
+            `${note.pubkey.slice(0, 8)}...${note.pubkey.slice(-4)}`}
         </a>
         <span class="text-sm text-base-content/50">· {formatRelativeTime(note.created_at)}</span>
       </div>
