@@ -602,6 +602,7 @@
   "community_views_chat_empty": "Noch keine Nachrichten. Sei der Erste, der etwas sagt!",
   "community_views_chat_input_placeholder": "Nachricht eingeben...",
   "community_views_chat_send_button": "Senden",
+  "community_views_chat_load_more": "Ältere Nachrichten laden",
   "community_views_chat_login_prompt": "Melde dich an, um am Chat teilzunehmen",
   "community_profile_hero_more": "mehr",
   "community_upcoming_events_title": "Kommende Veranstaltungen",

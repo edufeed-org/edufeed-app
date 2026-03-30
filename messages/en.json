@@ -647,6 +647,7 @@
   "community_views_chat_empty": "No messages yet. Be the first to say something!",
   "community_views_chat_input_placeholder": "Type a message...",
   "community_views_chat_send_button": "Send",
+  "community_views_chat_load_more": "Load older messages",
   "community_views_chat_login_prompt": "Sign in to participate in the chat",
   "community_profile_hero_more": "more",
   "community_upcoming_events_title": "Upcoming Events",

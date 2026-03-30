@@ -97,7 +97,6 @@ async function initializeAccountPersistence() {
     // Wait for config to be ready before loading relay sets
     // This ensures relayListLookupRelays has been populated from API
     if (!isConfigReady) {
-      console.log('⏳ Waiting for config before loading relay sets...');
       return;
     }
 
@@ -112,14 +111,6 @@ async function initializeAccountPersistence() {
       console.warn('⚠️ No lookup relays configured, cannot load relay sets');
       return;
     }
-
-    console.log(
-      '🔄 Loading relay sets for account:',
-      account.pubkey.slice(0, 8),
-      'using',
-      lookupRelays.length,
-      'lookup relays'
-    );
 
     // Load and subscribe to each category's relay set via addressLoader
     for (const category of Object.keys(CATEGORIES)) {

@@ -2,11 +2,13 @@
   import { resolve } from '$app/paths';
   import { getContext } from 'svelte';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { manager } from '$lib/stores/accounts.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
+  import { storeEvents } from 'applesauce-relay/operators';
+  import { TimelineModel } from 'applesauce-core/models';
   import NostrIdentifierParser from '$lib/components/shared/NostrIdentifierParser.svelte';
   import CompactCommunityHeader from '$lib/components/community/layout/CompactCommunityHeader.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -24,85 +26,109 @@
     canPublish = true
   } = $props();
 
+  const PAGE_SIZE = 20;
+
   // Reactive state
-  /** @type {any[]} */
-  let messages = $state([]);
-  /** @type {any} */
-  let activeUser = $state(null);
+  let messages = $state.raw(/** @type {any[]} */ ([]));
+  const getActiveUser = useActiveUser();
   const getUserProfiles = useProfileMap(() =>
     messages.filter((m) => m && m.pubkey).map((m) => m.pubkey)
   );
   let userProfiles = $derived(getUserProfiles());
   let newMessage = $state('');
   let isLoading = $state(true);
+  let isLoadingMore = $state(false);
+  let hasMore = $state(true);
   let isSending = $state(false);
 
   let displayedMessages = $derived.by(() => {
     const allowed = getAllowedAuthors?.();
     const valid = messages.filter((m) => m && m.id && m.pubkey && m.content);
-    return allowed ? valid.filter((m) => allowed.includes(m.pubkey)) : valid;
+    const filtered = allowed ? valid.filter((m) => allowed.includes(m.pubkey)) : valid;
+    // TimelineModel returns newest-first; chat needs oldest-first
+    return filtered.toReversed();
   });
 
   // Derive community pubkey from communikey event if not provided as prop
   let derivedCommunityPubkey = $derived(communityPubkey || communikeyEvent?.pubkey || '');
 
-  // Subscribe to active user
-  $effect(() => {
-    const subscription = manager.active$.subscribe((user) => {
-      activeUser = user;
-    });
-    return () => subscription.unsubscribe();
-  });
+  // Track chat relays and base filter for reuse in loadMore
+  let chatRelays = $derived([
+    ...getAppRelaysForCategory('communikey'),
+    ...(runtimeConfig.fallbackRelays || [])
+  ]);
 
-  // Subscribe to chat messages
+  // Subscribe to chat messages using storeEvents + TimelineModel pattern
   $effect(() => {
     if (!derivedCommunityPubkey) return;
 
     isLoading = true;
-    let initialLoadComplete = false;
+    hasMore = true;
+    const filter = { kinds: [9], '#h': [derivedCommunityPubkey] };
 
-    // Use communikey relays + fallback for chat messages
-    const chatRelays = [
-      ...getAppRelaysForCategory('communikey'),
-      ...(runtimeConfig.fallbackRelays || [])
-    ];
-    // Create a persistent subscription that continues after EOSE
-    const subscription = pool
+    // 1. Persistent subscription with limit for initial load
+    //    limit only affects stored events before EOSE; real-time events still arrive
+    const subSub = pool
       .group(chatRelays)
-      .subscription({ kinds: [9], '#h': [derivedCommunityPubkey] })
+      .subscription({ ...filter, limit: PAGE_SIZE })
+      .pipe(storeEvents(eventStore))
       .subscribe({
         next: (response) => {
-          if (response === 'EOSE') {
-            console.log('End of stored events - switching to real-time mode');
-            initialLoadComplete = true;
-            isLoading = false;
-          } else if (response && typeof response === 'object' && response.kind === 9) {
-            // This is an actual event
-            console.log('Received chat event:', response);
-
-            // Add to eventStore for persistence
-            eventStore.add(response);
-
-            // Add message to list if not already present
-            const existingIndex = messages.findIndex((m) => m.id === response.id);
-            if (existingIndex === -1) {
-              messages = [...messages, response].sort((a, b) => a.created_at - b.created_at);
-            }
-
-            // If this is the first event after EOSE, mark loading as complete
-            if (initialLoadComplete && isLoading) {
-              isLoading = false;
-            }
-          }
+          if (response === 'EOSE') isLoading = false;
         },
-        error: (error) => {
-          console.error('Chat subscription error:', error);
+        error: (err) => {
+          console.error('Chat subscription error:', err);
           isLoading = false;
         }
       });
 
-    return () => subscription.unsubscribe();
+    // 2. TimelineModel provides sorted, deduped, deletion-filtered view
+    const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
+      messages = events;
+    });
+
+    return () => {
+      subSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
   });
+
+  /** Load older messages before the oldest currently displayed */
+  function loadMore() {
+    if (isLoadingMore || !derivedCommunityPubkey || messages.length === 0) return;
+
+    isLoadingMore = true;
+    // messages is newest-first from TimelineModel, so last element is oldest
+    const oldestTimestamp = messages[messages.length - 1].created_at;
+
+    const olderFilter = {
+      kinds: [9],
+      '#h': [derivedCommunityPubkey],
+      until: oldestTimestamp - 1,
+      limit: PAGE_SIZE
+    };
+
+    let count = 0;
+    const sub = pool
+      .group(chatRelays)
+      .subscription(olderFilter)
+      .pipe(storeEvents(eventStore))
+      .subscribe({
+        next: (response) => {
+          if (response === 'EOSE') {
+            if (count < PAGE_SIZE) hasMore = false;
+            isLoadingMore = false;
+            sub.unsubscribe();
+          } else {
+            count++;
+          }
+        },
+        error: () => {
+          isLoadingMore = false;
+          sub.unsubscribe();
+        }
+      });
+  }
 
   // Send message function
   /**
@@ -111,6 +137,7 @@
   async function sendMessage(event) {
     event.preventDefault();
 
+    const activeUser = getActiveUser();
     if (!activeUser || !newMessage.trim() || !derivedCommunityPubkey) return;
 
     const messageContent = newMessage.trim();
@@ -132,8 +159,7 @@
       const signedEvent = await activeUser.signer.signEvent(chatEvent);
       isSending = false; // Signing complete
 
-      // Add immediately to local messages for instant UI feedback
-      messages = [...messages, signedEvent].sort((a, b) => a.created_at - b.created_at);
+      // Add to EventStore — TimelineModel subscription picks it up automatically
       eventStore.add(signedEvent);
 
       // Publish optimistically in background (returns immediately)
@@ -189,12 +215,20 @@
     return null;
   }
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive (only if already near bottom)
   /** @type {HTMLElement} */
   let chatContainer;
+  let prevMessageCount = 0;
   $effect(() => {
     if (chatContainer && displayedMessages.length > 0) {
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+      const isNewMessage = displayedMessages.length > prevMessageCount;
+      const isNearBottom =
+        chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 100;
+      // Auto-scroll on initial load or when near bottom and new messages arrive
+      if (prevMessageCount === 0 || (isNewMessage && isNearBottom)) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+      prevMessageCount = displayedMessages.length;
     }
   });
 </script>
@@ -220,6 +254,18 @@
 
   <!-- Messages container -->
   <div bind:this={chatContainer} class="flex-1 space-y-4 overflow-y-auto p-4">
+    {#if hasMore && displayedMessages.length > 0}
+      <div class="text-center">
+        <button class="btn btn-ghost btn-sm" onclick={loadMore} disabled={isLoadingMore}>
+          {#if isLoadingMore}
+            <span class="loading loading-sm loading-spinner"></span>
+          {:else}
+            {m.community_views_chat_load_more()}
+          {/if}
+        </button>
+      </div>
+    {/if}
+
     {#if displayedMessages.length === 0 && !isLoading}
       <div class="py-8 text-center text-base-content/50">
         {m.community_views_chat_empty()}
@@ -227,7 +273,7 @@
     {/if}
 
     {#each displayedMessages as message (message.id)}
-      {@const isOwnMessage = activeUser && message.pubkey === activeUser.pubkey}
+      {@const isOwnMessage = getActiveUser() && message.pubkey === getActiveUser()?.pubkey}
       <div class="chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
         {#if !isOwnMessage}
           <a href={resolve(`/p/${message.pubkey}`)} class="avatar chat-image">
@@ -272,7 +318,7 @@
   </div>
 
   <!-- Message input -->
-  {#if activeUser && canPublish}
+  {#if getActiveUser() && canPublish}
     <form onsubmit={sendMessage} class="rounded-b-lg border-t bg-base-100 p-4">
       <div class="flex gap-2">
         <input

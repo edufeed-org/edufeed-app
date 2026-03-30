@@ -275,8 +275,6 @@ export function initializeConfig(runtimeConfig) {
     }
   };
 
-  console.log('Config initialized with runtime values');
-
   // Signal that config is ready for dependent code
   configReady.set(true);
 }

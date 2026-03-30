@@ -174,13 +174,11 @@ function parseSKOSResponse(data) {
 
   // Check for hasTopConcept (the standard structure for these vocabularies)
   if (data.hasTopConcept && Array.isArray(data.hasTopConcept)) {
-    console.log(`📚 SKOS: Found hasTopConcept with ${data.hasTopConcept.length} top concepts`);
     return extractConceptsRecursively(data.hasTopConcept, 0);
   }
 
   // Fallback: Check for @graph structure (older JSON-LD format)
   if (data['@graph'] && Array.isArray(data['@graph'])) {
-    console.log(`📚 SKOS: Found @graph with ${data['@graph'].length} items`);
     const concepts = [];
     for (const item of data['@graph']) {
       const type = item['@type'] || item.type;
@@ -260,7 +258,6 @@ export async function fetchVocabulary(vocabKey) {
   // Try cache first
   const cached = loadFromCache(vocabKey);
   if (cached) {
-    console.log(`📚 SKOS: Loaded ${vocabKey} from cache (${cached.length} concepts)`);
     return cached;
   }
 
@@ -268,8 +265,6 @@ export async function fetchVocabulary(vocabKey) {
   if (!url) {
     throw new Error(`Unknown vocabulary: ${vocabKey}`);
   }
-
-  console.log(`📚 SKOS: Fetching ${vocabKey} from ${url}`);
 
   try {
     const response = await fetch(url, {
@@ -285,8 +280,6 @@ export async function fetchVocabulary(vocabKey) {
 
     const data = await response.json();
     const concepts = parseSKOSResponse(data);
-
-    console.log(`📚 SKOS: Parsed ${concepts.length} concepts from ${vocabKey}`);
 
     // Cache the result
     if (concepts.length > 0) {

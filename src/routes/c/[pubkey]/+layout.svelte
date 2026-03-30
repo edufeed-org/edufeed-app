@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
+  import { setContext } from 'svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
@@ -28,6 +29,7 @@
   let leftDrawerOpen = $state(false);
   let communikeyEvent = $state(/** @type {any} */ (null));
   let communityProfile = $state(/** @type {any} */ (null));
+  let communikeyLoaded = $state(false);
 
   // Valid content types for ?view= query param
   const validContentTypes = new Set([
@@ -65,6 +67,7 @@
   // Load community's kind:10222 event for content type configuration
   $effect(() => {
     if (data.pubkey) {
+      communikeyLoaded = false;
       const pointer = {
         kind: 10222,
         pubkey: data.pubkey
@@ -75,10 +78,15 @@
       const loaderSub = addressLoader({
         ...pointer,
         relays: getCommunikeyRelays()
-      }).subscribe();
+      }).subscribe({
+        complete: () => {
+          communikeyLoaded = true;
+        }
+      });
 
       const sub = eventStore.replaceable(pointer).subscribe((event) => {
         communikeyEvent = event || null;
+        if (event) communikeyLoaded = true;
       });
 
       return () => {
@@ -87,6 +95,7 @@
       };
     } else {
       communikeyEvent = null;
+      communikeyLoaded = true;
     }
   });
 
@@ -140,6 +149,29 @@
     () => getCommunikeyRelays()
   );
   let accessibleTabs = $derived(getAccessibleTabIds(communikeyEvent, profileAccess));
+
+  // Provide shared data to child components via context (eliminates duplicate loading)
+  /** @type {Record<string, string>} */
+  const contentTypeToSection = {
+    calendar: 'Calendar',
+    chat: 'Chat',
+    articles: 'Articles',
+    forum: 'Posts',
+    wikis: 'Wikis',
+    learning: 'Learning',
+    boards: 'Boards',
+    'social-bookmarks': 'Social Bookmarks'
+  };
+  let sectionName = $derived(contentTypeToSection[selectedContentType]);
+  let allowedAuthors = $derived(
+    sectionName && !profileAccess.isLoading ? profileAccess.getAllowedAuthors(sectionName) : null
+  );
+
+  setContext('communikeyEvent', () => communikeyEvent);
+  setContext('communityProfile', () => communityProfile);
+  setContext('communikeyLoaded', () => communikeyLoaded);
+  setContext('profileAccess', profileAccess);
+  setContext('allowedAuthors', () => allowedAuthors);
 
   /**
    * Handle community selection from sidebar

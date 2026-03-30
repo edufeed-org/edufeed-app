@@ -523,8 +523,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
   const { getTagValue } = await import('applesauce-core/helpers');
   const { bufferTime, mergeMap, firstValueFrom } = await import('rxjs');
 
-  console.log('📅 fetchCommunityCalendarEvents: Fetching events for community:', communityPubkey);
-
   /** @type {import('nostr-tools').NostrEvent[]} */
   const allEvents = [];
   /** @type {Set<string>} */
@@ -552,8 +550,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
     const directEventsArray = Array.isArray(directEventsBuffered)
       ? directEventsBuffered.flat()
       : [];
-
-    console.log(`📅 fetchCommunityCalendarEvents: Found ${directEventsArray.length} direct events`);
 
     for (const event of directEventsArray) {
       if (!eventIds.has(event.id)) {
@@ -586,10 +582,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
     const targetedPubsArray = Array.isArray(targetedPubsBuffered)
       ? targetedPubsBuffered.flat()
       : [];
-
-    console.log(
-      `📅 fetchCommunityCalendarEvents: Found ${targetedPubsArray.length} targeted publications`
-    );
 
     // Resolve referenced events from targeted publications
     // Now using addressable references ('a' tags) instead of event IDs ('e' tags)
@@ -702,7 +694,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
     // Wait for all referenced events to be resolved
     await Promise.all(referencedEventPromises);
 
-    console.log(`📅 fetchCommunityCalendarEvents: Total events fetched: ${allEvents.length}`);
     return allEvents;
   } catch (error) {
     console.error(

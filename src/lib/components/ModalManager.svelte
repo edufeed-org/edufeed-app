@@ -69,39 +69,31 @@
       );
 
       if (loginModal && loginModal.open) {
-        console.log('ModalManager: Closing login modal');
         loginModal.close();
       }
       if (privateKeyModal && privateKeyModal.open) {
-        console.log('ModalManager: Closing private key modal');
         privateKeyModal.close();
       }
       const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
       if (bunkerModal && bunkerModal.open) {
-        console.log('ModalManager: Closing bunker modal');
         bunkerModal.close();
       }
       if (signupModal && signupModal.open) {
-        console.log('ModalManager: Closing signup modal');
         signupModal.close();
       }
       if (createCommunityModal && createCommunityModal.open) {
-        console.log('ModalManager: Closing create community modal');
         createCommunityModal.close();
       }
       if (editCommunityModal && editCommunityModal.open) {
-        console.log('ModalManager: Closing edit community modal');
         editCommunityModal.close();
       }
       if (editProfileModal && editProfileModal.open) {
-        console.log('ModalManager: Closing edit profile modal');
         editProfileModal.close();
       }
       const communityMigrationModal = /** @type {HTMLDialogElement} */ (
         document.getElementById(communityMigrationModalId)
       );
       if (communityMigrationModal && communityMigrationModal.open) {
-        console.log('ModalManager: Closing community migration modal');
         communityMigrationModal.close();
       }
       const addBookmarkModal = /** @type {HTMLDialogElement} */ (
@@ -120,7 +112,6 @@
       // Open login modal
       const loginModal = /** @type {HTMLDialogElement} */ (document.getElementById(loginModalId));
       if (loginModal && !loginModal.open) {
-        console.log('ModalManager: Opening login modal');
         loginModal.showModal();
       }
     } else if (currentModal === 'privateKey') {
@@ -129,20 +120,17 @@
         document.getElementById(privateKeyModalId)
       );
       if (privateKeyModal && !privateKeyModal.open) {
-        console.log('ModalManager: Opening private key modal');
         privateKeyModal.showModal();
       }
     } else if (currentModal === 'bunker') {
       const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
       if (bunkerModal && !bunkerModal.open) {
-        console.log('ModalManager: Opening bunker modal');
         bunkerModal.showModal();
       }
     } else if (currentModal === 'signup') {
       // Open signup modal
       const signupModal = /** @type {HTMLDialogElement} */ (document.getElementById(signupModalId));
       if (signupModal && !signupModal.open) {
-        console.log('ModalManager: Opening signup modal');
         signupModal.showModal();
       }
     } else if (currentModal === 'createCommunity') {
@@ -151,7 +139,6 @@
         document.getElementById(createCommunityModalId)
       );
       if (createCommunityModal && !createCommunityModal.open) {
-        console.log('ModalManager: Opening create community modal');
         createCommunityModal.showModal();
       }
     } else if (currentModal === 'profile') {
@@ -160,7 +147,6 @@
         document.getElementById(editProfileModalId)
       );
       if (editProfileModal && !editProfileModal.open) {
-        console.log('ModalManager: Opening edit profile modal');
         editProfileModal.showModal();
       }
     } else if (currentModal === 'editCommunity') {
@@ -169,7 +155,6 @@
         document.getElementById(editCommunityModalId)
       );
       if (editCommunityModal && !editCommunityModal.open) {
-        console.log('ModalManager: Opening edit community modal');
         editCommunityModal.showModal();
       }
     } else if (currentModal === 'communityMigration') {
@@ -178,7 +163,6 @@
         document.getElementById(communityMigrationModalId)
       );
       if (communityMigrationModal && !communityMigrationModal.open) {
-        console.log('ModalManager: Opening community migration modal');
         communityMigrationModal.showModal();
       }
     } else if (currentModal === 'addBookmark') {
