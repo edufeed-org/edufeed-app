@@ -6,6 +6,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { reactionsLoader } from '$lib/loaders/reactions.js';
 import {
   normalizeReactionContent,
+  getCustomEmojiUrl,
   publishReaction,
   deleteReaction
 } from '$lib/helpers/reactions.js';
@@ -140,7 +141,8 @@ class ReactionsStore {
       const existing = aggregated.get(emoji) || {
         count: 0,
         userReacted: false,
-        userReactionEvent: null
+        userReactionEvent: null,
+        emojiUrl: null
       };
 
       const isUserReaction = currentUser && reaction.pubkey === currentUser.pubkey;
@@ -148,7 +150,8 @@ class ReactionsStore {
       aggregated.set(emoji, {
         count: existing.count + 1,
         userReacted: existing.userReacted || isUserReaction,
-        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent
+        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
+        emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction)
       });
     }
 

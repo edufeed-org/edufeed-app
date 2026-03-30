@@ -66,7 +66,18 @@ vi.mock('$lib/loaders/reactions.js', () => ({
 }));
 
 vi.mock('$lib/helpers/reactions.js', () => ({
-  normalizeReactionContent: (/** @type {string} */ content) => content || '+'
+  normalizeReactionContent: (/** @type {string} */ content) => content || '+',
+  getCustomEmojiUrl: (/** @type {any} */ event) => {
+    const content = event.content?.trim();
+    if (!content) return null;
+    const match = content.match(/^:([^:]+):$/);
+    if (!match) return null;
+    const shortcode = match[1];
+    const emojiTag = event.tags?.find(
+      (/** @type {string[]} */ t) => t[0] === 'emoji' && t[1] === shortcode
+    );
+    return emojiTag?.[2] || null;
+  }
 }));
 
 // Stub child components
@@ -121,6 +132,42 @@ describe('ReactionBar', () => {
     expect(reactionBar).toBeTruthy();
     // Model subscription should only happen once (no re-runs from reactive cycle)
     expect(emissionCount).toBe(1);
+  });
+
+  it('renders without crashing when reactions include custom emoji', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    const customEmojiReaction = {
+      id: 'reaction-custom',
+      kind: 7,
+      pubkey: 'reactor-pubkey-3-aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666',
+      tags: [
+        ['e', 'event-123'],
+        ['emoji', 'zap', 'https://example.com/zap.png']
+      ],
+      created_at: 1700000300,
+      content: ':zap:'
+    };
+
+    vi.mocked(eventStore.reactions).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([...mockReactionEvents, customEmojiReaction]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+
+    const { container } = render(ReactionBar, {
+      props: {
+        event: mockEvent,
+        relays: ['wss://relay.test.com']
+      }
+    });
+
+    const reactionBar = container.querySelector('[data-testid="reaction-bar"]');
+    expect(reactionBar).toBeTruthy();
   });
 
   it('does not render when event has no id', () => {

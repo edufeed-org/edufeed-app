@@ -13,7 +13,14 @@
   import * as m from '$lib/paraglide/messages';
 
   /** @type {any} */
-  let { event, emoji, count = 0, userReacted = false, userReactionEvent = null } = $props();
+  let {
+    event,
+    emoji,
+    count = 0,
+    userReacted = false,
+    userReactionEvent = null,
+    emojiUrl = null
+  } = $props();
 
   let loading = $state(false);
   let isHovering = $state(false);
@@ -92,7 +99,11 @@
     ? 'border-blue-400/60 bg-blue-900/30 text-blue-300 hover:border-blue-400/80 hover:bg-blue-500/20'
     : 'border-gray-700/50 bg-gray-800/30 text-gray-300 hover:border-gray-600/60 hover:bg-gray-800/40'}"
 >
-  <span class="text-base leading-none">{emoji}</span>
+  {#if emojiUrl}
+    <img src={emojiUrl} alt={emoji} title={emoji} class="inline h-5 w-5 object-contain" />
+  {:else}
+    <span class="text-base leading-none">{emoji}</span>
+  {/if}
   {#if count > 0}
     <span class="text-xs font-medium">{count}</span>
   {/if}

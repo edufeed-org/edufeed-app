@@ -10,7 +10,7 @@
   import { reactionsLoader } from '$lib/loaders/reactions.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
-  import { normalizeReactionContent } from '$lib/helpers/reactions.js';
+  import { normalizeReactionContent, getCustomEmojiUrl } from '$lib/helpers/reactions.js';
   import ReactionButton from './ReactionButton.svelte';
   import AddReactionButton from './AddReactionButton.svelte';
 
@@ -43,7 +43,8 @@
       const existing = agg.get(emoji) || {
         count: 0,
         userReacted: false,
-        userReactionEvent: null
+        userReactionEvent: null,
+        emojiUrl: null
       };
 
       const isUserReaction = currentUser && reaction.pubkey === currentUser.pubkey;
@@ -51,7 +52,8 @@
       agg.set(emoji, {
         count: existing.count + 1,
         userReacted: existing.userReacted || isUserReaction,
-        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent
+        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
+        emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction)
       });
     }
 
@@ -121,6 +123,7 @@
         count={summary.count}
         userReacted={summary.userReacted}
         userReactionEvent={summary.userReactionEvent}
+        emojiUrl={summary.emojiUrl}
       />
     {/each}
 

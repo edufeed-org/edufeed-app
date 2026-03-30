@@ -172,6 +172,25 @@ export async function deleteReaction(reactionEvent, options = {}) {
 }
 
 /**
+ * Extract custom emoji image URL from a NIP-30 reaction event.
+ * Custom emoji reactions have content ":shortcode:" and an ["emoji", "shortcode", "url"] tag.
+ *
+ * @param {any} event - A kind 7 reaction event
+ * @returns {string|null} The image URL, or null if not a custom emoji reaction
+ */
+export function getCustomEmojiUrl(event) {
+  const content = event.content?.trim();
+  if (!content) return null;
+  const match = content.match(/^:([^:]+):$/);
+  if (!match) return null;
+  const shortcode = match[1];
+  const emojiTag = event.tags?.find(
+    (/** @type {string[]} */ t) => t[0] === 'emoji' && t[1] === shortcode
+  );
+  return emojiTag?.[2] || null;
+}
+
+/**
  * Normalize reaction content for display
  * Converts + to ❤️ and - to 👎
  *
