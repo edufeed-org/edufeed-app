@@ -215,6 +215,7 @@
                   description={cardData.description}
                   authorName={profile ? getDisplayName(profile) : undefined}
                   authorAvatar={profile ? getProfilePicture(profile) : undefined}
+                  authorPubkey={event.pubkey}
                   timestamp={event.created_at}
                   onclick={() => navigateToEvent(event)}
                 />

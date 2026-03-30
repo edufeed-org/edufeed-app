@@ -1,4 +1,5 @@
 <script>
+  import { resolve } from '$app/paths';
   import {
     CalendarIcon,
     BookIcon,
@@ -23,6 +24,7 @@
    *   description?: string,
    *   authorName?: string,
    *   authorAvatar?: string,
+   *   authorPubkey?: string,
    *   timestamp: number,
    *   onclick?: () => void
    * }}
@@ -36,6 +38,7 @@
     description,
     authorName,
     authorAvatar,
+    authorPubkey,
     timestamp,
     onclick
   } = $props();
@@ -97,11 +100,23 @@
     : undefined}
 >
   {#if authorAvatar}
-    <div class="avatar flex-shrink-0">
-      <div class="h-10 w-10 rounded-full">
-        <img src={authorAvatar} alt={authorName || ''} loading="lazy" />
+    {#if authorPubkey}
+      <a
+        href={resolve(`/p/${authorPubkey}`)}
+        class="avatar flex-shrink-0"
+        onclick={(e) => e.stopPropagation()}
+      >
+        <div class="h-10 w-10 rounded-full">
+          <img src={authorAvatar} alt={authorName || ''} loading="lazy" />
+        </div>
+      </a>
+    {:else}
+      <div class="avatar flex-shrink-0">
+        <div class="h-10 w-10 rounded-full">
+          <img src={authorAvatar} alt={authorName || ''} loading="lazy" />
+        </div>
       </div>
-    </div>
+    {/if}
   {/if}
 
   <div class="min-w-0 flex-1">

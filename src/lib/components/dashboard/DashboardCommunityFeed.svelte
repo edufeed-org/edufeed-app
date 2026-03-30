@@ -141,6 +141,7 @@
           description={communityName || cardData.description}
           authorName={profile ? getDisplayName(profile) : undefined}
           authorAvatar={profile ? getProfilePicture(profile) : undefined}
+          authorPubkey={event.pubkey}
           timestamp={0}
           onclick={() => navigateToEvent(event)}
         />
@@ -181,6 +182,7 @@
           description={communityName || cardData.description}
           authorName={profile ? getDisplayName(profile) : undefined}
           authorAvatar={profile ? getProfilePicture(profile) : undefined}
+          authorPubkey={event.pubkey}
           timestamp={event.created_at}
           onclick={() => navigateToEvent(event)}
         />
