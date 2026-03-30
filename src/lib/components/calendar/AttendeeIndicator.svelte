@@ -4,7 +4,6 @@
    * Displays RSVP attendee counts and avatars
    * Supports compact mode (for cards) and expanded mode (for detail pages)
    */
-  import { resolve } from '$app/paths';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import ProfileCard from '../shared/ProfileCard.svelte';
   import { getDisplayName } from 'applesauce-core/helpers';
@@ -59,10 +58,7 @@
             <div class="avatar-group -space-x-3">
               {#each showAcceptedAvatars as attendee (attendee.pubkey)}
                 <div class="tooltip" data-tip={getAttendeeName(attendee)}>
-                  <a
-                    href={resolve(`/p/${attendee.pubkey}`)}
-                    class="avatar h-7 w-7 cursor-pointer transition-transform hover:scale-110"
-                  >
+                  <div class="h-7 w-7 transition-transform hover:scale-110">
                     <div
                       class="w-full rounded-full ring ring-success ring-offset-2 ring-offset-base-100"
                     >
@@ -70,9 +66,10 @@
                         pubkey={attendee.pubkey}
                         profile={attendee.profile}
                         size="xs"
+                        linkToProfile
                       />
                     </div>
-                  </a>
+                  </div>
                 </div>
               {/each}
               {#if remainingAccepted > 0}
