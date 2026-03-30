@@ -186,6 +186,88 @@ describe('buildCommentTree', () => {
   });
 });
 
+describe('buildCommentTree with missing k tag (interop)', () => {
+  /**
+   * Helper: create a comment missing the lowercase k tag (like some clients emit).
+   * @param {string} id
+   * @param {number} created_at
+   * @param {string} content
+   * @param {{ parentEventId?: string, rootEventId: string, rootKind: number }} opts
+   */
+  function makeCommentNoKTag(id, created_at, content, opts) {
+    const { parentEventId, rootEventId, rootKind } = opts;
+    const tags = [
+      ['E', rootEventId],
+      ['K', String(rootKind)]
+    ];
+
+    if (parentEventId) {
+      // Reply to another comment: lowercase e points to parent, but NO k tag
+      tags.push(['e', parentEventId]);
+    } else {
+      // Top-level: lowercase e points to root
+      tags.push(['e', rootEventId]);
+    }
+
+    return { id, kind: 1111, created_at, content, tags, pubkey: 'testpub', sig: 'testsig' };
+  }
+
+  it('detects reply when k tag is missing but e differs from E', () => {
+    const comments = [
+      makeComment('parent', 100, 'top-level', { rootEventId: 'root1', rootKind: 11 }),
+      makeCommentNoKTag('reply', 200, 'reply without k tag', {
+        rootEventId: 'root1',
+        rootKind: 11,
+        parentEventId: 'parent'
+      })
+    ];
+
+    const tree = buildCommentTree(comments);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('parent');
+    expect(tree[0].replies).toHaveLength(1);
+    expect(tree[0].replies[0].id).toBe('reply');
+  });
+
+  it('treats as top-level when k tag is missing and e equals E', () => {
+    const comments = [
+      makeCommentNoKTag('top', 100, 'top-level without k tag', {
+        rootEventId: 'root1',
+        rootKind: 11
+      })
+    ];
+
+    const tree = buildCommentTree(comments);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('top');
+    expect(tree[0].replies).toEqual([]);
+  });
+
+  it('builds correct tree with missing k tags in multi-level thread', () => {
+    const comments = [
+      makeComment('a', 100, 'top-level', { rootEventId: 'root1', rootKind: 11 }),
+      makeCommentNoKTag('b', 200, 'reply to a (no k tag)', {
+        rootEventId: 'root1',
+        rootKind: 11,
+        parentEventId: 'a'
+      }),
+      makeComment('c', 300, 'reply to b (with k tag)', {
+        rootEventId: 'root1',
+        rootKind: 11,
+        parentEventId: 'b'
+      })
+    ];
+
+    const tree = buildCommentTree(comments);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('a');
+    expect(tree[0].replies).toHaveLength(1);
+    expect(tree[0].replies[0].id).toBe('b');
+    expect(tree[0].replies[0].replies).toHaveLength(1);
+    expect(tree[0].replies[0].replies[0].id).toBe('c');
+  });
+});
+
 describe('buildCommentTree with kind 1 NIP-10 replies', () => {
   /**
    * Helper: create a kind 1 reply event with NIP-10 e-tags

@@ -78,9 +78,24 @@ function getParentCommentId(comment) {
     const parentKind = parentKindTag ? parseInt(parentKindTag[1]) : null;
 
     if (parentKind === 1111) {
+      // Explicit: k=1111 means parent is a comment
       const parentETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'e');
       return parentETag ? parentETag[1] : null;
     }
+
+    if (parentKind !== null) {
+      // k exists but is not 1111 — top-level comment (parent is root event)
+      return null;
+    }
+
+    // No k tag: fallback — compare lowercase e with uppercase E
+    // If they differ, the lowercase e points to a parent comment
+    const parentETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'e');
+    const rootETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'E');
+    if (parentETag && rootETag && parentETag[1] !== rootETag[1]) {
+      return parentETag[1];
+    }
+
     return null;
   }
 
