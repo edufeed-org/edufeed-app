@@ -1,7 +1,8 @@
 <script>
   import { resolve } from '$app/paths';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import CommentInput from './CommentInput.svelte';
   import { ChatIcon, TrashIcon, CopyIcon } from '$lib/components/icons';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
@@ -153,22 +154,13 @@
 
     <!-- Comment Header -->
     <div class="mb-3 flex items-start gap-3">
-      <a
-        href={resolve(`/p/${hexToNpub(comment.pubkey) || comment.pubkey}`)}
-        class="avatar flex-shrink-0"
-      >
-        <div class="w-10 rounded-full">
-          {#if getProfilePicture(authorProfile)}
-            <img src={getProfilePicture(authorProfile)} alt={getDisplayName(authorProfile)} />
-          {:else}
-            <div
-              class="flex h-full w-full items-center justify-center bg-primary text-sm font-semibold text-primary-content"
-            >
-              {getDisplayName(authorProfile)?.charAt(0).toUpperCase() || '?'}
-            </div>
-          {/if}
-        </div>
-      </a>
+      <ProfileAvatar
+        pubkey={comment.pubkey}
+        profile={authorProfile}
+        size="md"
+        linkToProfile
+        class="flex-shrink-0"
+      />
 
       <!-- Author & Timestamp -->
       <div class="flex-1">
