@@ -6,7 +6,8 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
@@ -52,10 +53,6 @@
   const authorName = $derived(
     getDisplayName(authorProfile ?? undefined, event.pubkey.slice(0, 8) + '...')
   );
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile ?? undefined) || `https://robohash.org/${event.pubkey}`
-  );
-
   const relativeDate = $derived(formatRelativeTime(event.created_at));
 
   let showShareUI = $state(false);
@@ -89,11 +86,7 @@
 <article class="thread-detail mx-auto max-w-4xl">
   <!-- Header: author avatar + name + date + actions -->
   <div class="mb-6 flex items-center gap-3">
-    <a href={resolve(`/p/${hexToNpub(event.pubkey) || event.pubkey}`)} class="avatar flex-shrink-0">
-      <div class="h-10 w-10 rounded-full">
-        <img src={authorAvatar} alt={authorName} />
-      </div>
-    </a>
+    <ProfileAvatar pubkey={event.pubkey} size="md" linkToProfile class="flex-shrink-0" />
     <div class="min-w-0 flex-1">
       <a
         href={resolve(`/p/${hexToNpub(event.pubkey) || event.pubkey}`)}
