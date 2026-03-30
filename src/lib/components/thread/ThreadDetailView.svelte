@@ -1,6 +1,6 @@
 <!--
   ThreadDetailView Component
-  Full thread display with flat comments
+  Full detail view for kind 1 (text notes) and kind 11 (forum threads)
   Header matches Chateau layout: back arrow + author avatar + name + date
 -->
 
@@ -16,6 +16,9 @@
   import { resolve } from '$app/paths';
   import { TrashIcon } from '$lib/components/icons';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import NostrContentRenderer from '../shared/NostrContentRenderer.svelte';
+  import ReactionBar from '../reactions/ReactionBar.svelte';
+  import NoteCard from '../notes/NoteCard.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
@@ -23,14 +26,21 @@
 
   /**
    * @typedef {Object} Props
-   * @property {any} event - Thread event (kind 11)
+   * @property {any} event - Thread event (kind 1 or 11)
+   * @property {any} [parentEvent] - Parent event for kind 1 replies
    * @property {() => void} [onBack] - Callback to navigate back
    * @property {string|null} [initialFocusCommentId] - Comment ID to auto-focus (deep-linking)
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
    */
 
   /** @type {Props} */
-  let { event, onBack, initialFocusCommentId = null, communityPubkey = undefined } = $props();
+  let {
+    event,
+    parentEvent = null,
+    onBack,
+    initialFocusCommentId = null,
+    communityPubkey = undefined
+  } = $props();
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
@@ -83,6 +93,14 @@
 </script>
 
 <article class="thread-detail mx-auto max-w-4xl">
+  <!-- Parent context for kind 1 replies -->
+  {#if parentEvent}
+    <div class="mb-2 text-xs text-base-content/50">{m.thread_detail_replying_to()}</div>
+    <div class="pointer-events-none mb-4 opacity-60">
+      <NoteCard note={parentEvent} />
+    </div>
+  {/if}
+
   <!-- Header: author avatar + name + date + actions -->
   <div class="mb-6 flex items-center gap-3">
     <ProfileAvatar pubkey={event.pubkey} size="md" linkToProfile class="flex-shrink-0" />
@@ -126,17 +144,28 @@
     </div>
   {/if}
 
-  <!-- Title -->
-  <h1 class="mb-4 text-2xl font-bold text-base-content md:text-3xl">
-    {title}
-  </h1>
+  <!-- Title (kind 11 only) -->
+  {#if event.kind === 11}
+    <h1 class="mb-4 text-2xl font-bold text-base-content md:text-3xl">
+      {title}
+    </h1>
+  {/if}
 
-  <!-- Thread Content -->
+  <!-- Content -->
   <div class="mb-6">
-    <MarkdownRenderer
-      content={event.content}
-      class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50"
-    />
+    {#if event.kind === 11}
+      <MarkdownRenderer
+        content={event.content}
+        class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50"
+      />
+    {:else}
+      <NostrContentRenderer {event} />
+    {/if}
+  </div>
+
+  <!-- Reactions -->
+  <div class="mb-6">
+    <ReactionBar {event} />
   </div>
 
   <!-- Tags -->
