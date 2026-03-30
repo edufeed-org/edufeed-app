@@ -3,11 +3,11 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { PlusIcon } from '$lib/components/icons';
+  import { PlusIcon, DashboardIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
 
-  let { currentCommunityId, onCommunitySelect } = $props();
+  let { currentCommunityId, onCommunitySelect, isDashboardActive = false, onHomeSelect } = $props();
 
   const getJoinedCommunities = useJoinedCommunitiesList();
   const joinedCommunities = $derived(getJoinedCommunities());
@@ -35,10 +35,23 @@
   class="fixed top-16 left-0 hidden h-[calc(100vh-8rem)] w-16 flex-col overflow-x-hidden overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
 >
   <div class="flex flex-col items-center space-y-3 py-4">
+    <!-- Home button -->
+    <div class="tooltip tooltip-right" data-tip={m.dashboard_home_tooltip()}>
+      <button
+        onclick={() => onHomeSelect?.()}
+        class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isDashboardActive
+          ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
+          : ''}"
+      >
+        <DashboardIcon class_="w-6 h-6" />
+      </button>
+    </div>
+    <div class="w-8 border-b border-base-300"></div>
+
     {#each sortedCommunities as communityPubKey (communityPubKey)}
       {@const getCommunityProfile = useUserProfile(communityPubKey)}
       {@const communityProfile = getCommunityProfile()}
-      {@const isActive = currentCommunityId === communityPubKey}
+      {@const isActive = !isDashboardActive && currentCommunityId === communityPubKey}
 
       <div class="tooltip tooltip-right" data-tip={getDisplayName(communityProfile)}>
         <button
@@ -111,10 +124,24 @@
   </div>
 
   <div class="flex-1 space-y-2 overflow-y-auto p-4">
+    <!-- Home button -->
+    <button
+      onclick={() => onHomeSelect?.()}
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {isDashboardActive
+        ? 'bg-primary text-primary-content'
+        : 'hover:bg-base-300'}"
+    >
+      <DashboardIcon class_="w-5 h-5" />
+      <span class="flex-1 truncate text-left text-sm font-medium">
+        {m.dashboard_home_tooltip()}
+      </span>
+    </button>
+    <div class="border-b border-base-300"></div>
+
     {#each sortedCommunities as communityPubKey (communityPubKey)}
       {@const getCommunityProfile = useUserProfile(communityPubKey)}
       {@const communityProfile = getCommunityProfile()}
-      {@const isActive = currentCommunityId === communityPubKey}
+      {@const isActive = !isDashboardActive && currentCommunityId === communityPubKey}
 
       <button
         onclick={() => handleCommunityClick(communityPubKey)}

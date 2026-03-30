@@ -103,8 +103,8 @@
 </script>
 
 <div class="navbar bg-base-100 shadow-sm">
-  <!-- Logo + Brand (always visible) -->
-  <div class="flex-1">
+  <!-- Left: Logo + Brand -->
+  <div class="flex flex-1 items-center">
     <div class="avatar">
       <div class="mask w-10 mask-hexagon-2">
         <img src={runtimeConfig.appLogo} alt="App Logo" />
@@ -115,25 +115,27 @@
     >
   </div>
 
-  <!-- Desktop Navigation (hidden below lg) -->
-  <div class="hidden items-center gap-2 lg:flex">
-    <a href={resolve('/communities')} class="btn btn-ghost">
-      <PeopleIcon class_="w-5 h-5" />
-      {m.navbar_communities()}
-    </a>
+  <!-- Center: Nav links (desktop only) -->
+  <div class="hidden flex-1 items-center justify-center gap-2 lg:flex">
     <a href={resolve('/discover')} class="btn btn-ghost">
       <SearchIcon class_="w-5 h-5" />
       {m.navbar_discover()}
     </a>
+    {#if activeAccount}
+      <a href={resolve('/c/')} class="btn btn-ghost">
+        <DashboardIcon class_="w-5 h-5" />
+        {m.navbar_dashboard()}
+      </a>
+    {/if}
     <a href={resolve('/calendar')} class="btn btn-ghost" onmouseenter={prefetchCalendarData}>
       <CalendarIcon class_="w-5 h-5" />
       {m.navbar_calendar()}
     </a>
+  </div>
+
+  <!-- Right: Utility items (desktop only) -->
+  <div class="hidden flex-1 items-center justify-end gap-2 lg:flex">
     {#if activeAccount}
-      <a href={resolve('/dashboard')} class="btn btn-ghost">
-        <DashboardIcon class_="w-5 h-5" />
-        {m.navbar_dashboard()}
-      </a>
       <!-- Inbox bell + dropdown -->
       <div class="dropdown dropdown-end">
         <button class="btn relative btn-circle btn-ghost" aria-label={m.inbox_bell_label()}>
@@ -213,7 +215,7 @@
         <!-- Auth Section -->
         {#if activeAccount}
           <li>
-            <a href={resolve('/dashboard')} onclick={closeDropdown}>
+            <a href={resolve('/c/')} onclick={closeDropdown}>
               <DashboardIcon class_="w-5 h-5" />
               {m.navbar_dashboard()}
             </a>

@@ -1295,5 +1295,10 @@
   "send_form_no_encryption": "Ihr Signer unterstützt keine NIP-44-Verschlüsselung. Die Nachricht wird nicht verschlüsselt.",
   "contact_search_hint": "{count} Follows durchsuchen oder npub eingeben",
   "contact_search_loading": "Kontakte werden geladen...",
-  "contact_search_enter_npub": "npub eingeben zum Suchen"
+  "contact_search_enter_npub": "npub eingeben zum Suchen",
+  "dashboard_nav_feed": "Feed",
+  "dashboard_nav_inbox": "Posteingang",
+  "dashboard_nav_your_content": "Deine Inhalte",
+  "dashboard_nav_communities": "Communities",
+  "dashboard_home_tooltip": "Startseite"
 }

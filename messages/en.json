@@ -1295,5 +1295,10 @@
   "send_form_no_encryption": "Your signer does not support NIP-44 encryption. The message will not be encrypted.",
   "contact_search_hint": "Search {count} follows or enter npub",
   "contact_search_loading": "Loading contacts...",
-  "contact_search_enter_npub": "Enter npub to search"
+  "contact_search_enter_npub": "Enter npub to search",
+  "dashboard_nav_feed": "Feed",
+  "dashboard_nav_inbox": "Inbox",
+  "dashboard_nav_your_content": "Your Content",
+  "dashboard_nav_communities": "Communities",
+  "dashboard_home_tooltip": "Home"
 }
