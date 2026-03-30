@@ -12,7 +12,6 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { hexToNpub } from '$lib/helpers/nostrUtils';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { resolve } from '$app/paths';
   import { TrashIcon } from '$lib/components/icons';
@@ -89,7 +88,7 @@
     <ProfileAvatar pubkey={event.pubkey} size="md" linkToProfile class="flex-shrink-0" />
     <div class="min-w-0 flex-1">
       <a
-        href={resolve(`/p/${hexToNpub(event.pubkey) || event.pubkey}`)}
+        href={resolve(`/p/${event.pubkey}`)}
         class="font-semibold text-base-content hover:underline"
       >
         {authorName}

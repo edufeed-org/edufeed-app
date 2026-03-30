@@ -6,7 +6,7 @@
   import CommentInput from './CommentInput.svelte';
   import { ChatIcon, TrashIcon, CopyIcon } from '$lib/components/icons';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
-  import { hexToNpub, generateAuthorColorRGB } from '$lib/helpers/nostrUtils';
+  import { generateAuthorColorRGB } from '$lib/helpers/nostrUtils';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { getPlainTextExcerpt } from '$lib/helpers/commentThreading.js';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -165,10 +165,7 @@
       <!-- Author & Timestamp -->
       <div class="flex-1">
         <div class="flex items-baseline gap-2">
-          <a
-            href={resolve(`/p/${hexToNpub(comment.pubkey) || comment.pubkey}`)}
-            class="font-semibold hover:underline"
-          >
+          <a href={resolve(`/p/${comment.pubkey}`)} class="font-semibold hover:underline">
             {getDisplayName(authorProfile) ||
               `${comment.pubkey.slice(0, 8)}...${comment.pubkey.slice(-4)}`}
           </a>
