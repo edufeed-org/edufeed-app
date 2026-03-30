@@ -4,9 +4,8 @@
   import {
     getNotifications,
     getUnreadCount,
-    getReadMarkers
+    isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
-  import { isUnread } from '$lib/helpers/inbox.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { BellIcon } from '$lib/components/icons';
   import InboxItem from './InboxItem.svelte';
@@ -16,7 +15,6 @@
 
   let items = $derived(getNotifications().slice(0, PREVIEW_COUNT));
   let count = $derived(getUnreadCount());
-  let markers = $derived(getReadMarkers());
 
   const getProfiles = useProfileMap(() => items.map((n) => n.pubkey));
   let profiles = $derived(getProfiles());
@@ -46,7 +44,11 @@
   {:else}
     <div class="divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300">
       {#each items as event (event.id)}
-        <InboxItem {event} profile={profiles.get(event.pubkey)} unread={isUnread(event, markers)} />
+        <InboxItem
+          {event}
+          profile={profiles.get(event.pubkey)}
+          unread={isNotificationUnread(event)}
+        />
       {/each}
     </div>
   {/if}

@@ -74,6 +74,10 @@ let readMarkers = $state(null);
 /** @type {string | null} */
 let activePubkey = $state(null);
 
+/** @type {Set<string>} */
+
+let readItemIds = $state.raw(new Set());
+
 /** @type {import('rxjs').Subscription[]} */
 let subscriptions = [];
 
@@ -82,21 +86,49 @@ let notifications = $derived.by(() => {
   return [...mainNotifications, ...rsvpNotifications].sort((a, b) => b.created_at - a.created_at);
 });
 
+/**
+ * Check if a notification is unread (single source of truth).
+ * Combines per-item localStorage tracking with timestamp-based markers.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {boolean}
+ */
+export function isNotificationUnread(event) {
+  if (readItemIds.has(event.id)) return false;
+  return isUnread(event, readMarkers);
+}
+
 let unreadCount = $derived.by(() => {
   if (!notifications.length) return 0;
-  return notifications.filter((e) => isUnread(e, readMarkers)).length;
+  return notifications.filter((e) => isNotificationUnread(e)).length;
 });
 
 let unreadByType = $derived.by(() => {
   /** @type {Record<string, number>} */
   const counts = {};
   for (const e of notifications) {
-    if (!isUnread(e, readMarkers)) continue;
+    if (!isNotificationUnread(e)) continue;
     const type = getNotificationType(e);
     if (type) counts[type] = (counts[type] || 0) + 1;
   }
   return counts;
 });
+
+const LOCALSTORAGE_PREFIX = 'comcal:inbox:read-items:';
+
+/**
+ * Mark a single notification as read by event ID.
+ * @param {string} eventId
+ */
+export function markItemAsRead(eventId) {
+  if (!activePubkey) return;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
+  readItemIds = new Set([...readItemIds, eventId]);
+  try {
+    localStorage.setItem(LOCALSTORAGE_PREFIX + activePubkey, JSON.stringify([...readItemIds]));
+  } catch {
+    /* localStorage full or unavailable */
+  }
+}
 
 /**
  * Initialize inbox for logged-in user.
@@ -105,6 +137,18 @@ let unreadByType = $derived.by(() => {
 export function initializeInbox(pubkey) {
   cleanup();
   activePubkey = pubkey;
+
+  // Load persisted per-item read IDs
+  try {
+    const stored = localStorage.getItem(LOCALSTORAGE_PREFIX + pubkey);
+    if (stored) {
+      const ids = JSON.parse(stored);
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
+      if (Array.isArray(ids)) readItemIds = new Set(ids);
+    }
+  } catch {
+    /* ignore parse errors */
+  }
 
   // Load read markers (kind 30078) from relays
   const lookupRelays = getRelayListLookupRelays();
@@ -265,6 +309,8 @@ export function cleanup() {
   mainNotifications = [];
   rsvpNotifications = [];
   readMarkers = null;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
+  readItemIds = new Set();
   activePubkey = null;
 }
 
@@ -280,4 +326,8 @@ export function getUnreadByType() {
 }
 export function getReadMarkers() {
   return readMarkers;
+}
+/** @returns {(event: import('nostr-tools').NostrEvent) => boolean} */
+export function getIsNotificationUnread() {
+  return isNotificationUnread;
 }

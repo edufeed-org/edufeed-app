@@ -4,10 +4,9 @@
   import { resolve } from '$app/paths';
   import {
     getNotifications,
-    getReadMarkers,
-    markAsRead
+    markAsRead,
+    isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
-  import { isUnread } from '$lib/helpers/inbox.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -20,7 +19,6 @@
 
   let profiles = $derived(getProfiles());
   let items = $derived(getNotifications().slice(0, MAX_ITEMS));
-  let markers = $derived(getReadMarkers());
 
   function handleMarkAllRead() {
     markAsRead();
@@ -48,7 +46,11 @@
       </div>
     {:else}
       {#each items as event (event.id)}
-        <InboxItem {event} profile={profiles.get(event.pubkey)} unread={isUnread(event, markers)} />
+        <InboxItem
+          {event}
+          profile={profiles.get(event.pubkey)}
+          unread={isNotificationUnread(event)}
+        />
       {/each}
     {/if}
   </div>

@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
+  import { markItemAsRead } from '$lib/services/inbox-service.svelte.js';
   import {
     HeartIcon,
     ChatIcon,
@@ -40,6 +41,7 @@
   const TypeIcon = $derived(type ? iconMap[type] || BellIcon : BellIcon);
 
   function handleClick() {
+    markItemAsRead(event.id);
     if (url) goto(resolve(url));
   }
 
