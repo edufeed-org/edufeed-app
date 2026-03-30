@@ -10,6 +10,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
+  import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
   import ImageWithFallback from './ImageWithFallback.svelte';
 
@@ -19,6 +20,7 @@
    * @property {any} [profile] - Profile object (optional - if not provided, loads internally)
    * @property {'xs' | 'sm' | 'md' | 'lg' | 'xl'} [size] - Avatar size
    * @property {'initial' | 'robohash'} [fallbackType] - Type of fallback to use
+   * @property {boolean} [linkToProfile] - Wrap avatar in a link to the user's profile page
    * @property {string} [class] - Additional CSS classes
    */
 
@@ -28,6 +30,7 @@
     profile = undefined,
     size = 'md',
     fallbackType = 'initial',
+    linkToProfile = false,
     class: className = ''
   } = $props();
 
@@ -105,7 +108,7 @@
   let showRobohashFallback = $derived(fallbackType === 'robohash' && !avatarUrl);
 </script>
 
-<div class="avatar {className}">
+{#snippet avatarContent()}
   <div class="{sizeClasses[size]} rounded-full">
     {#if avatarUrl}
       <ImageWithFallback
@@ -131,4 +134,14 @@
       </div>
     {/if}
   </div>
-</div>
+{/snippet}
+
+{#if linkToProfile && pubkey}
+  <a href={resolve(`/p/${pubkey}`)} class="avatar {className}">
+    {@render avatarContent()}
+  </a>
+{:else}
+  <div class="avatar {className}">
+    {@render avatarContent()}
+  </div>
+{/if}
