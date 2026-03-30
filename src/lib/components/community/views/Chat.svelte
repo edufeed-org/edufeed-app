@@ -1,4 +1,6 @@
 <script>
+  import { resolve } from '$app/paths';
+  import { getContext } from 'svelte';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -10,9 +12,17 @@
   import * as m from '$lib/paraglide/messages';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
+  import { extractMentionPubkeys } from '$lib/helpers/inbox.js';
+
+  const getAllowedAuthors = getContext('allowedAuthors');
 
   /** @type {any} */
-  let { communikeyEvent, communityProfile = null, communityPubkey = '' } = $props();
+  let {
+    communikeyEvent,
+    communityProfile = null,
+    communityPubkey = '',
+    canPublish = true
+  } = $props();
 
   // Reactive state
   /** @type {any[]} */
@@ -26,6 +36,12 @@
   let newMessage = $state('');
   let isLoading = $state(true);
   let isSending = $state(false);
+
+  let displayedMessages = $derived.by(() => {
+    const allowed = getAllowedAuthors?.();
+    const valid = messages.filter((m) => m && m.id && m.pubkey && m.content);
+    return allowed ? valid.filter((m) => allowed.includes(m.pubkey)) : valid;
+  });
 
   // Derive community pubkey from communikey event if not provided as prop
   let derivedCommunityPubkey = $derived(communityPubkey || communikeyEvent?.pubkey || '');
@@ -102,11 +118,12 @@
     isSending = true; // Show loading during signing
 
     try {
-      // Create kind 9 event with community h-tag
+      // Create kind 9 event with community h-tag + mention p-tags
+      const mentionTags = extractMentionPubkeys(messageContent).map((pk) => ['p', pk]);
       const chatEvent = {
         kind: 9,
         content: messageContent,
-        tags: [['h', derivedCommunityPubkey]],
+        tags: [['h', derivedCommunityPubkey], ...mentionTags],
         created_at: Math.floor(Date.now() / 1000),
         pubkey: activeUser.pubkey
       };
@@ -176,7 +193,7 @@
   /** @type {HTMLElement} */
   let chatContainer;
   $effect(() => {
-    if (chatContainer && messages.length > 0) {
+    if (chatContainer && displayedMessages.length > 0) {
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
   });
@@ -195,7 +212,7 @@
       <div class="text-sm text-base-content/70">{m.community_views_chat_loading()}</div>
     {:else}
       <div class="text-sm text-base-content/70">
-        {messages.length}
+        {displayedMessages.length}
         {m.community_views_chat_message_count()}
       </div>
     {/if}
@@ -203,17 +220,17 @@
 
   <!-- Messages container -->
   <div bind:this={chatContainer} class="flex-1 space-y-4 overflow-y-auto p-4">
-    {#if messages.length === 0 && !isLoading}
+    {#if displayedMessages.length === 0 && !isLoading}
       <div class="py-8 text-center text-base-content/50">
         {m.community_views_chat_empty()}
       </div>
     {/if}
 
-    {#each messages.filter((m) => m && m.id && m.pubkey && m.content) as message (message.id)}
+    {#each displayedMessages as message (message.id)}
       {@const isOwnMessage = activeUser && message.pubkey === activeUser.pubkey}
       <div class="chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
         {#if !isOwnMessage}
-          <div class="avatar chat-image">
+          <a href={resolve(`/p/${message.pubkey}`)} class="avatar chat-image">
             <div class="w-8 rounded-full">
               {#if getUserAvatar(message.pubkey)}
                 <img
@@ -232,12 +249,14 @@
                 </div>
               {/if}
             </div>
-          </div>
+          </a>
         {/if}
 
         <div class="chat-header mb-1 text-xs opacity-70">
           {#if !isOwnMessage}
-            <span class="font-semibold">{getUserDisplayName(message.pubkey)}</span>
+            <a href={resolve(`/p/${message.pubkey}`)} class="font-semibold hover:underline"
+              >{getUserDisplayName(message.pubkey)}</a
+            >
             <span class="mx-1">•</span>
           {/if}
           <time datetime={new Date(message.created_at * 1000).toISOString()}>
@@ -253,7 +272,7 @@
   </div>
 
   <!-- Message input -->
-  {#if activeUser}
+  {#if activeUser && canPublish}
     <form onsubmit={sendMessage} class="rounded-b-lg border-t bg-base-100 p-4">
       <div class="flex gap-2">
         <input
