@@ -5,12 +5,12 @@
 -->
 
 <script>
-  import { resolve } from '$app/paths';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
 
-  import { hexToNpub, generateAuthorColorRGB } from '$lib/helpers/nostrUtils';
+  import { generateAuthorColorRGB } from '$lib/helpers/nostrUtils';
 
   /**
    * @typedef {Object} AncestorChainProps
@@ -28,8 +28,6 @@
       {@const getProfile = useUserProfile(() => ancestor.pubkey)}
       {@const profile = getProfile()}
       {@const displayName = getDisplayName(profile) || ancestor.pubkey.slice(0, 8) + '...'}
-      {@const avatar = getProfilePicture(profile)}
-
       {@const timestamp = formatRelativeTime(ancestor.created_at)}
       {@const ancestorRgb = generateAuthorColorRGB(ancestor.pubkey)}
       {@const ancestorBg = `rgba(${ancestorRgb.r},${ancestorRgb.g},${ancestorRgb.b},0.07)`}
@@ -42,23 +40,9 @@
         data-testid="ancestor-card"
       >
         <!-- Avatar -->
-        <a
-          href={resolve(`/p/${hexToNpub(ancestor.pubkey) || ancestor.pubkey}`)}
-          class="avatar mt-0.5 flex-shrink-0"
-          onclick={(e) => e.stopPropagation()}
-        >
-          <div class="w-7 rounded-full">
-            {#if avatar}
-              <img src={avatar} alt={displayName} />
-            {:else}
-              <div
-                class="flex h-full w-full items-center justify-center bg-primary text-xs font-semibold text-primary-content"
-              >
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            {/if}
-          </div>
-        </a>
+        <span class="mt-0.5 flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+          <ProfileAvatar pubkey={ancestor.pubkey} size="xs" linkToProfile />
+        </span>
 
         <!-- Content -->
         <div class="min-w-0 flex-1">
