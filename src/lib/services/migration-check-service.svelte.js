@@ -40,10 +40,12 @@ export async function isMigrationDone(pubkey) {
   const identifier = getMigrationIdentifier();
   const relays = getAllLookupRelays();
 
-  // Load the flag event from network
-  addressLoader({ kind: 30078, pubkey, identifier, relays }).subscribe();
+  // Load the flag event from network (must complete before reading EventStore)
+  await lastValueFrom(addressLoader({ kind: 30078, pubkey, identifier, relays }), {
+    defaultValue: undefined
+  });
 
-  // Read from EventStore
+  // Read from EventStore (now populated by loader)
   const event = await firstValueFrom(eventStore.replaceable(30078, pubkey, identifier), {
     defaultValue: null
   });

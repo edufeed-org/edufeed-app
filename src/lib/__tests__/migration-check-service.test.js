@@ -108,8 +108,9 @@ vi.mock('applesauce-actions/actions', () => ({
 
 vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: vi.fn(() => {
+    // Simulate async network delay to catch fire-and-forget race conditions
     return new Observable((sub) => {
-      sub.complete();
+      setTimeout(() => sub.complete(), 10);
     });
   })
 }));
@@ -143,6 +144,42 @@ describe('isMigrationDone', () => {
       content: '"done"',
       tags: [['d', 'ComCal/community-migration-v1']]
     };
+    expect(await isMigrationDone('abc123')).toBe(true);
+  });
+
+  it('waits for addressLoader to complete before reading EventStore', async () => {
+    const { addressLoader } = await import('$lib/loaders/base.js');
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    let loaderCompleted = false;
+
+    // addressLoader completes after a delay and populates EventStore
+    addressLoader.mockImplementationOnce(() => {
+      return new Observable((sub) => {
+        setTimeout(() => {
+          loaderCompleted = true;
+          sub.complete();
+        }, 50);
+      });
+    });
+
+    // EventStore returns the flag only after loader has completed
+    eventStore.replaceable.mockImplementationOnce((kind) => {
+      return new Observable((sub) => {
+        if (kind === 30078 && loaderCompleted) {
+          sub.next({
+            kind: 30078,
+            content: '"done"',
+            tags: [['d', 'ComCal/community-migration-v1']]
+          });
+        } else if (kind === 30078) {
+          sub.next(null);
+        }
+        sub.complete();
+      });
+    });
+
+    // Without awaiting the loader, this would return false (race condition)
     expect(await isMigrationDone('abc123')).toBe(true);
   });
 
