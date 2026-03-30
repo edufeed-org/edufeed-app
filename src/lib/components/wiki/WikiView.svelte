@@ -5,19 +5,20 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { renderMarkdown } from '$lib/helpers/markdown.js';
-  import { preprocessWikilinks } from '$lib/helpers/markdownNostr.js';
+  import { renderWikiContent } from '$lib/helpers/wikiContent.js';
   import { loadEventHighlights } from '$lib/loaders/event-highlights.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { TimelineModel } from 'applesauce-core/models';
+  import { resolve } from '$app/paths';
   import { TrashIcon } from '$lib/components/icons';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import EventContextMenu from '../shared/EventContextMenu.svelte';
   import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
@@ -77,18 +78,20 @@
   const authorName = $derived(
     getDisplayName(authorProfile ?? undefined, event.pubkey.slice(0, 8) + '...')
   );
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile ?? undefined) || `https://robohash.org/${event.pubkey}`
-  );
-
   let showShareUI = $state(false);
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
 
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
 
-  // Render markdown to HTML (with wikilink preprocessing)
-  const htmlContent = $derived(renderMarkdown(preprocessWikilinks(event.content)));
+  // Render wiki content (Djot default, AsciiDoc detected)
+  let htmlContent = $state('');
+  $effect(() => {
+    const content = event.content;
+    renderWikiContent(content).then((html) => {
+      htmlContent = html;
+    });
+  });
 
   // Address pointer for this wiki
   const addressPointer = $derived.by(() => ({
@@ -175,13 +178,12 @@
     <!-- Author Info & Metadata -->
     <div class="flex flex-col gap-4 border-y border-base-300 py-4 md:flex-row md:items-center">
       <div class="flex flex-1 items-center gap-3">
-        <div class="avatar">
-          <div class="h-12 w-12 rounded-full">
-            <img src={authorAvatar} alt={authorName} />
-          </div>
-        </div>
+        <ProfileAvatar pubkey={event.pubkey} size="lg" linkToProfile />
         <div>
-          <div class="font-semibold text-base-content">{authorName}</div>
+          <a
+            href={resolve(`/p/${event.pubkey}`)}
+            class="font-semibold text-base-content hover:underline">{authorName}</a
+          >
           <div class="text-sm text-base-content/60">
             {m.wiki_view_published({ date: formatCalendarDate(publishedAt, 'short') })}
           </div>

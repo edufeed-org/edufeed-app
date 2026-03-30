@@ -3,9 +3,8 @@
  * Extracted from MarkdownRenderer for reuse in HighlightOverlay.
  */
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
-import { browser } from '$app/environment';
 import { preprocessNostrMentions } from '$lib/helpers/markdownNostr.js';
+import { sanitizeHtml } from '$lib/helpers/htmlSanitize.js';
 
 /** @type {import('marked').RendererObject} */
 const renderer = {
@@ -26,45 +25,6 @@ marked.use({
   renderer
 });
 
-const ALLOWED_TAGS = [
-  'p',
-  'br',
-  'strong',
-  'em',
-  'u',
-  's',
-  'del',
-  'code',
-  'pre',
-  'a',
-  'ul',
-  'ol',
-  'li',
-  'blockquote',
-  'h1',
-  'h2',
-  'h3',
-  'h4',
-  'h5',
-  'h6',
-  'hr',
-  'table',
-  'thead',
-  'tbody',
-  'tr',
-  'th',
-  'td',
-  'img',
-  'figure',
-  'figcaption',
-  'mark',
-  'span',
-  'div',
-  'section'
-];
-
-const ALLOWED_ATTR = ['href', 'target', 'rel', 'src', 'alt', 'title', 'class'];
-
 /**
  * Render markdown content to sanitized HTML string.
  * @param {string | null | undefined} content - Raw markdown content
@@ -75,15 +35,7 @@ export function renderMarkdown(content) {
 
   try {
     const rawHtml = marked.parse(preprocessNostrMentions(content), { async: false });
-
-    if (browser && typeof DOMPurify?.sanitize === 'function') {
-      return DOMPurify.sanitize(String(rawHtml), {
-        ALLOWED_TAGS,
-        ALLOWED_ATTR
-      });
-    }
-
-    return String(rawHtml);
+    return sanitizeHtml(rawHtml);
   } catch (error) {
     console.error('Markdown parsing error:', error);
     return content.replace(/\n/g, '<br>');

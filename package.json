@@ -54,6 +54,7 @@
     "ws": "^8.19.0"
   },
   "dependencies": {
+    "@djot/djot": "^0.3.2",
     "@fontsource-variable/roboto-condensed": "^5.2.8",
     "@fontsource-variable/yanone-kaffeesatz": "^5.2.7",
     "@mozilla/readability": "^0.6.0",
@@ -66,6 +67,7 @@
     "applesauce-loaders": "^5.1.0",
     "applesauce-relay": "^5.1.0",
     "applesauce-signers": "^5.1.0",
+    "asciidoctor": "^3.0.4",
     "blossom-client-sdk": "^4.1.0",
     "dompurify": "^3.3.0",
     "embla-carousel": "^8.6.0",
