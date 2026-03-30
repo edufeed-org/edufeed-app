@@ -85,19 +85,17 @@
   });
 
   // Auto-focus on mount for deep-linked comments (one-shot)
+  // Instead of isolating into subtree mode, expand the path and scroll+highlight
   let hasAutoFocused = false;
   $effect(() => {
-    if (
-      initialFocusCommentId &&
-      !isLoading &&
-      commentTree.length > 0 &&
-      focusHistory.length === 0 &&
-      !hasAutoFocused
-    ) {
-      const subtree = getSubtree(commentTree, initialFocusCommentId);
-      if (subtree) {
+    if (initialFocusCommentId && !isLoading && commentTree.length > 0 && !hasAutoFocused) {
+      const chain = getParentChain(commentTree, initialFocusCommentId);
+      if (chain.length > 0) {
         hasAutoFocused = true;
-        focusHistory = [initialFocusCommentId];
+        // Expand the entire path to the comment so it's visible
+        expandedIds = new Set(chain.map((c) => c.id));
+        // Scroll to and highlight the comment
+        scrollToCommentId = initialFocusCommentId;
       }
     }
   });

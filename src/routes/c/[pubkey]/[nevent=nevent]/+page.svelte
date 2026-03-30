@@ -20,8 +20,8 @@
   }
 </script>
 
-{#if data.event?.kind === 11}
-  <!-- Forum thread detail within community layout -->
+{#if data.event?.kind === 11 || data.event?.kind === 1}
+  <!-- Thread detail within community layout -->
   <div class="flex-1 overflow-auto pb-16 transition-all duration-300 lg:ml-[304px] lg:pb-0">
     <div class="p-4">
       <button class="btn mb-4 gap-1 btn-ghost btn-sm" onclick={handleBack}>
@@ -30,8 +30,10 @@
       </button>
       <ThreadDetailView
         event={data.event}
+        parentEvent={data.parentEvent}
         onBack={handleBack}
         initialFocusCommentId={data.focusCommentId}
+        scrollTo={data.scrollTo}
         {communityPubkey}
       />
     </div>

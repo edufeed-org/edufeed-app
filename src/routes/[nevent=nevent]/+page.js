@@ -1,18 +1,30 @@
-import { decodeEventPointer } from 'applesauce-core/helpers';
+import {
+  decodeEventPointer,
+  getAddressPointerForEvent,
+  encodePointer
+} from 'applesauce-core/helpers';
 import { fetchEventById, hexToNpub } from '$lib/helpers/nostrUtils.js';
+import { resolveThreadContext } from '$lib/helpers/threadContext.js';
+import { initializeConfig } from '$lib/stores/config.svelte.js';
 import { error, redirect } from '@sveltejs/kit';
 
 export const ssr = false;
 export const prerender = false;
 
 /**
- * Top-level nevent route: resolves community from #h tag and redirects.
- * @type {import('./$types').PageLoad}
+ * Top-level nevent route: resolves meta-events first, then routes by community or content type.
+ * @param {{ params: { nevent: string }, parent: () => Promise<any> }} context
  */
-export async function load({ params }) {
+export async function load({ params, parent }) {
   const pointer = decodeEventPointer(params.nevent);
   if (!pointer) {
     throw error(400, 'Invalid nevent format');
+  }
+
+  // Ensure runtime config is initialized before fetching (needed for relay resolution)
+  const parentData = await parent();
+  if (parentData.config) {
+    initializeConfig(parentData.config);
   }
 
   const event = await fetchEventById(params.nevent);
@@ -20,43 +32,30 @@ export async function load({ params }) {
     throw error(404, 'Event not found');
   }
 
-  // Find community pubkey from #h tag
-  let hTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'h');
+  // Resolve meta-events (reaction→target, comment→root, RSVP→calendar event) FIRST
+  const context = await resolveThreadContext(event, fetchEventById);
+  const resolvedEvent = context.event;
 
-  // If no #h tag and it's a comment (kind 1111), follow root event to find community
-  if ((!hTag || !hTag[1]) && event.kind === 1111) {
-    /** @type {any} */
-    let rootEvent = null;
+  // Route based on the resolved event
+  const hTag = resolvedEvent.tags?.find((/** @type {string[]} */ t) => t[0] === 'h');
 
-    // Try A tag first (addressable root events like kind 30xxx)
-    const aTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'A');
-    if (aTag?.[1]) {
-      const [kind, pubkey, ...rest] = aTag[1].split(':');
-      const identifier = rest.join(':');
-      const relays = aTag[2] ? [aTag[2]] : [];
-      const { nip19 } = await import('nostr-tools');
-      const naddr = nip19.naddrEncode({ kind: parseInt(kind), pubkey, identifier, relays });
-      rootEvent = await fetchEventById(naddr);
-    }
-
-    // Try E tag (regular root events like kind 11)
-    if (!rootEvent) {
-      const eTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'E');
-      if (eTag?.[1]) {
-        const relayHint = eTag[2] || '';
-        const { nip19 } = await import('nostr-tools');
-        const nevent = nip19.neventEncode({ id: eTag[1], relays: relayHint ? [relayHint] : [] });
-        rootEvent = await fetchEventById(nevent);
+  if (!hTag?.[1]) {
+    // Redirect addressable events (calendar, educational, etc.) to naddr route
+    const addrPointer = getAddressPointerForEvent(resolvedEvent);
+    if (addrPointer) {
+      const naddr = encodePointer(addrPointer);
+      if (naddr) {
+        redirect(307, `/${naddr}`);
       }
     }
-
-    if (rootEvent) {
-      hTag = rootEvent.tags?.find((/** @type {string[]} */ t) => t[0] === 'h');
-    }
-  }
-
-  if (!hTag || !hTag[1]) {
-    throw error(404, 'Event not associated with a community');
+    // No community — render directly
+    return {
+      event: resolvedEvent,
+      parentEvent: context.parentEvent ?? null,
+      focusCommentId: context.focusCommentId ?? null,
+      scrollTo: context.scrollTo ?? null,
+      nevent: params.nevent
+    };
   }
 
   const npub = hexToNpub(hTag[1]);

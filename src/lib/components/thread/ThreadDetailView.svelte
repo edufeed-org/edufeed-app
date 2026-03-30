@@ -30,6 +30,7 @@
    * @property {any} [parentEvent] - Parent event for kind 1 replies
    * @property {() => void} [onBack] - Callback to navigate back
    * @property {string|null} [initialFocusCommentId] - Comment ID to auto-focus (deep-linking)
+   * @property {string|null} [scrollTo] - Section to scroll to (e.g. 'reactions')
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
    */
 
@@ -39,6 +40,7 @@
     parentEvent = null,
     onBack,
     initialFocusCommentId = null,
+    scrollTo = null,
     communityPubkey = undefined
   } = $props();
 
@@ -67,6 +69,20 @@
   let showShareUI = $state(false);
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
+
+  // Scroll to reactions section when navigating from a reaction notification
+  /** @type {HTMLElement | undefined} */
+  let reactionsEl;
+  $effect(() => {
+    if (scrollTo !== 'reactions') return;
+    if (!reactionsEl) return;
+
+    requestAnimationFrame(() => {
+      reactionsEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reactionsEl?.classList.add('comment-highlight');
+      setTimeout(() => reactionsEl?.classList.remove('comment-highlight'), 2000);
+    });
+  });
 
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
 
@@ -164,7 +180,7 @@
   </div>
 
   <!-- Reactions -->
-  <div class="mb-6">
+  <div class="mb-6" id="reactions" bind:this={reactionsEl}>
     <ReactionBar {event} />
   </div>
 

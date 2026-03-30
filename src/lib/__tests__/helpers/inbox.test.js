@@ -89,16 +89,64 @@ describe('getNotificationUrl', () => {
     const event = { kind: 9, tags: [['h', 'communitypubkey123']] };
     expect(getNotificationUrl(event)).toBe('/c/communitypubkey123');
   });
-  it('returns naddr URL for reaction with a-tag', () => {
+  it('returns naddr URL for reaction with a-tag (last a-tag per NIP-25)', () => {
     const event = {
       kind: 7,
-      tags: [['a', `31923:${validPubkey}:some-event-id`]]
+      tags: [
+        ['a', `30023:${validPubkey}:wrong-one`],
+        ['a', `31923:${validPubkey}:correct-one`]
+      ]
+    };
+    const url = getNotificationUrl(event);
+    expect(url).toMatch(/^\/naddr1/);
+    expect(url).not.toContain('#');
+  });
+  it('returns nevent URL for reaction with only e-tag', () => {
+    const eventId = 'a'.repeat(64);
+    const event = {
+      kind: 7,
+      tags: [
+        ['e', eventId, 'wss://relay.example.com'],
+        ['p', validPubkey]
+      ]
+    };
+    const url = getNotificationUrl(event);
+    expect(url).toMatch(/^\/nevent1/);
+    expect(url).not.toContain('#');
+  });
+  it('returns nevent URL encoding the comment event itself', () => {
+    const commentId = 'c'.repeat(64);
+    const event = {
+      kind: 1111,
+      id: commentId,
+      tags: [
+        ['A', `31923:${validPubkey}:cal-event`, 'wss://relay.example.com'],
+        ['K', '31923'],
+        ['a', `31923:${validPubkey}:cal-event`, 'wss://relay.example.com'],
+        ['k', '31923']
+      ]
+    };
+    const url = getNotificationUrl(event);
+    expect(url).toMatch(/^\/nevent1/);
+  });
+  it('returns naddr URL for RSVP with a-tag', () => {
+    const event = {
+      kind: 31925,
+      tags: [['a', `31923:${validPubkey}:cal-event`, 'wss://relay.example.com']]
     };
     const url = getNotificationUrl(event);
     expect(url).toMatch(/^\/naddr1/);
   });
-  it('returns null for events without navigable tags', () => {
+  it('returns null for reaction without navigable tags', () => {
     expect(getNotificationUrl({ kind: 7, tags: [] })).toBe(null);
+  });
+  it('returns nevent URL for comment even without root tags', () => {
+    const commentId = 'd'.repeat(64);
+    const url = getNotificationUrl({ kind: 1111, id: commentId, tags: [] });
+    expect(url).toMatch(/^\/nevent1/);
+  });
+  it('returns null for RSVP without a-tag', () => {
+    expect(getNotificationUrl({ kind: 31925, tags: [] })).toBe(null);
   });
 });
 

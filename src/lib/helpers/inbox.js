@@ -1,5 +1,9 @@
 import { nip19 } from 'nostr-tools';
 import { formCoordinateToNaddr } from '$lib/helpers/forms.js';
+import { getReactionAddressPointer, getReactionEventPointer } from 'applesauce-common/helpers';
+
+import { getRSVPAddressPointer } from 'applesauce-common/helpers';
+import { encodePointer } from 'applesauce-core/helpers';
 
 /** @type {Record<number, string>} */
 const KIND_TO_TYPE = {
@@ -64,25 +68,28 @@ export function getNotificationUrl(event) {
     return community ? `/c/${community}` : null;
   }
 
-  // Reactions, comments, RSVPs — resolve parent event's naddr
-  const aTag = event.tags.find((t) => t[0] === 'a' || t[0] === 'A')?.[1];
-  if (!aTag) {
-    const eTag = event.tags.find((t) => t[0] === 'e')?.[1];
-    return eTag ? `/${eTag}` : null;
-  }
-
-  try {
-    const [kindStr, pubkey, ...idParts] = aTag.split(':');
-    const naddr = nip19.naddrEncode({
-      kind: Number(kindStr),
-      pubkey,
-      identifier: idParts.join(':'),
-      relays: []
-    });
-    return `/${naddr}`;
-  } catch {
+  // Reactions — use last e/a tag per NIP-25
+  if (type === 'reaction') {
+    const addr = getReactionAddressPointer(event);
+    if (addr) return `/${encodePointer(addr)}`;
+    const evt = getReactionEventPointer(event);
+    if (evt) return `/${encodePointer(evt)}`;
     return null;
   }
+
+  // Comments — encode the comment event itself; resolveThreadContext will resolve root + set focusCommentId
+  if (type === 'comment') {
+    return `/${encodePointer({ id: event.id, relays: [] })}`;
+  }
+
+  // RSVPs — always address pointer (calendar events are addressable)
+  if (type === 'rsvp') {
+    const addr = getRSVPAddressPointer(event);
+    if (addr) return `/${encodePointer(addr)}`;
+    return null;
+  }
+
+  return null;
 }
 
 /**

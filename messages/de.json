@@ -1105,6 +1105,7 @@
   "thread_detail_delete_success": "Thread gelöscht",
   "thread_detail_delete_failed": "Thread konnte nicht gelöscht werden",
   "thread_detail_delete_confirm_title": "Thread löschen",
+  "thread_detail_replying_to": "Antwort auf",
   "thread_forum_back_to_list": "Zurück zu den Threads",
   "thread_forum_new_thread": "Neuer Thread",
   "thread_create_title": "Neuer Thread",
