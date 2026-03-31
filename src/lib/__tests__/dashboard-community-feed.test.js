@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { filterUpcomingEvents, filterRecentActivity } from '../helpers/dashboardFilters.js';
+import { filterUpcomingEvents, mergeCommunityActivity } from '../helpers/dashboardFilters.js';
 
 /** Helper to create a fake event */
 function makeEvent(kind, created_at, tags = []) {
@@ -49,23 +49,38 @@ describe('filterUpcomingEvents', () => {
   });
 });
 
-describe('filterRecentActivity', () => {
-  it('returns all kinds sorted by created_at desc, limited to 8', () => {
-    const items = Array.from({ length: 12 }, (_, i) => makeEvent(30142, i * 100));
-    const result = filterRecentActivity(items);
-    expect(result).toHaveLength(8);
-    expect(result[0].created_at).toBe(1100); // highest
-    expect(result[7].created_at).toBe(400); // 8th highest
+describe('mergeCommunityActivity', () => {
+  it('merges items from multiple communities sorted by created_at desc', () => {
+    const perCommunityItems = new Map([
+      ['community-a', [makeEvent(30142, 300), makeEvent(30142, 100)]],
+      ['community-b', [makeEvent(30301, 200), makeEvent(30023, 400)]]
+    ]);
+    const result = mergeCommunityActivity(perCommunityItems);
+    expect(result).toHaveLength(4);
+    expect(result.map((e) => e.created_at)).toEqual([400, 300, 200, 100]);
+  });
+
+  it('deduplicates by event ID (same event in multiple communities)', () => {
+    const sharedEvent = makeEvent(30142, 500);
+    const perCommunityItems = new Map([
+      ['community-a', [sharedEvent, makeEvent(30301, 200)]],
+      ['community-b', [sharedEvent, makeEvent(30023, 300)]]
+    ]);
+    const result = mergeCommunityActivity(perCommunityItems);
+    expect(result).toHaveLength(3);
+    expect(result.filter((e) => e.id === sharedEvent.id)).toHaveLength(1);
   });
 
   it('returns empty array for empty input', () => {
-    expect(filterRecentActivity([])).toEqual([]);
+    expect(mergeCommunityActivity(new Map())).toEqual([]);
   });
 
-  it('returns all items when fewer than 8', () => {
-    const items = [makeEvent(30142, 100), makeEvent(31922, 200)];
-    const result = filterRecentActivity(items);
-    expect(result).toHaveLength(2);
-    expect(result[0].created_at).toBe(200);
+  it('handles communities with empty item arrays', () => {
+    const perCommunityItems = new Map([
+      ['community-a', []],
+      ['community-b', [makeEvent(30142, 100)]]
+    ]);
+    const result = mergeCommunityActivity(perCommunityItems);
+    expect(result).toHaveLength(1);
   });
 });

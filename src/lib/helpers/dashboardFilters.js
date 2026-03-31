@@ -17,10 +17,23 @@ export function filterUpcomingEvents(items, nowTs) {
 }
 
 /**
- * Get most recent activity items sorted by created_at desc, max 8.
- * @param {any[]} items
- * @returns {any[]}
+ * Merge activity items from multiple communities into a single sorted list.
+ * Deduplicates by event ID (same event h-tagged to multiple communities).
+ * @param {Map<string, any[]>} perCommunityItems - Map of communityPubkey → items
+ * @returns {any[]} Merged, deduplicated, sorted by created_at desc
  */
-export function filterRecentActivity(items) {
-  return [...items].sort((a, b) => b.created_at - a.created_at).slice(0, 8);
+export function mergeCommunityActivity(perCommunityItems) {
+  const seen = new Set();
+  const merged = [];
+
+  for (const items of perCommunityItems.values()) {
+    for (const item of items) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        merged.push(item);
+      }
+    }
+  }
+
+  return merged.sort((a, b) => b.created_at - a.created_at);
 }

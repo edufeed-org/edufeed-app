@@ -1,31 +1,40 @@
 <!--
   DashboardCommunityFeed — Shows upcoming events and recent activity
-  from the user's joined communities in two sections.
+  from the user's joined communities using per-community loaders for
+  complete content (direct + reposts + legacy 30222).
 -->
 
 <script>
+  /* eslint-disable svelte/prefer-svelte-reactivity -- Map/Set used intentionally for non-reactive internal tracking */
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { nip19 } from 'nostr-tools';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
-  import { TimelineModel } from 'applesauce-core/models';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { timedPool } from '$lib/loaders/base.js';
-  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { addressLoader } from '$lib/loaders/base.js';
+  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
-  import { filterUpcomingEvents, filterRecentActivity } from '$lib/helpers/dashboardFilters.js';
+  import { filterUpcomingEvents, mergeCommunityActivity } from '$lib/helpers/dashboardFilters.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
+  import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
+  import {
+    CommunityActivityModel,
+    CommunitySocialBookmarkModel
+  } from '$lib/models/community-content.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
-  import { CalendarIcon, FilesIcon } from '$lib/components/icons';
+  import { ChevronRightIcon, FilesIcon } from '$lib/components/icons';
+  import { generateKindColorRGB } from '$lib/helpers/nostrUtils';
+  import { getEventStartTimestamp } from '$lib/helpers/calendar';
   import * as m from '$lib/paraglide/messages';
 
-  const ALL_KINDS = [30142, 30301, 30023, 30818, 31922, 31923, 11];
-
-  let items = $state.raw(/** @type {any[]} */ ([]));
+  /** @type {Map<string, any[]>} */
+  let perCommunityItems = new Map();
+  let allItems = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
+  let displayCount = $state(15);
 
   const getJoinedCommunities = useJoinedCommunitiesList();
   let joinedCommunities = $derived(getJoinedCommunities());
@@ -35,47 +44,98 @@
   let communityProfiles = $derived(getCommunityProfiles());
 
   // Event author profiles
-  const getProfiles = useProfileMap(() => items.map((e) => e.pubkey));
+  const getProfiles = useProfileMap(() => allItems.map((e) => e.pubkey));
   let profiles = $derived(getProfiles());
 
   let upcomingEvents = $derived.by(() => {
     const nowTs = Math.floor(Date.now() / 1000);
-    return filterUpcomingEvents(items, nowTs);
+    return filterUpcomingEvents(allItems, nowTs);
   });
 
-  let recentItems = $derived.by(() => filterRecentActivity(items));
+  let visibleItems = $derived(allItems.slice(0, displayCount));
+  let hasMore = $derived(displayCount < allItems.length);
+
+  // Per-community cleanup functions
+  /** @type {Map<string, () => void>} */
+  let cleanupMap = new Map();
 
   $effect(() => {
     const communities = joinedCommunities;
+
+    // Clean up previous subscriptions
+    for (const cleanup of cleanupMap.values()) cleanup();
+    cleanupMap.clear();
+    perCommunityItems = new Map();
+    displayCount = 15;
+
     if (communities.length === 0) {
-      items = [];
+      allItems = [];
       isLoading = false;
       return;
     }
 
-    const relays = getAllLookupRelays();
-    const filter = { kinds: ALL_KINDS, '#h': communities, limit: 50 };
+    for (const pubkey of communities) {
+      // Ensure community kind 10222 event is in EventStore for relay discovery
+      const addrSub = addressLoader({
+        kind: 10222,
+        pubkey,
+        relays: getCommunikeyRelays()
+      }).subscribe();
 
-    const loader = createTimelineLoader(timedPool, relays, filter, { eventStore });
-    const loaderSub = loader().subscribe({
-      error: (err) => {
-        console.error('DashboardCommunityFeed: Loader error:', err);
+      // Load all content sources (direct + reposts + legacy 30222)
+      const { cleanup: activityCleanup } = useCommunityActivityLoader(pubkey);
+      const { cleanup: bookmarkCleanup } = useSocialBookmarksCommunityLoader(pubkey);
+
+      // Merge activity + bookmark models per community (same pattern as HomeView)
+      /** @type {any[]} */
+      let activityItems = [];
+      /** @type {any[]} */
+      let bookmarkItems = [];
+
+      function mergeAndUpdate() {
+        const seen = new Set();
+        const merged = [...activityItems, ...bookmarkItems].filter((e) => {
+          if (seen.has(e.id)) return false;
+          seen.add(e.id);
+          return true;
+        });
+        perCommunityItems.set(pubkey, merged);
+        allItems = mergeCommunityActivity(perCommunityItems);
         isLoading = false;
       }
-    });
 
-    const modelSub = eventStore
-      .model(TimelineModel, { kinds: ALL_KINDS, '#h': communities })
-      .subscribe({
+      const activitySub = eventStore.model(CommunityActivityModel, pubkey).subscribe({
         next: (loaded) => {
-          items = loaded || [];
-          isLoading = false;
+          activityItems = loaded || [];
+          mergeAndUpdate();
+        },
+        error: (err) => {
+          console.error(`DashboardCommunityFeed: Activity error for ${pubkey}:`, err);
         }
       });
 
+      const bookmarkSub = eventStore.model(CommunitySocialBookmarkModel, pubkey).subscribe({
+        next: (loaded) => {
+          bookmarkItems = loaded || [];
+          mergeAndUpdate();
+        },
+        error: (err) => {
+          console.error(`DashboardCommunityFeed: Bookmark error for ${pubkey}:`, err);
+        }
+      });
+
+      cleanupMap.set(pubkey, () => {
+        addrSub.unsubscribe();
+        activitySub.unsubscribe();
+        bookmarkSub.unsubscribe();
+        activityCleanup();
+        bookmarkCleanup();
+      });
+    }
+
     return () => {
-      loaderSub.unsubscribe();
-      modelSub.unsubscribe();
+      for (const cleanup of cleanupMap.values()) cleanup();
+      cleanupMap.clear();
     };
   });
 
@@ -104,89 +164,98 @@
     const profile = communityProfiles.get(hTag);
     return profile ? getDisplayName(profile) : undefined;
   }
+
+  function loadMore() {
+    displayCount += 15;
+  }
 </script>
 
-<!-- Upcoming Events -->
-<section data-testid="dashboard-upcoming-events">
-  <div class="mb-4 flex items-center justify-between">
-    <h2 class="text-lg font-bold">{m.dashboard_upcoming_title()}</h2>
-    <a href={resolve('/calendar')} class="btn btn-ghost btn-sm">
-      {m.dashboard_upcoming_view_calendar()} →
-    </a>
+{#if isLoading}
+  <div class="flex justify-center py-12">
+    <span class="loading loading-lg loading-spinner text-primary"></span>
   </div>
+{:else}
+  <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
+    <!-- Activity Feed (main column) -->
+    <div class="min-w-0 flex-1" data-testid="dashboard-community-activity">
+      <h3 class="mb-3 text-sm font-semibold">{m.dashboard_activity_title()}</h3>
 
-  {#if isLoading}
-    <div class="flex justify-center py-8">
-      <span class="loading loading-md loading-spinner text-primary"></span>
-    </div>
-  {:else if upcomingEvents.length === 0}
-    <div
-      class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
-    >
-      <CalendarIcon class_="mb-3 h-10 w-10 text-base-content/30" />
-      <p class="text-base-content/60">{m.dashboard_upcoming_empty()}</p>
-    </div>
-  {:else}
-    <div class="grid gap-3 sm:grid-cols-2">
-      {#each upcomingEvents as event (event.id)}
-        {@const cardData = getFeedCardData(event)}
-        {@const profile = profiles.get(event.pubkey)}
-        {@const communityName = getCommunityName(event)}
-        <FeedCard
-          title={cardData.title}
-          subtitle={cardData.subtitle}
-          typeKey={cardData.typeKey}
-          kind={event.kind}
-          tags={cardData.tags}
-          description={communityName || cardData.description}
-          authorName={profile ? getDisplayName(profile) : undefined}
-          authorAvatar={profile ? getProfilePicture(profile) : undefined}
-          authorPubkey={event.pubkey}
-          timestamp={0}
-          onclick={() => navigateToEvent(event)}
-        />
-      {/each}
-    </div>
-  {/if}
-</section>
+      {#if visibleItems.length === 0}
+        <div
+          class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
+        >
+          <FilesIcon class_="mb-3 h-10 w-10 text-base-content/30" />
+          <p class="text-base-content/60">{m.dashboard_activity_empty()}</p>
+        </div>
+      {:else}
+        <div class="space-y-4">
+          {#each visibleItems as event (event.id)}
+            {@const cardData = getFeedCardData(event)}
+            {@const profile = profiles.get(event.pubkey)}
+            {@const communityName = getCommunityName(event)}
+            <FeedCard
+              title={cardData.title}
+              subtitle={cardData.subtitle}
+              typeKey={cardData.typeKey}
+              kind={event.kind}
+              tags={cardData.tags}
+              description={communityName || cardData.description}
+              authorName={profile ? getDisplayName(profile) : undefined}
+              authorAvatar={profile ? getProfilePicture(profile) : undefined}
+              authorPubkey={event.pubkey}
+              timestamp={event.created_at}
+              onclick={() => navigateToEvent(event)}
+            />
+          {/each}
+        </div>
 
-<!-- Community Activity -->
-<section data-testid="dashboard-community-activity">
-  <div class="mb-4 flex items-center justify-between">
-    <h2 class="text-lg font-bold">{m.dashboard_activity_title()}</h2>
+        {#if hasMore}
+          <div class="mt-4 flex justify-center">
+            <button class="btn btn-ghost btn-sm" onclick={loadMore}>
+              {m.discover_load_more()}
+            </button>
+          </div>
+        {/if}
+      {/if}
+    </div>
+
+    <!-- Upcoming Events Sidebar -->
+    {#if upcomingEvents.length > 0}
+      <div class="w-full shrink-0 lg:w-72" data-testid="dashboard-upcoming-events">
+        <a
+          href={resolve('/calendar')}
+          class="mb-3 flex items-center gap-1 text-sm font-semibold hover:text-primary"
+        >
+          {m.dashboard_upcoming_title()}
+          <ChevronRightIcon class_="h-4 w-4" />
+        </a>
+        <div class="flex flex-row gap-3 overflow-x-auto lg:flex-col lg:overflow-x-visible">
+          {#each upcomingEvents as event (event.id)}
+            {@const cardData = getFeedCardData(event)}
+            {@const kindColor = generateKindColorRGB(event.kind)}
+            {@const startTs = getEventStartTimestamp(event)}
+            {@const communityName = getCommunityName(event)}
+            <button
+              class="w-[200px] shrink-0 rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md lg:w-full"
+              style:border-left-color="rgb({kindColor.r},{kindColor.g},{kindColor.b})"
+              onclick={() => navigateToEvent(event)}
+            >
+              <div class="text-xs font-medium text-primary">
+                {new Date(startTs * 1000).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit'
+                })}
+              </div>
+              <div class="mt-1 line-clamp-2 text-sm font-semibold">{cardData.title}</div>
+              {#if communityName}
+                <div class="mt-1 text-xs text-base-content/60">{communityName}</div>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
-
-  {#if isLoading}
-    <div class="flex justify-center py-8">
-      <span class="loading loading-md loading-spinner text-primary"></span>
-    </div>
-  {:else if recentItems.length === 0}
-    <div
-      class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
-    >
-      <FilesIcon class_="mb-3 h-10 w-10 text-base-content/30" />
-      <p class="text-base-content/60">{m.dashboard_activity_empty()}</p>
-    </div>
-  {:else}
-    <div class="grid gap-3 sm:grid-cols-2">
-      {#each recentItems as event (event.id)}
-        {@const cardData = getFeedCardData(event)}
-        {@const profile = profiles.get(event.pubkey)}
-        {@const communityName = getCommunityName(event)}
-        <FeedCard
-          title={cardData.title}
-          subtitle={cardData.subtitle}
-          typeKey={cardData.typeKey}
-          kind={event.kind}
-          tags={cardData.tags}
-          description={communityName || cardData.description}
-          authorName={profile ? getDisplayName(profile) : undefined}
-          authorAvatar={profile ? getProfilePicture(profile) : undefined}
-          authorPubkey={event.pubkey}
-          timestamp={event.created_at}
-          onclick={() => navigateToEvent(event)}
-        />
-      {/each}
-    </div>
-  {/if}
-</section>
+{/if}
