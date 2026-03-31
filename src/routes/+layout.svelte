@@ -11,6 +11,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
   import { browser } from '$app/environment';
+  import { navigating } from '$app/stores';
 
   let { children, data } = $props();
 
@@ -111,6 +112,12 @@
     href={runtimeConfig.favicon?.png16 || '/favicon-16x16.png'}
   />
 </svelte:head>
+
+{#if $navigating}
+  <div class="fixed top-0 right-0 left-0 z-50">
+    <progress class="progress h-1 w-full progress-primary"></progress>
+  </div>
+{/if}
 
 <div class="flex min-h-screen flex-col">
   <Navbar />

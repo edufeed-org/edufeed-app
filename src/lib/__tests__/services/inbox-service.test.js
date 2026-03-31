@@ -7,12 +7,14 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),
-  addressLoader: vi.fn()
+  addressLoader: vi.fn(),
+  eventLoader: vi.fn()
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://relay1'],
   getCalendarRelays: () => ['wss://relay2'],
-  getEducationalRelays: () => ['wss://relay3']
+  getEducationalRelays: () => ['wss://relay3'],
+  getAllLookupRelays: () => ['wss://lookup1']
 }));
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: vi.fn()
@@ -31,6 +33,12 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 }));
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: vi.fn()
+}));
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  parseAddressPointerFromATag: vi.fn()
+}));
+vi.mock('$lib/services/relay-service.svelte.js', () => ({
+  getRelayListLookupRelays: () => []
 }));
 
 describe('inbox-service pure functions', () => {

@@ -7,19 +7,25 @@ import { TimelineModel } from 'applesauce-core/models';
 import { AppDataBlueprint } from 'applesauce-common/blueprints';
 import { EventFactory } from 'applesauce-core/event-factory';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { timedPool, addressLoader } from '$lib/loaders/base.js';
+import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
 import {
   getCommunikeyRelays,
   getCalendarRelays,
-  getEducationalRelays
+  getEducationalRelays,
+  getAllLookupRelays
 } from '$lib/helpers/relay-helper.js';
 import { getNotificationType, isUnread, filterSelfNotifications } from '$lib/helpers/inbox.js';
 import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
+import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
 const DEFAULT_LOOKBACK = 604800; // 7 days
+
+/** @type {Set<string>} IDs of events already prefetched */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive, internal tracking only
+let prefetchedIds = new Set();
 
 // --- Pure exported functions (testable) ---
 
@@ -57,6 +63,65 @@ export function parseReadMarkers(content) {
     return JSON.parse(content);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Extract referenced event pointers from a notification event's tags.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {{ addressPointers: Array<{kind: number, pubkey: string, identifier: string, relays: string[]}>, eventPointers: Array<{id: string, relays: string[]}> }}
+ */
+export function extractReferencedPointers(event) {
+  /** @type {Array<{kind: number, pubkey: string, identifier: string, relays: string[]}>} */
+  const addressPointers = [];
+  /** @type {Array<{id: string, relays: string[]}>} */
+  const eventPointers = [];
+
+  const type = getNotificationType(event);
+  if (!type || type === 'mention') return { addressPointers, eventPointers };
+
+  // Extract 'a' or 'A' tags → addressable events
+  const aTag = event.tags.findLast((t) => t[0] === 'a' || t[0] === 'A');
+  if (aTag) {
+    const pointer = parseAddressPointerFromATag(aTag);
+    if (pointer) {
+      addressPointers.push({
+        ...pointer,
+        relays: aTag[2] ? [aTag[2]] : getAllLookupRelays()
+      });
+    }
+  }
+
+  // Extract 'e' tags → regular events
+  const eTag = event.tags.findLast((t) => t[0] === 'e');
+  if (eTag && eTag[1]) {
+    eventPointers.push({
+      id: eTag[1],
+      relays: eTag[2] ? [eTag[2]] : getAllLookupRelays()
+    });
+  }
+
+  return { addressPointers, eventPointers };
+}
+
+/**
+ * Prefetch referenced content from notification events into EventStore.
+ * Fire-and-forget subscriptions so content is ready when user clicks.
+ * @param {import('nostr-tools').NostrEvent[]} notifications
+ */
+function prefetchReferencedContent(notifications) {
+  for (const event of notifications) {
+    if (prefetchedIds.has(event.id)) continue;
+    prefetchedIds.add(event.id);
+
+    const { addressPointers, eventPointers } = extractReferencedPointers(event);
+
+    for (const pointer of addressPointers) {
+      addressLoader(pointer).subscribe();
+    }
+    for (const pointer of eventPointers) {
+      eventLoader(pointer).subscribe();
+    }
   }
 }
 
@@ -201,7 +266,9 @@ export function initializeInbox(pubkey) {
       { kinds: [1111], '#P': [pubkey] }
     ])
     .subscribe((events) => {
-      mainNotifications = filterSelfNotifications(events || [], pubkey);
+      const filtered = filterSelfNotifications(events || [], pubkey);
+      mainNotifications = filtered;
+      prefetchReferencedContent(filtered);
     });
   subscriptions.push(modelSub);
 
@@ -257,7 +324,9 @@ export function loadRsvpNotifications(calendarEventCoords) {
   const modelSub = eventStore
     .model(TimelineModel, { kinds: [31925], '#a': calendarEventCoords })
     .subscribe((events) => {
-      rsvpNotifications = filterSelfNotifications(events || [], pubkey);
+      const filtered = filterSelfNotifications(events || [], pubkey);
+      rsvpNotifications = filtered;
+      prefetchReferencedContent(filtered);
     });
   subscriptions.push(modelSub);
 }
@@ -311,6 +380,7 @@ export function cleanup() {
   readMarkers = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
   readItemIds = new Set();
+  prefetchedIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- not reactive
   activePubkey = null;
 }
 

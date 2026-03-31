@@ -1,5 +1,4 @@
 <script>
-  import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
   import { markItemAsRead } from '$lib/services/inbox-service.svelte.js';
@@ -26,6 +25,7 @@
 
   const type = $derived(getNotificationType(event));
   const url = $derived(getNotificationUrl(event));
+  const href = $derived(url ? resolve(url) : undefined);
   const displayName = $derived(profile?.display_name || profile?.name || event.pubkey.slice(0, 8));
 
   /** @type {Record<string, typeof BellIcon>} */
@@ -40,9 +40,10 @@
 
   const TypeIcon = $derived(type ? iconMap[type] || BellIcon : BellIcon);
 
-  function handleClick() {
+  /** @param {MouseEvent} e */
+  function handleClick(e) {
     markItemAsRead(event.id);
-    if (url) goto(resolve(url));
+    if (!href) e.preventDefault();
   }
 
   /**
@@ -58,8 +59,10 @@
   }
 </script>
 
-<button
-  class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-base-200/50
+<a
+  href={href || '#'}
+  data-sveltekit-preload-data="hover"
+  class="flex w-full items-start gap-3 px-4 py-3 text-left no-underline transition-colors hover:bg-base-200/50
     {unread
     ? 'border-l-3 border-primary bg-primary/5'
     : 'border-l-3 border-transparent opacity-60'}"
@@ -97,4 +100,4 @@
   {#if unread}
     <div class="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-primary"></div>
   {/if}
-</button>
+</a>

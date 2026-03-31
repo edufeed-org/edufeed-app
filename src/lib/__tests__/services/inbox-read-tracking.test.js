@@ -14,12 +14,14 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),
-  addressLoader: vi.fn(() => noopObservable)
+  addressLoader: vi.fn(() => noopObservable),
+  eventLoader: vi.fn(() => noopObservable)
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://relay1'],
   getCalendarRelays: () => ['wss://relay2'],
-  getEducationalRelays: () => ['wss://relay3']
+  getEducationalRelays: () => ['wss://relay3'],
+  getAllLookupRelays: () => ['wss://lookup1']
 }));
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: vi.fn(() => () => noopObservable)
@@ -41,6 +43,9 @@ vi.mock('$lib/services/publish-service.js', () => ({
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
   getRelayListLookupRelays: () => []
+}));
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  parseAddressPointerFromATag: vi.fn()
 }));
 
 // Mock localStorage
