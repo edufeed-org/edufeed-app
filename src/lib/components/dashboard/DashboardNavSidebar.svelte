@@ -3,7 +3,7 @@
   import { resolve } from '$app/paths';
   import { DashboardIcon, BellIcon, ScrollTextIcon, PeopleIcon } from '$lib/components/icons';
   import { getUnreadCount } from '$lib/services/inbox-service.svelte.js';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+
   import * as m from '$lib/paraglide/messages';
 
   const sections = [
@@ -39,15 +39,6 @@
 <div
   class="fixed top-16 left-16 hidden h-[calc(100vh-8rem)] w-60 flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
 >
-  <div class="flex items-center gap-3 p-4">
-    <div class="avatar">
-      <div class="mask w-9 mask-hexagon-2">
-        <img src={runtimeConfig.appLogo} alt={runtimeConfig.appName} class="object-cover" />
-      </div>
-    </div>
-    <h2 class="truncate text-sm font-semibold text-base-content">{runtimeConfig.appName}</h2>
-  </div>
-
   <nav class="menu space-y-1 p-4">
     {#each sections as section (section.id)}
       {@const isActive = activeSection === section.id}
