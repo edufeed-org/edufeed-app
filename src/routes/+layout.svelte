@@ -113,14 +113,11 @@
   />
 </svelte:head>
 
-{#if $navigating}
-  <div class="fixed top-0 right-0 left-0 z-50">
-    <progress class="progress h-1 w-full progress-primary"></progress>
-  </div>
-{/if}
-
 <div class="flex min-h-screen flex-col">
   <Navbar />
+  {#if $navigating}
+    <progress class="progress h-1 w-full progress-primary"></progress>
+  {/if}
   <ModalManager />
   <main class="flex-1">
     {#if curatedReady}
