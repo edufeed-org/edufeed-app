@@ -9,7 +9,7 @@
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
-  import { TimelineModel } from 'applesauce-core/models';
+  import { SharesModel } from 'applesauce-common/models';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import {
     getDisplayName,
@@ -19,7 +19,7 @@
   import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
   /**
    * @typedef {Object} Props
@@ -38,8 +38,43 @@
 
   // State management
   let selectedCommunityIds = $state(/** @type {string[]} */ ([]));
+
+  // Separate source tracking (plain vars — no $state to avoid effect re-triggers)
+  /** @type {Set<string>} */ let _repostCommunities = new Set();
+  /** @type {Set<string>} */ let _repostDeletable = new Set();
+  /** @type {Set<string>} */ let _legacyCommunities = new Set();
+  /** @type {Set<string>} */ let _legacyDeletable = new Set();
+
+  // Combined output state
   /** @type {Set<string>} */
   let communitiesWithShares = $state.raw(new Set());
+  /** @type {Set<string>} */
+  let deletableShares = $state.raw(new Set());
+
+  /**
+   * Recompute combined share state from all sources (repost + legacy + native h-tags).
+   * Uses plain vars for sources to avoid $state read+write cycles in effects.
+   */
+  function updateCombinedShares() {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- assigned to $state.raw
+    const combined = new Set();
+    // Native h-tags on original event
+    if (event?.tags) {
+      for (const t of event.tags) {
+        if (t[0] === 'h' && t[1]) combined.add(t[1]);
+      }
+    }
+    for (const s of _repostCommunities) combined.add(s);
+    for (const s of _legacyCommunities) combined.add(s);
+    communitiesWithShares = combined;
+
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- assigned to $state.raw
+    const combinedDel = new Set();
+    for (const s of _repostDeletable) combinedDel.add(s);
+    for (const s of _legacyDeletable) combinedDel.add(s);
+    deletableShares = combinedDel;
+  }
+
   let isCheckingShares = $state(false);
   let isProcessingShares = $state(false);
   let shareError = $state('');
@@ -60,30 +95,44 @@
 
   /**
    * Check which communities already have sharing events for this content.
-   * Detects both NIP-18 reposts (kind 6/16 with h-tag) and legacy 30222 shares.
+   * Detects native h-tags on the event, NIP-18 reposts (kind 6/16) by ANY user,
+   * and legacy kind 30222 shares by ANY user.
    */
   $effect(() => {
     if (!activeUser || !event || !joinedCommunities.length) {
+      _repostCommunities = new Set();
+      _repostDeletable = new Set();
+      _legacyCommunities = new Set();
+      _legacyDeletable = new Set();
       communitiesWithShares = new Set();
+      deletableShares = new Set();
       isCheckingShares = false;
       return;
     }
 
     isCheckingShares = true;
 
-    // Load user's shares from relays (both NIP-18 reposts and legacy 30222)
-    const repostLoader = createTimelineLoader(
-      pool,
-      runtimeConfig.fallbackRelays || [],
-      { kinds: [6, 16], authors: [activeUser.pubkey] },
-      { eventStore, limit: 100 }
-    );
-    const legacyLoader = createTimelineLoader(
-      pool,
-      runtimeConfig.fallbackRelays || [],
-      { kinds: [30222], authors: [activeUser.pubkey] },
-      { eventStore, limit: 100 }
-    );
+    // Build targeted filters — no authors filter so we detect ALL shares
+    const lookupRelays = getAllLookupRelays();
+    /** @type {import('nostr-tools').Filter} */
+    const repostFilter = { kinds: [6, 16], '#e': [event.id] };
+    /** @type {import('nostr-tools').Filter} */
+    const legacyFilter = { kinds: [30222], '#e': [event.id] };
+
+    // For addressable events, also search by a-tag (some shares may only have a-tag)
+    const isAddressable = event.kind >= 30000 && event.kind < 40000;
+    const dTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
+    const address = isAddressable ? `${event.kind}:${event.pubkey}:${dTag}` : null;
+
+    // Load ALL shares from relays (both NIP-18 reposts and legacy 30222)
+    const repostLoader = createTimelineLoader(pool, lookupRelays, repostFilter, {
+      eventStore,
+      limit: 50
+    });
+    const legacyLoader = createTimelineLoader(pool, lookupRelays, legacyFilter, {
+      eventStore,
+      limit: 50
+    });
 
     const repostLoaderSub = repostLoader().subscribe({
       error: (err) => console.warn('CommunityShare: Repost loader error:', err)
@@ -92,80 +141,105 @@
       error: (err) => console.warn('CommunityShare: Legacy loader error:', err)
     });
 
-    // Subscribe to combined model for reactive updates
-    const modelSub = eventStore
-      .model(TimelineModel, {
-        kinds: [6, 16, 30222],
-        authors: [activeUser.pubkey]
-      })
-      .subscribe((shareEvents) => {
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- assigned to $state.raw, not reactive
-        const shares = new Set();
-        for (const shareEvent of shareEvents || []) {
-          if (shareEvent.kind === 6 || shareEvent.kind === 16) {
-            // NIP-18 repost: check e/a tag matches our event, extract h-tag for community
-            const eTag = shareEvent.tags.find((t) => t[0] === 'e');
-            const aTag = shareEvent.tags.find((t) => t[0] === 'a');
+    // For addressable events, also query by #a tag (some shares may lack e-tag)
+    /** @type {import('rxjs').Subscription | undefined} */
+    let repostByAddrSub;
+    /** @type {import('rxjs').Subscription | undefined} */
+    let legacyByAddrSub;
+    if (address) {
+      const repostByAddrLoader = createTimelineLoader(
+        pool,
+        lookupRelays,
+        { kinds: [6, 16], '#a': [address] },
+        { eventStore, limit: 50 }
+      );
+      const legacyByAddrLoader = createTimelineLoader(
+        pool,
+        lookupRelays,
+        { kinds: [30222], '#a': [address] },
+        { eventStore, limit: 50 }
+      );
+      repostByAddrSub = repostByAddrLoader().subscribe({
+        error: (err) => console.warn('CommunityShare: Repost addr loader error:', err)
+      });
+      legacyByAddrSub = legacyByAddrLoader().subscribe({
+        error: (err) => console.warn('CommunityShare: Legacy addr loader error:', err)
+      });
+    }
 
-            let matchesEvent = false;
-            if (eTag && eTag[1] === event.id) {
-              matchesEvent = true;
-            } else if (aTag) {
-              const eventPointer = getAddressPointerForEvent(event);
-              const sharePointer = parseAddressPointerFromATag(aTag);
-              if (eventPointer && sharePointer) {
-                matchesEvent =
-                  eventPointer.identifier === sharePointer.identifier &&
-                  eventPointer.kind === sharePointer.kind &&
-                  eventPointer.pubkey === sharePointer.pubkey;
-              }
-            }
+    // SharesModel handles kind 6/16 matching (no author filter, uses buildCommonEventRelationFilters)
+    const sharesModelSub = eventStore.model(SharesModel, event).subscribe((repostEvents) => {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to callback, assigned to plain var
+      const communities = new Set();
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to callback, assigned to plain var
+      const userDeletable = new Set();
 
-            if (matchesEvent) {
-              // Extract all h-tags (community targets)
-              for (const tag of shareEvent.tags) {
-                if (tag[0] === 'h' && tag[1]) {
-                  shares.add(tag[1]);
-                }
-              }
-            }
-          } else if (shareEvent.kind === 30222) {
-            // Legacy targeted publication: check e/a tag matches, extract p-tag for community
-            const aTag = shareEvent.tags.find((t) => t[0] === 'a');
-            const eTag = shareEvent.tags.find((t) => t[0] === 'e');
-
-            if (aTag) {
-              const eventPointer = getAddressPointerForEvent(event);
-              const sharePointer = parseAddressPointerFromATag(aTag);
-
-              if (!sharePointer || !eventPointer) continue;
-
-              const idMatch = eventPointer.identifier === sharePointer.identifier;
-              const kindMatch = eventPointer.kind === sharePointer.kind;
-              const pubkeyMatch = eventPointer.pubkey === sharePointer.pubkey;
-
-              if (idMatch && kindMatch && pubkeyMatch) {
-                const pTag = shareEvent.tags.find((t) => t[0] === 'p');
-                if (pTag?.[1]) {
-                  shares.add(pTag[1]);
-                }
-              }
-            } else if (eTag && eTag[1] === event.id) {
-              const pTag = shareEvent.tags.find((t) => t[0] === 'p');
-              if (pTag?.[1]) {
-                shares.add(pTag[1]);
-              }
+      for (const repost of repostEvents || []) {
+        for (const tag of repost.tags) {
+          if (tag[0] === 'h' && tag[1]) {
+            communities.add(tag[1]);
+            if (repost.pubkey === activeUser.pubkey) {
+              userDeletable.add(tag[1]);
             }
           }
         }
-        communitiesWithShares = shares;
-        isCheckingShares = false;
-      });
+      }
+
+      _repostCommunities = communities;
+      _repostDeletable = userDeletable;
+      updateCombinedShares();
+      isCheckingShares = false;
+    });
+
+    // Legacy 30222 detection — kept separate since SharesModel only covers kind 6/16
+    const legacyModelSub = eventStore.timeline({ kinds: [30222] }).subscribe((legacyEvents) => {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to callback, assigned to plain var
+      const communities = new Set();
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to callback, assigned to plain var
+      const userDeletable = new Set();
+
+      for (const shareEvent of legacyEvents || []) {
+        const aTag = shareEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'a');
+        const eTag = shareEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'e');
+
+        let matchesEvent = false;
+        if (aTag) {
+          const eventPointer = getAddressPointerForEvent(event);
+          const sharePointer = parseAddressPointerFromATag(aTag);
+          if (eventPointer && sharePointer) {
+            matchesEvent =
+              eventPointer.identifier === sharePointer.identifier &&
+              eventPointer.kind === sharePointer.kind &&
+              eventPointer.pubkey === sharePointer.pubkey;
+          }
+        }
+        if (!matchesEvent && eTag && eTag[1] === event.id) {
+          matchesEvent = true;
+        }
+
+        if (matchesEvent) {
+          const pTag = shareEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'p');
+          if (pTag?.[1]) {
+            communities.add(pTag[1]);
+            if (shareEvent.pubkey === activeUser.pubkey) {
+              userDeletable.add(pTag[1]);
+            }
+          }
+        }
+      }
+
+      _legacyCommunities = communities;
+      _legacyDeletable = userDeletable;
+      updateCombinedShares();
+    });
 
     return () => {
       repostLoaderSub.unsubscribe();
       legacyLoaderSub.unsubscribe();
-      modelSub.unsubscribe();
+      repostByAddrSub?.unsubscribe();
+      legacyByAddrSub?.unsubscribe();
+      sharesModelSub.unsubscribe();
+      legacyModelSub.unsubscribe();
     };
   });
 
@@ -259,9 +333,9 @@
     shareResults = { successful: [], failed: [] };
 
     try {
-      // Separate into creates vs deletes
+      // Separate into creates vs deletes (only deletable shares can be unshared)
       const toCreate = selectedCommunityIds.filter((id) => !communitiesWithShares.has(id));
-      const toDelete = selectedCommunityIds.filter((id) => communitiesWithShares.has(id));
+      const toDelete = selectedCommunityIds.filter((id) => deletableShares.has(id));
 
       // Batch create: ONE sign call for all new shares
       if (toCreate.length > 0) {
@@ -328,12 +402,15 @@
   }
 
   /**
-   * Select all communities that don't already have shares
+   * Select all communities that don't have non-deletable shares
    */
   function selectAllCommunities() {
-    const availableCommunities = joinedCommunities.filter(
-      (pubkey) => !communitiesWithShares.has(pubkey)
-    );
+    const availableCommunities = joinedCommunities.filter((pubkey) => {
+      const isShared = communitiesWithShares.has(pubkey);
+      const isDeletable = deletableShares.has(pubkey);
+      // Skip communities with non-deletable shares (native h-tags, other users' reposts)
+      return !isShared || isDeletable;
+    });
     selectedCommunityIds = availableCommunities;
   }
 
@@ -382,21 +459,29 @@
       <div class="max-h-40 overflow-y-auto rounded-lg border border-base-300 p-3">
         {#each joinedCommunities as communityPubKey (communityPubKey)}
           {@const isAlreadyShared = communitiesWithShares.has(communityPubKey)}
+          {@const isDeletable = deletableShares.has(communityPubKey)}
+          {@const isNonDeletable = isAlreadyShared && !isDeletable}
           {@const isSelected = selectedCommunityIds.includes(communityPubKey)}
           {@const getCommunityProfile = useUserProfile(communityPubKey)}
           {@const communityProfile = getCommunityProfile()}
-          <label class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200">
+          <label
+            class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200"
+            class:opacity-60={isNonDeletable}
+          >
             <input
               type="checkbox"
               class="checkbox checkbox-secondary {compact ? 'checkbox-sm' : ''}"
               checked={isSelected || isAlreadyShared}
+              disabled={isNonDeletable}
               onchange={() => toggleCommunitySelection(communityPubKey)}
             />
             <span class="font-medium {compact ? 'text-sm' : ''}">
               {getDisplayName(communityProfile) ||
                 `${communityPubKey.slice(0, 8)}...${communityPubKey.slice(-4)}`}
             </span>
-            {#if isAlreadyShared && !isSelected}
+            {#if isNonDeletable}
+              <span class="text-xs font-medium text-success">(Shared)</span>
+            {:else if isAlreadyShared && !isSelected}
               <span class="text-xs font-medium text-success">(Shared - click to unshare)</span>
             {:else if isAlreadyShared && isSelected}
               <span class="text-xs font-medium text-warning">(Will be unshared)</span>

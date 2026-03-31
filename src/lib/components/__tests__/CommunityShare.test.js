@@ -2,12 +2,14 @@
  * CommunityShare Component Tests
  *
  * Tests for NIP-18 repost (kind 6/16) community sharing with h-tags,
+ * detection of shares by any user, native h-tag detection on original events,
  * plus backward-compat detection of legacy kind 30222 shares.
  *
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/svelte';
+
 import CommunityShare from '../shared/CommunityShare.svelte';
 
 // --- Mocks ---
@@ -31,7 +33,7 @@ const mockActiveUser = {
   signer: { sign: vi.fn() }
 };
 
-// NIP-18 repost: user shared mockEvent with community1 via kind 16 + h-tag
+// NIP-18 repost: current user shared mockEvent with community1 via kind 16 + h-tag
 const mockRepostEvent = {
   id: 'repost-event-1',
   kind: 16,
@@ -44,6 +46,22 @@ const mockRepostEvent = {
     ['h', mockCommunityPubkey1]
   ],
   created_at: 1700000100,
+  content: JSON.stringify(mockEvent)
+};
+
+// NIP-18 repost by a DIFFERENT user targeting community2
+const mockOtherUserRepostEvent = {
+  id: 'repost-event-2',
+  kind: 16,
+  pubkey: 'other-user-pubkey',
+  tags: [
+    ['e', 'event-123'],
+    ['a', '30142:author-pubkey:test-resource-id'],
+    ['k', '30142'],
+    ['p', 'author-pubkey'],
+    ['h', mockCommunityPubkey2]
+  ],
+  created_at: 1700000200,
   content: JSON.stringify(mockEvent)
 };
 
@@ -63,6 +81,19 @@ const mockLegacyShareEvent = {
   content: ''
 };
 
+// Event with native h-tags (directly targeting communities)
+const mockEventWithHTags = {
+  id: 'event-456',
+  kind: 30142,
+  pubkey: 'author-pubkey',
+  tags: [
+    ['d', 'test-resource-with-htags'],
+    ['h', mockCommunityPubkey1]
+  ],
+  created_at: 1700000000,
+  content: ''
+};
+
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
   useJoinedCommunitiesList: () => () => mockJoinedCommunities
 }));
@@ -71,10 +102,22 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => null
 }));
 
+// Track the SharesModel callback so tests can emit events
+let _sharesModelCallback = (/** @type {any[]} */ _events) => {};
+let _timelineCallback = (/** @type {any[]} */ _events) => {};
+
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    model: vi.fn(() => ({
+    model: vi.fn((_model, _arg) => ({
       subscribe: (/** @type {Function} */ cb) => {
+        _sharesModelCallback = cb;
+        cb([]);
+        return { unsubscribe: vi.fn() };
+      }
+    })),
+    timeline: vi.fn(() => ({
+      subscribe: (/** @type {Function} */ cb) => {
+        _timelineCallback = cb;
         cb([]);
         return { unsubscribe: vi.fn() };
       }
@@ -84,14 +127,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: vi.fn()
 }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({
-    subscribe: () => ({ unsubscribe: vi.fn() })
-  })
+const mockCreateTimelineLoader = vi.fn(() => () => ({
+  subscribe: () => ({ unsubscribe: vi.fn() })
 }));
 
-vi.mock('applesauce-core/models', () => ({
-  TimelineModel: 'TimelineModel'
+vi.mock('applesauce-loaders/loaders', () => ({
+  createTimelineLoader: (...args) => mockCreateTimelineLoader(...args)
+}));
+
+vi.mock('applesauce-common/models', () => ({
+  SharesModel: 'SharesModel'
 }));
 
 vi.mock('applesauce-core/event-factory', () => ({
@@ -142,15 +187,41 @@ vi.mock('$lib/components/icons', () => ({
   AlertIcon: StubComponent
 }));
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    fallbackRelays: ['wss://relay.test.com']
-  }
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getAllLookupRelays: () => ['wss://relay.test.com', 'wss://app.relay.com']
 }));
 
 describe('CommunityShare', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    _sharesModelCallback = () => {};
+    _timelineCallback = () => {};
+    mockCreateTimelineLoader.mockImplementation(() => () => ({
+      subscribe: () => ({ unsubscribe: vi.fn() })
+    }));
+
+    // Reset eventStore mocks to defaults (vi.clearAllMocks doesn't reset implementations)
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+    vi.mocked(eventStore.model).mockImplementation(
+      (_model, _arg) =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            _sharesModelCallback = cb;
+            cb([]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+    vi.mocked(eventStore.timeline).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            _timelineCallback = cb;
+            cb([]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
   });
 
   it('renders community checkboxes without effect_update_depth_exceeded', () => {
@@ -168,7 +239,7 @@ describe('CommunityShare', () => {
   it('detects existing NIP-18 reposts (kind 16) with h-tag as shared', async () => {
     const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
 
-    // Model emits NIP-18 repost events (kind 16 with h-tag)
+    // SharesModel emits NIP-18 repost events (kind 16 with h-tag)
     vi.mocked(eventStore.model).mockImplementation(
       () =>
         /** @type {any} */ ({
@@ -186,7 +257,7 @@ describe('CommunityShare', () => {
       }
     });
 
-    // Community1 should show as shared (via h-tag on the repost)
+    // Community1 should show as shared (via h-tag on the repost) and deletable by current user
     const sharedLabels = container.querySelectorAll('.text-success');
     expect(sharedLabels.length).toBe(1);
     expect(sharedLabels[0].textContent).toContain('Shared');
@@ -195,8 +266,17 @@ describe('CommunityShare', () => {
   it('detects legacy kind 30222 shares (backward compat)', async () => {
     const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
 
-    // Model emits legacy share events (kind 30222 with p-tag)
+    // SharesModel returns empty (no kind 6/16), timeline returns legacy share
     vi.mocked(eventStore.model).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+    vi.mocked(eventStore.timeline).mockImplementation(
       () =>
         /** @type {any} */ ({
           subscribe: (/** @type {Function} */ cb) => {
@@ -222,12 +302,21 @@ describe('CommunityShare', () => {
   it('detects both NIP-18 reposts and legacy 30222 shares simultaneously', async () => {
     const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
 
-    // Model emits both types
+    // SharesModel returns repost, timeline returns legacy
     vi.mocked(eventStore.model).mockImplementation(
       () =>
         /** @type {any} */ ({
           subscribe: (/** @type {Function} */ cb) => {
-            cb([mockRepostEvent, mockLegacyShareEvent]);
+            cb([mockRepostEvent]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+    vi.mocked(eventStore.timeline).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([mockLegacyShareEvent]);
             return { unsubscribe: vi.fn() };
           }
         })
@@ -272,6 +361,58 @@ describe('CommunityShare', () => {
     expect(emissionCount).toBe(1);
   });
 
+  it('uses getAllLookupRelays for share detection (not just fallbackRelays)', () => {
+    render(CommunityShare, {
+      props: {
+        event: mockEvent,
+        activeUser: mockActiveUser
+      }
+    });
+
+    // All loader calls should use the full relay set from getAllLookupRelays
+    for (const call of mockCreateTimelineLoader.mock.calls) {
+      const relays = call[1];
+      expect(relays).toEqual(['wss://relay.test.com', 'wss://app.relay.com']);
+    }
+  });
+
+  it('uses targeted #e tag filters for share detection without authors filter', () => {
+    render(CommunityShare, {
+      props: {
+        event: mockEvent,
+        activeUser: mockActiveUser
+      }
+    });
+
+    // Should have loaders with #e tag filter targeting this event's id
+    const filtersUsed = mockCreateTimelineLoader.mock.calls.map((call) => call[2]);
+    const repostByE = filtersUsed.find(
+      (f) => f.kinds?.includes(6) && f.kinds?.includes(16) && f['#e']
+    );
+    expect(repostByE).toBeDefined();
+    expect(repostByE['#e']).toEqual(['event-123']);
+    // No authors filter — detect shares by ALL users
+    expect(repostByE.authors).toBeUndefined();
+  });
+
+  it('uses #a tag filters for addressable events without authors filter', () => {
+    render(CommunityShare, {
+      props: {
+        event: mockEvent, // kind 30142 is addressable (30000-40000)
+        activeUser: mockActiveUser
+      }
+    });
+
+    const filtersUsed = mockCreateTimelineLoader.mock.calls.map((call) => call[2]);
+    const repostByA = filtersUsed.find(
+      (f) => f.kinds?.includes(6) && f.kinds?.includes(16) && f['#a']
+    );
+    expect(repostByA).toBeDefined();
+    expect(repostByA['#a']).toEqual(['30142:author-pubkey:test-resource-id']);
+    // No authors filter
+    expect(repostByA.authors).toBeUndefined();
+  });
+
   it('shows loading state when checking shares', () => {
     const { container } = render(CommunityShare, {
       props: {
@@ -282,5 +423,106 @@ describe('CommunityShare', () => {
 
     const spinners = container.querySelectorAll('.loading-spinner');
     expect(spinners.length).toBe(0);
+  });
+
+  // --- New tests for all-user share detection ---
+
+  it('detects shares by other users as non-deletable', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    // SharesModel returns a repost by a DIFFERENT user
+    vi.mocked(eventStore.model).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([mockOtherUserRepostEvent]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+
+    const { container } = render(CommunityShare, {
+      props: {
+        event: mockEvent,
+        activeUser: mockActiveUser
+      }
+    });
+
+    // Community2 should show as shared but non-deletable (shows just "(Shared)" not "click to unshare")
+    const sharedLabels = container.querySelectorAll('.text-success');
+    expect(sharedLabels.length).toBe(1);
+    expect(sharedLabels[0].textContent).toBe('(Shared)');
+
+    // The checkbox should be disabled (non-deletable)
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    const community2Checkbox = checkboxes[1]; // second community
+    expect(community2Checkbox.disabled).toBe(true);
+  });
+
+  it('detects native h-tags on original event as non-deletable shares', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    // SharesModel returns empty — no reposts exist
+    vi.mocked(eventStore.model).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+
+    const { container } = render(CommunityShare, {
+      props: {
+        event: mockEventWithHTags, // has h-tag for community1
+        activeUser: mockActiveUser
+      }
+    });
+
+    // Community1 should show as shared via native h-tag (non-deletable)
+    const sharedLabels = container.querySelectorAll('.text-success');
+    expect(sharedLabels.length).toBe(1);
+    expect(sharedLabels[0].textContent).toBe('(Shared)');
+
+    // The checkbox should be disabled
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    const community1Checkbox = checkboxes[0];
+    expect(community1Checkbox.disabled).toBe(true);
+  });
+
+  it('distinguishes deletable (own) from non-deletable (other user) shares', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    // SharesModel returns both: own repost for community1, other user's repost for community2
+    vi.mocked(eventStore.model).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([mockRepostEvent, mockOtherUserRepostEvent]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+
+    const { container } = render(CommunityShare, {
+      props: {
+        event: mockEvent,
+        activeUser: mockActiveUser
+      }
+    });
+
+    const sharedLabels = container.querySelectorAll('.text-success');
+    expect(sharedLabels.length).toBe(2);
+
+    // Community1 (own share) should show "Shared - click to unshare"
+    expect(sharedLabels[0].textContent).toContain('click to unshare');
+
+    // Community2 (other user's share) should show just "(Shared)" and be disabled
+    expect(sharedLabels[1].textContent).toBe('(Shared)');
+
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    expect(checkboxes[0].disabled).toBe(false); // own share — can unshare
+    expect(checkboxes[1].disabled).toBe(true); // other user's share — cannot unshare
   });
 });
