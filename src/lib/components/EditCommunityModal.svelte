@@ -2,7 +2,7 @@
   import * as m from '$lib/paraglide/messages';
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { publishEvent } from '$lib/services/publish-service.js';
+  import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
@@ -403,9 +403,8 @@
       isPublishing = true;
 
       const account = manager.active;
-      const signer = account?.signer;
 
-      if (!account || !signer) {
+      if (!account) {
         throw new Error(m.create_community_modal_error_no_account());
       }
 
@@ -425,49 +424,37 @@
         hasBadges ? {} : { communityPubkey: communityEvent.pubkey }
       );
 
+      /** @type {import('nostr-tools').EventTemplate} */
       const communityUpdateEvent = {
         kind: 10222,
         created_at: Math.floor(Date.now() / 1000),
         tags: communityTags,
-        content: '',
-        pubkey: account.pubkey
+        content: ''
       };
 
-      const signedEvent = await signer.signEvent(communityUpdateEvent);
+      const signedEvent = await account.signEvent(communityUpdateEvent);
+      publishEventOptimistic(signedEvent);
 
-      // Publish using outbox model + communikey relays (for kind 10222)
-      const publishResult = await publishEvent(signedEvent);
+      // Create/update kind 30000 profile list events for gated sections
+      for (const [, ct] of Object.entries(communityData.contentTypes)) {
+        if (!ct.enabled || !ct.formRef) continue;
 
-      if (publishResult.success) {
-        eventStore.add(signedEvent);
+        /** @type {import('nostr-tools').EventTemplate} */
+        const profileListEvent = {
+          kind: 30000,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ['d', ct.name],
+            ['form', ct.formRef]
+          ],
+          content: ''
+        };
 
-        // Create/update kind 30000 profile list events for gated sections
-        for (const [, ct] of Object.entries(communityData.contentTypes)) {
-          if (!ct.enabled || !ct.formRef) continue;
-
-          const profileListEvent = {
-            kind: 30000,
-            created_at: Math.floor(Date.now() / 1000),
-            tags: [
-              ['d', ct.name],
-              ['form', ct.formRef]
-            ],
-            content: '',
-            pubkey: account.pubkey
-          };
-
-          const signedProfileList = await signer.signEvent(profileListEvent);
-          const plResult = await publishEvent(signedProfileList);
-          if (plResult.success) {
-            eventStore.add(signedProfileList);
-          }
-        }
-
-        console.log('EditCommunityModal: Successfully updated community');
-        closeModal();
-      } else {
-        throw new Error(m.create_community_modal_error_publish_failed());
+        const signedProfileList = await account.signEvent(profileListEvent);
+        publishEventOptimistic(signedProfileList);
       }
+
+      closeModal();
     } catch (error) {
       console.error('Error updating community:', error);
       errors.publishing =
