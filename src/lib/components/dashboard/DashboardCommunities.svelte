@@ -9,8 +9,9 @@
   import * as m from '$lib/paraglide/messages';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import { PeopleIcon } from '$lib/components/icons';
+  import { PeopleIcon, SearchIcon, PlusIcon } from '$lib/components/icons';
 
   const getJoinedCommunities = useJoinedCommunitiesList();
   let joinedCommunities = $derived(getJoinedCommunities());
@@ -44,9 +45,19 @@
 <section data-testid="dashboard-communities">
   <div class="mb-4 flex items-center justify-between">
     <h2 class="text-lg font-bold">{m.dashboard_communities_title()}</h2>
-    <a href={resolve('/communities')} class="btn btn-ghost btn-sm">
-      {m.dashboard_communities_view_all()} →
-    </a>
+    <div class="flex gap-1">
+      <a href={resolve('/discover?type=communities')} class="btn gap-1 btn-ghost btn-sm">
+        <SearchIcon class_="w-4 h-4" />
+        {m.dashboard_communities_discover()}
+      </a>
+      <button
+        onclick={() => modalStore.openModal('createCommunity')}
+        class="btn gap-1 btn-ghost btn-sm"
+      >
+        <PlusIcon class_="w-4 h-4" />
+        {m.dashboard_communities_create()}
+      </button>
+    </div>
   </div>
 
   {#if joinedCommunities.length === 0}
@@ -55,7 +66,7 @@
     >
       <PeopleIcon class_="mb-3 h-10 w-10 text-base-content/30" />
       <p class="text-base-content/60">{m.dashboard_communities_empty()}</p>
-      <a href={resolve('/communities')} class="btn mt-3 btn-sm btn-primary">
+      <a href={resolve('/discover?type=communities')} class="btn mt-3 btn-sm btn-primary">
         {m.dashboard_communities_explore()}
       </a>
     </div>

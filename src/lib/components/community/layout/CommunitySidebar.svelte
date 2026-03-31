@@ -2,8 +2,7 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
-  import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { PlusIcon, DashboardIcon } from '$lib/components/icons';
+  import { DashboardIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
 
@@ -23,10 +22,6 @@
     if (onCommunitySelect) {
       onCommunitySelect(pubkey);
     }
-  }
-
-  function handleCreateCommunity() {
-    modalStore.openModal('createCommunity');
   }
 </script>
 
@@ -77,43 +72,6 @@
         </button>
       </div>
     {/each}
-  </div>
-
-  <!-- Spacer to push buttons to bottom -->
-  <div class="flex-1"></div>
-
-  <!-- Action Buttons -->
-  <div class="flex flex-col items-center gap-2 border-t border-base-300 py-3">
-    <!-- Discover Communities Button -->
-    <div class="tooltip tooltip-right" data-tip={m.community_layout_sidebar_discover_communities()}>
-      <a
-        href={resolve('/discover?type=communities')}
-        class="btn btn-circle h-10 w-10 btn-ghost btn-sm"
-        aria-label={m.community_layout_sidebar_discover_communities()}
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
-      </a>
-    </div>
-
-    <!-- Create Community Button -->
-    <div class="tooltip tooltip-right" data-tip={m.community_layout_sidebar_create_community()}>
-      <button onclick={handleCreateCommunity} class="btn btn-circle h-10 w-10 btn-sm btn-primary">
-        <PlusIcon class_="w-5 h-5" />
-      </button>
-    </div>
   </div>
 </div>
 
@@ -190,30 +148,5 @@
         </a>
       </div>
     {/if}
-  </div>
-
-  <!-- Action Buttons -->
-  <div class="space-y-2 border-t border-base-300 p-4">
-    <a href={resolve('/discover?type=communities')} class="btn w-full gap-2 btn-outline">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="h-4 w-4"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-        />
-      </svg>
-      {m.community_layout_sidebar_discover_button()}
-    </a>
-    <button onclick={handleCreateCommunity} class="btn w-full btn-primary">
-      <PlusIcon class_="w-5 h-5" />
-      {m.community_layout_sidebar_create_button()}
-    </button>
   </div>
 </div>

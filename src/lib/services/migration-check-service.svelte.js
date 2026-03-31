@@ -38,7 +38,9 @@ export function getMigrationIdentifier() {
  */
 export async function isMigrationDone(pubkey) {
   const identifier = getMigrationIdentifier();
-  const relays = getAllLookupRelays();
+  const lookupRelays = getAllLookupRelays();
+  const writeRelays = await getWriteRelays(pubkey);
+  const relays = lookupRelays.concat(writeRelays.filter((r) => !lookupRelays.includes(r)));
 
   // Load the flag event from network (must complete before reading EventStore)
   await lastValueFrom(addressLoader({ kind: 30078, pubkey, identifier, relays }), {

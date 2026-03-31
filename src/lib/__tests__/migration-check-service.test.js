@@ -183,6 +183,20 @@ describe('isMigrationDone', () => {
     expect(await isMigrationDone('abc123')).toBe(true);
   });
 
+  it('includes user write relays in lookup', async () => {
+    const { addressLoader } = await import('$lib/loaders/base.js');
+    const { getWriteRelays } = await import('$lib/services/relay-service.svelte.js');
+
+    getWriteRelays.mockResolvedValueOnce(['wss://user-write.relay']);
+    mockFlagEvent = null;
+
+    await isMigrationDone('abc123');
+
+    const lastCall = addressLoader.mock.calls[addressLoader.mock.calls.length - 1][0];
+    expect(lastCall.relays).toContain('wss://lookup.relay');
+    expect(lastCall.relays).toContain('wss://user-write.relay');
+  });
+
   it('returns false when flag event has different content', async () => {
     mockFlagEvent = {
       kind: 30078,

@@ -61,3 +61,7 @@ screenshots/
 
 # Git worktrees
 .worktrees/
+
+# Local tooling
+.superpowers/
+docs/
