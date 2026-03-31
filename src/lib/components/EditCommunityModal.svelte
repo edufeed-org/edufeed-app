@@ -6,13 +6,13 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
-  import ContentTypeFormConfig from './shared/ContentTypeFormConfig.svelte';
+  import ContentTypesAndACL from './shared/ContentTypesAndACL.svelte';
+  import { deriveDefaultFormRef } from '$lib/helpers/communityFormDefaults.js';
   import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
-  import { formTemplateLoader } from '$lib/loaders/community.js';
+  import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
-  import { TimelineModel } from 'applesauce-core/models';
 
   let { modalId } = $props();
 
@@ -66,11 +66,16 @@
 
   // Toggle for access control configuration
   let showAccessConfig = $state(false);
-  let showAdvancedRelays = $state(false);
-
-  // Form templates for access gating
-  /** @type {any[]} */
-  let formTemplates = $state.raw([]);
+  let defaultFormRef = $state('');
+  // Form templates for access gating (community pubkey + logged-in user)
+  const getFormTemplates = useFormTemplates(() => {
+    const communityPk = communityEvent?.pubkey;
+    const userPk = manager.active?.pubkey;
+    /** @type {string[]} */
+    const authors = communityPk ? [communityPk] : [];
+    if (userPk && userPk !== communityPk) authors.push(userPk);
+    return authors;
+  });
 
   // UI state
   let isPublishing = $state(false);
@@ -192,24 +197,6 @@
             contentTypes[key].badges.write = tag[1];
           }
         }
-      } else if (tag[0] === 'r' && currentSection && tag[2] === 'content') {
-        // Per-content-type relay
-        const key =
-          currentSection === 'calendar'
-            ? 'calendar'
-            : currentSection === 'chat'
-              ? 'chat'
-              : currentSection === 'articles'
-                ? 'articles'
-                : currentSection === 'posts'
-                  ? 'posts'
-                  : currentSection === 'wikis'
-                    ? 'wikis'
-                    : null;
-
-        if (key && contentTypes[key]) {
-          contentTypes[key].relays.push(tag[1]);
-        }
       }
     }
 
@@ -271,27 +258,17 @@
     }
   }
 
-  // Load form templates for the community
+  // Derive defaultFormRef once formRefs load from network
+  let defaultDerived = $state(false);
   $effect(() => {
-    const pubkey = communityEvent?.pubkey;
-    if (!pubkey) return;
-
-    /** @type {import('rxjs').Subscription | undefined} */
-    let loaderSub;
-    /** @type {import('rxjs').Subscription | undefined} */
-    let modelSub;
-
-    loaderSub = formTemplateLoader(pubkey)().subscribe();
-    modelSub = eventStore
-      .model(TimelineModel, { kinds: [30168], authors: [pubkey] })
-      .subscribe((events) => {
-        formTemplates = events || [];
-      });
-
-    return () => {
-      loaderSub?.unsubscribe();
-      modelSub?.unsubscribe();
-    };
+    const anyGated = Object.values(communityData.contentTypes).some(
+      (ct) => ct.enabled && ct.formRef
+    );
+    if (anyGated && !defaultDerived) {
+      defaultDerived = true;
+      defaultFormRef = deriveDefaultFormRef(communityData.contentTypes);
+      showAccessConfig = true;
+    }
   });
 
   // Reset when modal closes
@@ -357,7 +334,8 @@
       }
     };
     showAccessConfig = false;
-    showAdvancedRelays = false;
+    defaultFormRef = '';
+    defaultDerived = false;
     isPublishing = false;
     errors = {};
     isInitialized = false;
@@ -413,6 +391,13 @@
         throw new Error(
           m.edit_community_modal_error_not_owner?.() || 'Only the community owner can edit settings'
         );
+      }
+
+      // Clear formRefs if access control is disabled
+      if (!showAccessConfig) {
+        for (const ct of Object.values(communityData.contentTypes)) {
+          ct.formRef = '';
+        }
       }
 
       // Detect old-spec: community has badge a-tags → preserve old format
@@ -497,27 +482,6 @@
       </div>
     {:else}
       <div class="space-y-6">
-        <!-- Relays -->
-        <EditableList
-          bind:items={communityData.relays}
-          label={m.create_community_modal_relays_label()}
-          placeholder={m.create_community_modal_relays_placeholder()}
-          buttonText={m.create_community_modal_relays_button()}
-          itemType="relay"
-          validator={validateRelayUrl}
-          minItems={1}
-          helpText={m.create_community_modal_relays_help()}
-        />
-
-        <!-- Blossom Servers -->
-        <EditableList
-          bind:items={communityData.blossomServers}
-          label={m.create_community_modal_blossom_label()}
-          placeholder={m.create_community_modal_blossom_placeholder()}
-          buttonText={m.create_community_modal_blossom_button()}
-          itemType="server"
-        />
-
         <!-- Location -->
         <LocationInput
           bind:value={communityData.location}
@@ -535,246 +499,72 @@
             id="ecm-description-textarea"
             bind:value={communityData.description}
             placeholder={m.create_community_modal_description_placeholder()}
-            class="textarea-bordered textarea h-24"
+            class="textarea-bordered textarea h-24 w-full"
           ></textarea>
         </div>
 
-        <!-- Content Types -->
-        <div class="form-control">
-          <div class="label">
-            <span class="label-text font-semibold"
-              >{m.create_community_modal_content_types_label()}</span
-            >
-            <span class="label-text-alt text-sm"
-              >{m.create_community_modal_content_types_alt()}</span
-            >
+        <!-- Content Types & Access Control -->
+        <ContentTypesAndACL
+          bind:contentTypes={communityData.contentTypes}
+          formTemplates={getFormTemplates()}
+          bind:showAccessConfig
+          bind:defaultFormRef
+          {errors}
+        />
+
+        <!-- Advanced Settings -->
+        <div class="collapse-arrow collapse bg-base-200">
+          <input type="checkbox" />
+          <div class="collapse-title font-medium">
+            {m.advanced_settings_label?.() || 'Advanced Settings'}
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <!-- Calendar Card -->
-            <button
-              type="button"
-              class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                .contentTypes.calendar.enabled
-                ? 'ring-2 ring-primary'
-                : ''}"
-              onclick={() =>
-                (communityData.contentTypes.calendar.enabled =
-                  !communityData.contentTypes.calendar.enabled)}
-            >
-              <div class="card-body p-4">
-                <div class="flex items-center justify-between">
-                  <span class="font-medium">{m.create_community_modal_content_calendar()}</span>
-                  <input
-                    type="checkbox"
-                    checked={communityData.contentTypes.calendar.enabled}
-                    class="pointer-events-none checkbox checkbox-primary"
-                    tabindex="-1"
-                  />
-                </div>
-              </div>
-            </button>
-
-            <!-- Chat Card -->
-            <button
-              type="button"
-              class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                .contentTypes.chat.enabled
-                ? 'ring-2 ring-primary'
-                : ''}"
-              onclick={() =>
-                (communityData.contentTypes.chat.enabled =
-                  !communityData.contentTypes.chat.enabled)}
-            >
-              <div class="card-body p-4">
-                <div class="flex items-center justify-between">
-                  <span class="font-medium">{m.create_community_modal_content_chat()}</span>
-                  <input
-                    type="checkbox"
-                    checked={communityData.contentTypes.chat.enabled}
-                    class="pointer-events-none checkbox checkbox-primary"
-                    tabindex="-1"
-                  />
-                </div>
-              </div>
-            </button>
-
-            <!-- Articles Card -->
-            <button
-              type="button"
-              class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                .contentTypes.articles.enabled
-                ? 'ring-2 ring-primary'
-                : ''}"
-              onclick={() =>
-                (communityData.contentTypes.articles.enabled =
-                  !communityData.contentTypes.articles.enabled)}
-            >
-              <div class="card-body p-4">
-                <div class="flex items-center justify-between">
-                  <span class="font-medium">{m.create_community_modal_content_articles()}</span>
-                  <input
-                    type="checkbox"
-                    checked={communityData.contentTypes.articles.enabled}
-                    class="pointer-events-none checkbox checkbox-primary"
-                    tabindex="-1"
-                  />
-                </div>
-              </div>
-            </button>
-
-            <!-- Posts Card -->
-            <button
-              type="button"
-              class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                .contentTypes.posts.enabled
-                ? 'ring-2 ring-primary'
-                : ''}"
-              onclick={() =>
-                (communityData.contentTypes.posts.enabled =
-                  !communityData.contentTypes.posts.enabled)}
-            >
-              <div class="card-body p-4">
-                <div class="flex items-center justify-between">
-                  <span class="font-medium">{m.create_community_modal_content_posts()}</span>
-                  <input
-                    type="checkbox"
-                    checked={communityData.contentTypes.posts.enabled}
-                    class="pointer-events-none checkbox checkbox-primary"
-                    tabindex="-1"
-                  />
-                </div>
-              </div>
-            </button>
-
-            <!-- Wikis Card -->
-            <button
-              type="button"
-              class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                .contentTypes.wikis.enabled
-                ? 'ring-2 ring-primary'
-                : ''}"
-              onclick={() =>
-                (communityData.contentTypes.wikis.enabled =
-                  !communityData.contentTypes.wikis.enabled)}
-            >
-              <div class="card-body p-4">
-                <div class="flex items-center justify-between">
-                  <span class="font-medium">{m.create_community_modal_content_wikis()}</span>
-                  <input
-                    type="checkbox"
-                    checked={communityData.contentTypes.wikis.enabled}
-                    class="pointer-events-none checkbox checkbox-primary"
-                    tabindex="-1"
-                  />
-                </div>
-              </div>
-            </button>
+          <div class="collapse-content space-y-4">
+            <EditableList
+              bind:items={communityData.relays}
+              label={m.create_community_modal_relays_label()}
+              placeholder={m.create_community_modal_relays_placeholder()}
+              buttonText={m.create_community_modal_relays_button()}
+              itemType="relay"
+              validator={validateRelayUrl}
+              minItems={1}
+              helpText={m.create_community_modal_relays_help()}
+            />
+            <EditableList
+              bind:items={communityData.blossomServers}
+              label={m.create_community_modal_blossom_label()}
+              placeholder={m.create_community_modal_blossom_placeholder()}
+              buttonText={m.create_community_modal_blossom_button()}
+              itemType="server"
+            />
           </div>
-          {#if errors.contentTypes}
-            <div class="label">
-              <span class="label-text-alt text-error">{errors.contentTypes}</span>
-            </div>
-          {/if}
         </div>
+        <!-- Actions -->
+        <div class="modal-action">
+          <div class="flex w-full justify-between">
+            <div></div>
+            <div class="flex gap-2">
+              <form method="dialog">
+                <button class="btn">{m.create_community_modal_button_cancel()}</button>
+              </form>
 
-        <!-- Access Control Toggle -->
-        <div class="form-control mt-4">
-          <label class="label cursor-pointer justify-start gap-3">
-            <input type="checkbox" class="toggle toggle-primary" bind:checked={showAccessConfig} />
-            <span class="label-text">{m.form_config_toggle?.() || 'Configure access control'}</span>
-          </label>
-          <p class="ml-12 text-xs opacity-70">
-            {m.form_config_toggle_help?.() ||
-              'Require a form submission for publishing to specific content types'}
-          </p>
-        </div>
+              <button class="btn btn-primary" onclick={saveCommunity} disabled={isPublishing}>
+                {#if isPublishing}
+                  <span class="loading loading-sm loading-spinner"></span>
+                  {m.edit_community_modal_button_saving?.() || 'Saving...'}
+                {:else}
+                  {m.edit_community_modal_button_save?.() || 'Save Changes'}
+                {/if}
+              </button>
 
-        <!-- Access Control Section -->
-        {#if showAccessConfig}
-          <div class="mt-4 space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold">
-                {m.form_config_title?.() || 'Access Control'}
-              </h3>
-              <label class="label cursor-pointer gap-2">
-                <span class="label-text text-sm"
-                  >{m.form_config_show_relays?.() || 'Show relay config'}</span
-                >
-                <input type="checkbox" class="toggle toggle-sm" bind:checked={showAdvancedRelays} />
-              </label>
+              {#if errors.publishing}
+                <div class="mt-4 alert alert-error">
+                  <span>{errors.publishing}</span>
+                </div>
+              {/if}
             </div>
-
-            {#if communityData.contentTypes.calendar.enabled}
-              <ContentTypeFormConfig
-                bind:contentType={communityData.contentTypes.calendar}
-                {formTemplates}
-                showAdvanced={showAdvancedRelays}
-              />
-            {/if}
-
-            {#if communityData.contentTypes.chat.enabled}
-              <ContentTypeFormConfig
-                bind:contentType={communityData.contentTypes.chat}
-                {formTemplates}
-                showAdvanced={showAdvancedRelays}
-              />
-            {/if}
-
-            {#if communityData.contentTypes.articles.enabled}
-              <ContentTypeFormConfig
-                bind:contentType={communityData.contentTypes.articles}
-                {formTemplates}
-                showAdvanced={showAdvancedRelays}
-              />
-            {/if}
-
-            {#if communityData.contentTypes.posts.enabled}
-              <ContentTypeFormConfig
-                bind:contentType={communityData.contentTypes.posts}
-                {formTemplates}
-                showAdvanced={showAdvancedRelays}
-              />
-            {/if}
-
-            {#if communityData.contentTypes.wikis.enabled}
-              <ContentTypeFormConfig
-                bind:contentType={communityData.contentTypes.wikis}
-                {formTemplates}
-                showAdvanced={showAdvancedRelays}
-              />
-            {/if}
           </div>
-        {/if}
+        </div>
       </div>
     {/if}
-
-    <!-- Actions -->
-    <div class="modal-action">
-      <div class="flex w-full justify-between">
-        <div></div>
-        <div class="flex gap-2">
-          <form method="dialog">
-            <button class="btn">{m.create_community_modal_button_cancel()}</button>
-          </form>
-
-          {#if isOwner}
-            <button class="btn btn-primary" onclick={saveCommunity} disabled={isPublishing}>
-              {#if isPublishing}
-                <span class="loading loading-sm loading-spinner"></span>
-                {m.edit_community_modal_button_saving?.() || 'Saving...'}
-              {:else}
-                {m.edit_community_modal_button_save?.() || 'Save Changes'}
-              {/if}
-            </button>
-          {/if}
-
-          {#if errors.publishing}
-            <div class="mt-4 alert alert-error">
-              <span>{errors.publishing}</span>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
   </div>
 </dialog>

@@ -76,34 +76,9 @@
           </div>
         {/if}
 
-        <!-- Community Actions -->
-        <div class="card bg-base-200 shadow-xl">
-          <div class="card-body">
-            <h2 class="mb-4 card-title">{m.community_views_settings_actions_title()}</h2>
-
-            <div class="space-y-3">
-              <button
-                onclick={handleLeaveClick}
-                disabled={isLeaving || !getJoined()}
-                class="btn w-full btn-outline btn-error"
-              >
-                {#if isLeaving}
-                  <span class="loading loading-xs loading-spinner"></span>
-                  {m.community_views_settings_leaving()}
-                {:else}
-                  {m.community_views_settings_leave_button()}
-                {/if}
-              </button>
-              <p class="text-center text-xs text-base-content/60">
-                {m.community_views_settings_leave_help()}
-              </p>
-            </div>
-          </div>
-        </div>
-
         <!-- Admin Settings -->
         {#if isOwner}
-          <div class="card mt-6 bg-base-200 shadow-xl">
+          <div class="card bg-base-200 shadow-xl">
             <div class="card-body">
               <h2 class="mb-4 card-title">
                 {m.community_views_settings_admin_title?.() || 'Admin Settings'}
@@ -130,6 +105,31 @@
             <FormLinkManager communityEvent={communikeyEvent} communityPubkey={communityId} />
           </div>
         {/if}
+
+        <!-- Community Actions -->
+        <div class="card mt-6 bg-base-200 shadow-xl">
+          <div class="card-body">
+            <h2 class="mb-4 card-title">{m.community_views_settings_actions_title()}</h2>
+
+            <div class="space-y-3">
+              <button
+                onclick={handleLeaveClick}
+                disabled={isLeaving || !getJoined()}
+                class="btn w-full btn-outline btn-error"
+              >
+                {#if isLeaving}
+                  <span class="loading loading-xs loading-spinner"></span>
+                  {m.community_views_settings_leaving()}
+                {:else}
+                  {m.community_views_settings_leave_button()}
+                {/if}
+              </button>
+              <p class="text-center text-xs text-base-content/60">
+                {m.community_views_settings_leave_help()}
+              </p>
+            </div>
+          </div>
+        </div>
       {:else}
         <div class="flex items-center justify-center py-12">
           <div class="loading loading-lg loading-spinner text-primary"></div>

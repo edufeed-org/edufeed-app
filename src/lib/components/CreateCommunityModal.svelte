@@ -16,11 +16,10 @@
   import ProfileForm from './shared/ProfileForm.svelte';
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
-  import ContentTypeFormConfig from './shared/ContentTypeFormConfig.svelte';
+  import ContentTypesAndACL from './shared/ContentTypesAndACL.svelte';
   import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
-  import { formTemplateLoader } from '$lib/loaders/community.js';
+  import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import { parseFormTemplate } from '$lib/helpers/forms.js';
-  import { TimelineModel } from 'applesauce-core/models';
 
   let { modalId } = $props();
 
@@ -102,33 +101,15 @@
 
   // Toggle for access control configuration
   let showAccessConfig = $state(false);
-  let showAdvancedRelays = $state(false);
-
-  // Form templates for access gating
-  /** @type {any[]} */
-  let formTemplates = $state.raw([]);
-
-  // Load form templates for the community pubkey
-  $effect(() => {
-    const pubkey = useCurrentKeypair ? manager.active?.pubkey : userData.publicKey;
-    if (!pubkey) return;
-
-    /** @type {import('rxjs').Subscription | undefined} */
-    let loaderSub;
-    /** @type {import('rxjs').Subscription | undefined} */
-    let modelSub;
-
-    loaderSub = formTemplateLoader(pubkey)().subscribe();
-    modelSub = eventStore
-      .model(TimelineModel, { kinds: [30168], authors: [pubkey] })
-      .subscribe((events) => {
-        formTemplates = events || [];
-      });
-
-    return () => {
-      loaderSub?.unsubscribe();
-      modelSub?.unsubscribe();
-    };
+  let defaultFormRef = $state('');
+  // Form templates for access gating (community pubkey + logged-in user)
+  const getFormTemplates = useFormTemplates(() => {
+    const communityPk = useCurrentKeypair ? manager.active?.pubkey : userData.publicKey;
+    const userPk = manager.active?.pubkey;
+    /** @type {string[]} */
+    const authors = communityPk ? [communityPk] : [];
+    if (userPk && userPk !== communityPk) authors.push(userPk);
+    return authors;
   });
 
   /**
@@ -139,7 +120,7 @@
   function getFormName(ref) {
     if (!ref) return '';
     const [kind, pubkey, dTag] = ref.split(':');
-    const template = formTemplates.find((t) => {
+    const template = getFormTemplates().find((t) => {
       const parsed = parseFormTemplate(t);
       return String(t.kind) === kind && t.pubkey === pubkey && parsed.dTag === dTag;
     });
@@ -232,7 +213,7 @@
           }
         };
         showAccessConfig = false;
-        showAdvancedRelays = false;
+        defaultFormRef = '';
         errors = {};
       }
     };
@@ -409,6 +390,13 @@
         throw new Error(m.create_community_modal_error_relay_required());
       }
 
+      // Clear formRefs if access control is disabled
+      if (!showAccessConfig) {
+        for (const ct of Object.values(communityData.contentTypes)) {
+          ct.formRef = '';
+        }
+      }
+
       // New communities always use new-spec tags (profile list a-tags)
       const communityTags = buildCommunityDefinitionTags(communityData, {
         communityPubkey: account.pubkey
@@ -545,7 +533,7 @@
       }
     };
     showAccessConfig = false;
-    showAdvancedRelays = false;
+    defaultFormRef = '';
     errors = {};
   }
 </script>
@@ -616,27 +604,6 @@
             </p>
           </div>
 
-          <!-- Relays -->
-          <EditableList
-            bind:items={communityData.relays}
-            label={m.create_community_modal_relays_label()}
-            placeholder={m.create_community_modal_relays_placeholder()}
-            buttonText={m.create_community_modal_relays_button()}
-            itemType="relay"
-            validator={validateRelayUrl}
-            minItems={1}
-            helpText={m.create_community_modal_relays_help()}
-          />
-
-          <!-- Blossom Servers -->
-          <EditableList
-            bind:items={communityData.blossomServers}
-            label={m.create_community_modal_blossom_label()}
-            placeholder={m.create_community_modal_blossom_placeholder()}
-            buttonText={m.create_community_modal_blossom_button()}
-            itemType="server"
-          />
-
           <!-- Location -->
           <LocationInput
             bind:value={communityData.location}
@@ -654,231 +621,45 @@
               id="ccm-current-description-textarea"
               bind:value={communityData.description}
               placeholder={m.create_community_modal_description_placeholder()}
-              class="textarea-bordered textarea h-24"
+              class="textarea-bordered textarea h-24 w-full"
             ></textarea>
           </div>
 
-          <!-- Content Types -->
-          <div class="form-control">
-            <div class="label">
-              <span class="label-text font-semibold"
-                >{m.create_community_modal_content_types_label()}</span
-              >
-              <span class="label-text-alt text-sm"
-                >{m.create_community_modal_content_types_alt()}</span
-              >
+          <!-- Content Types & Access Control -->
+          <ContentTypesAndACL
+            bind:contentTypes={communityData.contentTypes}
+            formTemplates={getFormTemplates()}
+            bind:showAccessConfig
+            bind:defaultFormRef
+            {errors}
+          />
+
+          <!-- Advanced Settings -->
+          <div class="collapse-arrow collapse bg-base-200">
+            <input type="checkbox" />
+            <div class="collapse-title font-medium">
+              {m.advanced_settings_label?.() || 'Advanced Settings'}
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <!-- Calendar Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.calendar.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.calendar.enabled =
-                    !communityData.contentTypes.calendar.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_calendar()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.calendar.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Chat Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.chat.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.chat.enabled =
-                    !communityData.contentTypes.chat.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_chat()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.chat.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Articles Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.articles.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.articles.enabled =
-                    !communityData.contentTypes.articles.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_articles()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.articles.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Posts Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.posts.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.posts.enabled =
-                    !communityData.contentTypes.posts.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_posts()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.posts.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Wikis Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.wikis.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.wikis.enabled =
-                    !communityData.contentTypes.wikis.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_wikis()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.wikis.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-            </div>
-            {#if errors.contentTypes}
-              <div class="label">
-                <span class="label-text-alt text-error">{errors.contentTypes}</span>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Access Control Toggle -->
-          <div class="form-control mt-4">
-            <label class="label cursor-pointer justify-start gap-3">
-              <input
-                id="ccm-current-access-config-toggle"
-                type="checkbox"
-                class="toggle toggle-primary"
-                bind:checked={showAccessConfig}
+            <div class="collapse-content space-y-4">
+              <EditableList
+                bind:items={communityData.relays}
+                label={m.create_community_modal_relays_label()}
+                placeholder={m.create_community_modal_relays_placeholder()}
+                buttonText={m.create_community_modal_relays_button()}
+                itemType="relay"
+                validator={validateRelayUrl}
+                minItems={1}
+                helpText={m.create_community_modal_relays_help()}
               />
-              <span class="label-text"
-                >{m.form_config_toggle?.() || 'Configure access control'}</span
-              >
-            </label>
-            <p class="ml-12 text-xs opacity-70">
-              {m.form_config_toggle_help?.() ||
-                'Require a form submission for publishing to specific content types'}
-            </p>
-          </div>
-
-          <!-- Access Control Section -->
-          {#if showAccessConfig}
-            <div class="mt-4 space-y-4">
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold">
-                  {m.form_config_title?.() || 'Access Control'}
-                </h3>
-                <label
-                  class="label cursor-pointer gap-2"
-                  for="ccm-current-show-relay-config-toggle"
-                >
-                  <span class="label-text text-sm"
-                    >{m.form_config_show_relays?.() || 'Show relay config'}</span
-                  >
-                  <input
-                    id="ccm-current-show-relay-config-toggle"
-                    type="checkbox"
-                    class="toggle toggle-sm"
-                    bind:checked={showAdvancedRelays}
-                  />
-                </label>
-              </div>
-
-              {#if communityData.contentTypes.calendar.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.calendar}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.chat.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.chat}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.articles.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.articles}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.posts.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.posts}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.wikis.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.wikis}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
+              <EditableList
+                bind:items={communityData.blossomServers}
+                label={m.create_community_modal_blossom_label()}
+                placeholder={m.create_community_modal_blossom_placeholder()}
+                buttonText={m.create_community_modal_blossom_button()}
+                itemType="server"
+              />
             </div>
-          {/if}
+          </div>
         </div>
       {:else if currentStep === 2 && useCurrentKeypair}
         <!-- Confirmation for Current Keypair -->
@@ -938,96 +719,27 @@
                   {m.create_community_modal_confirm_content_types_section()}
                 </h3>
                 <div class="flex flex-wrap gap-2">
-                  {#if communityData.contentTypes.calendar.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_calendar()}
-                      {#if communityData.contentTypes.calendar.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.chat.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_chat()}
-                      {#if communityData.contentTypes.chat.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.articles.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_articles()}
-                      {#if communityData.contentTypes.articles.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.posts.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_posts()}
-                      {#if communityData.contentTypes.posts.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.wikis.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_wikis()}
-                      {#if communityData.contentTypes.wikis.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
+                  {#each Object.entries(communityData.contentTypes) as [key, ct] (key)}
+                    {#if ct.enabled}
+                      <div class="badge gap-1 badge-primary">
+                        {ct.name}
+                        {#if ct.formRef}
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            class="h-3 w-3"
+                          >
+                            <path
+                              fill-rule="evenodd"
+                              d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                              clip-rule="evenodd"
+                            />
+                          </svg>
+                        {/if}
+                      </div>
+                    {/if}
+                  {/each}
                 </div>
                 {#if Object.values(communityData.contentTypes).some((ct) => ct.enabled && ct.formRef)}
                   <div class="mt-2 space-y-1 text-sm text-base-content/70">
@@ -1072,27 +784,6 @@
             {m.create_community_modal_step_community_settings()}
           </h2>
 
-          <!-- Relays -->
-          <EditableList
-            bind:items={communityData.relays}
-            label={m.create_community_modal_relays_label()}
-            placeholder={m.create_community_modal_relays_placeholder()}
-            buttonText={m.create_community_modal_relays_button()}
-            itemType="relay"
-            validator={validateRelayUrl}
-            minItems={1}
-            helpText={m.create_community_modal_relays_help()}
-          />
-
-          <!-- Blossom Servers -->
-          <EditableList
-            bind:items={communityData.blossomServers}
-            label={m.create_community_modal_blossom_label()}
-            placeholder={m.create_community_modal_blossom_placeholder()}
-            buttonText={m.create_community_modal_blossom_button()}
-            itemType="server"
-          />
-
           <!-- Location -->
           <LocationInput
             bind:value={communityData.location}
@@ -1110,228 +801,45 @@
               id="ccm-new-description-textarea"
               bind:value={communityData.description}
               placeholder={m.create_community_modal_description_placeholder()}
-              class="textarea-bordered textarea h-24"
+              class="textarea-bordered textarea h-24 w-full"
             ></textarea>
           </div>
 
-          <!-- Content Types -->
-          <div class="form-control">
-            <div class="label">
-              <span class="label-text font-semibold"
-                >{m.create_community_modal_content_types_label()}</span
-              >
-              <span class="label-text-alt text-sm"
-                >{m.create_community_modal_content_types_alt()}</span
-              >
+          <!-- Content Types & Access Control -->
+          <ContentTypesAndACL
+            bind:contentTypes={communityData.contentTypes}
+            formTemplates={getFormTemplates()}
+            bind:showAccessConfig
+            bind:defaultFormRef
+            {errors}
+          />
+
+          <!-- Advanced Settings -->
+          <div class="collapse-arrow collapse bg-base-200">
+            <input type="checkbox" />
+            <div class="collapse-title font-medium">
+              {m.advanced_settings_label?.() || 'Advanced Settings'}
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <!-- Calendar Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.calendar.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.calendar.enabled =
-                    !communityData.contentTypes.calendar.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_calendar()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.calendar.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Chat Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.chat.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.chat.enabled =
-                    !communityData.contentTypes.chat.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_chat()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.chat.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Articles Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.articles.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.articles.enabled =
-                    !communityData.contentTypes.articles.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_articles()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.articles.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Posts Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.posts.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.posts.enabled =
-                    !communityData.contentTypes.posts.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_posts()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.posts.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <!-- Wikis Card -->
-              <button
-                type="button"
-                class="card cursor-pointer bg-base-200 transition-all hover:bg-base-300 {communityData
-                  .contentTypes.wikis.enabled
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() =>
-                  (communityData.contentTypes.wikis.enabled =
-                    !communityData.contentTypes.wikis.enabled)}
-              >
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between">
-                    <span class="font-medium">{m.create_community_modal_content_wikis()}</span>
-                    <input
-                      type="checkbox"
-                      checked={communityData.contentTypes.wikis.enabled}
-                      class="pointer-events-none checkbox checkbox-primary"
-                      tabindex="-1"
-                    />
-                  </div>
-                </div>
-              </button>
-            </div>
-            {#if errors.contentTypes}
-              <div class="label">
-                <span class="label-text-alt text-error">{errors.contentTypes}</span>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Access Control Toggle -->
-          <div class="form-control mt-4">
-            <label class="label cursor-pointer justify-start gap-3">
-              <input
-                id="ccm-new-access-config-toggle"
-                type="checkbox"
-                class="toggle toggle-primary"
-                bind:checked={showAccessConfig}
+            <div class="collapse-content space-y-4">
+              <EditableList
+                bind:items={communityData.relays}
+                label={m.create_community_modal_relays_label()}
+                placeholder={m.create_community_modal_relays_placeholder()}
+                buttonText={m.create_community_modal_relays_button()}
+                itemType="relay"
+                validator={validateRelayUrl}
+                minItems={1}
+                helpText={m.create_community_modal_relays_help()}
               />
-              <span class="label-text"
-                >{m.form_config_toggle?.() || 'Configure access control'}</span
-              >
-            </label>
-            <p class="ml-12 text-xs opacity-70">
-              {m.form_config_toggle_help?.() ||
-                'Require a form submission for publishing to specific content types'}
-            </p>
-          </div>
-
-          <!-- Access Control Section -->
-          {#if showAccessConfig}
-            <div class="mt-4 space-y-4">
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold">
-                  {m.form_config_title?.() || 'Access Control'}
-                </h3>
-                <label class="label cursor-pointer gap-2" for="ccm-new-show-relay-config-toggle">
-                  <span class="label-text text-sm"
-                    >{m.form_config_show_relays?.() || 'Show relay config'}</span
-                  >
-                  <input
-                    id="ccm-new-show-relay-config-toggle"
-                    type="checkbox"
-                    class="toggle toggle-sm"
-                    bind:checked={showAdvancedRelays}
-                  />
-                </label>
-              </div>
-
-              {#if communityData.contentTypes.calendar.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.calendar}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.chat.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.chat}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.articles.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.articles}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.posts.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.posts}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
-
-              {#if communityData.contentTypes.wikis.enabled}
-                <ContentTypeFormConfig
-                  bind:contentType={communityData.contentTypes.wikis}
-                  {formTemplates}
-                  showAdvanced={showAdvancedRelays}
-                />
-              {/if}
+              <EditableList
+                bind:items={communityData.blossomServers}
+                label={m.create_community_modal_blossom_label()}
+                placeholder={m.create_community_modal_blossom_placeholder()}
+                buttonText={m.create_community_modal_blossom_button()}
+                itemType="server"
+              />
             </div>
-          {/if}
+          </div>
         </div>
       {:else if currentStep === 4 && !useCurrentKeypair}
         <!-- Confirmation for New Keypair -->
@@ -1395,96 +903,27 @@
                   {m.create_community_modal_confirm_content_types_section()}
                 </h3>
                 <div class="flex flex-wrap gap-2">
-                  {#if communityData.contentTypes.calendar.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_calendar()}
-                      {#if communityData.contentTypes.calendar.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.chat.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_chat()}
-                      {#if communityData.contentTypes.chat.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.articles.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_articles()}
-                      {#if communityData.contentTypes.articles.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.posts.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_posts()}
-                      {#if communityData.contentTypes.posts.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if communityData.contentTypes.wikis.enabled}
-                    <div class="badge gap-1 badge-primary">
-                      {m.create_community_modal_content_wikis()}
-                      {#if communityData.contentTypes.wikis.formRef}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          class="h-3 w-3"
-                          ><path
-                            fill-rule="evenodd"
-                            d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                            clip-rule="evenodd"
-                          /></svg
-                        >
-                      {/if}
-                    </div>
-                  {/if}
+                  {#each Object.entries(communityData.contentTypes) as [key, ct] (key)}
+                    {#if ct.enabled}
+                      <div class="badge gap-1 badge-primary">
+                        {ct.name}
+                        {#if ct.formRef}
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            class="h-3 w-3"
+                          >
+                            <path
+                              fill-rule="evenodd"
+                              d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                              clip-rule="evenodd"
+                            />
+                          </svg>
+                        {/if}
+                      </div>
+                    {/if}
+                  {/each}
                 </div>
                 {#if Object.values(communityData.contentTypes).some((ct) => ct.enabled && ct.formRef)}
                   <div class="mt-2 space-y-1 text-sm text-base-content/70">

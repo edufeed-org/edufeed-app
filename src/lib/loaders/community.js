@@ -15,14 +15,14 @@ export const communikeyTimelineLoader = () => {
 };
 
 /**
- * Load form templates (kind 30168) for a given pubkey.
- * @param {string} pubkey
+ * Load form templates (kind 30168) for given pubkey(s).
+ * @param {string | string[]} pubkeys
  */
-export const formTemplateLoader = (pubkey) =>
+export const formTemplateLoader = (pubkeys) =>
   createTimelineLoader(
     timedPool,
     getCommunikeyRelays(),
-    { kinds: [30168], authors: [pubkey] },
+    { kinds: [30168], authors: Array.isArray(pubkeys) ? pubkeys : [pubkeys] },
     { eventStore }
   );
 
