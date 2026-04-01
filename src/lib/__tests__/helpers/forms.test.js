@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { findLinkedProfileLists } from '$lib/helpers/forms.js';
+import { findLinkedProfileLists, buildUserResponseFilter } from '$lib/helpers/forms.js';
 
 /** @param {Partial<import('nostr-tools').NostrEvent>} overrides */
 function makeProfileList(overrides = {}) {
@@ -15,6 +15,17 @@ function makeProfileList(overrides = {}) {
     ...overrides
   };
 }
+
+describe('buildUserResponseFilter', () => {
+  it('returns correct filter shape for user response lookup', () => {
+    const filter = buildUserResponseFilter('30168:pubkey1:my-form', 'userpub');
+    expect(filter).toEqual({
+      kinds: [1069],
+      authors: ['userpub'],
+      '#a': ['30168:pubkey1:my-form']
+    });
+  });
+});
 
 describe('findLinkedProfileLists', () => {
   it('returns sections whose form tag matches the form address', () => {

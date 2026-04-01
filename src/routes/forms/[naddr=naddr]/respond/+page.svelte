@@ -1,11 +1,17 @@
 <script>
+  import { page } from '$app/stores';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { EventFactory } from 'applesauce-core/event-factory';
-  import { addressLoader } from '$lib/loaders/base.js';
+  import { addressLoader, timedPool } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { buildResponseTags, decodeFormNaddr } from '$lib/helpers/forms.js';
+  import {
+    buildResponseTags,
+    decodeFormNaddr,
+    buildUserResponseFilter
+  } from '$lib/helpers/forms.js';
+  import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
 
   /** @type {{ data: { naddr: string } }} */
@@ -16,9 +22,12 @@
   let error = $state('');
   let isSubmitting = $state(false);
   let submitted = $state(false);
+  let alreadyResponded = $state(false);
 
   /** @type {{ pubkey: string, identifier: string } | null} */
   let decodedForm = $state(null);
+
+  let returnTo = $derived($page.url.searchParams.get('returnTo'));
 
   // Decode naddr and load form template
   $effect(() => {
@@ -48,6 +57,31 @@
     return () => {
       loaderSub.unsubscribe();
       modelSub?.unsubscribe();
+    };
+  });
+
+  // Check if user already submitted a response
+  $effect(() => {
+    if (!decodedForm || !manager.active) return;
+
+    const formAddress = `30168:${decodedForm.pubkey}:${decodedForm.identifier}`;
+    const filter = buildUserResponseFilter(formAddress, manager.active.pubkey);
+    const relays = getCommunikeyRelays();
+
+    const loaderSub = createTimelineLoader(timedPool, relays, filter, {
+      eventStore,
+      limit: 1
+    })().subscribe();
+
+    const modelSub = eventStore.timeline(filter).subscribe((events) => {
+      if (events && events.length > 0) {
+        alreadyResponded = true;
+      }
+    });
+
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
     };
   });
 
@@ -111,11 +145,23 @@
       Your current signer does not support NIP-44 encryption, which is required for this form. Try a
       different login method.
     </div>
+  {:else if alreadyResponded && !submitted}
+    <div class="mb-4 alert alert-warning">You've already submitted a response to this form.</div>
+    {#if returnTo}
+      <a href={returnTo} class="btn btn-primary">Back to community</a>
+    {:else}
+      <button class="btn btn-primary" onclick={() => history.back()}>Go back</button>
+    {/if}
   {:else if submitted}
-    <div class="alert alert-success">
+    <div class="mb-4 alert alert-success">
       {formEvent?.tags.find((t) => t[0] === 'confirmation_message')?.[1] ||
         'Response submitted successfully!'}
     </div>
+    {#if returnTo}
+      <a href={returnTo} class="btn btn-primary">Back to community</a>
+    {:else}
+      <button class="btn btn-primary" onclick={() => history.back()}>Go back</button>
+    {/if}
   {:else if formEvent}
     {#if isSubmitting}
       <div class="flex justify-center p-8">

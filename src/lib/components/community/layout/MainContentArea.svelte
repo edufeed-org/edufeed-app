@@ -57,7 +57,7 @@
       {@const canPublish = sectionName ? profileAccess.canPublish(sectionName) : true}
 
       {#if userPubkey && !canPublish && formRef && !profileAccess.isLoading}
-        <AccessGateBanner {formRef} {sectionName} />
+        <AccessGateBanner {formRef} {sectionName} {userPubkey} />
       {/if}
 
       {#if selectedContentType === 'home'}

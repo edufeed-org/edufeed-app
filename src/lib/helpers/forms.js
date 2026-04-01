@@ -307,6 +307,16 @@ export async function createDefaultMembershipForm(signer) {
 }
 
 /**
+ * Build a Nostr filter to find a user's existing response to a form.
+ * @param {string} formAddress - e.g. "30168:pubkey:d-tag"
+ * @param {string} userPubkey - hex pubkey of the user
+ * @returns {{ kinds: number[], authors: string[], '#a': string[] }}
+ */
+export function buildUserResponseFilter(formAddress, userPubkey) {
+  return { kinds: [1069], authors: [userPubkey], '#a': [formAddress] };
+}
+
+/**
  * Extract the form template a-tag coordinate from a form request event.
  * @param {{ tags: string[][] }} event
  * @returns {string | undefined}
