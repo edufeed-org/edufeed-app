@@ -161,7 +161,7 @@ class ReactionsStore {
   /**
    * React to an event
    * @param {any} event - The event to react to
-   * @param {string} emoji - The emoji to react with
+   * @param {string | import('applesauce-common/helpers').Emoji} emoji - The emoji to react with (string or {shortcode, url})
    * @param {string[]} [relays] - Optional relay list
    */
   async react(event, emoji, relays) {

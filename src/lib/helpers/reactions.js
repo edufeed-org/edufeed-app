@@ -3,104 +3,44 @@
  * Handles creating, publishing, and deleting reactions
  */
 import { EventFactory } from 'applesauce-core/event-factory';
+import { ReactionBlueprint } from 'applesauce-common/blueprints';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
 
 /**
- * Check if an event is addressable (replaceable)
- * @param {any} event - The event to check
- * @returns {boolean}
- */
-function isAddressableEvent(event) {
-  return event.kind >= 30000 && event.kind < 40000;
-}
-
-/**
- * Get the addressable coordinate for an event (kind:pubkey:d-tag)
- * @param {any} event - The event
- * @returns {string|null}
- */
-function getEventAddress(event) {
-  if (!isAddressableEvent(event)) return null;
-
-  const dTag = event.tags.find((/** @type {any} */ tag) => tag[0] === 'd');
-  const dValue = dTag ? dTag[1] : '';
-
-  return `${event.kind}:${event.pubkey}:${dValue}`;
-}
-
-/**
- * Create a NIP-25 reaction event
+ * Create a NIP-25 reaction event using ReactionBlueprint.
+ * Accepts a plain string emoji or a NIP-30 custom Emoji object.
  *
  * @param {any} targetEvent - The event being reacted to
- * @param {string} content - The reaction content (emoji, +, -, etc.)
- * @param {Object} [options] - Optional configuration
- * @param {string[]} [options.relays] - Relay hints
+ * @param {string | import('applesauce-common/helpers').Emoji} emoji - Reaction emoji (string or {shortcode, url})
  * @returns {Promise<any>} The signed reaction event
  */
-export async function createReaction(targetEvent, content, options = {}) {
+export async function createReaction(targetEvent, emoji) {
   const account = manager.active;
 
   if (!account?.signer) {
     throw new Error('No account or signer available');
   }
 
-  // Get relay hint for the target event author
-  const relayHint = options.relays?.[0] || (await getPrimaryWriteRelay(targetEvent.pubkey));
-
-  // Build tags according to NIP-25
-  const tags = [];
-
-  // Always add 'e' tag with event id
-  tags.push(['e', targetEvent.id, relayHint, targetEvent.pubkey]);
-
-  // Add 'p' tag for the event author
-  tags.push(['p', targetEvent.pubkey, relayHint]);
-
-  // For addressable events, add 'a' tag
-  if (isAddressableEvent(targetEvent)) {
-    const address = getEventAddress(targetEvent);
-    if (address) {
-      tags.push(['a', address, relayHint, targetEvent.pubkey]);
-    }
-  }
-
-  // Add 'k' tag with the kind of the reacted event
-  tags.push(['k', String(targetEvent.kind)]);
-
-  // Create EventFactory with the signer
-  const factory = new EventFactory({
-    signer: account.signer
-  });
-
-  // Build the unsigned event
-  const unsignedEvent = await factory.build({
-    kind: 7, // NIP-25 reaction kind
-    content: content || '+', // Default to "like" if no content
-    tags
-  });
-
-  // Sign the event using EventFactory
-  const signedEvent = await factory.sign(unsignedEvent);
-
-  return signedEvent;
+  const factory = new EventFactory({ signer: account.signer });
+  const draft = await factory.create(ReactionBlueprint, targetEvent, emoji || '+');
+  return await factory.sign(draft);
 }
 
 /**
  * Publish a reaction to an event
  *
  * @param {any} targetEvent - The event to react to
- * @param {string} content - The reaction content (emoji, +, -, etc.)
+ * @param {string | import('applesauce-common/helpers').Emoji} emoji - Reaction emoji (string or {shortcode, url})
  * @param {Object} [options] - Publishing options
  * @param {string[]} [options.relays] - Custom relay list
  * @returns {Promise<{success: boolean, event: any, relays: string[], successCount: number}>}
  */
-export async function publishReaction(targetEvent, content, options = {}) {
+export async function publishReaction(targetEvent, emoji, options = {}) {
   try {
     // Create the reaction event
-    const reactionEvent = await createReaction(targetEvent, content, options);
+    const reactionEvent = await createReaction(targetEvent, emoji);
 
     // Publish using outbox model (tags target event author)
     const result = await publishEvent(reactionEvent, [targetEvent.pubkey], {
