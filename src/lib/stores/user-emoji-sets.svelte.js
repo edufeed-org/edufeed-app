@@ -93,6 +93,23 @@ export function useUserEmojiSets() {
           }).subscribe()
         );
 
+        // Also fetch from pack author's write relays if different user
+        if (packPubkey !== pubkey) {
+          getWriteRelays(packPubkey).then((writeRelays) => {
+            const newRelays = writeRelays.filter((r) => !packRelays.includes(r));
+            if (newRelays.length > 0) {
+              subs.push(
+                addressLoader({
+                  kind: 30030,
+                  pubkey: packPubkey,
+                  identifier,
+                  relays: newRelays
+                }).subscribe()
+              );
+            }
+          });
+        }
+
         // Subscribe to pack in EventStore
         const packSub = eventStore.replaceable(30030, packPubkey, identifier).subscribe(() => {
           // Rebuild all packs when any pack updates
