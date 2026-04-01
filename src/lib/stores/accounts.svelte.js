@@ -145,7 +145,7 @@ async function initializeAccountPersistence() {
     }).subscribe();
   });
 
-  // Step 7: Pre-warm relays when user logs in (after relay sets loaded above)
+  // Step 7: Pre-warm relays and preload user emoji sets on login
   manager.active$.subscribe(async (account) => {
     if (account) {
       // Use dynamic import to avoid circular dependencies
@@ -158,6 +158,10 @@ async function initializeAccountPersistence() {
       // Warm relay connections (WebSocket only, no NIP-42 auth)
       warmUserRelays(account.pubkey);
       warmAppRelays();
+
+      // Preload custom emoji sets so ReactionPicker has data on first open
+      const { preloadUserEmojiSets } = await import('$lib/stores/user-emoji-sets.svelte.js');
+      preloadUserEmojiSets(account.pubkey);
     } else {
       // User logged out - clear warm status
       const { clearWarmStatus } = await import('$lib/services/relay-warming-service.svelte.js');

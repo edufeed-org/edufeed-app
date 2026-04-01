@@ -11,6 +11,67 @@ import { getEmojis, getPackName } from 'applesauce-common/helpers';
  */
 
 /**
+ * Preload user's emoji sets into EventStore on login.
+ * Fires addressLoader calls for kind 10030 (emoji list) and kind 30030 (emoji packs)
+ * so data is available immediately when ReactionPicker first opens.
+ * @param {string} pubkey
+ */
+export function preloadUserEmojiSets(pubkey) {
+  const relays = getAllLookupRelays();
+
+  // Load kind 10030 (user's emoji list)
+  addressLoader({ kind: 10030, pubkey, relays }).subscribe();
+
+  // Also try user's write relays
+  getWriteRelays(pubkey).then((writeRelays) => {
+    const newRelays = writeRelays.filter((r) => !relays.includes(r));
+    if (newRelays.length > 0) {
+      addressLoader({ kind: 10030, pubkey, relays: newRelays }).subscribe();
+    }
+  });
+
+  // Subscribe to emoji list to preload referenced packs
+  const sub = eventStore.replaceable(10030, pubkey).subscribe((listEvent) => {
+    if (!listEvent) return;
+
+    const aTags = listEvent.tags.filter((t) => t[0] === 'a' && t[1]?.startsWith('30030:'));
+    for (const aTag of aTags) {
+      const [, coordinate, relay] = aTag;
+      const parts = coordinate.split(':');
+      if (parts.length < 3) continue;
+
+      const [, packPubkey, ...identifierParts] = parts;
+      const identifier = identifierParts.join(':');
+      const packRelays = relay ? [...relays, relay] : relays;
+
+      addressLoader({
+        kind: 30030,
+        pubkey: packPubkey,
+        identifier,
+        relays: packRelays
+      }).subscribe();
+
+      if (packPubkey !== pubkey) {
+        getWriteRelays(packPubkey).then((writeRelays) => {
+          const newRelays = writeRelays.filter((r) => !packRelays.includes(r));
+          if (newRelays.length > 0) {
+            addressLoader({
+              kind: 30030,
+              pubkey: packPubkey,
+              identifier,
+              relays: newRelays
+            }).subscribe();
+          }
+        });
+      }
+    }
+
+    // One-shot: unsubscribe once packs are loaded
+    sub.unsubscribe();
+  });
+}
+
+/**
  * Hook to load and subscribe to the active user's NIP-30 custom emoji sets.
  * Loads kind 10030 (emoji list) → resolves kind 30030 (emoji packs).
  * @returns {() => EmojiPack[]} Reactive getter returning array of emoji packs
