@@ -4,6 +4,8 @@
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import { ChevronRightIcon } from '$lib/components/icons';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
+  import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
+  import { getContext } from 'svelte';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
   import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -64,6 +66,9 @@
   }
 
   let { communikeyEvent, profileEvent, communityId, onKindNavigation } = $props();
+
+  /** @type {import('$lib/stores/profile-list-access.svelte.js').ProfileListAccess} */
+  const profileAccess = getContext('profileAccess');
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
@@ -157,9 +162,11 @@
     };
   });
 
+  let displayedItems = $derived(filterEventsByAccess(feedItems, communikeyEvent, profileAccess));
+
   let upcomingEvents = $derived.by(() => {
     const now = Math.floor(Date.now() / 1000);
-    return feedItems
+    return displayedItems
       .filter((e) => (e.kind === 31922 || e.kind === 31923) && getEventStartTimestamp(e) > now)
       .sort((a, b) => getEventStartTimestamp(a) - getEventStartTimestamp(b))
       .slice(0, 5);
@@ -192,7 +199,7 @@
             <div class="flex flex-col items-center justify-center py-12">
               <span class="loading loading-lg loading-spinner text-primary"></span>
             </div>
-          {:else if feedItems.length === 0}
+          {:else if displayedItems.length === 0}
             <div class="card bg-base-200 shadow-xl">
               <div class="card-body">
                 <div class="py-8 text-center text-base-content/60">
@@ -203,7 +210,7 @@
             </div>
           {:else}
             <div class="space-y-4">
-              {#each feedItems as event (event.id)}
+              {#each displayedItems as event (event.id)}
                 {@const profile = authorProfiles.get(event.pubkey)}
                 {@const cardData = getFeedCardData(event)}
                 <FeedCard

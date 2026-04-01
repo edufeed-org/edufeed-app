@@ -17,7 +17,7 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
-  import CommunityShare from '../shared/CommunityShare.svelte';
+
   import { getLocale } from '$lib/paraglide/runtime.js';
   import {
     getLabelsWithFallback,
@@ -66,9 +66,6 @@
   // Get active user (reactive to login/logout)
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
-
-  // Share UI state
-  let showShareUI = $state(false);
 
   // Delete state
   let showDeleteConfirmation = $state(false);
@@ -341,21 +338,9 @@
             {m.common_delete()}
           </button>
         {/if}
-        {#if activeUser}
-          <button class="btn btn-sm btn-secondary" onclick={() => (showShareUI = !showShareUI)}>
-            {showShareUI ? m.common_close() : m.common_share()}
-          </button>
-        {/if}
         <EventContextMenu {event} />
       </div>
     </div>
-
-    <!-- Share UI -->
-    {#if showShareUI && activeUser}
-      <div class="mt-4 rounded-lg bg-base-200 p-4">
-        <CommunityShare {event} {activeUser} shareButtonText={m.common_share()} />
-      </div>
-    {/if}
   </header>
 
   <!-- FEATURED IMAGE -->

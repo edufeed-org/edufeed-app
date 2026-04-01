@@ -8,6 +8,9 @@
   import { getContext } from 'svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { matchesEventSearch } from '$lib/helpers/contentSearch.js';
+  import { SearchIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
 
   const getAllowedAuthors = getContext('allowedAuthors');
 
@@ -23,6 +26,8 @@
    * @property {(count: number) => string} formatCount - Function to format the item count
    * @property {(items: any[]) => number} [countTransform] - Optional transform to derive display count from items
    * @property {string} emptyIconPath - SVG path for empty state icon
+   * @property {boolean} [searchable] - Show search input in header
+   * @property {string} [searchPlaceholder] - Placeholder text for search input
    */
 
   /** @type {Props & { content: import('svelte').Snippet<[any[], Map<string, any>]>, headerAction?: import('svelte').Snippet }} */
@@ -37,9 +42,13 @@
     formatCount,
     countTransform = /** @type {any[]} */ (items) => items.length,
     emptyIconPath,
+    searchable = false,
+    searchPlaceholder = 'Search...',
     content,
     headerAction
   } = $props();
+
+  let searchQuery = $state('');
 
   let items = $state(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
@@ -47,7 +56,7 @@
   const getAuthorProfiles = useProfileMap(() => items.map((i) => i.pubkey));
   let authorProfiles = $derived(getAuthorProfiles());
 
-  let displayedItems = $derived.by(() => {
+  let accessFilteredItems = $derived.by(() => {
     const allowed = getAllowedAuthors?.();
     if (!allowed) return items;
     return items.filter(
@@ -55,6 +64,15 @@
         allowed.includes(item.pubkey) || (item._sharedBy && allowed.includes(item._sharedBy))
     );
   });
+
+  let displayedItems = $derived.by(() => {
+    if (!searchable || !searchQuery.trim()) return accessFilteredItems;
+    return accessFilteredItems.filter((item) =>
+      matchesEventSearch(item, searchQuery, authorProfiles)
+    );
+  });
+
+  let isSearchFiltered = $derived(searchable && searchQuery.trim().length > 0);
 
   let loaderCleanup = /** @type {(() => void) | null} */ (null);
 
@@ -110,9 +128,35 @@
 </script>
 
 <div class="community-content-view p-4">
-  {#if headerAction}
-    <div class="mb-4 flex justify-end">
-      {@render headerAction()}
+  {#if searchable || headerAction}
+    <div class="mb-4 flex items-center gap-2">
+      {#if searchable}
+        <div class="relative flex-1">
+          <SearchIcon
+            class_="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40"
+          />
+          <input
+            type="text"
+            bind:value={searchQuery}
+            placeholder={searchPlaceholder}
+            class="input-bordered input input-sm w-full pl-9"
+          />
+          {#if searchQuery}
+            <button
+              class="btn absolute top-1/2 right-2 btn-circle -translate-y-1/2 btn-ghost btn-xs"
+              onclick={() => (searchQuery = '')}
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          {/if}
+        </div>
+      {:else}
+        <div class="flex-1"></div>
+      {/if}
+      {#if headerAction}
+        {@render headerAction()}
+      {/if}
     </div>
   {/if}
 
@@ -139,6 +183,11 @@
         />
       </svg>
       <span>{error}</span>
+    </div>
+    <!-- No search results -->
+  {:else if displayedItems.length === 0 && isSearchFiltered}
+    <div class="py-8 text-center text-base-content/60">
+      {m.community_search_no_results({ query: searchQuery.trim() })}
     </div>
     <!-- Empty State -->
   {:else if displayedItems.length === 0}

@@ -18,7 +18,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
-  import { PlusIcon, SearchIcon } from '$lib/components/icons';
+  import { PlusIcon } from '$lib/components/icons';
   import ThreadCard from '$lib/components/thread/ThreadCard.svelte';
   import ThreadCreateForm from '$lib/components/thread/ThreadCreateForm.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
@@ -31,7 +31,6 @@
   const activeUser = $derived(getActiveUser());
 
   let showCreateForm = $state(false);
-  let searchQuery = $state('');
 
   // Thread events from model — used to derive IDs for batch comment loader
   let threads = $state(/** @type {any[]} */ ([]));
@@ -107,22 +106,6 @@
   });
 
   /**
-   * Filter threads by search query — pure function, used inside snippet
-   * @param {any[]} items
-   * @returns {any[]}
-   */
-  function filterThreads(items) {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter((t) => {
-      const title =
-        t.tags?.find((/** @type {any} */ tag) => tag[0] === 'title')?.[1]?.toLowerCase() || '';
-      const content = t.content?.toLowerCase() || '';
-      return title.includes(q) || content.includes(q);
-    });
-  }
-
-  /**
    * Navigate to thread detail view via nevent URL
    * @param {any} thread
    */
@@ -145,33 +128,6 @@
   }
 </script>
 
-<!-- Top action bar: Search + Post -->
-<div
-  class="sticky top-0 z-[55] flex items-center gap-2 border-b border-base-300 bg-base-100 px-4 py-3"
->
-  <div class="relative flex-1">
-    <SearchIcon class_="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40" />
-    <input
-      type="text"
-      bind:value={searchQuery}
-      placeholder={m.thread_forum_search_placeholder()}
-      class="input-bordered input input-sm w-full pl-9"
-    />
-  </div>
-
-  {#if activeUser && canPublish}
-    <button
-      class="btn gap-1 btn-sm btn-primary"
-      onclick={() => (showCreateForm = true)}
-      aria-label={m.thread_forum_new_thread()}
-    >
-      <PlusIcon class_="h-4 w-4" />
-      {m.thread_forum_post()}
-    </button>
-  {/if}
-</div>
-
-<!-- Thread list -->
 <CommunityContentView
   {communityPubkey}
   {communityProfile}
@@ -181,14 +137,26 @@
   emptyTitle={m.community_forum_empty_title()}
   emptyDescription={m.community_forum_empty_description()}
   formatCount={(count) => m.community_forum_count({ count })}
+  searchable
+  searchPlaceholder={m.thread_forum_search_placeholder()}
   emptyIconPath="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"
 >
-  {#snippet content(items, authorProfiles)}
-    {@const filtered = filterThreads(items)}
+  {#snippet headerAction()}
+    {#if activeUser && canPublish}
+      <button
+        class="btn gap-1 btn-sm btn-primary"
+        onclick={() => (showCreateForm = true)}
+        aria-label={m.thread_forum_new_thread()}
+      >
+        <PlusIcon class_="h-4 w-4" />
+        {m.thread_forum_post()}
+      </button>
+    {/if}
+  {/snippet}
 
-    <!-- Single-column thread list with dividers -->
+  {#snippet content(items, authorProfiles)}
     <div class="divide-y divide-base-300">
-      {#each filtered as thread (thread.id)}
+      {#each items as thread (thread.id)}
         <ThreadCard
           {thread}
           authorProfile={authorProfiles.get(thread.pubkey) || null}
@@ -196,11 +164,6 @@
           onSelect={handleSelectThread}
         />
       {/each}
-      {#if filtered.length === 0 && searchQuery.trim()}
-        <div class="py-8 text-center text-base-content/60">
-          No threads match "{searchQuery}"
-        </div>
-      {/if}
     </div>
   {/snippet}
 </CommunityContentView>

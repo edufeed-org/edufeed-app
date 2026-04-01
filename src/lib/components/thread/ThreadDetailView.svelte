@@ -23,7 +23,7 @@
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
-  import CommunityShare from '../shared/CommunityShare.svelte';
+  import EventContextMenu from '../shared/EventContextMenu.svelte';
 
   /**
    * @typedef {Object} Props
@@ -67,7 +67,6 @@
   );
   const relativeDate = $derived(formatRelativeTime(event.created_at));
 
-  let showShareUI = $state(false);
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
 
@@ -145,24 +144,9 @@
           <TrashIcon class="h-4 w-4" />
         </button>
       {/if}
-      {#if activeUser}
-        <button class="btn btn-ghost btn-sm" onclick={() => (showShareUI = !showShareUI)}>
-          {showShareUI ? m.common_close() : m.common_share()}
-        </button>
-      {/if}
+      <EventContextMenu {event} />
     </div>
   </div>
-
-  <!-- Share UI -->
-  {#if showShareUI && activeUser}
-    <div class="mb-6 rounded-lg bg-base-200 p-4">
-      <CommunityShare
-        {event}
-        {activeUser}
-        shareButtonText={m.thread_detail_share_with_communities()}
-      />
-    </div>
-  {/if}
 
   <!-- Title (kind 11 only) -->
   {#if event.kind === 11}

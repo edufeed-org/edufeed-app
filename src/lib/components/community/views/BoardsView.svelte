@@ -23,6 +23,8 @@
   emptyTitle={m.community_boards_empty_title()}
   emptyDescription={m.community_boards_empty_description()}
   formatCount={(count) => m.community_boards_count({ count })}
+  searchable
+  searchPlaceholder={m.community_boards_search_placeholder()}
   emptyIconPath="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
 >
   {#snippet content(items, authorProfiles)}

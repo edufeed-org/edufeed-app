@@ -54,6 +54,38 @@ export function ambSearchLoader(filters, limit = 50) {
 }
 
 /**
+ * Create a search loader for AMB resources within a community using NIP-50 full-text search.
+ * Adds `#h` filter to scope results to a specific community.
+ *
+ * @param {string} communityPubkey - Community pubkey to scope search to
+ * @param {SearchFilters} filters - The search filters
+ * @param {number} limit - Maximum number of results
+ * @returns {import('rxjs').Observable<import('nostr-tools').Event>}
+ */
+export function communityAMBSearchLoader(communityPubkey, filters, limit = 50) {
+  if (!hasActiveFilters(filters)) {
+    return new Observable((subscriber) => {
+      subscriber.complete();
+    });
+  }
+
+  const searchQuery = buildSearchQuery(filters);
+
+  if (!searchQuery) {
+    return new Observable((subscriber) => {
+      subscriber.complete();
+    });
+  }
+
+  const relays = getEducationalRelays();
+  const filter = { kinds: [30142], search: searchQuery, '#h': [communityPubkey], limit };
+
+  return pool
+    .request(relays, filter, /** @type {any} */ ({ timeout: 5000 }))
+    .pipe(tap((event) => eventStore.add(event)));
+}
+
+/**
  * Create a reactive search loader that can be called multiple times with updated filters
  * Returns a function that triggers a new search when called
  *

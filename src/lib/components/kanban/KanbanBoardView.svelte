@@ -16,10 +16,11 @@
   const resolve = /** @type {any} */ (_resolve);
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
-  import CommunityShare from '../shared/CommunityShare.svelte';
+
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import { KanbanIcon, TrashIcon, ExternalLinkIcon } from '$lib/components/icons';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
+  import EventContextMenu from '../shared/EventContextMenu.svelte';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
@@ -77,9 +78,6 @@
   const editorUrl = $derived(
     boardNaddr ? `https://kanban.edufeed.org/cardsboard/${boardNaddr}` : null
   );
-
-  // Share UI state
-  let showShareUI = $state(false);
 
   // Delete state
   let showDeleteConfirmation = $state(false);
@@ -250,20 +248,9 @@
             {m.common_delete()}
           </button>
         {/if}
-        {#if activeUser}
-          <button class="btn btn-sm btn-secondary" onclick={() => (showShareUI = !showShareUI)}>
-            {showShareUI ? m.common_close() : m.common_share()}
-          </button>
-        {/if}
+        <EventContextMenu {event} />
       </div>
     </div>
-
-    <!-- Share UI -->
-    {#if showShareUI && activeUser}
-      <div class="mt-4 rounded-lg bg-base-200 p-4">
-        <CommunityShare {event} {activeUser} shareButtonText="Share with Communities" />
-      </div>
-    {/if}
   </header>
 
   <!-- OPEN IN EDITOR CTA -->

@@ -1,6 +1,6 @@
 <!--
   EventContextMenu Component
-  Three-dots dropdown with copy event ID, copy share link, and view raw event actions
+  Three-dots dropdown with share, copy, pin, and dev actions
 -->
 
 <script>
@@ -12,11 +12,13 @@
     CopyIcon,
     ExternalLinkIcon,
     InfoIcon,
-    BookmarkIcon
+    BookmarkIcon,
+    RepostIcon
   } from '$lib/components/icons';
   import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import CommunityShare from './CommunityShare.svelte';
 
   /**
    * @typedef {Object} Props
@@ -49,21 +51,17 @@
 
   /** @type {HTMLDialogElement|undefined} */
   let rawEventDialog = $state(undefined);
+  /** @type {HTMLDialogElement|undefined} */
+  let shareDialog = $state(undefined);
   let isCopied = $state(false);
 
   function closeDropdown() {
     /** @type {HTMLElement|null} */ (document.activeElement)?.blur();
   }
 
-  async function copyEventId() {
-    try {
-      const naddr = encodeEventToNaddr(event);
-      await navigator.clipboard.writeText(naddr);
-      showToast(m.event_menu_event_id_copied(), 'success');
-    } catch (err) {
-      console.error('Failed to copy event ID:', err);
-    }
+  function openShareModal() {
     closeDropdown();
+    shareDialog?.showModal();
   }
 
   async function copyShareLink() {
@@ -77,24 +75,35 @@
     closeDropdown();
   }
 
-  function viewRawEvent() {
-    closeDropdown();
-    rawEventDialog?.showModal();
-  }
-
   async function togglePin() {
     try {
       if (eventIsPinned) {
         await unpinEvent(event);
-        showToast(m.pinned_removed_toast(), 'success');
+        showToast(m.event_menu_unfeatured_toast(), 'success');
       } else {
         await pinEvent(event);
-        showToast(m.pinned_added_toast(), 'success');
+        showToast(m.event_menu_featured_toast(), 'success');
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed', 'error');
     }
     closeDropdown();
+  }
+
+  async function copyEventId() {
+    try {
+      const naddr = encodeEventToNaddr(event);
+      await navigator.clipboard.writeText(naddr);
+      showToast(m.event_menu_event_id_copied(), 'success');
+    } catch (err) {
+      console.error('Failed to copy event ID:', err);
+    }
+    closeDropdown();
+  }
+
+  function viewRawEvent() {
+    closeDropdown();
+    rawEventDialog?.showModal();
   }
 
   async function copyRawJson() {
@@ -116,26 +125,38 @@
   </button>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <ul tabindex="0" class="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow-lg">
-    <li>
-      <button onclick={copyEventId}>
-        <CopyIcon class_="w-4 h-4" />
-        {m.event_menu_copy_event_id()}
-      </button>
-    </li>
+    <!-- User actions -->
+    {#if activeUser}
+      <li>
+        <button onclick={openShareModal}>
+          <RepostIcon class_="w-4 h-4" />
+          {m.event_menu_share_to_communities()}
+        </button>
+      </li>
+    {/if}
     <li>
       <button onclick={copyShareLink}>
         <ExternalLinkIcon class_="w-4 h-4" />
-        {m.event_menu_copy_share_link()}
+        {m.event_menu_copy_link()}
       </button>
     </li>
     {#if showPinOption}
       <li>
         <button onclick={togglePin}>
           <BookmarkIcon class_="w-4 h-4" />
-          {eventIsPinned ? m.unpin_from_community() : m.pin_to_community()}
+          {eventIsPinned ? m.event_menu_remove_from_homepage() : m.event_menu_feature_on_homepage()}
         </button>
       </li>
     {/if}
+    <!-- Divider -->
+    <div class="divider my-0"></div>
+    <!-- Dev actions -->
+    <li>
+      <button onclick={copyEventId}>
+        <CopyIcon class_="w-4 h-4" />
+        {m.event_menu_copy_event_id()}
+      </button>
+    </li>
     <li>
       <button onclick={viewRawEvent}>
         <InfoIcon class_="w-4 h-4" />
@@ -145,6 +166,25 @@
   </ul>
 </div>
 
+<!-- Share to communities modal -->
+<dialog bind:this={shareDialog} class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="mb-4 text-lg font-bold">{m.event_menu_share_to_communities()}</h3>
+    {#if activeUser}
+      <CommunityShare {event} {activeUser} shareButtonText={m.event_menu_share_to_communities()} />
+    {/if}
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">{m.common_close()}</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Raw event modal -->
 <dialog bind:this={rawEventDialog} class="modal">
   <div class="modal-box max-w-2xl">
     <div class="mb-4 flex items-center justify-between">

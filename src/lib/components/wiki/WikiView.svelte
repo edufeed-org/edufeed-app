@@ -25,7 +25,6 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
-  import CommunityShare from '../shared/CommunityShare.svelte';
 
   /**
    * @typedef {Object} Props
@@ -78,7 +77,6 @@
   const authorName = $derived(
     getDisplayName(authorProfile ?? undefined, event.pubkey.slice(0, 8) + '...')
   );
-  let showShareUI = $state(false);
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
 
@@ -202,25 +200,9 @@
             {m.common_delete()}
           </button>
         {/if}
-        {#if activeUser}
-          <button class="btn btn-sm btn-secondary" onclick={() => (showShareUI = !showShareUI)}>
-            {showShareUI ? m.common_close() : m.common_share()}
-          </button>
-        {/if}
         <EventContextMenu {event} />
       </div>
     </div>
-
-    <!-- Share UI -->
-    {#if showShareUI && activeUser}
-      <div class="mt-4 rounded-lg bg-base-200 p-4">
-        <CommunityShare
-          {event}
-          {activeUser}
-          shareButtonText={m.wiki_view_share_with_communities()}
-        />
-      </div>
-    {/if}
   </header>
 
   <!-- Wiki Content with Highlights -->

@@ -22,16 +22,13 @@
   /** @type {{ onfilterchange: (filters: SearchFilters) => void, isSearching?: boolean, searchText?: string }} */
   let { onfilterchange, isSearching: _isSearching = false, searchText = '' } = $props();
 
-  // Filter state (searchText is now a prop, not internal state)
+  // Filter state
   let learningResourceType = $state(/** @type {SelectedConcept[]} */ ([]));
   let about = $state(/** @type {SelectedConcept[]} */ ([]));
   let audience = $state(/** @type {SelectedConcept[]} */ ([]));
 
   // Get current locale
   const locale = $derived(getLocale());
-
-  // Track previous searchText to avoid unnecessary re-emissions
-  let previousSearchText = '';
 
   // Check if any filters are active (excluding searchText which is shown in parent)
   const hasActiveFilters = $derived(
@@ -92,15 +89,6 @@
     }
     emitFilterChange();
   }
-
-  // Re-emit filters when searchText prop changes (from parent)
-  $effect(() => {
-    // Only emit when searchText actually changes to a new value
-    if (searchText !== previousSearchText) {
-      previousSearchText = searchText;
-      emitFilterChange();
-    }
-  });
 </script>
 
 <div class="learning-content-filters space-y-4">

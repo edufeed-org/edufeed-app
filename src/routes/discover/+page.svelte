@@ -965,6 +965,21 @@
     });
   }
 
+  // Auto-search: debounce searchQuery → activeSearchQuery
+  let searchDebounceTimer;
+  $effect(() => {
+    const text = searchQuery;
+
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      activeSearchQuery = text.trim();
+    }, 300);
+
+    return () => {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    };
+  });
+
   // Track previous search query to avoid unnecessary re-triggers
   let previousActiveSearchQuery = '';
 

@@ -239,6 +239,50 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
   });
 }
 
+/** @type {Record<string, string>} Maps content type ID to community section name */
+export const CONTENT_TYPE_TO_SECTION = {
+  calendar: 'Calendar',
+  chat: 'Chat',
+  articles: 'Articles',
+  forum: 'Posts',
+  wikis: 'Wikis',
+  learning: 'Learning',
+  boards: 'Boards',
+  'social-bookmarks': 'Social Bookmarks'
+};
+
+/**
+ * Filter events by profile-list access restrictions.
+ * Uses parseCommunityContentTypes to map event kinds to section names directly,
+ * so section names always match the community event's own content tags.
+ * @param {any[]} events
+ * @param {any} communityEvent - kind 10222 event (or null)
+ * @param {{ getAllowedAuthors: (name: string) => string[] | null, isLoading: boolean }} profileAccess
+ * @returns {any[]}
+ */
+export function filterEventsByAccess(events, communityEvent, profileAccess) {
+  if (!communityEvent || profileAccess.isLoading) return events;
+
+  const sections = parseCommunityContentTypes(communityEvent);
+  /** @type {Map<number, string>} kind → section name from the community event */
+  const kindToSection = new Map();
+  for (const section of sections) {
+    for (const kind of section.kinds) {
+      kindToSection.set(kind, section.name);
+    }
+  }
+
+  return events.filter((event) => {
+    const sectionName = kindToSection.get(event.kind);
+    if (!sectionName) return true;
+
+    const allowed = profileAccess.getAllowedAuthors(sectionName);
+    if (allowed === null) return true;
+
+    return allowed.includes(event.pubkey);
+  });
+}
+
 /**
  * Map content kind number to navigation content type string
  * @param {number} kind - The content type kind number

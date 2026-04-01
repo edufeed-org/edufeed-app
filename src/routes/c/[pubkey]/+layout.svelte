@@ -11,7 +11,11 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { getRestrictedTabIds, getAccessibleTabIds } from '$lib/helpers/contentTypes.js';
+  import {
+    getRestrictedTabIds,
+    getAccessibleTabIds,
+    CONTENT_TYPE_TO_SECTION
+  } from '$lib/helpers/contentTypes.js';
   import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
@@ -131,18 +135,7 @@
   let accessibleTabs = $derived(getAccessibleTabIds(communikeyEvent, profileAccess));
 
   // Provide shared data to child components via context
-  /** @type {Record<string, string>} */
-  const contentTypeToSection = {
-    calendar: 'Calendar',
-    chat: 'Chat',
-    articles: 'Articles',
-    forum: 'Posts',
-    wikis: 'Wikis',
-    learning: 'Learning',
-    boards: 'Boards',
-    'social-bookmarks': 'Social Bookmarks'
-  };
-  let sectionName = $derived(contentTypeToSection[selectedContentType]);
+  let sectionName = $derived(CONTENT_TYPE_TO_SECTION[selectedContentType]);
   let allowedAuthors = $derived(
     sectionName && !profileAccess.isLoading ? profileAccess.getAllowedAuthors(sectionName) : null
   );

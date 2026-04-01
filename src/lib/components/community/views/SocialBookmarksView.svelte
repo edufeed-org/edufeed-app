@@ -25,6 +25,8 @@
   emptyTitle={m.community_social_bookmarks_empty_title()}
   emptyDescription={m.community_social_bookmarks_empty_description()}
   formatCount={(count) => m.community_social_bookmarks_count({ count })}
+  searchable
+  searchPlaceholder={m.community_bookmarks_search_placeholder()}
   countTransform={(items) =>
     groupByUrl(filterSocialBookmarks(items)).length + groupByEventRef(items).length}
   emptyIconPath="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"

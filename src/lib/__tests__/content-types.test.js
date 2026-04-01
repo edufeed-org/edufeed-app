@@ -8,10 +8,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   CONTENT_TYPE_CONFIG,
+  CONTENT_TYPE_TO_SECTION,
   kindToContentType,
   getCommunityAvailableContentTypes,
   getRestrictedTabIds,
-  getAccessibleTabIds
+  getAccessibleTabIds,
+  filterEventsByAccess
 } from '$lib/helpers/contentTypes.js';
 
 describe('CONTENT_TYPE_CONFIG', () => {
@@ -138,6 +140,131 @@ describe('getRestrictedTabIds', () => {
     };
     const result = getRestrictedTabIds(event);
     expect(result).toEqual(new Set(['calendar']));
+  });
+});
+
+describe('CONTENT_TYPE_TO_SECTION', () => {
+  it('maps content type IDs to section names', () => {
+    expect(CONTENT_TYPE_TO_SECTION.calendar).toBe('Calendar');
+    expect(CONTENT_TYPE_TO_SECTION.chat).toBe('Chat');
+    expect(CONTENT_TYPE_TO_SECTION.articles).toBe('Articles');
+    expect(CONTENT_TYPE_TO_SECTION.forum).toBe('Posts');
+    expect(CONTENT_TYPE_TO_SECTION.learning).toBe('Learning');
+    expect(CONTENT_TYPE_TO_SECTION.boards).toBe('Boards');
+    expect(CONTENT_TYPE_TO_SECTION['social-bookmarks']).toBe('Social Bookmarks');
+  });
+});
+
+describe('filterEventsByAccess', () => {
+  /** @param {Partial<import('nostr-tools').Event>} overrides */
+  function makeEvent(overrides) {
+    return {
+      id: 'e1',
+      pubkey: 'author1',
+      kind: 1,
+      created_at: 0,
+      content: '',
+      tags: [],
+      sig: '',
+      ...overrides
+    };
+  }
+
+  it('returns all events when communityEvent is null', () => {
+    const events = [makeEvent({ kind: 11, pubkey: 'a' }), makeEvent({ kind: 30142, pubkey: 'b' })];
+    const profileAccess = { getAllowedAuthors: () => null, isLoading: false };
+    expect(filterEventsByAccess(events, null, profileAccess)).toEqual(events);
+  });
+
+  it('returns all events when no sections are restricted', () => {
+    const communityEvent = {
+      tags: [
+        ['content', 'Forum'],
+        ['k', '11'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+    const events = [makeEvent({ kind: 11, pubkey: 'a' }), makeEvent({ kind: 30142, pubkey: 'b' })];
+    const profileAccess = { getAllowedAuthors: () => null, isLoading: false };
+    expect(filterEventsByAccess(events, communityEvent, profileAccess)).toEqual(events);
+  });
+
+  it('filters out events from restricted sections when author not allowed', () => {
+    const communityEvent = {
+      tags: [
+        ['content', 'Forum'],
+        ['k', '11'],
+        ['a', '30000:abc:forum-members', 'wss://relay.example.com'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+    const events = [
+      makeEvent({ id: 'forum1', kind: 11, pubkey: 'unauthorized' }),
+      makeEvent({ id: 'learn1', kind: 30142, pubkey: 'anyone' })
+    ];
+    const profileAccess = {
+      /** @param {string} name */
+      getAllowedAuthors: (name) => (name === 'Forum' ? ['allowed1', 'allowed2'] : null),
+      isLoading: false
+    };
+    const result = filterEventsByAccess(events, communityEvent, profileAccess);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('learn1');
+  });
+
+  it('keeps events from restricted sections when author IS allowed', () => {
+    const communityEvent = {
+      tags: [
+        ['content', 'Forum'],
+        ['k', '11'],
+        ['a', '30000:abc:forum-members', 'wss://relay.example.com']
+      ]
+    };
+    const events = [makeEvent({ id: 'forum1', kind: 11, pubkey: 'allowed1' })];
+    const profileAccess = {
+      getAllowedAuthors: () => ['allowed1', 'allowed2'],
+      isLoading: false
+    };
+    const result = filterEventsByAccess(events, communityEvent, profileAccess);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('forum1');
+  });
+
+  it('keeps events whose kind has no content type mapping', () => {
+    const communityEvent = {
+      tags: [
+        ['content', 'Forum'],
+        ['k', '11'],
+        ['a', '30000:abc:forum-members', 'wss://relay.example.com']
+      ]
+    };
+    // kind 7 (reaction) has no contentType mapping — should pass through
+    const events = [makeEvent({ id: 'reaction1', kind: 7, pubkey: 'anyone' })];
+    const profileAccess = {
+      getAllowedAuthors: () => ['allowed1'],
+      isLoading: false
+    };
+    const result = filterEventsByAccess(events, communityEvent, profileAccess);
+    expect(result).toHaveLength(1);
+  });
+
+  it('returns all events when profileAccess is still loading', () => {
+    const communityEvent = {
+      tags: [
+        ['content', 'Forum'],
+        ['k', '11'],
+        ['a', '30000:abc:forum-members', 'wss://relay.example.com']
+      ]
+    };
+    const events = [makeEvent({ kind: 11, pubkey: 'unauthorized' })];
+    const profileAccess = {
+      getAllowedAuthors: () => ['allowed1'],
+      isLoading: true
+    };
+    const result = filterEventsByAccess(events, communityEvent, profileAccess);
+    expect(result).toEqual(events);
   });
 });
 
