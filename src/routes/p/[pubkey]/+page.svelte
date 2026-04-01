@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { ProfileModel } from 'applesauce-core/models';
   import { getProfilePointersFromList, getNip10References } from 'applesauce-common/helpers';
@@ -23,6 +24,8 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { showToast } from '$lib/helpers/toast';
+  import { useBadgeAwards } from '$lib/stores/badge-awards.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import NoteCard from '$lib/components/notes/NoteCard.svelte';
   import ProfileContentView from '$lib/components/profile/ProfileContentView.svelte';
   import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
@@ -31,6 +34,8 @@
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
   import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
+  import BadgeCard from '$lib/components/badges/BadgeCard.svelte';
+  import BadgeHeaderRow from '$lib/components/badges/BadgeHeaderRow.svelte';
   import {
     CopyIcon,
     ChevronDownIcon,
@@ -42,6 +47,7 @@
     BookIcon,
     PeopleIcon,
     BookmarkIcon,
+    BadgeIcon,
     ChatIcon,
     UserIcon
   } from '$lib/components/icons';
@@ -64,6 +70,11 @@
   // Communities tab state
   let communityPubkeys = $state(/** @type {string[]} */ ([]));
   let communitiesLoading = $state(true);
+
+  // Badge awards
+  const badgeAwards = useBadgeAwards(() => data.pubkey);
+  const getBadges = badgeAwards.getBadges;
+  const getIssuerProfiles = useProfileMap(() => getBadges().map((b) => b.issuerPubkey));
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
@@ -90,7 +101,7 @@
     const loaderSub = profileLoader({
       kind: 0,
       pubkey: data.pubkey,
-      relays: getProfileLookupRelays()
+      relays: untrack(() => getProfileLookupRelays())
     }).subscribe((event) => {
       if (event) {
         profileEvent = event;
@@ -128,7 +139,7 @@
     communityPubkeys = [];
     communitiesLoading = true;
 
-    const relays = getAllLookupRelays();
+    const relays = untrack(() => getAllLookupRelays());
     const loaderSub = addressLoader({
       kind: 30000,
       pubkey: data.pubkey,
@@ -240,6 +251,7 @@
     { id: 'resources', label: () => m.profile_tab_resources(), icon: GraduationCapIcon },
     { id: 'articles', label: () => m.profile_tab_articles(), icon: BookIcon },
     { id: 'communities', label: () => m.profile_tab_communities(), icon: PeopleIcon },
+    { id: 'badges', label: () => m.profile_tab_badges(), icon: BadgeIcon },
     { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon }
   ];
 </script>
@@ -415,6 +427,11 @@
             {#if profile?.about}
               <p class="mt-4 max-w-2xl leading-relaxed text-base-content/80">{profile.about}</p>
             {/if}
+
+            <!-- Badge header row -->
+            {#if getBadges().length > 0}
+              <BadgeHeaderRow badges={getBadges()} onViewAll={() => switchTab('badges')} />
+            {/if}
           </div>
         </div>
       </div>
@@ -579,6 +596,44 @@
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {#each communityPubkeys as pubkey (pubkey)}
                     <CommunikeyCard {pubkey} />
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Badges -->
+        <div class:hidden={activeTab !== 'badges'}>
+          {#if activatedTabs.has('badges')}
+            <div class="py-4">
+              {#if badgeAwards.isLoading}
+                <div class="flex flex-col items-center justify-center py-16">
+                  <span class="loading loading-lg loading-spinner text-primary"></span>
+                  <p class="mt-4 text-base-content/60">{m.profile_content_loading()}</p>
+                </div>
+              {:else if getBadges().length === 0}
+                <div class="flex flex-col items-center justify-center py-16 text-center">
+                  <div
+                    class="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-base-200"
+                  >
+                    <BadgeIcon class_="w-12 h-12 text-base-content/40" />
+                  </div>
+                  <h3 class="mb-2 text-lg font-semibold text-base-content">
+                    {m.profile_badges_empty_title()}
+                  </h3>
+                  <p class="max-w-md text-base-content/60">
+                    {m.profile_badges_empty_description()}
+                  </p>
+                </div>
+              {:else}
+                {@const issuerProfiles = getIssuerProfiles()}
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {#each getBadges() as badge (badge.id)}
+                    <BadgeCard
+                      {badge}
+                      issuerProfile={issuerProfiles.get(badge.issuerPubkey) || null}
+                    />
                   {/each}
                 </div>
               {/if}

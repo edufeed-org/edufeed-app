@@ -51,26 +51,6 @@ export function createBadgeAwardLoader(pool, relays, eventStore, badgeAddress) {
 }
 
 /**
- * User's received awards loader - loads all awards for a user (kind 8)
- * Used for bulk badge access checking
- *
- * @param {any} pool - Nostr relay pool
- * @param {string[]} defaultRelays - Array of relay URLs
- * @param {any} eventStore - EventStore instance
- * @param {string} userPubkey - User's pubkey whose awards to fetch
- * @returns {Function} Factory function that returns loader function
- */
-export function createUserAwardsLoader(pool, defaultRelays, eventStore, userPubkey) {
-  return () =>
-    createTimelineLoader(
-      pool,
-      defaultRelays,
-      { kinds: [8], '#p': [userPubkey], limit: 200 },
-      { eventStore }
-    );
-}
-
-/**
  * Awards given loader - loads badge awards created by user (kind 8)
  * Used to see what badges a user has awarded to others
  *

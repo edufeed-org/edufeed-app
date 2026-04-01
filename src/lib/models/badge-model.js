@@ -47,42 +47,6 @@ export function BadgeModel(authorPubkey) {
 }
 
 /**
- * User Awards Model - transforms kind 8 events into award objects
- * Used to check what badges a user has been awarded
- *
- * @param {string} userPubkey - Filter awards for specific recipient
- * @returns {Function} Model function that takes eventStore
- */
-export function UserAwardsModel(userPubkey) {
-  return (/** @type {any} */ eventStore) => {
-    const filter = {
-      kinds: [8],
-      '#p': [userPubkey]
-    };
-
-    // Use map instead of scan - timeline already handles deduplication and removals
-    return eventStore.timeline(filter).pipe(
-      map((/** @type {any[]} */ events) => {
-        return events.map((/** @type {any} */ event) => ({
-          id: event.id,
-          issuerPubkey: event.pubkey,
-          created_at: event.created_at,
-          badgeAddress: event.tags.find((/** @type {string[]} */ t) => t[0] === 'a')?.[1] || '',
-          recipients: event.tags
-            .filter((/** @type {string[]} */ t) => t[0] === 'p')
-            .map((/** @type {string[]} */ t) => t[1]),
-          rawEvent: event
-        }));
-      }),
-      distinctUntilChanged(
-        (/** @type {any[]} */ prev, /** @type {any[]} */ curr) =>
-          prev?.length === curr?.length && prev?.every((a, i) => a.id === curr[i]?.id)
-      )
-    );
-  };
-}
-
-/**
  * Badge Awards Model - transforms kind 8 events for a specific badge
  * Used to see all users who have been awarded a specific badge
  *
