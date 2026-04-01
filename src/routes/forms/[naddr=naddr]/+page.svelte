@@ -7,6 +7,7 @@
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import FormResponses from '$lib/components/forms/FormResponses.svelte';
   import SendFormModal from '$lib/components/forms/SendFormModal.svelte';
+  import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
   import { EditIcon, SendIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -82,6 +83,7 @@
           </a>
         {/if}
         <a href="/forms/{data.naddr}/respond" class="btn btn-sm btn-primary">Fill Form</a>
+        <EventContextMenu event={formEvent} />
       </div>
     </div>
 
