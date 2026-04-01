@@ -5,12 +5,14 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { storeEvents } from 'applesauce-relay/operators';
   import { TimelineModel } from 'applesauce-core/models';
-  import NostrIdentifierParser from '$lib/components/shared/NostrIdentifierParser.svelte';
-  import CompactCommunityHeader from '$lib/components/community/layout/CompactCommunityHeader.svelte';
+  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
+  import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
@@ -21,7 +23,7 @@
   /** @type {any} */
   let {
     communikeyEvent,
-    communityProfile = null,
+    _communityProfile = null,
     communityPubkey = '',
     canPublish = true
   } = $props();
@@ -40,6 +42,20 @@
   let isLoadingMore = $state(false);
   let hasMore = $state(true);
   let isSending = $state(false);
+  let showEmojiPicker = $state(false);
+
+  // Custom emoji state
+  const getUserEmojiSets = useUserEmojiSets();
+  let customEmojiSets = $derived(getUserEmojiSets());
+  /** @type {Record<string, { shortcode: string, url: string }>} */
+  let usedCustomEmojis = {};
+
+  // Reply state
+  /** @type {any} */
+  let replyingTo = $state(null);
+
+  /** @type {HTMLInputElement | undefined} */
+  let messageInput = $state(undefined);
 
   let displayedMessages = $derived.by(() => {
     const allowed = getAllowedAuthors?.();
@@ -47,6 +63,24 @@
     const filtered = allowed ? valid.filter((m) => allowed.includes(m.pubkey)) : valid;
     // TimelineModel returns newest-first; chat needs oldest-first
     return filtered.toReversed();
+  });
+
+  // Group messages by date for separators
+  let groupedMessages = $derived.by(() => {
+    /** @type {Array<{ type: 'separator', date: string } | { type: 'message', message: any }>} */
+    const items = [];
+    let lastDate = '';
+
+    for (const message of displayedMessages) {
+      const date = new Date(message.created_at * 1000);
+      const dateStr = formatCalendarDate(date, 'short');
+      if (dateStr !== lastDate) {
+        items.push({ type: 'separator', date: dateStr });
+        lastDate = dateStr;
+      }
+      items.push({ type: 'message', message });
+    }
+    return items;
   });
 
   // Derive community pubkey from communikey event if not provided as prop
@@ -66,8 +100,6 @@
     hasMore = true;
     const filter = { kinds: [9], '#h': [derivedCommunityPubkey] };
 
-    // 1. Persistent subscription with limit for initial load
-    //    limit only affects stored events before EOSE; real-time events still arrive
     const subSub = pool
       .group(chatRelays)
       .subscription({ ...filter, limit: PAGE_SIZE })
@@ -82,7 +114,6 @@
         }
       });
 
-    // 2. TimelineModel provides sorted, deduped, deletion-filtered view
     const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
       messages = events;
     });
@@ -98,7 +129,6 @@
     if (isLoadingMore || !derivedCommunityPubkey || messages.length === 0) return;
 
     isLoadingMore = true;
-    // messages is newest-first from TimelineModel, so last element is oldest
     const oldestTimestamp = messages[messages.length - 1].created_at;
 
     const olderFilter = {
@@ -130,7 +160,6 @@
       });
   }
 
-  // Send message function
   /**
    * @param {Event} event
    */
@@ -141,11 +170,10 @@
     if (!activeUser || !newMessage.trim() || !derivedCommunityPubkey) return;
 
     const messageContent = newMessage.trim();
-    newMessage = ''; // Clear input immediately for instant feedback
-    isSending = true; // Show loading during signing
+    newMessage = '';
+    isSending = true;
 
     try {
-      // Create kind 9 event with community h-tag + mention p-tags
       const mentionTags = extractMentionPubkeys(messageContent).map((pk) => ['p', pk]);
       const chatEvent = {
         kind: 9,
@@ -155,26 +183,38 @@
         pubkey: activeUser.pubkey
       };
 
-      // Sign the event (may require user approval in browser extension)
-      const signedEvent = await activeUser.signer.signEvent(chatEvent);
-      isSending = false; // Signing complete
+      // Add reply tags (NIP-10 markers)
+      if (replyingTo) {
+        chatEvent.tags.push(['e', replyingTo.id, '', 'reply']);
+        chatEvent.tags.push(['p', replyingTo.pubkey]);
+      }
 
-      // Add to EventStore — TimelineModel subscription picks it up automatically
+      // Add custom emoji tags for any shortcodes used in content
+      for (const shortcode of Object.keys(usedCustomEmojis)) {
+        if (messageContent.includes(`:${shortcode}:`)) {
+          chatEvent.tags.push(['emoji', shortcode, usedCustomEmojis[shortcode].url]);
+        }
+      }
+
+      const signedEvent = await activeUser.signer.signEvent(chatEvent);
+      isSending = false;
+
       eventStore.add(signedEvent);
 
-      // Publish optimistically in background (returns immediately)
       publishEventOptimistic(signedEvent, [derivedCommunityPubkey], {
         communityEvent: communikeyEvent
       });
+
+      // Clear reply and custom emoji state after sending
+      replyingTo = null;
+      usedCustomEmojis = {};
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Restore message if signing failed
       newMessage = messageContent;
       isSending = false;
     }
   }
 
-  // Format timestamp
   /**
    * @param {number} timestamp
    */
@@ -183,13 +223,12 @@
     const now = new Date();
     const diff = now.getTime() - date.getTime();
 
-    if (diff < 60000) return 'now'; // Less than 1 minute
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`; // Minutes
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`; // Hours
-    return formatCalendarDate(date, 'short'); // Date with configured locale
+    if (diff < 60000) return 'now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+    return formatCalendarDate(date, 'short');
   }
 
-  // Get user display name
   /**
    * @param {string} pubkey
    */
@@ -202,7 +241,6 @@
     return pubkey.slice(0, 8) + '...';
   }
 
-  // Get user avatar
   /**
    * @param {string} pubkey
    */
@@ -215,6 +253,33 @@
     return null;
   }
 
+  /** Insert unicode emoji at cursor position in message input */
+  function insertEmoji(/** @type {string} */ emoji) {
+    newMessage += emoji;
+    showEmojiPicker = false;
+    messageInput?.focus();
+  }
+
+  /** Insert custom emoji shortcode and track for tagging */
+  function insertCustomEmoji(/** @type {{ shortcode: string, url: string }} */ emoji) {
+    newMessage += `:${emoji.shortcode}:`;
+    usedCustomEmojis[emoji.shortcode] = emoji;
+    showEmojiPicker = false;
+    messageInput?.focus();
+  }
+
+  /**
+   * Get the reply parent event ID from a message's tags
+   * @param {any} message
+   * @returns {string | null}
+   */
+  function getReplyParentId(message) {
+    const eTag = message.tags?.find(
+      (/** @type {string[]} */ t) => t[0] === 'e' && t[3] === 'reply'
+    );
+    return eTag?.[1] || null;
+  }
+
   // Auto-scroll to bottom when new messages arrive (only if already near bottom)
   /** @type {HTMLElement} */
   let chatContainer;
@@ -224,126 +289,202 @@
       const isNewMessage = displayedMessages.length > prevMessageCount;
       const isNearBottom =
         chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 100;
-      // Auto-scroll on initial load or when near bottom and new messages arrive
       if (prevMessageCount === 0 || (isNewMessage && isNearBottom)) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
       prevMessageCount = displayedMessages.length;
     }
   });
+
+  // Auto-load older messages on scroll to top
+  function handleScroll() {
+    if (chatContainer && chatContainer.scrollTop < 50 && hasMore && !isLoadingMore) {
+      loadMore();
+    }
+  }
 </script>
 
-<div class="flex flex-col rounded-lg border bg-base-100" style="height: calc(100vh - 20rem);">
-  <!-- Community Context Header -->
-  {#if communityProfile && communityPubkey}
-    <CompactCommunityHeader {communityProfile} {communityPubkey} />
-  {/if}
-
-  <!-- Chat header -->
-  <div class="border-b bg-base-200 px-4 py-2">
-    <h3 class="font-semibold text-base-content">{m.community_views_chat_title()}</h3>
-    {#if isLoading}
-      <div class="text-sm text-base-content/70">{m.community_views_chat_loading()}</div>
-    {:else}
-      <div class="text-sm text-base-content/70">
-        {displayedMessages.length}
-        {m.community_views_chat_message_count()}
-      </div>
-    {/if}
-  </div>
-
+<div class="flex flex-col" style="height: calc(100vh - 20rem);">
   <!-- Messages container -->
-  <div bind:this={chatContainer} class="flex-1 space-y-4 overflow-y-auto p-4">
-    {#if hasMore && displayedMessages.length > 0}
-      <div class="text-center">
-        <button class="btn btn-ghost btn-sm" onclick={loadMore} disabled={isLoadingMore}>
-          {#if isLoadingMore}
-            <span class="loading loading-sm loading-spinner"></span>
-          {:else}
-            {m.community_views_chat_load_more()}
-          {/if}
-        </button>
+  <div
+    bind:this={chatContainer}
+    onscroll={handleScroll}
+    class="flex-1 space-y-1 overflow-y-auto px-4 py-2"
+  >
+    {#if isLoadingMore}
+      <div class="flex justify-center py-2">
+        <span class="loading loading-sm loading-spinner"></span>
       </div>
     {/if}
 
-    {#if displayedMessages.length === 0 && !isLoading}
+    {#if isLoading}
+      <div class="flex items-center justify-center py-8">
+        <span class="loading loading-md loading-spinner"></span>
+      </div>
+    {:else if displayedMessages.length === 0}
       <div class="py-8 text-center text-base-content/50">
         {m.community_views_chat_empty()}
       </div>
-    {/if}
-
-    {#each displayedMessages as message (message.id)}
-      {@const isOwnMessage = getActiveUser() && message.pubkey === getActiveUser()?.pubkey}
-      <div class="chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
-        {#if !isOwnMessage}
-          <a href={resolve(`/p/${message.pubkey}`)} class="avatar chat-image">
-            <div class="w-8 rounded-full">
-              {#if getUserAvatar(message.pubkey)}
-                <img
-                  src={getUserAvatar(message.pubkey)}
-                  alt={getUserDisplayName(message.pubkey)}
-                  onerror={(e) => {
-                    const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
-                    if (img) img.src = `https://robohash.org/${message.pubkey}`;
-                  }}
-                />
-              {:else}
-                <div
-                  class="flex h-full w-full items-center justify-center bg-primary text-xs text-primary-content"
-                >
-                  {getUserDisplayName(message.pubkey).charAt(0).toUpperCase()}
+    {:else}
+      {#each groupedMessages as item, i (item.type === 'separator' ? `sep-${item.date}-${i}` : item.message.id)}
+        {#if item.type === 'separator'}
+          <div class="divider text-xs text-base-content/40">{item.date}</div>
+        {:else}
+          {@const message = item.message}
+          {@const isOwnMessage = getActiveUser() && message.pubkey === getActiveUser()?.pubkey}
+          {@const replyToId = getReplyParentId(message)}
+          <div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
+            {#if !isOwnMessage}
+              <a href={resolve(`/p/${message.pubkey}`)} class="avatar chat-image">
+                <div class="w-8 rounded-full">
+                  {#if getUserAvatar(message.pubkey)}
+                    <img
+                      src={getUserAvatar(message.pubkey)}
+                      alt={getUserDisplayName(message.pubkey)}
+                      onerror={(e) => {
+                        const img = /** @type {HTMLImageElement} */ (
+                          /** @type {unknown} */ (e.target)
+                        );
+                        if (img) img.src = `https://robohash.org/${message.pubkey}`;
+                      }}
+                    />
+                  {:else}
+                    <div
+                      class="flex h-full w-full items-center justify-center bg-primary text-xs text-primary-content"
+                    >
+                      {getUserDisplayName(message.pubkey).charAt(0).toUpperCase()}
+                    </div>
+                  {/if}
                 </div>
+              </a>
+            {/if}
+
+            <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
+              {#if !isOwnMessage}
+                <a href={resolve(`/p/${message.pubkey}`)} class="font-semibold hover:underline"
+                  >{getUserDisplayName(message.pubkey)}</a
+                >
+                <span>&middot;</span>
+              {/if}
+              <time datetime={new Date(message.created_at * 1000).toISOString()}>
+                {formatTimestamp(message.created_at)}
+              </time>
+              {#if getActiveUser() && canPublish}
+                <button
+                  type="button"
+                  onclick={() => {
+                    replyingTo = message;
+                    messageInput?.focus();
+                  }}
+                  class="ml-1 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
+                  title="Reply"
+                >
+                  <ReplyIcon class="h-3.5 w-3.5" />
+                </button>
               {/if}
             </div>
-          </a>
+
+            <div class="chat-bubble {isOwnMessage ? 'chat-bubble-primary' : ''}">
+              <!-- Reply quote preview -->
+              {#if replyToId}
+                {@const parent = displayedMessages.find((msg) => msg.id === replyToId)}
+                {#if parent}
+                  <div
+                    class="mb-1 rounded border-l-2 border-primary/40 bg-base-300/50 px-2 py-1 text-xs text-base-content/70"
+                  >
+                    <span class="font-semibold">{getUserDisplayName(parent.pubkey)}</span>
+                    <p class="truncate">{parent.content}</p>
+                  </div>
+                {/if}
+              {/if}
+              <NostrContentRenderer event={message} />
+            </div>
+          </div>
         {/if}
-
-        <div class="chat-header mb-1 text-xs opacity-70">
-          {#if !isOwnMessage}
-            <a href={resolve(`/p/${message.pubkey}`)} class="font-semibold hover:underline"
-              >{getUserDisplayName(message.pubkey)}</a
-            >
-            <span class="mx-1">•</span>
-          {/if}
-          <time datetime={new Date(message.created_at * 1000).toISOString()}>
-            {formatTimestamp(message.created_at)}
-          </time>
-        </div>
-
-        <div class="chat-bubble {isOwnMessage ? 'chat-bubble-primary' : ''}">
-          <NostrIdentifierParser text={message.content} />
-        </div>
-      </div>
-    {/each}
+      {/each}
+    {/if}
   </div>
 
-  <!-- Message input -->
+  <!-- Floating pill input -->
   {#if getActiveUser() && canPublish}
-    <form onsubmit={sendMessage} class="rounded-b-lg border-t bg-base-100 p-4">
-      <div class="flex gap-2">
+    <div class="relative px-4 pt-2 pb-4">
+      <!-- Emoji picker dropdown -->
+      {#if showEmojiPicker}
+        <div
+          class="absolute bottom-full left-4 z-10 mb-2 flex max-h-80 w-72 flex-col rounded-lg bg-base-200 shadow-xl"
+        >
+          <EmojiPicker
+            onSelect={insertEmoji}
+            {customEmojiSets}
+            onSelectCustom={insertCustomEmoji}
+          />
+        </div>
+      {/if}
+
+      <!-- Reply preview bar -->
+      {#if replyingTo}
+        <div class="flex items-center gap-2 rounded-t-2xl bg-base-200 px-4 py-2 text-sm shadow-md">
+          <ReplyIcon class="h-4 w-4 shrink-0 text-base-content/60" />
+          <span class="font-medium text-base-content/60"
+            >{getUserDisplayName(replyingTo.pubkey)}</span
+          >
+          <span class="min-w-0 flex-1 truncate text-base-content/80">{replyingTo.content}</span>
+          <button type="button" onclick={() => (replyingTo = null)} class="btn btn-ghost btn-xs">
+            ✕
+          </button>
+        </div>
+      {/if}
+
+      <form
+        onsubmit={sendMessage}
+        class="flex items-center gap-2 {replyingTo
+          ? 'rounded-t-none rounded-b-full'
+          : 'rounded-full'} bg-base-200 px-2 py-1 shadow-md"
+      >
+        <button
+          type="button"
+          onclick={() => (showEmojiPicker = !showEmojiPicker)}
+          class="btn btn-circle btn-ghost btn-sm"
+          title="Emoji"
+        >
+          <SmilePlusIcon class="h-5 w-5" />
+        </button>
+
         <input
+          bind:this={messageInput}
           type="text"
           bind:value={newMessage}
           placeholder={m.community_views_chat_input_placeholder()}
-          class="input-bordered input flex-1"
+          class="min-w-0 flex-1 border-none bg-transparent focus:outline-none"
           disabled={isSending}
+          onfocus={() => (showEmojiPicker = false)}
           required
         />
-        <button type="submit" class="btn btn-primary" disabled={!newMessage.trim() || isSending}>
+
+        <button
+          type="submit"
+          class="btn btn-circle btn-sm btn-primary"
+          disabled={!newMessage.trim() || isSending}
+        >
           {#if isSending}
             <span class="loading loading-sm loading-spinner"></span>
           {:else}
-            {m.community_views_chat_send_button()}
+            <SendIcon class="h-4 w-4" />
           {/if}
         </button>
-      </div>
-    </form>
+      </form>
+    </div>
   {:else}
-    <div class="rounded-b-lg border-t bg-base-100 p-4">
+    <div class="px-4 pt-2 pb-4">
       <div class="text-center text-base-content/70">
-        <p class="mb-2">{m.community_views_chat_login_prompt()}</p>
-        <!-- TODO: Add login button/component -->
+        <p>{m.community_views_chat_login_prompt()}</p>
       </div>
     </div>
   {/if}
 </div>
+
+<!-- Close emoji picker when clicking outside -->
+{#if showEmojiPicker}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="fixed inset-0 z-[9]" onclick={() => (showEmojiPicker = false)}></div>
+{/if}
