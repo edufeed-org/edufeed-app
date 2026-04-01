@@ -52,7 +52,11 @@
     const pubkeys = [];
     for (const e of communityItems) {
       pubkeys.push(e.pubkey);
-      if (e._sharedBy) pubkeys.push(e._sharedBy);
+      if (e._allSharers) {
+        for (const pk of e._allSharers) pubkeys.push(pk);
+      } else if (e._sharedBy) {
+        pubkeys.push(e._sharedBy);
+      }
     }
     return pubkeys;
   });
@@ -68,7 +72,10 @@
     if (!allowed) return communityItems;
     return communityItems.filter(
       (item) =>
-        allowed.includes(item.pubkey) || (item._sharedBy && allowed.includes(item._sharedBy))
+        allowed.includes(item.pubkey) ||
+        (item._allSharers &&
+          item._allSharers.some((/** @type {string} */ pk) => allowed.includes(pk))) ||
+        (item._sharedBy && allowed.includes(item._sharedBy))
     );
   });
 
@@ -321,10 +328,7 @@
       {#each displayedItems as resource (resource.id)}
         <div>
           {#if resource._sharedBy}
-            <SharedByLine
-              sharerProfile={authorProfiles.get(resource._sharedBy) || null}
-              sharerPubkey={resource._sharedBy}
-            />
+            <SharedByLine sharers={resource._allSharers || [resource._sharedBy]} {authorProfiles} />
           {/if}
           <AMBResourceCard
             {resource}

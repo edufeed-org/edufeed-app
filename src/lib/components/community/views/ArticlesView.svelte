@@ -52,10 +52,7 @@
       {#each items as article (article.id)}
         <div>
           {#if article._sharedBy}
-            <SharedByLine
-              sharerProfile={authorProfiles.get(article._sharedBy) || null}
-              sharerPubkey={article._sharedBy}
-            />
+            <SharedByLine sharers={article._allSharers || [article._sharedBy]} {authorProfiles} />
           {/if}
           <ArticleCard
             {article}

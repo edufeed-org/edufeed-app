@@ -159,10 +159,7 @@
     <div class="divide-y divide-base-300">
       {#each items as thread (thread.id)}
         {#if thread._sharedBy}
-          <SharedByLine
-            sharerProfile={authorProfiles.get(thread._sharedBy) || null}
-            sharerPubkey={thread._sharedBy}
-          />
+          <SharedByLine sharers={thread._allSharers || [thread._sharedBy]} {authorProfiles} />
         {/if}
         <ThreadCard
           {thread}

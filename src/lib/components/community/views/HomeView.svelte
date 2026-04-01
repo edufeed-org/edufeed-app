@@ -84,7 +84,11 @@
     const pubkeys = [];
     for (const i of feedItems) {
       pubkeys.push(i.pubkey);
-      if (i._sharedBy) pubkeys.push(i._sharedBy);
+      if (i._allSharers) {
+        for (const pk of i._allSharers) pubkeys.push(pk);
+      } else if (i._sharedBy) {
+        pubkeys.push(i._sharedBy);
+      }
     }
     return pubkeys;
   });
@@ -220,10 +224,7 @@
             <div class="space-y-4">
               {#each displayedItems as event (event.id)}
                 {#if event._sharedBy}
-                  <SharedByLine
-                    sharerProfile={authorProfiles.get(event._sharedBy) || null}
-                    sharerPubkey={event._sharedBy}
-                  />
+                  <SharedByLine sharers={event._allSharers || [event._sharedBy]} {authorProfiles} />
                 {/if}
                 {@const profile = authorProfiles.get(event.pubkey)}
                 {@const cardData = getFeedCardData(event)}

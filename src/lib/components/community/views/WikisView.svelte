@@ -52,10 +52,7 @@
       {#each items as wiki (wiki.id)}
         <div>
           {#if wiki._sharedBy}
-            <SharedByLine
-              sharerProfile={authorProfiles.get(wiki._sharedBy) || null}
-              sharerPubkey={wiki._sharedBy}
-            />
+            <SharedByLine sharers={wiki._allSharers || [wiki._sharedBy]} {authorProfiles} />
           {/if}
           <WikiCard
             {wiki}

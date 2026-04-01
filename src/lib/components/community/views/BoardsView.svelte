@@ -33,10 +33,7 @@
       {#each items as board (board.id)}
         <div>
           {#if board._sharedBy}
-            <SharedByLine
-              sharerProfile={authorProfiles.get(board._sharedBy) || null}
-              sharerPubkey={board._sharedBy}
-            />
+            <SharedByLine sharers={board._allSharers || [board._sharedBy]} {authorProfiles} />
           {/if}
           <KanbanBoardCard
             {board}
