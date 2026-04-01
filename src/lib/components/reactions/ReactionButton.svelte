@@ -95,9 +95,9 @@
   data-emoji={emoji}
   data-count={count}
   data-user-reacted={userReacted}
-  class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm shadow-sm backdrop-blur-sm transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 {userReacted
-    ? 'border-blue-400/60 bg-blue-900/30 text-blue-300 hover:border-blue-400/80 hover:bg-blue-500/20'
-    : 'border-gray-700/50 bg-gray-800/30 text-gray-300 hover:border-gray-600/60 hover:bg-gray-800/40'}"
+  class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 {userReacted
+    ? 'border-primary/40 bg-primary/10 text-primary hover:border-primary/60 hover:bg-primary/15'
+    : 'border-base-content/20 bg-base-200/50 text-base-content/70 hover:border-base-content/30 hover:bg-base-200'}"
 >
   {#if emojiUrl}
     <img src={emojiUrl} alt={emoji} title={emoji} class="inline h-5 w-5 object-contain" />
@@ -126,7 +126,7 @@
       class="ml-0.5 inline-flex cursor-pointer items-center transition-opacity"
       aria-label={m.reactions_delete_title()}
     >
-      <TrashIcon class="h-3 w-3 text-red-400 transition-colors hover:text-red-300" />
+      <TrashIcon class="h-3 w-3 text-error transition-colors hover:text-error/80" />
     </span>
   {/if}
 </button>
