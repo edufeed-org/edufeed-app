@@ -255,13 +255,13 @@
     <div class="space-y-6">
       <!-- Avatar Uploader (centered) -->
       <div class="flex flex-col items-center">
-        <AvatarUploader {userData} signer={manager.active?.signer} bind:errors />
+        <AvatarUploader bind:userData signer={manager.active?.signer} bind:errors />
       </div>
 
       <!-- Form Fields (centered with max-width) -->
       <div class="flex w-full flex-col items-center">
         <div class="w-full max-w-md space-y-4">
-          <ProfileForm {userData} bind:errors />
+          <ProfileForm bind:userData bind:errors />
         </div>
       </div>
     </div>

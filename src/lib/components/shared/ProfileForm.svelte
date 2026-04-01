@@ -1,7 +1,7 @@
 <script>
   import * as m from '$lib/paraglide/messages';
 
-  let { userData, errors = $bindable({}) } = $props();
+  let { userData = $bindable(), errors = $bindable({}) } = $props();
 
   function validateStep() {
     errors = {};
