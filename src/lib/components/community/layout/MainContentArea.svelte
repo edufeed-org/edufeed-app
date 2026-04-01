@@ -13,7 +13,7 @@
   import SettingsView from '../views/SettingsView.svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { CONTENT_TYPE_TO_SECTION } from '$lib/helpers/contentTypes.js';
+  import { getSectionNameForContentType } from '$lib/helpers/contentTypes.js';
   import * as m from '$lib/paraglide/messages';
 
   let { selectedCommunityId, selectedContentType, onKindNavigation } = $props();
@@ -51,7 +51,7 @@
   {:else}
     <!-- Key block ensures views remount when community changes -->
     {#key selectedCommunityId}
-      {@const sectionName = CONTENT_TYPE_TO_SECTION[selectedContentType]}
+      {@const sectionName = getSectionNameForContentType(communikeyEvent, selectedContentType)}
       {@const formRef = sectionName ? profileAccess.getFormRef(sectionName) : null}
       {@const userPubkey = manager.active?.pubkey}
       {@const canPublish = sectionName ? profileAccess.canPublish(sectionName) : true}

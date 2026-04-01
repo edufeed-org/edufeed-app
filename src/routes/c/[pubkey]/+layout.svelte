@@ -14,7 +14,7 @@
   import {
     getRestrictedTabIds,
     getAccessibleTabIds,
-    CONTENT_TYPE_TO_SECTION
+    getSectionNameForContentType
   } from '$lib/helpers/contentTypes.js';
   import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
 
@@ -135,7 +135,7 @@
   let accessibleTabs = $derived(getAccessibleTabIds(communikeyEvent, profileAccess));
 
   // Provide shared data to child components via context
-  let sectionName = $derived(CONTENT_TYPE_TO_SECTION[selectedContentType]);
+  let sectionName = $derived(getSectionNameForContentType(communikeyEvent, selectedContentType));
   let allowedAuthors = $derived(
     sectionName && !profileAccess.isLoading ? profileAccess.getAllowedAuthors(sectionName) : null
   );

@@ -13,7 +13,8 @@ import {
   getCommunityAvailableContentTypes,
   getRestrictedTabIds,
   getAccessibleTabIds,
-  filterEventsByAccess
+  filterEventsByAccess,
+  getSectionNameForContentType
 } from '$lib/helpers/contentTypes.js';
 
 describe('CONTENT_TYPE_CONFIG', () => {
@@ -155,6 +156,75 @@ describe('CONTENT_TYPE_TO_SECTION', () => {
   });
 });
 
+describe('getSectionNameForContentType', () => {
+  it('returns section name from old-style event with "Posts"', () => {
+    const event = {
+      tags: [
+        ['content', 'Posts'],
+        ['k', '1'],
+        ['k', '11']
+      ]
+    };
+    expect(getSectionNameForContentType(event, 'forum')).toBe('Posts');
+  });
+
+  it('returns section name from new-style event with "Forum"', () => {
+    const event = {
+      tags: [
+        ['content', 'Forum'],
+        ['k', '1'],
+        ['k', '11']
+      ]
+    };
+    expect(getSectionNameForContentType(event, 'forum')).toBe('Forum');
+  });
+
+  it('returns null for unmapped content type', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9']
+      ]
+    };
+    expect(getSectionNameForContentType(event, 'forum')).toBeNull();
+  });
+
+  it('returns null when event is null', () => {
+    expect(getSectionNameForContentType(null, 'forum')).toBeNull();
+  });
+
+  it('returns null when contentTypeId is empty', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9']
+      ]
+    };
+    expect(getSectionNameForContentType(event, '')).toBeNull();
+  });
+
+  it('maps calendar kinds (31922/31923) to same section', () => {
+    const event = {
+      tags: [
+        ['content', 'Events'],
+        ['k', '31922'],
+        ['k', '31923']
+      ]
+    };
+    expect(getSectionNameForContentType(event, 'calendar')).toBe('Events');
+  });
+
+  it('handles custom section names', () => {
+    const event = {
+      tags: [
+        ['content', 'Discussions'],
+        ['k', '11']
+      ]
+    };
+    expect(getSectionNameForContentType(event, 'forum')).toBe('Discussions');
+  });
+});
+
 describe('filterEventsByAccess', () => {
   /** @param {Partial<import('nostr-tools').Event>} overrides */
   function makeEvent(overrides) {
@@ -212,6 +282,26 @@ describe('filterEventsByAccess', () => {
     const result = filterEventsByAccess(events, communityEvent, profileAccess);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('learn1');
+  });
+
+  it('allows shared content when sharer is in allowed list but author is not', () => {
+    const communityEvent = {
+      tags: [
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['a', '30000:abc:learning-members', 'wss://relay.example.com']
+      ]
+    };
+    const events = [
+      makeEvent({ id: 'shared1', kind: 30142, pubkey: 'outsideAuthor', _sharedBy: 'allowedSharer' })
+    ];
+    const profileAccess = {
+      getAllowedAuthors: () => ['allowedSharer', 'otherMember'],
+      isLoading: false
+    };
+    const result = filterEventsByAccess(events, communityEvent, profileAccess);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('shared1');
   });
 
   it('keeps events from restricted sections when author IS allowed', () => {

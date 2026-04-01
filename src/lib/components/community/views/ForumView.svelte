@@ -21,6 +21,7 @@
   import { PlusIcon } from '$lib/components/icons';
   import ThreadCard from '$lib/components/thread/ThreadCard.svelte';
   import ThreadCreateForm from '$lib/components/thread/ThreadCreateForm.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -157,6 +158,12 @@
   {#snippet content(items, authorProfiles)}
     <div class="divide-y divide-base-300">
       {#each items as thread (thread.id)}
+        {#if thread._sharedBy}
+          <SharedByLine
+            sharerProfile={authorProfiles.get(thread._sharedBy) || null}
+            sharerPubkey={thread._sharedBy}
+          />
+        {/if}
         <ThreadCard
           {thread}
           authorProfile={authorProfiles.get(thread.pubkey) || null}

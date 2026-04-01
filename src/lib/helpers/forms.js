@@ -1,4 +1,6 @@
 import { nip19 } from 'nostr-tools';
+import * as m from '$lib/paraglide/messages';
+import { EventFactory } from 'applesauce-core/event-factory';
 
 /**
  * Find kind 30000 events that link to a specific form via ['form', formAddress] tag.
@@ -260,6 +262,48 @@ export function decodeFormNaddr(naddrStr) {
   }
 
   return { pubkey, identifier, relays: relays || [] };
+}
+
+/** Kind for form template events */
+export const FORM_TEMPLATE_KIND = 30168;
+
+/**
+ * Returns the default membership form definition using current locale i18n messages.
+ * @returns {{ dTag: string, name: string, fields: FormField[] }}
+ */
+export function getDefaultMembershipForm() {
+  return {
+    dTag: 'membership',
+    name: m.default_form_name(),
+    fields: [
+      { id: 'name', type: 'text', label: m.default_form_field_name(), options: { required: true } },
+      {
+        id: 'email',
+        type: 'email',
+        label: m.default_form_field_email(),
+        options: { required: true }
+      },
+      {
+        id: 'motivation',
+        type: 'textarea',
+        label: m.default_form_field_motivation(),
+        options: { required: true }
+      }
+    ]
+  };
+}
+
+/**
+ * Create and sign a default membership form template event (kind 30168).
+ * @param {import('applesauce-signers').Signer} signer
+ * @returns {Promise<import('nostr-tools').NostrEvent>}
+ */
+export async function createDefaultMembershipForm(signer) {
+  const { dTag, name, fields } = getDefaultMembershipForm();
+  const tags = buildFormTemplateTags(dTag, fields, { name });
+  const factory = new EventFactory({ signer });
+  const template = await factory.build({ kind: FORM_TEMPLATE_KIND, tags, content: '' });
+  return factory.sign(template);
 }
 
 /**

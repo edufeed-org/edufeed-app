@@ -2,6 +2,7 @@
   import CommunityProfileHero from './CommunityProfileHero.svelte';
   import PinnedSection from '../PinnedSection.svelte';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import { ChevronRightIcon } from '$lib/components/icons';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
@@ -79,7 +80,14 @@
   let feedItems = $state.raw([]);
   let isLoadingFeed = $state(true);
 
-  const getAuthorProfiles = useProfileMap(() => feedItems.map((i) => i.pubkey));
+  const getAuthorProfiles = useProfileMap(() => {
+    const pubkeys = [];
+    for (const i of feedItems) {
+      pubkeys.push(i.pubkey);
+      if (i._sharedBy) pubkeys.push(i._sharedBy);
+    }
+    return pubkeys;
+  });
   let authorProfiles = $derived(getAuthorProfiles());
 
   // Plain let for internal refs — must NOT be $state to avoid infinite $effect loops
@@ -211,6 +219,12 @@
           {:else}
             <div class="space-y-4">
               {#each displayedItems as event (event.id)}
+                {#if event._sharedBy}
+                  <SharedByLine
+                    sharerProfile={authorProfiles.get(event._sharedBy) || null}
+                    sharerPubkey={event._sharedBy}
+                  />
+                {/if}
                 {@const profile = authorProfiles.get(event.pubkey)}
                 {@const cardData = getFeedCardData(event)}
                 <FeedCard

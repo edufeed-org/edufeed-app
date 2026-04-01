@@ -7,6 +7,7 @@
   import { useKanbanCommunityLoader } from '$lib/loaders/kanban-community.js';
   import { CommunityBoardModel } from '$lib/models/community-content.js';
   import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -30,11 +31,19 @@
   {#snippet content(items, authorProfiles)}
     <div class="space-y-4">
       {#each items as board (board.id)}
-        <KanbanBoardCard
-          {board}
-          authorProfile={authorProfiles.get(board.pubkey) || null}
-          compact={false}
-        />
+        <div>
+          {#if board._sharedBy}
+            <SharedByLine
+              sharerProfile={authorProfiles.get(board._sharedBy) || null}
+              sharerPubkey={board._sharedBy}
+            />
+          {/if}
+          <KanbanBoardCard
+            {board}
+            authorProfile={authorProfiles.get(board.pubkey) || null}
+            compact={false}
+          />
+        </div>
       {/each}
     </div>
   {/snippet}

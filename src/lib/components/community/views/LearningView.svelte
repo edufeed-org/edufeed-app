@@ -12,6 +12,7 @@
   import { CommunityAMBResourceModel } from '$lib/models/community-content.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import LearningContentFilters from '$lib/components/educational/LearningContentFilters.svelte';
   import { ambSearchLoader } from '$lib/loaders/amb-search.js';
   import {
@@ -47,7 +48,14 @@
 
   // Profile loading for all community items
   // $state.raw() reassignment triggers reactivity, no trigger counter needed
-  const getAuthorProfiles = useProfileMap(() => communityItems.map((e) => e.pubkey));
+  const getAuthorProfiles = useProfileMap(() => {
+    const pubkeys = [];
+    for (const e of communityItems) {
+      pubkeys.push(e.pubkey);
+      if (e._sharedBy) pubkeys.push(e._sharedBy);
+    }
+    return pubkeys;
+  });
   let authorProfiles = $derived(getAuthorProfiles());
 
   // Subscription management (plain let, not $state)
@@ -311,11 +319,19 @@
   {:else}
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each displayedItems as resource (resource.id)}
-        <AMBResourceCard
-          {resource}
-          authorProfile={authorProfiles.get(resource.pubkey) || null}
-          compact={false}
-        />
+        <div>
+          {#if resource._sharedBy}
+            <SharedByLine
+              sharerProfile={authorProfiles.get(resource._sharedBy) || null}
+              sharerPubkey={resource._sharedBy}
+            />
+          {/if}
+          <AMBResourceCard
+            {resource}
+            authorProfile={authorProfiles.get(resource.pubkey) || null}
+            compact={false}
+          />
+        </div>
       {/each}
     </div>
     {#if isSearching}

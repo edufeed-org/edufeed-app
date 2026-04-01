@@ -11,9 +11,12 @@ import {
   formCoordinateToNaddr,
   formEventToNaddr,
   FORM_REQUEST_KIND,
+  FORM_TEMPLATE_KIND,
   decodeFormNaddr,
   getFormRequestFormAddress,
-  parseFormRequestMessage
+  parseFormRequestMessage,
+  getDefaultMembershipForm,
+  createDefaultMembershipForm
 } from '../helpers/forms.js';
 
 describe('forms — tag building', () => {
@@ -343,6 +346,73 @@ describe('forms — getFormRequestFormAddress', () => {
       created_at: 1
     };
     expect(getFormRequestFormAddress(event)).toBeUndefined();
+  });
+});
+
+describe('forms — FORM_TEMPLATE_KIND', () => {
+  it('equals 30168', () => {
+    expect(FORM_TEMPLATE_KIND).toBe(30168);
+  });
+});
+
+describe('forms — getDefaultMembershipForm', () => {
+  it('returns 3 fields with correct ids and types', () => {
+    const form = getDefaultMembershipForm();
+    expect(form.dTag).toBe('membership');
+    expect(form.name).toBeTruthy();
+    expect(form.fields).toHaveLength(3);
+
+    expect(form.fields[0].id).toBe('name');
+    expect(form.fields[0].type).toBe('text');
+    expect(form.fields[0].options.required).toBe(true);
+
+    expect(form.fields[1].id).toBe('email');
+    expect(form.fields[1].type).toBe('email');
+    expect(form.fields[1].options.required).toBe(true);
+
+    expect(form.fields[2].id).toBe('motivation');
+    expect(form.fields[2].type).toBe('textarea');
+    expect(form.fields[2].options.required).toBe(true);
+  });
+
+  it('roundtrips through buildFormTemplateTags + parseFormTemplate', () => {
+    const form = getDefaultMembershipForm();
+    const tags = buildFormTemplateTags(form.dTag, form.fields, { name: form.name });
+    const mockEvent = { kind: 30168, pubkey: 'abc', tags, content: '', created_at: 1 };
+    const parsed = parseFormTemplate(mockEvent);
+
+    expect(parsed.dTag).toBe('membership');
+    expect(parsed.name).toBe(form.name);
+    expect(parsed.fields).toHaveLength(3);
+    expect(parsed.fields[0].id).toBe('name');
+    expect(parsed.fields[1].id).toBe('email');
+    expect(parsed.fields[2].id).toBe('motivation');
+  });
+});
+
+describe('forms — createDefaultMembershipForm', () => {
+  it('returns a valid signed kind 30168 event with correct d-tag', async () => {
+    // Use a real PrivateKeySigner for integration-style test
+    const { generateSecretKey } = await import('nostr-tools');
+    const { PrivateKeySigner } = await import('applesauce-signers');
+    const sk = generateSecretKey();
+    const signer = new PrivateKeySigner(sk);
+
+    const event = await createDefaultMembershipForm(signer);
+
+    expect(event.kind).toBe(30168);
+    expect(event.sig).toBeTruthy();
+    expect(event.pubkey).toBeTruthy();
+
+    // Verify d-tag
+    const dTag = event.tags.find((t) => t[0] === 'd');
+    expect(dTag?.[1]).toBe('membership');
+
+    // Verify fields roundtrip
+    const parsed = parseFormTemplate(event);
+    expect(parsed.name).toBeTruthy();
+    expect(parsed.fields).toHaveLength(3);
+    expect(parsed.fields.map((f) => f.id)).toEqual(['name', 'email', 'motivation']);
   });
 });
 

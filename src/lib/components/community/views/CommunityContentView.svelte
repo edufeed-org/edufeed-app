@@ -53,7 +53,14 @@
   let items = $state(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let error = $state(/** @type {string | null} */ (null));
-  const getAuthorProfiles = useProfileMap(() => items.map((i) => i.pubkey));
+  const getAuthorProfiles = useProfileMap(() => {
+    const pubkeys = [];
+    for (const i of items) {
+      pubkeys.push(i.pubkey);
+      if (i._sharedBy) pubkeys.push(i._sharedBy);
+    }
+    return pubkeys;
+  });
   let authorProfiles = $derived(getAuthorProfiles());
 
   let accessFilteredItems = $derived.by(() => {

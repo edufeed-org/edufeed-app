@@ -239,7 +239,7 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
   });
 }
 
-/** @type {Record<string, string>} Maps content type ID to community section name */
+/** @type {Record<string, string>} Maps content type ID to community section name (UI default) */
 export const CONTENT_TYPE_TO_SECTION = {
   calendar: 'Calendar',
   chat: 'Chat',
@@ -250,6 +250,24 @@ export const CONTENT_TYPE_TO_SECTION = {
   boards: 'Boards',
   'social-bookmarks': 'Social Bookmarks'
 };
+
+/**
+ * Get the actual section name from a community event for a given content type.
+ * Looks up by kind number, not by hardcoded name — resilient to naming changes.
+ * @param {any} communityEvent - The community's kind:10222 event
+ * @param {string} contentTypeId - The content type ID (e.g., 'forum', 'calendar')
+ * @returns {string|null} The section name from the event, or null if not found
+ */
+export function getSectionNameForContentType(communityEvent, contentTypeId) {
+  if (!communityEvent || !contentTypeId) return null;
+  const sections = parseCommunityContentTypes(communityEvent);
+  for (const section of sections) {
+    for (const kind of section.kinds) {
+      if (kindToContentType(kind) === contentTypeId) return section.name;
+    }
+  }
+  return null;
+}
 
 /**
  * Filter events by profile-list access restrictions.
@@ -279,7 +297,7 @@ export function filterEventsByAccess(events, communityEvent, profileAccess) {
     const allowed = profileAccess.getAllowedAuthors(sectionName);
     if (allowed === null) return true;
 
-    return allowed.includes(event.pubkey);
+    return allowed.includes(event.pubkey) || (event._sharedBy && allowed.includes(event._sharedBy));
   });
 }
 

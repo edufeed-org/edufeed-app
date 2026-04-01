@@ -8,6 +8,7 @@
   import { useWikiCommunityLoader } from '$lib/loaders/wiki.js';
   import { CommunityWikiModel } from '$lib/models/community-content.js';
   import WikiCard from '$lib/components/wiki/WikiCard.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import { RepostIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -49,7 +50,19 @@
   {#snippet content(items, authorProfiles)}
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each items as wiki (wiki.id)}
-        <WikiCard {wiki} authorProfile={authorProfiles.get(wiki.pubkey) || null} {communityNpub} />
+        <div>
+          {#if wiki._sharedBy}
+            <SharedByLine
+              sharerProfile={authorProfiles.get(wiki._sharedBy) || null}
+              sharerPubkey={wiki._sharedBy}
+            />
+          {/if}
+          <WikiCard
+            {wiki}
+            authorProfile={authorProfiles.get(wiki.pubkey) || null}
+            {communityNpub}
+          />
+        </div>
       {/each}
     </div>
   {/snippet}

@@ -8,6 +8,7 @@
   import { useArticleCommunityLoader } from '$lib/loaders/articles.js';
   import { CommunityArticleModel } from '$lib/models/community-content.js';
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import { RepostIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -49,12 +50,20 @@
   {#snippet content(items, authorProfiles)}
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each items as article (article.id)}
-        <ArticleCard
-          {article}
-          authorProfile={authorProfiles.get(article.pubkey) || null}
-          compact={false}
-          {communityNpub}
-        />
+        <div>
+          {#if article._sharedBy}
+            <SharedByLine
+              sharerProfile={authorProfiles.get(article._sharedBy) || null}
+              sharerPubkey={article._sharedBy}
+            />
+          {/if}
+          <ArticleCard
+            {article}
+            authorProfile={authorProfiles.get(article.pubkey) || null}
+            compact={false}
+            {communityNpub}
+          />
+        </div>
       {/each}
     </div>
   {/snippet}

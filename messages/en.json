@@ -648,6 +648,7 @@
   "community_views_chat_login_prompt": "Sign in to participate in the chat",
   "community_profile_hero_more": "more",
   "community_upcoming_events_title": "Upcoming Events",
+  "community_shared_label": "{name} shared",
   "community_views_home_recent_activity_title": "Recent Activity",
   "community_views_home_recent_activity_empty": "No recent activity to display",
   "community_views_home_recent_activity_description": "Activity will appear here as members interact with the community",

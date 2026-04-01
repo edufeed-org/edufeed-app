@@ -162,19 +162,25 @@
     // Parse content sections from tags
     /** @type {string|null} */
     let currentSection = null;
+    /** @type {string|null} */
+    let currentSectionOriginalName = null;
 
     for (const tag of tags) {
       if (!Array.isArray(tag) || tag.length === 0) continue;
 
       if (tag[0] === 'content') {
-        // Start new section
+        // Start new section — preserve original name from event
         currentSection = tag[1]?.toLowerCase() || null;
+        currentSectionOriginalName = tag[1] || null;
       } else if (tag[0] === 'k' && currentSection) {
-        // Kind tag - enable corresponding content type
+        // Kind tag - enable corresponding content type and preserve original name
         const kind = parseInt(tag[1], 10);
         const key = kindToKey[kind];
         if (key && contentTypes[key]) {
           contentTypes[key].enabled = true;
+          if (currentSectionOriginalName) {
+            contentTypes[key].name = currentSectionOriginalName;
+          }
         }
       } else if (tag[0] === 'a' && currentSection && tag[1]?.startsWith('30009:')) {
         // Badge tag
