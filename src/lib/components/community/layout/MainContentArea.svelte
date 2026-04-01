@@ -23,6 +23,7 @@
   const getCommunityProfile = getContext('communityProfile');
   const getCommunikeyLoaded = getContext('communikeyLoaded');
   const profileAccess = getContext('profileAccess');
+  const getIsMember = getContext('isCommunityMember');
 
   let communikeyEvent = $derived(getCommunikeyEvent());
   let communityProfile = $derived(getCommunityProfile());
@@ -56,7 +57,7 @@
       {@const userPubkey = manager.active?.pubkey}
       {@const canPublish = sectionName ? profileAccess.canPublish(sectionName) : true}
 
-      {#if userPubkey && !canPublish && formRef && !profileAccess.isLoading}
+      {#if userPubkey && getIsMember() && !canPublish && formRef && !profileAccess.isLoading}
         <AccessGateBanner {formRef} {sectionName} {userPubkey} />
       {/if}
 

@@ -17,6 +17,7 @@
     getSectionNameForContentType
   } from '$lib/helpers/contentTypes.js';
   import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
+  import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -139,6 +140,9 @@
   let allowedAuthors = $derived(
     sectionName && !profileAccess.isLoading ? profileAccess.getAllowedAuthors(sectionName) : null
   );
+
+  const getIsMember = useCommunityMembership(() => data.pubkey);
+  setContext('isCommunityMember', getIsMember);
 
   setContext('communikeyEvent', () => communikeyEvent);
   setContext('communityProfile', () => communityProfile);
