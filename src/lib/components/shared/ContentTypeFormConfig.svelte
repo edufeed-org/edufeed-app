@@ -4,7 +4,10 @@
 -->
 
 <script>
-  import { parseFormTemplate } from '$lib/helpers/forms.js';
+  import { parseFormTemplate, formCoordinateToNaddr } from '$lib/helpers/forms.js';
+  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { resolve } from '$app/paths';
+  import { ExternalLinkIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -37,6 +40,19 @@
       </option>
     {/each}
   </select>
+  {#if contentType.formRef}
+    <a
+      href={resolve(
+        `/forms/${formCoordinateToNaddr(contentType.formRef, getCommunikeyRelays().slice(0, 2))}`
+      )}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="btn btn-square btn-ghost btn-sm"
+      title={m.form_config_view_form?.() || 'View form in new tab'}
+    >
+      <ExternalLinkIcon class_="w-4 h-4" title="" />
+    </a>
+  {/if}
   {#if defaultFormRef && contentType.formRef === defaultFormRef}
     <span class="text-xs opacity-50">{m.form_config_same_as_default?.() || 'same as default'}</span>
   {/if}

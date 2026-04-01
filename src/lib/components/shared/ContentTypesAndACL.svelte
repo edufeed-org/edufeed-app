@@ -5,9 +5,12 @@
 -->
 
 <script>
-  import { parseFormTemplate } from '$lib/helpers/forms.js';
+  import { parseFormTemplate, formCoordinateToNaddr } from '$lib/helpers/forms.js';
   import { applyDefaultFormRef } from '$lib/helpers/communityFormDefaults.js';
+  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { resolve } from '$app/paths';
   import ContentTypeFormConfig from './ContentTypeFormConfig.svelte';
+  import { ExternalLinkIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -20,6 +23,7 @@
    *   formTemplates: any[],
    *   showAccessConfig: boolean,
    *   defaultFormRef: string,
+   *   onCreateDefaultForm?: () => Promise<string>,
    *   errors?: Record<string, string>
    * }}
    */
@@ -28,8 +32,11 @@
     formTemplates,
     showAccessConfig = $bindable(),
     defaultFormRef = $bindable(),
+    onCreateDefaultForm,
     errors = {}
   } = $props();
+
+  let isCreatingDefault = $state(false);
 
   /** Content type display names from i18n */
   const contentTypeLabels = {
@@ -127,20 +134,64 @@
           >{m.form_config_default_form_label?.() || 'Default form'}</span
         >
       </label>
-      <select
-        id="acl-default-form"
-        class="select-bordered select"
-        value={defaultFormRef}
-        onchange={handleDefaultChange}
-      >
-        <option value="">{m.form_config_open?.() || 'Open — anyone can publish'}</option>
-        {#each formTemplates as template (template.id)}
-          {@const parsed = parseFormTemplate(template)}
-          <option value={getTemplateValue(template)}>
-            {parsed.name || parsed.dTag}
-          </option>
-        {/each}
-      </select>
+      {#if formTemplates.length === 0 && onCreateDefaultForm}
+        <p class="mb-2 text-sm opacity-70">
+          {m.form_config_no_forms_hint?.() || 'No form templates available.'}
+        </p>
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          disabled={isCreatingDefault}
+          onclick={async () => {
+            isCreatingDefault = true;
+            try {
+              const coordinate = await onCreateDefaultForm();
+              const oldDefault = defaultFormRef;
+              contentTypes = applyDefaultFormRef(contentTypes, oldDefault, coordinate);
+              defaultFormRef = coordinate;
+            } finally {
+              isCreatingDefault = false;
+            }
+          }}
+        >
+          {#if isCreatingDefault}
+            <span class="loading loading-xs loading-spinner"></span>
+            {m.form_config_creating_default?.() || 'Creating form…'}
+          {:else}
+            {m.form_config_create_default?.() || 'Create default membership form'}
+          {/if}
+        </button>
+      {:else}
+        <div class="flex items-center gap-2">
+          <select
+            id="acl-default-form"
+            class="select-bordered select flex-1"
+            value={defaultFormRef}
+            onchange={handleDefaultChange}
+          >
+            <option value="">{m.form_config_open?.() || 'Open — anyone can publish'}</option>
+            {#each formTemplates as template (template.id)}
+              {@const parsed = parseFormTemplate(template)}
+              <option value={getTemplateValue(template)}>
+                {parsed.name || parsed.dTag}
+              </option>
+            {/each}
+          </select>
+          {#if defaultFormRef}
+            <a
+              href={resolve(
+                `/forms/${formCoordinateToNaddr(defaultFormRef, getCommunikeyRelays().slice(0, 2))}`
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-square btn-ghost btn-sm"
+              title={m.form_config_view_form?.() || 'View form in new tab'}
+            >
+              <ExternalLinkIcon class_="w-4 h-4" title="" />
+            </a>
+          {/if}
+        </div>
+      {/if}
       <p class="mt-1 text-xs opacity-70">
         {m.form_config_default_form_help?.() || 'Applies to all enabled content types'}
       </p>
