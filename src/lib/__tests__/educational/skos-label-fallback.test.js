@@ -249,6 +249,29 @@ describe('getLabelsWithFallback', () => {
     ]);
   });
 
+  it('deduplicates IDs when event has repeated tags', () => {
+    const tags = [
+      ['about:id', 'https://w3id.org/kim/hochschulfaechersystematik/n0128'],
+      ['about:id', 'https://w3id.org/kim/hochschulfaechersystematik/n0128'],
+      ['about:id', 'https://w3id.org/kim/hochschulfaechersystematik/n270'],
+      ['about:prefLabel:de', 'Bauingenieurwesen'],
+      ['about:prefLabel:de', 'Bauingenieurwesen'],
+      ['about:prefLabel:de', 'Informatik']
+    ];
+
+    const result = getLabelsWithFallback(tags, 'about', 'de');
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({
+      id: 'https://w3id.org/kim/hochschulfaechersystematik/n0128',
+      label: 'Bauingenieurwesen'
+    });
+    expect(result[1]).toEqual({
+      id: 'https://w3id.org/kim/hochschulfaechersystematik/n270',
+      label: 'Informatik'
+    });
+  });
+
   it('falls back to URI extraction when prefLabel is URI and no SKOS match', () => {
     const tags = [
       ['about:id', 'https://w3id.org/kim/hochschulfaechersystematik/n091'],
