@@ -3,12 +3,12 @@
  * Profile List Access Hook
  * Reactive checker for community section membership via kind 30000 profile lists.
  * Replaces the old badge-based access control (useBadgeAccess).
+ *
+ * Delegates to subscribeToProfileListMembers for the actual loading/subscribing,
+ * wrapping the results in Svelte 5 runes for reactivity.
  */
-import { getProfilePointersFromList } from 'applesauce-common/helpers';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { addressLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
-import { untrack } from 'svelte';
+import { subscribeToProfileListMembers } from '$lib/helpers/profile-list-members.js';
 import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
 
 /**
@@ -37,6 +37,7 @@ export function useProfileListAccess(getCommunityEvent, getRelays) {
   /** @type {Map<string, string | null>} section name → form ref URL */
   let formRefMap = $state.raw(new Map());
   let isLoading = $state(true);
+  let pendingCount = 0;
 
   $effect(() => {
     const communityEvent = getCommunityEvent();
@@ -58,67 +59,21 @@ export function useProfileListAccess(getCommunityEvent, getRelays) {
     }
 
     isLoading = true;
+    pendingCount = sectionsWithLists.length;
+
     const relays = getRelays();
-    let pendingCount = sectionsWithLists.length;
-
-    /** @type {import('rxjs').Subscription[]} */
-    const subs = [];
-
-    for (const section of sectionsWithLists) {
-      const address = section.profileList;
-      if (!address) continue;
-
-      // Parse "30000:pubkey:d-tag"
-      const parts = address.split(':');
-      if (parts.length < 3) {
-        pendingCount--;
-        if (pendingCount === 0) isLoading = false;
-        continue;
-      }
-
-      const [, pubkey, ...identifierParts] = parts;
-      const identifier = identifierParts.join(':');
-
-      // Determine relays: use profile list relay hint if available, plus passed relays
-      const fetchRelays = section.profileListRelay ? [section.profileListRelay, ...relays] : relays;
-
-      // Fetch the profile list event
-      const loaderSub = addressLoader({
-        kind: 30000,
-        pubkey,
-        identifier,
-        relays: fetchRelays
-      }).subscribe();
-      subs.push(loaderSub);
-
-      // Subscribe for reactive updates
-      const modelSub = eventStore.replaceable(30000, pubkey, identifier).subscribe((event) => {
-        const newMemberMap = new Map(untrack(() => memberMap));
-        const newFormRefMap = new Map(untrack(() => formRefMap));
-
-        if (event) {
-          const pointers = getProfilePointersFromList(event);
-          newMemberMap.set(section.name, new Set(pointers.map((p) => p.pubkey)));
-
-          // Extract form reference from tags (e.g., ["form", "https://..."])
-          const formTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'form');
-          newFormRefMap.set(section.name, formTag?.[1] || null);
-        } else {
-          newMemberMap.set(section.name, new Set());
-          newFormRefMap.set(section.name, null);
-        }
-
-        memberMap = newMemberMap;
-        formRefMap = newFormRefMap;
+    const { cleanup } = subscribeToProfileListMembers(
+      communityEvent,
+      relays,
+      (newMemberMap, newFormRefMap) => {
+        memberMap = new Map(newMemberMap);
+        formRefMap = new Map(newFormRefMap);
         pendingCount--;
         if (pendingCount <= 0) isLoading = false;
-      });
-      subs.push(modelSub);
-    }
+      }
+    );
 
-    return () => {
-      for (const sub of subs) sub.unsubscribe();
-    };
+    return cleanup;
   });
 
   return {

@@ -15,6 +15,11 @@
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { filterUpcomingEvents, mergeCommunityActivity } from '$lib/helpers/dashboardFilters.js';
+  import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
+  import {
+    subscribeToProfileListMembers,
+    buildProfileAccess
+  } from '$lib/helpers/profile-list-members.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
@@ -59,6 +64,10 @@
   /** @type {Map<string, () => void>} */
   let cleanupMap = new Map();
 
+  // Per-community ACL state: community event + member map for filtering
+  /** @type {Map<string, { communityEvent: any, memberMap: Map<string, Set<string>>, aclLoading: boolean }>} */
+  let perCommunityAcl = new Map();
+
   $effect(() => {
     const communities = joinedCommunities;
 
@@ -66,6 +75,7 @@
     for (const cleanup of cleanupMap.values()) cleanup();
     cleanupMap.clear();
     perCommunityItems = new Map();
+    perCommunityAcl = new Map();
     displayCount = 15;
 
     if (communities.length === 0) {
@@ -94,15 +104,68 @@
 
       function mergeAndUpdate() {
         const seen = new Set();
-        const merged = [...activityItems, ...bookmarkItems].filter((e) => {
+        let merged = [...activityItems, ...bookmarkItems].filter((e) => {
           if (seen.has(e.id)) return false;
           seen.add(e.id);
           return true;
         });
+
+        // Apply ACL filtering if community event and member data are available
+        const acl = perCommunityAcl.get(pubkey);
+        if (acl?.communityEvent) {
+          const access = buildProfileAccess(acl.memberMap, acl.aclLoading);
+          merged = filterEventsByAccess(merged, acl.communityEvent, access);
+        }
+
         perCommunityItems.set(pubkey, merged);
         allItems = mergeCommunityActivity(perCommunityItems);
         isLoading = false;
       }
+
+      // Subscribe to community event for ACL setup
+      /** @type {(() => void) | undefined} */
+      let aclCleanup;
+      const communitySub = eventStore.replaceable(10222, pubkey).subscribe((communityEvent) => {
+        // Clean up previous ACL subscriptions when community event updates
+        if (aclCleanup) aclCleanup();
+
+        if (!communityEvent) {
+          perCommunityAcl.set(pubkey, {
+            communityEvent: null,
+            memberMap: new Map(),
+            aclLoading: false
+          });
+          mergeAndUpdate();
+          return;
+        }
+
+        perCommunityAcl.set(pubkey, {
+          communityEvent,
+          memberMap: new Map(),
+          aclLoading: true
+        });
+
+        const { cleanup: memberCleanup, hasRestrictedSections } = subscribeToProfileListMembers(
+          communityEvent,
+          getCommunikeyRelays(),
+          (memberMap) => {
+            const acl = perCommunityAcl.get(pubkey);
+            if (acl) {
+              acl.memberMap = memberMap;
+              acl.aclLoading = false;
+            }
+            mergeAndUpdate();
+          }
+        );
+
+        if (!hasRestrictedSections) {
+          const acl = perCommunityAcl.get(pubkey);
+          if (acl) acl.aclLoading = false;
+          mergeAndUpdate();
+        }
+
+        aclCleanup = memberCleanup;
+      });
 
       const activitySub = eventStore.model(CommunityActivityModel, pubkey).subscribe({
         next: (loaded) => {
@@ -126,6 +189,8 @@
 
       cleanupMap.set(pubkey, () => {
         addrSub.unsubscribe();
+        communitySub.unsubscribe();
+        if (aclCleanup) aclCleanup();
         activitySub.unsubscribe();
         bookmarkSub.unsubscribe();
         activityCleanup();
