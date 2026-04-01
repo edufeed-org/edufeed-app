@@ -515,7 +515,7 @@
   "create_community_modal_content_calendar": "Kalender",
   "create_community_modal_content_chat": "Chat",
   "create_community_modal_content_articles": "Artikel",
-  "create_community_modal_content_posts": "Beiträge",
+  "create_community_modal_content_posts": "Forum",
   "create_community_modal_content_wikis": "Wikis",
   "create_community_modal_profile_title": "Profil erstellen für {name}",
   "create_community_modal_profile_description": "Ihre Community benötigt ein eigenes Nostr-Profil. Dies wird die Identität sein, die die Community verwaltet.",

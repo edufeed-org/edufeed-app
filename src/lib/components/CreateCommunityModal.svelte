@@ -19,7 +19,7 @@
   import ContentTypesAndACL from './shared/ContentTypesAndACL.svelte';
   import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
-  import { parseFormTemplate } from '$lib/helpers/forms.js';
+  import { parseFormTemplate, createDefaultMembershipForm } from '$lib/helpers/forms.js';
 
   let { modalId } = $props();
 
@@ -83,7 +83,7 @@
         formRef: ''
       },
       posts: {
-        name: 'Posts',
+        name: 'Forum',
         enabled: true,
         badges: { read: null, write: null },
         relays: [],
@@ -197,7 +197,7 @@
               formRef: ''
             },
             posts: {
-              name: 'Posts',
+              name: 'Forum',
               enabled: true,
               badges: { read: null, write: null },
               relays: [],
@@ -335,6 +335,21 @@
   function selectNewKeypair() {
     useCurrentKeypair = false;
     nextStep();
+  }
+
+  async function handleCreateDefaultForm() {
+    /** @type {import('applesauce-signers').Signer} */
+    let signer;
+    if (useCurrentKeypair) {
+      signer = manager.active.signer;
+    } else {
+      if (!userData.privateKey) throw new Error('Private key not generated yet');
+      signer = new SimpleSigner(userData.privateKey);
+    }
+    const signed = await createDefaultMembershipForm(signer);
+    await publishEvent(signed);
+    eventStore.add(signed);
+    return `${signed.kind}:${signed.pubkey}:membership`;
   }
 
   async function createCommunity() {
@@ -517,7 +532,7 @@
           formRef: ''
         },
         posts: {
-          name: 'Posts',
+          name: 'Forum',
           enabled: true,
           badges: { read: null, write: null },
           relays: [],
@@ -631,6 +646,7 @@
             formTemplates={getFormTemplates()}
             bind:showAccessConfig
             bind:defaultFormRef
+            onCreateDefaultForm={handleCreateDefaultForm}
             {errors}
           />
 
@@ -811,6 +827,7 @@
             formTemplates={getFormTemplates()}
             bind:showAccessConfig
             bind:defaultFormRef
+            onCreateDefaultForm={handleCreateDefaultForm}
             {errors}
           />
 

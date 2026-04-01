@@ -148,7 +148,7 @@ describe('CONTENT_TYPE_TO_SECTION', () => {
     expect(CONTENT_TYPE_TO_SECTION.calendar).toBe('Calendar');
     expect(CONTENT_TYPE_TO_SECTION.chat).toBe('Chat');
     expect(CONTENT_TYPE_TO_SECTION.articles).toBe('Articles');
-    expect(CONTENT_TYPE_TO_SECTION.forum).toBe('Posts');
+    expect(CONTENT_TYPE_TO_SECTION.forum).toBe('Forum');
     expect(CONTENT_TYPE_TO_SECTION.learning).toBe('Learning');
     expect(CONTENT_TYPE_TO_SECTION.boards).toBe('Boards');
     expect(CONTENT_TYPE_TO_SECTION['social-bookmarks']).toBe('Social Bookmarks');

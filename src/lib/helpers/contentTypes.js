@@ -244,7 +244,7 @@ export const CONTENT_TYPE_TO_SECTION = {
   calendar: 'Calendar',
   chat: 'Chat',
   articles: 'Articles',
-  forum: 'Posts',
+  forum: 'Forum',
   wikis: 'Wikis',
   learning: 'Learning',
   boards: 'Boards',

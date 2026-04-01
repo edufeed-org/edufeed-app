@@ -13,6 +13,8 @@
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
+  import { createDefaultMembershipForm } from '$lib/helpers/forms.js';
+  import { publishEvent } from '$lib/services/publish-service.js';
 
   let { modalId } = $props();
 
@@ -48,7 +50,7 @@
         formRef: ''
       },
       posts: {
-        name: 'Posts',
+        name: 'Forum',
         enabled: false,
         badges: { read: null, write: null },
         relays: [],
@@ -142,7 +144,7 @@
         formRef: ''
       },
       posts: {
-        name: 'Posts',
+        name: 'Forum',
         enabled: false,
         badges: { read: null, write: null },
         relays: [],
@@ -318,7 +320,7 @@
           formRef: ''
         },
         posts: {
-          name: 'Posts',
+          name: 'Forum',
           enabled: false,
           badges: { read: null, write: null },
           relays: [],
@@ -355,6 +357,13 @@
     } catch {
       return m.create_community_modal_error_invalid_url();
     }
+  }
+
+  async function handleCreateDefaultForm() {
+    const signed = await createDefaultMembershipForm(manager.active.signer);
+    await publishEvent(signed);
+    eventStore.add(signed);
+    return `${signed.kind}:${signed.pubkey}:membership`;
   }
 
   function validate() {
@@ -509,6 +518,7 @@
           formTemplates={getFormTemplates()}
           bind:showAccessConfig
           bind:defaultFormRef
+          onCreateDefaultForm={handleCreateDefaultForm}
           {errors}
         />
 
