@@ -1,6 +1,9 @@
 import { error } from '@sveltejs/kit';
 import { normalizeToHex, hexToNpub } from '$lib/helpers/nostrUtils';
 
+export const ssr = false;
+export const prerender = false;
+
 /** @type {import('./$types').PageLoad} */
 export function load({ params }) {
   const hexPubkey = normalizeToHex(params.pubkey);
