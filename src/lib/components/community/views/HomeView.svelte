@@ -7,6 +7,8 @@
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { filterEventsByAccess, getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { getContext } from 'svelte';
+  import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
+  import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
   import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -70,6 +72,29 @@
 
   /** @type {import('$lib/stores/profile-list-access.svelte.js').ProfileListAccess} */
   const profileAccess = getContext('profileAccess');
+  const getCommunityWideFormRef = /** @type {() => string | null} */ (
+    getContext('communityWideFormRef')
+  );
+
+  // User can publish to all gated sections → no join banner needed
+  let canPublishAnywhere = $derived.by(() => {
+    if (!communikeyEvent || profileAccess.isLoading) return true;
+    const sections = parseCommunityContentTypes(communikeyEvent);
+    const gated = sections.filter((s) => s.profileList);
+    if (gated.length === 0) return true;
+    return gated.every((s) => profileAccess.canPublish(s.name));
+  });
+
+  let accessDetail = $derived.by(() => {
+    if (!communikeyEvent || profileAccess.isLoading) return null;
+    const sections = parseCommunityContentTypes(communikeyEvent);
+    const gated = sections.filter((s) => s.profileList);
+    if (gated.length === 0) return null;
+    const granted = gated.filter((s) => profileAccess.canPublish(s.name)).map((s) => s.name);
+    const pending = gated.filter((s) => !profileAccess.canPublish(s.name)).map((s) => s.name);
+    if (granted.length === 0) return null;
+    return { granted, pending };
+  });
 
   let memberData = $derived(getVerifiedMembers(profileAccess, communikeyEvent));
   let hasGatedSections = $derived(memberData.perSection.size > 0);
@@ -202,6 +227,19 @@
       memberPubkeys={heroMemberPubkeys}
       onMembersClick={() => onKindNavigation?.('members')}
     />
+
+    <!-- Join Request Banner -->
+    {#if getCommunityWideFormRef?.() && activeUser?.pubkey && !canPublishAnywhere}
+      <div class="container mx-auto max-w-4xl px-4 pt-4">
+        <AccessGateBanner
+          formRef={getCommunityWideFormRef()}
+          sectionName="community"
+          userPubkey={activeUser.pubkey}
+          {communityId}
+          {accessDetail}
+        />
+      </div>
+    {/if}
 
     <!-- Main Content -->
     <div class="container mx-auto max-w-4xl px-4 py-8">

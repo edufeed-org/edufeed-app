@@ -7,7 +7,15 @@
   import { buildUserResponseFilter } from '$lib/helpers/forms.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
 
-  let { formRef, sectionName, userPubkey } = $props();
+  import * as m from '$lib/paraglide/messages';
+
+  let {
+    formRef,
+    sectionName,
+    userPubkey,
+    communityId = undefined,
+    accessDetail = undefined
+  } = $props();
 
   let hasExistingResponse = $state(false);
 
@@ -28,7 +36,9 @@
   let applyHref = $derived.by(() => {
     if (!naddr) return null;
     const returnTo = encodeURIComponent($page.url.pathname);
-    return `/forms/${naddr}/respond?returnTo=${returnTo}`;
+    let href = `/forms/${naddr}/respond?returnTo=${returnTo}`;
+    if (communityId) href += `&communityId=${communityId}`;
+    return href;
   });
 
   // Check if user already submitted a response
@@ -73,19 +83,39 @@
     </svg>
     {#if hasExistingResponse}
       <div>
-        <p class="font-medium">Application submitted</p>
-        <p class="text-sm opacity-80">
-          Your application for {sectionName} is pending review.
+        <p class="font-medium">
+          {communityId ? m.join_request_banner_pending_title() : 'Application submitted'}
         </p>
+        <p class="text-sm opacity-80">
+          {communityId
+            ? m.join_request_banner_pending_description()
+            : `Your application for ${sectionName} is pending review.`}
+        </p>
+        {#if accessDetail}
+          <p class="mt-1 text-sm opacity-80">
+            {m.join_request_banner_access_granted({ sections: accessDetail.granted.join(', ') })}
+            {#if accessDetail.pending.length > 0}
+              · {m.join_request_banner_access_pending({
+                sections: accessDetail.pending.join(', ')
+              })}
+            {/if}
+          </p>
+        {/if}
       </div>
     {:else}
       <div>
-        <p class="font-medium">This section requires approval</p>
+        <p class="font-medium">
+          {communityId ? m.join_request_banner_title() : 'This section requires approval'}
+        </p>
         <p class="text-sm opacity-80">
-          Fill out the application form to request access to {sectionName}.
+          {communityId
+            ? m.join_request_banner_description()
+            : `Fill out the application form to request access to ${sectionName}.`}
         </p>
       </div>
-      <a href={applyHref} class="btn btn-sm btn-primary">Apply</a>
+      <a href={applyHref} class="btn btn-sm btn-primary">
+        {communityId ? m.community_request_join() : 'Apply'}
+      </a>
     {/if}
   </div>
 {/if}
