@@ -32,8 +32,28 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_shared_label: (/** @type {{ name: string }} */ params) => `${params.name} shared`,
   community_shared_multiple_suffix: () => 'shared',
   community_shared_multiple_overflow: (/** @type {{ count: number }} */ params) =>
-    `and ${params.count} more shared`
+    `and ${params.count} more shared`,
+  community_shared_all_label: (/** @type {{ count: number }} */ params) =>
+    `Shared by ${params.count} people`
 }));
+
+// Stub useUserProfile since ProfileCard uses it
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({
+  useUserProfile: () => () => null
+}));
+
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  hexToNpub: (/** @type {string} */ hex) => `npub${hex.slice(0, 8)}`
+}));
+
+vi.mock('../shared/ProfileCard.svelte', () => ({
+  default: function StubProfileCard() {}
+}));
+
+vi.mock('../shared/HoverCard.svelte', async () => {
+  const mock = await import('./__mocks__/HoverCardMock.svelte');
+  return { default: mock.default };
+});
 
 const pk1 = 'aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222';
 const pk2 = 'bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333';
@@ -118,5 +138,37 @@ describe('SharedByLine', () => {
     expect(links.length).toBe(2);
     expect(links[0].getAttribute('href')).toContain(pk1);
     expect(links[1].getAttribute('href')).toContain(pk2);
+  });
+
+  it('renders overflow text inside HoverCard trigger for 3+ sharers', () => {
+    const profiles = new Map([
+      [pk1, { name: 'Alice' }],
+      [pk2, { name: 'Bob' }],
+      [pk3, { name: 'Charlie' }]
+    ]);
+
+    const { container } = render(SharedByLine, {
+      props: { sharers: [pk1, pk2, pk3], authorProfiles: profiles }
+    });
+
+    const trigger = container.querySelector('[data-testid="hovercard-trigger"]');
+    expect(trigger).not.toBeNull();
+    expect(trigger.textContent).toContain('and 1 more shared');
+  });
+
+  it('hover card content shows header with total sharer count', () => {
+    const profiles = new Map([
+      [pk1, { name: 'Alice' }],
+      [pk2, { name: 'Bob' }],
+      [pk3, { name: 'Charlie' }]
+    ]);
+
+    const { container } = render(SharedByLine, {
+      props: { sharers: [pk1, pk2, pk3], authorProfiles: profiles }
+    });
+
+    const content = container.querySelector('[data-testid="hovercard-content"]');
+    expect(content).not.toBeNull();
+    expect(content.textContent).toContain('Shared by 3 people');
   });
 });

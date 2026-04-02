@@ -1,6 +1,8 @@
 <script>
   import { RepostIcon } from '$lib/components/icons';
   import ProfileAvatar from './ProfileAvatar.svelte';
+  import ProfileCard from './ProfileCard.svelte';
+  import HoverCard from './HoverCard.svelte';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
@@ -43,7 +45,30 @@
         &
       {/if}{/each}
     {#if extraCount > 0}
-      {m.community_shared_multiple_overflow({ count: extraCount })}
+      <HoverCard position="top">
+        {#snippet trigger()}
+          <span class="cursor-pointer hover:underline">
+            {m.community_shared_multiple_overflow({ count: extraCount })}
+          </span>
+        {/snippet}
+        {#snippet content()}
+          <div class="max-h-48 w-56 space-y-1 overflow-y-auto p-3">
+            <div class="mb-2 text-xs font-semibold text-base-content/70">
+              {m.community_shared_all_label({ count: sharers.length })}
+            </div>
+            {#each sharers as pubkey (pubkey)}
+              <ProfileCard
+                {pubkey}
+                profile={authorProfiles.get(pubkey)}
+                size="sm"
+                showNpub={false}
+                showIcon={false}
+                class="!bg-transparent !p-1"
+              />
+            {/each}
+          </div>
+        {/snippet}
+      </HoverCard>
     {:else}
       {m.community_shared_multiple_suffix()}
     {/if}

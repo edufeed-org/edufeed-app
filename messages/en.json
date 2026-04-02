@@ -656,7 +656,7 @@
   "community_shared_label": "{name} shared",
   "community_shared_multiple_suffix": "shared",
   "community_shared_multiple_overflow": "and {count} more shared",
-  "community_shared_all_label": "Shared by {count, plural, one {# person} other {# people}}",
+  "community_shared_all_label": "Shared by {count} people",
   "community_views_home_recent_activity_title": "Recent Activity",
   "community_views_home_recent_activity_empty": "No recent activity to display",
   "community_views_home_recent_activity_description": "Activity will appear here as members interact with the community",
