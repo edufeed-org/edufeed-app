@@ -12,8 +12,20 @@ describe('getNotificationType', () => {
   it('returns "formRequest" for kind 1070', () => {
     expect(getNotificationType({ kind: 1070 })).toBe('formRequest');
   });
-  it('returns "reaction" for kind 7', () => {
-    expect(getNotificationType({ kind: 7 })).toBe('reaction');
+  it('returns "reaction" for kind 7 without k=0 tag', () => {
+    expect(getNotificationType({ kind: 7, tags: [['k', '1']] })).toBe('reaction');
+  });
+  it('returns "wave" for kind 7 with k=0 tag', () => {
+    expect(
+      getNotificationType({
+        kind: 7,
+        tags: [
+          ['e', 'abc'],
+          ['p', 'def'],
+          ['k', '0']
+        ]
+      })
+    ).toBe('wave');
   });
   it('returns "comment" for kind 1111', () => {
     expect(getNotificationType({ kind: 1111 })).toBe('comment');
@@ -136,6 +148,21 @@ describe('getNotificationUrl', () => {
     };
     const url = getNotificationUrl(event);
     expect(url).toMatch(/^\/naddr1/);
+  });
+  it('returns profile URL for wave (kind 7 with k=0)', () => {
+    const pokerPubkey = 'a'.repeat(64);
+    const event = {
+      kind: 7,
+      pubkey: pokerPubkey,
+      content: '👋',
+      tags: [
+        ['e', 'b'.repeat(64)],
+        ['p', 'c'.repeat(64)],
+        ['k', '0'],
+        ['a', '0:' + 'c'.repeat(64) + ':']
+      ]
+    };
+    expect(getNotificationUrl(event)).toBe(`/p/${pokerPubkey}`);
   });
   it('returns null for reaction without navigable tags', () => {
     expect(getNotificationUrl({ kind: 7, tags: [] })).toBe(null);

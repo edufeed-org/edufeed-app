@@ -346,7 +346,15 @@ export async function markAsRead(type) {
     updated[type] = now;
   } else {
     updated.global = now;
-    for (const t of ['formRequest', 'formResponse', 'reaction', 'comment', 'mention', 'rsvp']) {
+    for (const t of [
+      'formRequest',
+      'formResponse',
+      'reaction',
+      'wave',
+      'comment',
+      'mention',
+      'rsvp'
+    ]) {
       updated[t] = now;
     }
   }

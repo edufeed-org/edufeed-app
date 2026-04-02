@@ -80,7 +80,7 @@
     );
   });
 
-  // Initialize inbox on login, cleanup on logout
+  // Initialize inbox + wave toasts on login, cleanup on logout
   $effect(() => {
     if (!browser) return;
     const account = getActiveUser();
@@ -88,9 +88,15 @@
       import('$lib/services/inbox-service.svelte.js').then(({ initializeInbox }) => {
         initializeInbox(account.pubkey);
       });
+      import('$lib/services/wave-service.svelte.js').then(({ initializeWaveToasts }) => {
+        initializeWaveToasts(account.pubkey);
+      });
     } else {
       import('$lib/services/inbox-service.svelte.js').then(({ cleanup }) => {
         cleanup();
+      });
+      import('$lib/services/wave-service.svelte.js').then(({ cleanupWaveToasts }) => {
+        cleanupWaveToasts();
       });
     }
   });

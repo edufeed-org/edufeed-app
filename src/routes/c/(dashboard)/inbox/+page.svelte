@@ -17,6 +17,7 @@
     { key: 'all', label: () => m.inbox_filter_all() },
     { key: 'formRequest', label: () => m.inbox_filter_forms() },
     { key: 'reaction', label: () => m.inbox_filter_reactions() },
+    { key: 'wave', label: () => m.inbox_filter_waves() },
     { key: 'comment', label: () => m.inbox_filter_comments() },
     { key: 'mention', label: () => m.inbox_filter_mentions() },
     { key: 'rsvp', label: () => m.inbox_filter_rsvps() }

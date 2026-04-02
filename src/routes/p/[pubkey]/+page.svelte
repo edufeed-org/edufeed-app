@@ -36,6 +36,7 @@
   import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
   import BadgeCard from '$lib/components/badges/BadgeCard.svelte';
   import BadgeHeaderRow from '$lib/components/badges/BadgeHeaderRow.svelte';
+  import WaveButton from '$lib/components/waves/WaveButton.svelte';
   import {
     CopyIcon,
     ChevronDownIcon,
@@ -343,6 +344,7 @@
                   {m.common_edit()}
                 </button>
               {:else if activeUser}
+                <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
                 <button
                   onclick={handleFollow}
                   disabled={followLoading}

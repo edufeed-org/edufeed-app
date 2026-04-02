@@ -4,6 +4,7 @@ import { getReactionAddressPointer, getReactionEventPointer } from 'applesauce-c
 
 import { getRSVPAddressPointer } from 'applesauce-common/helpers';
 import { encodePointer } from 'applesauce-core/helpers';
+import { isWave } from '$lib/helpers/waves.js';
 
 /** @type {Record<number, string>} */
 const KIND_TO_TYPE = {
@@ -20,6 +21,7 @@ const KIND_TO_TYPE = {
  * @returns {string | null}
  */
 export function getNotificationType(event) {
+  if (event.kind === 7 && isWave(event)) return 'wave';
   return KIND_TO_TYPE[event.kind] ?? null;
 }
 
@@ -66,6 +68,11 @@ export function getNotificationUrl(event) {
   if (type === 'mention') {
     const community = event.tags.find((t) => t[0] === 'h')?.[1];
     return community ? `/c/${community}` : null;
+  }
+
+  // Waves — link to waver's profile
+  if (type === 'wave') {
+    return `/p/${event.pubkey}`;
   }
 
   // Reactions — use last e/a tag per NIP-25
