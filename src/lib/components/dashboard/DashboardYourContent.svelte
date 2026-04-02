@@ -20,22 +20,32 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
+  import { navigateToCreate, CONTENT_CREATION } from '$lib/helpers/contentCreation.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
-  import { FilesIcon } from '$lib/components/icons';
+  import { FilesIcon, PlusIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ pubkey: string }} */
   let { pubkey } = $props();
 
-  /** @typedef {{ label: () => string, kinds: number[] }} FilterDef */
+  /** @typedef {{ label: () => string, kinds: number[], ctaKey?: string }} FilterDef */
   /** @type {Record<string, FilterDef>} */
   const FILTERS = {
     all: { label: () => m.common_all(), kinds: [] },
-    calendar: { label: () => m.feed_badge_calendar(), kinds: [31922, 31923] },
-    learning: { label: () => m.feed_badge_learning(), kinds: [30142] },
-    article: { label: () => m.feed_badge_article(), kinds: [30023] },
-    wiki: { label: () => m.feed_badge_wiki(), kinds: [30818] },
-    form: { label: () => m.dashboard_content_forms(), kinds: [30168] }
+    calendar: { label: () => m.feed_badge_calendar(), kinds: [31922, 31923], ctaKey: 'calendar' },
+    learning: { label: () => m.feed_badge_learning(), kinds: [30142], ctaKey: 'learning' },
+    article: { label: () => m.feed_badge_article(), kinds: [30023], ctaKey: 'article' },
+    wiki: { label: () => m.feed_badge_wiki(), kinds: [30818], ctaKey: 'wiki' },
+    form: { label: () => m.dashboard_content_forms(), kinds: [30168], ctaKey: 'form' }
+  };
+
+  /** @type {Record<string, () => string>} */
+  const CTA_LABELS = {
+    calendar: () => m.fab_create_event(),
+    learning: () => m.fab_create_learning(),
+    article: () => m.article_fab_write(),
+    wiki: () => m.wiki_fab_write(),
+    form: () => m.fab_create_form()
   };
 
   let activeFilter = $state('all');
@@ -153,7 +163,26 @@
       class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
     >
       <FilesIcon class_="mb-3 h-10 w-10 text-base-content/30" />
-      <p class="text-base-content/60">{m.dashboard_content_empty()}</p>
+      <p class="mb-4 text-base-content/60">{m.dashboard_content_empty()}</p>
+
+      {#if activeFilter !== 'all' && FILTERS[activeFilter]?.ctaKey}
+        <button
+          class="btn gap-2 btn-sm btn-primary"
+          onclick={() => navigateToCreate(FILTERS[activeFilter].ctaKey)}
+        >
+          <PlusIcon class_="h-4 w-4" />
+          {CTA_LABELS[FILTERS[activeFilter].ctaKey]?.() ?? ''}
+        </button>
+      {:else if activeFilter === 'all'}
+        <div class="flex flex-wrap justify-center gap-2">
+          {#each Object.keys(CONTENT_CREATION) as key (key)}
+            <button class="btn gap-2 btn-outline btn-sm" onclick={() => navigateToCreate(key)}>
+              <PlusIcon class_="h-4 w-4" />
+              {CTA_LABELS[key]?.() ?? key}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="grid gap-3 sm:grid-cols-2">

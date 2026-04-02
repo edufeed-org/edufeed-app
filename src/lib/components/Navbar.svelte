@@ -4,7 +4,7 @@
   import { getLocale, setLocale, locales } from '$lib/paraglide/runtime';
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { CalendarIcon, PeopleIcon, SearchIcon, MenuIcon, DashboardIcon, BellIcon } from './icons';
+  import { CalendarIcon, PeopleIcon, SearchIcon, MenuIcon, HomeIcon, BellIcon } from './icons';
   import ProfileAvatar from './shared/ProfileAvatar.svelte';
   import InboxDropdown from './inbox/InboxDropdown.svelte';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
@@ -123,7 +123,7 @@
     </a>
     {#if activeAccount}
       <a href={resolve('/c/')} class="btn btn-ghost">
-        <DashboardIcon class_="w-5 h-5" />
+        <HomeIcon class_="w-5 h-5" />
         {m.navbar_dashboard()}
       </a>
     {/if}
@@ -216,7 +216,7 @@
         {#if activeAccount}
           <li>
             <a href={resolve('/c/')} onclick={closeDropdown}>
-              <DashboardIcon class_="w-5 h-5" />
+              <HomeIcon class_="w-5 h-5" />
               {m.navbar_dashboard()}
             </a>
           </li>

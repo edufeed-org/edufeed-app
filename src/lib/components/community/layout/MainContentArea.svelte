@@ -9,6 +9,7 @@
   import ForumView from '../views/ForumView.svelte';
   import WikisView from '../views/WikisView.svelte';
   import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
+  import MembersView from '../views/MembersView.svelte';
   import HomeView from '../views/HomeView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
@@ -93,6 +94,8 @@
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'social-bookmarks'}
         <SocialBookmarksView communityPubkey={selectedCommunityId} {communityProfile} />
+      {:else if selectedContentType === 'members'}
+        <MembersView {communikeyEvent} />
       {:else if selectedContentType === 'settings'}
         <SettingsView
           communityId={selectedCommunityId}

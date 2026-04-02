@@ -386,3 +386,35 @@ export function getDefaultCommunityTabs() {
   tabs.push('settings');
   return tabs;
 }
+
+/**
+ * Get verified members from profile-list access data across all gated sections.
+ * Returns a deduplicated union of members plus the community owner.
+ * @param {{ getMembers: (name: string) => string[], isLoading: boolean }} profileAccess
+ * @param {any} communityEvent - kind 10222 event (or null)
+ * @returns {{ allMembers: string[], perSection: Map<string, string[]> }}
+ */
+export function getVerifiedMembers(profileAccess, communityEvent) {
+  if (!communityEvent) return { allMembers: [], perSection: new Map() };
+
+  const sections = parseCommunityContentTypes(communityEvent);
+  /** @type {Map<string, string[]>} */
+  const perSection = new Map();
+  const allSet = new Set();
+
+  // Always include community owner
+  allSet.add(communityEvent.pubkey);
+
+  for (const section of sections) {
+    if (!section.profileList) continue;
+    const members = profileAccess.getMembers(section.name);
+    if (members && members.length > 0) {
+      perSection.set(section.name, members);
+      for (const pubkey of members) {
+        allSet.add(pubkey);
+      }
+    }
+  }
+
+  return { allMembers: Array.from(allSet), perSection };
+}

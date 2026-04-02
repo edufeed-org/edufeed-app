@@ -39,6 +39,7 @@
     'forum',
     'wikis',
     'social-bookmarks',
+    'members',
     'settings'
   ]);
 

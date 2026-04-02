@@ -5,7 +5,7 @@
   import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import { ChevronRightIcon } from '$lib/components/icons';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
-  import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
+  import { filterEventsByAccess, getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { getContext } from 'svelte';
   import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
   import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
@@ -70,6 +70,12 @@
 
   /** @type {import('$lib/stores/profile-list-access.svelte.js').ProfileListAccess} */
   const profileAccess = getContext('profileAccess');
+
+  let memberData = $derived(getVerifiedMembers(profileAccess, communikeyEvent));
+  let hasGatedSections = $derived(memberData.perSection.size > 0);
+  let heroMemberPubkeys = $derived(
+    hasGatedSections && !profileAccess.isLoading ? memberData.allMembers : []
+  );
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
@@ -193,6 +199,8 @@
       {communikeyEvent}
       {profileEvent}
       onNavigateToAbout={() => onKindNavigation?.('settings')}
+      memberPubkeys={heroMemberPubkeys}
+      onMembersClick={() => onKindNavigation?.('members')}
     />
 
     <!-- Main Content -->

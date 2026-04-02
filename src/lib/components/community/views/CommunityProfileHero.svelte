@@ -3,9 +3,21 @@
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { joinCommunity } from '$lib/helpers/community';
   import { showToast } from '$lib/helpers/toast';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import { ChevronRightIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
-  let { communityId, communikeyEvent, profileEvent, onNavigateToAbout } = $props();
+  let {
+    communityId,
+    communikeyEvent,
+    profileEvent,
+    onNavigateToAbout,
+    memberPubkeys = [],
+    onMembersClick
+  } = $props();
+
+  const MAX_FACEPILE = 3;
+  let facepileMembers = $derived(memberPubkeys.slice(0, MAX_FACEPILE));
 
   const getJoined = useCommunityMembership(() => communityId);
 
@@ -103,6 +115,24 @@
       </div>
     {/if}
   </div>
+
+  <!-- Member Facepile -->
+  {#if memberPubkeys.length > 0}
+    <button
+      class="mt-1 flex items-center gap-1.5 text-sm hover:text-primary"
+      onclick={onMembersClick}
+    >
+      <div class="avatar-group -space-x-2">
+        {#each facepileMembers as pubkey (pubkey)}
+          <ProfileAvatar {pubkey} size="xs" class="ring-2 ring-base-100" />
+        {/each}
+      </div>
+      <span class="text-base-content/60"
+        >{m.community_members_count({ count: memberPubkeys.length })}</span
+      >
+      <ChevronRightIcon class_="h-3.5 w-3.5 text-base-content/40" />
+    </button>
+  {/if}
 
   <!-- Description (truncated) -->
   {#if description}
