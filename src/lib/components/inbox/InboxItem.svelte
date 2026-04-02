@@ -2,6 +2,9 @@
   import { resolve } from '$app/paths';
   import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
   import { markItemAsRead } from '$lib/services/inbox-service.svelte.js';
+  import { publishWave } from '$lib/helpers/waves.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { showToast } from '$lib/helpers/toast';
   import {
     HeartIcon,
     ChatIcon,
@@ -28,10 +31,13 @@
   const href = $derived(url ? resolve(url) : undefined);
   const displayName = $derived(profile?.display_name || profile?.name || event.pubkey.slice(0, 8));
 
+  let waveBackLoading = $state(false);
+
   /** @type {Record<string, typeof BellIcon>} */
   const iconMap = {
     formRequest: ScrollTextIcon,
     formResponse: ScrollTextIcon,
+    wave: BellIcon,
     reaction: HeartIcon,
     comment: ChatIcon,
     mention: BellIcon,
@@ -44,6 +50,42 @@
   function handleClick(e) {
     markItemAsRead(event.id);
     if (!href) e.preventDefault();
+  }
+
+  /** @param {MouseEvent} e */
+  async function handleWaveBack(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (waveBackLoading) return;
+    waveBackLoading = true;
+    try {
+      // Get the waver's profile event from EventStore
+      /** @type {any} */
+      let profileEvent = null;
+      await new Promise((resolve, reject) => {
+        /** @type {import('rxjs').Subscription | undefined} */
+        let sub;
+        sub = eventStore.replaceable(0, event.pubkey).subscribe((ev) => {
+          if (ev) {
+            profileEvent = ev;
+            sub?.unsubscribe();
+            resolve(undefined);
+          }
+        });
+        // Timeout if profile not in store
+        setTimeout(() => {
+          sub?.unsubscribe();
+          if (!profileEvent) reject(new Error('Profile not found'));
+        }, 3000);
+      });
+      await publishWave(profileEvent);
+      showToast(m.wave_success(), 'success');
+    } catch (err) {
+      console.error('Failed to wave back:', err);
+      showToast(m.wave_error(), 'error');
+    } finally {
+      waveBackLoading = false;
+    }
   }
 
   /**
@@ -85,6 +127,8 @@
         &nbsp;{m.inbox_action_form_request({ formName: formName || '' })}
       {:else if type === 'formResponse'}
         &nbsp;{m.inbox_action_form_response({ formName: formName || '' })}
+      {:else if type === 'wave'}
+        &nbsp;{m.inbox_action_wave()}
       {:else if type === 'reaction'}
         &nbsp;{m.inbox_action_reaction({ contentTitle })}
       {:else if type === 'comment'}
@@ -95,7 +139,18 @@
         &nbsp;{m.inbox_action_rsvp({ eventTitle: contentTitle })}
       {/if}
     </div>
-    <div class="mt-0.5 text-xs text-base-content/50">{formatTime(event.created_at)}</div>
+    <div class="mt-0.5 flex items-center gap-2">
+      <span class="text-xs text-base-content/50">{formatTime(event.created_at)}</span>
+      {#if type === 'wave'}
+        <button class="btn btn-ghost btn-xs" onclick={handleWaveBack} disabled={waveBackLoading}>
+          {#if waveBackLoading}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            👋 {m.wave_back_button()}
+          {/if}
+        </button>
+      {/if}
+    </div>
   </div>
   {#if unread}
     <div class="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-primary"></div>
