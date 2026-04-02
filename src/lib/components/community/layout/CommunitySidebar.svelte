@@ -2,7 +2,7 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
-  import { DashboardIcon } from '$lib/components/icons';
+  import { HomeIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
 
@@ -38,7 +38,7 @@
           ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
           : ''}"
       >
-        <DashboardIcon class_="w-6 h-6" />
+        <HomeIcon class_="w-6 h-6" />
       </button>
     </div>
     <div class="w-8 border-b border-base-300"></div>
@@ -89,7 +89,7 @@
         ? 'bg-primary text-primary-content'
         : 'hover:bg-base-300'}"
     >
-      <DashboardIcon class_="w-5 h-5" />
+      <HomeIcon class_="w-5 h-5" />
       <span class="flex-1 truncate text-left text-sm font-medium">
         {m.dashboard_home_tooltip()}
       </span>

@@ -34,7 +34,6 @@ export { default as BookIcon } from './ui/BookIcon.svelte';
 export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
 export { default as InfoIcon } from './ui/InfoIcon.svelte';
-export { default as DashboardIcon } from './ui/DashboardIcon.svelte';
 export { default as BadgeIcon } from './ui/BadgeIcon.svelte';
 
 // Action Icons

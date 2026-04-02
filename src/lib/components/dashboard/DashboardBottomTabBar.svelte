@@ -1,12 +1,12 @@
 <script>
   import { page } from '$app/stores';
   import { resolve } from '$app/paths';
-  import { DashboardIcon, BellIcon, ScrollTextIcon, PeopleIcon } from '$lib/components/icons';
+  import { HomeIcon, BellIcon, ScrollTextIcon, PeopleIcon } from '$lib/components/icons';
   import { getUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   const sections = [
-    { id: 'feed', href: resolve('/c/'), icon: DashboardIcon, label: () => m.dashboard_nav_feed() },
+    { id: 'feed', href: resolve('/c/'), icon: HomeIcon, label: () => m.dashboard_nav_feed() },
     {
       id: 'inbox',
       href: resolve('/c/inbox'),
