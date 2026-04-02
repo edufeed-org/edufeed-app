@@ -71,6 +71,13 @@ export function createCommunityContentModel(contentKinds, options = {}) {
           const resultMap = new Map();
           const fmt = transform || ((e) => e);
 
+          /** Append a sharer pubkey to an item's _allSharers (deduplicating)
+           * @param {any} item @param {string} pubkey */
+          function addSharer(item, pubkey) {
+            if (!item._allSharers) item._allSharers = [];
+            if (!item._allSharers.includes(pubkey)) item._allSharers.push(pubkey);
+          }
+
           // Add direct events first (highest priority)
           for (const event of directEvents) {
             resultMap.set(event.id, fmt(event));
@@ -81,8 +88,17 @@ export function createCommunityContentModel(contentKinds, options = {}) {
             const eTag = getTagValue(share, 'e');
             const aTag = getTagValue(share, 'a');
             const resolved = (eTag && lookup.get(eTag)) || (aTag && lookup.get(aTag));
-            if (resolved && !resultMap.has(resolved.id)) {
-              resultMap.set(resolved.id, { ...fmt(resolved), _sharedBy: share.pubkey });
+            if (!resolved) continue;
+            const existing = resultMap.get(resolved.id);
+            if (existing) {
+              addSharer(existing, share.pubkey);
+            } else {
+              const item = {
+                ...fmt(resolved),
+                _sharedBy: share.pubkey,
+                _allSharers: [share.pubkey]
+              };
+              resultMap.set(resolved.id, item);
             }
           }
 
@@ -91,8 +107,17 @@ export function createCommunityContentModel(contentKinds, options = {}) {
             const eTag = getTagValue(repost, 'e');
             const aTag = getTagValue(repost, 'a');
             const resolved = (eTag && lookup.get(eTag)) || (aTag && lookup.get(aTag));
-            if (resolved && !resultMap.has(resolved.id)) {
-              resultMap.set(resolved.id, { ...fmt(resolved), _sharedBy: repost.pubkey });
+            if (!resolved) continue;
+            const existing = resultMap.get(resolved.id);
+            if (existing) {
+              addSharer(existing, repost.pubkey);
+            } else {
+              const item = {
+                ...fmt(resolved),
+                _sharedBy: repost.pubkey,
+                _allSharers: [repost.pubkey]
+              };
+              resultMap.set(resolved.id, item);
             }
           }
 

@@ -5,6 +5,7 @@
   import { setContext } from 'svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import { MenuIcon, CloseIcon } from '$lib/components/icons';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -31,7 +32,7 @@
   function handleCommunitySelect(pubkey) {
     const npub = hexToNpub(pubkey);
     if (npub) {
-      goto(resolve(`/c/${npub}`));
+      goto(resolve(buildCommunityPath(npub, $page.url.searchParams)));
     }
     leftDrawerOpen = false;
   }

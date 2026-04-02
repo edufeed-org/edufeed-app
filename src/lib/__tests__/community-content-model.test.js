@@ -890,6 +890,219 @@ describe('CommunityWikiModel', () => {
   });
 });
 
+describe('_allSharers collection', () => {
+  it('collects multiple legacy sharers into _allSharers', () => {
+    const event = mockEvent({ id: 'multi-shared', kind: 30142 });
+    const share1 = mockEvent({
+      kind: 30222,
+      pubkey: 'sharer1',
+      tags: [
+        ['p', COMMUNITY_PUBKEY],
+        ['e', 'multi-shared'],
+        ['k', '30142']
+      ]
+    });
+    const share2 = mockEvent({
+      kind: 30222,
+      pubkey: 'sharer2',
+      tags: [
+        ['p', COMMUNITY_PUBKEY],
+        ['e', 'multi-shared'],
+        ['k', '30142']
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [share1, share2],
+      all: [event]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._allSharers).toEqual(['sharer1', 'sharer2']);
+    expect(result[0]._sharedBy).toBe('sharer1');
+  });
+
+  it('collects multiple repost sharers into _allSharers', () => {
+    const event = mockEvent({ id: 'multi-reposted', kind: 30142 });
+    const repost1 = mockEvent({
+      kind: 16,
+      pubkey: 'reposter1',
+      tags: [
+        ['e', 'multi-reposted'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+    const repost2 = mockEvent({
+      kind: 16,
+      pubkey: 'reposter2',
+      tags: [
+        ['e', 'multi-reposted'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [],
+      reposts: [repost1, repost2],
+      all: [event]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._allSharers).toEqual(['reposter1', 'reposter2']);
+    expect(result[0]._sharedBy).toBe('reposter1');
+  });
+
+  it('collects mixed share + repost into _allSharers', () => {
+    const event = mockEvent({ id: 'mixed-shared', kind: 30142 });
+    const share = mockEvent({
+      kind: 30222,
+      pubkey: 'legacy-sharer',
+      tags: [
+        ['p', COMMUNITY_PUBKEY],
+        ['e', 'mixed-shared'],
+        ['k', '30142']
+      ]
+    });
+    const repost = mockEvent({
+      kind: 16,
+      pubkey: 'reposter',
+      tags: [
+        ['e', 'mixed-shared'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [share],
+      reposts: [repost],
+      all: [event]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._allSharers).toEqual(['legacy-sharer', 'reposter']);
+    expect(result[0]._sharedBy).toBe('legacy-sharer');
+  });
+
+  it('collects sharers on direct event when also shared/reposted', () => {
+    const event = mockEvent({
+      id: 'direct-and-shared',
+      kind: 30142,
+      tags: [['h', COMMUNITY_PUBKEY]]
+    });
+    const share = mockEvent({
+      kind: 30222,
+      pubkey: 'sharer-of-direct',
+      tags: [
+        ['p', COMMUNITY_PUBKEY],
+        ['e', 'direct-and-shared'],
+        ['k', '30142']
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [event],
+      shares: [share],
+      all: [event]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._allSharers).toEqual(['sharer-of-direct']);
+    // Direct event should NOT have _sharedBy (it was posted directly)
+    expect(result[0]._sharedBy).toBeUndefined();
+  });
+
+  it('deduplicates pubkeys in _allSharers', () => {
+    const event = mockEvent({ id: 'dedup-sharers', kind: 30142 });
+    const share = mockEvent({
+      kind: 30222,
+      pubkey: 'same-person',
+      tags: [
+        ['p', COMMUNITY_PUBKEY],
+        ['e', 'dedup-sharers'],
+        ['k', '30142']
+      ]
+    });
+    const repost = mockEvent({
+      kind: 16,
+      pubkey: 'same-person',
+      tags: [
+        ['e', 'dedup-sharers'],
+        ['k', '30142'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [share],
+      reposts: [repost],
+      all: [event]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._allSharers).toEqual(['same-person']);
+  });
+
+  it('single sharer still gets _allSharers array', () => {
+    const event = mockEvent({ id: 'single-shared', kind: 30142 });
+    const share = mockEvent({
+      kind: 30222,
+      pubkey: 'lone-sharer',
+      tags: [
+        ['p', COMMUNITY_PUBKEY],
+        ['e', 'single-shared'],
+        ['k', '30142']
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [share],
+      all: [event]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._allSharers).toEqual(['lone-sharer']);
+    expect(result[0]._sharedBy).toBe('lone-sharer');
+  });
+});
+
 describe('CommunityActivityModel', () => {
   it('returns events across multiple kinds', () => {
     const amb = mockEvent({ kind: 30142, tags: [['h', COMMUNITY_PUBKEY]] });

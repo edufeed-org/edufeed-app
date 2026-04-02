@@ -57,7 +57,11 @@
     const pubkeys = [];
     for (const i of items) {
       pubkeys.push(i.pubkey);
-      if (i._sharedBy) pubkeys.push(i._sharedBy);
+      if (i._allSharers) {
+        for (const pk of i._allSharers) pubkeys.push(pk);
+      } else if (i._sharedBy) {
+        pubkeys.push(i._sharedBy);
+      }
     }
     return pubkeys;
   });
@@ -68,7 +72,10 @@
     if (!allowed) return items;
     return items.filter(
       (item) =>
-        allowed.includes(item.pubkey) || (item._sharedBy && allowed.includes(item._sharedBy))
+        allowed.includes(item.pubkey) ||
+        (item._allSharers &&
+          item._allSharers.some((/** @type {string} */ pk) => allowed.includes(pk))) ||
+        (item._sharedBy && allowed.includes(item._sharedBy))
     );
   });
 
