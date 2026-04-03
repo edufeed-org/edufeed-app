@@ -13,7 +13,7 @@
   let extraCount = $derived(Math.max(0, sharers.length - MAX_SHOWN));
 </script>
 
-<div class="flex items-center gap-1.5 pl-1 text-xs text-base-content/50">
+<div class="mb-0.5 flex items-center gap-1.5 pl-1 text-xs text-base-content/50">
   <RepostIcon class_="w-3.5 h-3.5 shrink-0" />
   <div class="flex items-center">
     {#each shownPubkeys as pubkey, i (pubkey)}
