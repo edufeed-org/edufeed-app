@@ -1,7 +1,7 @@
 /**
  * SharedByLine Component Tests
  *
- * Tests for displaying single and multiple sharers with profile lookup.
+ * Tests for displaying stacked avatars with compact shared label.
  *
  * @vitest-environment jsdom
  */
@@ -24,15 +24,8 @@ vi.mock('$app/paths', () => ({
   resolve: (/** @type {string} */ path) => path
 }));
 
-vi.mock('applesauce-core/helpers', () => ({
-  getDisplayName: (/** @type {any} */ profile) => profile?.name || null
-}));
-
 vi.mock('$lib/paraglide/messages', () => ({
-  community_shared_label: (/** @type {{ name: string }} */ params) => `${params.name} shared`,
   community_shared_multiple_suffix: () => 'shared',
-  community_shared_multiple_overflow: (/** @type {{ count: number }} */ params) =>
-    `and ${params.count} more shared`,
   community_shared_all_label: (/** @type {{ count: number }} */ params) =>
     `Shared by ${params.count} people`
 }));
@@ -58,73 +51,20 @@ vi.mock('../shared/HoverCard.svelte', async () => {
 const pk1 = 'aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222';
 const pk2 = 'bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333';
 const pk3 = 'cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333dddd4444';
+const pk4 = 'dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333dddd4444eeee5555';
 
 describe('SharedByLine', () => {
-  it('renders single sharer name when given one sharer with profile', () => {
+  it('renders "shared" suffix for single sharer', () => {
     const profiles = new Map([[pk1, { name: 'Alice' }]]);
 
     const { container } = render(SharedByLine, {
       props: { sharers: [pk1], authorProfiles: profiles }
     });
 
-    expect(container.textContent).toContain('Alice shared');
-  });
-
-  it('renders two sharer names joined with ampersand', () => {
-    const profiles = new Map([
-      [pk1, { name: 'Alice' }],
-      [pk2, { name: 'Bob' }]
-    ]);
-
-    const { container } = render(SharedByLine, {
-      props: { sharers: [pk1, pk2], authorProfiles: profiles }
-    });
-
-    expect(container.textContent).toContain('Alice');
-    expect(container.textContent).toContain('&');
-    expect(container.textContent).toContain('Bob');
     expect(container.textContent).toContain('shared');
   });
 
-  it('renders "and N more shared" when given 3+ sharers', () => {
-    const profiles = new Map([
-      [pk1, { name: 'Alice' }],
-      [pk2, { name: 'Bob' }],
-      [pk3, { name: 'Charlie' }]
-    ]);
-
-    const { container } = render(SharedByLine, {
-      props: { sharers: [pk1, pk2, pk3], authorProfiles: profiles }
-    });
-
-    expect(container.textContent).toContain('Alice');
-    expect(container.textContent).toContain('Bob');
-    expect(container.textContent).toContain('and 1 more shared');
-  });
-
-  it('falls back to truncated pubkey when profile not found', () => {
-    const profiles = new Map();
-
-    const { container } = render(SharedByLine, {
-      props: { sharers: [pk1], authorProfiles: profiles }
-    });
-
-    expect(container.textContent).toContain('aaaa1111...');
-  });
-
-  it('renders profile link for single sharer', () => {
-    const profiles = new Map([[pk1, { name: 'Alice' }]]);
-
-    const { container } = render(SharedByLine, {
-      props: { sharers: [pk1], authorProfiles: profiles }
-    });
-
-    const link = container.querySelector('a');
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toContain(pk1);
-  });
-
-  it('renders profile links for multiple sharers', () => {
+  it('does not render individual names inline', () => {
     const profiles = new Map([
       [pk1, { name: 'Alice' }],
       [pk2, { name: 'Bob' }]
@@ -134,13 +74,12 @@ describe('SharedByLine', () => {
       props: { sharers: [pk1, pk2], authorProfiles: profiles }
     });
 
-    const links = container.querySelectorAll('a');
-    expect(links.length).toBe(2);
-    expect(links[0].getAttribute('href')).toContain(pk1);
-    expect(links[1].getAttribute('href')).toContain(pk2);
+    expect(container.textContent).not.toContain('Alice');
+    expect(container.textContent).not.toContain('Bob');
+    expect(container.textContent).toContain('shared');
   });
 
-  it('renders overflow text inside HoverCard trigger for 3+ sharers', () => {
+  it('shows up to 3 avatars without overflow for 3 sharers', () => {
     const profiles = new Map([
       [pk1, { name: 'Alice' }],
       [pk2, { name: 'Bob' }],
@@ -149,26 +88,62 @@ describe('SharedByLine', () => {
 
     const { container } = render(SharedByLine, {
       props: { sharers: [pk1, pk2, pk3], authorProfiles: profiles }
+    });
+
+    // No +N pill when exactly 3 sharers (MAX_SHOWN = 3)
+    expect(container.textContent).not.toContain('+');
+    expect(container.textContent).toContain('shared');
+  });
+
+  it('renders +N pill inside HoverCard for 4+ sharers', () => {
+    const profiles = new Map([
+      [pk1, { name: 'Alice' }],
+      [pk2, { name: 'Bob' }],
+      [pk3, { name: 'Charlie' }],
+      [pk4, { name: 'Dave' }]
+    ]);
+
+    const { container } = render(SharedByLine, {
+      props: { sharers: [pk1, pk2, pk3, pk4], authorProfiles: profiles }
     });
 
     const trigger = container.querySelector('[data-testid="hovercard-trigger"]');
     expect(trigger).not.toBeNull();
-    expect(trigger.textContent).toContain('and 1 more shared');
+    expect(trigger?.textContent).toContain('+1');
   });
 
   it('hover card content shows header with total sharer count', () => {
     const profiles = new Map([
       [pk1, { name: 'Alice' }],
       [pk2, { name: 'Bob' }],
-      [pk3, { name: 'Charlie' }]
+      [pk3, { name: 'Charlie' }],
+      [pk4, { name: 'Dave' }]
     ]);
 
     const { container } = render(SharedByLine, {
-      props: { sharers: [pk1, pk2, pk3], authorProfiles: profiles }
+      props: { sharers: [pk1, pk2, pk3, pk4], authorProfiles: profiles }
     });
 
     const content = container.querySelector('[data-testid="hovercard-content"]');
     expect(content).not.toBeNull();
-    expect(content.textContent).toContain('Shared by 3 people');
+    expect(content?.textContent).toContain('Shared by 4 people');
+  });
+
+  it('applies negative margin for stacked avatar overlap', () => {
+    const profiles = new Map([
+      [pk1, { name: 'Alice' }],
+      [pk2, { name: 'Bob' }]
+    ]);
+
+    const { container } = render(SharedByLine, {
+      props: { sharers: [pk1, pk2], authorProfiles: profiles }
+    });
+
+    const avatarWrappers = container.querySelectorAll('[style*="z-index"]');
+    expect(avatarWrappers.length).toBe(2);
+    // Second avatar should have negative margin class
+    expect(avatarWrappers[1].className).toContain('-ml-1.5');
+    // First avatar should not
+    expect(avatarWrappers[0].className).not.toContain('-ml-1.5');
   });
 });
