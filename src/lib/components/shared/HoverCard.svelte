@@ -6,6 +6,7 @@
 
 <script>
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
 
   /**
    * @typedef {Object} Props
@@ -97,6 +98,7 @@
         ? 'bottom-full mb-2'
         : 'top-full mt-2'}"
       role="tooltip"
+      transition:fade={{ duration: 150 }}
     >
       {@render content()}
     </div>

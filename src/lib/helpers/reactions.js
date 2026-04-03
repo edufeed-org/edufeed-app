@@ -4,9 +4,8 @@
  */
 import { EventFactory } from 'applesauce-core/event-factory';
 import { ReactionBlueprint } from 'applesauce-common/blueprints';
-import { publishEvent } from '$lib/services/publish-service.js';
+import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
 /**
  * Create a NIP-25 reaction event using ReactionBlueprint.
@@ -29,37 +28,26 @@ export async function createReaction(targetEvent, emoji) {
 }
 
 /**
- * Publish a reaction to an event
+ * Publish a reaction to an event (optimistic — instant UI update)
  *
  * @param {any} targetEvent - The event to react to
  * @param {string | import('applesauce-common/helpers').Emoji} emoji - Reaction emoji (string or {shortcode, url})
  * @param {Object} [options] - Publishing options
  * @param {string[]} [options.relays] - Custom relay list
- * @returns {Promise<{success: boolean, event: any, relays: string[], successCount: number}>}
+ * @param {Function} [options.onStatusChange] - Callback for publish status updates
+ * @returns {Promise<{success: boolean, event: any}>}
  */
 export async function publishReaction(targetEvent, emoji, options = {}) {
-  try {
-    // Create the reaction event
-    const reactionEvent = await createReaction(targetEvent, emoji);
+  // Create and sign the reaction event (awaits signing)
+  const reactionEvent = await createReaction(targetEvent, emoji);
 
-    // Publish using outbox model (tags target event author)
-    const result = await publishEvent(reactionEvent, [targetEvent.pubkey], {
-      additionalRelays: options.relays || []
-    });
+  // Publish optimistically — adds to EventStore immediately, rolls back on total failure
+  publishEventOptimistic(reactionEvent, [targetEvent.pubkey], {
+    additionalRelays: options.relays || [],
+    onStatusChange: options.onStatusChange
+  });
 
-    // Add to EventStore for immediate UI updates
-    if (result.success) {
-      eventStore.add(reactionEvent);
-    }
-
-    return {
-      ...result,
-      event: reactionEvent
-    };
-  } catch (error) {
-    console.error('Failed to publish reaction:', error);
-    throw error;
-  }
+  return { success: true, event: reactionEvent };
 }
 
 /**
@@ -69,7 +57,8 @@ export async function publishReaction(targetEvent, emoji, options = {}) {
  * @param {any} reactionEvent - The reaction event to delete
  * @param {Object} [options] - Publishing options
  * @param {string[]} [options.relays] - Custom relay list
- * @returns {Promise<{success: boolean, event: any, relays: string[], successCount: number}>}
+ * @param {Function} [options.onStatusChange] - Callback for publish status updates
+ * @returns {Promise<{success: boolean, event: any}>}
  */
 export async function deleteReaction(reactionEvent, options = {}) {
   const account = manager.active;
@@ -93,22 +82,14 @@ export async function deleteReaction(reactionEvent, options = {}) {
   // Sign the deletion event
   const deleteEvent = await factory.sign(deleteEventTemplate);
 
-  // Publish deletion using outbox model
-  const result = await publishEvent(deleteEvent, [], {
-    additionalRelays: options.relays || []
+  // Publish optimistically — adds deletion to EventStore immediately,
+  // triggering automatic removal of the referenced reaction event
+  publishEventOptimistic(deleteEvent, [], {
+    additionalRelays: options.relays || [],
+    onStatusChange: options.onStatusChange
   });
 
-  // Explicitly add deletion event to EventStore after successful publish
-  // This triggers automatic removal of the referenced reaction event
-  // and updates all subscriptions (including ReactionsModel)
-  if (result.success) {
-    eventStore.add(deleteEvent);
-  }
-
-  return {
-    ...result,
-    event: deleteEvent
-  };
+  return { success: true, event: deleteEvent };
 }
 
 /**

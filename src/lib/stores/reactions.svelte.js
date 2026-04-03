@@ -159,36 +159,28 @@ class ReactionsStore {
   }
 
   /**
-   * React to an event
+   * React to an event (fire-and-forget — UI updates via EventStore subscription)
    * @param {any} event - The event to react to
    * @param {string | import('applesauce-common/helpers').Emoji} emoji - The emoji to react with (string or {shortcode, url})
    * @param {string[]} [relays] - Optional relay list
    */
-  async react(event, emoji, relays) {
-    if (!event?.id) {
-      throw new Error('Invalid event');
-    }
+  react(event, emoji, relays) {
+    if (!event?.id) return;
 
     const currentUser = manager.active;
     if (!currentUser) {
       showToast('Please sign in to react', 'error');
-      throw new Error('No active account');
+      return;
     }
 
-    try {
-      // Publish the reaction
-      const result = await publishReaction(event, emoji, { relays });
-
-      if (result.success) {
-        showToast('Reaction added!', 'success');
-      } else {
-        throw new Error('Failed to publish reaction');
-      }
-    } catch (error) {
-      console.error('Failed to react:', error);
-      showToast('Failed to add reaction', 'error');
-      throw error;
-    }
+    publishReaction(event, emoji, { relays })
+      .then((result) => {
+        if (!result.success) showToast('Failed to add reaction', 'error');
+      })
+      .catch((error) => {
+        console.error('Failed to react:', error);
+        showToast('Failed to add reaction', 'error');
+      });
   }
 
   /**

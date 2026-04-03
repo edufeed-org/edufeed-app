@@ -18,6 +18,7 @@
   } from '$lib/helpers/contentTypes.js';
   import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
+  import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -142,10 +143,15 @@
     sectionName && !profileAccess.isLoading ? profileAccess.getAllowedAuthors(sectionName) : null
   );
 
+  let communityWideFormRef = $derived(
+    !profileAccess.isLoading ? getCommunityWideFormRef(profileAccess, communikeyEvent) : null
+  );
+
   const getIsMember = useCommunityMembership(() => data.pubkey);
   setContext('isCommunityMember', getIsMember);
 
   setContext('communikeyEvent', () => communikeyEvent);
+  setContext('communityWideFormRef', () => communityWideFormRef);
   setContext('communityProfile', () => communityProfile);
   setContext('communikeyLoaded', () => communikeyLoaded);
   setContext('profileAccess', profileAccess);

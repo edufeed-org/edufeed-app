@@ -22,7 +22,6 @@
     emojiUrl = null
   } = $props();
 
-  let loading = $state(false);
   let isHovering = $state(false);
 
   // Track active user with direct subscription for proper reactivity
@@ -43,45 +42,33 @@
     userReactionEvent && activeUser && userReactionEvent.pubkey === activeUser.pubkey
   );
 
-  async function toggleReaction() {
-    if (loading || !isLoggedIn) return;
+  function toggleReaction() {
+    if (!isLoggedIn) return;
 
-    loading = true;
-    try {
-      if (userReacted && userReactionEvent) {
-        // Use deleteReaction directly with the reaction event we already have
-        await deleteReaction(userReactionEvent, {
-          relays: runtimeConfig.fallbackRelays || []
+    if (userReacted && userReactionEvent) {
+      deleteReaction(userReactionEvent, {
+        relays: runtimeConfig.fallbackRelays || []
+      })
+        .then(() => showToast(m.reactions_remove_success(), 'success'))
+        .catch((err) => {
+          console.error('Failed to remove reaction:', err);
+          showToast(m.reactions_remove_error(), 'error');
         });
-        showToast(m.reactions_remove_success(), 'success');
-      } else {
-        await reactionsStore.react(event, emoji);
-      }
-    } catch (error) {
-      console.error('Failed to toggle reaction:', error);
-      if (userReacted) {
-        showToast(m.reactions_remove_error(), 'error');
-      }
-    } finally {
-      loading = false;
+    } else {
+      reactionsStore.react(event, emoji);
     }
   }
 
-  async function handleDelete() {
-    if (loading || !canDelete) return;
-    loading = true;
-    try {
-      // Delete the reaction event using the helper
-      await deleteReaction(userReactionEvent, {
-        relays: runtimeConfig.fallbackRelays || []
+  function handleDelete() {
+    if (!canDelete) return;
+    deleteReaction(userReactionEvent, {
+      relays: runtimeConfig.fallbackRelays || []
+    })
+      .then(() => showToast(m.reactions_remove_success(), 'success'))
+      .catch((err) => {
+        console.error('Failed to delete reaction:', err);
+        showToast(m.reactions_remove_error(), 'error');
       });
-      showToast(m.reactions_remove_success(), 'success');
-    } catch (error) {
-      console.error('Failed to delete reaction:', error);
-      showToast(m.reactions_remove_error(), 'error');
-    } finally {
-      loading = false;
-    }
   }
 </script>
 
@@ -90,7 +77,7 @@
   onclick={toggleReaction}
   onmouseenter={() => (isHovering = true)}
   onmouseleave={() => (isHovering = false)}
-  disabled={loading || !isLoggedIn}
+  disabled={!isLoggedIn}
   data-testid="reaction-button"
   data-emoji={emoji}
   data-count={count}

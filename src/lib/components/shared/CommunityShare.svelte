@@ -334,7 +334,7 @@
 
     try {
       // Separate into creates vs deletes (only deletable shares can be unshared)
-      const toCreate = selectedCommunityIds.filter((id) => !communitiesWithShares.has(id));
+      const toCreate = selectedCommunityIds.filter((id) => !deletableShares.has(id));
       const toDelete = selectedCommunityIds.filter((id) => deletableShares.has(id));
 
       // Batch create: ONE sign call for all new shares
@@ -406,10 +406,8 @@
    */
   function selectAllCommunities() {
     const availableCommunities = joinedCommunities.filter((pubkey) => {
-      const isShared = communitiesWithShares.has(pubkey);
-      const isDeletable = deletableShares.has(pubkey);
-      // Skip communities with non-deletable shares (native h-tags, other users' reposts)
-      return !isShared || isDeletable;
+      // Skip only communities where user already has their own share
+      return !deletableShares.has(pubkey);
     });
     selectedCommunityIds = availableCommunities;
   }
@@ -464,27 +462,24 @@
           {@const isSelected = selectedCommunityIds.includes(communityPubKey)}
           {@const getCommunityProfile = useUserProfile(communityPubKey)}
           {@const communityProfile = getCommunityProfile()}
-          <label
-            class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200"
-            class:opacity-60={isNonDeletable}
-          >
+          <label class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200">
             <input
               type="checkbox"
               class="checkbox checkbox-secondary {compact ? 'checkbox-sm' : ''}"
-              checked={isSelected || isAlreadyShared}
-              disabled={isNonDeletable}
+              checked={isSelected}
+              disabled={isProcessingShares}
               onchange={() => toggleCommunitySelection(communityPubKey)}
             />
             <span class="font-medium {compact ? 'text-sm' : ''}">
               {getDisplayName(communityProfile) ||
                 `${communityPubKey.slice(0, 8)}...${communityPubKey.slice(-4)}`}
             </span>
-            {#if isNonDeletable}
-              <span class="text-xs font-medium text-success">(Shared)</span>
-            {:else if isAlreadyShared && !isSelected}
-              <span class="text-xs font-medium text-success">(Shared - click to unshare)</span>
-            {:else if isAlreadyShared && isSelected}
+            {#if isDeletable && isSelected}
               <span class="text-xs font-medium text-warning">(Will be unshared)</span>
+            {:else if isDeletable}
+              <span class="text-xs font-medium text-success">(Shared - click to unshare)</span>
+            {:else if isNonDeletable}
+              <span class="text-xs font-medium text-success/70">(Shared by others)</span>
             {:else if isSelected}
               <span class="text-xs font-medium text-info">(Will be shared)</span>
             {/if}

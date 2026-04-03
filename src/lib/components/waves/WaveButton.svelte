@@ -8,9 +8,9 @@
   /** @type {{ profileEvent: any, pubkey: string }} */
   let { profileEvent, pubkey } = $props();
 
-  let loading = $state(false);
   /** @type {any[]} */
   let reactions = $state.raw([]);
+  let waved = $state(false);
 
   /** @type {import('rxjs').Subscription | undefined} */
   let loaderSub;
@@ -30,35 +30,31 @@
     return () => {
       loaderSub?.unsubscribe();
       modelSub?.unsubscribe();
+      waved = false;
     };
   });
 
   let cooldownState = $derived(canWave(reactions, pubkey));
 
-  async function handleWave() {
-    if (loading || !cooldownState.canWave || !profileEvent) return;
-    loading = true;
-    try {
-      await publishWave(profileEvent);
-      showToast(m.wave_success(), 'success');
-    } catch (err) {
-      console.error('Failed to wave:', err);
-      showToast(m.wave_error(), 'error');
-    } finally {
-      loading = false;
-    }
+  function handleWave() {
+    if (!cooldownState.canWave || !profileEvent) return;
+    waved = true;
+    publishWave(profileEvent)
+      .then(() => showToast(m.wave_success(), 'success'))
+      .catch((err) => {
+        console.error('Failed to wave:', err);
+        waved = false;
+        showToast(m.wave_error(), 'error');
+      });
   }
 </script>
 
 <button
-  class="btn btn-circle btn-ghost btn-sm"
+  class="btn btn-circle transition-colors btn-sm
+    {waved || !cooldownState.canWave ? 'text-white btn-success' : 'btn-ghost'}"
   onclick={handleWave}
-  disabled={loading || !cooldownState.canWave}
+  disabled={!cooldownState.canWave}
   title={cooldownState.canWave ? m.wave_button_tooltip() : m.wave_cooldown_tooltip()}
 >
-  {#if loading}
-    <span class="loading loading-xs loading-spinner"></span>
-  {:else}
-    <span class="text-lg">👋</span>
-  {/if}
+  <span class="text-lg">👋</span>
 </button>

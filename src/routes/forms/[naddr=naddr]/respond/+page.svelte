@@ -3,6 +3,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
+  import { joinCommunity } from '$lib/helpers/community';
   import { EventFactory } from 'applesauce-core/event-factory';
   import { addressLoader, timedPool } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -28,6 +29,7 @@
   let decodedForm = $state(null);
 
   let returnTo = $derived($page.url.searchParams.get('returnTo'));
+  let communityId = $derived($page.url.searchParams.get('communityId'));
 
   // Decode naddr and load form template
   $effect(() => {
@@ -121,6 +123,13 @@
       const signed = await factory.sign(template);
       await publishEvent(signed);
       eventStore.add(signed);
+
+      // Auto-join community if this form was reached via join flow
+      if (communityId) {
+        await joinCommunity(communityId).catch((err) =>
+          console.error('Auto-join after form submit failed:', err)
+        );
+      }
 
       submitted = true;
     } catch (err) {

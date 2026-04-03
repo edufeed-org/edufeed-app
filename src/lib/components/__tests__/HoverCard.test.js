@@ -9,6 +9,27 @@ import { tick } from 'svelte';
 
 import HoverCardTestWrapper from './HoverCardTestWrapper.svelte';
 
+// Polyfill Element.animate for jsdom (used by Svelte transitions).
+// Returns an animation that completes instantly so transitions don't block DOM removal.
+if (!Element.prototype.animate) {
+  Element.prototype.animate = function (_keyframes, _options) {
+    const finishedPromise = Promise.resolve();
+    const anim = {
+      onfinish: /** @type {(() => void) | null} */ (null),
+      cancel: vi.fn(),
+      finished: finishedPromise,
+      // Svelte checks currentTime to see if animation is done
+      currentTime: /** @type {number | null} */ (null),
+      playState: 'finished'
+    };
+    // Use a promise microtask chain so onfinish fires after Svelte sets it
+    finishedPromise.then(() => {
+      if (anim.onfinish) anim.onfinish();
+    });
+    return anim;
+  };
+}
+
 describe('HoverCard', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -60,7 +81,8 @@ describe('HoverCard', () => {
     expect(queryByTestId('content')).not.toBeNull();
 
     vi.advanceTimersByTime(200);
-    await tick();
+    // Flush Svelte reactivity + transition animation microtasks
+    for (let i = 0; i < 5; i++) await tick();
     expect(queryByTestId('content')).toBeNull();
   });
 

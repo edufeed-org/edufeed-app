@@ -448,15 +448,15 @@ describe('CommunityShare', () => {
       }
     });
 
-    // Community2 should show as shared but non-deletable (shows just "(Shared)" not "click to unshare")
-    const sharedLabels = container.querySelectorAll('.text-success');
+    // Community2 should show as shared by others (non-deletable)
+    const sharedLabels = container.querySelectorAll('[class*="text-success"]');
     expect(sharedLabels.length).toBe(1);
-    expect(sharedLabels[0].textContent).toBe('(Shared)');
+    expect(sharedLabels[0].textContent).toBe('(Shared by others)');
 
-    // The checkbox should be disabled (non-deletable)
+    // The checkbox should NOT be disabled — user can still share themselves
     const checkboxes = container.querySelectorAll('input[type="checkbox"]');
     const community2Checkbox = checkboxes[1]; // second community
-    expect(community2Checkbox.disabled).toBe(true);
+    expect(community2Checkbox.disabled).toBe(false);
   });
 
   it('detects native h-tags on original event as non-deletable shares', async () => {
@@ -480,15 +480,15 @@ describe('CommunityShare', () => {
       }
     });
 
-    // Community1 should show as shared via native h-tag (non-deletable)
-    const sharedLabels = container.querySelectorAll('.text-success');
+    // Community1 should show as shared via native h-tag (non-deletable, shared by others)
+    const sharedLabels = container.querySelectorAll('[class*="text-success"]');
     expect(sharedLabels.length).toBe(1);
-    expect(sharedLabels[0].textContent).toBe('(Shared)');
+    expect(sharedLabels[0].textContent).toBe('(Shared by others)');
 
-    // The checkbox should be disabled
+    // The checkbox should NOT be disabled — user can still share themselves
     const checkboxes = container.querySelectorAll('input[type="checkbox"]');
     const community1Checkbox = checkboxes[0];
-    expect(community1Checkbox.disabled).toBe(true);
+    expect(community1Checkbox.disabled).toBe(false);
   });
 
   it('distinguishes deletable (own) from non-deletable (other user) shares', async () => {
@@ -512,17 +512,17 @@ describe('CommunityShare', () => {
       }
     });
 
-    const sharedLabels = container.querySelectorAll('.text-success');
+    const sharedLabels = container.querySelectorAll('[class*="text-success"]');
     expect(sharedLabels.length).toBe(2);
 
     // Community1 (own share) should show "Shared - click to unshare"
     expect(sharedLabels[0].textContent).toContain('click to unshare');
 
-    // Community2 (other user's share) should show just "(Shared)" and be disabled
-    expect(sharedLabels[1].textContent).toBe('(Shared)');
+    // Community2 (other user's share) should show "(Shared by others)"
+    expect(sharedLabels[1].textContent).toBe('(Shared by others)');
 
     const checkboxes = container.querySelectorAll('input[type="checkbox"]');
     expect(checkboxes[0].disabled).toBe(false); // own share — can unshare
-    expect(checkboxes[1].disabled).toBe(true); // other user's share — cannot unshare
+    expect(checkboxes[1].disabled).toBe(false); // other user's share — user can still share themselves
   });
 });

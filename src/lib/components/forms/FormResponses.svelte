@@ -14,6 +14,7 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import * as m from '$lib/paraglide/messages';
 
   /**
    * @type {{
@@ -161,6 +162,31 @@
       console.error('Failed to grant access:', err);
     } finally {
       granting.delete(key);
+    }
+  }
+
+  /** @type {SvelteSet<string>} in-flight grant-all keys: responseId */
+  let grantingAll = new SvelteSet();
+
+  /**
+   * Grant a respondent access to all linked sections.
+   * @param {string} pubkey
+   * @param {string} responseId
+   */
+  async function grantAllAccess(pubkey, responseId) {
+    grantingAll.add(responseId);
+    try {
+      const results = await Promise.allSettled(
+        linkedSections
+          .filter((s) => !isProfilePointerInList(s.event, pubkey))
+          .map((s) => actionRunner.run(AddUserToFollowSet, pubkey, s.sectionName))
+      );
+      const failures = results.filter((r) => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.error('Some grant-all actions failed:', failures);
+      }
+    } finally {
+      grantingAll.delete(responseId);
     }
   }
 
@@ -330,6 +356,18 @@
             <!-- Access control actions per linked section (shown regardless of decrypt status) -->
             {#if linkedSections.length > 0}
               <div class="mt-3 flex flex-wrap gap-2 border-t border-base-content/10 pt-3">
+                {#if linkedSections.length > 1 && linkedSections.some((s) => !isProfilePointerInList(s.event, response.pubkey))}
+                  <button
+                    class="btn btn-xs btn-success"
+                    disabled={grantingAll.has(response.id)}
+                    onclick={() => grantAllAccess(response.pubkey, response.id)}
+                  >
+                    {#if grantingAll.has(response.id)}
+                      <span class="loading loading-xs loading-spinner"></span>
+                    {/if}
+                    {m.form_responses_grant_all()}
+                  </button>
+                {/if}
                 {#each linkedSections as section (section.sectionName)}
                   {@const isMember = isProfilePointerInList(section.event, response.pubkey)}
                   {@const denyKey = `${response.id}:${section.sectionName}`}

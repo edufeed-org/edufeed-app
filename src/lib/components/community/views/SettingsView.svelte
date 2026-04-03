@@ -42,7 +42,7 @@
     try {
       const result = await leaveCommunity(communityId);
       if (result.success) {
-        showToast('Left community', 'success');
+        showToast('Unfollowed community', 'success');
         // Redirect to discover page after leaving
         await goto(/** @type {string} */ (resolve('/discover')));
       } else {

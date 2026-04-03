@@ -12,43 +12,23 @@
   /** @type {any} */
   let { event, onClose } = $props();
 
-  let loading = $state(false);
-
   const getUserEmojiSets = useUserEmojiSets();
   let customEmojiSets = $derived(getUserEmojiSets());
 
   /**
    * @param {string} emoji
    */
-  async function selectEmoji(emoji) {
-    if (loading) return;
-
-    loading = true;
-    try {
-      await reactionsStore.react(event, emoji);
-      onClose();
-    } catch (error) {
-      console.error('Failed to add reaction:', error);
-    } finally {
-      loading = false;
-    }
+  function selectEmoji(emoji) {
+    reactionsStore.react(event, emoji);
+    onClose();
   }
 
   /**
    * @param {{ shortcode: string, url: string }} emoji
    */
-  async function selectCustomEmoji(emoji) {
-    if (loading) return;
-
-    loading = true;
-    try {
-      await reactionsStore.react(event, emoji);
-      onClose();
-    } catch (error) {
-      console.error('Failed to add custom reaction:', error);
-    } finally {
-      loading = false;
-    }
+  function selectCustomEmoji(emoji) {
+    reactionsStore.react(event, emoji);
+    onClose();
   }
 
   /**
@@ -83,12 +63,6 @@
       </button>
     </div>
 
-    {#if loading}
-      <div class="flex items-center justify-center p-8">
-        <span class="loading loading-md loading-spinner"></span>
-      </div>
-    {:else}
-      <EmojiPicker onSelect={selectEmoji} {customEmojiSets} onSelectCustom={selectCustomEmoji} />
-    {/if}
+    <EmojiPicker onSelect={selectEmoji} {customEmojiSets} onSelectCustom={selectCustomEmoji} />
   </div>
 </div>

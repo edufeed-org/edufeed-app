@@ -44,6 +44,14 @@ vi.mock('../shared/ImageWithFallback.svelte', () => ({
   default: {}
 }));
 
+vi.mock('../shared/HoverCard.svelte', () => ({
+  default: {}
+}));
+
+vi.mock('../shared/ProfileHoverCardContent.svelte', () => ({
+  default: {}
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -66,9 +74,9 @@ describe('ProfileAvatar', () => {
       expect(link).toBeNull();
     });
 
-    it('renders an <a> tag with correct href when linkToProfile is true and pubkey is provided', () => {
+    it('renders an <a> tag when linkToProfile is true and showHoverCard is false', () => {
       const { container } = render(ProfileAvatar, {
-        props: { pubkey: TEST_PUBKEY, linkToProfile: true }
+        props: { pubkey: TEST_PUBKEY, linkToProfile: true, showHoverCard: false }
       });
       const link = container.querySelector('a');
       expect(link).not.toBeNull();

@@ -6,7 +6,6 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
-  import { getProfilePicture } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { storeEvents } from 'applesauce-relay/operators';
   import { TimelineModel } from 'applesauce-core/models';
@@ -14,6 +13,7 @@
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import ProfileAvatar from '../../shared/ProfileAvatar.svelte';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import { extractMentionPubkeys } from '$lib/helpers/inbox.js';
@@ -241,18 +241,6 @@
     return pubkey.slice(0, 8) + '...';
   }
 
-  /**
-   * @param {string} pubkey
-   */
-  function getUserAvatar(pubkey) {
-    if (!pubkey) return null;
-    const profile = userProfiles.get(pubkey);
-    if (profile) {
-      return getProfilePicture(profile);
-    }
-    return null;
-  }
-
   /** Insert unicode emoji at cursor position in message input */
   function insertEmoji(/** @type {string} */ emoji) {
     newMessage += emoji;
@@ -335,28 +323,13 @@
           {@const replyToId = getReplyParentId(message)}
           <div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
             {#if !isOwnMessage}
-              <a href={resolve(`/p/${message.pubkey}`)} class="avatar chat-image">
-                <div class="w-8 rounded-full">
-                  {#if getUserAvatar(message.pubkey)}
-                    <img
-                      src={getUserAvatar(message.pubkey)}
-                      alt={getUserDisplayName(message.pubkey)}
-                      onerror={(e) => {
-                        const img = /** @type {HTMLImageElement} */ (
-                          /** @type {unknown} */ (e.target)
-                        );
-                        if (img) img.src = `https://robohash.org/${message.pubkey}`;
-                      }}
-                    />
-                  {:else}
-                    <div
-                      class="flex h-full w-full items-center justify-center bg-primary text-xs text-primary-content"
-                    >
-                      {getUserDisplayName(message.pubkey).charAt(0).toUpperCase()}
-                    </div>
-                  {/if}
-                </div>
-              </a>
+              <ProfileAvatar
+                pubkey={message.pubkey}
+                profile={userProfiles.get(message.pubkey)}
+                size="sm"
+                linkToProfile
+                class="chat-image"
+              />
             {/if}
 
             <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">

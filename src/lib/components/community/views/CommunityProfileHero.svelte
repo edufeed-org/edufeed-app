@@ -3,6 +3,10 @@
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { joinCommunity } from '$lib/helpers/community';
   import { showToast } from '$lib/helpers/toast';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
+  import { nip19 } from 'nostr-tools';
+  import { getContext } from 'svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { ChevronRightIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -19,9 +23,32 @@
   const MAX_FACEPILE = 3;
   let facepileMembers = $derived(memberPubkeys.slice(0, MAX_FACEPILE));
 
+  const getCommunityWideFormRef = /** @type {() => string | null} */ (
+    getContext('communityWideFormRef')
+  );
+
   const getJoined = useCommunityMembership(() => communityId);
 
   let isJoining = $state(false);
+
+  /** Navigate to the form respond page for join request */
+  function handleRequestJoin() {
+    const formRef = getCommunityWideFormRef?.();
+    if (!formRef) return;
+    const parts = formRef.split(':');
+    if (parts.length < 3) return;
+    const [kindStr, pubkey, ...identifierParts] = parts;
+    const kind = parseInt(kindStr, 10);
+    const identifier = identifierParts.join(':');
+    try {
+      const naddr = nip19.naddrEncode({ kind, pubkey, identifier, relays: [] });
+      const returnTo = encodeURIComponent($page.url.pathname);
+      goto(`/forms/${naddr}/respond?returnTo=${returnTo}&communityId=${communityId}`);
+    } catch {
+      // fallback to instant join
+      handleJoin();
+    }
+  }
 
   async function handleJoin() {
     if (isJoining) return;
@@ -31,7 +58,7 @@
       if (result.success) {
         showToast(m.communikey_header_join_button() + ' ✓', 'success');
       } else {
-        showToast(result.error || 'Failed to join', 'error');
+        showToast(result.error || 'Failed to follow', 'error');
       }
     } catch {
       showToast('An error occurred', 'error');
@@ -105,13 +132,19 @@
     <!-- Join Button (non-members) -->
     {#if !getJoined()}
       <div class="mt-7">
-        <button onclick={handleJoin} disabled={isJoining} class="btn btn-sm btn-primary">
-          {#if isJoining}
-            <span class="loading loading-xs loading-spinner"></span>
-          {:else}
-            {m.communikey_header_join_button()}
-          {/if}
-        </button>
+        {#if getCommunityWideFormRef?.()}
+          <button onclick={handleRequestJoin} class="btn btn-sm btn-primary">
+            {m.community_request_join()}
+          </button>
+        {:else}
+          <button onclick={handleJoin} disabled={isJoining} class="btn btn-sm btn-primary">
+            {#if isJoining}
+              <span class="loading loading-xs loading-spinner"></span>
+            {:else}
+              {m.communikey_header_join_button()}
+            {/if}
+          </button>
+        {/if}
       </div>
     {/if}
   </div>

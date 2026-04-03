@@ -126,3 +126,96 @@ describe('applyDefaultFormRef', () => {
     expect(types.calendar.formRef).toBe('30168:pub:formA');
   });
 });
+
+// --- getCommunityWideFormRef tests ---
+import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
+
+/**
+ * Helper to build a mock profileAccess with getFormRef
+ * @param {Record<string, string | null>} formRefs - section name -> formRef
+ */
+function makeProfileAccess(formRefs) {
+  return {
+    /** @param {string} name */
+    getFormRef(name) {
+      return formRefs[name] ?? null;
+    }
+  };
+}
+
+/**
+ * Helper to build a kind 10222 event with content sections
+ * @param {Array<{ name: string, profileList?: string }>} sections
+ */
+function makeCommunityEvent(sections) {
+  /** @type {string[][]} */
+  const tags = [];
+  for (const s of sections) {
+    tags.push(['content', s.name]);
+    tags.push(['k', '31922']);
+    if (s.profileList) {
+      tags.push(['a', s.profileList]);
+    }
+  }
+  return { kind: 10222, tags, pubkey: 'abc', content: '', created_at: 0, id: 'x', sig: 'x' };
+}
+
+describe('getCommunityWideFormRef', () => {
+  it('returns null for open community (no profile lists)', () => {
+    const access = makeProfileAccess({});
+    const event = makeCommunityEvent([{ name: 'calendar' }, { name: 'chat' }]);
+    expect(getCommunityWideFormRef(access, event)).toBeNull();
+  });
+
+  it('returns the shared formRef when all gated sections have the same form', () => {
+    const access = makeProfileAccess({
+      calendar: '30168:pub:formA',
+      chat: '30168:pub:formA'
+    });
+    const event = makeCommunityEvent([
+      { name: 'calendar', profileList: '30000:pub:cal-list' },
+      { name: 'chat', profileList: '30000:pub:chat-list' }
+    ]);
+    expect(getCommunityWideFormRef(access, event)).toBe('30168:pub:formA');
+  });
+
+  it('returns null when gated sections have different forms', () => {
+    const access = makeProfileAccess({
+      calendar: '30168:pub:formA',
+      chat: '30168:pub:formB'
+    });
+    const event = makeCommunityEvent([
+      { name: 'calendar', profileList: '30000:pub:cal-list' },
+      { name: 'chat', profileList: '30000:pub:chat-list' }
+    ]);
+    expect(getCommunityWideFormRef(access, event)).toBeNull();
+  });
+
+  it('returns the formRef for a single gated section', () => {
+    const access = makeProfileAccess({
+      calendar: '30168:pub:formA'
+    });
+    const event = makeCommunityEvent([
+      { name: 'calendar', profileList: '30000:pub:cal-list' },
+      { name: 'chat' }
+    ]);
+    expect(getCommunityWideFormRef(access, event)).toBe('30168:pub:formA');
+  });
+
+  it('returns null when a gated section has no form', () => {
+    const access = makeProfileAccess({
+      calendar: '30168:pub:formA',
+      chat: null
+    });
+    const event = makeCommunityEvent([
+      { name: 'calendar', profileList: '30000:pub:cal-list' },
+      { name: 'chat', profileList: '30000:pub:chat-list' }
+    ]);
+    expect(getCommunityWideFormRef(access, event)).toBeNull();
+  });
+
+  it('returns null for null/undefined inputs', () => {
+    expect(getCommunityWideFormRef(null, null)).toBeNull();
+    expect(getCommunityWideFormRef(makeProfileAccess({}), null)).toBeNull();
+  });
+});

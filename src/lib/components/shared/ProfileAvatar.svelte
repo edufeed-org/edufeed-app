@@ -13,6 +13,8 @@
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
   import ImageWithFallback from './ImageWithFallback.svelte';
+  import HoverCard from './HoverCard.svelte';
+  import ProfileHoverCardContent from './ProfileHoverCardContent.svelte';
 
   /**
    * @typedef {Object} Props
@@ -21,6 +23,7 @@
    * @property {'xs' | 'sm' | 'md' | 'lg' | 'xl'} [size] - Avatar size
    * @property {'initial' | 'robohash'} [fallbackType] - Type of fallback to use
    * @property {boolean} [linkToProfile] - Wrap avatar in a link to the user's profile page
+   * @property {boolean} [showHoverCard] - Show profile hover card on hover (defaults to linkToProfile && !!pubkey)
    * @property {string} [class] - Additional CSS classes
    */
 
@@ -31,8 +34,11 @@
     size = 'md',
     fallbackType = 'initial',
     linkToProfile = false,
+    showHoverCard = undefined,
     class: className = ''
   } = $props();
+
+  let effectiveShowHoverCard = $derived(showHoverCard ?? (linkToProfile && !!pubkey));
 
   // Load profile reactively when pubkey changes
   let loadedProfile = $state(/** @type {any} */ (null));
@@ -136,7 +142,18 @@
   </div>
 {/snippet}
 
-{#if linkToProfile && pubkey}
+{#if effectiveShowHoverCard && pubkey}
+  <HoverCard>
+    {#snippet trigger()}
+      <div class="avatar {className}">
+        {@render avatarContent()}
+      </div>
+    {/snippet}
+    {#snippet content()}
+      <ProfileHoverCardContent {pubkey} profile={loadedProfile} />
+    {/snippet}
+  </HoverCard>
+{:else if linkToProfile && pubkey}
   <a href={resolve(`/p/${pubkey}`)} class="avatar {className}">
     {@render avatarContent()}
   </a>
