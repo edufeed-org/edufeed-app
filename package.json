@@ -87,6 +87,7 @@
       "eslint --fix",
       "prettier --write"
     ],
-    "*.{json,css,md}": "prettier --write"
+    "*.{json,css,md}": "prettier --write",
+    "messages/*.json": "scripts/check-i18n-keys.sh"
   }
 }
