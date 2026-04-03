@@ -31,7 +31,7 @@
   const href = $derived(url ? resolve(url) : undefined);
   const displayName = $derived(profile?.display_name || profile?.name || event.pubkey.slice(0, 8));
 
-  let waveBackLoading = $state(false);
+  let wavedBack = $state(false);
 
   /** @type {Record<string, typeof BellIcon>} */
   const iconMap = {
@@ -53,39 +53,33 @@
   }
 
   /** @param {MouseEvent} e */
-  async function handleWaveBack(e) {
+  function handleWaveBack(e) {
     e.stopPropagation();
     e.preventDefault();
-    if (waveBackLoading) return;
-    waveBackLoading = true;
-    try {
-      // Get the waver's profile event from EventStore
-      /** @type {any} */
-      let profileEvent = null;
-      await new Promise((resolve, reject) => {
-        /** @type {import('rxjs').Subscription | undefined} */
-        let sub;
-        sub = eventStore.replaceable(0, event.pubkey).subscribe((ev) => {
-          if (ev) {
-            profileEvent = ev;
-            sub?.unsubscribe();
-            resolve(undefined);
-          }
-        });
-        // Timeout if profile not in store
-        setTimeout(() => {
+    if (wavedBack) return;
+    wavedBack = true;
+
+    new Promise((resolve, reject) => {
+      /** @type {import('rxjs').Subscription | undefined} */
+      let sub;
+      sub = eventStore.replaceable(0, event.pubkey).subscribe((ev) => {
+        if (ev) {
           sub?.unsubscribe();
-          if (!profileEvent) reject(new Error('Profile not found'));
-        }, 3000);
+          resolve(ev);
+        }
       });
-      await publishWave(profileEvent);
-      showToast(m.wave_success(), 'success');
-    } catch (err) {
-      console.error('Failed to wave back:', err);
-      showToast(m.wave_error(), 'error');
-    } finally {
-      waveBackLoading = false;
-    }
+      setTimeout(() => {
+        sub?.unsubscribe();
+        reject(new Error('Profile not found'));
+      }, 3000);
+    })
+      .then((profileEvent) => publishWave(/** @type {any} */ (profileEvent)))
+      .then(() => showToast(m.wave_success(), 'success'))
+      .catch((err) => {
+        console.error('Failed to wave back:', err);
+        wavedBack = false;
+        showToast(m.wave_error(), 'error');
+      });
   }
 
   /**
@@ -142,12 +136,11 @@
     <div class="mt-0.5 flex items-center gap-2">
       <span class="text-xs text-base-content/50">{formatTime(event.created_at)}</span>
       {#if type === 'wave'}
-        <button class="btn btn-ghost btn-xs" onclick={handleWaveBack} disabled={waveBackLoading}>
-          {#if waveBackLoading}
-            <span class="loading loading-xs loading-spinner"></span>
-          {:else}
-            👋 {m.wave_back_button()}
-          {/if}
+        <button
+          class="btn transition-colors btn-xs {wavedBack ? 'text-white btn-success' : 'btn-ghost'}"
+          onclick={handleWaveBack}
+        >
+          👋 {wavedBack ? m.wave_success() : m.wave_back_button()}
         </button>
       {/if}
     </div>
