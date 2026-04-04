@@ -4,6 +4,11 @@ import { getParentEventPointer, resolveThreadContext } from '$lib/helpers/thread
 
 const validPubkey = '3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d';
 
+/**
+ * @param {number} [kind]
+ * @param {string[][]} [tags]
+ * @param {string} [id]
+ */
 function makeEvent(kind = 1, tags = [], id = 'abc123') {
   return {
     id,
@@ -37,7 +42,7 @@ describe('getParentEventPointer', () => {
     ]);
     const result = getParentEventPointer(event);
     expect(result).not.toBeNull();
-    expect(result.id).toBe('replyid');
+    expect(/** @type {any} */ (result).id).toBe('replyid');
   });
 
   it('preserves relay hint from reply marker', () => {
@@ -46,15 +51,15 @@ describe('getParentEventPointer', () => {
       ['e', 'replyid', 'wss://relay.example.com', 'reply']
     ]);
     const result = getParentEventPointer(event);
-    expect(result.relayHint).toBe('wss://relay.example.com');
+    expect(/** @type {any} */ (result).relayHint).toBe('wss://relay.example.com');
   });
 
   it('returns root ID when only root marker present (direct reply to root)', () => {
     const event = makeEvent(1, [['e', 'rootid', 'wss://relay.example.com', 'root']]);
     const result = getParentEventPointer(event);
     expect(result).not.toBeNull();
-    expect(result.id).toBe('rootid');
-    expect(result.relayHint).toBe('wss://relay.example.com');
+    expect(/** @type {any} */ (result).id).toBe('rootid');
+    expect(/** @type {any} */ (result).relayHint).toBe('wss://relay.example.com');
   });
 
   it('handles legacy positional e-tags (two e-tags, no markers)', () => {
@@ -65,20 +70,20 @@ describe('getParentEventPointer', () => {
     const result = getParentEventPointer(event);
     expect(result).not.toBeNull();
     // Legacy: last e-tag is the reply target
-    expect(result.id).toBe('replyid');
+    expect(/** @type {any} */ (result).id).toBe('replyid');
   });
 
   it('handles single legacy positional e-tag', () => {
     const event = makeEvent(1, [['e', 'someid']]);
     const result = getParentEventPointer(event);
     expect(result).not.toBeNull();
-    expect(result.id).toBe('someid');
+    expect(/** @type {any} */ (result).id).toBe('someid');
   });
 
   it('returns null relay hint when no relay provided', () => {
     const event = makeEvent(1, [['e', 'rootid', '', 'root']]);
     const result = getParentEventPointer(event);
-    expect(result.relayHint).toBeUndefined();
+    expect(/** @type {any} */ (result).relayHint).toBeUndefined();
   });
 });
 

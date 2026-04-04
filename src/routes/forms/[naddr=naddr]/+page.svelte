@@ -17,6 +17,7 @@
   let formEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   let isLoading = $state(true);
   let error = $state('');
+  // svelte-ignore state_referenced_locally
   let activeTab = $state(data.initialTab);
 
   /** @type {string} */

@@ -81,7 +81,7 @@ function renderDjot(content) {
       },
       url: (node, renderer) => {
         const href = rewriteNostrHref(node.text || '');
-        return `<a href="${href}">${renderer.renderChildren(node)}</a>`;
+        return `<a href="${href}">${renderer.renderChildren(/** @type {any} */ (node))}</a>`;
       }
     }
   });

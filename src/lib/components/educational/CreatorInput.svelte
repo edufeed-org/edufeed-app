@@ -55,6 +55,7 @@
   function addCreator() {
     if (!newCreator.name.trim()) return;
 
+    /** @type {Creator} */
     const creatorToAdd = { ...newCreator };
     // Clean up empty optional fields
     if (!creatorToAdd.pubkey?.trim()) delete creatorToAdd.pubkey;
@@ -255,7 +256,7 @@
           id="creator-pubkey"
           placeholder="Search follows or enter npub..."
           inputClass="input-sm"
-          exclude={creators.map((c) => c.pubkey).filter(Boolean)}
+          exclude={creators.map((c) => c.pubkey || '').filter((p) => p !== '')}
           onselect={(contact) => {
             newCreator.pubkey = contact.pubkey;
             newCreator.name = contact.display_name || contact.name || '';

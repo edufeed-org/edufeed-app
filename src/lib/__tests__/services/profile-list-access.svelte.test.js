@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable no-undef -- $effect is a Svelte rune, available in .svelte.js context */
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';

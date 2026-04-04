@@ -276,7 +276,11 @@ export function initializeInbox(pubkey) {
   const calendarLoader = createTimelineLoader(
     timedPool,
     getCalendarRelays(),
-    { kinds: [31922, 31923], authors: [pubkey], since: Math.floor(Date.now() / 1000) - 15552000 },
+    /** @type {any} */ ({
+      kinds: [31922, 31923],
+      authors: [pubkey],
+      since: Math.floor(Date.now() / 1000) - 15552000
+    }),
     { eventStore, limit: 100 }
   );
 
@@ -313,7 +317,7 @@ export function loadRsvpNotifications(calendarEventCoords) {
   const rsvpLoader = createTimelineLoader(
     timedPool,
     getCalendarRelays(),
-    { kinds: [31925], '#a': calendarEventCoords, since },
+    /** @type {any} */ ({ kinds: [31925], '#a': calendarEventCoords, since }),
     { eventStore, limit: 50 }
   );
 
@@ -364,13 +368,17 @@ export async function markAsRead(type) {
   // Publish kind 30078 via EventFactory + AppDataBlueprint
   const factory = new EventFactory({ signer: manager.active.signer });
   try {
-    const signed = await factory.create(AppDataBlueprint, APP_DATA_D_TAG, updated, true);
+    const signed = /** @type {import('nostr-tools').NostrEvent} */ (
+      await factory.create(AppDataBlueprint, APP_DATA_D_TAG, updated, true)
+    );
     eventStore.add(signed);
     await publishEvent(signed);
   } catch {
     // Fallback: try without encryption (signer may not support NIP-44)
     try {
-      const signed = await factory.create(AppDataBlueprint, APP_DATA_D_TAG, updated, false);
+      const signed = /** @type {import('nostr-tools').NostrEvent} */ (
+        await factory.create(AppDataBlueprint, APP_DATA_D_TAG, updated, false)
+      );
       eventStore.add(signed);
       await publishEvent(signed);
     } catch (err) {

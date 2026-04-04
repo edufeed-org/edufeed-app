@@ -1,6 +1,7 @@
 <script>
   import HoverCard from '../shared/HoverCard.svelte';
 
+  /** @type {{ enterDelay?: number, leaveDelay?: number, position?: 'top' | 'bottom' }} */
   let { enterDelay = 150, leaveDelay = 300, position = 'bottom' } = $props();
 </script>
 

@@ -30,7 +30,12 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
 
 const { buildBadgeDisplayItems } = await import('../stores/badge-awards.svelte.js');
 
-/** Helper to build a kind 8 award event */
+/** Helper to build a kind 8 award event
+ * @param {string} id
+ * @param {string} issuerPubkey
+ * @param {string} badgeAddress
+ * @param {number} [created_at]
+ */
 function makeAward(id, issuerPubkey, badgeAddress, created_at = 1700000000) {
   return {
     id,
@@ -42,7 +47,13 @@ function makeAward(id, issuerPubkey, badgeAddress, created_at = 1700000000) {
   };
 }
 
-/** Helper to build a badge definition (from BadgeModel output) */
+/** Helper to build a badge definition (from BadgeModel output)
+ * @param {string} address
+ * @param {string} name
+ * @param {string} [description]
+ * @param {string} [image]
+ * @param {string} [thumb]
+ */
 function makeDefinition(address, name, description = '', image = '', thumb = '') {
   const [, pubkey, identifier] = address.split(':');
   return {

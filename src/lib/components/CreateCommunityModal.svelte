@@ -338,10 +338,10 @@
   }
 
   async function handleCreateDefaultForm() {
-    /** @type {import('applesauce-signers').Signer} */
+    /** @type {import('applesauce-signers').ISigner} */
     let signer;
     if (useCurrentKeypair) {
-      signer = manager.active.signer;
+      signer = /** @type {any} */ (manager.active).signer;
     } else {
       if (!userData.privateKey) throw new Error('Private key not generated yet');
       signer = new SimpleSigner(userData.privateKey);

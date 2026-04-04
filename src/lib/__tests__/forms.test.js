@@ -364,15 +364,15 @@ describe('forms — getDefaultMembershipForm', () => {
 
     expect(form.fields[0].id).toBe('name');
     expect(form.fields[0].type).toBe('text');
-    expect(form.fields[0].options.required).toBe(true);
+    expect(/** @type {any} */ (form.fields[0]).options.required).toBe(true);
 
     expect(form.fields[1].id).toBe('email');
     expect(form.fields[1].type).toBe('email');
-    expect(form.fields[1].options.required).toBe(true);
+    expect(/** @type {any} */ (form.fields[1]).options.required).toBe(true);
 
     expect(form.fields[2].id).toBe('motivation');
     expect(form.fields[2].type).toBe('textarea');
-    expect(form.fields[2].options.required).toBe(true);
+    expect(/** @type {any} */ (form.fields[2]).options.required).toBe(true);
   });
 
   it('roundtrips through buildFormTemplateTags + parseFormTemplate', () => {

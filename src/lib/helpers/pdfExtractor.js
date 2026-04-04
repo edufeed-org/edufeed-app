@@ -88,14 +88,14 @@ export async function extractPdfContent(buffer) {
   const textContent = pageTexts.join('\n\n');
 
   // Title from metadata or first text line
-  const metaTitle = meta?.info?.Title || meta?.metadata?.Title;
+  const metaTitle = meta?.info?.Title || /** @type {any} */ (meta?.metadata)?.Title;
   const firstLine =
     textContent
       .split('\n')
       .find((l) => l.trim().length > 0)
       ?.trim() || '';
   const title = metaTitle || firstLine;
-  const byline = meta?.info?.Author || meta?.metadata?.Author || null;
+  const byline = meta?.info?.Author || /** @type {any} */ (meta?.metadata)?.Author || null;
 
   return { title, content, textContent, byline, siteName: null };
 }
@@ -146,7 +146,7 @@ function detectHeaderFooterPatterns(allPageData, bodyHeight) {
     // Deduplicate per page
     const seen = new Set();
     for (const line of edgeLines) {
-      const text = line.items.map((i) => i.str).join('');
+      const text = line.items.map((/** @type {TextItem} */ i) => i.str).join('');
       const normalized = normalizeEdgeText(text);
       if (normalized.length < 3 || seen.has(normalized)) continue;
       seen.add(normalized);

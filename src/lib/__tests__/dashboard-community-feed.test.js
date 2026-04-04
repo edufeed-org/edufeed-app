@@ -2,7 +2,11 @@
 import { describe, it, expect } from 'vitest';
 import { filterUpcomingEvents, mergeCommunityActivity } from '../helpers/dashboardFilters.js';
 
-/** Helper to create a fake event */
+/** Helper to create a fake event
+ * @param {number} kind
+ * @param {number} created_at
+ * @param {string[][]} [tags]
+ */
 function makeEvent(kind, created_at, tags = []) {
   return { id: `id-${kind}-${created_at}`, kind, created_at, pubkey: 'abc', tags, content: '' };
 }

@@ -130,9 +130,9 @@
 
     const prefix = KIND_ROUTE_PREFIX[event.kind];
     if (prefix) {
-      goto(resolve(`${prefix}${naddr}`));
+      goto(resolve(/** @type {any} */ (`${prefix}${naddr}`)));
     } else {
-      goto(resolve(`/${naddr}`));
+      goto(resolve(/** @type {any} */ (`/${naddr}`)));
     }
   }
 </script>
@@ -168,10 +168,10 @@
       {#if activeFilter !== 'all' && FILTERS[activeFilter]?.ctaKey}
         <button
           class="btn gap-2 btn-sm btn-primary"
-          onclick={() => navigateToCreate(FILTERS[activeFilter].ctaKey)}
+          onclick={() => navigateToCreate(/** @type {string} */ (FILTERS[activeFilter].ctaKey))}
         >
           <PlusIcon class_="h-4 w-4" />
-          {CTA_LABELS[FILTERS[activeFilter].ctaKey]?.() ?? ''}
+          {CTA_LABELS[/** @type {string} */ (FILTERS[activeFilter].ctaKey)]?.() ?? ''}
         </button>
       {:else if activeFilter === 'all'}
         <div class="flex flex-wrap justify-center gap-2">

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * CommunityShare Component Tests
  *

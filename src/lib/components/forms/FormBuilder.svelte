@@ -25,6 +25,7 @@
   ];
 
   // existingEvent is only used for initial population — it won't change after mount
+  // svelte-ignore state_referenced_locally
   const existing = existingEvent ? parseFormTemplate(existingEvent) : null;
 
   let formName = $state(existing?.name || '');
@@ -350,7 +351,9 @@
                       class="btn px-1 btn-ghost btn-xs"
                       title="Add option"
                       onclick={(e) => {
-                        const input = e.currentTarget.previousElementSibling;
+                        const input = /** @type {HTMLInputElement | null} */ (
+                          e.currentTarget.previousElementSibling
+                        );
                         if (input?.value) {
                           field.selectOptions.push(input.value);
                           input.value = '';

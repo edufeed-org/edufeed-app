@@ -34,7 +34,7 @@ export async function createReaction(targetEvent, emoji) {
  * @param {string | import('applesauce-common/helpers').Emoji} emoji - Reaction emoji (string or {shortcode, url})
  * @param {Object} [options] - Publishing options
  * @param {string[]} [options.relays] - Custom relay list
- * @param {Function} [options.onStatusChange] - Callback for publish status updates
+ * @param {((status: import('$lib/services/publish-service.js').PublishStatus) => void)} [options.onStatusChange] - Callback for publish status updates
  * @returns {Promise<{success: boolean, event: any}>}
  */
 export async function publishReaction(targetEvent, emoji, options = {}) {
@@ -57,7 +57,7 @@ export async function publishReaction(targetEvent, emoji, options = {}) {
  * @param {any} reactionEvent - The reaction event to delete
  * @param {Object} [options] - Publishing options
  * @param {string[]} [options.relays] - Custom relay list
- * @param {Function} [options.onStatusChange] - Callback for publish status updates
+ * @param {((status: import('$lib/services/publish-service.js').PublishStatus) => void)} [options.onStatusChange] - Callback for publish status updates
  * @returns {Promise<{success: boolean, event: any}>}
  */
 export async function deleteReaction(reactionEvent, options = {}) {

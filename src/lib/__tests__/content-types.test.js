@@ -293,7 +293,14 @@ describe('filterEventsByAccess', () => {
       ]
     };
     const events = [
-      makeEvent({ id: 'shared1', kind: 30142, pubkey: 'outsideAuthor', _sharedBy: 'allowedSharer' })
+      makeEvent(
+        /** @type {any} */ ({
+          id: 'shared1',
+          kind: 30142,
+          pubkey: 'outsideAuthor',
+          _sharedBy: 'allowedSharer'
+        })
+      )
     ];
     const profileAccess = {
       getAllowedAuthors: () => ['allowedSharer', 'otherMember'],

@@ -14,13 +14,19 @@ const replaceableSubjects = new Map();
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    replaceable: vi.fn((kind, pubkey, identifier) => {
-      const key = `${kind}:${pubkey}:${identifier}`;
-      if (!replaceableSubjects.has(key)) {
-        replaceableSubjects.set(key, new Subject());
+    replaceable: vi.fn(
+      (
+        /** @type {number} */ kind,
+        /** @type {string} */ pubkey,
+        /** @type {string} */ identifier
+      ) => {
+        const key = `${kind}:${pubkey}:${identifier}`;
+        if (!replaceableSubjects.has(key)) {
+          replaceableSubjects.set(key, new Subject());
+        }
+        return replaceableSubjects.get(key);
       }
-      return replaceableSubjects.get(key);
-    }),
+    ),
     __replaceableSubjects: replaceableSubjects
   }
 }));
@@ -31,12 +37,19 @@ vi.mock('$lib/loaders/base.js', () => ({
   }))
 }));
 
-/** Helper to build a kind 10222 event */
+/** Helper to build a kind 10222 event
+ * @param {string[][]} tags
+ * @param {string} [pubkey]
+ */
 function makeCommunityEvent(tags, pubkey = 'community-pubkey') {
   return { kind: 10222, pubkey, tags, content: '', created_at: 1700000000 };
 }
 
-/** Helper to build a kind 30000 profile list event */
+/** Helper to build a kind 30000 profile list event
+ * @param {string} pubkey
+ * @param {string} identifier
+ * @param {string[]} memberPubkeys
+ */
 function makeProfileListEvent(pubkey, identifier, memberPubkeys) {
   return {
     kind: 30000,

@@ -17,7 +17,9 @@
 
   // Detect community context from route (convert npub param to hex for consistent matching)
   let communityPubkey = $derived(
-    $page.route.id?.startsWith('/c/') ? (npubToHex($page.params.pubkey) ?? '') : ''
+    $page.route.id?.startsWith('/c/')
+      ? (npubToHex(/** @type {string} */ ($page.params.pubkey)) ?? '')
+      : ''
   );
 
   function handleCreateEvent() {

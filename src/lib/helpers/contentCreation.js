@@ -30,7 +30,7 @@ export function navigateToCreate(key, { communityPubkey = '' } = {}) {
 
   if (target.type === 'route') {
     const query = communityPubkey ? `?community=${communityPubkey}` : '';
-    goto(resolve(`${target.path}${query}`));
+    goto(resolve(/** @type {any} */ (`${target.path}${query}`)));
   } else {
     modalStore.openModal(target.modal, { communityPubkey, ...target.props });
   }

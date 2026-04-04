@@ -90,7 +90,7 @@
           resolved.set(pointer.id, existing);
         } else {
           unresolvedEventPointers++;
-          const loaderSub = eventLoader(pointer.id, pointer.relays).subscribe();
+          const loaderSub = eventLoader({ id: pointer.id, relays: pointer.relays }).subscribe();
           subs.push(loaderSub);
         }
       } else if (pointer.kind !== undefined) {

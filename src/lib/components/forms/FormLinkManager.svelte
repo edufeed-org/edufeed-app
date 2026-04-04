@@ -182,10 +182,11 @@
     {:else}
       {#each gatedSections as section (section.name)}
         <div class="form-control">
-          <label class="label">
+          <label class="label" for="form-link-{section.name}">
             <span class="label-text font-medium">{section.name}</span>
           </label>
           <select
+            id="form-link-{section.name}"
             class="select-bordered select w-full"
             value={currentFormLinks.get(section.name) || ''}
             onchange={(e) =>

@@ -163,12 +163,12 @@ describe('createCommentLoaderForEvent', () => {
     const lastTwoCalls = calls.slice(-2);
 
     // One for NIP-22 (kind 1111, #E)
-    const nip22Call = lastTwoCalls.find((c) => c[2].kinds[0] === 1111);
+    const nip22Call = lastTwoCalls.find((/** @type {any} */ c) => c[2].kinds[0] === 1111);
     expect(nip22Call).toBeDefined();
     expect(nip22Call[2]['#E']).toEqual(['note123']);
 
     // One for NIP-10 (kind 1, #e)
-    const nip10Call = lastTwoCalls.find((c) => c[2].kinds[0] === 1);
+    const nip10Call = lastTwoCalls.find((/** @type {any} */ c) => c[2].kinds[0] === 1);
     expect(nip10Call).toBeDefined();
     expect(nip10Call[2]['#e']).toEqual(['note123']);
 

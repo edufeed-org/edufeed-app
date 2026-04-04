@@ -14,7 +14,12 @@
   import * as m from '$lib/paraglide/messages';
 
   /**
-   * @typedef {import('./ContentTypeFormConfig.svelte').ContentTypeConfig} ContentTypeConfig
+   * @typedef {Object} ContentTypeConfig
+   * @property {string} name
+   * @property {boolean} enabled
+   * @property {{read: string|null, write: string|null}} badges
+   * @property {string[]} relays
+   * @property {string} formRef
    */
 
   /**
@@ -38,7 +43,9 @@
 
   let isCreatingDefault = $state(false);
 
-  /** Content type display names from i18n */
+  /** Content type display names from i18n
+   * @type {Record<string, () => string>}
+   */
   const contentTypeLabels = {
     calendar: () => m.create_community_modal_content_calendar(),
     chat: () => m.create_community_modal_content_chat(),

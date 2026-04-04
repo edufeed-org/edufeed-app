@@ -58,7 +58,7 @@ export function isPinned(event, communityPubkey) {
  * @param {import('nostr-tools').NostrEvent} event
  */
 export async function pinEvent(event) {
-  if (isPinned(event, manager.active?.pubkey)) {
+  if (isPinned(event, /** @type {string} */ (manager.active?.pubkey))) {
     throw new Error('Already pinned');
   }
 

@@ -966,6 +966,7 @@
   }
 
   // Auto-search: debounce searchQuery → activeSearchQuery
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
   let searchDebounceTimer;
   $effect(() => {
     const text = searchQuery;

@@ -37,7 +37,7 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 }));
 
 vi.mock('$lib/services/publish-service.js', () => ({
-  publishEvent: (...args) => mockPublishEvent(...args)
+  publishEvent: (/** @type {any[]} */ ...args) => mockPublishEvent(...args)
 }));
 
 // Must import AFTER mocks
@@ -47,23 +47,25 @@ const { pinEvent, unpinEvent, isPinned, reorderPins } = await import(
 
 const communityPubkey = 'aa'.repeat(32);
 
-const regularEvent = {
+/** @type {import('nostr-tools').NostrEvent} */
+const regularEvent = /** @type {any} */ ({
   id: 'event123',
   kind: 1,
   pubkey: 'bb'.repeat(32),
   tags: [],
   content: 'hello',
   created_at: 1700000000
-};
+});
 
-const addressableEvent = {
+/** @type {import('nostr-tools').NostrEvent} */
+const addressableEvent = /** @type {any} */ ({
   id: 'event456',
   kind: 30023,
   pubkey: 'cc'.repeat(32),
   tags: [['d', 'my-article']],
   content: 'article content',
   created_at: 1700000000
-};
+});
 
 describe('pin-list-service', () => {
   beforeEach(() => {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * EventContextMenu Component Tests
  *

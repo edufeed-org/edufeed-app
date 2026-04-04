@@ -103,9 +103,9 @@ describe('getUpcomingEvents (HomeView derived logic)', () => {
     const result = getUpcomingEvents(items);
 
     expect(result).toHaveLength(3);
-    expect(result[0].tags.find((t) => t[0] === 'd')[1]).toBe('sooner');
-    expect(result[1].tags.find((t) => t[0] === 'd')[1]).toBe('mid');
-    expect(result[2].tags.find((t) => t[0] === 'd')[1]).toBe('later');
+    expect(/** @type {any} */ (result[0].tags.find((t) => t[0] === 'd'))[1]).toBe('sooner');
+    expect(/** @type {any} */ (result[1].tags.find((t) => t[0] === 'd'))[1]).toBe('mid');
+    expect(/** @type {any} */ (result[2].tags.find((t) => t[0] === 'd'))[1]).toBe('later');
   });
 
   it('limits to 5 events', () => {

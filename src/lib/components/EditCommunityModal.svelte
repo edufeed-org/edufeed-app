@@ -27,43 +27,44 @@
     blossomServers: /** @type {string[]} */ ([]),
     location: '',
     description: '',
-    contentTypes: {
-      calendar: {
-        name: 'Calendar',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      chat: {
-        name: 'Chat',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      articles: {
-        name: 'Articles',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      posts: {
-        name: 'Forum',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      wikis: {
-        name: 'Wikis',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      }
-    }
+    contentTypes:
+      /** @type {Record<string, { name: string, enabled: boolean, badges: { read: string|null, write: string|null }, relays: string[], formRef: string }>} */ ({
+        calendar: {
+          name: 'Calendar',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        chat: {
+          name: 'Chat',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        articles: {
+          name: 'Articles',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        posts: {
+          name: 'Forum',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        wikis: {
+          name: 'Wikis',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        }
+      })
   });
 
   // Toggle for access control configuration
@@ -121,6 +122,7 @@
     const description = descriptionTag ? descriptionTag[1] : '';
 
     // Parse content types with badges, relays, and formRef
+    /** @type {Record<string, { name: string, enabled: boolean, badges: { read: string|null, write: string|null }, relays: string[], formRef: string }>} */
     const contentTypes = {
       calendar: {
         name: 'Calendar',
@@ -366,7 +368,7 @@
   }
 
   async function handleCreateDefaultForm() {
-    const signed = await createDefaultMembershipForm(manager.active.signer);
+    const signed = await createDefaultMembershipForm(/** @type {any} */ (manager.active).signer);
     await publishEvent(signed);
     eventStore.add(signed);
     return `${signed.kind}:${signed.pubkey}:membership`;

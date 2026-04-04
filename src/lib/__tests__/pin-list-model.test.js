@@ -4,6 +4,7 @@ import { Subject } from 'rxjs';
 import { CommunityPinListModel } from '$lib/models/pin-list.js';
 
 // Helper to simulate eventStore.replaceable() returning an observable
+/** @param {any} event */
 function createMockEventStore(event) {
   return {
     replaceable: vi.fn(() => {

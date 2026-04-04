@@ -28,12 +28,12 @@
 
   const type = $derived(getNotificationType(event));
   const url = $derived(getNotificationUrl(event));
-  const href = $derived(url ? resolve(url) : undefined);
+  const href = $derived(url ? resolve(/** @type {any} */ (url)) : undefined);
   const displayName = $derived(profile?.display_name || profile?.name || event.pubkey.slice(0, 8));
 
   let wavedBack = $state(false);
 
-  /** @type {Record<string, typeof BellIcon>} */
+  /** @type {Record<string, any>} */
   const iconMap = {
     formRequest: ScrollTextIcon,
     formResponse: ScrollTextIcon,

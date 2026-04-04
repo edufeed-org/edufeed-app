@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ContactSearchInput Component Tests
  *

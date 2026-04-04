@@ -445,13 +445,13 @@
       <div class="scrollbar-none overflow-x-auto border-b border-base-300">
         <div role="tablist" class="tabs-bordered tabs flex-nowrap">
           {#each tabs as tab (tab.id)}
+            {@const Icon = tab.icon}
             <button
               role="tab"
               class="tab gap-2 whitespace-nowrap {activeTab === tab.id ? 'tab-active' : ''}"
               onclick={() => switchTab(tab.id)}
             >
-              <!-- eslint-disable-next-line svelte/valid-compile -- Svelte 5 dynamic component -->
-              <svelte:component this={tab.icon} class_="w-4 h-4" />
+              <Icon class_="w-4 h-4" />
               {tab.label()}
             </button>
           {/each}
@@ -669,10 +669,16 @@
                 ].toSorted((a, b) => b.ts - a.ts)}
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {#each sortedKeys as item (item.key)}
-                    {#if item.type === 'url' && urlMap.has(item.key)}
-                      <UrlCard group={urlMap.get(item.key)} {authorProfiles} />
-                    {:else if refMap.has(item.key)}
-                      <EventHighlightCard group={refMap.get(item.key)} {authorProfiles} />
+                    {#if item.type === 'url'}
+                      {@const group = urlMap.get(item.key)}
+                      {#if group}
+                        <UrlCard {group} {authorProfiles} />
+                      {/if}
+                    {:else}
+                      {@const group = refMap.get(item.key)}
+                      {#if group}
+                        <EventHighlightCard {group} {authorProfiles} />
+                      {/if}
                     {/if}
                   {/each}
                 </div>

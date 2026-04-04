@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * DashboardCommunities Component Tests
  *

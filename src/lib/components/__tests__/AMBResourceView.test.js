@@ -117,7 +117,7 @@ vi.mock('../shared/CommunityShare.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/components/icons', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = /** @type {any} */ (await importOriginal());
   return { ...actual };
 });
 

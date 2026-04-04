@@ -154,7 +154,7 @@ describe('isMigrationDone', () => {
     let loaderCompleted = false;
 
     // addressLoader completes after a delay and populates EventStore
-    addressLoader.mockImplementationOnce(() => {
+    /** @type {any} */ (addressLoader).mockImplementationOnce(() => {
       return new Observable((sub) => {
         setTimeout(() => {
           loaderCompleted = true;
@@ -164,20 +164,22 @@ describe('isMigrationDone', () => {
     });
 
     // EventStore returns the flag only after loader has completed
-    eventStore.replaceable.mockImplementationOnce((kind) => {
-      return new Observable((sub) => {
-        if (kind === 30078 && loaderCompleted) {
-          sub.next({
-            kind: 30078,
-            content: '"done"',
-            tags: [['d', 'ComCal/community-migration-v1']]
-          });
-        } else if (kind === 30078) {
-          sub.next(null);
-        }
-        sub.complete();
-      });
-    });
+    /** @type {any} */ (eventStore.replaceable).mockImplementationOnce(
+      (/** @type {number} */ kind) => {
+        return new Observable((sub) => {
+          if (kind === 30078 && loaderCompleted) {
+            sub.next({
+              kind: 30078,
+              content: '"done"',
+              tags: [['d', 'ComCal/community-migration-v1']]
+            });
+          } else if (kind === 30078) {
+            sub.next(null);
+          }
+          sub.complete();
+        });
+      }
+    );
 
     // Without awaiting the loader, this would return false (race condition)
     expect(await isMigrationDone('abc123')).toBe(true);
@@ -187,12 +189,14 @@ describe('isMigrationDone', () => {
     const { addressLoader } = await import('$lib/loaders/base.js');
     const { getWriteRelays } = await import('$lib/services/relay-service.svelte.js');
 
-    getWriteRelays.mockResolvedValueOnce(['wss://user-write.relay']);
+    /** @type {any} */ (getWriteRelays).mockResolvedValueOnce(['wss://user-write.relay']);
     mockFlagEvent = null;
 
     await isMigrationDone('abc123');
 
-    const lastCall = addressLoader.mock.calls[addressLoader.mock.calls.length - 1][0];
+    const lastCall = /** @type {any} */ (addressLoader).mock.calls[
+      /** @type {any} */ (addressLoader).mock.calls.length - 1
+    ][0];
     expect(lastCall.relays).toContain('wss://lookup.relay');
     expect(lastCall.relays).toContain('wss://user-write.relay');
   });

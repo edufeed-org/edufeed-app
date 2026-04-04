@@ -458,6 +458,12 @@
 
 <!-- Close emoji picker when clicking outside -->
 {#if showEmojiPicker}
-  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-  <div class="fixed inset-0 z-[9]" onclick={() => (showEmojiPicker = false)}></div>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-[9]"
+    onclick={() => (showEmojiPicker = false)}
+    onkeydown={(e) => {
+      if (e.key === 'Escape') showEmojiPicker = false;
+    }}
+  ></div>
 {/if}

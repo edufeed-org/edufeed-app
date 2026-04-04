@@ -11,6 +11,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   profile_badges_view_all: () => 'View all'
 }));
 
+/** @param {string} id @param {string} [name] @param {string} [thumb] */
 function makeBadge(id, name = 'Badge', thumb = '') {
   return {
     id,

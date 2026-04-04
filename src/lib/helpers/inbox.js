@@ -33,7 +33,7 @@ export function getNotificationType(event) {
 export function isUnread(event, readMarkers) {
   if (!readMarkers) return true;
   const type = getNotificationType(event);
-  const marker = (type && readMarkers[type]) ?? readMarkers.global ?? 0;
+  const marker = /** @type {number} */ ((type && readMarkers[type]) ?? readMarkers.global ?? 0);
   return event.created_at > marker;
 }
 

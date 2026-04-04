@@ -8,13 +8,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Subject } from 'rxjs';
 
 // Track all calls to the base loader
+/** @type {{event: any, relays: any}[]} */
 let baseLoaderCalls = [];
+/** @type {import('rxjs').Subject<any>[]} */
 let baseLoaderSubjects = [];
 
 vi.mock('applesauce-loaders/loaders', () => ({
   createReactionsLoader: vi.fn(() => {
     // Return a function that acts as the base loader
-    return (event, relays) => {
+    return (/** @type {any} */ event, /** @type {any} */ relays) => {
       const subject = new Subject();
       baseLoaderCalls.push({ event, relays });
       baseLoaderSubjects.push(subject);
@@ -31,7 +33,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 // Mock getReadRelays — resolved value controlled per test
 let mockGetReadRelays = vi.fn();
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  getReadRelays: (...args) => mockGetReadRelays(...args)
+  getReadRelays: (/** @type {any[]} */ ...args) => mockGetReadRelays(...args)
 }));
 
 describe('reactionsLoader wrapper', () => {
@@ -46,7 +48,7 @@ describe('reactionsLoader wrapper', () => {
 
     const { reactionsLoader } = await import('$lib/loaders/reactions.js');
 
-    const event = { id: 'evt1', pubkey: 'author1', tags: [] };
+    const event = /** @type {any} */ ({ id: 'evt1', pubkey: 'author1', tags: [] });
     const relays = ['wss://seen.relay'];
 
     reactionsLoader(event, relays).subscribe();
@@ -60,7 +62,7 @@ describe('reactionsLoader wrapper', () => {
 
     const { reactionsLoader } = await import('$lib/loaders/reactions.js');
 
-    const event = { id: 'evt2', pubkey: 'author2', tags: [] };
+    const event = /** @type {any} */ ({ id: 'evt2', pubkey: 'author2', tags: [] });
     reactionsLoader(event).subscribe();
 
     // Wait for async getReadRelays to resolve
@@ -80,10 +82,11 @@ describe('reactionsLoader wrapper', () => {
 
     const { reactionsLoader } = await import('$lib/loaders/reactions.js');
 
-    const event = { id: 'evt3', pubkey: 'author3', tags: [] };
+    const event = /** @type {any} */ ({ id: 'evt3', pubkey: 'author3', tags: [] });
+    /** @type {any[]} */
     const received = [];
 
-    reactionsLoader(event).subscribe((evt) => received.push(evt));
+    reactionsLoader(event).subscribe((/** @type {any} */ evt) => received.push(evt));
 
     // Wait for inbox loader to be created
     await vi.waitFor(() => {
@@ -103,7 +106,7 @@ describe('reactionsLoader wrapper', () => {
 
     const { reactionsLoader } = await import('$lib/loaders/reactions.js');
 
-    const event = { id: 'evt4', pubkey: 'author4', tags: [] };
+    const event = /** @type {any} */ ({ id: 'evt4', pubkey: 'author4', tags: [] });
     reactionsLoader(event).subscribe();
 
     // Give async code time to resolve
@@ -119,10 +122,11 @@ describe('reactionsLoader wrapper', () => {
 
     const { reactionsLoader } = await import('$lib/loaders/reactions.js');
 
-    const event = { id: 'evt5', pubkey: 'author5', tags: [] };
+    const event = /** @type {any} */ ({ id: 'evt5', pubkey: 'author5', tags: [] });
+    /** @type {any[]} */
     const received = [];
 
-    reactionsLoader(event).subscribe((evt) => received.push(evt));
+    reactionsLoader(event).subscribe((/** @type {any} */ evt) => received.push(evt));
 
     // Give async code time to reject
     await new Promise((r) => setTimeout(r, 50));

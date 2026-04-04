@@ -7,11 +7,13 @@ import { getNip10References } from 'applesauce-common/helpers';
  * The filter: `!refs?.reply?.e && !refs?.root?.e` keeps only standalone notes.
  */
 
+/** @param {import('nostr-tools').NostrEvent} event */
 function isStandaloneNote(event) {
   const refs = getNip10References(event);
   return !refs?.reply?.e && !refs?.root?.e;
 }
 
+/** @param {string[][]} [tags] */
 function makeEvent(tags = []) {
   return {
     id: 'abc123',

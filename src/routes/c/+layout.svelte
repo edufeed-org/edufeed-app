@@ -32,7 +32,7 @@
   function handleCommunitySelect(pubkey) {
     const npub = hexToNpub(pubkey);
     if (npub) {
-      goto(resolve(buildCommunityPath(npub, $page.url.searchParams)));
+      goto(resolve(/** @type {any} */ (buildCommunityPath(npub, $page.url.searchParams))));
     }
     leftDrawerOpen = false;
   }

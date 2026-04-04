@@ -295,7 +295,7 @@ export function getDefaultMembershipForm() {
 
 /**
  * Create and sign a default membership form template event (kind 30168).
- * @param {import('applesauce-signers').Signer} signer
+ * @param {import('applesauce-signers').ISigner} signer
  * @returns {Promise<import('nostr-tools').NostrEvent>}
  */
 export async function createDefaultMembershipForm(signer) {

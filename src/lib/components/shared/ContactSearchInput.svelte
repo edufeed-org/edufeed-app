@@ -9,7 +9,7 @@
 
   /**
    * @type {{
-   *   value: string,
+   *   value?: string,
    *   placeholder?: string,
    *   disabled?: boolean,
    *   onselect?: (contact: import('$lib/stores/contacts.svelte.js').EnrichedContact) => void,

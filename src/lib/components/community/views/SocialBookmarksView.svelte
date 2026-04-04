@@ -44,10 +44,14 @@
       {#each sortedKeys as item (item.key)}
         {#if item.type === 'url'}
           {@const group = urlMap.get(item.key)}
-          <UrlCard {group} {authorProfiles} {communityPubkey} />
+          {#if group}
+            <UrlCard {group} {authorProfiles} {communityPubkey} />
+          {/if}
         {:else}
           {@const group = refMap.get(item.key)}
-          <EventHighlightCard {group} {authorProfiles} {communityPubkey} />
+          {#if group}
+            <EventHighlightCard {group} {authorProfiles} {communityPubkey} />
+          {/if}
         {/if}
       {/each}
     </div>
