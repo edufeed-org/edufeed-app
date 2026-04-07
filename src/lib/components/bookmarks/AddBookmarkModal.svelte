@@ -1,4 +1,5 @@
 <script>
+  import * as m from '$lib/paraglide/messages';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { CloseIcon } from '$lib/components/icons';
@@ -127,7 +128,7 @@
 
     const account = manager.active;
     if (!account) {
-      error = 'Please log in first';
+      error = m.bookmark_modal_error_login();
       return;
     }
 
@@ -135,12 +136,12 @@
     const type = detectInputType(trimmedInput);
 
     if (type === 'invalid') {
-      error = 'Please enter a valid URL or naddr';
+      error = m.bookmark_modal_error_invalid_input();
       return;
     }
 
     if (selectedCommunityIds.length === 0) {
-      error = 'Please select at least one community';
+      error = m.bookmark_modal_error_no_community();
       return;
     }
 
@@ -156,7 +157,7 @@
       } else if (type === 'naddr') {
         naddrData = decodeNaddr(trimmedInput) || undefined;
         if (!naddrData) {
-          error = 'Failed to decode naddr';
+          error = m.bookmark_modal_error_decode_naddr();
           isSubmitting = false;
           return;
         }
@@ -186,7 +187,7 @@
         }
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to create bookmark';
+      error = err instanceof Error ? err.message : m.bookmark_modal_error_create();
     } finally {
       isSubmitting = false;
     }
@@ -200,7 +201,7 @@
 <dialog id={modalId} class="modal">
   <div class="modal-box w-11/12 max-w-lg">
     <div class="mb-4 flex items-center justify-between">
-      <h3 class="text-lg font-bold">Add Bookmark</h3>
+      <h3 class="text-lg font-bold">{m.bookmark_modal_title()}</h3>
       <button class="btn btn-circle btn-ghost btn-sm" onclick={handleClose} aria-label="Close">
         <CloseIcon class_="h-5 w-5" />
       </button>
@@ -215,7 +216,7 @@
       <!-- URL / naddr input -->
       <div class="form-control mb-3">
         <label class="label" for="bookmark-input">
-          <span class="label-text">URL or naddr</span>
+          <span class="label-text">{m.bookmark_modal_input_label()}</span>
         </label>
         <input
           id="bookmark-input"
@@ -223,24 +224,24 @@
           class="input-bordered input w-full"
           class:input-error={input.trim() && inputType === 'invalid'}
           class:input-success={inputType === 'url' || inputType === 'naddr'}
-          placeholder="https://example.com or naddr1..."
+          placeholder={m.bookmark_modal_input_placeholder()}
           bind:value={input}
         />
         {#if isFetching}
-          <span class="label-text-alt mt-1 text-info">Fetching info...</span>
+          <span class="label-text-alt mt-1 text-info">{m.bookmark_modal_fetching()}</span>
         {/if}
       </div>
 
       <!-- Title -->
       <div class="form-control mb-3">
         <label class="label" for="bookmark-title">
-          <span class="label-text">Title</span>
+          <span class="label-text">{m.bookmark_modal_title_label()}</span>
         </label>
         <input
           id="bookmark-title"
           type="text"
           class="input-bordered input w-full"
-          placeholder="Page title"
+          placeholder={m.bookmark_modal_title_placeholder()}
           bind:value={title}
           oninput={() => {
             userEditedTitle = true;
@@ -251,13 +252,13 @@
       <!-- Description -->
       <div class="form-control mb-3">
         <label class="label" for="bookmark-description">
-          <span class="label-text">Comment</span>
+          <span class="label-text">{m.bookmark_modal_comment_label()}</span>
         </label>
         <textarea
           id="bookmark-description"
           class="textarea-bordered textarea w-full"
           rows="3"
-          placeholder="Add a note (optional)"
+          placeholder={m.bookmark_modal_comment_placeholder()}
           bind:value={description}
         ></textarea>
       </div>
@@ -266,7 +267,7 @@
       <CommunitySelector
         {communities}
         bind:selectedCommunityIds
-        title="Share to Communities"
+        title={m.bookmark_modal_community_label()}
         showSelectAll={true}
       />
 
@@ -277,7 +278,7 @@
 
       <!-- Actions -->
       <div class="modal-action">
-        <button type="button" class="btn" onclick={handleClose}>Cancel</button>
+        <button type="button" class="btn" onclick={handleClose}>{m.common_cancel()}</button>
         <button
           type="submit"
           class="btn btn-primary"
@@ -286,7 +287,7 @@
           {#if isSubmitting}
             <span class="loading loading-sm loading-spinner"></span>
           {/if}
-          Add Bookmark
+          {m.bookmark_modal_submit()}
         </button>
       </div>
     </form>

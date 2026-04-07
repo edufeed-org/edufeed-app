@@ -21,7 +21,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   skos_dropdown_search: () => 'Search...',
   skos_dropdown_no_results: () => 'No results found',
   skos_dropdown_expand: () => 'Expand',
-  skos_dropdown_collapse: () => 'Collapse'
+  skos_dropdown_collapse: () => 'Collapse',
+  skos_loading: () => 'Loading...',
+  skos_maximum_reached: () => 'Maximum reached',
+  skos_selected: (/** @type {{ count: number }} */ { count }) => `${count} selected`
 }));
 
 /** Flat vocabulary (like learningResourceType) */

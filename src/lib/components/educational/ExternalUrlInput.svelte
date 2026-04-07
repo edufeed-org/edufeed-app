@@ -5,14 +5,10 @@
 
 <script>
   import { CloseIcon, PlusIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ urls?: string[], label?: string, helpText?: string, onchange?: (urls: string[]) => void }} */
-  let {
-    urls = $bindable([]),
-    label = 'External References',
-    helpText = '',
-    onchange = () => {}
-  } = $props();
+  let { urls = $bindable([]), label = '', helpText = '', onchange = () => {} } = $props();
 
   let newUrl = $state('');
 
@@ -78,9 +74,9 @@
 
 <div class="external-url-input form-control w-full">
   <!-- Label -->
-  {#if label}
+  {#if label || m.external_url_label()}
     <div class="label">
-      <span class="label-text font-medium">{label}</span>
+      <span class="label-text font-medium">{label || m.external_url_label()}</span>
     </div>
   {/if}
 
@@ -117,7 +113,7 @@
             type="button"
             class="btn text-error btn-ghost btn-xs"
             onclick={() => removeUrl(index)}
-            aria-label="Remove URL"
+            aria-label={m.aria_remove_url()}
           >
             <CloseIcon class_="w-4 h-4" />
           </button>
@@ -134,11 +130,11 @@
       bind:value={newUrl}
       onkeydown={handleKeydown}
       onblur={handleBlur}
-      placeholder="https://youtube.com/... or other URL"
+      placeholder={m.external_url_placeholder()}
     />
     <button type="button" class="btn btn-outline btn-sm" onclick={addUrl} disabled={!canAdd}>
       <PlusIcon class_="w-4 h-4" />
-      Add
+      {m.external_url_add()}
     </button>
   </div>
 

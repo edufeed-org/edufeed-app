@@ -71,7 +71,7 @@
     <!-- Header with actions -->
     <div class="mb-4 flex items-center justify-between">
       <h1 class="text-xl font-bold">
-        {formEvent.tags.find((t) => t[0] === 'name')?.[1] || 'Untitled Form'}
+        {formEvent.tags.find((t) => t[0] === 'name')?.[1] || m.forms_untitled()}
       </h1>
       <div class="flex gap-2">
         {#if isOwner}
@@ -80,10 +80,11 @@
             {m.send_form_button()}
           </button>
           <a href="/forms/{data.naddr}/edit" class="btn gap-1 btn-ghost btn-sm">
-            <EditIcon class_="w-4 h-4" /> Edit
+            <EditIcon class_="w-4 h-4" />
+            {m.forms_edit()}
           </a>
         {/if}
-        <a href="/forms/{data.naddr}/respond" class="btn btn-sm btn-primary">Fill Form</a>
+        <a href="/forms/{data.naddr}/respond" class="btn btn-sm btn-primary">{m.forms_fill()}</a>
         <EventContextMenu event={formEvent} />
       </div>
     </div>
@@ -96,7 +97,7 @@
         class:tab-active={activeTab === 'preview'}
         onclick={() => (activeTab = 'preview')}
       >
-        Preview
+        {m.forms_preview_tab()}
       </button>
       {#if isOwner}
         <button
@@ -105,7 +106,7 @@
           class:tab-active={activeTab === 'responses'}
           onclick={() => (activeTab = 'responses')}
         >
-          Responses
+          {m.forms_responses_tab()}
         </button>
       {/if}
     </div>

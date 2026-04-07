@@ -12,6 +12,7 @@
   import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
   import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
+  import * as m from '$lib/paraglide/messages';
 
   /**
    * @typedef {Object} UploadedFile
@@ -28,7 +29,7 @@
     multiple = true,
     accept = '*/*',
     maxSize = runtimeConfig.blossom.maxFileSize,
-    label = 'Upload Files',
+    label = '',
     helpText = '',
     disabled = false,
     required = false,
@@ -279,10 +280,10 @@
 
 <div class="blossom-uploader form-control w-full">
   <!-- Label -->
-  {#if label}
+  {#if label || m.blossom_upload_label()}
     <div class="label">
       <span class="label-text font-medium">
-        {label}
+        {label || m.blossom_upload_label()}
         {#if required}
           <span class="text-error">*</span>
         {/if}
@@ -328,7 +329,9 @@
           <progress class="progress w-full progress-primary" value={uploadProgress} max="100"
           ></progress>
         </div>
-        <p class="text-sm text-base-content/70">Uploading... {uploadProgress}%</p>
+        <p class="text-sm text-base-content/70">
+          {m.blossom_uploading({ progress: String(uploadProgress) })}
+        </p>
       </div>
     {:else}
       <!-- Upload Prompt -->
@@ -337,10 +340,10 @@
           <PlusIcon class_="w-6 h-6 text-base-content/50" />
         </div>
         <p class="font-medium text-base-content">
-          {isDragging ? 'Drop files here' : 'Click or drag files to upload'}
+          {isDragging ? m.blossom_drop_files() : m.blossom_click_upload()}
         </p>
         <p class="text-sm text-base-content/60">
-          Maximum file size: {formatFileSize(maxSize)}
+          {m.blossom_max_size({ size: formatFileSize(maxSize) })}
         </p>
       </div>
     {/if}
@@ -360,7 +363,7 @@
   {#if files.length > 0}
     <div class="mt-3 space-y-2">
       <div class="text-sm font-medium text-base-content/70">
-        Uploaded files ({files.length})
+        {m.blossom_uploaded_files({ count: String(files.length) })}
       </div>
       {#each files as file, index (file.url)}
         <div class="flex items-center gap-3 rounded-lg bg-base-200 p-3">
@@ -379,14 +382,14 @@
             class="btn btn-ghost btn-xs"
             onclick={stopPropagation}
           >
-            View
+            {m.blossom_view()}
           </a>
           <!-- eslint-enable svelte/no-navigation-without-resolve -->
           <button
             type="button"
             class="btn text-error btn-ghost btn-xs"
             onclick={handleRemoveFile(index)}
-            aria-label="Remove file"
+            aria-label={m.aria_remove_file()}
           >
             <CloseIcon class_="w-4 h-4" />
           </button>

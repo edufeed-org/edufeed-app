@@ -36,6 +36,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
   import EventManagementActions from '$lib/components/calendar/EventManagementActions.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {import('./$types').PageProps} */
   let { data } = $props();
@@ -207,7 +208,7 @@
               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
             ></path>
           </svg>
-          Your Event
+          {m.calendar_detail_your_event()}
         </div>
       </div>
     {/if}
@@ -250,14 +251,14 @@
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <CalendarIcon class_="w-6 h-6" />
-          Date & Time
+          {m.calendar_detail_date_time()}
         </h2>
 
         {#if isAllDay}
           <div class="mt-4 space-y-2">
             <div class="flex items-center gap-3">
               <CalendarIcon class_="w-5 h-5 text-info" />
-              <span class="font-semibold">All Day Event</span>
+              <span class="font-semibold">{m.calendar_detail_all_day()}</span>
             </div>
             <div class="ml-8 text-base-content/70">
               {#if isMultiDay && endDate && startDate}
@@ -273,7 +274,7 @@
               <div class="flex items-start gap-3">
                 <ClockIcon class_="w-5 h-5 text-primary mt-0.5" />
                 <div>
-                  <div class="font-semibold">Start</div>
+                  <div class="font-semibold">{m.calendar_detail_start()}</div>
                   <div class="text-base-content/80">
                     {formatCalendarDate(startDate, 'long')} at {formatCalendarDate(
                       startDate,
@@ -290,7 +291,7 @@
               <div class="flex items-start gap-3">
                 <ClockIcon class_="w-5 h-5 text-secondary mt-0.5" />
                 <div>
-                  <div class="font-semibold">End</div>
+                  <div class="font-semibold">{m.calendar_detail_end()}</div>
                   <div class="text-base-content/80">
                     {formatCalendarDate(endDate, 'long')} at {formatCalendarDate(endDate, 'time')}
                     {#if event.endTimezone}
@@ -310,7 +311,7 @@
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <UserIcon class_="w-6 h-6" />
-          Event Author
+          {m.calendar_detail_author()}
         </h2>
         <div class="mt-4">
           <ProfileCard pubkey={event.pubkey} size="lg" class="bg-base-100" />
@@ -324,7 +325,7 @@
         <div class="card-body">
           <h2 class="card-title text-2xl">
             <LocationIcon class_="w-6 h-6" />
-            Location
+            {m.calendar_event_location()}
           </h2>
           <div class="mt-4">
             <div class="flex items-start gap-3">
@@ -347,7 +348,7 @@
     {#if event.hashtags && event.hashtags.length > 0}
       <div class="card mb-8 bg-base-200 shadow-lg">
         <div class="card-body">
-          <h2 class="card-title text-2xl">Tags</h2>
+          <h2 class="card-title text-2xl">{m.calendar_detail_tags()}</h2>
           <div class="mt-4">
             <EventTags tags={event.hashtags} size="lg" />
           </div>
@@ -359,7 +360,7 @@
     {#if event.references && event.references.length > 0}
       <div class="card mb-8 bg-base-200 shadow-lg">
         <div class="card-body">
-          <h2 class="card-title text-2xl">Further Links</h2>
+          <h2 class="card-title text-2xl">{m.calendar_detail_links()}</h2>
           <div class="mt-4 space-y-2">
             {#each event.references as reference (reference)}
               <!-- eslint-disable svelte/no-navigation-without-resolve -- external: event reference URL -->
@@ -382,11 +383,11 @@
     <!-- Featured in Calendars -->
     <div class="card mb-8 bg-base-200 shadow-lg">
       <div class="card-body">
-        <h2 class="card-title text-2xl">Featured in Calendars</h2>
+        <h2 class="card-title text-2xl">{m.calendar_detail_featured_calendars()}</h2>
         {#if isLoadingCalendars}
           <div class="mt-4 flex items-center gap-2">
             <span class="loading loading-sm loading-spinner"></span>
-            <span class="text-base-content/70">Loading calendars...</span>
+            <span class="text-base-content/70">{m.calendar_detail_loading_calendars()}</span>
           </div>
         {:else if featuredCalendars.length > 0}
           <div class="mt-4 space-y-2">
@@ -404,7 +405,7 @@
           </div>
         {:else}
           <div class="mt-4 text-center text-base-content/60">
-            This event is not featured in any calendars yet
+            {m.calendar_detail_no_calendars()}
           </div>
         {/if}
       </div>
@@ -448,7 +449,7 @@
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <UserIcon class_="w-6 h-6" />
-          RSVP to Event
+          {m.calendar_detail_rsvp_title()}
         </h2>
         <div class="mt-4">
           <InlineRsvp
@@ -459,7 +460,7 @@
             compact={false}
           />
           <p class="mt-3 text-sm text-base-content/60">
-            Let the organizer and other attendees know if you're coming
+            {m.calendar_detail_rsvp_help()}
           </p>
         </div>
       </div>
@@ -484,7 +485,7 @@
     {#if rawEvent}
       <div class="card mb-8 bg-base-200 shadow-lg">
         <div class="card-body">
-          <h2 class="card-title text-2xl">Reactions</h2>
+          <h2 class="card-title text-2xl">{m.calendar_detail_reactions()}</h2>
           <div class="mt-4">
             <ReactionBar event={rawEvent} relays={getCalendarRelays()} />
           </div>
@@ -500,7 +501,7 @@
 {:else}
   <div class="container mx-auto px-4 py-8">
     <div class="alert alert-error">
-      <span>Event not found</span>
+      <span>{m.calendar_detail_not_found()}</span>
     </div>
   </div>
 {/if}

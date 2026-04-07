@@ -10,6 +10,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { goto } from '$app/navigation';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: { topic: string } }} */
   let { data } = $props();
@@ -93,9 +94,9 @@
     </div>
   {:else if status === 'not-found'}
     <div class="mx-auto max-w-2xl py-16 text-center">
-      <h1 class="mb-4 text-3xl font-bold text-base-content">Article Not Found</h1>
+      <h1 class="mb-4 text-3xl font-bold text-base-content">{m.route_article_not_found()}</h1>
       <p class="text-base-content/70">
-        No wiki article found for topic "<strong>{decodeURIComponent(data.topic)}</strong>".
+        {m.route_article_not_found_detail({ topic: decodeURIComponent(data.topic) })}
       </p>
     </div>
   {:else if status === 'multiple'}
@@ -103,7 +104,7 @@
       <h1 class="mb-6 text-3xl font-bold text-base-content">
         {decodeURIComponent(data.topic)}
       </h1>
-      <p class="mb-6 text-base-content/70">Multiple articles found for this topic. Choose one:</p>
+      <p class="mb-6 text-base-content/70">{m.route_article_multiple()}</p>
       <div class="flex flex-col gap-3">
         {#each results as event (event.id)}
           {@const title = getTagValue(event, 'title') || getTagValue(event, 'd') || 'Untitled'}

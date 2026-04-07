@@ -31,6 +31,16 @@ vi.mock('$app/stores', () => {
 });
 
 vi.mock('$lib/paraglide/messages', () => ({
+  fab_open_menu: () => 'Open actions menu',
+  fab_create_event: () => 'Create Event',
+  fab_create_event_aria: () => 'Create new event',
+  fab_create_calendar: () => 'Create Calendar',
+  fab_create_calendar_aria: () => 'Create new calendar',
+  fab_create_resource: () => 'Create Learning Content',
+  fab_create_resource_aria: () => 'Create new learning content',
+  fab_add_bookmark: () => 'Add Bookmark',
+  fab_share_existing: () => 'Share Existing Content',
+  fab_share_existing_aria: () => 'Share existing content with community',
   article_fab_write: () => 'Write Article',
   wiki_fab_write: () => 'Write Wiki',
   fab_create_form: () => 'Create Form'

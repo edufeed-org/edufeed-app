@@ -32,7 +32,7 @@
 
   async function handleLeaveClick() {
     if (!activeUser) {
-      showToast('Please login to leave communities', 'error');
+      showToast(m.toast_login_to_leave(), 'error');
       return;
     }
 
@@ -42,15 +42,15 @@
     try {
       const result = await leaveCommunity(communityId);
       if (result.success) {
-        showToast('Unfollowed community', 'success');
+        showToast(m.toast_community_unfollowed(), 'success');
         // Redirect to discover page after leaving
         await goto(/** @type {string} */ (resolve('/discover')));
       } else {
-        showToast(result.error || 'Failed to leave community', 'error');
+        showToast(result.error || m.toast_community_leave_failed(), 'error');
       }
     } catch (error) {
       console.error('Error leaving community:', error);
-      showToast('An error occurred', 'error');
+      showToast(m.toast_generic_error(), 'error');
     } finally {
       isLeaving = false;
     }
@@ -81,20 +81,18 @@
           <div class="card bg-base-200 shadow-xl">
             <div class="card-body">
               <h2 class="mb-4 card-title">
-                {m.community_views_settings_admin_title?.() || 'Admin Settings'}
+                {m.community_views_settings_admin_title()}
               </h2>
               <p class="mb-4 text-sm text-base-content/70">
-                {m.community_views_settings_admin_description?.() ||
-                  'As the community owner, you can edit community settings.'}
+                {m.community_views_settings_admin_description()}
               </p>
 
               <div class="space-y-3">
                 <button onclick={handleEditCommunity} class="btn w-full btn-primary">
-                  {m.community_views_settings_edit_button?.() || 'Edit Community Settings'}
+                  {m.community_views_settings_edit_button()}
                 </button>
                 <p class="text-center text-xs text-base-content/60">
-                  {m.community_views_settings_edit_help?.() ||
-                    'Configure relays, content types, badge requirements, and more.'}
+                  {m.community_views_settings_edit_help()}
                 </p>
               </div>
             </div>

@@ -10,6 +10,7 @@
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { untrack } from 'svelte';
+  import * as m from '$lib/paraglide/messages';
 
   let { communityEvent, communityPubkey } = $props();
 
@@ -163,7 +164,7 @@
       }
     } catch (err) {
       console.error('Failed to save form link:', err);
-      showToast('Failed to save form link', 'error');
+      showToast(m.toast_form_save_failed(), 'error');
     } finally {
       saving = false;
     }
@@ -172,13 +173,13 @@
 
 <div class="card bg-base-200 shadow-xl">
   <div class="card-body">
-    <h2 class="card-title">Application Forms</h2>
+    <h2 class="card-title">{m.form_link_title()}</h2>
     <p class="text-sm text-base-content/70">
-      Link forms to gated content sections. Members apply by filling out the form.
+      {m.form_link_description()}
     </p>
 
     {#if gatedSections.length === 0}
-      <p class="text-sm text-base-content/50">No profile-list-gated sections configured.</p>
+      <p class="text-sm text-base-content/50">{m.form_link_none_configured()}</p>
     {:else}
       {#each gatedSections as section (section.name)}
         <div class="form-control">
@@ -193,7 +194,7 @@
               handleFormSelect(section, /** @type {HTMLSelectElement} */ (e.target).value)}
             disabled={saving}
           >
-            <option value="">No form linked</option>
+            <option value="">{m.form_link_no_form()}</option>
             {#each formTemplates as template (template.id)}
               {@const parsed = parseFormTemplate(template)}
               <option value="{template.kind}:{template.pubkey}:{parsed.dTag}">
@@ -207,7 +208,7 @@
 
     {#if formTemplates.length === 0 && gatedSections.length > 0}
       <div class="mt-2 alert alert-info">
-        <span>No form templates found. Create one at /forms/new first.</span>
+        <span>{m.form_link_no_templates()}</span>
       </div>
     {/if}
   </div>

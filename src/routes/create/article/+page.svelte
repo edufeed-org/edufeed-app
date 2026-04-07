@@ -46,13 +46,13 @@
       try {
         const decoded = nip19.decode(data.editNaddr);
         if (decoded.type !== 'naddr') {
-          editError = 'Invalid address format';
+          editError = m.create_edit_error_invalid_address();
           return;
         }
 
         const event = await fetchEventById(data.editNaddr);
         if (!event) {
-          editError = 'Article not found';
+          editError = m.create_edit_error_article_not_found();
           return;
         }
 
@@ -70,7 +70,7 @@
             .map((/** @type {any} */ t) => t[1]) || [];
       } catch (err) {
         console.error('Error loading article for edit:', err);
-        editError = 'Failed to load article';
+        editError = m.create_edit_error_article_load();
       } finally {
         isLoadingEdit = false;
       }
@@ -120,7 +120,7 @@
       }
     } catch (err) {
       console.error('Publish failed:', err);
-      validationError = err instanceof Error ? err.message : 'Publishing failed';
+      validationError = err instanceof Error ? err.message : m.toast_publish_failed();
     } finally {
       isPublishing = false;
     }
@@ -137,7 +137,7 @@
   <!-- Top bar -->
   <div class="border-b border-base-300 bg-base-100">
     <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-      <button class="btn btn-ghost btn-sm" onclick={handleBack} aria-label="Go back">
+      <button class="btn btn-ghost btn-sm" onclick={handleBack} aria-label={m.aria_go_back()}>
         <ChevronLeftIcon class_="w-5 h-5" />
       </button>
       <h1 class="text-lg font-semibold text-base-content">

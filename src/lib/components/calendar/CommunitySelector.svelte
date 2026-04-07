@@ -6,6 +6,7 @@
 <script>
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
+  import * as m from '$lib/paraglide/messages';
 
   /**
    * @typedef {Object} Community
@@ -64,7 +65,7 @@
           onclick={selectAllCommunities}
           disabled={selectedCommunityIds.length === communities.length}
         >
-          Select All
+          {m.community_selector_select_all()}
         </button>
         <button
           type="button"
@@ -72,7 +73,7 @@
           onclick={deselectAllCommunities}
           disabled={selectedCommunityIds.length === 0}
         >
-          Deselect All
+          {m.community_selector_deselect_all()}
         </button>
       </div>
     {/if}
@@ -99,23 +100,26 @@
           </span>
         </div>
         {#if isAlreadyShared && !isSelected}
-          <span class="text-xs font-medium text-success">(Shared - click to unshare)</span>
+          <span class="text-xs font-medium text-success">{m.community_selector_shared()}</span>
         {:else if isAlreadyShared && isSelected}
-          <span class="text-xs font-medium text-warning">(Will be unshared)</span>
+          <span class="text-xs font-medium text-warning">{m.community_selector_will_unshare()}</span
+          >
         {:else if isSelected}
-          <span class="text-xs font-medium text-info">(Will be shared)</span>
+          <span class="text-xs font-medium text-info">{m.community_selector_will_share()}</span>
         {/if}
       </label>
     {/each}
     {#if communities.length === 0}
-      <div class="py-4 text-center text-base-content/60">No joined communities available</div>
+      <div class="py-4 text-center text-base-content/60">
+        {m.community_selector_no_communities()}
+      </div>
     {/if}
   </div>
 
   <!-- Selected Communities Summary -->
   {#if selectedCommunityIds.length > 0}
     <div class="mt-2 text-sm text-base-content/70">
-      {selectedCommunityIds.length} community{selectedCommunityIds.length > 1 ? 'ies' : ''} selected
+      {m.community_selector_count({ count: String(selectedCommunityIds.length) })}
     </div>
   {/if}
 </div>

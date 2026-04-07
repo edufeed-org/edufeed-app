@@ -250,7 +250,7 @@
       const values = parseResponseTags(tags);
       decryptedMap = new Map([...decryptedMap, [response.id, values]]);
     } catch (_err) {
-      decryptErrors = new Map([...decryptErrors, [response.id, 'Could not decrypt response']]);
+      decryptErrors = new Map([...decryptErrors, [response.id, m.form_responses_decrypt_failed()]]);
     }
   }
 
@@ -274,7 +274,7 @@
 <div class="space-y-3">
   {#if linkedSections.length > 0}
     <div class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200/50 px-3 py-2 text-sm">
-      <span class="text-base-content/60">Linked to:</span>
+      <span class="text-base-content/60">{m.form_responses_linked_to()}</span>
       {#each linkedSections as section (section.sectionName)}
         <span class="badge badge-outline badge-sm">{section.sectionName}</span>
       {/each}
@@ -286,7 +286,7 @@
       <span class="loading loading-md loading-spinner"></span>
     </div>
   {:else if responses.length === 0}
-    <p class="py-8 text-center text-base-content/50">No responses yet.</p>
+    <p class="py-8 text-center text-base-content/50">{m.form_responses_empty()}</p>
   {:else}
     {#each responses as response (response.id)}
       {@const profile = getProfiles()?.get(response.pubkey)}
@@ -342,7 +342,7 @@
               {#each Object.entries(values).filter(([id]) => !parsed.fields.find((f) => f.id === id)) as [id, value] (id)}
                 <div>
                   <div class="text-xs text-base-content/50">
-                    {id} <span class="italic">(field removed)</span>
+                    {id} <span class="italic">{m.form_responses_field_removed()}</span>
                   </div>
                   <div>{value}</div>
                 </div>
@@ -376,14 +376,15 @@
 
                   {#if isMember}
                     <span class="badge gap-1 badge-sm badge-success"
-                      >Member of {section.sectionName}</span
+                      >{m.form_responses_member_of({ section: section.sectionName })}</span
                     >
                   {:else if isDenied}
                     <span class="inline-flex items-center gap-1 text-xs text-base-content/50">
-                      Denied {section.sectionName}
+                      {m.form_responses_denied({ section: section.sectionName })}
                       <button
                         class="link text-xs link-hover"
-                        onclick={() => undoDeny(response.id, section.sectionName)}>Undo</button
+                        onclick={() => undoDeny(response.id, section.sectionName)}
+                        >{m.form_responses_undo()}</button
                       >
                     </span>
                   {:else}
@@ -397,11 +398,12 @@
                         {#if isGranting}
                           <span class="loading loading-xs loading-spinner"></span>
                         {/if}
-                        Grant {section.sectionName}
+                        {m.form_responses_grant({ section: section.sectionName })}
                       </button>
                       <button
                         class="btn btn-ghost btn-xs"
-                        onclick={() => denyAccess(response.id, section.sectionName)}>Deny</button
+                        onclick={() => denyAccess(response.id, section.sectionName)}
+                        >{m.form_responses_deny()}</button
                       >
                     </div>
                   {/if}

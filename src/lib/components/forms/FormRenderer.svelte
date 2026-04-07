@@ -1,5 +1,6 @@
 <script>
   import { parseFormTemplate, validateField } from '$lib/helpers/forms.js';
+  import * as m from '$lib/paraglide/messages';
 
   /**
    * @type {{
@@ -61,7 +62,7 @@
     {#if !form.isPublic}
       <div class="mt-2 flex items-center gap-2 text-xs text-base-content/50">
         <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-        Encrypted — only the form creator can read your answers
+        {m.form_encrypted_info()}
       </div>
     {/if}
   </div>
@@ -99,7 +100,7 @@
         {#if field.options?.min}
           <div class="label">
             <span class="label-text-alt text-base-content/40"
-              >Min {field.options.min} characters</span
+              >{m.form_min_characters({ min: field.options.min })}</span
             >
           </div>
         {/if}
@@ -137,7 +138,7 @@
           bind:value={values[field.id]}
           disabled={readonly}
         >
-          <option value="">Select...</option>
+          <option value="">{m.form_select_placeholder()}</option>
           {#each field.options?.options || [] as opt (opt)}
             <option value={opt}>{opt}</option>
           {/each}

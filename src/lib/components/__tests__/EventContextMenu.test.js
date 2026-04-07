@@ -21,6 +21,7 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 }));
 
 vi.mock('$lib/paraglide/messages.js', () => ({
+  aria_event_menu: () => 'Event menu',
   event_menu_copy_event_id: () => 'Copy event ID',
   event_menu_copy_link: () => 'Copy link',
   event_menu_view_raw_event: () => 'View raw event',

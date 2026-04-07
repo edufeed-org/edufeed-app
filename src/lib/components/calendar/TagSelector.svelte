@@ -163,7 +163,7 @@
   {:else}
     <!-- Empty state -->
     <div class="text-center text-sm text-base-content/50">
-      <p>No tags found in current events</p>
+      <p>{m.tag_selector_no_tags()}</p>
     </div>
   {/if}
 </div>

@@ -18,6 +18,7 @@
   import { firstValueFrom, filter, timeout } from 'rxjs';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
+  import * as m from '$lib/paraglide/messages';
 
   let { modalId = 'share-by-naddr-modal' } = $props();
 
@@ -92,14 +93,14 @@
 
     const decoded = decodeNaddr(cleaned);
     if (!decoded) {
-      if (cleaned.length > 5) error = 'Invalid naddr format';
+      if (cleaned.length > 5) error = m.share_modal_error_invalid_naddr();
       return;
     }
 
     // Validate kind if restricted
     if (allowedKinds && !allowedKinds.includes(decoded.kind)) {
       const allowedLabels = allowedKinds.map((k) => kindLabels[k] || `kind ${k}`).join(', ');
-      error = `This tab only accepts: ${allowedLabels}`;
+      error = m.share_modal_error_tab_accepts({ types: allowedLabels });
       return;
     }
 
@@ -138,7 +139,7 @@
       fetchedTitle = event.tags?.find((t) => t[0] === 'title')?.[1] || '';
       fetchedAuthorPubkey = event.pubkey;
     } catch {
-      error = 'Could not find this event on relays';
+      error = m.share_modal_error_not_found();
     } finally {
       isFetching = false;
     }
@@ -150,17 +151,17 @@
 
     const account = manager.active;
     if (!account) {
-      error = 'Please log in first';
+      error = m.share_modal_error_login();
       return;
     }
 
     if (!fetchedEvent) {
-      error = 'No event loaded — paste a valid naddr first';
+      error = m.share_modal_error_no_event();
       return;
     }
 
     if (selectedCommunityIds.length === 0) {
-      error = 'Please select at least one community';
+      error = m.share_modal_error_no_community();
       return;
     }
 
@@ -170,13 +171,13 @@
       const ok = await createCommunityReposts(fetchedEvent, selectedCommunityIds, account.signer);
 
       if (ok) {
-        success = `Shared with ${selectedCommunityIds.length} community${selectedCommunityIds.length > 1 ? 'ies' : ''}`;
+        success = m.share_modal_success({ count: selectedCommunityIds.length });
         setTimeout(() => modalStore.closeModal(), 1200);
       } else {
-        error = `Failed to share with ${selectedCommunityIds.length} community${selectedCommunityIds.length > 1 ? 'ies' : ''}`;
+        error = m.share_modal_error_share_failed({ count: selectedCommunityIds.length });
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to share';
+      error = err instanceof Error ? err.message : m.share_modal_error_share_generic();
     } finally {
       isSubmitting = false;
     }
@@ -190,7 +191,7 @@
 <dialog id={modalId} class="modal">
   <div class="modal-box w-11/12 max-w-lg">
     <div class="mb-4 flex items-center justify-between">
-      <h3 class="text-lg font-bold">Share Existing Content</h3>
+      <h3 class="text-lg font-bold">{m.share_modal_title()}</h3>
       <button class="btn btn-circle btn-ghost btn-sm" onclick={handleClose} aria-label="Close">
         <CloseIcon class_="h-5 w-5" />
       </button>
@@ -205,7 +206,7 @@
       <!-- naddr input -->
       <div class="form-control mb-3">
         <label class="label" for="share-naddr-input">
-          <span class="label-text">Paste naddr</span>
+          <span class="label-text">{m.share_modal_input_label()}</span>
         </label>
         <input
           id="share-naddr-input"
@@ -213,11 +214,11 @@
           class="input-bordered input w-full"
           class:input-error={error && !isFetching}
           class:input-success={fetchedEvent && !error}
-          placeholder="naddr1... or nostr:naddr1..."
+          placeholder={m.share_modal_input_placeholder()}
           bind:value={input}
         />
         {#if isFetching}
-          <span class="label-text-alt mt-1 text-info">Fetching event...</span>
+          <span class="label-text-alt mt-1 text-info">{m.share_modal_fetching()}</span>
         {/if}
       </div>
 
@@ -244,7 +245,7 @@
       <CommunitySelector
         {communities}
         bind:selectedCommunityIds
-        title="Share to Communities"
+        title={m.share_modal_community_label()}
         showSelectAll={true}
       />
 
@@ -260,7 +261,7 @@
 
       <!-- Actions -->
       <div class="modal-action">
-        <button type="button" class="btn" onclick={handleClose}>Cancel</button>
+        <button type="button" class="btn" onclick={handleClose}>{m.common_cancel()}</button>
         <button
           type="submit"
           class="btn btn-primary"
@@ -269,7 +270,7 @@
           {#if isSubmitting}
             <span class="loading loading-sm loading-spinner"></span>
           {/if}
-          Share with Community
+          {m.share_modal_submit()}
         </button>
       </div>
     </form>

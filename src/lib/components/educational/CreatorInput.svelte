@@ -4,6 +4,7 @@
 -->
 
 <script>
+  import * as m from '$lib/paraglide/messages';
   import { CloseIcon, PlusIcon } from '$lib/components/icons';
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
@@ -120,7 +121,9 @@
    * @returns {string}
    */
   function _getTypeLabel(type) {
-    return type === 'Person' ? '👤 Person' : '🏢 Organization';
+    return type === 'Person'
+      ? `👤 ${m.amb_creator_type_person()}`
+      : `🏢 ${m.amb_creator_type_organization()}`;
   }
 
   /**
@@ -219,15 +222,15 @@
             type="button"
             class="btn btn-ghost btn-xs"
             onclick={() => editCreator(index)}
-            aria-label="Edit creator"
+            aria-label={m.amb_creator_edit_aria()}
           >
-            Edit
+            {m.common_edit()}
           </button>
           <button
             type="button"
             class="btn text-error btn-ghost btn-xs"
             onclick={() => removeCreator(index)}
-            aria-label="Remove creator"
+            aria-label={m.amb_creator_remove_aria()}
           >
             <CloseIcon class_="w-4 h-4" />
           </button>
@@ -241,20 +244,22 @@
     <form onsubmit={handleSubmit} class="space-y-3 rounded-lg bg-base-200 p-4">
       <div class="mb-2 flex items-center justify-between">
         <span class="text-sm font-medium">
-          {editingIndex !== null ? 'Edit Creator' : 'Add Creator'}
+          {editingIndex !== null ? m.amb_creator_heading_edit() : m.amb_creator_heading_add()}
         </span>
-        <button type="button" class="btn btn-ghost btn-xs" onclick={cancelAdd}> Cancel </button>
+        <button type="button" class="btn btn-ghost btn-xs" onclick={cancelAdd}>
+          {m.common_cancel()}
+        </button>
       </div>
 
       <!-- Nostr Pubkey / Contact Search - First field for auto-fill -->
       <div class="form-control">
         <label class="label py-1" for="creator-pubkey">
-          <span class="label-text text-sm">Nostr Identity (optional)</span>
+          <span class="label-text text-sm">{m.amb_creator_label_nostr()}</span>
         </label>
         <ContactSearchInput
           bind:value={newCreator.pubkey}
           id="creator-pubkey"
-          placeholder="Search follows or enter npub..."
+          placeholder={m.amb_creator_placeholder_search()}
           inputClass="input-sm"
           exclude={creators.map((c) => c.pubkey || '').filter((p) => p !== '')}
           onselect={(contact) => {
@@ -269,7 +274,7 @@
       <div class="form-control">
         <label class="label py-1" for="creator-name">
           <span class="label-text flex items-center gap-2 text-sm">
-            Name <span class="text-error">*</span>
+            {m.amb_creator_label_name()} <span class="text-error">*</span>
             {#if isLoadingProfile}
               <span class="loading loading-xs loading-spinner"></span>
             {/if}
@@ -280,7 +285,7 @@
           type="text"
           class="input-bordered input input-sm w-full"
           bind:value={newCreator.name}
-          placeholder="Enter name"
+          placeholder={m.amb_creator_placeholder_name()}
           required
         />
       </div>
@@ -288,15 +293,15 @@
       <!-- Type -->
       <div class="form-control">
         <label class="label py-1" for="creator-type">
-          <span class="label-text text-sm">Type</span>
+          <span class="label-text text-sm">{m.amb_creator_label_type()}</span>
         </label>
         <select
           id="creator-type"
           class="select-bordered select w-full select-sm"
           bind:value={newCreator.type}
         >
-          <option value="Person">👤 Person</option>
-          <option value="Organization">🏢 Organization</option>
+          <option value="Person">👤 {m.amb_creator_type_person()}</option>
+          <option value="Organization">🏢 {m.amb_creator_type_organization()}</option>
         </select>
       </div>
 
@@ -304,14 +309,14 @@
       {#if newCreator.type === 'Person'}
         <div class="form-control">
           <label class="label py-1" for="creator-title">
-            <span class="label-text text-sm">Title (optional)</span>
+            <span class="label-text text-sm">{m.amb_creator_label_title()}</span>
           </label>
           <input
             id="creator-title"
             type="text"
             class="input-bordered input input-sm w-full"
             bind:value={newCreator.honorificPrefix}
-            placeholder="Dr., Prof., etc."
+            placeholder={m.amb_creator_placeholder_title()}
           />
         </div>
       {/if}
@@ -319,14 +324,14 @@
       <!-- Affiliation -->
       <div class="form-control">
         <label class="label py-1" for="creator-affiliation">
-          <span class="label-text text-sm">Affiliation (optional)</span>
+          <span class="label-text text-sm">{m.amb_creator_label_affiliation()}</span>
         </label>
         <input
           id="creator-affiliation"
           type="text"
           class="input-bordered input input-sm w-full"
           bind:value={newCreator.affiliationName}
-          placeholder="University, Company, etc."
+          placeholder={m.amb_creator_placeholder_affiliation()}
         />
       </div>
 
@@ -336,7 +341,7 @@
         class="btn w-full btn-sm btn-primary"
         disabled={!newCreator.name.trim()}
       >
-        {editingIndex !== null ? 'Update Creator' : 'Add Creator'}
+        {editingIndex !== null ? m.amb_creator_button_update() : m.amb_creator_button_add()}
       </button>
     </form>
   {:else}
@@ -347,7 +352,7 @@
       onclick={() => (showAddForm = true)}
     >
       <PlusIcon class_="w-4 h-4" />
-      Add Creator
+      {m.amb_creator_button_add()}
     </button>
   {/if}
 

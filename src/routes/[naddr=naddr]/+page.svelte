@@ -1,4 +1,5 @@
 <script>
+  import * as m from '$lib/paraglide/messages';
   import ArticleView from '$lib/components/article/ArticleView.svelte';
   import AMBResourceView from '$lib/components/educational/AMBResourceView.svelte';
   import KanbanBoardView from '$lib/components/kanban/KanbanBoardView.svelte';
@@ -111,9 +112,9 @@
         />
       </svg>
       <div>
-        <h3 class="font-bold">Unsupported Content Type</h3>
+        <h3 class="font-bold">{m.route_unsupported_content()}</h3>
         <p class="text-sm">
-          Content kind {displayData.kind} is not yet supported for display.
+          {m.route_unsupported_content_detail({ kind: displayData.kind })}
         </p>
       </div>
     </div>
@@ -133,7 +134,7 @@
           d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
-      <span>Failed to load content</span>
+      <span>{m.route_failed_load_content()}</span>
     </div>
   {/if}
 </div>

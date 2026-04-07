@@ -13,6 +13,7 @@ import {
 import { manager } from './accounts.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { showToast } from '$lib/helpers/toast.js';
+import * as m from '$lib/paraglide/messages';
 import { eventStore } from './nostr-infrastructure.svelte.js';
 
 /**
@@ -169,17 +170,17 @@ class ReactionsStore {
 
     const currentUser = manager.active;
     if (!currentUser) {
-      showToast('Please sign in to react', 'error');
+      showToast(m.toast_sign_in_to_react(), 'error');
       return;
     }
 
     publishReaction(event, emoji, { relays })
       .then((result) => {
-        if (!result.success) showToast('Failed to add reaction', 'error');
+        if (!result.success) showToast(m.toast_reaction_failed(), 'error');
       })
       .catch((error) => {
         console.error('Failed to react:', error);
-        showToast('Failed to add reaction', 'error');
+        showToast(m.toast_reaction_failed(), 'error');
       });
   }
 
@@ -217,10 +218,10 @@ class ReactionsStore {
       // Remove from store
       eventStore.add(deletedEvent);
 
-      showToast('Reaction removed', 'success');
+      showToast(m.toast_reaction_removed(), 'success');
     } catch (error) {
       console.error('Failed to remove reaction:', error);
-      showToast('Failed to remove reaction', 'error');
+      showToast(m.toast_reaction_remove_failed(), 'error');
       throw error;
     }
   }

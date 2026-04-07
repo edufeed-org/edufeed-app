@@ -6,6 +6,7 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import * as m from '$lib/paraglide/messages';
 
   const activeUser = useActiveUser();
   const getJoinedCommunities = useJoinedCommunitiesList(); // gets the getter function
@@ -15,13 +16,13 @@
 <!-- Sidebar -->
 <div class="mb-4 space-y-2">
   <div class="flex items-center justify-between">
-    <h2 class="text-base font-semibold text-base-content">Joined Communities</h2>
+    <h2 class="text-base font-semibold text-base-content">{m.sidebar_joined_communities()}</h2>
     {#if activeUser()}
       <button
         class="hover:btn-primary-focus btn transition-colors duration-200 btn-sm btn-primary"
         onclick={() => modalStore.openModal('createCommunity')}
       >
-        New Group
+        {m.sidebar_new_group()}
       </button>
     {/if}
   </div>
@@ -42,7 +43,7 @@
           d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
         />
       </svg>
-      Discover Communities
+      {m.sidebar_discover_communities()}
     </a>
   {/if}
 </div>
@@ -77,7 +78,7 @@
   {/each}
   {#if joinedCommunities.length === 0}
     <div class="px-3 py-6 text-center">
-      <p class="mb-3 text-sm text-base-content/60">No joined communities yet</p>
+      <p class="mb-3 text-sm text-base-content/60">{m.sidebar_no_communities()}</p>
       <a href={resolve('/discover')} class="btn btn-sm btn-primary">
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -93,7 +94,7 @@
             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
           />
         </svg>
-        Discover Communities
+        {m.sidebar_discover_communities()}
       </a>
     </div>
   {/if}

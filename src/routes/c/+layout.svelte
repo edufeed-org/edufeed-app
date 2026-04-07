@@ -9,6 +9,7 @@
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import { MenuIcon, CloseIcon } from '$lib/components/icons';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ children: import('svelte').Snippet }} */
   let { children } = $props();
@@ -121,10 +122,14 @@
 
       <!-- Drawer Side (Community List) -->
       <div class="drawer-side z-50">
-        <label for="community-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+        <label
+          for="community-drawer"
+          aria-label={m.community_layout_close_sidebar()}
+          class="drawer-overlay"
+        ></label>
         <div class="min-h-full w-80 bg-base-200">
           <div class="flex items-center justify-between border-b border-base-300 p-4">
-            <h2 class="text-lg font-semibold">Communities</h2>
+            <h2 class="text-lg font-semibold">{m.community_layout_title()}</h2>
             <button onclick={toggleDrawer} class="btn btn-circle btn-ghost btn-sm">
               <CloseIcon class_="w-5 h-5" />
             </button>

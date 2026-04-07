@@ -77,14 +77,14 @@
     {disabled}
   >
     <!-- Default options -->
-    <option value="">All</option>
+    <option value="">{m.community_filter_all()}</option>
     {#if joinedCommunities.length > 0}
-      <option value="joined">My Communities</option>
+      <option value="joined">{m.community_filter_my()}</option>
     {/if}
 
     <!-- Joined communities section -->
     {#if joinedCommunities.length > 0}
-      <optgroup label="Joined">
+      <optgroup label={m.community_filter_joined()}>
         {#each joinedCommunities as community (community.pubkey)}
           <option value={community.pubkey}>{community.name}</option>
         {/each}
@@ -93,7 +93,7 @@
 
     <!-- Discover communities section -->
     {#if discoverCommunities.length > 0}
-      <optgroup label="Discover">
+      <optgroup label={m.community_filter_discover()}>
         {#each discoverCommunities as community (community.pubkey)}
           <option value={community.pubkey}>{community.name}</option>
         {/each}

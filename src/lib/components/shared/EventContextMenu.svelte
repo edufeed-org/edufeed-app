@@ -120,7 +120,7 @@
 </script>
 
 <div class="dropdown dropdown-end">
-  <button tabindex="0" class="btn btn-square btn-ghost btn-sm" aria-label="Event menu">
+  <button tabindex="0" class="btn btn-square btn-ghost btn-sm" aria-label={m.aria_event_menu()}>
     <MoreIcon class_="w-5 h-5" />
   </button>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->

@@ -8,6 +8,7 @@
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { buildFormTemplateTags, parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
   import { TrashIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ existingEvent?: import('nostr-tools').NostrEvent }} */
   let { existingEvent = undefined } = $props();
@@ -134,11 +135,11 @@
 
   async function publish() {
     if (!manager.active) {
-      error = 'You must be logged in to create a form';
+      error = m.form_builder_error_login();
       return;
     }
     if (!dTag) {
-      error = 'Form identifier is required';
+      error = m.form_builder_error_identifier();
       return;
     }
 
@@ -183,7 +184,7 @@
       });
       goto(`/forms/${naddr}`);
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to publish form';
+      error = err instanceof Error ? err.message : m.form_builder_error_publish_failed();
     } finally {
       isPublishing = false;
     }
@@ -193,11 +194,17 @@
 <div class="container mx-auto max-w-3xl p-4">
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
-    <div class="text-sm tracking-wide text-base-content/50 uppercase">Form Builder</div>
+    <div class="text-sm tracking-wide text-base-content/50 uppercase">
+      {m.form_builder_header()}
+    </div>
     <div class="flex gap-2">
-      <a href="/forms" class="btn btn-ghost btn-sm">Cancel</a>
+      <a href="/forms" class="btn btn-ghost btn-sm">{m.common_cancel()}</a>
       <button class="btn btn-sm btn-primary" onclick={publish} disabled={isPublishing}>
-        {isPublishing ? 'Publishing...' : existingEvent ? 'Save' : 'Publish Form'}
+        {isPublishing
+          ? m.form_builder_publishing()
+          : existingEvent
+            ? m.common_save()
+            : m.form_builder_publish()}
       </button>
     </div>
   </div>
@@ -211,26 +218,28 @@
     <input
       type="text"
       class="input-bordered input w-full text-lg font-semibold"
-      placeholder="Form name (e.g., Membership Application)"
+      placeholder={m.form_builder_name_placeholder()}
       bind:value={formName}
     />
     <input
       type="text"
       class="input-bordered input w-full"
-      placeholder="Description — explain the form's purpose"
+      placeholder={m.form_builder_description_placeholder()}
       bind:value={formDescription}
     />
     <div class="flex gap-4">
       <label class="label cursor-pointer gap-2">
         <input type="checkbox" class="checkbox checkbox-sm" bind:checked={isPublic} />
-        <span class="label-text">Public responses</span>
+        <span class="label-text">{m.form_builder_public_responses()}</span>
       </label>
     </div>
   </div>
 
   <!-- Fields -->
   <div class="mb-6">
-    <div class="mb-3 text-sm tracking-wide text-base-content/50 uppercase">Fields</div>
+    <div class="mb-3 text-sm tracking-wide text-base-content/50 uppercase">
+      {m.form_builder_fields_label()}
+    </div>
 
     {#each fields as field, i (field.id + '-' + i)}
       <div
@@ -245,19 +254,21 @@
         <div class="flex items-start gap-3">
           <!-- Drag handle + arrow buttons -->
           <div class="flex flex-col items-center gap-1 pt-1">
-            <span class="cursor-grab text-lg opacity-30 select-none" title="Drag to reorder">⠿</span
+            <span
+              class="cursor-grab text-lg opacity-30 select-none"
+              title={m.form_builder_drag_reorder()}>⠿</span
             >
             <button
               class="btn px-1 btn-ghost btn-xs"
               onclick={() => moveField(i, i - 1)}
               disabled={i === 0}
-              title="Move up">▲</button
+              title={m.form_builder_move_up()}>▲</button
             >
             <button
               class="btn px-1 btn-ghost btn-xs"
               onclick={() => moveField(i, i + 1)}
               disabled={i === fields.length - 1}
-              title="Move down">▼</button
+              title={m.form_builder_move_down()}>▼</button
             >
           </div>
 
@@ -267,7 +278,7 @@
               <input
                 type="text"
                 class="input-bordered input input-sm flex-1 font-semibold"
-                placeholder="Enter field name"
+                placeholder={m.form_builder_field_name_placeholder()}
                 bind:value={field.label}
                 onchange={() => {
                   if (!existing) {
@@ -286,12 +297,12 @@
             <div class="flex items-center gap-3 text-sm">
               <label class="label cursor-pointer gap-1">
                 <input type="checkbox" class="checkbox checkbox-xs" bind:checked={field.required} />
-                <span class="label-text text-xs">Required</span>
+                <span class="label-text text-xs">{m.form_builder_field_required()}</span>
               </label>
               <input
                 type="text"
                 class="input-bordered input input-xs flex-1"
-                placeholder="Placeholder text"
+                placeholder={m.form_builder_field_placeholder_text()}
                 bind:value={field.placeholder}
               />
             </div>
@@ -302,7 +313,7 @@
                 <span
                   class="text-xs text-base-content/50"
                   title={isNumeric ? 'Minimum allowed value' : 'Minimum character length'}
-                  >{isNumeric ? 'Min value:' : 'Min length:'}</span
+                  >{isNumeric ? m.form_builder_min_value() : m.form_builder_min_length()}</span
                 >
                 <input
                   type="number"
@@ -312,7 +323,7 @@
                 <span
                   class="text-xs text-base-content/50"
                   title={isNumeric ? 'Maximum allowed value' : 'Maximum character length'}
-                  >{isNumeric ? 'Max value:' : 'Max length:'}</span
+                  >{isNumeric ? m.form_builder_max_value() : m.form_builder_max_length()}</span
                 >
                 <input
                   type="number"
@@ -324,7 +335,9 @@
 
             {#if field.type === 'select' || field.type === 'radio'}
               <div class="rounded bg-base-200/50 p-2">
-                <div class="mb-1 text-xs text-base-content/50">Options:</div>
+                <div class="mb-1 text-xs text-base-content/50">
+                  {m.form_builder_field_options_label()}
+                </div>
                 <div class="flex flex-wrap gap-2">
                   {#each field.selectOptions as opt, j (opt + '-' + j)}
                     <span class="badge gap-1 badge-outline">
@@ -339,7 +352,7 @@
                     <input
                       type="text"
                       class="input-bordered input input-xs w-24 border-dashed"
-                      placeholder="New option"
+                      placeholder={m.form_builder_field_option_new()}
                       onkeydown={(e) => {
                         if (e.key === 'Enter' && e.currentTarget.value) {
                           field.selectOptions.push(e.currentTarget.value);
@@ -349,7 +362,7 @@
                     />
                     <button
                       class="btn px-1 btn-ghost btn-xs"
-                      title="Add option"
+                      title={m.form_builder_add_option()}
                       onclick={(e) => {
                         const input = /** @type {HTMLInputElement | null} */ (
                           e.currentTarget.previousElementSibling
@@ -370,7 +383,7 @@
                       class="checkbox checkbox-xs"
                       bind:checked={field.multiple}
                     />
-                    <span class="label-text text-xs">Allow multiple selections</span>
+                    <span class="label-text text-xs">{m.form_builder_field_allow_multiple()}</span>
                   </label>
                 {/if}
               </div>
@@ -381,7 +394,7 @@
           <button
             class="btn opacity-30 btn-ghost btn-sm hover:opacity-100"
             onclick={() => removeField(i)}
-            title="Remove field"
+            title={m.form_builder_remove_field()}
           >
             <TrashIcon class="h-4 w-4" />
           </button>
@@ -391,7 +404,7 @@
 
     <!-- Add field buttons -->
     <div class="rounded-lg border-2 border-dashed border-base-content/10 p-4 text-center">
-      <div class="mb-2 text-sm text-base-content/50">Add Field</div>
+      <div class="mb-2 text-sm text-base-content/50">{m.form_builder_add_field()}</div>
       <div class="flex flex-wrap justify-center gap-2">
         {#each FIELD_TYPES as type (type)}
           <button class="btn btn-outline btn-xs" onclick={() => addField(type)}>{type}</button>
@@ -404,7 +417,7 @@
   <input
     type="text"
     class="input-bordered input w-full"
-    placeholder="Confirmation message (shown after submission)"
+    placeholder={m.form_builder_confirm_placeholder()}
     bind:value={confirmationMessage}
   />
 </div>

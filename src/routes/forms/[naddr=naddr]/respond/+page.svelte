@@ -14,6 +14,7 @@
   } from '$lib/helpers/forms.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: { naddr: string } }} */
   let { data } = $props();
@@ -133,7 +134,7 @@
 
       submitted = true;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to submit response';
+      error = err instanceof Error ? err.message : m.forms_submit_failed();
     } finally {
       isSubmitting = false;
     }
@@ -148,28 +149,27 @@
   {:else if error}
     <div class="alert alert-error">{error}</div>
   {:else if !manager.active}
-    <div class="alert alert-warning">Log in with a signing key to submit this form.</div>
+    <div class="alert alert-warning">{m.forms_submit_login_required()}</div>
   {:else if formEvent && !formEvent.tags.some((t) => t[0] === 'public') && !manager.active?.signer?.nip44Encrypt}
     <div class="alert alert-warning">
-      Your current signer does not support NIP-44 encryption, which is required for this form. Try a
-      different login method.
+      {m.forms_submit_no_encryption()}
     </div>
   {:else if alreadyResponded && !submitted}
-    <div class="mb-4 alert alert-warning">You've already submitted a response to this form.</div>
+    <div class="mb-4 alert alert-warning">{m.forms_already_responded()}</div>
     {#if returnTo}
-      <a href={returnTo} class="btn btn-primary">Back to community</a>
+      <a href={returnTo} class="btn btn-primary">{m.forms_back_to_community()}</a>
     {:else}
-      <button class="btn btn-primary" onclick={() => history.back()}>Go back</button>
+      <button class="btn btn-primary" onclick={() => history.back()}>{m.forms_go_back()}</button>
     {/if}
   {:else if submitted}
     <div class="mb-4 alert alert-success">
       {formEvent?.tags.find((t) => t[0] === 'confirmation_message')?.[1] ||
-        'Response submitted successfully!'}
+        m.forms_submit_success()}
     </div>
     {#if returnTo}
-      <a href={returnTo} class="btn btn-primary">Back to community</a>
+      <a href={returnTo} class="btn btn-primary">{m.forms_back_to_community()}</a>
     {:else}
-      <button class="btn btn-primary" onclick={() => history.back()}>Go back</button>
+      <button class="btn btn-primary" onclick={() => history.back()}>{m.forms_go_back()}</button>
     {/if}
   {:else if formEvent}
     {#if isSubmitting}

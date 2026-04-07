@@ -5,9 +5,9 @@
 -->
 
 <script>
-  import { resolve } from '$app/paths';
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
   import { useCalendarManagement } from '$lib/stores/calendar-management-store.svelte.js';
+  import * as m from '$lib/paraglide/messages';
 
   /**
    * @typedef {Object} Props
@@ -166,7 +166,7 @@
   <div class="mb-3">
     <div class="mb-2 flex items-center justify-between">
       <div class="block text-sm font-medium text-base-content">
-        {compact ? 'Personal Calendars' : 'Select Calendars'}
+        {compact ? m.personal_calendar_title() : m.personal_calendar_select_title()}
       </div>
       {#if calendars.length > 1}
         <div class="flex gap-2">
@@ -175,14 +175,14 @@
             onclick={selectAllCalendars}
             disabled={selectedCalendarIds.length === calendars.length}
           >
-            Select All
+            {m.personal_calendar_select_all()}
           </button>
           <button
             class="btn btn-ghost btn-xs"
             onclick={deselectAllCalendars}
             disabled={selectedCalendarIds.length === 0}
           >
-            Deselect All
+            {m.personal_calendar_deselect_all()}
           </button>
         </div>
       {/if}
@@ -210,11 +210,17 @@
               <span class="truncate text-xs text-base-content/60">{calendar.description}</span>
             {/if}
             {#if isAlreadyInCalendar && !isSelected}
-              <span class="text-xs font-medium text-success">(Added - click to remove)</span>
+              <span class="text-xs font-medium text-success"
+                >{m.personal_calendar_added_click_remove()}</span
+              >
             {:else if isAlreadyInCalendar && isSelected}
-              <span class="text-xs font-medium text-warning">(Will be removed)</span>
+              <span class="text-xs font-medium text-warning"
+                >{m.personal_calendar_will_be_removed()}</span
+              >
             {:else if isSelected}
-              <span class="text-xs font-medium text-info">(Will be added)</span>
+              <span class="text-xs font-medium text-info"
+                >{m.personal_calendar_will_be_added()}</span
+              >
             {/if}
           </label>
         {/each}
@@ -223,12 +229,12 @@
       <!-- Selected Calendars Summary -->
       {#if selectedCalendarIds.length > 0}
         <div class="mt-2 text-sm text-base-content/70">
-          {selectedCalendarIds.length} calendar{selectedCalendarIds.length > 1 ? 's' : ''} selected
+          {m.personal_calendar_count_selected({ count: selectedCalendarIds.length })}
         </div>
       {/if}
     {:else}
       <div class="py-4 text-center text-base-content/60 {compact ? 'text-sm' : ''}">
-        No calendars available. <a href={resolve('/calendar/manage')} class="link">Create one</a>.
+        {m.personal_calendar_no_calendars()}
       </div>
     {/if}
   </div>
@@ -242,15 +248,10 @@
     >
       {#if isProcessingChanges}
         <span class="loading loading-spinner {compact ? 'loading-sm' : ''}"></span>
-        Applying changes to {selectedCalendarIds.length} calendar{selectedCalendarIds.length > 1
-          ? 's'
-          : ''}...
+        {m.personal_calendar_applying({ count: selectedCalendarIds.length })}
       {:else}
         <PlusIcon class_="w-4 h-4 mr-2" />
-        Apply Changes to {selectedCalendarIds.length || 'Selected'} Calendar{selectedCalendarIds.length !==
-        1
-          ? 's'
-          : ''}
+        {m.personal_calendar_apply_changes({ count: selectedCalendarIds.length })}
       {/if}
     </button>
   </div>
@@ -259,7 +260,7 @@
   {#if calendarChangesSuccess}
     <div class="mt-3 alert alert-success {compact ? 'py-2' : ''}">
       <CheckIcon class_={compact ? 'w-4 h-4' : 'w-5 h-5'} />
-      <span class={compact ? 'text-sm' : ''}>Calendar changes applied successfully!</span>
+      <span class={compact ? 'text-sm' : ''}>{m.personal_calendar_success()}</span>
     </div>
   {/if}
 

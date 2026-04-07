@@ -326,7 +326,7 @@
     >
       {#if isLoading}
         <span class="loading loading-sm loading-spinner"></span>
-        <span class="text-base-content/50">Loading...</span>
+        <span class="text-base-content/50">{m.skos_loading()}</span>
       {:else if error}
         <span class="text-sm text-error">{error}</span>
       {:else if selected.length === 0}
@@ -503,9 +503,9 @@
           <div
             class="flex items-center justify-between border-t border-base-300 bg-base-200 p-2 text-xs text-base-content/70"
           >
-            <span>{selected.length} selected</span>
+            <span>{m.skos_selected({ count: String(selected.length) })}</span>
             {#if selected.length >= maxSelections}
-              <span class="text-warning">Maximum reached</span>
+              <span class="text-warning">{m.skos_maximum_reached()}</span>
             {/if}
           </div>
         {/if}

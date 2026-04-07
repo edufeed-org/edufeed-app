@@ -1683,7 +1683,7 @@
               type="button"
               class="btn btn-circle btn-ghost btn-xs"
               onclick={() => clearAuthorFilter(pubkey)}
-              aria-label="Remove author filter"
+              aria-label={m.discover_remove_author_filter()}
             >
               ✕
             </button>
@@ -1694,9 +1694,9 @@
             type="button"
             class="btn btn-ghost btn-xs"
             onclick={() => clearAuthorFilter()}
-            aria-label="Clear all author filters"
+            aria-label={m.discover_clear_author_filters()}
           >
-            Clear all
+            {m.discover_clear_author_filters()}
           </button>
         {/if}
       </div>

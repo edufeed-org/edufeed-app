@@ -124,7 +124,7 @@
           type="button"
           onclick={scrollToPastEvents}
           class="flex link items-center gap-1 text-sm link-primary link-hover"
-          aria-label="Jump to past events section"
+          aria-label={m.aria_jump_past_events()}
         >
           <span>{m.events_list_jump_to_past({ count: pastEvents.length })}</span>
           <ChevronDownIcon class_="h-4 w-4" />
@@ -175,7 +175,7 @@
         type="button"
         onclick={scrollToTop}
         class="flex link items-center gap-1 text-sm link-primary link-hover"
-        aria-label="Back to top"
+        aria-label={m.aria_back_to_top()}
       >
         <ChevronDownIcon class_="h-4 w-4 rotate-180" />
         <span>{m.events_list_back_to_top()}</span>

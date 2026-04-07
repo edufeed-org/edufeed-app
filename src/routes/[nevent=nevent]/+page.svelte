@@ -1,4 +1,5 @@
 <script>
+  import * as m from '$lib/paraglide/messages';
   import ThreadDetailView from '$lib/components/thread/ThreadDetailView.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getTagValue } from 'applesauce-core/helpers';
@@ -25,11 +26,11 @@
     <ThreadDetailView event={data.event} parentEvent={data.parentEvent} scrollTo={data.scrollTo} />
   {:else if data.event}
     <div class="alert alert-warning">
-      <span>Unsupported content type (kind {data.event.kind})</span>
+      <span>{m.route_unsupported_event_kind({ kind: data.event.kind })}</span>
     </div>
   {:else}
     <div class="alert alert-error">
-      <span>Failed to load event</span>
+      <span>{m.route_failed_load_event()}</span>
     </div>
   {/if}
 </div>

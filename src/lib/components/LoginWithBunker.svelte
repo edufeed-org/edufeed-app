@@ -308,7 +308,7 @@
         <div class="flex justify-center">
           {#if nostrConnectUri}
             <div class="rounded-lg bg-white p-4">
-              <canvas bind:this={qrCanvas} aria-label="QR code for Nostr Connect"></canvas>
+              <canvas bind:this={qrCanvas} aria-label={m.bunker_qr_aria()}></canvas>
             </div>
           {:else}
             <div

@@ -98,16 +98,16 @@
       const result = await deleteEvent(event, activeUser);
 
       if (result.success) {
-        showToast('Resource deleted successfully', 'success');
+        showToast(m.toast_resource_deleted(), 'success');
         showDeleteConfirmation = false;
         // Navigate to discover page
         goto(resolve('/discover'));
       } else {
-        showToast(result.error || 'Failed to delete resource', 'error');
+        showToast(result.error || m.toast_resource_delete_failed(), 'error');
       }
     } catch (error) {
       console.error('Failed to delete resource:', error);
-      showToast('An error occurred while deleting the resource', 'error');
+      showToast(m.toast_resource_delete_error(), 'error');
     } finally {
       isDeleting = false;
     }
@@ -276,7 +276,7 @@
               <img
                 src={getProfilePicture(creatorProfile) ||
                   `https://robohash.org/${firstCreator.pubkey}`}
-                alt="Creator"
+                alt={m.amb_resource_creator_alt()}
               />
             </div>
           </div>
@@ -286,7 +286,7 @@
             </div>
             {#if creators.length > 1}
               <div class="text-sm text-base-content/60">
-                +{creators.length - 1} more creator{creators.length > 2 ? 's' : ''}
+                {m.amb_resource_more_creators({ count: creators.length - 1 })}
               </div>
             {/if}
           </div>
@@ -296,7 +296,7 @@
             <div class="h-12 w-12 rounded-full">
               <img
                 src={`https://robohash.org/${encodeURIComponent(resource.creatorNames[0])}`}
-                alt="Creator"
+                alt={m.amb_resource_creator_alt()}
               />
             </div>
           </div>
@@ -313,7 +313,7 @@
         <!-- Published date -->
         {#if publishedAt}
           <div class="ml-auto text-sm text-base-content/60">
-            Published {formatCalendarDate(publishedAt, 'short')}
+            {m.amb_resource_published({ date: formatCalendarDate(publishedAt, 'short') })}
           </div>
         {/if}
       </div>
@@ -517,7 +517,7 @@
                 <img
                   src={getProfilePicture(creatorProfile) ||
                     `https://robohash.org/${creator.pubkey}`}
-                  alt="Creator"
+                  alt={m.amb_resource_creator_alt()}
                 />
               </div>
             </div>
@@ -592,8 +592,7 @@
       </h3>
       {#if isNostrNativeOnly}
         <p class="mb-4 text-sm text-base-content/70">
-          This content is stored on the Nostr network and available directly without external
-          dependencies.
+          {m.amb_resource_nostr_native_description()}
         </p>
       {/if}
       <div class="space-y-2">
@@ -633,7 +632,7 @@
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                 />
               </svg>
-              View
+              {m.amb_resource_view_file()}
             </a>
             <a href={file.url} download class="btn btn-ghost btn-sm">
               <svg
@@ -650,7 +649,7 @@
                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                 />
               </svg>
-              Download
+              {m.amb_resource_download_file()}
             </a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </div>
@@ -663,7 +662,9 @@
   {#if hasExternalRefs}
     <div class="mb-8">
       <h3 class="mb-3 text-lg font-semibold text-base-content">
-        External Reference{resource.externalUrls.length > 1 ? 's' : ''}
+        {resource.externalUrls.length > 1
+          ? m.amb_resource_external_references()
+          : m.amb_resource_external_reference()}
       </h3>
       <div class="space-y-2">
         {#each resource.externalUrls as url (url)}

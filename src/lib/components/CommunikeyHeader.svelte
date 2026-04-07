@@ -120,7 +120,7 @@
           <button
             onclick={() => scrollTabs('left')}
             class="absolute top-0 bottom-0 left-0 z-10 flex w-8 items-center justify-start bg-gradient-to-r from-base-100 to-transparent pl-1"
-            aria-label="Scroll tabs left"
+            aria-label={m.aria_scroll_tabs_left()}
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -138,7 +138,7 @@
           <button
             onclick={() => scrollTabs('right')}
             class="absolute top-0 right-0 bottom-0 z-10 flex w-8 items-center justify-end bg-gradient-to-l from-base-100 to-transparent pr-1"
-            aria-label="Scroll tabs right"
+            aria-label={m.aria_scroll_tabs_right()}
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

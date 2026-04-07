@@ -57,7 +57,7 @@
         type="button"
         onclick={onClose}
         class="p-1 text-base-content/60 transition-colors hover:text-base-content"
-        aria-label="Close"
+        aria-label={m.common_close()}
       >
         <CloseIcon class_="w-5 h-5" />
       </button>

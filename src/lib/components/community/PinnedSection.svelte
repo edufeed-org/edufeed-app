@@ -300,7 +300,7 @@
               class="btn btn-ghost btn-xs"
               disabled={i === 0}
               onclick={() => handleReorder(i, i - 1)}
-              aria-label="Move up"
+              aria-label={m.aria_pin_move_up()}
             >
               &#9650;
             </button>
@@ -308,14 +308,14 @@
               class="btn btn-ghost btn-xs"
               disabled={i === pinnedEvents.length - 1}
               onclick={() => handleReorder(i, i + 1)}
-              aria-label="Move down"
+              aria-label={m.aria_pin_move_down()}
             >
               &#9660;
             </button>
             <button
               class="btn text-error btn-ghost btn-xs"
               onclick={() => handleRemove(event)}
-              aria-label="Remove pin"
+              aria-label={m.aria_pin_remove()}
             >
               &#10005;
             </button>

@@ -20,7 +20,15 @@ vi.mock('$lib/paraglide/messages', () => ({
   learning_filter_audience_placeholder: () => 'Select audience...',
   learning_filter_active: () => 'Active filters',
   learning_filter_search_label: () => 'Search',
-  learning_filter_clear_all: () => 'Clear all'
+  learning_filter_clear_all: () => 'Clear all',
+  skos_dropdown_select: () => 'Select...',
+  skos_dropdown_search: () => 'Search...',
+  skos_dropdown_no_results: () => 'No results found',
+  skos_dropdown_expand: () => 'Expand',
+  skos_dropdown_collapse: () => 'Collapse',
+  skos_loading: () => 'Loading...',
+  skos_maximum_reached: () => 'Maximum reached',
+  skos_selected: (/** @type {{ count: number }} */ { count }) => `${count} selected`
 }));
 
 // Mock paraglide runtime

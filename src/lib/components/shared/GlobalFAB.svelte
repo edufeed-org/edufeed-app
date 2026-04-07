@@ -65,7 +65,7 @@
     tabindex="0"
     role="button"
     class="btn btn-circle shadow-lg btn-lg btn-primary hover:shadow-xl"
-    aria-label="Open actions menu"
+    aria-label={m.fab_open_menu()}
   >
     <PlusIcon class_="h-6 w-6" />
   </div>
@@ -73,9 +73,9 @@
   <!-- Create Event -->
   <button
     class="tooltip btn tooltip-left btn-circle btn-lg"
-    data-tip="Create Event"
+    data-tip={m.fab_create_event()}
     onclick={handleCreateEvent}
-    aria-label="Create new event"
+    aria-label={m.fab_create_event_aria()}
   >
     <CalendarIcon class_="h-5 w-5" />
   </button>
@@ -83,9 +83,9 @@
   <!-- Create Calendar -->
   <button
     class="tooltip btn tooltip-left btn-circle btn-lg"
-    data-tip="Create Calendar"
+    data-tip={m.fab_create_calendar()}
     onclick={handleCreateCalendar}
-    aria-label="Create new calendar"
+    aria-label={m.fab_create_calendar_aria()}
   >
     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
@@ -100,9 +100,9 @@
   <!-- Create Learning Content -->
   <button
     class="tooltip btn tooltip-left btn-circle btn-lg"
-    data-tip="Create Learning Content"
+    data-tip={m.fab_create_resource()}
     onclick={handleCreateResource}
-    aria-label="Create new learning content"
+    aria-label={m.fab_create_resource_aria()}
   >
     <GraduationCapIcon class_="h-5 w-5" />
   </button>
@@ -147,9 +147,9 @@
   <!-- Add Bookmark -->
   <button
     class="tooltip btn tooltip-left btn-circle btn-lg"
-    data-tip="Add Bookmark"
+    data-tip={m.fab_add_bookmark()}
     onclick={handleAddBookmark}
-    aria-label="Add Bookmark"
+    aria-label={m.fab_add_bookmark()}
   >
     <BookmarkIcon class_="h-5 w-5" />
   </button>
@@ -157,9 +157,9 @@
   <!-- Share Existing Content -->
   <button
     class="tooltip btn tooltip-left btn-circle btn-lg"
-    data-tip="Share Existing Content"
+    data-tip={m.fab_share_existing()}
     onclick={handleShareExisting}
-    aria-label="Share existing content with community"
+    aria-label={m.fab_share_existing_aria()}
   >
     <RepostIcon class_="h-5 w-5" />
   </button>

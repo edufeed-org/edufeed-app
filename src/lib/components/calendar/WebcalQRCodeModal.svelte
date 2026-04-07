@@ -167,7 +167,7 @@
         <button
           class="btn btn-circle btn-ghost btn-sm"
           onclick={handleClose}
-          aria-label="Close modal"
+          aria-label={m.aria_close_modal()}
         >
           <CloseIcon class_="w-6 h-6" />
         </button>

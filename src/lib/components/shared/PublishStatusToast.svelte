@@ -1,6 +1,7 @@
 <script>
   import { subscribeToPublishStatus } from '$lib/services/publish-service.js';
   import { CloseIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {import('$lib/services/publish-service.js').PublishStatus[]} */
   let activeStatuses = $state([]);
@@ -48,7 +49,12 @@
         <div class="flex flex-1 items-center gap-3">
           {#if status.status === 'pending' || status.status === 'publishing'}
             <span class="loading loading-sm loading-spinner"></span>
-            <span>Publishing... {status.successCount}/{status.totalRelays}</span>
+            <span
+              >{m.publish_status_publishing({
+                successCount: String(status.successCount),
+                totalRelays: String(status.totalRelays)
+              })}</span
+            >
           {:else if status.status === 'success'}
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -64,9 +70,7 @@
                 d="M5 13l4 4L19 7"
               />
             </svg>
-            <span
-              >Published to {status.successCount} relay{status.successCount !== 1 ? 's' : ''}</span
-            >
+            <span>{m.publish_status_success({ count: String(status.successCount) })}</span>
           {:else if status.status === 'failed'}
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -82,7 +86,7 @@
                 d="M6 18L18 6M6 6l12 12"
               />
             </svg>
-            <span>Failed to publish</span>
+            <span>{m.publish_status_failed()}</span>
           {/if}
         </div>
         <button class="btn btn-circle btn-ghost btn-xs" onclick={() => dismiss(status.eventId)}>
