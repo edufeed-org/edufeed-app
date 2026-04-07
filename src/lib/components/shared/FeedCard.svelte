@@ -10,6 +10,7 @@
     BookmarkIcon,
     FilesIcon
   } from '$lib/components/icons';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
@@ -25,6 +26,9 @@
    *   authorName?: string,
    *   authorAvatar?: string,
    *   authorPubkey?: string,
+   *   communityName?: string,
+   *   communityAvatar?: string,
+   *   communityPubkey?: string,
    *   timestamp: number,
    *   onclick?: () => void
    * }}
@@ -39,6 +43,9 @@
     authorName,
     authorAvatar,
     authorPubkey,
+    communityName,
+    communityAvatar,
+    communityPubkey,
     timestamp,
     onclick
   } = $props();
@@ -99,24 +106,18 @@
     ? `rgb(${kindColor.r},${kindColor.g},${kindColor.b})`
     : undefined}
 >
-  {#if authorAvatar}
-    {#if authorPubkey}
-      <a
-        href={resolve(`/p/${authorPubkey}`)}
-        class="avatar flex-shrink-0"
-        onclick={(e) => e.stopPropagation()}
-      >
-        <div class="h-10 w-10 rounded-full">
-          <img src={authorAvatar} alt={authorName || ''} loading="lazy" />
-        </div>
-      </a>
-    {:else}
-      <div class="avatar flex-shrink-0">
-        <div class="h-10 w-10 rounded-full">
-          <img src={authorAvatar} alt={authorName || ''} loading="lazy" />
-        </div>
+  {#if authorPubkey}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+      <ProfileAvatar pubkey={authorPubkey} size="md" linkToProfile showHoverCard />
+    </div>
+  {:else if authorAvatar}
+    <div class="avatar flex-shrink-0">
+      <div class="h-10 w-10 rounded-full">
+        <img src={authorAvatar} alt={authorName || ''} loading="lazy" />
       </div>
-    {/if}
+    </div>
   {/if}
 
   <div class="min-w-0 flex-1">
@@ -148,7 +149,28 @@
       </p>
     {/if}
 
-    {#if description}
+    {#if communityName}
+      <div class="mt-0.5 flex items-center gap-1.5">
+        {#if communityAvatar}
+          <img
+            src={communityAvatar}
+            alt={communityName}
+            class="h-4 w-4 rounded-full object-cover"
+          />
+        {/if}
+        {#if communityPubkey}
+          <a
+            href={resolve(`/c/${communityPubkey}`)}
+            class="truncate text-xs text-base-content/60 hover:text-primary"
+            onclick={(e) => e.stopPropagation()}
+          >
+            {communityName}
+          </a>
+        {:else}
+          <span class="truncate text-xs text-base-content/60">{communityName}</span>
+        {/if}
+      </div>
+    {:else if description}
       <p class="mt-0.5 truncate text-sm text-base-content/60">{description}</p>
     {/if}
 

@@ -210,12 +210,20 @@
     if (route) goto(resolve(/** @type {any} */ (route)));
   }
 
-  /** @param {any} event */
-  function getCommunityName(event) {
+  /**
+   * Get community info (name, avatar, pubkey) from an event's h-tag
+   * @param {any} event
+   * @returns {{ name?: string, avatar?: string, pubkey?: string }}
+   */
+  function getCommunityInfo(event) {
     const hTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
-    if (!hTag) return undefined;
+    if (!hTag) return {};
     const profile = communityProfiles.get(hTag);
-    return profile ? getDisplayName(profile) : undefined;
+    return {
+      name: profile ? getDisplayName(profile) : undefined,
+      avatar: profile ? getProfilePicture(profile) : undefined,
+      pubkey: hTag
+    };
   }
 
   function loadMore() {
@@ -245,17 +253,20 @@
           {#each visibleItems as event (event.id)}
             {@const cardData = getFeedCardData(event)}
             {@const profile = profiles.get(event.pubkey)}
-            {@const communityName = getCommunityName(event)}
+            {@const community = getCommunityInfo(event)}
             <FeedCard
               title={cardData.title}
               subtitle={cardData.subtitle}
               typeKey={cardData.typeKey}
               kind={event.kind}
               tags={cardData.tags}
-              description={communityName || cardData.description}
+              description={cardData.description}
               authorName={profile ? getDisplayName(profile) : undefined}
               authorAvatar={profile ? getProfilePicture(profile) : undefined}
               authorPubkey={event.pubkey}
+              communityName={community.name}
+              communityAvatar={community.avatar}
+              communityPubkey={community.pubkey}
               timestamp={event.created_at}
               onclick={() => navigateToEvent(event)}
             />
@@ -287,7 +298,7 @@
             {@const cardData = getFeedCardData(event)}
             {@const kindColor = generateKindColorRGB(event.kind)}
             {@const startTs = getEventStartTimestamp(event)}
-            {@const communityName = getCommunityName(event)}
+            {@const communityName = getCommunityInfo(event).name}
             <button
               class="w-[200px] shrink-0 rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md lg:w-full"
               style:border-left-color="rgb({kindColor.r},{kindColor.g},{kindColor.b})"
