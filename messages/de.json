@@ -1314,6 +1314,7 @@
   "inbox_title": "Posteingang",
   "inbox_empty": "Noch keine Benachrichtigungen.",
   "inbox_mark_all_read": "Alle als gelesen markieren",
+  "inbox_mark_read": "Als gelesen markieren",
   "inbox_view_all": "Alle im Posteingang anzeigen",
   "inbox_action_form_request": "hat dir eine Formularanfrage gesendet: {formName}",
   "inbox_action_form_response": "hat auf dein Formular geantwortet: {formName}",
@@ -1720,15 +1721,12 @@
   "error_publish_failed": "Veröffentlichung an kein Relay möglich",
   "toast_calendar_link_error": "Kalenderlink-Fehler",
   "toast_publish_failed": "Veröffentlichung fehlgeschlagen",
-
   "community_filter_joined": "Beigetreten",
   "community_filter_discover": "Entdecken",
-
   "share_modal_error_tab_accepts": "Dieser Tab akzeptiert nur: {types}",
   "share_modal_success": "Mit {count} Communities geteilt",
   "share_modal_error_share_failed": "Teilen mit {count} Communities fehlgeschlagen",
   "share_modal_error_share_generic": "Teilen fehlgeschlagen",
-
   "amb_resource_creator_alt": "Ersteller",
   "amb_resource_nostr_native_description": "Dieser Inhalt ist im Nostr-Netzwerk gespeichert und direkt ohne externe Abhängigkeiten verfügbar.",
   "amb_resource_view_file": "Anzeigen",
@@ -1736,7 +1734,6 @@
   "amb_resource_external_references": "Externe Referenzen",
   "amb_resource_external_reference": "Externe Referenz",
   "amb_resource_more_creators": "+{count} weitere",
-
   "create_resource_title_edit": "Bildungsressource bearbeiten",
   "create_resource_title_create": "Bildungsressource erstellen",
   "create_go_back": "Zurück",
@@ -1747,9 +1744,7 @@
   "create_edit_error_article_load": "Artikel konnte nicht geladen werden",
   "create_edit_error_wiki_not_found": "Wiki nicht gefunden",
   "create_edit_error_wiki_load": "Wiki konnte nicht geladen werden",
-
   "aria_scroll_tabs_left": "Tabs nach links scrollen",
   "aria_scroll_tabs_right": "Tabs nach rechts scrollen",
-
   "form_min_characters": "Min. {min} Zeichen"
 }
