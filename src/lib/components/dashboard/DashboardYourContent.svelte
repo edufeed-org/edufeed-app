@@ -18,7 +18,7 @@
     getAllLookupRelays
   } from '$lib/helpers/relay-helper.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
+  import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { navigateToCreate, CONTENT_CREATION } from '$lib/helpers/contentCreation.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
@@ -111,29 +111,10 @@
     return () => subs.forEach((s) => s.unsubscribe());
   });
 
-  /** @type {Record<number, string>} */
-  const KIND_ROUTE_PREFIX = {
-    31922: '/calendar/event/',
-    31923: '/calendar/event/',
-    30142: '/discover?resource=',
-    30023: '/',
-    30818: '/',
-    30168: '/forms/'
-  };
-
-  /**
-   * @param {any} event
-   */
+  /** @param {any} event */
   function navigateToEvent(event) {
-    const naddr = encodeEventToNaddr(event);
-    if (!naddr) return;
-
-    const prefix = KIND_ROUTE_PREFIX[event.kind];
-    if (prefix) {
-      goto(resolve(/** @type {any} */ (`${prefix}${naddr}`)));
-    } else {
-      goto(resolve(/** @type {any} */ (`/${naddr}`)));
-    }
+    const route = getContentEventRoute(event);
+    if (route) goto(resolve(/** @type {any} */ (route)));
   }
 </script>
 

@@ -9,8 +9,7 @@
   import { getContext } from 'svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
-  import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
-  import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -21,51 +20,16 @@
     CommunitySocialBookmarkModel
   } from '$lib/models/community-content.js';
   import { goto } from '$app/navigation';
-  import { encodeEventToNaddr, hexToNpub, generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
+  import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
+  import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
   import { getEventStartTimestamp } from '$lib/helpers/calendar.js';
-  import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
 
   /** Navigate to the detail view for a feed event
    * @param {import('nostr-tools').Event} event */
   function navigateToEvent(event) {
-    const isAddressable = event.kind >= 30000 && event.kind < 40000;
-    const isCalendar = event.kind === 31922 || event.kind === 31923;
-    const isBookmarkKind = event.kind === 39701 || event.kind === 9802 || event.kind === 1111;
-
-    if (isBookmarkKind) {
-      const rawUrl = extractUrlFromEvent(event);
-      if (rawUrl && communityId) {
-        const displayUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-        const npub = hexToNpub(communityId);
-        const fragment = event.kind === 9802 ? `#highlight-${event.id}` : '';
-        goto(`/c/${npub}/bookmarks/${encodeURIComponent(displayUrl)}${fragment}`);
-        return;
-      }
-      // Event-ref highlight (a-tag, no r-tag) — navigate to article/wiki detail
-      const pointer = extractEventRefFromHighlight(event);
-      if (pointer && communityId) {
-        const npub = hexToNpub(communityId);
-        const routePrefix = pointer.kind === 30818 ? 'wiki' : 'article';
-        const naddr = nip19.naddrEncode({
-          kind: pointer.kind,
-          pubkey: pointer.pubkey,
-          identifier: pointer.identifier
-        });
-        goto(`/c/${npub}/${routePrefix}/${naddr}#highlight-${event.id}`);
-      }
-    } else if (isAddressable) {
-      const naddr = encodeEventToNaddr(event);
-      if (!naddr) return;
-      goto(isCalendar ? `/calendar/event/${naddr}` : `/${naddr}`);
-    } else if (event.kind === 11) {
-      const relays = getSeenRelays(event);
-      const nevent = nip19.neventEncode({
-        id: event.id,
-        relays: relays ? Array.from(relays).slice(0, 3) : []
-      });
-      goto(`/${nevent}`);
-    }
+    const route = getContentEventRoute(event, { communityPubkey: communityId });
+    if (route) goto(route);
   }
 
   let { communikeyEvent, profileEvent, communityId, onKindNavigation } = $props();

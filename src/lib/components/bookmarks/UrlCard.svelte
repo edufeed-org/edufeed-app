@@ -42,7 +42,8 @@
     if (communityPubkey) {
       const npub = hexToNpub(communityPubkey);
       const encodedUrl = encodeURIComponent(group.displayUrl);
-      goto(resolve(`/c/${npub}/bookmarks/${encodedUrl}`));
+      const fragment = featuredHighlight ? `#highlight-${featuredHighlight.id}` : '';
+      goto(resolve(`/c/${npub}/bookmarks/${encodedUrl}${fragment}`));
     } else {
       // No community context — open the URL directly
       window.open(group.displayUrl, '_blank', 'noopener,noreferrer');

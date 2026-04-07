@@ -8,8 +8,7 @@
   /* eslint-disable svelte/prefer-svelte-reactivity -- Map/Set used intentionally for non-reactive internal tracking */
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { nip19 } from 'nostr-tools';
-  import { getDisplayName, getProfilePicture, getSeenRelays } from 'applesauce-core/helpers';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -28,7 +27,7 @@
     CommunityActivityModel,
     CommunitySocialBookmarkModel
   } from '$lib/models/community-content.js';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
+  import { getContentEventRoute, resolveCommunityPubkey } from '$lib/helpers/contentNavigation.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import { ChevronRightIcon, FilesIcon } from '$lib/components/icons';
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils';
@@ -206,20 +205,9 @@
 
   /** @param {any} event */
   function navigateToEvent(event) {
-    const isAddressable = event.kind >= 30000 && event.kind < 40000;
-    const isCalendar = event.kind === 31922 || event.kind === 31923;
-
-    if (isAddressable) {
-      const naddr = encodeEventToNaddr(event);
-      if (naddr) goto(resolve(isCalendar ? `/calendar/event/${naddr}` : `/${naddr}`));
-    } else if (event.kind === 11) {
-      const relays = getSeenRelays(event);
-      const nevent = nip19.neventEncode({
-        id: event.id,
-        relays: relays ? Array.from(relays).slice(0, 3) : []
-      });
-      goto(resolve(`/${nevent}`));
-    }
+    const communityPubkey = resolveCommunityPubkey(event, perCommunityItems);
+    const route = getContentEventRoute(event, { communityPubkey });
+    if (route) goto(resolve(/** @type {any} */ (route)));
   }
 
   /** @param {any} event */

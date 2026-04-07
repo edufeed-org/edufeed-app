@@ -4,12 +4,25 @@
   import AMBResourceView from '$lib/components/educational/AMBResourceView.svelte';
   import KanbanBoardView from '$lib/components/kanban/KanbanBoardView.svelte';
   import WikiView from '$lib/components/wiki/WikiView.svelte';
+  import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
+  import BookmarkItem from '$lib/components/bookmarks/BookmarkItem.svelte';
+  import { ExternalLinkIcon } from '$lib/components/icons';
   import { formatAMBResource } from '$lib/helpers/educational';
+  import { extractUrlFromEvent } from '$lib/helpers/urlGrouping.js';
   import { getTagValue } from 'applesauce-core/helpers';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte.js';
 
   /** @type {{ data: any }} */
   let { data } = $props();
+
+  let readerFailed = $state(false);
+
+  const getActiveUser = useActiveUser();
+  const getProfiles = useProfileMap(() =>
+    displayData?.type === 'bookmark' ? [data.event.pubkey] : []
+  );
 
   // Transform event data based on kind
   const displayData = $derived.by(() => {
@@ -48,6 +61,14 @@
       };
     }
 
+    // Social bookmark (kind 39701)
+    if (data.kind === 39701) {
+      const rawUrl = extractUrlFromEvent(data.event);
+      const url = rawUrl?.startsWith('http') ? rawUrl : rawUrl ? `https://${rawUrl}` : null;
+      const title = data.event.tags?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1];
+      return { type: 'bookmark', event: data.event, url, title };
+    }
+
     // Unsupported kind
     return {
       type: 'unsupported',
@@ -72,6 +93,8 @@
       const wikiTitle =
         getTagValue(displayData.event, 'title') || getTagValue(displayData.event, 'd') || 'Wiki';
       return `${wikiTitle} - ${runtimeConfig.appName}`;
+    } else if (displayData?.type === 'bookmark') {
+      return `${displayData.title || 'Bookmark'} - ${runtimeConfig.appName}`;
     }
     return `Content - ${runtimeConfig.appName}`;
   });
@@ -95,6 +118,39 @@
   {:else if displayData?.type === 'wiki'}
     <!-- Wiki Article -->
     <WikiView event={displayData.event} />
+  {:else if displayData?.type === 'bookmark'}
+    <!-- Social Bookmark -->
+    {#if displayData.url && !readerFailed}
+      <ReaderView
+        articleUrl={displayData.url}
+        bookmarks={[displayData.event]}
+        highlights={[]}
+        pageNotes={[]}
+        profiles={getProfiles()}
+        activeUser={getActiveUser()}
+        onerror={() => (readerFailed = true)}
+      />
+    {:else}
+      <div class="mx-auto max-w-2xl space-y-4">
+        {#if displayData.url}
+          <a
+            href={displayData.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn gap-2 btn-primary"
+          >
+            <ExternalLinkIcon class_="w-4 h-4" />
+            {displayData.url}
+          </a>
+        {/if}
+        <BookmarkItem
+          event={displayData.event}
+          authorProfile={getProfiles().get(data.event.pubkey)}
+          expanded={true}
+          activeUser={getActiveUser()}
+        />
+      </div>
+    {/if}
   {:else if displayData?.type === 'unsupported'}
     <!-- Unsupported Content Type -->
     <div class="alert alert-warning">
