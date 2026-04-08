@@ -3,7 +3,7 @@
  * Actions for creating and managing educational resources (AMB) with Nostr integration
  */
 
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { flattenAMBToNostrTags } from '$lib/helpers/educational/ambTransform.js';
 import { extractLabelFromUri } from '$lib/helpers/educational/skosLoader.js';
@@ -234,7 +234,7 @@ export function createEducationalActions() {
         }
 
         // Create the event using EventFactory
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         const eventTemplate = await eventFactory.build({
           kind: AMB_RESOURCE_KIND,
@@ -323,7 +323,7 @@ export function createEducationalActions() {
         }
 
         // Create the updated event
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         const eventTemplate = await eventFactory.build({
           kind: AMB_RESOURCE_KIND,

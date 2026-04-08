@@ -4,7 +4,7 @@
  * Manages kind 10001 pin lists for communities.
  * Uses applesauce tag operations for e/a tag manipulation.
  */
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { isAddressableKind } from 'applesauce-core/helpers/event';
 import { modifyPublicTags } from 'applesauce-core/operations/tags';
 import {
@@ -91,7 +91,7 @@ async function modifyPinList(operation) {
   const signer = manager.active?.signer;
   if (!signer) throw new Error('No active signer');
 
-  const factory = new EventFactory({ signer });
+  const factory = createAppEventFactory({ signer });
   const existing = getCurrentPinList();
 
   const template = existing
@@ -127,7 +127,7 @@ export async function reorderPins(communityPubkey, fromIndex, toIndex) {
   const signer = manager.active?.signer;
   if (!signer) throw new Error('No active signer');
 
-  const factory = new EventFactory({ signer });
+  const factory = createAppEventFactory({ signer });
   const newTags = [...otherTags, ...pinTags];
 
   const template = await factory.build({ kind: 10001, tags: newTags });

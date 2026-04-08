@@ -8,7 +8,7 @@
   import { CommunitySocialBookmarkModel } from '$lib/models/community-content.js';
   import { extractUrlFromEvent, normalizeUrl } from '$lib/helpers/urlGrouping.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import BookmarkItem from '$lib/components/bookmarks/BookmarkItem.svelte';
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
@@ -118,7 +118,7 @@
 
     isPostingNote = true;
     try {
-      const factory = new EventFactory({ signer: user.signer });
+      const factory = createAppEventFactory({ signer: user.signer });
       const draft = await factory.build({
         kind: 1111,
         content: noteContent.trim(),

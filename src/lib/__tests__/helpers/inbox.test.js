@@ -1,6 +1,11 @@
 // @ts-nocheck
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: vi.fn(() => ({}))
+}));
+
 import {
   getNotificationType,
   isUnread,

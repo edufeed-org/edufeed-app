@@ -3,7 +3,7 @@
   in the article container. Publishes NIP-84 highlight (kind 9802) on click.
 -->
 <script>
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { HighlightBlueprint } from 'applesauce-common/blueprints';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
@@ -109,7 +109,7 @@
     isSaving = true;
 
     try {
-      const factory = new EventFactory({ signer: activeUser.signer });
+      const factory = createAppEventFactory({ signer: activeUser.signer });
 
       const context = container
         ? extractContext(container.textContent || '', selectedText)

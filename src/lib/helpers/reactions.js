@@ -2,8 +2,8 @@
  * Reaction helper functions for NIP-25 reactions
  * Handles creating, publishing, and deleting reactions
  */
-import { EventFactory } from 'applesauce-core/event-factory';
 import { ReactionBlueprint } from 'applesauce-common/blueprints';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
 
@@ -22,7 +22,7 @@ export async function createReaction(targetEvent, emoji) {
     throw new Error('No account or signer available');
   }
 
-  const factory = new EventFactory({ signer: account.signer });
+  const factory = createAppEventFactory({ signer: account.signer });
   const draft = await factory.create(ReactionBlueprint, targetEvent, emoji || '+');
   return await factory.sign(draft);
 }
@@ -72,7 +72,7 @@ export async function deleteReaction(reactionEvent, options = {}) {
   }
 
   // Create EventFactory with the signer
-  const factory = new EventFactory({
+  const factory = createAppEventFactory({
     signer: account.signer
   });
 

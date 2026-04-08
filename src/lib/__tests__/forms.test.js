@@ -1,5 +1,13 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('$lib/helpers/event-factory.js', async () => {
+  const { EventFactory } = await import('applesauce-core/event-factory');
+  return {
+    createAppEventFactory: vi.fn((/** @type {any} */ opts) => new EventFactory(opts))
+  };
+});
+
 import { nip19 } from 'nostr-tools';
 import {
   buildFormTemplateTags,

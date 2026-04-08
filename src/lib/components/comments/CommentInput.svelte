@@ -1,5 +1,5 @@
 <script>
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { CommentBlueprint } from 'applesauce-common/blueprints';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -55,7 +55,7 @@
     isPosting = true; // Show loading during signing (may require user approval)
 
     try {
-      const factory = new EventFactory({ signer: activeUser.signer });
+      const factory = createAppEventFactory({ signer: activeUser.signer });
 
       // CommentBlueprint handles NIP-22 tag generation (root/reply pointers)
       const parent = parentItem || rootEvent;

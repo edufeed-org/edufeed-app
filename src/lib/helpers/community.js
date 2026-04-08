@@ -1,6 +1,6 @@
 import { AddUserToFollowSet, RemoveUserFromFollowSet } from 'applesauce-actions/actions';
 import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
@@ -27,7 +27,7 @@ export async function ensureFollowSetExists() {
 
   if (existing) return;
 
-  const factory = new EventFactory({ signer: manager.active.signer });
+  const factory = createAppEventFactory({ signer: manager.active.signer });
   const template = await factory.build({ kind: 30000, tags: [['d', COMMUNITIES_SET_ID]] });
   const signed = await factory.sign(template);
   await publishEvent(signed);

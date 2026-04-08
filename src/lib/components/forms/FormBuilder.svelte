@@ -2,7 +2,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { nip19 } from 'nostr-tools';
   import { goto } from '$app/navigation';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -170,7 +170,7 @@
         confirmationMessage
       });
 
-      const factory = new EventFactory({ signer: manager.active.signer });
+      const factory = createAppEventFactory({ signer: manager.active.signer });
       const template = await factory.build({ kind: 30168, tags, content: '' });
       const signed = await factory.sign(template);
       await publishEvent(signed);

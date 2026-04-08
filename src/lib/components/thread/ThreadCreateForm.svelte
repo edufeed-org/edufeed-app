@@ -4,7 +4,7 @@
 -->
 
 <script>
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { showToast } from '$lib/helpers/toast.js';
@@ -69,7 +69,7 @@
         eventTags.push(['t', tag]);
       }
 
-      const factory = new EventFactory({ signer: activeUser.signer });
+      const factory = createAppEventFactory({ signer: activeUser.signer });
       const signedEvent = await factory.sign(
         await factory.build({
           kind: 11,

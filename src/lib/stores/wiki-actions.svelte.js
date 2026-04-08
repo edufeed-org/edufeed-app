@@ -3,7 +3,7 @@
  * Actions for creating and managing wiki articles (NIP-54, kind 30818)
  */
 
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { normalizeIdentifier } from 'nostr-tools/nip54';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
@@ -80,7 +80,7 @@ export async function createWiki(formData, communityPubkey, communityEvent = nul
   const dTag = normalizeIdentifier(formData.topic.trim());
   const tags = buildWikiTags(formData, dTag, communityPubkey);
 
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const eventTemplate = await eventFactory.build({
     kind: WIKI_KIND,
     content: formData.content,
@@ -129,7 +129,7 @@ export async function updateWiki(formData, existingEvent, communityEvent = null)
 
   const tags = buildWikiTags(formData, dTag, hTag || undefined);
 
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const eventTemplate = await eventFactory.build({
     kind: WIKI_KIND,
     content: formData.content,

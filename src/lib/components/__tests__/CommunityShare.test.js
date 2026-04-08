@@ -144,6 +144,10 @@ vi.mock('applesauce-core/event-factory', () => ({
   EventFactory: vi.fn()
 }));
 
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: vi.fn(() => ({}))
+}));
+
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: vi.fn()
 }));

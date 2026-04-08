@@ -3,7 +3,7 @@
  * Actions for creating and managing long-form articles (NIP-23, kind 30023)
  */
 
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -90,7 +90,7 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
 
   const tags = buildArticleTags(formData, undefined, communityPubkey);
 
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const eventTemplate = await eventFactory.build({
     kind: ARTICLE_KIND,
     content: formData.content,
@@ -139,7 +139,7 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
 
   const tags = buildArticleTags(formData, dTag, hTag || undefined);
 
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const eventTemplate = await eventFactory.build({
     kind: ARTICLE_KIND,
     content: formData.content,

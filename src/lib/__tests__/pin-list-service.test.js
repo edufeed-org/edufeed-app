@@ -28,6 +28,10 @@ vi.mock('applesauce-core/event-factory', () => ({
   })
 }));
 
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: vi.fn(() => mockFactory)
+}));
+
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: mockEventStore
 }));

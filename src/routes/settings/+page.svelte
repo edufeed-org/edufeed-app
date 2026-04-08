@@ -1141,6 +1141,32 @@
         </div>
       </div>
 
+      <!-- Client Tag Card -->
+      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <h2 class="mb-2 card-title text-2xl">
+            <span class="text-2xl">{m.settings_client_tag_title()}</span>
+          </h2>
+          <p class="mb-6 text-base-content/70">
+            {m.settings_client_tag_description()}
+          </p>
+
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="checkbox"
+                class="toggle toggle-primary"
+                checked={appSettings.includeClientTag}
+                onchange={() => (appSettings.includeClientTag = !appSettings.includeClientTag)}
+              />
+              <span class="label-text font-medium">
+                {m.settings_client_tag_label({ clientName: runtimeConfig.clientName })}
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Developer Settings Card -->
       <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">

@@ -3,7 +3,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useCalendarManagement } from '$lib/stores/calendar-management-store.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
@@ -94,7 +94,7 @@
       });
 
       // Create the updated calendar event using EventFactory
-      const eventFactory = new EventFactory();
+      const eventFactory = createAppEventFactory();
       const eventTemplate = await eventFactory.build({
         kind: 31924,
         content: editDescription,
@@ -161,7 +161,7 @@
 
     try {
       // Create NIP-09 deletion request event (kind 5)
-      const deletionEventTemplate = await new EventFactory().build({
+      const deletionEventTemplate = await createAppEventFactory().build({
         kind: 5,
         content: 'Calendar deleted by user',
         tags: [

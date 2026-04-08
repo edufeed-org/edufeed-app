@@ -16,6 +16,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {'default' | 'stil' | 'rpi'} themeFamily
  * @property {'light' | 'dark' | 'system'} colorMode
  * @property {boolean} gatedMode
+ * @property {boolean} includeClientTag
  */
 
 /**
@@ -91,7 +92,8 @@ function getDefaultSettings() {
     debugMode: false,
     themeFamily,
     colorMode,
-    gatedMode: runtimeConfig.gatedMode?.default ?? false
+    gatedMode: runtimeConfig.gatedMode?.default ?? false,
+    includeClientTag: true
   };
 }
 
@@ -109,7 +111,8 @@ function migrateSettings(stored) {
       debugMode: stored.debugMode ?? defaults.debugMode,
       themeFamily: stored.themeFamily ?? defaults.themeFamily,
       colorMode: stored.colorMode ?? defaults.colorMode,
-      gatedMode: stored.gatedMode ?? defaults.gatedMode
+      gatedMode: stored.gatedMode ?? defaults.gatedMode,
+      includeClientTag: stored.includeClientTag ?? defaults.includeClientTag
     };
   }
 
@@ -145,7 +148,8 @@ function migrateSettings(stored) {
     debugMode: stored.debugMode ?? defaults.debugMode,
     themeFamily,
     colorMode,
-    gatedMode: stored.gatedMode ?? defaults.gatedMode
+    gatedMode: stored.gatedMode ?? defaults.gatedMode,
+    includeClientTag: stored.includeClientTag ?? defaults.includeClientTag
   };
 }
 
@@ -376,6 +380,23 @@ export const appSettings = {
    */
   get canToggleGatedMode() {
     return !runtimeConfig.gatedMode?.force;
+  },
+
+  /**
+   * Get includeClientTag setting
+   * @returns {boolean}
+   */
+  get includeClientTag() {
+    return settings.includeClientTag;
+  },
+
+  /**
+   * Set includeClientTag setting
+   * @param {boolean} value
+   */
+  set includeClientTag(value) {
+    settings.includeClientTag = value;
+    saveSettings(settings);
   },
 
   /**

@@ -1,5 +1,5 @@
-import { EventFactory } from 'applesauce-core/event-factory';
 import 'applesauce-common/blueprints';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 
 /**
@@ -13,7 +13,7 @@ import { publishEventOptimistic } from '$lib/services/publish-service.js';
 export async function createCommunityReposts(event, communityPubkeys, signer) {
   if (!communityPubkeys.length) return true;
 
-  const factory = new EventFactory({ signer });
+  const factory = createAppEventFactory({ signer });
 
   const template = await factory.share(event);
 

@@ -3,7 +3,7 @@
  * Actions for creating and managing calendar events with applesauce integration
  */
 import { SvelteMap } from 'svelte/reactivity';
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
 import {
@@ -67,7 +67,7 @@ export function createCalendarActions(_communityPubkey) {
         const dTag = `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         // Create the calendar event using EventFactory
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         // Build NIP-52 compliant tags with all community h-tags
         const tags = buildCalendarEventTags(
@@ -150,7 +150,7 @@ export function createCalendarActions(_communityPubkey) {
         const eventData = convertFormDataToEvent(formData, existingEvent.pubkey);
 
         // Create the calendar event using EventFactory with the SAME d-tag
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         // Build NIP-52 compliant tags (reuses original d-tag for replacement)
         const tags = buildCalendarEventTags(formData, eventData, dTag, hTag);
@@ -209,7 +209,7 @@ export function createCalendarActions(_communityPubkey) {
 
       try {
         // Create a deletion event (kind 5) with relay hint for discoverability
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
         const eTagWithHint = await buildETagWithHint(eventId, currentAccount.pubkey);
 
         const eventTemplate = await eventFactory.build({
@@ -251,7 +251,7 @@ export function createCalendarActions(_communityPubkey) {
         const dTag = `calendar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         // Create the calendar event using EventFactory (NIP-52 kind 31924)
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         // Build calendar event template
         const eventTemplate = await eventFactory.build({
@@ -313,7 +313,7 @@ export function createCalendarActions(_communityPubkey) {
         const rsvpDTag = `rsvp-${eventCoordinate}`;
 
         // Create the RSVP event using EventFactory (NIP-52 kind 31925)
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         // Build RSVP tags according to NIP-52 with relay hints for discoverability
         const aTagWithHint = await buildATagWithHint(eventCoordinate);

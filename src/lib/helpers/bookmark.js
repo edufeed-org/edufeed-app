@@ -3,7 +3,7 @@
  */
 
 import { nip19 } from 'nostr-tools';
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 
 /** Kind number for social bookmarks */
 export const BOOKMARK_KIND = 39701;
@@ -138,7 +138,7 @@ export async function createBookmarkEvent({
 }) {
   const tags = buildBookmarkTags(url, title, communityPubkeys, naddrData);
 
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const template = await eventFactory.build({
     kind: BOOKMARK_KIND,
     content: description || '',
@@ -158,7 +158,7 @@ export async function createBookmarkEvent({
  * @returns {Promise<import('nostr-tools').NostrEvent>}
  */
 export async function updateBookmarkContent(event, newContent, account) {
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const template = await eventFactory.build({
     kind: BOOKMARK_KIND,
     content: newContent,

@@ -1,4 +1,4 @@
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import {
@@ -49,7 +49,7 @@ export async function deleteEvent(event, activeUser) {
 
   try {
     // Create EventFactory
-    const factory = new EventFactory({
+    const factory = createAppEventFactory({
       signer: activeUser.signer
     });
 

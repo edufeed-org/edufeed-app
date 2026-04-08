@@ -4,7 +4,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { joinCommunity } from '$lib/helpers/community';
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader, timedPool } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import {
@@ -119,7 +119,7 @@
         tags.push(['encrypted']);
       }
 
-      const factory = new EventFactory({ signer: manager.active.signer });
+      const factory = createAppEventFactory({ signer: manager.active.signer });
       const template = await factory.build({ kind: 1069, tags, content });
       const signed = await factory.sign(template);
       await publishEvent(signed);

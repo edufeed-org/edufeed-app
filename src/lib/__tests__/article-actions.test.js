@@ -28,6 +28,11 @@ vi.mock('applesauce-core/event-factory', () => {
   return { EventFactory: MockEventFactory };
 });
 
+vi.mock('$lib/helpers/event-factory.js', async () => {
+  const { EventFactory } = await import('applesauce-core/event-factory');
+  return { createAppEventFactory: vi.fn(() => new EventFactory()) };
+});
+
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: {
     active: null

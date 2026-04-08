@@ -1,6 +1,6 @@
 import { nip19 } from 'nostr-tools';
 import * as m from '$lib/paraglide/messages';
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 
 /**
  * Find kind 30000 events that link to a specific form via ['form', formAddress] tag.
@@ -301,7 +301,7 @@ export function getDefaultMembershipForm() {
 export async function createDefaultMembershipForm(signer) {
   const { dTag, name, fields } = getDefaultMembershipForm();
   const tags = buildFormTemplateTags(dTag, fields, { name });
-  const factory = new EventFactory({ signer });
+  const factory = createAppEventFactory({ signer });
   const template = await factory.build({ kind: FORM_TEMPLATE_KIND, tags, content: '' });
   return factory.sign(template);
 }

@@ -36,6 +36,9 @@ vi.mock('applesauce-common/blueprints', () => ({
 vi.mock('applesauce-core/event-factory', () => ({
   EventFactory: vi.fn()
 }));
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: vi.fn(() => ({}))
+}));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: { active: null }
 }));

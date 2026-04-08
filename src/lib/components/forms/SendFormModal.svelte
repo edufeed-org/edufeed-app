@@ -1,6 +1,6 @@
 <script>
   import { nip19 } from 'nostr-tools';
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import {
@@ -96,7 +96,7 @@
         content = await signer.nip44Encrypt(recipient.pubkey, payload);
       }
 
-      const factory = new EventFactory({ signer });
+      const factory = createAppEventFactory({ signer });
       const template = await factory.build({ kind: FORM_REQUEST_KIND, tags, content });
       const signed = await factory.sign(template);
       await publishEvent(signed, [recipient.pubkey]);

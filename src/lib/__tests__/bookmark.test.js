@@ -3,7 +3,19 @@
  *
  * @vitest-environment node
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: vi.fn(() => ({
+    build: vi.fn(async (/** @type {any} */ t) => ({
+      ...t,
+      created_at: Math.floor(Date.now() / 1000),
+      pubkey: ''
+    })),
+    sign: vi.fn(async (/** @type {any} */ t) => ({ ...t, id: 'mock-id', sig: 'mock-sig' }))
+  }))
+}));
+
 import {
   detectInputType,
   buildBookmarkTags,

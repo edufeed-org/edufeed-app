@@ -5,7 +5,7 @@
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { TimelineModel } from 'applesauce-core/models';
 import { AppDataBlueprint } from 'applesauce-common/blueprints';
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
@@ -366,7 +366,7 @@ export async function markAsRead(type) {
   readMarkers = updated;
 
   // Publish kind 30078 via EventFactory + AppDataBlueprint
-  const factory = new EventFactory({ signer: manager.active.signer });
+  const factory = createAppEventFactory({ signer: manager.active.signer });
   try {
     const signed = /** @type {import('nostr-tools').NostrEvent} */ (
       await factory.create(AppDataBlueprint, APP_DATA_D_TAG, updated, true)
