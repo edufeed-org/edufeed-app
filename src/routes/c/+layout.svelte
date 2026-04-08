@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
-  import { setContext } from 'svelte';
+  import { getContext, setContext } from 'svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
@@ -15,6 +15,7 @@
   let { children } = $props();
 
   const activeUser = useActiveUser();
+  const hasWorkspaceShell = getContext('workspaceShell');
 
   let leftDrawerOpen = $state(false);
 
@@ -62,17 +63,19 @@
 
 <!-- Desktop Layout -->
 {#if activeUser()}
-  <div class="hidden h-[calc(100vh-8rem)] lg:flex">
-    <CommunitySidebar
-      currentCommunityId={currentCommunityPubkey}
-      {isDashboardActive}
-      onCommunitySelect={handleCommunitySelect}
-      onHomeSelect={handleHomeSelect}
-    />
+  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex">
+    {#if !hasWorkspaceShell}
+      <CommunitySidebar
+        currentCommunityId={currentCommunityPubkey}
+        {isDashboardActive}
+        onCommunitySelect={handleCommunitySelect}
+        onHomeSelect={handleHomeSelect}
+      />
+    {/if}
     {@render children()}
   </div>
 {:else}
-  <div class="hidden h-[calc(100vh-8rem)] lg:flex">
+  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex">
     {@render children()}
   </div>
 {/if}

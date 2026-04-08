@@ -1,4 +1,12 @@
 @import 'tailwindcss';
+
+/* Layout */
+:root {
+  --sidebar-icon-w: 4rem;
+  --sidebar-nav-w: 15rem;
+  --sidebar-total-w: calc(var(--sidebar-icon-w) + var(--sidebar-nav-w));
+}
+
 @plugin '@tailwindcss/typography';
 @plugin "daisyui" {
   themes:

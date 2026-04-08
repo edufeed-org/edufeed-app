@@ -7,15 +7,49 @@
   import Footer from '$lib/components/Footer.svelte';
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
+  import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
+  import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
+  import DashboardBottomTabBar from '$lib/components/dashboard/DashboardBottomTabBar.svelte';
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
   import { browser } from '$app/environment';
-  import { navigating } from '$app/stores';
+  import { afterNavigate, goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { recordNavigation } from '$lib/helpers/navigationHistory.js';
+  import { page, navigating } from '$app/stores';
+  import { setContext } from 'svelte';
+  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
 
   let { children, data } = $props();
 
   const getActiveUser = useActiveUser();
+
+  // Sidebar navigation — active state based on current route
+  let currentCommunityPubkey = $derived($page.params.pubkey ? $page.data?.pubkey : null);
+  let isOnCommunityRoutes = $derived($page.url.pathname.startsWith('/c'));
+  let isDashboardActive = $derived(isOnCommunityRoutes && !currentCommunityPubkey);
+  let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
+  let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
+
+  /**
+   * Handle community selection from sidebar
+   * @param {string} pubkey
+   */
+  function handleCommunitySelect(pubkey) {
+    const npub = hexToNpub(pubkey);
+    if (npub) {
+      goto(resolve(/** @type {any} */ (buildCommunityPath(npub, $page.url.searchParams))));
+    }
+  }
+
+  function handleHomeSelect() {
+    goto(resolve('/c/'));
+  }
+
+  // Signal to child layouts that the root layout provides CommunitySidebar
+  setContext('workspaceShell', true);
 
   // Initialize runtime config synchronously before any child components render.
   // The initialized guard inside initializeConfig() prevents double-initialization.
@@ -69,6 +103,9 @@
         curatedReady = true;
       });
   });
+
+  // Track in-app navigation for back button
+  afterNavigate(({ from }) => recordNavigation(from));
 
   // Check for community membership migration (old kind 30382 → kind 30000)
   $effect(() => {
@@ -125,7 +162,24 @@
     <progress class="progress h-1 w-full progress-primary"></progress>
   {/if}
   <ModalManager />
-  <main class="flex-1">
+  {#if getActiveUser()}
+    <CommunitySidebar
+      currentCommunityId={currentCommunityPubkey}
+      {isDashboardActive}
+      onCommunitySelect={handleCommunitySelect}
+      onHomeSelect={handleHomeSelect}
+    />
+  {/if}
+  {#if showDashboardNav}
+    <DashboardNavSidebar />
+  {/if}
+  <main
+    class="flex-1"
+    class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
+    class:lg:ml-(--sidebar-total-w)={showDashboardNav}
+    class:pb-16={showDashboardNav}
+    class:lg:pb-0={showDashboardNav}
+  >
     {#if curatedReady}
       {@render children?.()}
     {:else}
@@ -134,9 +188,17 @@
       </div>
     {/if}
   </main>
-  <Footer />
+  <div
+    class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
+    class:lg:ml-(--sidebar-total-w)={showDashboardNav}
+  >
+    <Footer />
+  </div>
 </div>
 <PublishStatusToast />
 {#if getActiveUser()}
   <GlobalFAB />
+{/if}
+{#if showDashboardNav}
+  <DashboardBottomTabBar />
 {/if}

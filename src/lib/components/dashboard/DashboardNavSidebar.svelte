@@ -3,6 +3,7 @@
   import { resolve } from '$app/paths';
   import { HomeIcon, BellIcon, ScrollTextIcon, PeopleIcon } from '$lib/components/icons';
   import { getUnreadCount } from '$lib/services/inbox-service.svelte.js';
+  import { getDashboardActiveSection } from '$lib/helpers/dashboardNavigation.js';
 
   import * as m from '$lib/paraglide/messages';
 
@@ -28,16 +29,13 @@
     }
   ];
 
-  let activeSection = $derived.by(() => {
-    const path = $page.url.pathname;
-    const resolvedInbox = resolve('/c/inbox');
-    if (path === resolvedInbox || path === resolvedInbox + '/') return 'inbox';
-    return $page.url.searchParams.get('view') || 'feed';
-  });
+  let activeSection = $derived(
+    getDashboardActiveSection($page.url.pathname, $page.url.searchParams)
+  );
 </script>
 
 <div
-  class="fixed top-16 left-16 hidden h-[calc(100vh-8rem)] w-60 flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
+  class="fixed top-16 left-(--sidebar-icon-w) hidden h-[calc(100vh-8rem)] w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
 >
   <nav class="menu space-y-1 p-4">
     {#each sections as section (section.id)}

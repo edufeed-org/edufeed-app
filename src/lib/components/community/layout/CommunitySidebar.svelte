@@ -27,7 +27,7 @@
 
 <!-- Desktop: Fixed left sidebar -->
 <div
-  class="fixed top-16 left-0 hidden h-[calc(100vh-8rem)] w-16 flex-col overflow-x-hidden overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
+  class="fixed top-16 left-0 hidden h-[calc(100vh-8rem)] w-(--sidebar-icon-w) flex-col overflow-x-hidden overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
 >
   <div class="flex flex-col items-center space-y-3 py-4">
     <!-- Home button -->

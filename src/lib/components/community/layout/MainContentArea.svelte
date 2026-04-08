@@ -32,7 +32,7 @@
 </script>
 
 <!-- Main Content Area -->
-<div class="flex-1 overflow-auto transition-all duration-300 lg:ml-[304px]">
+<div class="flex-1 overflow-auto transition-all duration-300 lg:ml-(--sidebar-nav-w)">
   {#if !selectedCommunityId}
     <!-- Empty state: No community selected -->
     <div class="flex h-full flex-col items-center justify-center p-8 text-center">

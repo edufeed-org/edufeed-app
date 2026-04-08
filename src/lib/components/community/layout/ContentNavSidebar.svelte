@@ -80,7 +80,7 @@
 
 <!-- Desktop: Fixed right sidebar -->
 <div
-  class="fixed top-16 left-16 hidden h-[calc(100vh-8rem)] w-60 flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
+  class="fixed top-16 left-(--sidebar-icon-w) hidden h-[calc(100vh-8rem)] w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
 >
   {#if !communitySelected}
     <div

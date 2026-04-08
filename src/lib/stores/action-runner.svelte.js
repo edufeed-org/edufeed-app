@@ -29,12 +29,15 @@ const publish = async (event, relays) => {
 };
 
 // Sync client tag on the long-lived factory when settings change at runtime
-$effect.pre(() => {
-  if (appSettings.includeClientTag && runtimeConfig.clientName) {
-    factory.setClient({ name: runtimeConfig.clientName });
-  } else {
-    factory.clearClient();
-  }
+// Wrapped in $effect.root() because this runs at module level (outside any component)
+$effect.root(() => {
+  $effect.pre(() => {
+    if (appSettings.includeClientTag && runtimeConfig.clientName) {
+      factory.setClient({ name: runtimeConfig.clientName });
+    } else {
+      factory.clearClient();
+    }
+  });
 });
 
 export const actionRunner = new ActionRunner(eventStore, factory, publish);
