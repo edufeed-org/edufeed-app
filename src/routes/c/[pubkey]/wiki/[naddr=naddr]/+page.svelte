@@ -1,9 +1,8 @@
 <script>
-  import { goto } from '$app/navigation';
-  import { resolve } from '$app/paths';
   import { page } from '$app/stores';
-  import { ChevronLeftIcon } from '$lib/components/icons';
   import WikiView from '$lib/components/wiki/WikiView.svelte';
+  import { ChevronLeftIcon } from '$lib/components/icons';
+  import { getHasHistory } from '$lib/helpers/navigationHistory.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: any }} */
@@ -16,19 +15,19 @@
     const hash = $page.url.hash;
     return hash.startsWith('#highlight-') ? hash.slice('#highlight-'.length) : null;
   });
-
-  function goBack() {
-    goto(resolve(`/c/${$page.params.pubkey}?view=wikis`));
-  }
 </script>
 
-<div class="flex-1 overflow-auto pb-16 transition-all duration-300 lg:ml-[304px] lg:pb-0">
+<div class="flex-1 overflow-auto pb-16 transition-all duration-300 lg:ml-(--sidebar-nav-w) lg:pb-0">
   <div class="mx-auto max-w-4xl p-4">
-    <button onclick={goBack} class="btn mb-4 gap-1 btn-ghost btn-sm">
-      <ChevronLeftIcon class_="w-4 h-4" />
-      {m.common_back()}
+    <button
+      onclick={() => {
+        if (getHasHistory()) history.back();
+      }}
+      class="btn mb-2 btn-circle btn-ghost btn-sm"
+      aria-label={m.common_back()}
+    >
+      <ChevronLeftIcon class_="w-5 h-5" />
     </button>
-
     {#if data.event}
       <WikiView event={data.event} {communityPubkey} {targetHighlightId} />
     {/if}

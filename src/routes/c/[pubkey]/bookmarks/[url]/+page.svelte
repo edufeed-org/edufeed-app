@@ -3,8 +3,6 @@
 -->
 <script>
   import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
-  import { resolve } from '$app/paths';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
   import { CommunitySocialBookmarkModel } from '$lib/models/community-content.js';
@@ -16,8 +14,9 @@
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
   import PageNoteItem from '$lib/components/bookmarks/PageNoteItem.svelte';
   import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
-  import { ChevronLeftIcon, ExternalLinkIcon } from '$lib/components/icons';
+  import { ExternalLinkIcon, ChevronLeftIcon } from '$lib/components/icons';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { getHasHistory } from '$lib/helpers/navigationHistory.js';
   import * as m from '$lib/paraglide/messages';
 
   const getActiveUser = useActiveUser();
@@ -140,22 +139,24 @@
       isPostingNote = false;
     }
   }
-
-  function goBack() {
-    goto(resolve(`/c/${$page.params.pubkey}?view=social-bookmarks`));
-  }
 </script>
 
-<div class="flex-1 overflow-auto lg:ml-[304px]">
+<div class="flex-1 overflow-auto lg:ml-(--sidebar-nav-w)">
   <div class="mx-auto max-w-3xl p-4">
     <!-- Header -->
     <div class="mb-6">
-      <button onclick={goBack} class="btn mb-3 gap-1 btn-ghost btn-sm">
-        <ChevronLeftIcon class_="w-4 h-4" />
-        {m.common_back()}
-      </button>
-
-      <h1 class="text-xl font-bold">{title}</h1>
+      <div class="flex items-center gap-2">
+        <button
+          onclick={() => {
+            if (getHasHistory()) history.back();
+          }}
+          class="btn btn-circle btn-ghost btn-sm"
+          aria-label={m.common_back()}
+        >
+          <ChevronLeftIcon class_="w-5 h-5" />
+        </button>
+        <h1 class="text-xl font-bold">{title}</h1>
+      </div>
       <div class="mt-1 flex items-center gap-2">
         <span class="text-sm text-base-content/50">{domain}</span>
         <a
