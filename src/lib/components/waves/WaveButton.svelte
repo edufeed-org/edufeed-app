@@ -36,7 +36,10 @@
 
   let cooldownState = $derived(canWave(reactions, pubkey));
 
-  function handleWave() {
+  /** @param {MouseEvent} e */
+  function handleWave(e) {
+    e.stopPropagation();
+    e.preventDefault();
     if (!cooldownState.canWave || !profileEvent) return;
     waved = true;
     publishWave(profileEvent)
