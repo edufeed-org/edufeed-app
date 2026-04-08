@@ -110,18 +110,26 @@
             : 'hover:bg-base-200'}"
         >
           <Icon class_="w-5 h-5" />
-          <span class="text-sm font-medium">{type.label}</span>
-          {#if restrictedTabs.has(type.id)}
-            {#if accessibleTabs.has(type.id)}
-              <span class="ml-auto" title={m.community_content_tab_access_granted()}>
-                <LockOpenIcon class_="w-3.5 h-3.5 text-success" />
-              </span>
-            {:else}
-              <span class="ml-auto opacity-60" title={m.community_content_tab_restricted()}>
-                <LockIcon class_="w-3.5 h-3.5" />
-              </span>
+          <span class="relative">
+            <span class="text-sm font-medium">{type.label}</span>
+            {#if restrictedTabs.has(type.id)}
+              {#if accessibleTabs.has(type.id)}
+                <span
+                  class="absolute -top-1.5 -right-3"
+                  title={m.community_content_tab_access_granted()}
+                >
+                  <LockOpenIcon class_="w-2.5 h-2.5 text-success" />
+                </span>
+              {:else}
+                <span
+                  class="absolute -top-1.5 -right-3 opacity-60"
+                  title={m.community_content_tab_restricted()}
+                >
+                  <LockIcon class_="w-2.5 h-2.5" />
+                </span>
+              {/if}
             {/if}
-          {/if}
+          </span>
         </button>
       {/each}
     </nav>
