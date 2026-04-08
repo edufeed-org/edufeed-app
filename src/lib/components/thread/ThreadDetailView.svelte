@@ -6,15 +6,12 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { getDisplayName } from 'applesauce-core/helpers';
-  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
-  import { resolve } from '$app/paths';
   import { encodePointer } from 'applesauce-core/helpers';
+  import { resolve } from '$app/paths';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import NostrContentRenderer from '../shared/NostrContentRenderer.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
@@ -44,9 +41,6 @@
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
 
-  const getAuthorProfile = useUserProfile(() => event.pubkey);
-  const authorProfile = $derived(getAuthorProfile());
-
   // Extract thread metadata
   const title = $derived(
     event.tags?.find((/** @type {any} */ t) => t[0] === 'title')?.[1] || m.thread_detail_untitled()
@@ -58,9 +52,6 @@
       .map((/** @type {any} */ t) => t[1]) || []
   );
 
-  const authorName = $derived(
-    getDisplayName(authorProfile ?? undefined, event.pubkey.slice(0, 8) + '...')
-  );
   const relativeDate = $derived(formatRelativeTime(event.created_at));
 
   // Scroll to reactions section when navigating from a reaction notification
@@ -106,28 +97,17 @@
   {/if}
 
   <DetailHeader
-    title={event.kind === 11 ? title : authorName}
+    title={event.kind === 11 ? title : ''}
     {event}
     authorPubkey={event.pubkey}
     date={relativeDate}
-    showAuthorStrip={event.kind === 11}
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.thread_detail_delete_confirm_title()}
     deleteItemName={title}
   >
-    {#snippet titleContent()}
-      {#if event.kind === 1}
-        <div class="flex items-center gap-2">
-          <ProfileAvatar pubkey={event.pubkey} size="sm" linkToProfile />
-          <div class="min-w-0">
-            <a href={resolve(`/p/${event.pubkey}`)} class="text-sm font-semibold hover:underline">
-              {authorName}
-            </a>
-            <div class="text-xs opacity-50">{relativeDate}</div>
-          </div>
-        </div>
-      {:else}
-        <h1 class="truncate text-xl font-bold">{title}</h1>
+    {#snippet metadata()}
+      {#if hashtags.length > 0}
+        <EventTags tags={hashtags} size="xs" maxDisplay={3} targetRoute="/discover" />
       {/if}
     {/snippet}
   </DetailHeader>

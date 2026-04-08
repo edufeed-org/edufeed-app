@@ -148,6 +148,11 @@
         <span class="badge badge-sm badge-secondary">{topic}</span>
       {/if}
     {/snippet}
+    {#snippet metadata()}
+      {#if hashtags.length > 0}
+        <EventTags tags={hashtags} size="xs" maxDisplay={3} targetRoute="/discover" />
+      {/if}
+    {/snippet}
   </DetailHeader>
 
   <!-- Wiki Content with Highlights -->

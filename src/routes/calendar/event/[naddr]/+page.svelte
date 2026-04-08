@@ -213,7 +213,6 @@
         sig: ''
       }}
       authorPubkey={event.pubkey || ''}
-      showAuthorStrip={false}
       onEdit={isUserEvent ? handleEdit : undefined}
       onDelete={isUserEvent ? handleDelete : undefined}
       deleteTitle={m.event_management_delete_confirm_title()}
@@ -221,6 +220,11 @@
     >
       {#snippet actions()}
         <AddToCalendarDropdown {event} disabled={!activeUser} />
+      {/snippet}
+      {#snippet metadata()}
+        {#if event.hashtags?.length > 0}
+          <EventTags tags={event.hashtags} size="xs" maxDisplay={3} />
+        {/if}
       {/snippet}
     </DetailHeader>
 

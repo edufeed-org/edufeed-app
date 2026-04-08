@@ -154,7 +154,13 @@
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.article_view_delete_confirm_title()}
     deleteItemName={title}
-  />
+  >
+    {#snippet metadata()}
+      {#if hashtags.length > 0}
+        <EventTags tags={hashtags} size="xs" maxDisplay={3} targetRoute="/discover" />
+      {/if}
+    {/snippet}
+  </DetailHeader>
 
   <!-- Featured Image -->
   {#if image}
