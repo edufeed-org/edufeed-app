@@ -14,9 +14,9 @@
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
   import PageNoteItem from '$lib/components/bookmarks/PageNoteItem.svelte';
   import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
-  import { ExternalLinkIcon, ChevronLeftIcon } from '$lib/components/icons';
+  import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
+  import { BookOpenIcon, ChatTextIcon } from '$lib/components/icons';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { getHasHistory } from '$lib/helpers/navigationHistory.js';
   import * as m from '$lib/paraglide/messages';
 
   const getActiveUser = useActiveUser();
@@ -102,6 +102,21 @@
     return normalizedUrl;
   });
 
+  // Representative event for DetailHeader context menu
+  const representativeEvent = $derived(
+    bookmarks[0] ||
+      highlights[0] ||
+      pageNotes[0] || {
+        id: '',
+        kind: 39701,
+        pubkey: '',
+        tags: [],
+        created_at: 0,
+        content: '',
+        sig: ''
+      }
+  );
+
   // Extract target highlight ID from URL fragment (e.g. #highlight-abc123)
   const targetHighlightId = $derived.by(() => {
     const hash = $page.url.hash;
@@ -143,60 +158,34 @@
 
 <div class="flex-1 overflow-auto lg:ml-(--sidebar-nav-w)">
   <div class="mx-auto max-w-3xl p-4">
-    <!-- Header -->
-    <div class="mb-6">
-      <div class="flex items-center gap-2">
-        <button
-          onclick={() => {
-            if (getHasHistory()) history.back();
-          }}
-          class="btn btn-circle btn-ghost btn-sm"
-          aria-label={m.common_back()}
-        >
-          <ChevronLeftIcon class_="w-5 h-5" />
-        </button>
-        <h1 class="text-xl font-bold">{title}</h1>
-      </div>
-      <div class="mt-1 flex items-center gap-2">
-        <span class="text-sm text-base-content/50">{domain}</span>
-        <a
-          href={decodedUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn gap-1 btn-ghost btn-xs"
-        >
-          <ExternalLinkIcon class_="w-3.5 h-3.5" />
-          Open
-        </a>
-      </div>
-
-      <!-- View mode toggle -->
-      {#if showReaderToggle && !isLoading}
-        <div class="mt-3">
-          <div class="join">
-            <button
-              class="btn join-item btn-sm"
-              class:btn-active={effectiveView === 'reader'}
-              onclick={() => {
-                viewMode = 'reader';
-                readerFailed = false;
+    <DetailHeader
+      {title}
+      subtitle={domain}
+      event={representativeEvent}
+      authorPubkey=""
+      showAuthorStrip={false}
+    >
+      {#snippet actions()}
+        {#if showReaderToggle && !isLoading}
+          <label class="btn swap swap-rotate btn-ghost btn-sm">
+            <input
+              type="checkbox"
+              checked={effectiveView === 'cards'}
+              onchange={() => {
+                if (effectiveView === 'cards') {
+                  viewMode = 'reader';
+                  readerFailed = false;
+                } else {
+                  viewMode = 'cards';
+                }
               }}
-            >
-              {m.reader_view()}
-            </button>
-            <button
-              class="btn join-item btn-sm"
-              class:btn-active={effectiveView === 'cards'}
-              onclick={() => {
-                viewMode = 'cards';
-              }}
-            >
-              {m.reader_cards_view()}
-            </button>
-          </div>
-        </div>
-      {/if}
-    </div>
+            />
+            <BookOpenIcon class_="swap-off w-4 h-4" />
+            <ChatTextIcon class_="swap-on w-4 h-4" />
+          </label>
+        {/if}
+      {/snippet}
+    </DetailHeader>
 
     {#if isLoading}
       <div class="flex flex-col items-center justify-center py-16">

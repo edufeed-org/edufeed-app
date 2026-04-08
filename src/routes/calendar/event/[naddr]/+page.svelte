@@ -22,12 +22,14 @@
     UserIcon,
     ExternalLinkIcon
   } from '$lib/components/icons';
-  import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
+  import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
   import AddToCalendarDropdown from '$lib/components/calendar/AddToCalendarDropdown.svelte';
+  import { showToast } from '$lib/helpers/toast.js';
+  import { deleteCalendarEvent } from '$lib/helpers/eventDeletion.js';
   import EventTags from '$lib/components/calendar/EventTags.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import LocationLink from '$lib/components/shared/LocationLink.svelte';
-  import MarkdownRenderer from '$lib/components/shared/MarkdownRenderer.svelte';
+
   import EventLocationMap from '$lib/components/calendar/EventLocationMap.svelte';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
@@ -35,7 +37,6 @@
   import { useCalendarEventRsvps } from '$lib/stores/calendar-event-rsvps.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
-  import EventManagementActions from '$lib/components/calendar/EventManagementActions.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {import('./$types').PageProps} */
@@ -165,10 +166,18 @@
   }
 
   /**
-   * Handle delete success - navigate back
+   * Handle delete action - delete and navigate back
    */
-  function handleDeleteSuccess() {
-    window.history.back();
+  async function handleDelete() {
+    if (!activeUser || !event) return;
+    const result = await deleteCalendarEvent(event, activeUser);
+    if (result.success) {
+      showToast(m.event_management_delete_success(), 'success');
+      window.history.back();
+    } else {
+      showToast(result.error || m.event_management_delete_failed(), 'error');
+      throw new Error(result.error || 'Delete failed');
+    }
   }
 </script>
 
@@ -181,7 +190,7 @@
   <div class="container mx-auto max-w-4xl px-4 py-8">
     <!-- Event Header with Image -->
     {#if event.image}
-      <div class="mb-8">
+      <div class="mb-4">
         <img
           src={event.image}
           alt={event.title}
@@ -191,60 +200,29 @@
       </div>
     {/if}
 
-    <!-- Event Owner Badge -->
-    {#if isUserEvent}
-      <div class="mb-4 flex items-center gap-2">
-        <div class="badge gap-2 badge-primary">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="inline-block h-4 w-4 stroke-current"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
-          {m.calendar_detail_your_event()}
-        </div>
-      </div>
-    {/if}
-
-    <!-- Title Row with Copy Icon, Add to Calendar, and Edit -->
-    <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <!-- Event Title with Context Menu -->
-      <div class="flex flex-1 items-start gap-2">
-        <h1 class="text-4xl font-bold text-base-content">
-          {event.title}
-        </h1>
-        {#if rawEvent}
-          <EventContextMenu event={rawEvent} />
-        {/if}
-      </div>
-
-      <!-- Actions (right side) -->
-      <div class="flex flex-shrink-0 items-center gap-2">
+    <DetailHeader
+      title={event.title || ''}
+      subtitle={event.summary || undefined}
+      event={rawEvent || {
+        id: '',
+        kind: event.kind || 31923,
+        pubkey: event.pubkey || '',
+        tags: [],
+        created_at: 0,
+        content: '',
+        sig: ''
+      }}
+      authorPubkey={event.pubkey || ''}
+      showAuthorStrip={false}
+      onEdit={isUserEvent ? handleEdit : undefined}
+      onDelete={isUserEvent ? handleDelete : undefined}
+      deleteTitle={m.event_management_delete_confirm_title()}
+      deleteItemName={event.title || ''}
+    >
+      {#snippet actions()}
         <AddToCalendarDropdown {event} disabled={!activeUser} />
-        {#if isUserEvent}
-          <EventManagementActions
-            {event}
-            {activeUser}
-            onEdit={handleEdit}
-            onDeleteSuccess={handleDeleteSuccess}
-          />
-        {/if}
-      </div>
-    </div>
-
-    <!-- Event Description -->
-    {#if event.summary}
-      <div class="mb-8">
-        <MarkdownRenderer content={event.summary} />
-      </div>
-    {/if}
+      {/snippet}
+    </DetailHeader>
 
     <!-- Date and Time Card -->
     <div class="card mb-8 bg-base-200 shadow-lg">

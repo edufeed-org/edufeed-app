@@ -35,6 +35,8 @@ export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
 export { default as InfoIcon } from './ui/InfoIcon.svelte';
 export { default as BadgeIcon } from './ui/BadgeIcon.svelte';
+export { default as BookOpenIcon } from './ui/BookOpenIcon.svelte';
+export { default as ChatTextIcon } from './ui/ChatTextIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';

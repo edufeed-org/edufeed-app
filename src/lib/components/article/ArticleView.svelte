@@ -7,11 +7,9 @@
   import * as m from '$lib/paraglide/messages';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { getDisplayName } from 'applesauce-core/helpers';
   import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
-  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
@@ -20,16 +18,12 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { TimelineModel } from 'applesauce-core/models';
-  import { EditIcon, TrashIcon } from '$lib/components/icons';
-  import EventContextMenu from '../shared/EventContextMenu.svelte';
+  import DetailHeader from '../shared/DetailHeader.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import HighlightOverlay from '../shared/HighlightOverlay.svelte';
-  import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
-
-  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
 
   /**
    * @typedef {Object} Props
@@ -44,10 +38,6 @@
   // Get active user (reactive to login/logout)
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
-
-  // Load author profile - pass getter for reactive tracking if event prop changes
-  const getAuthorProfile = useUserProfile(() => event.pubkey);
-  const authorProfile = $derived(getAuthorProfile());
 
   // Extract article metadata
   const title = $derived(getArticleTitle(event) || 'Untitled Article');
@@ -81,15 +71,6 @@
         .map((/** @type {any} */ t) => t[1]) || []
     );
   });
-
-  // Get author info
-  const authorName = $derived(
-    getDisplayName(authorProfile ?? undefined, event.pubkey.slice(0, 8) + '...')
-  );
-
-  // Delete state
-  let showDeleteConfirmation = $state(false);
-  let isDeleting = $state(false);
 
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
 
@@ -143,21 +124,13 @@
   async function handleDelete() {
     if (!activeUser || !event) return;
 
-    isDeleting = true;
-    try {
-      const result = await deleteEvent(event, activeUser);
-      if (result.success) {
-        showToast(m.article_view_delete_success(), 'success');
-        showDeleteConfirmation = false;
-        history.back();
-      } else {
-        showToast(result.error || m.article_view_delete_failed(), 'error');
-      }
-    } catch (error) {
-      console.error('Failed to delete article:', error);
-      showToast(m.article_view_delete_failed(), 'error');
-    } finally {
-      isDeleting = false;
+    const result = await deleteEvent(event, activeUser);
+    if (result.success) {
+      showToast(m.article_view_delete_success(), 'success');
+      history.back();
+    } else {
+      showToast(result.error || m.article_view_delete_failed(), 'error');
+      throw new Error(result.error || 'Delete failed');
     }
   }
 
@@ -171,55 +144,17 @@
 
 <article class="article-view mx-auto max-w-4xl">
   <!-- Article Header -->
-  <header class="mb-8">
-    <!-- Title -->
-    <h1 class="mb-4 text-4xl font-bold text-base-content md:text-5xl">
-      {title}
-    </h1>
-
-    <!-- Summary -->
-    {#if summary}
-      <p class="mb-6 text-xl text-base-content/70">
-        {summary}
-      </p>
-    {/if}
-
-    <!-- Author Info & Metadata -->
-    <div class="flex flex-col gap-4 border-y border-base-300 py-4 md:flex-row md:items-center">
-      <!-- Author -->
-      <div class="flex flex-1 items-center gap-3">
-        <ProfileAvatar pubkey={event.pubkey} size="lg" linkToProfile />
-        <div>
-          <a
-            href={resolve(`/p/${event.pubkey}`)}
-            class="font-semibold text-base-content hover:underline">{authorName}</a
-          >
-          <div class="text-sm text-base-content/60">
-            {m.article_view_published({ date: formatCalendarDate(publishedAt, 'short') })}
-          </div>
-        </div>
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-2">
-        {#if isAuthor}
-          <button class="btn btn-outline btn-sm" onclick={handleEdit}>
-            <EditIcon class="h-4 w-4" />
-            {m.common_edit()}
-          </button>
-          <button
-            class="btn btn-outline btn-sm btn-error"
-            onclick={() => (showDeleteConfirmation = true)}
-            aria-label={m.common_delete()}
-          >
-            <TrashIcon class="h-4 w-4" />
-            {m.common_delete()}
-          </button>
-        {/if}
-        <EventContextMenu {event} />
-      </div>
-    </div>
-  </header>
+  <DetailHeader
+    {title}
+    subtitle={summary}
+    {event}
+    authorPubkey={event.pubkey}
+    date={formatCalendarDate(publishedAt, 'short')}
+    onEdit={isAuthor ? handleEdit : undefined}
+    onDelete={isAuthor ? handleDelete : undefined}
+    deleteTitle={m.article_view_delete_confirm_title()}
+    deleteItemName={title}
+  />
 
   <!-- Featured Image -->
   {#if image}
@@ -269,12 +204,3 @@
     <CommentList rootEvent={event} {activeUser} />
   </div>
 </article>
-
-<DeleteConfirmModal
-  open={showDeleteConfirmation}
-  title={m.article_view_delete_confirm_title()}
-  itemName={title}
-  {isDeleting}
-  onconfirm={handleDelete}
-  oncancel={() => (showDeleteConfirmation = false)}
-/>

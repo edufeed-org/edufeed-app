@@ -35,7 +35,13 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   event_menu_unfeatured_toast: () => 'Removed from homepage',
   common_copy: () => 'Copy',
   common_copied: () => 'Copied',
-  common_close: () => 'Close'
+  common_close: () => 'Close',
+  common_edit: () => 'Edit',
+  common_delete: () => 'Delete',
+  delete_confirm_text: () => 'Are you sure you want to delete',
+  delete_confirm_cannot_undo: () => 'This cannot be undone.',
+  delete_confirm_deleting: () => 'Deleting...',
+  common_cancel: () => 'Cancel'
 }));
 
 vi.mock('$lib/services/pin-list-service.js', () => ({
@@ -71,6 +77,9 @@ vi.mock('$lib/components/icons', async (importOriginal) => {
 
 // Mock CommunityShare component
 vi.mock('../shared/CommunityShare.svelte', () => ({ default: () => ({}) }));
+
+// Mock DeleteConfirmModal component
+vi.mock('../shared/DeleteConfirmModal.svelte', () => ({ default: () => ({}) }));
 
 const mockEvent = {
   id: 'abc123',
@@ -153,10 +162,11 @@ describe('EventContextMenu', () => {
     expect(shareDialog?.hasAttribute('open')).toBe(true);
   });
 
-  it('has a divider separating user and dev actions', () => {
+  it('has a divider separating sharing and dev actions', () => {
     render(EventContextMenu, { props: { event: mockEvent } });
-    const divider = document.querySelector('.divider');
-    expect(divider).toBeTruthy();
+    const dividers = document.querySelectorAll('.divider');
+    // Without author actions, there should be one divider (between sharing and dev)
+    expect(dividers.length).toBe(1);
   });
 
   it('copies njump share link on Copy link click', async () => {
@@ -187,6 +197,72 @@ describe('EventContextMenu', () => {
     const pre = document.querySelector('pre');
     expect(pre?.textContent).toContain('"id": "abc123"');
     expect(pre?.textContent).toContain('"kind": 30023');
+  });
+
+  describe('author actions (edit/delete)', () => {
+    it('shows Edit menu item when onEdit is provided', () => {
+      const onEdit = vi.fn();
+      render(EventContextMenu, { props: { event: mockEvent, onEdit } });
+      const dropdown = document.querySelector('.dropdown-content');
+      const buttons = Array.from(dropdown?.querySelectorAll('button') || []);
+      const editBtn = buttons.find((btn) => btn.textContent?.includes('Edit'));
+      expect(editBtn).toBeTruthy();
+    });
+
+    it('shows Delete menu item with text-error class when onDelete is provided', () => {
+      const onDelete = vi.fn();
+      render(EventContextMenu, { props: { event: mockEvent, onDelete } });
+      const dropdown = document.querySelector('.dropdown-content');
+      const buttons = Array.from(dropdown?.querySelectorAll('button') || []);
+      const deleteBtn = buttons.find((btn) => btn.textContent?.includes('Delete'));
+      expect(deleteBtn).toBeTruthy();
+      expect(deleteBtn?.classList.contains('text-error')).toBe(true);
+    });
+
+    it('hides Edit and Delete when callbacks are not provided', () => {
+      render(EventContextMenu, { props: { event: mockEvent } });
+      const dropdown = document.querySelector('.dropdown-content');
+      const buttons = Array.from(dropdown?.querySelectorAll('button') || []);
+      const editBtn = buttons.find((btn) => btn.textContent?.trim() === 'Edit');
+      const deleteBtn = buttons.find((btn) => btn.textContent?.trim() === 'Delete');
+      expect(editBtn).toBeUndefined();
+      expect(deleteBtn).toBeUndefined();
+    });
+
+    it('shows divider between author and sharing sections when author actions present', () => {
+      const onEdit = vi.fn();
+      const onDelete = vi.fn();
+      render(EventContextMenu, { props: { event: mockEvent, onEdit, onDelete } });
+      const dividers = document.querySelectorAll('.divider');
+      // Two dividers: one after author actions, one before dev actions
+      expect(dividers.length).toBe(2);
+    });
+
+    it('calls onEdit when Edit is clicked', async () => {
+      const onEdit = vi.fn();
+      render(EventContextMenu, { props: { event: mockEvent, onEdit } });
+      const dropdown = document.querySelector('.dropdown-content');
+      const buttons = Array.from(dropdown?.querySelectorAll('button') || []);
+      const editBtn = buttons.find((btn) => btn.textContent?.includes('Edit'));
+      await fireEvent.click(editBtn);
+      expect(onEdit).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('dev actions styling', () => {
+    it('dev actions (Copy event ID, View raw event) have opacity-50 class', () => {
+      render(EventContextMenu, { props: { event: mockEvent } });
+      const dropdown = document.querySelector('.dropdown-content');
+      const listItems = Array.from(dropdown?.querySelectorAll('li') || []);
+      const copyEventIdLi = listItems.find((li) =>
+        li.querySelector('button')?.textContent?.includes('Copy event ID')
+      );
+      const viewRawLi = listItems.find((li) =>
+        li.querySelector('button')?.textContent?.includes('View raw event')
+      );
+      expect(copyEventIdLi?.classList.contains('opacity-50')).toBe(true);
+      expect(viewRawLi?.classList.contains('opacity-50')).toBe(true);
+    });
   });
 
   describe('feature on homepage (pin)', () => {

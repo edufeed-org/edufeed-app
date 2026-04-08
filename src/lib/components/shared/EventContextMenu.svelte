@@ -1,6 +1,6 @@
 <!--
   EventContextMenu Component
-  Three-dots dropdown with share, copy, pin, and dev actions
+  Three-dots dropdown with author actions, share, copy, pin, and dev actions
 -->
 
 <script>
@@ -13,20 +13,31 @@
     ExternalLinkIcon,
     InfoIcon,
     BookmarkIcon,
-    RepostIcon
+    RepostIcon,
+    EditIcon,
+    TrashIcon
   } from '$lib/components/icons';
   import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import CommunityShare from './CommunityShare.svelte';
+  import DeleteConfirmModal from './DeleteConfirmModal.svelte';
 
   /**
    * @typedef {Object} Props
    * @property {import('nostr-tools').NostrEvent} event - Raw Nostr event
+   * @property {(() => void) | undefined} [onEdit] - Callback when edit is clicked
+   * @property {(() => void | Promise<void>) | undefined} [onDelete] - Callback when delete is confirmed
+   * @property {string} [deleteTitle] - Title for the delete confirmation modal
+   * @property {string} [deleteItemName] - Item name shown in the delete confirmation modal
    */
 
   /** @type {Props} */
-  let { event } = $props();
+  let { event, onEdit, onDelete, deleteTitle = '', deleteItemName = '' } = $props();
+
+  let showDeleteConfirmation = $state(false);
+  let isDeleting = $state(false);
+  let hasAuthorActions = $derived(!!onEdit || !!onDelete);
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
@@ -54,6 +65,33 @@
   /** @type {HTMLDialogElement|undefined} */
   let shareDialog = $state(undefined);
   let isCopied = $state(false);
+
+  function handleEditClick() {
+    closeDropdown();
+    onEdit?.();
+  }
+
+  function handleDeleteClick() {
+    closeDropdown();
+    showDeleteConfirmation = true;
+  }
+
+  async function handleDeleteConfirm() {
+    if (!onDelete) return;
+    isDeleting = true;
+    try {
+      await onDelete();
+      showDeleteConfirmation = false;
+    } catch {
+      // Parent should handle error display
+    } finally {
+      isDeleting = false;
+    }
+  }
+
+  function handleDeleteCancel() {
+    showDeleteConfirmation = false;
+  }
 
   function closeDropdown() {
     /** @type {HTMLElement|null} */ (document.activeElement)?.blur();
@@ -125,7 +163,27 @@
   </button>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <ul tabindex="0" class="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow-lg">
-    <!-- User actions -->
+    <!-- Author actions -->
+    {#if onEdit}
+      <li>
+        <button onclick={handleEditClick}>
+          <EditIcon class="h-4 w-4" />
+          {m.common_edit()}
+        </button>
+      </li>
+    {/if}
+    {#if onDelete}
+      <li>
+        <button class="text-error" onclick={handleDeleteClick}>
+          <TrashIcon class="h-4 w-4" />
+          {m.common_delete()}
+        </button>
+      </li>
+    {/if}
+    {#if hasAuthorActions}
+      <div class="divider my-0"></div>
+    {/if}
+    <!-- Sharing actions -->
     {#if activeUser}
       <li>
         <button onclick={openShareModal}>
@@ -151,13 +209,13 @@
     <!-- Divider -->
     <div class="divider my-0"></div>
     <!-- Dev actions -->
-    <li>
+    <li class="opacity-50">
       <button onclick={copyEventId}>
         <CopyIcon class_="w-4 h-4" />
         {m.event_menu_copy_event_id()}
       </button>
     </li>
-    <li>
+    <li class="opacity-50">
       <button onclick={viewRawEvent}>
         <InfoIcon class_="w-4 h-4" />
         {m.event_menu_view_raw_event()}
@@ -183,6 +241,16 @@
     <button>close</button>
   </form>
 </dialog>
+
+<!-- Delete confirmation modal -->
+<DeleteConfirmModal
+  open={showDeleteConfirmation}
+  title={deleteTitle}
+  itemName={deleteItemName}
+  {isDeleting}
+  onconfirm={handleDeleteConfirm}
+  oncancel={handleDeleteCancel}
+/>
 
 <!-- Raw event modal -->
 <dialog bind:this={rawEventDialog} class="modal">

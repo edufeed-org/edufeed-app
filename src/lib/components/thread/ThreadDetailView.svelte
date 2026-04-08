@@ -1,7 +1,7 @@
 <!--
   ThreadDetailView Component
   Full detail view for kind 1 (text notes) and kind 11 (forum threads)
-  Header matches Chateau layout: back arrow + author avatar + name + date
+  Uses DetailHeader for unified back button, title, author strip, and context menu.
 -->
 
 <script>
@@ -15,21 +15,18 @@
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { resolve } from '$app/paths';
   import { encodePointer } from 'applesauce-core/helpers';
-  import { TrashIcon } from '$lib/components/icons';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import NostrContentRenderer from '../shared/NostrContentRenderer.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import NoteCard from '../notes/NoteCard.svelte';
-  import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
-  import EventContextMenu from '../shared/EventContextMenu.svelte';
+  import DetailHeader from '../shared/DetailHeader.svelte';
 
   /**
    * @typedef {Object} Props
    * @property {any} event - Thread event (kind 1 or 11)
    * @property {any} [parentEvent] - Parent event for kind 1 replies
-   * @property {() => void} [onBack] - Callback to navigate back
    * @property {string|null} [initialFocusCommentId] - Comment ID to auto-focus (deep-linking)
    * @property {string|null} [scrollTo] - Section to scroll to (e.g. 'reactions')
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
@@ -39,7 +36,6 @@
   let {
     event,
     parentEvent = null,
-    onBack,
     initialFocusCommentId = null,
     scrollTo = null,
     communityPubkey = undefined
@@ -67,9 +63,6 @@
   );
   const relativeDate = $derived(formatRelativeTime(event.created_at));
 
-  let showDeleteConfirmation = $state(false);
-  let isDeleting = $state(false);
-
   // Scroll to reactions section when navigating from a reaction notification
   /** @type {HTMLElement | undefined} */
   let reactionsEl;
@@ -89,21 +82,13 @@
   async function handleDelete() {
     if (!activeUser || !event) return;
 
-    isDeleting = true;
-    try {
-      const result = await deleteEvent(event, activeUser);
-      if (result.success) {
-        showToast(m.thread_detail_delete_success(), 'success');
-        showDeleteConfirmation = false;
-        onBack?.();
-      } else {
-        showToast(result.error || m.thread_detail_delete_failed(), 'error');
-      }
-    } catch (error) {
-      console.error('Failed to delete thread:', error);
-      showToast(m.thread_detail_delete_failed(), 'error');
-    } finally {
-      isDeleting = false;
+    const result = await deleteEvent(event, activeUser);
+    if (result.success) {
+      showToast(m.thread_detail_delete_success(), 'success');
+      history.back();
+    } else {
+      showToast(result.error || m.thread_detail_delete_failed(), 'error');
+      throw new Error(result.error || 'Delete failed');
     }
   }
 </script>
@@ -120,40 +105,32 @@
     </a>
   {/if}
 
-  <!-- Header: author avatar + name + date + actions -->
-  <div class="mb-6 flex items-center gap-3">
-    <ProfileAvatar pubkey={event.pubkey} size="md" linkToProfile class="flex-shrink-0" />
-    <div class="min-w-0 flex-1">
-      <a
-        href={resolve(`/p/${event.pubkey}`)}
-        class="font-semibold text-base-content hover:underline"
-      >
-        {authorName}
-      </a>
-      <div class="text-xs text-base-content/50">{relativeDate}</div>
-    </div>
-
-    <!-- Actions -->
-    <div class="flex shrink-0 gap-2">
-      {#if isAuthor}
-        <button
-          class="btn btn-outline btn-sm btn-error"
-          onclick={() => (showDeleteConfirmation = true)}
-          aria-label={m.common_delete()}
-        >
-          <TrashIcon class="h-4 w-4" />
-        </button>
+  <DetailHeader
+    title={event.kind === 11 ? title : authorName}
+    {event}
+    authorPubkey={event.pubkey}
+    date={relativeDate}
+    showAuthorStrip={event.kind === 11}
+    onDelete={isAuthor ? handleDelete : undefined}
+    deleteTitle={m.thread_detail_delete_confirm_title()}
+    deleteItemName={title}
+  >
+    {#snippet titleContent()}
+      {#if event.kind === 1}
+        <div class="flex items-center gap-2">
+          <ProfileAvatar pubkey={event.pubkey} size="sm" linkToProfile />
+          <div class="min-w-0">
+            <a href={resolve(`/p/${event.pubkey}`)} class="text-sm font-semibold hover:underline">
+              {authorName}
+            </a>
+            <div class="text-xs opacity-50">{relativeDate}</div>
+          </div>
+        </div>
+      {:else}
+        <h1 class="truncate text-xl font-bold">{title}</h1>
       {/if}
-      <EventContextMenu {event} />
-    </div>
-  </div>
-
-  <!-- Title (kind 11 only) -->
-  {#if event.kind === 11}
-    <h1 class="mb-4 text-2xl font-bold text-base-content md:text-3xl">
-      {title}
-    </h1>
-  {/if}
+    {/snippet}
+  </DetailHeader>
 
   <!-- Content -->
   <div class="mb-6">
@@ -190,12 +167,3 @@
     />
   </div>
 </article>
-
-<DeleteConfirmModal
-  open={showDeleteConfirmation}
-  title={m.thread_detail_delete_confirm_title()}
-  itemName={title}
-  {isDeleting}
-  onconfirm={handleDelete}
-  oncancel={() => (showDeleteConfirmation = false)}
-/>
