@@ -9,11 +9,13 @@
     disconnectFromRoom,
     toggleMute,
     toggleCamera,
+    toggleScreenShare,
     getLiveKitState,
     refreshAudioDevices,
     switchAudioDevice,
     switchAudioOutputDevice
   } from '$lib/services/livekit-connection.svelte.js';
+  import { Track } from 'livekit-client';
   import { startPresence, stopPresence } from '$lib/services/meet-presence.svelte.js';
   import { requestLiveKitToken } from '$lib/services/livekit-token-service.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
@@ -111,6 +113,30 @@
     }
   }
 
+  // --- Screen share ---
+  /** @type {HTMLVideoElement | undefined} */
+  let screenShareEl = $state(undefined);
+
+  const activeScreenShare = $derived.by(() => {
+    if (lk.isScreenSharing && lk.localParticipant) {
+      const pub = lk.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+      if (pub?.track) return { participant: lk.localParticipant, track: pub.track, isLocal: true };
+    }
+    for (const p of lk.remoteParticipants) {
+      const pub = p.getTrackPublication(Track.Source.ScreenShare);
+      if (pub?.track) return { participant: p, track: pub.track, isLocal: false };
+    }
+    return null;
+  });
+
+  $effect(() => {
+    const el = screenShareEl;
+    const track = activeScreenShare?.track;
+    if (!el || !track) return;
+    track.attach(el);
+    return () => track.detach(el);
+  });
+
   // --- #6: Audio device selector ---
   let audioDropdownOpen = $state(false);
 </script>
@@ -157,6 +183,38 @@
     <!-- Participant Grid -->
     <div class="flex-1 overflow-auto p-4">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {#if activeScreenShare}
+          <div class="relative col-span-full overflow-hidden rounded-lg bg-black">
+            <video
+              bind:this={screenShareEl}
+              autoplay
+              playsinline
+              muted
+              class="max-h-[60vh] w-full object-contain"
+            ></video>
+            <div
+              class="absolute right-0 bottom-0 left-0 flex items-center justify-between bg-gradient-to-t from-black/50 to-transparent px-3 py-1.5"
+            >
+              <span class="text-xs text-white">
+                {#if activeScreenShare.isLocal}
+                  {m.meet_screen_share_you()}
+                {:else}
+                  {m.meet_screen_share_active({
+                    name:
+                      getProfiles().get(activeScreenShare.participant.identity)?.name ||
+                      activeScreenShare.participant.identity
+                  })}
+                {/if}
+              </span>
+              {#if activeScreenShare.isLocal}
+                <button class="btn btn-xs btn-error" onclick={toggleScreenShare}
+                  >{m.meet_screen_share_stop()}</button
+                >
+              {/if}
+            </div>
+          </div>
+        {/if}
+
         {#if lk.localParticipant}
           <ParticipantTile
             participant={lk.localParticipant}
@@ -283,6 +341,21 @@
           </svg>
         </button>
       {/if}
+
+      <button
+        class="btn btn-circle {lk.isScreenSharing ? 'btn-warning' : 'btn-ghost'}"
+        onclick={toggleScreenShare}
+        title={lk.isScreenSharing ? m.meet_screen_share_stop() : m.meet_screen_share_start()}
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+          />
+        </svg>
+      </button>
     </div>
   {/if}
 </div>

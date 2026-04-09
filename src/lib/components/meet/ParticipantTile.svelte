@@ -35,9 +35,9 @@
   let audioTrack = $state(null);
 
   /** @type {HTMLVideoElement | undefined} */
-  let videoEl;
+  let videoEl = $state(undefined);
   /** @type {HTMLAudioElement | undefined} */
-  let audioEl;
+  let audioEl = $state(undefined);
 
   function updateTracks() {
     videoTrack = participant.getTrackPublication(Track.Source.Camera)?.track ?? null;
