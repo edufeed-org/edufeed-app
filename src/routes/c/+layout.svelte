@@ -90,7 +90,7 @@
         class="drawer-toggle"
         bind:checked={leftDrawerOpen}
       />
-      <div class="drawer-content flex h-[calc(100vh-8rem)] flex-col pt-16">
+      <div class="drawer-content flex h-[calc(100vh-8rem)] flex-col">
         <!-- Mobile Header with Menu Button -->
         <div class="flex items-center justify-between border-b border-base-300 bg-base-200 p-4">
           <button onclick={toggleDrawer} class="btn btn-circle btn-ghost">
@@ -150,7 +150,7 @@
     </div>
   </div>
 {:else}
-  <div class="flex h-[calc(100vh-8rem)] flex-col pt-16 lg:hidden">
+  <div class="flex h-[calc(100vh-8rem)] flex-col lg:hidden">
     {@render children()}
   </div>
 {/if}
