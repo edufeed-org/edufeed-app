@@ -3,7 +3,6 @@ import { eventLoader, addressLoader } from '$lib/loaders';
 import { firstValueFrom } from 'rxjs';
 import { getSeenRelays } from 'applesauce-core/helpers';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { getCalendarEventStart } from 'applesauce-common/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { parseCalendarTimestamp } from '$lib/helpers/calendar.js';
@@ -241,14 +240,10 @@ export const fetchEventById = async (identifier) => {
           const localEvent = eventStore.getEvent(data.id);
           if (localEvent) return localEvent;
 
-          // Resolve relays: pointer hints → author outbox → lookup relays
-          let relays = data.relays?.length ? data.relays : [];
-          if (relays.length === 0 && data.author) {
-            relays = await getWriteRelays(data.author);
-          }
-          if (relays.length === 0) {
-            relays = getAllLookupRelays();
-          }
+          // Union hint relays with lookup relays (hints may point to dead relays)
+          const hintRelays = data.relays?.length ? data.relays : [];
+          const lookupRelays = getAllLookupRelays();
+          const relays = [...new Set([...hintRelays, ...lookupRelays])];
           const event$ = eventLoader({ id: data.id, relays });
           const event = await firstValueFrom(event$, { defaultValue: null });
           return event || null;
