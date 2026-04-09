@@ -9,6 +9,7 @@
   import ForumView from '../views/ForumView.svelte';
   import WikisView from '../views/WikisView.svelte';
   import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
+  import MeetView from '$lib/components/meet/MeetView.svelte';
   import MembersView from '../views/MembersView.svelte';
   import HomeView from '../views/HomeView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
@@ -32,7 +33,7 @@
 </script>
 
 <!-- Main Content Area -->
-<div class="flex-1 overflow-auto transition-all duration-300 lg:ml-(--sidebar-nav-w)">
+<div class="min-h-0 flex-1 overflow-auto transition-all duration-300 lg:ml-(--sidebar-nav-w)">
   {#if !selectedCommunityId}
     <!-- Empty state: No community selected -->
     <div class="flex h-full flex-col items-center justify-center p-8 text-center">
@@ -94,6 +95,8 @@
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'social-bookmarks'}
         <SocialBookmarksView communityPubkey={selectedCommunityId} {communityProfile} />
+      {:else if selectedContentType === 'meet'}
+        <MeetView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'members'}
         <MembersView {communikeyEvent} />
       {:else if selectedContentType === 'settings'}

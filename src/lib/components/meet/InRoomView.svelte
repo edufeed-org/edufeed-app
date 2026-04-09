@@ -4,6 +4,7 @@
 -->
 
 <script>
+  import { SvelteSet } from 'svelte/reactivity';
   import {
     connectToRoom,
     disconnectFromRoom,
@@ -137,11 +138,38 @@
     return () => track.detach(el);
   });
 
+  // --- Adaptive grid based on participant count ---
+  const participantCount = $derived((lk.localParticipant ? 1 : 0) + lk.remoteParticipants.length);
+
+  const gridClass = $derived.by(() => {
+    if (participantCount <= 1) return 'grid-cols-1 max-w-2xl mx-auto';
+    if (participantCount <= 4) return 'grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto';
+    if (participantCount <= 6) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+    return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+  });
+
+  // --- Maximizable screen share ---
+  let screenShareMaximized = $state(false);
+
+  // Reset when screen share stops
+  $effect(() => {
+    if (!activeScreenShare) screenShareMaximized = false;
+  });
+
+  // --- Per-participant local mute ---
+  let mutedParticipants = new SvelteSet();
+
+  /** @param {string} identity */
+  function toggleParticipantMute(identity) {
+    if (mutedParticipants.has(identity)) mutedParticipants.delete(identity);
+    else mutedParticipants.add(identity);
+  }
+
   // --- #6: Audio device selector ---
   let audioDropdownOpen = $state(false);
 </script>
 
-<div class="flex h-full flex-col">
+<div class="flex flex-1 flex-col">
   <!-- Header -->
   <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
     <div class="flex items-center gap-2">
@@ -181,31 +209,46 @@
     </div>
   {:else if lk.isConnected}
     <!-- Participant Grid -->
-    <div class="flex-1 overflow-auto p-4">
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {#if activeScreenShare}
-          <div class="relative col-span-full overflow-hidden rounded-lg bg-black">
-            <video
-              bind:this={screenShareEl}
-              autoplay
-              playsinline
-              muted
-              class="max-h-[60vh] w-full object-contain"
-            ></video>
-            <div
-              class="absolute right-0 bottom-0 left-0 flex items-center justify-between bg-gradient-to-t from-black/50 to-transparent px-3 py-1.5"
-            >
-              <span class="text-xs text-white">
-                {#if activeScreenShare.isLocal}
-                  {m.meet_screen_share_you()}
-                {:else}
-                  {m.meet_screen_share_active({
-                    name:
-                      getProfiles().get(activeScreenShare.participant.identity)?.name ||
-                      activeScreenShare.participant.identity
-                  })}
-                {/if}
-              </span>
+    {#if activeScreenShare && screenShareMaximized}
+      <!-- Maximized screen share layout -->
+      <div class="flex flex-1 flex-col overflow-hidden p-2">
+        <div class="relative flex-1 overflow-hidden rounded-lg bg-black">
+          <video
+            bind:this={screenShareEl}
+            autoplay
+            playsinline
+            muted
+            class="h-full w-full object-contain"
+          ></video>
+          <div
+            class="absolute right-0 bottom-0 left-0 flex items-center justify-between bg-gradient-to-t from-black/50 to-transparent px-3 py-1.5"
+          >
+            <span class="text-xs text-white">
+              {#if activeScreenShare.isLocal}
+                {m.meet_screen_share_you()}
+              {:else}
+                {m.meet_screen_share_active({
+                  name:
+                    getProfiles().get(activeScreenShare.participant.identity)?.name ||
+                    activeScreenShare.participant.identity
+                })}
+              {/if}
+            </span>
+            <div class="flex items-center gap-1">
+              <button
+                class="btn text-white btn-ghost btn-xs"
+                onclick={() => (screenShareMaximized = false)}
+                title={m.meet_screen_share_minimize()}
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 9L4 4m0 0v4m0-4h4m6 6l5 5m0 0v-4m0 4h-4"
+                  />
+                </svg>
+              </button>
               {#if activeScreenShare.isLocal}
                 <button class="btn btn-xs btn-error" onclick={toggleScreenShare}
                   >{m.meet_screen_share_stop()}</button
@@ -213,27 +256,107 @@
               {/if}
             </div>
           </div>
-        {/if}
-
-        {#if lk.localParticipant}
-          <ParticipantTile
-            participant={lk.localParticipant}
-            isLocal={true}
-            isMuted={lk.isMuted}
-            isSpeaking={lk.speakingParticipantIds.has(lk.localParticipant.identity)}
-            profile={getProfiles().get(lk.localParticipant.identity)}
-          />
-        {/if}
-
-        {#each lk.remoteParticipants as participant (participant.sid)}
-          <ParticipantTile
-            {participant}
-            isSpeaking={lk.speakingParticipantIds.has(participant.identity)}
-            profile={getProfiles().get(participant.identity)}
-          />
-        {/each}
+        </div>
+        <!-- Participant strip -->
+        <div class="mt-2 flex gap-2 overflow-x-auto">
+          {#if lk.localParticipant}
+            <div class="h-20 w-32 flex-shrink-0">
+              <ParticipantTile
+                participant={lk.localParticipant}
+                isLocal={true}
+                isMuted={lk.isMuted}
+                isSpeaking={lk.speakingParticipantIds.has(lk.localParticipant.identity)}
+                profile={getProfiles().get(lk.localParticipant.identity)}
+              />
+            </div>
+          {/if}
+          {#each lk.remoteParticipants as participant (participant.sid)}
+            <div class="h-20 w-32 flex-shrink-0">
+              <ParticipantTile
+                {participant}
+                isSpeaking={lk.speakingParticipantIds.has(participant.identity)}
+                profile={getProfiles().get(participant.identity)}
+                isRemoteMuted={mutedParticipants.has(participant.identity)}
+                onToggleMute={() => toggleParticipantMute(participant.identity)}
+              />
+            </div>
+          {/each}
+        </div>
       </div>
-    </div>
+    {:else}
+      <!-- Normal grid layout -->
+      <div class="flex flex-1 flex-col overflow-auto p-4">
+        <div class="grid w-full flex-1 auto-rows-fr gap-3 {gridClass}">
+          {#if activeScreenShare}
+            <div class="relative col-span-full overflow-hidden rounded-lg bg-black">
+              <video
+                bind:this={screenShareEl}
+                autoplay
+                playsinline
+                muted
+                class="max-h-[70vh] w-full object-contain"
+              ></video>
+              <div
+                class="absolute right-0 bottom-0 left-0 flex items-center justify-between bg-gradient-to-t from-black/50 to-transparent px-3 py-1.5"
+              >
+                <span class="text-xs text-white">
+                  {#if activeScreenShare.isLocal}
+                    {m.meet_screen_share_you()}
+                  {:else}
+                    {m.meet_screen_share_active({
+                      name:
+                        getProfiles().get(activeScreenShare.participant.identity)?.name ||
+                        activeScreenShare.participant.identity
+                    })}
+                  {/if}
+                </span>
+                <div class="flex items-center gap-1">
+                  <button
+                    class="btn text-white btn-ghost btn-xs"
+                    onclick={() => (screenShareMaximized = true)}
+                    title={m.meet_screen_share_maximize()}
+                  >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m4 0v-4m0 4l-5-5"
+                      />
+                    </svg>
+                  </button>
+                  {#if activeScreenShare.isLocal}
+                    <button class="btn btn-xs btn-error" onclick={toggleScreenShare}
+                      >{m.meet_screen_share_stop()}</button
+                    >
+                  {/if}
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          {#if lk.localParticipant}
+            <ParticipantTile
+              participant={lk.localParticipant}
+              isLocal={true}
+              isMuted={lk.isMuted}
+              isSpeaking={lk.speakingParticipantIds.has(lk.localParticipant.identity)}
+              profile={getProfiles().get(lk.localParticipant.identity)}
+            />
+          {/if}
+
+          {#each lk.remoteParticipants as participant (participant.sid)}
+            <ParticipantTile
+              {participant}
+              isSpeaking={lk.speakingParticipantIds.has(participant.identity)}
+              profile={getProfiles().get(participant.identity)}
+              isRemoteMuted={mutedParticipants.has(participant.identity)}
+              onToggleMute={() => toggleParticipantMute(participant.identity)}
+            />
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <!-- Controls -->
     <div class="flex items-center justify-center gap-3 border-t border-base-300 px-4 py-3">

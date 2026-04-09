@@ -157,24 +157,26 @@
 </svelte:head>
 
 <div class="flex min-h-screen flex-col">
-  <Navbar />
+  <Navbar hideMobileNavbar={!!getActiveUser() && isOnCommunityRoutes} />
   {#if $navigating}
     <progress class="progress h-1 w-full progress-primary"></progress>
   {/if}
   <ModalManager />
   {#if getActiveUser()}
-    <CommunitySidebar
-      currentCommunityId={currentCommunityPubkey}
-      {isDashboardActive}
-      onCommunitySelect={handleCommunitySelect}
-      onHomeSelect={handleHomeSelect}
-    />
+    <div class="hidden lg:contents">
+      <CommunitySidebar
+        currentCommunityId={currentCommunityPubkey}
+        {isDashboardActive}
+        onCommunitySelect={handleCommunitySelect}
+        onHomeSelect={handleHomeSelect}
+      />
+    </div>
   {/if}
   {#if showDashboardNav}
     <DashboardNavSidebar />
   {/if}
   <main
-    class="flex-1"
+    class="flex flex-1 flex-col"
     class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
     class:lg:ml-(--sidebar-total-w)={showDashboardNav}
     class:pb-16={showDashboardNav}
@@ -191,6 +193,8 @@
   <div
     class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
     class:lg:ml-(--sidebar-total-w)={showDashboardNav}
+    class:hidden={!!getActiveUser() && isOnCommunityRoutes}
+    class:lg:block={!!getActiveUser() && isOnCommunityRoutes}
   >
     <Footer />
   </div>

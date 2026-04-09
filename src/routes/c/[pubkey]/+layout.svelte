@@ -40,6 +40,7 @@
     'forum',
     'wikis',
     'social-bookmarks',
+    'meet',
     'members',
     'settings'
   ]);
@@ -192,7 +193,9 @@
   {restrictedTabs}
   {accessibleTabs}
 />
-{@render children()}
+<div class="flex min-h-0 flex-1 flex-col pb-20 lg:pb-0">
+  {@render children()}
+</div>
 
 <!-- Mobile: Bottom Tab Bar (fixed positioned) -->
 <div class="lg:hidden">
