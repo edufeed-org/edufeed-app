@@ -1778,6 +1778,8 @@
   "meet_connection_error": "Failed to connect to room",
   "meet_mute": "Mute",
   "meet_unmute": "Unmute",
+  "meet_mute_participant": "Mute participant",
+  "meet_unmute_participant": "Unmute participant",
   "meet_camera_on": "Camera on",
   "meet_camera_off": "Camera off",
   "meet_livekit_url": "LiveKit Operator URL",
@@ -1794,5 +1796,11 @@
   "meet_select_speaker": "Select speaker",
   "meet_unknown_device": "Unknown device",
   "meet_hosted_by": "Hosted by {name}",
+  "meet_screen_share_start": "Share screen",
+  "meet_screen_share_stop": "Stop sharing",
+  "meet_screen_share_you": "You are sharing your screen",
+  "meet_screen_share_active": "{name} is sharing their screen",
+  "meet_screen_share_maximize": "Maximize screen share",
+  "meet_screen_share_minimize": "Minimize screen share",
   "create_community_modal_content_meet": "Meet"
 }

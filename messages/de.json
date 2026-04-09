@@ -1778,6 +1778,8 @@
   "meet_connection_error": "Verbindung zum Raum fehlgeschlagen",
   "meet_mute": "Stummschalten",
   "meet_unmute": "Stummschaltung aufheben",
+  "meet_mute_participant": "Teilnehmer stummschalten",
+  "meet_unmute_participant": "Teilnehmer-Stummschaltung aufheben",
   "meet_camera_on": "Kamera an",
   "meet_camera_off": "Kamera aus",
   "meet_livekit_url": "LiveKit-Operator-URL",
@@ -1794,5 +1796,11 @@
   "meet_select_speaker": "Lautsprecher auswählen",
   "meet_unknown_device": "Unbekanntes Gerät",
   "meet_hosted_by": "Gehostet von {name}",
+  "meet_screen_share_start": "Bildschirm teilen",
+  "meet_screen_share_stop": "Freigabe beenden",
+  "meet_screen_share_you": "Du teilst deinen Bildschirm",
+  "meet_screen_share_active": "{name} teilt den Bildschirm",
+  "meet_screen_share_maximize": "Bildschirmfreigabe maximieren",
+  "meet_screen_share_minimize": "Bildschirmfreigabe minimieren",
   "create_community_modal_content_meet": "Meet"
 }

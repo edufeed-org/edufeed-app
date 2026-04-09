@@ -18,7 +18,9 @@
    *   isLocal?: boolean,
    *   isMuted?: boolean,
    *   isSpeaking?: boolean,
-   *   profile?: any
+   *   profile?: any,
+   *   isRemoteMuted?: boolean,
+   *   onToggleMute?: () => void
    * }}
    */
   let {
@@ -26,7 +28,9 @@
     isLocal = false,
     isMuted = false,
     isSpeaking = false,
-    profile = undefined
+    profile = undefined,
+    isRemoteMuted = false,
+    onToggleMute = undefined
   } = $props();
 
   /** @type {import('livekit-client').Track | null} */
@@ -81,6 +85,13 @@
     return () => track.detach(el);
   });
 
+  // Apply local mute to audio element
+  $effect(() => {
+    const el = audioEl;
+    if (!el) return;
+    el.muted = isRemoteMuted;
+  });
+
   const displayName = $derived(
     isLocal
       ? 'You'
@@ -91,7 +102,7 @@
 </script>
 
 <div
-  class="relative aspect-video transition-shadow duration-200"
+  class="group/tile relative h-full min-h-0 transition-shadow duration-200"
   class:ring-2={isSpeaking}
   class:ring-primary={isSpeaking}
 >
@@ -188,7 +199,54 @@
     </span>
   {/if}
 
+  {#if !isLocal && isRemoteMuted}
+    <span class="absolute top-2 right-2 z-10 badge badge-sm badge-warning">
+      {m.meet_mute_participant()}
+    </span>
+  {/if}
+
+  {#if !isLocal && onToggleMute}
+    <button
+      class="btn absolute right-1 bottom-1 z-10 btn-circle opacity-0 btn-ghost transition-opacity btn-xs group-hover/tile:opacity-100"
+      class:opacity-100={isRemoteMuted}
+      onclick={onToggleMute}
+      title={isRemoteMuted ? m.meet_unmute_participant() : m.meet_mute_participant()}
+    >
+      {#if isRemoteMuted}
+        <svg class="h-4 w-4 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+          />
+        </svg>
+      {:else}
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728"
+          />
+        </svg>
+      {/if}
+    </button>
+  {/if}
+
   {#if !isLocal}
-    <audio bind:this={audioEl} autoplay />
+    <audio bind:this={audioEl} autoplay></audio>
   {/if}
 </div>
