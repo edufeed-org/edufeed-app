@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
 
 env:
   REGISTRY: git.edufeed.org
@@ -20,9 +20,14 @@ jobs:
 
       - name: Build and push
         run: |
+          REF_NAME="${{ github.ref_name }}"
+          TAG="latest"
+          if [ "$REF_NAME" != "main" ]; then
+            TAG="$REF_NAME"
+          fi
           docker buildx build \
             --push \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG} \
             --cache-from type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache \
             --cache-to type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max \
             .
