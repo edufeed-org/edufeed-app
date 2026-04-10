@@ -1776,6 +1776,8 @@
   "meet_leave": "Verlassen",
   "meet_active": "Aktiv",
   "meet_ended": "Beendet",
+  "meet_not_configured_title": "Meet nicht verfügbar",
+  "meet_not_configured_description": "Diese Community hat noch keine Videomeetings eingerichtet. Wenn du es ausprobieren möchtest, schreib einfach",
   "meet_no_rooms": "Noch keine Räume",
   "meet_no_rooms_description": "Erstelle einen Raum, um einen Video- oder Audioanruf mit Community-Mitgliedern zu starten.",
   "meet_participants": "{count} Teilnehmer",

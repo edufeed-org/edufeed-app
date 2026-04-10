@@ -1776,6 +1776,8 @@
   "meet_leave": "Leave",
   "meet_active": "Active",
   "meet_ended": "Ended",
+  "meet_not_configured_title": "Meet not available",
+  "meet_not_configured_description": "This community doesn't have video meetings set up yet. If you'd like to try it out, give a ping to",
   "meet_no_rooms": "No rooms yet",
   "meet_no_rooms_description": "Create a room to start a video or audio call with community members.",
   "meet_participants": "{count} participant(s)",

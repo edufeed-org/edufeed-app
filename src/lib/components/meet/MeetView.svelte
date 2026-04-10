@@ -13,10 +13,10 @@
   import { CommunityRoomModel } from '$lib/models/community-content.js';
   import { parseCommunityMetadata } from '$lib/helpers/communityRelays.js';
   import { isRoomActive, parseRoomEvent } from '$lib/helpers/meet.js';
-  import { fetchEventById } from '$lib/helpers/nostrUtils.js';
+  import { fetchEventById, encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import RoomCard from './RoomCard.svelte';
   import InRoomView from './InRoomView.svelte';
-  import { PlusIcon } from '$lib/components/icons';
+  import { PlusIcon, MeetIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -41,6 +41,13 @@
    */
   function handleJoinRoom(room) {
     joinedRoom = room;
+    autoJoinAttempted = true;
+    const naddr = encodeEventToNaddr(room.event);
+    if (naddr) {
+      const url = new URL($page.url);
+      url.searchParams.set('room', naddr);
+      goto(url, { replaceState: true, noScroll: true });
+    }
   }
 
   function handleLeaveRoom() {
@@ -53,10 +60,12 @@
     }
   }
 
-  // Auto-join room from ?room= query param (e.g. from shared link redirect)
+  // Auto-join room from ?room= query param on initial load (e.g. from shared link redirect)
+  let autoJoinAttempted = false;
   $effect(() => {
     const roomNaddr = $page.url.searchParams.get('room');
-    if (!roomNaddr || joinedRoom) return;
+    if (!roomNaddr || joinedRoom || autoJoinAttempted) return;
+    autoJoinAttempted = true;
 
     (async () => {
       try {
@@ -89,6 +98,22 @@
 {#if joinedRoom && livekitUrl}
   <div class="flex h-full flex-col">
     <InRoomView room={joinedRoom} {communityPubkey} {livekitUrl} onLeave={handleLeaveRoom} />
+  </div>
+{:else if !livekitUrl && communikeyEvent}
+  <div class="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+    <MeetIcon class_="h-12 w-12 text-base-content/30" />
+    <div>
+      <h3 class="text-lg font-semibold">{m.meet_not_configured_title()}</h3>
+      <p class="mt-1 max-w-md text-sm text-base-content/60">
+        {m.meet_not_configured_description()}
+        <a
+          href="/p/npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma"
+          class="link link-primary"
+        >
+          @laoc42
+        </a>
+      </p>
+    </div>
   </div>
 {:else}
   <CommunityContentView
