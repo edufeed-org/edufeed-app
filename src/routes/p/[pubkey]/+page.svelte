@@ -2,22 +2,13 @@
   import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { ProfileModel } from 'applesauce-core/models';
-  import { getProfilePointersFromList, getNip10References } from 'applesauce-common/helpers';
+  import { getProfilePointersFromList } from 'applesauce-common/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { profileLoader } from '$lib/loaders/profile.js';
-  import {
-    getProfileLookupRelays,
-    getCalendarRelays,
-    getEducationalRelays,
-    getArticleRelays,
-    getAllLookupRelays
-  } from '$lib/helpers/relay-helper.js';
+  import { getProfileLookupRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
-  import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
-  import { formatAMBResource } from '$lib/helpers/educational/index.js';
-  import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
   import { FollowUser, UnfollowUser } from 'applesauce-actions/actions';
@@ -26,14 +17,8 @@
   import { showToast } from '$lib/helpers/toast';
   import { useBadgeAwards } from '$lib/stores/badge-awards.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import NoteCard from '$lib/components/notes/NoteCard.svelte';
-  import ProfileContentView from '$lib/components/profile/ProfileContentView.svelte';
-  import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
-  import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
-  import ArticleCard from '$lib/components/article/ArticleCard.svelte';
+  import ProfileFeedView from '$lib/components/profile/ProfileFeedView.svelte';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
-  import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
-  import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
   import BadgeCard from '$lib/components/badges/BadgeCard.svelte';
   import BadgeHeaderRow from '$lib/components/badges/BadgeHeaderRow.svelte';
   import WaveButton from '$lib/components/waves/WaveButton.svelte';
@@ -43,11 +28,7 @@
     GlobeIcon,
     LightningIcon,
     CheckIcon,
-    CalendarIcon,
-    GraduationCapIcon,
-    BookIcon,
     PeopleIcon,
-    BookmarkIcon,
     BadgeIcon,
     ChatIcon,
     UserIcon
@@ -60,8 +41,8 @@
   let profile = $state(/** @type {any} */ (null));
   let profileEvent = $state(/** @type {any} */ (null));
   let showRawData = $state(false);
-  let activeTab = $state('notes');
-  let activatedTabs = new SvelteSet(['notes']);
+  let activeTab = $state('feed');
+  let activatedTabs = new SvelteSet(['feed']);
   let bannerError = $state(false);
   let loadingState = $state(/** @type {'loading' | 'found' | 'notFound'} */ ('loading'));
   let timeoutId = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
@@ -247,13 +228,9 @@
 
   /** @type {{ id: string, label: () => string, icon: any }[]} */
   const tabs = [
-    { id: 'notes', label: () => m.profile_tab_notes(), icon: ChatIcon },
-    { id: 'calendar', label: () => m.profile_tab_calendar(), icon: CalendarIcon },
-    { id: 'resources', label: () => m.profile_tab_resources(), icon: GraduationCapIcon },
-    { id: 'articles', label: () => m.profile_tab_articles(), icon: BookIcon },
+    { id: 'feed', label: () => m.profile_tab_feed(), icon: ChatIcon },
     { id: 'communities', label: () => m.profile_tab_communities(), icon: PeopleIcon },
-    { id: 'badges', label: () => m.profile_tab_badges(), icon: BadgeIcon },
-    { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon }
+    { id: 'badges', label: () => m.profile_tab_badges(), icon: BadgeIcon }
   ];
 </script>
 
@@ -460,114 +437,10 @@
 
       <!-- Tab content -->
       <div class="px-4 pb-8">
-        <!-- Notes -->
-        <div class:hidden={activeTab !== 'notes'}>
-          {#if activatedTabs.has('notes')}
-            <ProfileContentView
-              pubkey={data.pubkey}
-              kinds={[1]}
-              getRelays={getProfileLookupRelays}
-              emptyTitle={m.profile_notes_empty_title()}
-              emptyDescription={m.profile_notes_empty_description()}
-              emptyIconPath="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-            >
-              {#snippet content(items, authorProfiles)}
-                {@const rootNotes = items.filter((item) => {
-                  const refs = getNip10References(item);
-                  return !refs?.reply?.e && !refs?.root?.e;
-                })}
-                <div class="space-y-3">
-                  {#each rootNotes as note (note.id)}
-                    <NoteCard
-                      {note}
-                      authorProfile={authorProfiles.get(note.pubkey) || null}
-                      {activeUser}
-                      extraRelays={getProfileLookupRelays()}
-                    />
-                  {/each}
-                </div>
-              {/snippet}
-            </ProfileContentView>
-          {/if}
-        </div>
-
-        <!-- Calendar -->
-        <div class:hidden={activeTab !== 'calendar'}>
-          {#if activatedTabs.has('calendar')}
-            <ProfileContentView
-              pubkey={data.pubkey}
-              kinds={[31922, 31923]}
-              getRelays={getCalendarRelays}
-              emptyTitle={m.profile_calendar_empty_title()}
-              emptyDescription={m.profile_calendar_empty_description()}
-              emptyIconPath="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-            >
-              {#snippet content(items, _authorProfiles)}
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {#each items as rawEvent (rawEvent.id)}
-                    {@const event = getCalendarEventMetadata(rawEvent)}
-                    {#if event}
-                      <CalendarEventCard {event} compact={true} />
-                    {/if}
-                  {/each}
-                </div>
-              {/snippet}
-            </ProfileContentView>
-          {/if}
-        </div>
-
-        <!-- Resources -->
-        <div class:hidden={activeTab !== 'resources'}>
-          {#if activatedTabs.has('resources')}
-            <ProfileContentView
-              pubkey={data.pubkey}
-              kinds={[30142]}
-              getRelays={getEducationalRelays}
-              emptyTitle={m.profile_resources_empty_title()}
-              emptyDescription={m.profile_resources_empty_description()}
-              emptyIconPath="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"
-            >
-              {#snippet content(items, authorProfiles)}
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {#each items as rawEvent (rawEvent.id)}
-                    {@const resource = formatAMBResource(rawEvent)}
-                    {#if resource}
-                      <AMBResourceCard
-                        {resource}
-                        authorProfile={authorProfiles.get(rawEvent.pubkey) || null}
-                        compact={false}
-                      />
-                    {/if}
-                  {/each}
-                </div>
-              {/snippet}
-            </ProfileContentView>
-          {/if}
-        </div>
-
-        <!-- Articles -->
-        <div class:hidden={activeTab !== 'articles'}>
-          {#if activatedTabs.has('articles')}
-            <ProfileContentView
-              pubkey={data.pubkey}
-              kinds={[30023]}
-              getRelays={getArticleRelays}
-              emptyTitle={m.profile_articles_empty_title()}
-              emptyDescription={m.profile_articles_empty_description()}
-              emptyIconPath="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            >
-              {#snippet content(items, authorProfiles)}
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {#each items as article (article.id)}
-                    <ArticleCard
-                      {article}
-                      authorProfile={authorProfiles.get(article.pubkey) || null}
-                      compact={false}
-                    />
-                  {/each}
-                </div>
-              {/snippet}
-            </ProfileContentView>
+        <!-- Feed -->
+        <div class:hidden={activeTab !== 'feed'}>
+          {#if activatedTabs.has('feed')}
+            <ProfileFeedView pubkey={data.pubkey} {activeUser} />
           {/if}
         </div>
 
@@ -640,50 +513,6 @@
                 </div>
               {/if}
             </div>
-          {/if}
-        </div>
-
-        <!-- Bookmarks -->
-        <div class:hidden={activeTab !== 'bookmarks'}>
-          {#if activatedTabs.has('bookmarks')}
-            <ProfileContentView
-              pubkey={data.pubkey}
-              kinds={[39701, 9802, 1111]}
-              getRelays={getAllLookupRelays}
-              emptyTitle={m.profile_bookmarks_empty_title()}
-              emptyDescription={m.profile_bookmarks_empty_description()}
-              emptyIconPath="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-            >
-              {#snippet content(items, authorProfiles)}
-                {@const urlGroups = groupByUrl(filterSocialBookmarks(items))}
-                {@const eventRefGroups = groupByEventRef(items)}
-                {@const urlMap = new Map(urlGroups.map((g) => [g.url, g]))}
-                {@const refMap = new Map(eventRefGroups.map((g) => [g.aTagValue, g]))}
-                {@const sortedKeys = [
-                  ...urlGroups.map((g) => ({ type: 'url', key: g.url, ts: g.latestActivity })),
-                  ...eventRefGroups.map((g) => ({
-                    type: 'ref',
-                    key: g.aTagValue,
-                    ts: g.latestActivity
-                  }))
-                ].toSorted((a, b) => b.ts - a.ts)}
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {#each sortedKeys as item (item.key)}
-                    {#if item.type === 'url'}
-                      {@const group = urlMap.get(item.key)}
-                      {#if group}
-                        <UrlCard {group} {authorProfiles} />
-                      {/if}
-                    {:else}
-                      {@const group = refMap.get(item.key)}
-                      {#if group}
-                        <EventHighlightCard {group} {authorProfiles} />
-                      {/if}
-                    {/if}
-                  {/each}
-                </div>
-              {/snippet}
-            </ProfileContentView>
           {/if}
         </div>
       </div>
