@@ -200,7 +200,7 @@
   </div>
 </div>
 <PublishStatusToast />
-{#if getActiveUser()}
+{#if getActiveUser() && !$page.url.pathname.startsWith('/c/messages')}
   <GlobalFAB />
 {/if}
 {#if showDashboardNav}

@@ -6,8 +6,16 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
   import { getUnreadCount } from '$lib/services/inbox-service.svelte.js';
+  import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
-  import { PeopleIcon, SearchIcon, CalendarIcon, HomeIcon, BellIcon } from '$lib/components/icons';
+  import {
+    PeopleIcon,
+    SearchIcon,
+    CalendarIcon,
+    HomeIcon,
+    BellIcon,
+    MessageSquareIcon
+  } from '$lib/components/icons';
 
   /** @type {{ onClose?: () => void }} */
   let { onClose = () => {} } = $props();
@@ -103,6 +111,15 @@
       {m.inbox_bell_label()}
       {#if getUnreadCount() > 0}
         <span class="badge badge-sm badge-primary">{getUnreadCount()}</span>
+      {/if}
+    </a>
+  </li>
+  <li>
+    <a href={resolve('/c/messages')} onclick={onClose}>
+      <MessageSquareIcon class_="w-5 h-5" />
+      {m.dm_title()}
+      {#if getUnreadDmCount() > 0}
+        <span class="badge badge-sm badge-primary">{getUnreadDmCount()}</span>
       {/if}
     </a>
   </li>

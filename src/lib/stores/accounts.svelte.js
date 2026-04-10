@@ -213,6 +213,17 @@ async function initializeAccountPersistence() {
         }
       });
   });
+
+  // Step 10: Initialize DM service for NIP-17 encrypted messages
+  manager.active$.subscribe(async (account) => {
+    const { initializeDMs, cleanup } = await import('$lib/services/dm-service.svelte.js');
+
+    if (account && account.signer) {
+      initializeDMs(account.pubkey, account.signer);
+    } else {
+      cleanup();
+    }
+  });
 }
 
 // Initialize persistence when module loads (client-side only)

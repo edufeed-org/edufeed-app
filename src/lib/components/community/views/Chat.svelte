@@ -6,8 +6,13 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
-  import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { storeEvents } from 'applesauce-relay/operators';
+  import {
+    formatMessageTimestamp,
+    getUserDisplayName as getDisplayName,
+    getReplyParentId,
+    groupMessagesByDate
+  } from '$lib/helpers/message-utils.js';
   import { TimelineModel } from 'applesauce-core/models';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
@@ -66,22 +71,7 @@
   });
 
   // Group messages by date for separators
-  let groupedMessages = $derived.by(() => {
-    /** @type {Array<{ type: 'separator', date: string } | { type: 'message', message: any }>} */
-    const items = [];
-    let lastDate = '';
-
-    for (const message of displayedMessages) {
-      const date = new Date(message.created_at * 1000);
-      const dateStr = formatCalendarDate(date, 'short');
-      if (dateStr !== lastDate) {
-        items.push({ type: 'separator', date: dateStr });
-        lastDate = dateStr;
-      }
-      items.push({ type: 'message', message });
-    }
-    return items;
-  });
+  let groupedMessages = $derived(groupMessagesByDate(displayedMessages));
 
   // Derive community pubkey from communikey event if not provided as prop
   let derivedCommunityPubkey = $derived(communityPubkey || communikeyEvent?.pubkey || '');
@@ -215,30 +205,9 @@
     }
   }
 
-  /**
-   * @param {number} timestamp
-   */
-  function formatTimestamp(timestamp) {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-
-    if (diff < 60000) return 'now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-    return formatCalendarDate(date, 'short');
-  }
-
-  /**
-   * @param {string} pubkey
-   */
+  /** @param {string} pubkey */
   function getUserDisplayName(pubkey) {
-    if (!pubkey) return 'Unknown User';
-    const profile = userProfiles.get(pubkey);
-    if (profile) {
-      return profile.display_name || profile.name || pubkey.slice(0, 8) + '...';
-    }
-    return pubkey.slice(0, 8) + '...';
+    return getDisplayName(pubkey, userProfiles.get(pubkey));
   }
 
   /** Insert unicode emoji at cursor position in message input */
@@ -254,18 +223,6 @@
     usedCustomEmojis[emoji.shortcode] = emoji;
     showEmojiPicker = false;
     messageInput?.focus();
-  }
-
-  /**
-   * Get the reply parent event ID from a message's tags
-   * @param {any} message
-   * @returns {string | null}
-   */
-  function getReplyParentId(message) {
-    const eTag = message.tags?.find(
-      (/** @type {string[]} */ t) => t[0] === 'e' && t[3] === 'reply'
-    );
-    return eTag?.[1] || null;
   }
 
   // Auto-scroll to bottom when new messages arrive (only if already near bottom)
@@ -340,7 +297,7 @@
                 <span>&middot;</span>
               {/if}
               <time datetime={new Date(message.created_at * 1000).toISOString()}>
-                {formatTimestamp(message.created_at)}
+                {formatMessageTimestamp(message.created_at)}
               </time>
               {#if getActiveUser() && canPublish}
                 <button

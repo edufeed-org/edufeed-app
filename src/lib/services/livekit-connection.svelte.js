@@ -153,7 +153,11 @@ function handleDeviceChange() {
  * @param {{ video?: boolean, audio?: boolean }} [opts]
  */
 export async function connectToRoom(token, url, opts = {}) {
-  if (isConnecting || isConnected) return;
+  // Force clean up any stale state from a previous session
+  if (isConnecting || isConnected || room) {
+    isConnecting = false;
+    await disconnectFromRoom();
+  }
 
   isConnecting = true;
   try {
@@ -183,17 +187,29 @@ export async function connectToRoom(token, url, opts = {}) {
 
     await newRoom.connect(url, token);
 
-    // Publish local tracks
-    await newRoom.localParticipant.setMicrophoneEnabled(opts.audio !== false);
-    if (opts.video) {
-      await newRoom.localParticipant.setCameraEnabled(true);
-      isCameraOff = false;
-    }
-    isMuted = false;
-
+    // Track room state immediately after connection — before media setup
+    // so a camera/mic failure doesn't leave a zombie connection
     room = newRoom;
     isConnected = true;
+    isMuted = false;
     updateParticipants();
+
+    // Publish local tracks (failures are non-fatal)
+    try {
+      await newRoom.localParticipant.setMicrophoneEnabled(opts.audio !== false);
+    } catch (err) {
+      console.warn('Microphone not available:', err);
+      isMuted = true;
+    }
+    if (opts.video) {
+      try {
+        await newRoom.localParticipant.setCameraEnabled(true);
+        isCameraOff = false;
+      } catch (err) {
+        console.warn('Camera not available:', err);
+        isCameraOff = true;
+      }
+    }
 
     // Initialize devices after connection
     await refreshAudioDevices();

@@ -1,4 +1,5 @@
 <script>
+  import { resolve } from '$app/paths';
   import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { ProfileModel } from 'applesauce-core/models';
@@ -31,7 +32,8 @@
     PeopleIcon,
     BadgeIcon,
     ChatIcon,
-    UserIcon
+    UserIcon,
+    MessageSquareIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -324,6 +326,13 @@
               </button>
             {:else if activeUser}
               <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
+              <a
+                href={resolve(`/c/messages?to=${data.pubkey}`)}
+                class="btn btn-circle btn-ghost btn-sm"
+                aria-label={m.dm_title()}
+              >
+                <MessageSquareIcon class_="w-5 h-5" />
+              </a>
               <button
                 onclick={handleFollow}
                 disabled={followLoading}

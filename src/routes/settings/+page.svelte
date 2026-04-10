@@ -29,6 +29,7 @@
   import { publishEvent } from '$lib/services/publish-service.js';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
+  import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
@@ -1164,6 +1165,13 @@
               </span>
             </label>
           </div>
+        </div>
+      </div>
+
+      <!-- DM Relay Settings Card -->
+      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <DmRelaySettings />
         </div>
       </div>
 
