@@ -290,103 +290,103 @@
     <!-- Banner -->
     <div class="relative">
       {#if bannerUrl && !bannerError}
-        <div
-          class="relative h-48 bg-cover bg-center md:h-64"
-          style="background-image: url('{bannerUrl}')"
-        >
-          <img src={bannerUrl} alt="Banner" class="hidden" onerror={() => handleBannerError()} />
+        <div class="relative h-36 overflow-hidden md:h-48">
+          <img
+            src={bannerUrl}
+            alt="Banner"
+            class="h-full w-full object-cover"
+            onerror={() => handleBannerError()}
+          />
         </div>
       {:else}
-        <div class="h-48 bg-gradient-to-r from-primary/30 to-secondary/30 md:h-64"></div>
+        <div class="h-36 bg-gradient-to-r from-primary/30 to-secondary/30 md:h-48"></div>
       {/if}
 
-      <!-- Profile content overlapping banner -->
-      <div class="relative px-4 pb-6">
-        <div class="mx-auto max-w-4xl">
-          <!-- Avatar + action buttons row -->
-          <div class="flex items-end justify-between">
-            <div
-              class="-mt-16 h-32 w-32 overflow-hidden rounded-full border-4 border-base-100 bg-base-300"
-            >
-              <img
-                src={profile?.picture || `https://robohash.org/${data.pubkey}`}
-                alt={profile?.name || profile?.display_name || 'Profile'}
-                class="h-full w-full object-cover"
-              />
-            </div>
-
-            <div class="flex gap-2">
-              {#if isOwnProfile}
-                <button onclick={openEditModal} class="btn btn-outline btn-sm">
-                  {m.common_edit()}
-                </button>
-              {:else if activeUser}
-                <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
-                <button
-                  onclick={handleFollow}
-                  disabled={followLoading}
-                  class="btn btn-sm {isFollowing ? 'btn-outline' : 'btn-primary'}"
-                >
-                  {#if followLoading}
-                    <span class="loading loading-xs loading-spinner"></span>
-                  {:else if isFollowing}
-                    {m.profile_unfollow_button()}
-                  {:else}
-                    {m.profile_follow_button()}
-                  {/if}
-                </button>
-              {/if}
-            </div>
+      <!-- Avatar + action buttons overlap zone -->
+      <div class="relative px-4">
+        <div class="mx-auto flex max-w-4xl items-end justify-between">
+          <!-- Avatar overlapping banner -->
+          <div
+            class="-mt-12 h-24 w-24 overflow-hidden rounded-full border-4 border-base-100 bg-base-300"
+          >
+            <img
+              src={profile?.picture || `https://robohash.org/${data.pubkey}`}
+              alt={profile?.name || profile?.display_name || 'Profile'}
+              class="h-full w-full object-cover"
+            />
           </div>
 
-          <!-- Name + info -->
-          <div class="mt-4">
-            <h1 class="text-2xl font-bold text-base-content">
-              {profile?.name || profile?.display_name || 'Anonymous User'}
-            </h1>
-
-            {#if profile?.display_name && profile.display_name !== profile?.name}
-              <p class="text-base-content/60">@{profile.display_name}</p>
+          <!-- Action buttons — right-aligned -->
+          <div class="flex items-center gap-2 pb-1">
+            {#if isOwnProfile}
+              <button onclick={openEditModal} class="btn btn-outline btn-sm">
+                {m.common_edit()}
+              </button>
+            {:else if activeUser}
+              <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
+              <button
+                onclick={handleFollow}
+                disabled={followLoading}
+                class="btn btn-sm {isFollowing ? 'btn-outline' : 'btn-primary'}"
+              >
+                {#if followLoading}
+                  <span class="loading loading-xs loading-spinner"></span>
+                {:else if isFollowing}
+                  {m.profile_unfollow_button()}
+                {:else}
+                  {m.profile_follow_button()}
+                {/if}
+              </button>
             {/if}
+          </div>
+        </div>
+      </div>
 
-            <!-- Contact info -->
-            <div class="mt-3 flex flex-wrap items-center gap-4 text-sm">
-              {#if profile?.nip05}
-                <div class="flex items-center gap-1 text-primary">
-                  <CheckIcon class_="w-4 h-4" />
-                  <span>{profile.nip05}</span>
-                </div>
-              {/if}
+      <!-- Profile info -->
+      <div class="px-4 pt-3 pb-4">
+        <div class="mx-auto max-w-4xl">
+          <!-- Name -->
+          <h1 class="text-xl font-bold text-base-content">
+            {profile?.name || profile?.display_name || 'Anonymous User'}
+          </h1>
 
-              {#if profile?.website}
-                <div class="flex items-center gap-1 text-base-content/60">
-                  <GlobeIcon class_="w-4 h-4" />
-                  <!-- eslint-disable svelte/no-navigation-without-resolve -- external: user website -->
-                  <a
-                    href={profile.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="hover:text-primary"
-                  >
-                    {profile.website}
-                  </a>
-                  <!-- eslint-enable svelte/no-navigation-without-resolve -->
-                </div>
-              {/if}
-
-              {#if profile?.lud16}
-                <div class="flex items-center gap-1 text-warning">
-                  <LightningIcon class_="w-4 h-4" />
-                  <span>{profile.lud16}</span>
-                </div>
-              {/if}
+          <!-- NIP-05 -->
+          {#if profile?.nip05}
+            <div class="mt-0.5 flex items-center gap-1 text-sm text-primary">
+              <CheckIcon class_="w-3.5 h-3.5" />
+              <span>{profile.nip05}</span>
             </div>
+          {/if}
 
-            <!-- Public key -->
-            <div class="mt-3 flex items-center gap-2">
-              <code class="rounded bg-base-300 px-3 py-1 font-mono text-sm text-base-content/70">
+          <!-- Website -->
+          {#if profile?.website}
+            <div class="mt-1 flex items-center gap-1 text-sm text-base-content/60">
+              <GlobeIcon class_="w-3.5 h-3.5" />
+              <!-- eslint-disable svelte/no-navigation-without-resolve -- external: user website -->
+              <a
+                href={profile.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="hover:text-primary"
+              >
+                {profile.website}
+              </a>
+              <!-- eslint-enable svelte/no-navigation-without-resolve -->
+            </div>
+          {/if}
+
+          <!-- Lightning + npub row -->
+          <div class="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-base-content/60">
+            {#if profile?.lud16}
+              <span class="flex items-center gap-1 text-warning">
+                <LightningIcon class_="w-3 h-3" />
+                {profile.lud16}
+              </span>
+            {/if}
+            <span class="flex items-center gap-1">
+              <code class="rounded bg-base-300 px-2 py-0.5 font-mono text-[10px]">
                 {data.npub
-                  ? `${data.npub.slice(0, 16)}...${data.npub.slice(-8)}`
+                  ? `${data.npub.slice(0, 12)}...${data.npub.slice(-6)}`
                   : formatPubkey(data.pubkey)}
               </code>
               <button
@@ -395,23 +395,23 @@
                 title={m.profile_copy_pubkey()}
               >
                 {#if copied}
-                  <CheckIcon class_="w-4 h-4 text-success" />
+                  <CheckIcon class_="w-3 h-3 text-success" />
                 {:else}
-                  <CopyIcon class_="w-4 h-4" />
+                  <CopyIcon class_="w-3 h-3" />
                 {/if}
               </button>
-            </div>
-
-            <!-- Bio -->
-            {#if profile?.about}
-              <p class="mt-4 max-w-2xl leading-relaxed text-base-content/80">{profile.about}</p>
-            {/if}
-
-            <!-- Badge header row -->
-            {#if getBadges().length > 0}
-              <BadgeHeaderRow badges={getBadges()} onViewAll={() => switchTab('badges')} />
-            {/if}
+            </span>
           </div>
+
+          <!-- Bio -->
+          {#if profile?.about}
+            <p class="mt-3 text-sm leading-relaxed text-base-content/80">{profile.about}</p>
+          {/if}
+
+          <!-- Badges -->
+          {#if getBadges().length > 0}
+            <BadgeHeaderRow badges={getBadges()} onViewAll={() => switchTab('badges')} />
+          {/if}
         </div>
       </div>
     </div>
