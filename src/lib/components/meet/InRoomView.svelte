@@ -169,7 +169,7 @@
   let audioDropdownOpen = $state(false);
 </script>
 
-<div class="flex flex-1 flex-col">
+<div class="flex h-[calc(100dvh-7rem)] flex-col lg:h-auto lg:flex-1">
   <!-- Header -->
   <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
     <div class="flex items-center gap-2">
@@ -286,7 +286,7 @@
     {:else}
       <!-- Normal grid layout -->
       <div class="flex flex-1 flex-col overflow-auto p-4">
-        <div class="grid w-full flex-1 auto-rows-fr gap-3 {gridClass}">
+        <div class="grid w-full gap-3 {gridClass}">
           {#if activeScreenShare}
             <div class="relative col-span-full overflow-hidden rounded-lg bg-black">
               <video
@@ -336,30 +336,34 @@
           {/if}
 
           {#if lk.localParticipant}
-            <ParticipantTile
-              participant={lk.localParticipant}
-              isLocal={true}
-              isMuted={lk.isMuted}
-              isSpeaking={lk.speakingParticipantIds.has(lk.localParticipant.identity)}
-              profile={getProfiles().get(lk.localParticipant.identity)}
-            />
+            <div class="aspect-video">
+              <ParticipantTile
+                participant={lk.localParticipant}
+                isLocal={true}
+                isMuted={lk.isMuted}
+                isSpeaking={lk.speakingParticipantIds.has(lk.localParticipant.identity)}
+                profile={getProfiles().get(lk.localParticipant.identity)}
+              />
+            </div>
           {/if}
 
           {#each lk.remoteParticipants as participant (participant.sid)}
-            <ParticipantTile
-              {participant}
-              isSpeaking={lk.speakingParticipantIds.has(participant.identity)}
-              profile={getProfiles().get(participant.identity)}
-              isRemoteMuted={mutedParticipants.has(participant.identity)}
-              onToggleMute={() => toggleParticipantMute(participant.identity)}
-            />
+            <div class="aspect-video">
+              <ParticipantTile
+                {participant}
+                isSpeaking={lk.speakingParticipantIds.has(participant.identity)}
+                profile={getProfiles().get(participant.identity)}
+                isRemoteMuted={mutedParticipants.has(participant.identity)}
+                onToggleMute={() => toggleParticipantMute(participant.identity)}
+              />
+            </div>
           {/each}
         </div>
       </div>
     {/if}
 
     <!-- Controls -->
-    <div class="flex items-center justify-center gap-3 border-t border-base-300 px-4 py-3">
+    <div class="mt-auto flex items-center justify-center gap-3 border-t border-base-300 px-4 py-3">
       <!-- Mute button with audio device dropdown -->
       <div class="flex items-center">
         <button
