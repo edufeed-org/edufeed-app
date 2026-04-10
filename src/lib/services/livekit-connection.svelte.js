@@ -32,6 +32,11 @@ let activeAudioDeviceId = $state('');
 let audioOutputDevices = $state.raw([]);
 let activeAudioOutputDeviceId = $state('');
 
+// --- Video device state ---
+/** @type {MediaDeviceInfo[]} */
+let videoInputDevices = $state.raw([]);
+let activeVideoDeviceId = $state('');
+
 function updateParticipants() {
   if (!room) {
     remoteParticipants = [];
@@ -102,9 +107,43 @@ export async function switchAudioOutputDevice(deviceId) {
   }
 }
 
+/**
+ * Refresh the list of available video input devices.
+ */
+export async function refreshVideoDevices() {
+  if (!room) return;
+  try {
+    const devices = await Room.getLocalDevices('videoinput');
+    videoInputDevices = devices;
+
+    if (!activeVideoDeviceId && devices.length > 0) {
+      const mapId = room.localParticipant.activeDeviceMap?.get('videoinput');
+      activeVideoDeviceId =
+        mapId && devices.some((d) => d.deviceId === mapId) ? mapId : devices[0].deviceId;
+    }
+  } catch (err) {
+    console.error('Failed to enumerate video devices:', err);
+  }
+}
+
+/**
+ * Switch the active video input device.
+ * @param {string} deviceId
+ */
+export async function switchVideoDevice(deviceId) {
+  if (!room) return;
+  try {
+    await room.switchActiveDevice('videoinput', deviceId);
+    activeVideoDeviceId = deviceId;
+  } catch (err) {
+    console.error('Failed to switch video device:', err);
+  }
+}
+
 /** Handle device change events */
 function handleDeviceChange() {
   refreshAudioDevices();
+  refreshVideoDevices();
 }
 
 /**
@@ -156,8 +195,9 @@ export async function connectToRoom(token, url, opts = {}) {
     isConnected = true;
     updateParticipants();
 
-    // Initialize audio devices after connection
+    // Initialize devices after connection
     await refreshAudioDevices();
+    await refreshVideoDevices();
 
     // Listen for device changes
     if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
@@ -193,6 +233,8 @@ export async function disconnectFromRoom() {
   activeAudioDeviceId = '';
   audioOutputDevices = [];
   activeAudioOutputDeviceId = '';
+  videoInputDevices = [];
+  activeVideoDeviceId = '';
   updateParticipants();
 }
 
@@ -232,7 +274,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {
@@ -274,6 +316,12 @@ export function getLiveKitState() {
     },
     get activeAudioOutputDeviceId() {
       return activeAudioOutputDeviceId;
+    },
+    get videoInputDevices() {
+      return videoInputDevices;
+    },
+    get activeVideoDeviceId() {
+      return activeVideoDeviceId;
     }
   };
 }
