@@ -35,6 +35,7 @@
 
   /** @type {import('livekit-client').Track | null} */
   let videoTrack = $state(null);
+  let videoMuted = $state(true);
   /** @type {import('livekit-client').Track | null} */
   let audioTrack = $state(null);
 
@@ -44,7 +45,9 @@
   let audioEl = $state(undefined);
 
   function updateTracks() {
-    videoTrack = participant.getTrackPublication(Track.Source.Camera)?.track ?? null;
+    const cameraPub = participant.getTrackPublication(Track.Source.Camera);
+    videoTrack = cameraPub?.track ?? null;
+    videoMuted = cameraPub?.isMuted ?? true;
     if (!isLocal) {
       audioTrack = participant.getTrackPublication(Track.Source.Microphone)?.track ?? null;
     }
@@ -52,8 +55,18 @@
 
   /** @type {string[]} */
   const events = isLocal
-    ? [ParticipantEvent.LocalTrackPublished, ParticipantEvent.LocalTrackUnpublished]
-    : [ParticipantEvent.TrackSubscribed, ParticipantEvent.TrackUnsubscribed];
+    ? [
+        ParticipantEvent.LocalTrackPublished,
+        ParticipantEvent.LocalTrackUnpublished,
+        ParticipantEvent.TrackMuted,
+        ParticipantEvent.TrackUnmuted
+      ]
+    : [
+        ParticipantEvent.TrackSubscribed,
+        ParticipantEvent.TrackUnsubscribed,
+        ParticipantEvent.TrackMuted,
+        ParticipantEvent.TrackUnmuted
+      ];
 
   // Setup listeners + initial track state; cleanup on destroy
   $effect(() => {
@@ -111,7 +124,7 @@
   <div
     class="absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg bg-base-200"
   >
-    {#if videoTrack}
+    {#if videoTrack && !videoMuted}
       <video
         bind:this={videoEl}
         autoplay
@@ -147,7 +160,7 @@
   </div>
 
   <!-- Name overlay + hover card: OUTSIDE overflow-hidden -->
-  {#if videoTrack}
+  {#if videoTrack && !videoMuted}
     <div
       class="absolute right-0 bottom-0 left-0 z-10 rounded-b-lg bg-gradient-to-t from-black/50 to-transparent px-2 py-1"
     >
@@ -172,7 +185,7 @@
   {/if}
 
   <!-- Video-off hover card: OUTSIDE overflow-hidden -->
-  {#if !videoTrack && participant?.identity && !isLocal}
+  {#if (!videoTrack || videoMuted) && participant?.identity && !isLocal}
     <div class="absolute inset-0 z-10 flex items-center justify-center">
       <HoverCard position="top" fixed={true}>
         {#snippet trigger()}
