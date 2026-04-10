@@ -7,9 +7,17 @@
   import { parseEventContent } from '$lib/helpers/nostrContent.js';
   import NostrIdentifier from './NostrIdentifier.svelte';
 
-  let { event, class: className = '' } = $props();
+  let { event, class: className = '', depth = 0 } = $props();
 
-  let tree = $derived(event ? parseEventContent(event) : null);
+  // Use $state + $effect instead of $derived because parseEventContent
+  // mutates the event object (symbol-based caching via getParsedContent)
+  /** @type {any} */
+  // eslint-disable-next-line svelte/prefer-writable-derived -- parseEventContent mutates event (symbol cache)
+  let tree = $state(null);
+
+  $effect(() => {
+    tree = event ? parseEventContent(event) : null;
+  });
 
   const imageExts = /\.(jpe?g|png|gif|webp|svg|avif|bmp)(\?.*)?$/i;
   const videoExts = /\.(mp4|webm|mov|ogg)(\?.*)?$/i;
@@ -38,7 +46,7 @@
           class="inline h-5 w-5 align-text-bottom"
         />
       {:else if node.type === 'mention'}
-        <NostrIdentifier identifier={node.encoded} inline={true} />
+        <NostrIdentifier identifier={node.encoded} inline={true} {depth} />
       {:else if node.type === 'link'}
         {#if isImageUrl(node.href)}
           <a href={node.href} target="_blank" rel="noopener noreferrer">

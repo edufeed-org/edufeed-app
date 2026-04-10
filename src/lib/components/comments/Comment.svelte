@@ -6,7 +6,6 @@
   import CommentInput from './CommentInput.svelte';
   import { ChatIcon, TrashIcon, CopyIcon } from '$lib/components/icons';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
-  import { generateAuthorColorRGB } from '$lib/helpers/nostrUtils';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { getPlainTextExcerpt } from '$lib/helpers/commentThreading.js';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -54,12 +53,6 @@
 
   // Check if user can delete this comment (must be the author)
   let canDelete = $derived(activeUser && comment.pubkey === activeUser.pubkey);
-
-  // Author background tint
-  let authorBg = $derived.by(() => {
-    const { r, g, b } = generateAuthorColorRGB(comment.pubkey);
-    return `rgba(${r},${g},${b},0.07)`;
-  });
 
   /**
    * Copy a deep-link URL for this comment to the clipboard
@@ -136,7 +129,7 @@
 </script>
 
 <div class="comment-wrapper" data-testid="comment" data-comment-id={comment.id}>
-  <div class="relative rounded-lg p-4" style="background-color: {authorBg}">
+  <div class="rounded-lg border border-base-300 bg-base-100 p-4">
     <!-- Reply Context Header -->
     {#if depth > 0 && comment.parentComment}
       <button

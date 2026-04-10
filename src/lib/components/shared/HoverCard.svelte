@@ -51,7 +51,8 @@
   function updateFixedPosition() {
     if (!fixed || !triggerEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    popupX = rect.left;
+    const popupWidth = 288; // w-72 = 18rem
+    popupX = Math.min(rect.left, window.innerWidth - popupWidth - 16);
     if (position === 'top') {
       popupY = window.innerHeight - rect.top + 8;
     } else {
@@ -120,7 +121,7 @@
 
   {#if isOpen}
     <div
-      class="z-50 rounded-lg border border-base-300 bg-base-100 shadow-xl"
+      class="not-prose z-50 rounded-lg border border-base-300 bg-base-100 shadow-xl"
       class:absolute={!fixed}
       class:fixed
       class:bottom-full={!fixed && position === 'top'}

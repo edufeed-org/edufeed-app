@@ -17,7 +17,7 @@
   import NotePreview from './NostrPreviews/NotePreview.svelte';
   import FallbackIdentifier from './NostrPreviews/FallbackIdentifier.svelte';
 
-  let { identifier, inline = false } = $props();
+  let { identifier, inline = false, depth = 0 } = $props();
 
   let decoded = $derived(decodeNostrIdentifier(identifier));
   let isCalendarEvent = $derived(isCalendarEventIdentifier(decoded));
@@ -38,7 +38,7 @@
 {:else if isWiki}
   <WikiPreview {identifier} {decoded} {inline} />
 {:else if isNote}
-  <NotePreview {identifier} />
+  <NotePreview {identifier} {depth} />
 {:else}
   <FallbackIdentifier {identifier} {decoded} />
 {/if}

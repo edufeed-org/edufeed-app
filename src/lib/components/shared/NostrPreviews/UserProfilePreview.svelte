@@ -11,6 +11,8 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import HoverCard from '../HoverCard.svelte';
+  import ProfileHoverCardContent from '../ProfileHoverCardContent.svelte';
 
   let { identifier: _identifier, decoded } = $props();
 
@@ -49,7 +51,16 @@
   <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
   <a href={profileUrl} class="font-medium text-info hover:underline">@...</a>
 {:else}
-  <!-- Loaded state: Simple inline mention -->
-  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
-  <a href={profileUrl} class="font-medium text-info no-underline hover:underline">@{displayName}</a>
+  <!-- Loaded state: Inline mention with profile hover card -->
+  <HoverCard enterDelay={300} leaveDelay={200} fixed>
+    {#snippet trigger()}
+      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
+      <a href={profileUrl} class="font-medium text-info no-underline hover:underline"
+        >@{displayName}</a
+      >
+    {/snippet}
+    {#snippet content()}
+      <ProfileHoverCardContent {pubkey} {profile} />
+    {/snippet}
+  </HoverCard>
 {/if}

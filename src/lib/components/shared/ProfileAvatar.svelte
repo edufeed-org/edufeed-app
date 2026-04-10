@@ -115,7 +115,7 @@
 </script>
 
 {#snippet avatarContent()}
-  <div class="{sizeClasses[size]} rounded-full">
+  <div class="not-prose {sizeClasses[size]} rounded-full">
     {#if avatarUrl}
       <ImageWithFallback
         src={avatarUrl}
