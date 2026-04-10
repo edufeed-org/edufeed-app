@@ -297,7 +297,7 @@ export function renderOgTags(meta, url) {
   ];
 
   if (hasImage) {
-    const proxied = proxyImageUrl(meta.image, url);
+    const proxied = proxyImageUrl(/** @type {string} */ (meta.image), url);
     tags.push(`<meta property="og:image" content="${escapeHtml(proxied)}" />`);
     tags.push(`<meta name="twitter:card" content="summary_large_image" />`);
     tags.push(`<meta name="twitter:image" content="${escapeHtml(proxied)}" />`);

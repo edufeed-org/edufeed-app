@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * LiveKit Connection Service — Screen Share Tests
  *

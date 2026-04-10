@@ -25,6 +25,7 @@ export async function POST({ request }) {
   const endpoint = `${operatorUrl.replace(/\/$/, '')}/token`;
   const authHeader = request.headers.get('Authorization');
 
+  /** @type {Record<string, string>} */
   const headers = { 'Content-Type': 'application/json' };
   if (authHeader) {
     headers['Authorization'] = authHeader;

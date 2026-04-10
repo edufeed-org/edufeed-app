@@ -50,6 +50,7 @@
     }
   }
 
+  /** @type {string[]} */
   const events = isLocal
     ? [ParticipantEvent.LocalTrackPublished, ParticipantEvent.LocalTrackUnpublished]
     : [ParticipantEvent.TrackSubscribed, ParticipantEvent.TrackUnsubscribed];
@@ -58,11 +59,11 @@
   $effect(() => {
     updateTracks();
     for (const evt of events) {
-      participant.on(evt, updateTracks);
+      participant.on(/** @type {any} */ (evt), updateTracks);
     }
     return () => {
       for (const evt of events) {
-        participant.off(evt, updateTracks);
+        participant.off(/** @type {any} */ (evt), updateTracks);
       }
     };
   });
@@ -118,7 +119,7 @@
         muted={isLocal}
         class="h-full w-full object-cover"
         class:scale-x-[-1]={isLocal}
-      />
+      ></video>
     {:else}
       <div class="text-center">
         {#if participant?.identity}

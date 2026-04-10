@@ -54,7 +54,7 @@ export function useRoomPresence(getRoomCoordinate, getCommunityPubkey) {
     pruneTimer = setInterval(() => {
       const pruned = pruneStalePresence(presenceMap, MAX_AGE_SECONDS);
       if (pruned.size !== presenceMap.size) {
-        presenceMap = pruned;
+        presenceMap = new SvelteMap(pruned);
         presentPubkeys = Array.from(pruned.keys());
       }
     }, PRUNE_INTERVAL_MS);

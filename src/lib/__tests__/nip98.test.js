@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * NIP-98 auth helper tests
  *

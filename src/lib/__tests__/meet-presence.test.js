@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Meet Presence Service Tests
  *
