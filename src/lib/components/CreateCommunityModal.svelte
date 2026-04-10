@@ -18,6 +18,7 @@
   import LocationInput from './shared/LocationInput.svelte';
   import ContentTypesAndACL from './shared/ContentTypesAndACL.svelte';
   import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
+  import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import { parseFormTemplate, createDefaultMembershipForm } from '$lib/helpers/forms.js';
 
@@ -60,6 +61,7 @@
     blossomServers: ['blossom.edufeed.org'],
     location: '',
     description: '',
+    livekitUrl: '',
     contentTypes: {
       calendar: {
         name: 'Calendar',
@@ -92,6 +94,13 @@
       wikis: {
         name: 'Wikis',
         enabled: true,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
+      },
+      meet: {
+        name: 'Meet',
+        enabled: false,
         badges: { read: null, write: null },
         relays: [],
         formRef: ''
@@ -174,6 +183,7 @@
           blossomServers: ['blossom.edufeed.org'],
           location: '',
           description: '',
+          livekitUrl: '',
           contentTypes: {
             calendar: {
               name: 'Calendar',
@@ -206,6 +216,13 @@
             wikis: {
               name: 'Wikis',
               enabled: true,
+              badges: { read: null, write: null },
+              relays: [],
+              formRef: ''
+            },
+            meet: {
+              name: 'Meet',
+              enabled: false,
               badges: { read: null, write: null },
               relays: [],
               formRef: ''
@@ -243,6 +260,11 @@
         errors.contentTypes = m.create_community_modal_error_content_types_required();
         return false;
       }
+
+      if (communityData.contentTypes.meet?.enabled && !communityData.livekitUrl?.trim()) {
+        errors.livekitUrl = m.meet_livekit_url_required();
+        return false;
+      }
     }
 
     // For new keypair flow, validate profile in step 1
@@ -272,6 +294,11 @@
       const hasContentType = Object.values(communityData.contentTypes).some((ct) => ct.enabled);
       if (!hasContentType) {
         errors.contentTypes = m.create_community_modal_error_content_types_required();
+        return false;
+      }
+
+      if (communityData.contentTypes.meet?.enabled && !communityData.livekitUrl?.trim()) {
+        errors.livekitUrl = m.meet_livekit_url_required();
         return false;
       }
     }
@@ -428,8 +455,10 @@
       // Sign the community event
       const signedCommunityEvent = await signer.signEvent(communityEvent);
 
-      // Publish community event (kind 10222) - uses communikey relays
-      const communityResult = await publishEvent(signedCommunityEvent);
+      // Publish community event (kind 10222) - uses communikey relays + community's own relays
+      const communityResult = await publishEvent(signedCommunityEvent, [], {
+        additionalRelays: getCommunityGlobalRelays(signedCommunityEvent)
+      });
       if (communityResult.success) {
         eventStore.add(signedCommunityEvent);
       }
@@ -509,6 +538,7 @@
       blossomServers: ['blossom.edufeed.org'],
       location: '',
       description: '',
+      livekitUrl: '',
       contentTypes: {
         calendar: {
           name: 'Calendar',
@@ -541,6 +571,13 @@
         wikis: {
           name: 'Wikis',
           enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        meet: {
+          name: 'Meet',
+          enabled: false,
           badges: { read: null, write: null },
           relays: [],
           formRef: ''
@@ -649,6 +686,28 @@
             onCreateDefaultForm={handleCreateDefaultForm}
             {errors}
           />
+
+          <!-- LiveKit URL (shown when Meet is enabled) -->
+          {#if communityData.contentTypes.meet?.enabled}
+            <div class="form-control">
+              <label class="label" for="ccm-livekit-url">
+                <span class="label-text">{m.meet_livekit_url()}</span>
+              </label>
+              <input
+                id="ccm-livekit-url"
+                type="url"
+                class="input-bordered input"
+                placeholder={m.meet_livekit_url_placeholder()}
+                bind:value={communityData.livekitUrl}
+              />
+              <div class="label">
+                <span class="label-text-alt">{m.meet_livekit_url_help()}</span>
+              </div>
+              {#if errors.livekitUrl}
+                <p class="mt-1 text-sm text-error">{errors.livekitUrl}</p>
+              {/if}
+            </div>
+          {/if}
 
           <!-- Advanced Settings -->
           <div class="collapse-arrow collapse bg-base-200">
@@ -830,6 +889,28 @@
             onCreateDefaultForm={handleCreateDefaultForm}
             {errors}
           />
+
+          <!-- LiveKit URL (shown when Meet is enabled) -->
+          {#if communityData.contentTypes.meet?.enabled}
+            <div class="form-control">
+              <label class="label" for="ccm-livekit-url">
+                <span class="label-text">{m.meet_livekit_url()}</span>
+              </label>
+              <input
+                id="ccm-livekit-url"
+                type="url"
+                class="input-bordered input"
+                placeholder={m.meet_livekit_url_placeholder()}
+                bind:value={communityData.livekitUrl}
+              />
+              <div class="label">
+                <span class="label-text-alt">{m.meet_livekit_url_help()}</span>
+              </div>
+              {#if errors.livekitUrl}
+                <p class="mt-1 text-sm text-error">{errors.livekitUrl}</p>
+              {/if}
+            </div>
+          {/if}
 
           <!-- Advanced Settings -->
           <div class="collapse-arrow collapse bg-base-200">

@@ -10,7 +10,11 @@
   import { deriveDefaultFormRef } from '$lib/helpers/communityFormDefaults.js';
   import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
-  import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
+  import {
+    parseCommunityContentTypes,
+    parseCommunityMetadata,
+    getCommunityGlobalRelays
+  } from '$lib/helpers/communityRelays.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { createDefaultMembershipForm } from '$lib/helpers/forms.js';
@@ -27,6 +31,7 @@
     blossomServers: /** @type {string[]} */ ([]),
     location: '',
     description: '',
+    livekitUrl: '',
     contentTypes:
       /** @type {Record<string, { name: string, enabled: boolean, badges: { read: string|null, write: string|null }, relays: string[], formRef: string }>} */ ({
         calendar: {
@@ -63,6 +68,13 @@
           badges: { read: null, write: null },
           relays: [],
           formRef: ''
+        },
+        meet: {
+          name: 'Meet',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
         }
       })
   });
@@ -94,7 +106,9 @@
     30023: 'articles',
     1: 'posts',
     11: 'posts',
-    30818: 'wikis'
+    30818: 'wikis',
+    30312: 'meet',
+    30313: 'meet'
   };
 
   // Initialize from community event when it changes
@@ -158,8 +172,19 @@
         badges: { read: null, write: null },
         relays: [],
         formRef: ''
+      },
+      meet: {
+        name: 'Meet',
+        enabled: false,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: ''
       }
     };
+
+    // Parse livekitUrl from global metadata
+    const metadata = parseCommunityMetadata(communityEvent);
+    const livekitUrl = metadata.livekitUrl || '';
 
     // Parse content sections from tags
     /** @type {string|null} */
@@ -215,6 +240,7 @@
       blossomServers,
       location,
       description,
+      livekitUrl,
       contentTypes
     };
 
@@ -305,6 +331,7 @@
       blossomServers: [],
       location: '',
       description: '',
+      livekitUrl: '',
       contentTypes: {
         calendar: {
           name: 'Calendar',
@@ -336,6 +363,13 @@
         },
         wikis: {
           name: 'Wikis',
+          enabled: false,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+        },
+        meet: {
+          name: 'Meet',
           enabled: false,
           badges: { read: null, write: null },
           relays: [],
@@ -388,6 +422,11 @@
       return false;
     }
 
+    if (communityData.contentTypes.meet?.enabled && !communityData.livekitUrl?.trim()) {
+      errors.livekitUrl = m.meet_livekit_url_required();
+      return false;
+    }
+
     return true;
   }
 
@@ -435,7 +474,9 @@
       };
 
       const signedEvent = await account.signEvent(communityUpdateEvent);
-      publishEventOptimistic(signedEvent);
+      publishEventOptimistic(signedEvent, [], {
+        additionalRelays: getCommunityGlobalRelays(signedEvent)
+      });
 
       // Create/update kind 30000 profile list events for gated sections
       for (const [, ct] of Object.entries(communityData.contentTypes)) {
@@ -529,6 +570,28 @@
           onCreateDefaultForm={handleCreateDefaultForm}
           {errors}
         />
+
+        <!-- LiveKit URL (shown when Meet is enabled) -->
+        {#if communityData.contentTypes.meet?.enabled}
+          <div class="form-control">
+            <label class="label" for="ecm-livekit-url">
+              <span class="label-text">{m.meet_livekit_url()}</span>
+            </label>
+            <input
+              id="ecm-livekit-url"
+              type="url"
+              class="input-bordered input"
+              placeholder={m.meet_livekit_url_placeholder()}
+              bind:value={communityData.livekitUrl}
+            />
+            <div class="label">
+              <span class="label-text-alt">{m.meet_livekit_url_help()}</span>
+            </div>
+            {#if errors.livekitUrl}
+              <p class="mt-1 text-sm text-error">{errors.livekitUrl}</p>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Advanced Settings -->
         <div class="collapse-arrow collapse bg-base-200">
