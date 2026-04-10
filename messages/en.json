@@ -350,6 +350,8 @@
   "auth_bunker_tab_url": "Enter URL",
   "auth_bunker_qr_description": "Scan with Amber or a compatible NIP-46 signer",
   "auth_bunker_qr_regenerate": "Regenerate QR Code",
+  "auth_bunker_open_in_signer": "Open in Signer App",
+  "auth_bunker_open_in_signer_hint": "On mobile? Tap to open Amber or your signer app directly.",
   "auth_bunker_url_description": "Connect to a remote signer like nsec.app, Amber, or other NIP-46 compatible bunkers.",
   "auth_bunker_url_label": "Bunker URL",
   "auth_bunker_url_placeholder": "bunker://...",

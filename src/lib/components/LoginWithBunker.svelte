@@ -305,11 +305,17 @@
           {m.auth_bunker_qr_description()}
         </p>
 
-        <div class="flex justify-center">
+        <div class="flex flex-col items-center gap-3">
           {#if nostrConnectUri}
             <div class="rounded-lg bg-white p-4">
               <canvas bind:this={qrCanvas} aria-label={m.bunker_qr_aria()}></canvas>
             </div>
+            <a href={nostrConnectUri} class="btn btn-outline btn-sm">
+              {m.auth_bunker_open_in_signer()}
+            </a>
+            <p class="text-center text-xs text-base-content/50">
+              {m.auth_bunker_open_in_signer_hint()}
+            </p>
           {:else}
             <div
               class="flex h-[250px] w-[250px] items-center justify-center rounded-lg bg-base-200"
