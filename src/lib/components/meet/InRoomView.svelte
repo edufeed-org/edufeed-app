@@ -5,6 +5,7 @@
 
 <script>
   import { SvelteSet } from 'svelte/reactivity';
+  import { untrack } from 'svelte';
   import {
     connectToRoom,
     disconnectFromRoom,
@@ -43,6 +44,7 @@
 
   const lk = getLiveKitState();
   let error = $state(/** @type {string | null} */ (null));
+  let preparingConnection = $state(true);
 
   // --- #5: Profile map for participant tiles ---
   const getProfiles = useProfileMap(() => {
@@ -55,12 +57,17 @@
     return pks;
   });
 
-  // Connect on mount
-  $effect(() => {
-    if (!manager.active || !livekitUrl) return;
+  // Tracks whether leave was initiated via the button (prevents double-disconnect in cleanup)
+  let leaving = false;
 
-    const coordinate = getRoomCoordinate(room.event);
-    const isVideo = room.type === 'video';
+  // Connect on mount — untrack room data to prevent re-runs from EventStore updates
+  $effect(() => {
+    const active = untrack(() => manager.active);
+    const lkUrl = untrack(() => livekitUrl);
+    if (!active || !lkUrl) return;
+
+    const coordinate = untrack(() => getRoomCoordinate(room.event));
+    const isVideo = untrack(() => room.type === 'video');
 
     (async () => {
       try {
@@ -70,29 +77,34 @@
         };
 
         const { token, url } = await requestLiveKitToken(
-          livekitUrl,
+          lkUrl,
           coordinate,
           communityPubkey,
           signer
         );
 
+        preparingConnection = false;
         await connectToRoom(token, url, { video: isVideo, audio: true });
         await startPresence(coordinate, communityPubkey);
       } catch (err) {
+        preparingConnection = false;
         console.error('Failed to join room:', err);
         error = err instanceof Error ? err.message : m.meet_connection_error();
       }
     })();
 
     return () => {
-      disconnectFromRoom();
-      stopPresence();
+      if (!leaving) {
+        disconnectFromRoom();
+        stopPresence();
+      }
     };
   });
 
   async function handleLeave() {
+    leaving = true;
     await disconnectFromRoom();
-    await stopPresence();
+    stopPresence();
     onLeave();
   }
 
@@ -203,7 +215,7 @@
         </button>
       </div>
     </div>
-  {:else if lk.isConnecting}
+  {:else if lk.isConnecting || preparingConnection}
     <div class="flex flex-1 items-center justify-center">
       <div class="text-center">
         <span class="loading loading-lg loading-spinner text-primary"></span>
