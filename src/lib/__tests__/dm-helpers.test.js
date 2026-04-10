@@ -57,7 +57,7 @@ describe('read timestamps persistence', () => {
 
   it('loads read timestamps from localStorage', () => {
     const data = { conv1: 1000, conv2: 2000 };
-    localStorage.getItem.mockReturnValue(JSON.stringify(data));
+    /** @type {any} */ (localStorage.getItem).mockReturnValue(JSON.stringify(data));
 
     const result = loadReadTimestamps('pubkey123');
     expect(localStorage.getItem).toHaveBeenCalledWith(`${DM_READ_TIMESTAMPS_KEY}:pubkey123`);
@@ -65,12 +65,12 @@ describe('read timestamps persistence', () => {
   });
 
   it('returns empty object when localStorage is empty', () => {
-    localStorage.getItem.mockReturnValue(null);
+    /** @type {any} */ (localStorage.getItem).mockReturnValue(null);
     expect(loadReadTimestamps('pubkey123')).toEqual({});
   });
 
   it('returns empty object on parse error', () => {
-    localStorage.getItem.mockReturnValue('invalid-json');
+    /** @type {any} */ (localStorage.getItem).mockReturnValue('invalid-json');
     expect(loadReadTimestamps('pubkey123')).toEqual({});
   });
 

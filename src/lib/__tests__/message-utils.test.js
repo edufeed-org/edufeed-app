@@ -172,7 +172,7 @@ describe('reconcilePendingMessages', () => {
   });
 
   it('returns empty array when no pending messages', () => {
-    const result = reconcilePendingMessages([], [{ content: 'hi' }]);
+    const result = reconcilePendingMessages(/** @type {any[]} */ ([]), [{ content: 'hi' }]);
     expect(result).toEqual([]);
   });
 
