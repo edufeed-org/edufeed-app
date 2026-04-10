@@ -128,7 +128,7 @@
           status = 'awaiting_approval';
         },
         appMetadata: {
-          name: 'ComCal',
+          name: runtimeConfig.appName || 'ComCal',
           url: window.location.origin
         }
       });
