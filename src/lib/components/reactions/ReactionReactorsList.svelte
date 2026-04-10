@@ -22,10 +22,12 @@
   /** @type {Props} */
   let { reactors, emoji, emojiUrl = null } = $props();
 
-  const getProfiles = useProfileMap(() => reactors);
+  let uniqueReactors = $derived([...new Set(reactors)]);
 
-  let displayReactors = $derived(reactors.slice(0, MAX_DISPLAY));
-  let overflow = $derived(reactors.length - MAX_DISPLAY);
+  const getProfiles = useProfileMap(() => uniqueReactors);
+
+  let displayReactors = $derived(uniqueReactors.slice(0, MAX_DISPLAY));
+  let overflow = $derived(uniqueReactors.length - MAX_DISPLAY);
   let profiles = $derived(getProfiles());
 </script>
 
