@@ -83,6 +83,11 @@
     "svelte-maplibre": "^1.2.3",
     "unpdf": "^1.4.0"
   },
+  "pnpm": {
+    "patchedDependencies": {
+      "applesauce-content@5.0.0": "patches/applesauce-content@5.0.0.patch"
+    }
+  },
   "lint-staged": {
     "*.{js,svelte}": [
       "eslint --fix",
