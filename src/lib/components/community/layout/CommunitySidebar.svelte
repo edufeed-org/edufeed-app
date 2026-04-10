@@ -77,10 +77,6 @@
 
 <!-- Mobile: Drawer content (will be used inside drawer in AppLayout) -->
 <div class="flex h-full w-full flex-col bg-base-200 lg:hidden">
-  <div class="border-b border-base-300 p-4">
-    <h2 class="text-lg font-semibold">{m.community_layout_sidebar_title()}</h2>
-  </div>
-
   <div class="flex-1 space-y-2 overflow-y-auto p-4">
     <!-- Home button -->
     <button

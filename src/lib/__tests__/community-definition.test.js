@@ -309,6 +309,25 @@ describe('parseCommunityMetadata', () => {
     const result = parseCommunityMetadata(event);
     expect(result.languages).toEqual(['en']);
   });
+
+  it('parses livekit operator URL', () => {
+    const event = makeEvent([
+      ['livekit', 'https://operator.example.com'],
+      ['content', 'Chat'],
+      ['k', '9']
+    ]);
+    const result = parseCommunityMetadata(event);
+    expect(result.livekitUrl).toBe('https://operator.example.com');
+  });
+
+  it('returns null livekitUrl when no livekit tag', () => {
+    const event = makeEvent([
+      ['content', 'Chat'],
+      ['k', '9']
+    ]);
+    const result = parseCommunityMetadata(event);
+    expect(result.livekitUrl).toBeNull();
+  });
 });
 
 // ─── EXISTING EXPORTS (backward compat) ─────────────────────────────────────

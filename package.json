@@ -73,6 +73,7 @@
     "embla-carousel": "^8.6.0",
     "embla-carousel-svelte": "^8.6.0",
     "linkedom": "^0.18.12",
+    "livekit-client": "^2.18.1",
     "maplibre-gl": "^4.7.1",
     "marked": "^16.4.0",
     "nostr-tools": "^2.16.2",

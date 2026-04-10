@@ -21,6 +21,7 @@
  * @property {string} location
  * @property {string} description
  * @property {string[]} [languages] - ISO-639-1 language codes (new-spec)
+ * @property {string} [livekitUrl] - LiveKit operator URL for Meet rooms
  * @property {Record<string, ContentTypeFormData>} contentTypes
  */
 
@@ -32,7 +33,8 @@ const CONTENT_TYPE_KINDS = {
   chat: ['9'],
   articles: ['30023'],
   posts: ['1', '11'],
-  wikis: ['30818']
+  wikis: ['30818'],
+  meet: ['30312', '30313']
 };
 
 /**
@@ -86,6 +88,11 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
     for (const lang of data.languages) {
       tags.push(['l', lang, 'ISO-639-1']);
     }
+  }
+
+  // LiveKit operator URL
+  if (data.livekitUrl?.trim()) {
+    tags.push(['livekit', data.livekitUrl.trim()]);
   }
 
   // ── Content sections ──

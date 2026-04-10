@@ -24,7 +24,7 @@ export async function load({ params }) {
 
   return {
     event: context.event,
-    parentEvent: context.parentEvent ?? null,
+    parentPointer: context.parentPointer ?? null,
     focusCommentId: context.focusCommentId ?? null,
     scrollTo: context.scrollTo ?? null,
     nevent: params.nevent

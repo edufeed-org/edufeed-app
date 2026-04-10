@@ -37,6 +37,7 @@ function makeFormData(overrides = {}) {
       posts: { name: 'Posts', enabled: false, badges: { read: null, write: null }, relays: [] },
       wikis: { name: 'Wikis', enabled: false, badges: { read: null, write: null }, relays: [] }
     },
+    livekitUrl: '',
     ...overrides
   });
 }
@@ -261,6 +262,31 @@ describe('buildCommunityDefinitionTags — relay format handling', () => {
     });
     const tags = buildCommunityDefinitionTags(data);
     expect(tags).toContainEqual(['r', 'wss://r1.example.com']);
+  });
+
+  it('writes livekit tag when livekitUrl is set', () => {
+    const data = makeFormData({ livekitUrl: 'https://operator.example.com' });
+    const tags = buildCommunityDefinitionTags(data);
+    expect(tags).toContainEqual(['livekit', 'https://operator.example.com']);
+  });
+
+  it('omits livekit tag when livekitUrl is empty', () => {
+    const data = makeFormData({ livekitUrl: '' });
+    const tags = buildCommunityDefinitionTags(data);
+    expect(tags.find((t) => t[0] === 'livekit')).toBeUndefined();
+  });
+
+  it('writes meet content kinds when meet is enabled', () => {
+    const data = makeFormData();
+    data.contentTypes.meet = {
+      name: 'Meet',
+      enabled: true,
+      badges: { read: null, write: null },
+      relays: []
+    };
+    const tags = buildCommunityDefinitionTags(data);
+    expect(tags).toContainEqual(['k', '30312']);
+    expect(tags).toContainEqual(['k', '30313']);
   });
 
   it('enforced flag only written when communityPubkey provided', () => {

@@ -10,6 +10,7 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkShareIcon,
+    MeetIcon,
     LockIcon,
     LockOpenIcon
   } from '$lib/components/icons';
@@ -44,6 +45,7 @@
     forum: ForumIcon,
     wikis: BookIcon,
     'social-bookmarks': BookmarkShareIcon,
+    meet: MeetIcon,
     settings: SettingsIcon
   };
 
@@ -58,6 +60,7 @@
     forum: () => m.community_layout_bottom_tab_bar_forum(),
     wikis: () => m.community_wikis_title(),
     'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
+    meet: () => m.community_layout_bottom_tab_bar_meet(),
     settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 

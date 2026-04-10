@@ -71,11 +71,11 @@
       </a>
     </div>
   {:else}
-    <div class="flex gap-3 overflow-x-auto pb-2 lg:grid lg:grid-cols-3 lg:overflow-visible">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each joinedCommunities as pubkey (pubkey)}
         <a
           href={getCommunityLink(pubkey)}
-          class="flex min-w-[200px] flex-shrink-0 items-center gap-3 rounded-lg border border-base-300 bg-base-100 p-3 shadow-sm transition-shadow hover:border-primary hover:shadow-md lg:min-w-0"
+          class="flex items-center gap-3 rounded-lg border border-base-300 bg-base-100 p-3 shadow-sm transition-shadow hover:border-primary hover:shadow-md"
         >
           <ProfileAvatar {pubkey} size="md" fallbackType="robohash" />
           <span class="truncate font-medium">{getCommunityName(pubkey)}</span>

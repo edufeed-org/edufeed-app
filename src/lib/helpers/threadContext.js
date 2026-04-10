@@ -1,35 +1,49 @@
 import { getNip10References } from 'applesauce-common/helpers';
 import { getReactionAddressPointer, getReactionEventPointer } from 'applesauce-common/helpers';
 import { getRSVPAddressPointer } from 'applesauce-common/helpers';
+import {
+  getCommentRootPointer,
+  isCommentAddressPointer,
+  isCommentEventPointer
+} from 'applesauce-common/helpers';
 import { encodePointer } from 'applesauce-core/helpers';
 import { nip19 } from 'nostr-tools';
 
 /**
- * Returns the parent event pointer for a note, or null if standalone.
- * Prefers the direct parent (reply marker) over root.
- * @param {import('nostr-tools').Event} event
- * @returns {{ id: string, relayHint?: string } | null}
+ * Convert a CommentPointer (from getCommentRootPointer) to a NIP-19 encoded string.
+ * @param {import('applesauce-common/helpers').CommentPointer} pointer
+ * @returns {string}
  */
-export function getParentEventPointer(event) {
-  const refs = getNip10References(event);
-  // Prefer direct parent (reply), fall back to root
-  const parent = refs?.reply?.e ?? refs?.root?.e ?? null;
-  if (!parent?.id) return null;
-  return { id: parent.id, relayHint: parent.relays?.[0] || undefined };
+function encodeCommentPointerToNip19(pointer) {
+  if (isCommentAddressPointer(pointer)) {
+    return nip19.naddrEncode({
+      kind: pointer.kind,
+      pubkey: pointer.pubkey,
+      identifier: pointer.identifier,
+      relays: pointer.relay ? [pointer.relay] : []
+    });
+  }
+  if (isCommentEventPointer(pointer)) {
+    return nip19.neventEncode({
+      id: pointer.id,
+      relays: pointer.relay ? [pointer.relay] : []
+    });
+  }
+  return '';
 }
 
 /**
  * @typedef {Object} ThreadContext
  * @property {import('nostr-tools').NostrEvent} event - The resolved root/target event
- * @property {import('nostr-tools').NostrEvent} [parentEvent] - Parent event for kind 1 replies
  * @property {string} [focusCommentId] - Comment ID to auto-focus (when navigating from a comment)
  * @property {string} [scrollTo] - Section to scroll to (e.g. 'reactions')
+ * @property {string} [parentPointer] - NIP-19 encoded pointer to parent when it couldn't be fetched
  */
 
 /**
  * Resolves thread context for an event:
  * - Kind 1111 (comment): follows A/E root tags to find the root thread event
- * - Kind 1 (text note): resolves parent event via NIP-10 references
+ * - Kind 1 (text note): resolves root event via NIP-10 references
  * - Kind 7 (reaction): resolves target event via address/event pointer
  * - Kind 31925 (RSVP): resolves target calendar event via address pointer
  * - Other kinds: returns the event as-is
@@ -67,8 +81,10 @@ export async function resolveThreadContext(event, fetchFn) {
     if (rootEvent) {
       return { event: rootEvent, focusCommentId: event.id };
     }
-    // Could not resolve — return original comment
-    return { event };
+    // Could not resolve — return original comment with pointer for fallback link
+    const rootPointer = getCommentRootPointer(event);
+    const parentPointer = rootPointer ? encodeCommentPointerToNip19(rootPointer) : undefined;
+    return { event, parentPointer: parentPointer || undefined };
   }
 
   // Kind 7 reaction: resolve target event
@@ -107,16 +123,20 @@ export async function resolveThreadContext(event, fetchFn) {
     return { event };
   }
 
-  // Kind 1 text note: resolve parent event
+  // Kind 1 text note: resolve root event (like kind 1111)
   if (event.kind === 1) {
-    const parentPointer = getParentEventPointer(event);
-    if (parentPointer) {
-      const parentNevent = nip19.neventEncode({
-        id: parentPointer.id,
-        relays: parentPointer.relayHint ? [parentPointer.relayHint] : []
+    const refs = getNip10References(event);
+    const root = refs?.root?.e;
+    if (root?.id) {
+      const rootNevent = nip19.neventEncode({
+        id: root.id,
+        relays: root.relays?.[0] ? [root.relays[0]] : []
       });
-      const parentEvent = await fetchFn(parentNevent);
-      return { event, parentEvent: parentEvent ?? undefined };
+      const rootEvent = await fetchFn(rootNevent);
+      if (rootEvent) {
+        return { event: rootEvent, focusCommentId: event.id };
+      }
+      return { event, parentPointer: rootNevent };
     }
   }
 

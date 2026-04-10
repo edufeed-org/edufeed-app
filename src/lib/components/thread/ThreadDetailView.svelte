@@ -10,20 +10,19 @@
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
-  import { encodePointer } from 'applesauce-core/helpers';
   import { resolve } from '$app/paths';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import NostrContentRenderer from '../shared/NostrContentRenderer.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
-  import NoteCard from '../notes/NoteCard.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import DetailHeader from '../shared/DetailHeader.svelte';
+  import { ChevronLeftIcon } from '$lib/components/icons';
 
   /**
    * @typedef {Object} Props
-   * @property {any} event - Thread event (kind 1 or 11)
-   * @property {any} [parentEvent] - Parent event for kind 1 replies
+   * @property {any} event - Thread event (kind 1, 11, or 1111)
+   * @property {string|null} [parentPointer] - NIP-19 encoded pointer to unresolved parent
    * @property {string|null} [initialFocusCommentId] - Comment ID to auto-focus (deep-linking)
    * @property {string|null} [scrollTo] - Section to scroll to (e.g. 'reactions')
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
@@ -32,7 +31,7 @@
   /** @type {Props} */
   let {
     event,
-    parentEvent = null,
+    parentPointer = null,
     initialFocusCommentId = null,
     scrollTo = null,
     communityPubkey = undefined
@@ -85,14 +84,14 @@
 </script>
 
 <article class="thread-detail mx-auto max-w-4xl">
-  <!-- Parent context for kind 1 replies -->
-  {#if parentEvent}
-    <div class="mb-2 text-xs text-base-content/50">{m.thread_detail_replying_to()}</div>
+  <!-- Parent context fallback link -->
+  {#if parentPointer}
     <a
-      href={resolve(`/${encodePointer({ id: parentEvent.id, relays: [] })}`)}
-      class="mb-4 block opacity-60 transition-opacity hover:opacity-100"
+      href={resolve(`/${parentPointer}`)}
+      class="mb-4 flex items-center gap-2 text-sm text-base-content/60 transition-colors hover:text-primary"
     >
-      <NoteCard note={parentEvent} />
+      <ChevronLeftIcon class_="w-4 h-4" />
+      <span>{m.parent_context_view_parent()}</span>
     </a>
   {/if}
 
@@ -120,6 +119,7 @@
         class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50"
       />
     {:else}
+      <!-- kind 1 and kind 1111 both use inline content rendering -->
       <NostrContentRenderer {event} />
     {/if}
   </div>

@@ -12,14 +12,14 @@
   );
 </script>
 
-{#if data.event?.kind === 11 || data.event?.kind === 1}
+{#if data.event?.kind === 11 || data.event?.kind === 1 || data.event?.kind === 1111}
   <div
     class="flex-1 overflow-auto pb-16 transition-all duration-300 lg:ml-(--sidebar-nav-w) lg:pb-0"
   >
     <div class="p-4">
       <ThreadDetailView
         event={data.event}
-        parentEvent={data.parentEvent}
+        parentPointer={data.parentPointer}
         initialFocusCommentId={data.focusCommentId}
         scrollTo={data.scrollTo}
         {communityPubkey}

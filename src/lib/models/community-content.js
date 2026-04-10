@@ -13,6 +13,7 @@ import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { formatAMBResource } from '$lib/helpers/educational/index.js';
 import { getCalendarEventMetadata } from '$lib/helpers/eventUtils';
+import { parseRoomEvent } from '$lib/helpers/meet.js';
 
 /**
  * Create a community content model for specific event kinds.
@@ -152,6 +153,11 @@ export const CommunityWikiModel = createCommunityContentModel([30818]);
 
 /** Community social bookmark model for kinds 39701/9802/1111 */
 export const CommunitySocialBookmarkModel = createCommunityContentModel([39701, 9802, 1111]);
+
+/** Community room model for kind 30312/30313 meet rooms */
+export const CommunityRoomModel = createCommunityContentModel([30312, 30313], {
+  transform: parseRoomEvent
+});
 
 /** Community activity model — all content kinds for the home feed */
 export const CommunityActivityModel = createCommunityContentModel([

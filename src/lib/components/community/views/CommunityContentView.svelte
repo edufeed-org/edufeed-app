@@ -56,7 +56,8 @@
   const getAuthorProfiles = useProfileMap(() => {
     const pubkeys = [];
     for (const i of items) {
-      pubkeys.push(i.pubkey);
+      const pk = i.pubkey || i.event?.pubkey;
+      if (pk) pubkeys.push(pk);
       if (i._allSharers) {
         for (const pk of i._allSharers) pubkeys.push(pk);
       } else if (i._sharedBy) {
@@ -72,7 +73,7 @@
     if (!allowed) return items;
     return items.filter(
       (item) =>
-        allowed.includes(item.pubkey) ||
+        allowed.includes(item.pubkey || item.event?.pubkey) ||
         (item._allSharers &&
           item._allSharers.some((/** @type {string} */ pk) => allowed.includes(pk))) ||
         (item._sharedBy && allowed.includes(item._sharedBy))

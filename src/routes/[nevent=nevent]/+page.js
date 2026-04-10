@@ -51,7 +51,7 @@ export async function load({ params, parent }) {
     // No community — render directly
     return {
       event: resolvedEvent,
-      parentEvent: context.parentEvent ?? null,
+      parentPointer: context.parentPointer ?? null,
       focusCommentId: context.focusCommentId ?? null,
       scrollTo: context.scrollTo ?? null,
       nevent: params.nevent

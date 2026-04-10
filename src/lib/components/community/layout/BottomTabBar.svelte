@@ -10,6 +10,7 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkShareIcon,
+    MeetIcon,
     LockIcon,
     LockOpenIcon
   } from '$lib/components/icons';
@@ -41,6 +42,7 @@
     forum: ForumIcon,
     wikis: BookIcon,
     'social-bookmarks': BookmarkShareIcon,
+    meet: MeetIcon,
     settings: SettingsIcon
   };
 
@@ -54,6 +56,7 @@
     forum: () => m.community_layout_bottom_tab_bar_forum(),
     wikis: () => m.community_wikis_title(),
     'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
+    meet: () => m.community_layout_bottom_tab_bar_meet(),
     settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 
@@ -217,17 +220,19 @@
       style="scroll-behavior: smooth;"
     >
       <!-- DaisyUI Dock Component -->
-      <div class="dock dock-lg mx-auto min-w-max px-4 py-2">
+      <div class="flex w-max items-center gap-3 px-4 py-2">
         {#each contentTypes as type (type.id)}
           {@const isActive = selectedContentType === type.id}
           {@const Icon = type.icon}
           <button
-            class:dock-active={isActive}
             onclick={() => handleDockClick(type.id)}
-            class="snap-center"
+            class="flex-shrink-0 snap-center rounded-lg p-2 {isActive
+              ? 'bg-primary/10 text-primary'
+              : 'text-base-content/70'}"
+            title={type.label}
           >
             <span class="relative">
-              <Icon class_="size-[1.2em]" />
+              <Icon class_="size-[1.4em]" />
               {#if restrictedTabs.has(type.id)}
                 <span
                   class="absolute -top-1 -right-1.5"
@@ -243,7 +248,6 @@
                 </span>
               {/if}
             </span>
-            <span class="dock-label text-xs">{type.label}</span>
           </button>
         {/each}
       </div>

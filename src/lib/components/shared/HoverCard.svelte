@@ -15,12 +15,22 @@
    * @property {number} [enterDelay] - Delay before showing (ms)
    * @property {number} [leaveDelay] - Delay before hiding (ms)
    * @property {'top' | 'bottom'} [position] - Popover position
+   * @property {boolean} [fixed] - Use fixed positioning to escape overflow ancestors
    */
 
   /** @type {Props} */
-  let { trigger, content, enterDelay = 150, leaveDelay = 300, position = 'bottom' } = $props();
+  let {
+    trigger,
+    content,
+    enterDelay = 150,
+    leaveDelay = 300,
+    position = 'bottom',
+    fixed = false
+  } = $props();
 
   let isOpen = $state(false);
+  let popupX = $state(0);
+  let popupY = $state(0);
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let enterTimer;
@@ -28,6 +38,8 @@
   let leaveTimer;
   /** @type {HTMLDivElement | undefined} */
   let wrapperEl;
+  /** @type {HTMLDivElement | undefined} */
+  let triggerEl;
 
   function clearTimers() {
     if (enterTimer) clearTimeout(enterTimer);
@@ -36,9 +48,21 @@
     leaveTimer = undefined;
   }
 
+  function updateFixedPosition() {
+    if (!fixed || !triggerEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    popupX = rect.left;
+    if (position === 'top') {
+      popupY = window.innerHeight - rect.top + 8;
+    } else {
+      popupY = rect.bottom + 8;
+    }
+  }
+
   function handleMouseEnter() {
     clearTimers();
     enterTimer = setTimeout(() => {
+      updateFixedPosition();
       isOpen = true;
     }, enterDelay);
   }
@@ -52,6 +76,7 @@
 
   function handleClick() {
     clearTimers();
+    if (!isOpen) updateFixedPosition();
     isOpen = !isOpen;
   }
 
@@ -89,14 +114,22 @@
   role="button"
   tabindex="0"
 >
-  {@render trigger()}
+  <div bind:this={triggerEl} class="inline-block">
+    {@render trigger()}
+  </div>
 
   {#if isOpen}
     <div
-      class="absolute z-50 rounded-lg border border-base-300 bg-base-100 shadow-xl {position ===
-      'top'
-        ? 'bottom-full mb-2'
-        : 'top-full mt-2'}"
+      class="z-50 rounded-lg border border-base-300 bg-base-100 shadow-xl"
+      class:absolute={!fixed}
+      class:fixed
+      class:bottom-full={!fixed && position === 'top'}
+      class:mb-2={!fixed && position === 'top'}
+      class:top-full={!fixed && position !== 'top'}
+      class:mt-2={!fixed && position !== 'top'}
+      style={fixed
+        ? `left:${popupX}px;${position === 'top' ? 'bottom' : 'top'}:${popupY}px;min-width:16rem;`
+        : ''}
       role="tooltip"
       transition:fade={{ duration: 150 }}
     >

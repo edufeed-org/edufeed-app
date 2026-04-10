@@ -5,6 +5,19 @@ import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  server: {
+    allowedHosts: process.env.TUNNEL ? true : undefined,
+    proxy: process.env.TUNNEL
+      ? {
+          '/livekit-ws': {
+            target: 'http://localhost:7880',
+            ws: true,
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/livekit-ws/, '')
+          }
+        }
+      : undefined
+  },
   plugins: [
     paraglideVitePlugin({
       project: './project.inlang',

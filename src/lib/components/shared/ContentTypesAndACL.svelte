@@ -51,7 +51,8 @@
     chat: () => m.create_community_modal_content_chat(),
     articles: () => m.create_community_modal_content_articles(),
     posts: () => m.create_community_modal_content_posts(),
-    wikis: () => m.create_community_modal_content_wikis()
+    wikis: () => m.create_community_modal_content_wikis(),
+    meet: () => m.create_community_modal_content_meet()
   };
 
   /** Whether per-type overrides section is expanded */

@@ -7,7 +7,9 @@
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
-  import { MenuIcon, CloseIcon } from '$lib/components/icons';
+  import MobileNavMenu from '$lib/components/shared/MobileNavMenu.svelte';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import { MenuIcon, CloseIcon, ChevronRightIcon } from '$lib/components/icons';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -59,6 +61,13 @@
 
   // Provide toggleDrawer for child layouts if needed
   setContext('toggleDrawer', toggleDrawer);
+
+  function closeDropdown() {
+    const dropdownTrigger = /** @type {HTMLElement} */ (document.activeElement);
+    if (dropdownTrigger && dropdownTrigger.closest('.dropdown')) {
+      dropdownTrigger.blur();
+    }
+  }
 </script>
 
 <!-- Desktop Layout -->
@@ -90,31 +99,53 @@
         class="drawer-toggle"
         bind:checked={leftDrawerOpen}
       />
-      <div class="drawer-content flex h-[calc(100vh-8rem)] flex-col">
-        <!-- Mobile Header with Menu Button -->
+      <div class="drawer-content flex h-dvh flex-col">
+        <!-- Unified Mobile Header -->
         <div class="flex items-center justify-between border-b border-base-300 bg-base-200 p-4">
-          <button onclick={toggleDrawer} class="btn btn-circle btn-ghost">
-            <MenuIcon class_="w-6 h-6" />
-          </button>
-
-          {#if mobileHeaderAvatarUrl && !isDashboardActive}
-            <div class="mx-3 flex min-w-0 flex-1 items-center gap-2">
+          <!-- Left: Community avatar / App logo + chevron → opens drawer -->
+          <button onclick={toggleDrawer} class="btn gap-0 rounded-full px-1 btn-ghost">
+            {#if isDashboardActive}
+              <div class="avatar">
+                <div class="w-8 rounded-full">
+                  <img
+                    src={runtimeConfig.appLogo}
+                    alt={m.community_layout_title()}
+                    class="object-cover"
+                  />
+                </div>
+              </div>
+            {:else if mobileHeaderAvatarUrl}
               <div class="avatar">
                 <div class="w-8 rounded-full ring-1 ring-base-300">
                   <img src={mobileHeaderAvatarUrl} alt={mobileHeaderTitle} class="object-cover" />
                 </div>
               </div>
-              <h1 class="truncate text-base font-semibold text-base-content">
-                {mobileHeaderTitle}
-              </h1>
+            {:else}
+              <MenuIcon class_="w-6 h-6" />
+            {/if}
+            <ChevronRightIcon class_="w-4 h-4 opacity-50" />
+          </button>
+
+          <!-- Center: Community name / App name -->
+          <h1 class="min-w-0 flex-1 truncate text-center text-base font-semibold">
+            {isDashboardActive ? runtimeConfig.appName : mobileHeaderTitle}
+          </h1>
+
+          <!-- Right: User avatar → global nav dropdown -->
+          {#if activeUser()}
+            <div class="dropdown dropdown-end">
+              <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
+                <ProfileAvatar pubkey={activeUser().pubkey} size="sm" fallbackType="robohash" />
+              </div>
+              <ul
+                class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg"
+              >
+                <MobileNavMenu onClose={closeDropdown} />
+              </ul>
             </div>
           {:else}
-            <h1 class="text-lg font-semibold">
-              {isDashboardActive ? runtimeConfig.appName : mobileHeaderTitle}
-            </h1>
+            <div class="w-10"></div>
           {/if}
-
-          <div class="w-10"></div>
         </div>
 
         <!-- Main Content (child layout renders here) -->
@@ -137,7 +168,7 @@
               <CloseIcon class_="w-5 h-5" />
             </button>
           </div>
-          <div class="h-[calc(100vh-8rem)] overflow-y-auto">
+          <div class="h-[calc(100dvh-4rem)] overflow-y-auto">
             <CommunitySidebar
               currentCommunityId={currentCommunityPubkey}
               {isDashboardActive}
@@ -150,7 +181,7 @@
     </div>
   </div>
 {:else}
-  <div class="flex h-[calc(100vh-8rem)] flex-col lg:hidden">
+  <div class="flex h-[calc(100vh-4rem)] flex-col lg:hidden">
     {@render children()}
   </div>
 {/if}

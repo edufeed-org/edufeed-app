@@ -14,6 +14,7 @@
   import CommunityMigrationModal from './CommunityMigrationModal.svelte';
   import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
   import ShareByNaddrModal from './shared/ShareByNaddrModal.svelte';
+  import CreateRoomModal from './meet/CreateRoomModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -43,6 +44,7 @@
   const communityMigrationModalId = 'community-migration-modal';
   const addBookmarkModalId = 'add-bookmark-modal';
   const shareByNaddrModalId = 'share-by-naddr-modal';
+  const createRoomModalId = 'create-room-modal';
 
   /**
    * Reactive effect to handle modal opening/closing based on store state
@@ -107,6 +109,12 @@
       );
       if (shareByNaddrModal && shareByNaddrModal.open) {
         shareByNaddrModal.close();
+      }
+      const createRoomModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(createRoomModalId)
+      );
+      if (createRoomModal && createRoomModal.open) {
+        createRoomModal.close();
       }
     } else if (currentModal === 'login') {
       // Open login modal
@@ -179,6 +187,13 @@
       if (shareByNaddrModal && !shareByNaddrModal.open) {
         shareByNaddrModal.showModal();
       }
+    } else if (currentModal === 'createRoom') {
+      const createRoomModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(createRoomModalId)
+      );
+      if (createRoomModal && !createRoomModal.open) {
+        createRoomModal.showModal();
+      }
     }
   });
 
@@ -248,4 +263,6 @@
   <AddBookmarkModal modalId={addBookmarkModalId} />
 {:else if modal.activeModal === 'shareByNaddr'}
   <ShareByNaddrModal modalId={shareByNaddrModalId} />
+{:else if modal.activeModal === 'createRoom'}
+  <CreateRoomModal modalId={createRoomModalId} />
 {/if}

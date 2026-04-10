@@ -15,7 +15,7 @@ import { tap } from 'rxjs';
 import { addressLoader, timedPool } from './base.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 
 /**
  * Fetch events by IDs using a one-shot pool.request().
@@ -195,3 +195,6 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
     return { subscriptions, cleanup };
   };
 }
+
+/** Community meet room loader for kinds 30312/30313 */
+export const useMeetRoomLoader = createCommunityContentLoader([30312, 30313], getCommunikeyRelays);

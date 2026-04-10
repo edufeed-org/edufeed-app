@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
-import { getParentEventPointer, resolveThreadContext } from '$lib/helpers/threadContext.js';
+import { resolveThreadContext } from '$lib/helpers/threadContext.js';
 
 const validPubkey = '3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d';
 
@@ -21,83 +21,17 @@ function makeEvent(kind = 1, tags = [], id = 'abc123') {
   };
 }
 
-describe('getParentEventPointer', () => {
-  it('returns null for standalone note (no e-tags)', () => {
-    const event = makeEvent(1, []);
-    expect(getParentEventPointer(event)).toBeNull();
-  });
-
-  it('returns null for note with only non-reference tags', () => {
-    const event = makeEvent(1, [
-      ['t', 'nostr'],
-      ['p', 'somepubkey']
-    ]);
-    expect(getParentEventPointer(event)).toBeNull();
-  });
-
-  it('returns reply target ID for NIP-10 reply marker', () => {
-    const event = makeEvent(1, [
-      ['e', 'rootid', '', 'root'],
-      ['e', 'replyid', 'wss://relay.example.com', 'reply']
-    ]);
-    const result = getParentEventPointer(event);
-    expect(result).not.toBeNull();
-    expect(/** @type {any} */ (result).id).toBe('replyid');
-  });
-
-  it('preserves relay hint from reply marker', () => {
-    const event = makeEvent(1, [
-      ['e', 'rootid', '', 'root'],
-      ['e', 'replyid', 'wss://relay.example.com', 'reply']
-    ]);
-    const result = getParentEventPointer(event);
-    expect(/** @type {any} */ (result).relayHint).toBe('wss://relay.example.com');
-  });
-
-  it('returns root ID when only root marker present (direct reply to root)', () => {
-    const event = makeEvent(1, [['e', 'rootid', 'wss://relay.example.com', 'root']]);
-    const result = getParentEventPointer(event);
-    expect(result).not.toBeNull();
-    expect(/** @type {any} */ (result).id).toBe('rootid');
-    expect(/** @type {any} */ (result).relayHint).toBe('wss://relay.example.com');
-  });
-
-  it('handles legacy positional e-tags (two e-tags, no markers)', () => {
-    const event = makeEvent(1, [
-      ['e', 'rootid'],
-      ['e', 'replyid']
-    ]);
-    const result = getParentEventPointer(event);
-    expect(result).not.toBeNull();
-    // Legacy: last e-tag is the reply target
-    expect(/** @type {any} */ (result).id).toBe('replyid');
-  });
-
-  it('handles single legacy positional e-tag', () => {
-    const event = makeEvent(1, [['e', 'someid']]);
-    const result = getParentEventPointer(event);
-    expect(result).not.toBeNull();
-    expect(/** @type {any} */ (result).id).toBe('someid');
-  });
-
-  it('returns null relay hint when no relay provided', () => {
-    const event = makeEvent(1, [['e', 'rootid', '', 'root']]);
-    const result = getParentEventPointer(event);
-    expect(/** @type {any} */ (result).relayHint).toBeUndefined();
-  });
-});
-
 describe('resolveThreadContext', () => {
   it('returns event as-is for non-special kinds', async () => {
     const event = makeEvent(11, [['h', 'community1']]);
     const fetchFn = vi.fn();
     const result = await resolveThreadContext(event, fetchFn);
     expect(result.event).toBe(event);
-    expect(result.parentEvent).toBeUndefined();
     expect(result.focusCommentId).toBeUndefined();
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
+  // Kind 1111 (comment) resolution
   it('resolves kind 1111 comment via A tag to root thread', async () => {
     const rootEvent = makeEvent(11, [], 'root-event-id');
     const comment = makeEvent(
@@ -164,10 +98,14 @@ describe('resolveThreadContext', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
-  it('returns original comment when root cannot be resolved', async () => {
+  it('returns original comment with parentPointer (nevent) when E-tag root cannot be resolved', async () => {
+    const eventId = 'a'.repeat(64);
     const comment = makeEvent(
       1111,
-      [['E', 'a'.repeat(64), 'wss://relay.example.com']],
+      [
+        ['E', eventId, 'wss://relay.example.com'],
+        ['K', '11']
+      ],
       'comment-id'
     );
 
@@ -176,40 +114,105 @@ describe('resolveThreadContext', () => {
 
     expect(result.event).toBe(comment);
     expect(result.focusCommentId).toBeUndefined();
+    expect(result.parentPointer).toBeDefined();
+    expect(result.parentPointer).toMatch(/^nevent1/);
   });
 
-  it('resolves kind 1 parent event via NIP-10 references', async () => {
-    const parentId = 'c'.repeat(64);
-    const parentEvent = makeEvent(1, [], parentId);
-    const reply = makeEvent(1, [['e', parentId, 'wss://relay.example.com', 'root']], 'reply-id');
+  it('returns original comment with parentPointer (naddr) when A-tag root cannot be resolved', async () => {
+    const comment = makeEvent(
+      1111,
+      [
+        ['A', `31923:${validPubkey}:cal-event`, 'wss://relay.example.com'],
+        ['K', '31923']
+      ],
+      'comment-id'
+    );
 
-    const fetchFn = vi.fn().mockResolvedValue(parentEvent);
+    const fetchFn = vi.fn().mockResolvedValue(null);
+    const result = await resolveThreadContext(comment, fetchFn);
+
+    expect(result.event).toBe(comment);
+    expect(result.focusCommentId).toBeUndefined();
+    expect(result.parentPointer).toBeDefined();
+    expect(result.parentPointer).toMatch(/^naddr1/);
+  });
+
+  it('does NOT return parentPointer when kind 1111 root resolves successfully', async () => {
+    const rootEvent = makeEvent(11, [], 'root-event-id');
+    const comment = makeEvent(
+      1111,
+      [
+        ['A', `11:${validPubkey}:thread-id`, 'wss://relay.example.com'],
+        ['K', '11']
+      ],
+      'comment-id'
+    );
+
+    const fetchFn = vi.fn().mockResolvedValue(rootEvent);
+    const result = await resolveThreadContext(comment, fetchFn);
+
+    expect(result.event).toBe(rootEvent);
+    expect(result.parentPointer).toBeUndefined();
+  });
+
+  // Kind 1 (text note) resolution — resolves to ROOT event
+  it('resolves kind 1 reply to root event with focusCommentId', async () => {
+    const rootId = 'c'.repeat(64);
+    const rootEvent = makeEvent(1, [], rootId);
+    const reply = makeEvent(1, [['e', rootId, 'wss://relay.example.com', 'root']], 'reply-id');
+
+    const fetchFn = vi.fn().mockResolvedValue(rootEvent);
     const result = await resolveThreadContext(reply, fetchFn);
 
-    expect(result.event).toBe(reply);
-    expect(result.parentEvent).toBe(parentEvent);
-    expect(result.focusCommentId).toBeUndefined();
+    expect(result.event).toBe(rootEvent);
+    expect(result.focusCommentId).toBe('reply-id');
+    expect(fetchFn).toHaveBeenCalledOnce();
   });
 
-  it('returns kind 1 without parentEvent when standalone', async () => {
-    const note = makeEvent(1, [], 'note-id');
-    const fetchFn = vi.fn();
-    const result = await resolveThreadContext(note, fetchFn);
-
-    expect(result.event).toBe(note);
-    expect(result.parentEvent).toBeUndefined();
-    expect(fetchFn).not.toHaveBeenCalled();
-  });
-
-  it('returns kind 1 without parentEvent when parent fetch fails', async () => {
+  it('resolves kind 1 deep reply to root (not parent)', async () => {
+    const rootId = 'c'.repeat(64);
     const parentId = 'd'.repeat(64);
-    const reply = makeEvent(1, [['e', parentId, '', 'root']], 'reply-id');
+    const rootEvent = makeEvent(1, [], rootId);
+    const deepReply = makeEvent(
+      1,
+      [
+        ['e', rootId, 'wss://relay.example.com', 'root'],
+        ['e', parentId, 'wss://relay2.example.com', 'reply']
+      ],
+      'deep-reply-id'
+    );
+
+    const fetchFn = vi.fn().mockResolvedValue(rootEvent);
+    const result = await resolveThreadContext(deepReply, fetchFn);
+
+    expect(result.event).toBe(rootEvent);
+    expect(result.focusCommentId).toBe('deep-reply-id');
+    // Should fetch the ROOT, not the parent
+    const fetchedNevent = fetchFn.mock.calls[0][0];
+    expect(fetchedNevent).toMatch(/^nevent1/);
+  });
+
+  it('returns kind 1 reply with parentPointer when root fetch fails', async () => {
+    const rootId = 'd'.repeat(64);
+    const reply = makeEvent(1, [['e', rootId, 'wss://relay.example.com', 'root']], 'reply-id');
 
     const fetchFn = vi.fn().mockResolvedValue(null);
     const result = await resolveThreadContext(reply, fetchFn);
 
     expect(result.event).toBe(reply);
-    expect(result.parentEvent).toBeUndefined();
+    expect(result.focusCommentId).toBeUndefined();
+    expect(result.parentPointer).toBeDefined();
+    expect(result.parentPointer).toMatch(/^nevent1/);
+  });
+
+  it('returns standalone kind 1 note as-is', async () => {
+    const note = makeEvent(1, [], 'note-id');
+    const fetchFn = vi.fn();
+    const result = await resolveThreadContext(note, fetchFn);
+
+    expect(result.event).toBe(note);
+    expect(result.focusCommentId).toBeUndefined();
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 
   // Kind 7 (reaction) resolution

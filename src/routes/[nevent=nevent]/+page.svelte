@@ -22,8 +22,13 @@
 </svelte:head>
 
 <div class="container mx-auto px-4 py-8">
-  {#if data.event?.kind === 11 || data.event?.kind === 1}
-    <ThreadDetailView event={data.event} parentEvent={data.parentEvent} scrollTo={data.scrollTo} />
+  {#if data.event?.kind === 11 || data.event?.kind === 1 || data.event?.kind === 1111}
+    <ThreadDetailView
+      event={data.event}
+      parentPointer={data.parentPointer}
+      initialFocusCommentId={data.focusCommentId}
+      scrollTo={data.scrollTo}
+    />
   {:else if data.event}
     <div class="alert alert-warning">
       <span>{m.route_unsupported_event_kind({ kind: data.event.kind })}</span>

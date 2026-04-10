@@ -35,6 +35,16 @@ export async function load({ params, parent }) {
       redirect(307, `/calendar/${params.naddr}`);
     }
 
+    // Redirect meet room events to community meet view
+    if (kind === 30312 || kind === 30313) {
+      const roomEvent = await fetchEventById(params.naddr);
+      const communityPubkey = roomEvent?.tags?.find((t) => t[0] === 'h')?.[1];
+      if (communityPubkey) {
+        const npub = nip19.npubEncode(communityPubkey);
+        redirect(307, `/c/${npub}?view=meet&room=${params.naddr}`);
+      }
+    }
+
     // Fetch the actual event
     const event = await fetchEventById(params.naddr);
 

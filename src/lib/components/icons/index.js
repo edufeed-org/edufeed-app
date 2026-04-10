@@ -37,6 +37,7 @@ export { default as InfoIcon } from './ui/InfoIcon.svelte';
 export { default as BadgeIcon } from './ui/BadgeIcon.svelte';
 export { default as BookOpenIcon } from './ui/BookOpenIcon.svelte';
 export { default as ChatTextIcon } from './ui/ChatTextIcon.svelte';
+export { default as VolumeUpIcon } from './ui/VolumeUpIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';
@@ -57,3 +58,4 @@ export { default as SmilePlusIcon } from './social/SmilePlusIcon.svelte';
 export { default as PeopleIcon } from './social/People.svelte';
 export { default as ForumIcon } from './social/ForumIcon.svelte';
 export { default as BookmarkShareIcon } from './social/BookmarkShareIcon.svelte';
+export { default as MeetIcon } from './social/MeetIcon.svelte';

@@ -81,7 +81,8 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
     'wss://lookup1.example.com',
     'wss://lookup2.example.com',
     'wss://relay1.example.com'
-  ])
+  ]),
+  getCommunikeyRelays: vi.fn(() => ['wss://communikey1.example.com'])
 }));
 
 // Import after mocks

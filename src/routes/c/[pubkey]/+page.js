@@ -14,6 +14,7 @@ export async function load({ url }) {
     'articles',
     'forum',
     'social-bookmarks',
+    'meet',
     'settings'
   ]);
 
