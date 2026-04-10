@@ -14,7 +14,9 @@
     getLiveKitState,
     refreshAudioDevices,
     switchAudioDevice,
-    switchAudioOutputDevice
+    switchAudioOutputDevice,
+    refreshVideoDevices,
+    switchVideoDevice
   } from '$lib/services/livekit-connection.svelte.js';
   import { Track } from 'livekit-client';
   import { startPresence, stopPresence } from '$lib/services/meet-presence.svelte.js';
@@ -167,6 +169,7 @@
 
   // --- #6: Audio device selector ---
   let audioDropdownOpen = $state(false);
+  let videoDropdownOpen = $state(false);
 </script>
 
 <div class="flex h-[calc(100dvh-7rem)] flex-col lg:h-auto lg:flex-1">
@@ -453,20 +456,65 @@
       </div>
 
       {#if room.type === 'video'}
-        <button
-          class="btn btn-circle {lk.isCameraOff ? 'btn-error' : 'btn-ghost'}"
-          onclick={toggleCamera}
-          title={lk.isCameraOff ? m.meet_camera_on() : m.meet_camera_off()}
-        >
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-            />
-          </svg>
-        </button>
+        <div class="flex items-center">
+          <button
+            class="btn btn-circle {lk.isCameraOff ? 'btn-error' : 'btn-ghost'}"
+            onclick={toggleCamera}
+            title={lk.isCameraOff ? m.meet_camera_on() : m.meet_camera_off()}
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
+            </svg>
+          </button>
+
+          <!-- Video device selector dropdown -->
+          <div class="dropdown dropdown-top">
+            <button
+              class="btn btn-circle btn-ghost btn-xs"
+              title={m.meet_select_camera()}
+              onclick={() => {
+                refreshVideoDevices();
+                videoDropdownOpen = !videoDropdownOpen;
+              }}
+            >
+              <ChevronDownIcon class_="w-3 h-3" />
+            </button>
+            {#if videoDropdownOpen}
+              <ul
+                class="dropdown-content menu z-10 mb-2 w-60 rounded-box bg-base-200 p-2 shadow-lg"
+                role="menu"
+                onmouseleave={() => {
+                  videoDropdownOpen = false;
+                }}
+              >
+                <li class="menu-title text-xs">{m.meet_select_camera()}</li>
+                {#each lk.videoInputDevices as device (device.deviceId)}
+                  <li>
+                    <button
+                      class="text-sm"
+                      class:menu-active={device.deviceId === lk.activeVideoDeviceId}
+                      onclick={async () => {
+                        await switchVideoDevice(device.deviceId);
+                      }}
+                    >
+                      {device.label || m.meet_unknown_device()}
+                    </button>
+                  </li>
+                {/each}
+                {#if lk.videoInputDevices.length === 0}
+                  <li>
+                    <span class="text-sm text-base-content/50">{m.meet_unknown_device()}</span>
+                  </li>
+                {/if}
+              </ul>
+            {/if}
+          </div>
+        </div>
       {/if}
 
       <button

@@ -1797,6 +1797,7 @@
   "meet_in_room": "{count} in room",
   "meet_select_microphone": "Select microphone",
   "meet_select_speaker": "Select speaker",
+  "meet_select_camera": "Select camera",
   "meet_unknown_device": "Unknown device",
   "meet_hosted_by": "Hosted by {name}",
   "meet_screen_share_start": "Share screen",
