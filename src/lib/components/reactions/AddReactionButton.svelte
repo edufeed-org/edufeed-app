@@ -31,7 +31,7 @@
   type="button"
   onclick={() => isLoggedIn && (showPicker = true)}
   disabled={!isLoggedIn}
-  class="inline-flex items-center gap-1 rounded-full border border-base-content/20 px-2.5 py-1 text-sm text-base-content/50 transition-all hover:scale-105 hover:border-base-content/30 hover:bg-base-200 hover:text-base-content/70 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+  class="btn rounded-full border-base-content/20 text-base-content/50 btn-ghost btn-xs"
   title={isLoggedIn ? m.reactions_add_reaction_title() : m.reactions_login_required()}
   data-testid="add-reaction-btn"
 >

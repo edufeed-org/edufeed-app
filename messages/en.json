@@ -1060,6 +1060,8 @@
   "theme_switcher_family": "Theme Family",
   "theme_switcher_color_mode": "Color Mode",
   "reactions_close": "Close",
+  "reactions_reacted_with": "Reacted with {emoji}",
+  "reactions_and_others": "and {count} more",
   "events_list_jump_past_aria": "Jump to past events section",
   "events_list_back_top_aria": "Back to top",
   "inline_rsvp_going_aria": "RSVP as Going",

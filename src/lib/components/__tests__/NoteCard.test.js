@@ -116,12 +116,14 @@ describe('NoteCard', () => {
     modelSubscribers.clear();
   });
 
-  it('renders the chat button with "Comments" text when no comments', () => {
-    const { getByText } = render(NoteCard, {
+  it('renders the chat button', () => {
+    const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
-    expect(getByText('Comments')).toBeTruthy();
+    // Comment toggle button should exist (icon-only when no comments)
+    const chatButton = container.querySelector('.btn-ghost');
+    expect(chatButton).toBeTruthy();
   });
 
   it('does not render CommentList initially', () => {
@@ -134,43 +136,43 @@ describe('NoteCard', () => {
   });
 
   it('shows CommentList after clicking the chat button', async () => {
-    const { getByText, container } = render(NoteCard, {
+    const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
-    const button = getByText('Comments').closest('button');
+    // Find the first btn-ghost (comment toggle)
+    const button = container.querySelector('.btn-ghost');
     expect(button).toBeTruthy();
     await fireEvent.click(/** @type {HTMLElement} */ (button));
-
-    expect(getByText('Hide Comments')).toBeTruthy();
 
     const commentSection = container.querySelector('.border-t.border-base-300');
     expect(commentSection).toBeTruthy();
   });
 
   it('hides CommentList when clicking the chat button again', async () => {
-    const { getByText, container } = render(NoteCard, {
+    const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
-    const button = getByText('Comments').closest('button');
+    const button = container.querySelector('.btn-ghost');
     await fireEvent.click(/** @type {HTMLElement} */ (button));
-    expect(getByText('Hide Comments')).toBeTruthy();
+
+    const commentSection = container.querySelector('.border-t.border-base-300');
+    expect(commentSection).toBeTruthy();
 
     // Click again to hide
     await fireEvent.click(/** @type {HTMLElement} */ (button));
-    expect(getByText('Comments')).toBeTruthy();
 
-    const commentSection = container.querySelector('.border-t.border-base-300');
-    expect(commentSection).toBeFalsy();
+    const commentSectionAfter = container.querySelector('.border-t.border-base-300');
+    expect(commentSectionAfter).toBeFalsy();
   });
 
   it('highlights the chat button when comments are shown', async () => {
-    const { getByText } = render(NoteCard, {
+    const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
-    const button = getByText('Comments').closest('button');
+    const button = container.querySelector('.btn-ghost');
     expect(button?.classList.contains('text-primary')).toBe(false);
 
     await fireEvent.click(/** @type {HTMLElement} */ (button));
@@ -179,7 +181,7 @@ describe('NoteCard', () => {
 
   it('shows comment count when comments exist in EventStore', async () => {
     const nip22Key = JSON.stringify({ kinds: [1111], '#E': ['note-123'] });
-    const { getByText } = render(NoteCard, {
+    const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
@@ -189,13 +191,15 @@ describe('NoteCard', () => {
     await tick();
 
     await waitFor(() => {
-      expect(getByText('3 Comments')).toBeTruthy();
+      // Comment count should appear as a number in the button
+      const button = container.querySelector('.btn-ghost');
+      expect(button?.textContent).toContain('3');
     });
   });
 
-  it('shows singular label for exactly one comment', async () => {
+  it('shows count for exactly one comment', async () => {
     const nip22Key = JSON.stringify({ kinds: [1111], '#E': ['note-123'] });
-    const { getByText } = render(NoteCard, {
+    const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
@@ -205,7 +209,8 @@ describe('NoteCard', () => {
     await tick();
 
     await waitFor(() => {
-      expect(getByText('1 Comment')).toBeTruthy();
+      const button = container.querySelector('.btn-ghost');
+      expect(button?.textContent).toContain('1');
     });
   });
 });

@@ -1060,6 +1060,8 @@
   "theme_switcher_family": "Design-Familie",
   "theme_switcher_color_mode": "Farbmodus",
   "reactions_close": "Schließen",
+  "reactions_reacted_with": "Reagiert mit {emoji}",
+  "reactions_and_others": "und {count} weitere",
   "events_list_jump_past_aria": "Zum Abschnitt vergangene Veranstaltungen springen",
   "events_list_back_top_aria": "Zurück zum Anfang",
   "inline_rsvp_going_aria": "Als Zusage markieren",

@@ -44,16 +44,19 @@
         count: 0,
         userReacted: false,
         userReactionEvent: null,
-        emojiUrl: null
+        emojiUrl: null,
+        reactors: []
       };
 
       const isUserReaction = currentUser && reaction.pubkey === currentUser.pubkey;
 
+      existing.reactors.push(reaction.pubkey);
       agg.set(emoji, {
         count: existing.count + 1,
         userReacted: existing.userReacted || isUserReaction,
         userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
-        emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction)
+        emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction),
+        reactors: existing.reactors
       });
     }
 
@@ -124,6 +127,7 @@
         userReacted={summary.userReacted}
         userReactionEvent={summary.userReactionEvent}
         emojiUrl={summary.emojiUrl}
+        reactors={summary.reactors}
       />
     {/each}
 

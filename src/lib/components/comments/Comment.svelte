@@ -180,13 +180,8 @@
           class="prose-sm mt-2 max-w-none text-base-content/80"
         />
 
-        <!-- Reactions -->
-        <div class="mt-3">
-          <ReactionBar event={comment} />
-        </div>
-
         <!-- Actions -->
-        <div class="mt-2 flex items-center gap-4">
+        <div class="mt-3 flex flex-wrap items-center gap-1">
           {#if activeUser}
             <button
               class="btn gap-1 btn-ghost btn-xs"
@@ -194,36 +189,28 @@
               class:btn-active={showReplyForm}
               data-testid="comment-reply-btn"
             >
-              <ChatIcon class_="w-4 h-4" />
+              <ChatIcon class_="w-3.5 h-3.5" />
               {m.comments_reply_button()}
             </button>
           {/if}
+          <ReactionBar event={comment} />
           <button
-            class="btn gap-1 btn-ghost btn-xs"
+            class="btn btn-ghost btn-xs"
             onclick={copyCommentLink}
             title={m.comments_copy_link()}
             data-testid="comment-copy-link-btn"
           >
-            <CopyIcon class_="w-4 h-4" />
+            <CopyIcon class_="w-3.5 h-3.5" />
           </button>
           {#if canDelete}
             <button
-              class="btn gap-1 text-error btn-ghost btn-xs hover:bg-error/10"
+              class="btn text-error btn-ghost btn-xs"
               onclick={handleDelete}
               disabled={isDeleting}
               data-testid="comment-delete-btn"
             >
-              <TrashIcon class="h-4 w-4" />
-              {m.comments_delete_button()}
+              <TrashIcon class="h-3.5 w-3.5" />
             </button>
-          {/if}
-          {#if comment.replies && comment.replies.length > 0}
-            <span class="text-xs text-base-content/50">
-              {comment.replies.length}
-              {comment.replies.length === 1
-                ? m.comments_reply_count_singular()
-                : m.comments_reply_count_plural()}
-            </span>
           {/if}
         </div>
       </div>

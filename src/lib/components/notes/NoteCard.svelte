@@ -12,7 +12,6 @@
   import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
-  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ note: any, authorProfile?: any, activeUser?: any, communityPubkey?: string, extraRelays?: string[] }} */
   let {
@@ -101,37 +100,25 @@
         <NostrContentRenderer event={note} />
       </div>
 
-      <!-- Reactions -->
-      <div class="mb-3">
-        <ReactionBar event={note} />
-      </div>
-
       <!-- Actions -->
-      <div class="flex items-center gap-6 text-sm text-base-content/50">
+      <div class="flex flex-wrap items-center gap-1">
         <button
-          class="flex items-center gap-1 transition-colors hover:text-primary {showComments
-            ? 'text-primary'
-            : ''}"
+          class="btn gap-1 btn-ghost btn-sm {showComments ? 'text-primary' : ''}"
           onclick={() => (showComments = !showComments)}
         >
           <ChatIcon class_="w-4 h-4" />
-          <span class="text-xs"
-            >{showComments
-              ? m.comments_hide()
-              : commentCount > 0
-                ? commentCount === 1
-                  ? m.comments_count_one()
-                  : m.comments_count_other({ count: commentCount })
-                : m.comments_show()}</span
-          >
+          {#if commentCount > 0}
+            <span class="text-xs">{commentCount}</span>
+          {/if}
         </button>
-        <button class="flex items-center gap-1 transition-colors hover:text-primary">
+        <button class="btn btn-ghost btn-sm">
           <RepostIcon class_="w-4 h-4" />
         </button>
-        <button class="flex items-center gap-1 transition-colors hover:text-primary">
+        <ReactionBar event={note} />
+        <button class="btn btn-ghost btn-sm">
           <LightningIcon class_="w-4 h-4" />
         </button>
-        <button class="flex items-center gap-1 transition-colors hover:text-primary">
+        <button class="btn btn-ghost btn-sm">
           <BookmarkIcon class_="w-4 h-4" />
         </button>
       </div>

@@ -1,6 +1,6 @@
 <script>
   /**
-   * ReactionButton - Individual pill-style reaction button
+   * ReactionButton - Individual reaction button with who-reacted popover
    * Shows emoji and count, highlights if user reacted
    * @component
    */
@@ -10,6 +10,8 @@
   import { deleteReaction } from '$lib/helpers/reactions.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import HoverCard from '$lib/components/shared/HoverCard.svelte';
+  import ReactionReactorsList from './ReactionReactorsList.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {any} */
@@ -19,10 +21,9 @@
     count = 0,
     userReacted = false,
     userReactionEvent = null,
-    emojiUrl = null
+    emojiUrl = null,
+    reactors = []
   } = $props();
-
-  let isHovering = $state(false);
 
   // Track active user with direct subscription for proper reactivity
   let activeUser = $state(manager.active);
@@ -72,48 +73,56 @@
   }
 </script>
 
-<button
-  type="button"
-  onclick={toggleReaction}
-  onmouseenter={() => (isHovering = true)}
-  onmouseleave={() => (isHovering = false)}
-  disabled={!isLoggedIn}
-  data-testid="reaction-button"
-  data-emoji={emoji}
-  data-count={count}
-  data-user-reacted={userReacted}
-  class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 {userReacted
-    ? 'border-primary/40 bg-primary/10 text-primary hover:border-primary/60 hover:bg-primary/15'
-    : 'border-base-content/20 bg-base-200/50 text-base-content/70 hover:border-base-content/30 hover:bg-base-200'}"
->
-  {#if emojiUrl}
-    <img src={emojiUrl} alt={emoji} title={emoji} class="inline h-5 w-5 object-contain" />
-  {:else}
-    <span class="text-base leading-none">{emoji}</span>
-  {/if}
-  {#if count > 0}
-    <span class="text-xs font-medium">{count}</span>
-  {/if}
-
-  {#if canDelete && isHovering}
-    <span
-      role="button"
-      tabindex="0"
-      onclick={(e) => {
-        e.stopPropagation();
-        handleDelete();
-      }}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          handleDelete();
-        }
-      }}
-      class="ml-0.5 inline-flex cursor-pointer items-center transition-opacity"
-      aria-label={m.reactions_delete_title()}
+<HoverCard enterDelay={300} leaveDelay={200} fixed>
+  {#snippet trigger()}
+    <button
+      type="button"
+      onclick={toggleReaction}
+      disabled={!isLoggedIn}
+      data-testid="reaction-button"
+      data-emoji={emoji}
+      data-count={count}
+      data-user-reacted={userReacted}
+      class="btn gap-1 rounded-full btn-ghost btn-xs {userReacted
+        ? 'btn-active border-primary/40 text-primary'
+        : 'border-base-content/20'}"
     >
-      <TrashIcon class="h-3 w-3 text-error transition-colors hover:text-error/80" />
-    </span>
-  {/if}
-</button>
+      {#if emojiUrl}
+        <img src={emojiUrl} alt={emoji} title={emoji} class="inline h-4 w-4 object-contain" />
+      {:else}
+        <span class="text-sm leading-none">{emoji}</span>
+      {/if}
+      {#if count > 0}
+        <span class="text-xs font-medium">{count}</span>
+      {/if}
+
+      {#if canDelete}
+        <span
+          role="button"
+          tabindex="0"
+          onclick={(e) => {
+            e.stopPropagation();
+            handleDelete();
+          }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              handleDelete();
+            }
+          }}
+          class="ml-0.5 inline-flex cursor-pointer items-center"
+          aria-label={m.reactions_delete_title()}
+        >
+          <TrashIcon class="h-3 w-3 text-error transition-colors hover:text-error/80" />
+        </span>
+      {/if}
+    </button>
+  {/snippet}
+
+  {#snippet content()}
+    {#if reactors.length > 0}
+      <ReactionReactorsList {reactors} {emoji} {emojiUrl} />
+    {/if}
+  {/snippet}
+</HoverCard>
