@@ -17,6 +17,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {'light' | 'dark' | 'system'} colorMode
  * @property {boolean} gatedMode
  * @property {boolean} includeClientTag
+ * @property {'communities' | 'following'} dashboardFeedSource
  */
 
 /**
@@ -93,7 +94,8 @@ function getDefaultSettings() {
     themeFamily,
     colorMode,
     gatedMode: runtimeConfig.gatedMode?.default ?? false,
-    includeClientTag: true
+    includeClientTag: true,
+    dashboardFeedSource: 'communities'
   };
 }
 
@@ -112,7 +114,8 @@ function migrateSettings(stored) {
       themeFamily: stored.themeFamily ?? defaults.themeFamily,
       colorMode: stored.colorMode ?? defaults.colorMode,
       gatedMode: stored.gatedMode ?? defaults.gatedMode,
-      includeClientTag: stored.includeClientTag ?? defaults.includeClientTag
+      includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
+      dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
     };
   }
 
@@ -149,7 +152,8 @@ function migrateSettings(stored) {
     themeFamily,
     colorMode,
     gatedMode: stored.gatedMode ?? defaults.gatedMode,
-    includeClientTag: stored.includeClientTag ?? defaults.includeClientTag
+    includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
+    dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
   };
 }
 
@@ -396,6 +400,23 @@ export const appSettings = {
    */
   set includeClientTag(value) {
     settings.includeClientTag = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get dashboard feed source
+   * @returns {'communities' | 'following'}
+   */
+  get dashboardFeedSource() {
+    return settings.dashboardFeedSource;
+  },
+
+  /**
+   * Set dashboard feed source
+   * @param {'communities' | 'following'} value
+   */
+  set dashboardFeedSource(value) {
+    settings.dashboardFeedSource = value;
     saveSettings(settings);
   },
 

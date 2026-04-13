@@ -239,8 +239,6 @@
   <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
     <!-- Activity Feed (main column) -->
     <div class="min-w-0 flex-1" data-testid="dashboard-community-activity">
-      <h3 class="mb-3 text-sm font-semibold">{m.dashboard_activity_title()}</h3>
-
       {#if visibleItems.length === 0}
         <div
           class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"

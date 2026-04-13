@@ -1,8 +1,11 @@
 <script>
   import { page } from '$app/stores';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import DashboardCommunityFeed from '$lib/components/dashboard/DashboardCommunityFeed.svelte';
+  import DashboardFollowsFeed from '$lib/components/dashboard/DashboardFollowsFeed.svelte';
+  import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import DashboardYourContent from '$lib/components/dashboard/DashboardYourContent.svelte';
   import DashboardCommunities from '$lib/components/dashboard/DashboardCommunities.svelte';
 
@@ -17,6 +20,13 @@
   {:else if activeSection === 'communities'}
     <DashboardCommunities />
   {:else}
-    <DashboardCommunityFeed />
+    <div class="mb-3">
+      <DashboardFeedSelector />
+    </div>
+    {#if appSettings.dashboardFeedSource === 'following'}
+      <DashboardFollowsFeed />
+    {:else}
+      <DashboardCommunityFeed />
+    {/if}
   {/if}
 </div>

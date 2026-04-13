@@ -449,7 +449,7 @@
         <!-- Feed -->
         <div class:hidden={activeTab !== 'feed'}>
           {#if activatedTabs.has('feed')}
-            <ProfileFeedView pubkey={data.pubkey} {activeUser} />
+            <ProfileFeedView pubkeys={[data.pubkey]} {activeUser} />
           {/if}
         </div>
 

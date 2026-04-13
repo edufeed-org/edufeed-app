@@ -47,11 +47,11 @@
 
   /**
    * @type {{
-   *   pubkey: string,
+   *   pubkeys: string[],
    *   activeUser?: any
    * }}
    */
-  let { pubkey, activeUser = null } = $props();
+  let { pubkeys, activeUser = null } = $props();
 
   /** Feed source config: kinds → relay function */
   const FEED_SOURCES = [
@@ -144,7 +144,7 @@
       itemPubkeys = [];
     });
 
-    if (!pubkey) {
+    if (!pubkeys?.length) {
       isLoading = false;
       return;
     }
@@ -157,7 +157,7 @@
       const relays = untrack(() => source.getRelays());
       if (relays.length === 0) continue;
 
-      const filter = { kinds: source.kinds, authors: [pubkey], limit: 50 };
+      const filter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
       const loader = createTimelineLoader(timedPool, relays, filter, { eventStore });
       subs.push(
         loader().subscribe({
@@ -166,14 +166,26 @@
       );
     }
 
-    // Supplemental: user's NIP-65 write relays
-    getWriteRelays(pubkey).then((writeRelays) => {
+    // Supplemental: NIP-65 write relays (batch-resolve for multiple authors)
+    const BATCH_SIZE = 20;
+    (async () => {
+      /** @type {string[]} */
+      const collectedRelays = [];
+      for (let i = 0; i < pubkeys.length; i += BATCH_SIZE) {
+        const batch = pubkeys.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(batch.map((pk) => getWriteRelays(pk)));
+        for (const r of results) {
+          if (r.status === 'fulfilled') collectedRelays.push(...r.value);
+        }
+      }
+      const allWriteRelays = collectedRelays.filter((r, i) => collectedRelays.indexOf(r) === i);
+
       for (const source of FEED_SOURCES) {
-        const primaryRelays = new Set(source.getRelays());
-        const newRelays = writeRelays.filter((r) => !primaryRelays.has(r));
+        const primaryRelays = source.getRelays();
+        const newRelays = allWriteRelays.filter((r) => !primaryRelays.includes(r));
         if (newRelays.length === 0) continue;
 
-        const filter = { kinds: source.kinds, authors: [pubkey], limit: 50 };
+        const filter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
         const supplemental = createTimelineLoader(timedPool, newRelays, filter, { eventStore });
         subs.push(
           supplemental().subscribe({
@@ -181,17 +193,19 @@
           })
         );
       }
-    });
+    })();
 
     // Single model subscription for all kinds
     const modelSub = eventStore
-      .model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: [pubkey] })
+      .model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: pubkeys })
       .subscribe({
         next: (loaded) => {
           items = loaded || [];
-          // Extract pubkeys for profile loading (separate from items to avoid loops)
-          const pubkeys = [...new Set((loaded || []).map((/** @type {any} */ e) => e.pubkey))];
-          itemPubkeys = pubkeys;
+          // Extract unique pubkeys for profile loading (separate from items to avoid loops)
+          const loadedPubkeys = [
+            ...new Set((loaded || []).map((/** @type {any} */ e) => e.pubkey))
+          ];
+          itemPubkeys = loadedPubkeys;
           isLoading = false;
         },
         error: (err) => {
