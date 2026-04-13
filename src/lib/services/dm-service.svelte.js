@@ -158,6 +158,7 @@ export function initializeDMs(pubkey, signer) {
 
     const writeRelays = await getWriteRelays(pubkey);
     // DMs bypass gated mode — personal messages are not curated content
+    /** @type {string[]} */
     const fallback = runtimeConfig.fallbackRelays || [];
     const fallbackDmRelays = [...writeRelays, ...fallback].filter((r, i, a) => a.indexOf(r) === i);
 
