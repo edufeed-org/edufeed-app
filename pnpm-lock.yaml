@@ -13,97 +13,37 @@ importers:
 
   .:
     dependencies:
-      '@djot/djot':
-        specifier: ^0.3.2
-        version: 0.3.2
-      '@fontsource-variable/roboto-condensed':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource-variable/yanone-kaffeesatz':
-        specifier: ^5.2.7
-        version: 5.2.7
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
-      amb-nostr-converter:
-        specifier: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz
-        version: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz(typescript@5.9.3)(web-streams-polyfill@3.3.3)
-      applesauce-accounts:
-        specifier: ^5.1.0
-        version: 5.1.0(typescript@5.9.3)
-      applesauce-actions:
-        specifier: ^5.1.1
-        version: 5.1.1(typescript@5.9.3)
       applesauce-common:
         specifier: ^5.1.0
         version: 5.1.0(typescript@5.9.3)
-      applesauce-content:
-        specifier: ^5.0.0
-        version: 5.0.0(patch_hash=809facd426729602632d9fd71810399d910081f429d7900da3c4e6204bf7d62f)(typescript@5.9.3)
-      applesauce-core:
-        specifier: ^5.1.0
-        version: 5.1.0(typescript@5.9.3)
-      applesauce-loaders:
-        specifier: ^5.1.0
-        version: 5.1.0(typescript@5.9.3)
-      applesauce-relay:
-        specifier: ^5.1.0
-        version: 5.1.0(typescript@5.9.3)
-      applesauce-signers:
-        specifier: ^5.1.0
-        version: 5.1.0(typescript@5.9.3)
-      asciidoctor:
-        specifier: ^3.0.4
-        version: 3.0.4
-      blossom-client-sdk:
-        specifier: ^4.1.0
-        version: 4.1.0
-      dompurify:
-        specifier: ^3.3.0
-        version: 3.3.1
-      embla-carousel:
-        specifier: ^8.6.0
-        version: 8.6.0
-      embla-carousel-svelte:
-        specifier: ^8.6.0
-        version: 8.6.0(svelte@5.49.2)
       linkedom:
         specifier: ^0.18.12
         version: 0.18.12
-      livekit-client:
-        specifier: ^2.18.1
-        version: 2.18.1(@types/dom-mediacapture-record@1.0.22)
-      maplibre-gl:
-        specifier: ^4.7.1
-        version: 4.7.1
-      marked:
-        specifier: ^16.4.0
-        version: 16.4.2
       nostr-tools:
         specifier: ^2.16.2
         version: 2.23.0(typescript@5.9.3)
-      qrcode:
-        specifier: ^1.5.4
-        version: 1.5.4
-      rxjs:
-        specifier: ^7.8.2
-        version: 7.8.2
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
-      svelte-maplibre:
-        specifier: ^1.2.3
-        version: 1.2.6(svelte@5.49.2)
-      unpdf:
-        specifier: ^1.4.0
-        version: 1.4.0
     devDependencies:
+      '@djot/djot':
+        specifier: ^0.3.2
+        version: 0.3.2
       '@eslint/compat':
         specifier: ^1.2.5
         version: 1.4.1(eslint@9.39.2(jiti@2.6.1))
       '@eslint/js':
         specifier: ^9.18.0
         version: 9.39.2
+      '@fontsource-variable/roboto-condensed':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource-variable/yanone-kaffeesatz':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@inlang/cli':
         specifier: ^3.0.0
         version: 3.1.4
@@ -140,9 +80,48 @@ importers:
       '@testing-library/svelte':
         specifier: ^5.3.1
         version: 5.3.1(svelte@5.49.2)(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.30.2)(yaml@2.8.2))(vitest@4.0.18(@types/node@25.2.1)(jiti@2.6.1)(jsdom@27.4.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(yaml@2.8.2))
+      amb-nostr-converter:
+        specifier: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz
+        version: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz(typescript@5.9.3)(web-streams-polyfill@3.3.3)
+      applesauce-accounts:
+        specifier: ^5.1.0
+        version: 5.1.0(typescript@5.9.3)
+      applesauce-actions:
+        specifier: ^5.1.1
+        version: 5.1.1(typescript@5.9.3)
+      applesauce-content:
+        specifier: ^5.0.0
+        version: 5.0.0(patch_hash=809facd426729602632d9fd71810399d910081f429d7900da3c4e6204bf7d62f)(typescript@5.9.3)
+      applesauce-core:
+        specifier: ^5.1.0
+        version: 5.1.0(typescript@5.9.3)
+      applesauce-loaders:
+        specifier: ^5.1.0
+        version: 5.1.0(typescript@5.9.3)
+      applesauce-relay:
+        specifier: ^5.1.0
+        version: 5.1.0(typescript@5.9.3)
+      applesauce-signers:
+        specifier: ^5.1.0
+        version: 5.1.0(typescript@5.9.3)
+      asciidoctor:
+        specifier: ^3.0.4
+        version: 3.0.4
+      blossom-client-sdk:
+        specifier: ^4.1.0
+        version: 4.1.0
       daisyui:
         specifier: ^5.0.54
         version: 5.5.18
+      dompurify:
+        specifier: ^3.3.0
+        version: 3.3.1
+      embla-carousel:
+        specifier: ^8.6.0
+        version: 8.6.0
+      embla-carousel-svelte:
+        specifier: ^8.6.0
+        version: 8.6.0(svelte@5.49.2)
       eslint:
         specifier: ^9.18.0
         version: 9.39.2(jiti@2.6.1)
@@ -164,6 +143,15 @@ importers:
       lint-staged:
         specifier: ^16.2.7
         version: 16.2.7
+      livekit-client:
+        specifier: ^2.18.1
+        version: 2.18.1(@types/dom-mediacapture-record@1.0.22)
+      maplibre-gl:
+        specifier: ^4.7.1
+        version: 4.7.1
+      marked:
+        specifier: ^16.4.0
+        version: 16.4.2
       prettier:
         specifier: ^3.3.3
         version: 3.3.3
@@ -173,18 +161,30 @@ importers:
       prettier-plugin-tailwindcss:
         specifier: ^0.6.11
         version: 0.6.14(prettier-plugin-svelte@3.4.1(prettier@3.3.3)(svelte@5.49.2))(prettier@3.3.3)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
+      rxjs:
+        specifier: ^7.8.2
+        version: 7.8.2
       svelte:
         specifier: ^5.0.0
         version: 5.49.2
       svelte-check:
         specifier: ^4.0.0
         version: 4.3.6(picomatch@4.0.3)(svelte@5.49.2)(typescript@5.9.3)
+      svelte-maplibre:
+        specifier: ^1.2.3
+        version: 1.2.6(svelte@5.49.2)
       tailwindcss:
         specifier: ^4.0.0
         version: 4.1.18
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
+      unpdf:
+        specifier: ^1.4.0
+        version: 1.4.0
       vite:
         specifier: ^7.0.4
         version: 7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.30.2)(yaml@2.8.2)

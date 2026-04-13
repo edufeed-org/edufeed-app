@@ -36,7 +36,6 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # Copy built application from builder
 COPY --from=builder /app/build ./build
-COPY --from=builder /app/package.json ./
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
