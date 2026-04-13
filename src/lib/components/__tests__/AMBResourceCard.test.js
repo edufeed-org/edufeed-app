@@ -54,6 +54,12 @@ vi.mock('$lib/helpers/educational/ambTransform.js', () => ({
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     appRelays: { educational: ['wss://relay.example.com'] }
+  },
+  configReady: {
+    subscribe: (/** @type {Function} */ fn) => {
+      fn(true);
+      return { unsubscribe: () => {} };
+    }
   }
 }));
 vi.mock('nostr-tools', () => ({

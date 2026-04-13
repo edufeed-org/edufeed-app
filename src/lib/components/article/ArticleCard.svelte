@@ -16,6 +16,10 @@
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { RepliesModel } from 'applesauce-common/models';
+  import { ChatIcon } from '$lib/components/icons';
 
   /**
    * @typedef {Object} Props
@@ -70,6 +74,24 @@
         ?.filter((/** @type {any} */ t) => t[0] === 't')
         .map((/** @type {any} */ t) => t[1]) || []
     );
+  });
+
+  let commentCount = $state(0);
+
+  // Fetch comments from relays + subscribe to RepliesModel for reactive counts
+  $effect(() => {
+    if (!article?.id) return;
+
+    const loader = createCommentLoaderForEvent(article);
+    const loaderSub = loader().subscribe();
+    const modelSub = eventStore.model(RepliesModel, article).subscribe((replies) => {
+      commentCount = (replies || []).length;
+    });
+
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
   });
 
   // Get author info
@@ -240,9 +262,15 @@
         </div>
       {/if}
 
-      <!-- Reactions -->
+      <!-- Reactions & Comments -->
       {#if !compact}
-        <div class="pt-2">
+        <div class="flex items-center gap-2 pt-2">
+          {#if commentCount > 0}
+            <span class="flex items-center gap-1 text-sm text-base-content/60">
+              <ChatIcon class_="w-4 h-4" />
+              {commentCount}
+            </span>
+          {/if}
           <ReactionBar event={article} />
         </div>
       {/if}

@@ -1,8 +1,7 @@
 <script>
   import { resolve } from '$app/paths';
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
-  import { TimelineModel } from 'applesauce-core/models';
-  import { debounceTime } from 'rxjs';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { RepliesModel } from 'applesauce-common/models';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
   import { ChatIcon, RepostIcon, LightningIcon, BookmarkIcon } from '$lib/components/icons';
@@ -12,6 +11,7 @@
   import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
 
   /** @type {{ note: any, authorProfile?: any, activeUser?: any, communityPubkey?: string, extraRelays?: string[] }} */
   let {
@@ -30,45 +30,22 @@
   let commentCount = $state(0);
   let profileHref = $derived(resolve(`/p/${hexToNpub(note.pubkey) || note.pubkey}`));
 
-  // Eagerly fetch comments so counts are visible before expanding
+  // Fetch comments from relays + subscribe to RepliesModel for reactive counts
   $effect(() => {
     if (!note?.id) return;
+
+    // Loader: fetch from relays → populates eventStore
     const loader = createCommentLoaderForEvent(note, extraRelays);
-    const sub = loader().subscribe();
-    return () => sub.unsubscribe();
-  });
+    const loaderSub = loader().subscribe();
 
-  $effect(() => {
-    if (!note?.id) return;
-
-    let nip22Comments = [];
-    let nip10Replies = [];
-
-    // NIP-22 comments (kind 1111 with uppercase #E tag)
-    const nip22Sub = eventStore
-      .model(TimelineModel, { kinds: [1111], '#E': [note.id] })
-      .pipe(debounceTime(100))
-      .subscribe((comments) => {
-        nip22Comments = comments || [];
-        commentCount = nip22Comments.length + nip10Replies.length;
-      });
-
-    // NIP-10 replies (kind 1 with lowercase #e tag) — only for kind 1 notes
-    /** @type {import('rxjs').Subscription | undefined} */
-    let nip10Sub;
-    if (note.kind === 1) {
-      nip10Sub = eventStore
-        .model(TimelineModel, { kinds: [1], '#e': [note.id] })
-        .pipe(debounceTime(100))
-        .subscribe((replies) => {
-          nip10Replies = replies || [];
-          commentCount = nip22Comments.length + nip10Replies.length;
-        });
-    }
+    // Model: reactive subscription using RepliesModel (handles NIP-10 + NIP-22)
+    const modelSub = eventStore.model(RepliesModel, note).subscribe((replies) => {
+      commentCount = (replies || []).length;
+    });
 
     return () => {
-      nip22Sub.unsubscribe();
-      nip10Sub?.unsubscribe();
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
     };
   });
 </script>
@@ -76,13 +53,15 @@
 <div class="rounded-lg border border-base-300 bg-base-100 p-4">
   <div class="flex items-start gap-3">
     <!-- Profile Picture -->
-    <a href={profileHref} class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full">
-      <img
-        src={getProfilePicture(effectiveProfile) || `https://robohash.org/${note.pubkey}`}
-        alt="Profile"
-        class="h-full w-full object-cover"
+    <div class="flex-shrink-0">
+      <ProfileAvatar
+        pubkey={note.pubkey}
+        profile={effectiveProfile}
+        size="md"
+        linkToProfile
+        fallbackType="robohash"
       />
-    </a>
+    </div>
 
     <!-- Note Content -->
     <div class="min-w-0 flex-1">

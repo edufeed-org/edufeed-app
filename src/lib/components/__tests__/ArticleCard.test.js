@@ -50,6 +50,33 @@ vi.mock('$lib/helpers/calendar.js', () => ({
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
   encodeEventToNaddr: () => 'naddr1test'
 }));
+vi.mock('$lib/loaders/comments.js', () => ({
+  createCommentLoaderForEvent: () => () => ({
+    subscribe: () => ({ unsubscribe: vi.fn() })
+  })
+}));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: {
+    model: vi.fn(() => ({
+      subscribe: (/** @type {Function} */ cb) => {
+        cb([]);
+        return { unsubscribe: vi.fn() };
+      }
+    })),
+    reactions: vi.fn(() => ({
+      subscribe: (/** @type {Function} */ cb) => {
+        cb([]);
+        return { unsubscribe: vi.fn() };
+      }
+    })),
+    remove$: {
+      subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
+    }
+  }
+}));
+vi.mock('applesauce-common/models', () => ({
+  RepliesModel: class RepliesModel {}
+}));
 
 const mockArticle = {
   id: 'a'.repeat(64),

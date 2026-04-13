@@ -16,6 +16,10 @@
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { RepliesModel } from 'applesauce-common/models';
+  import { ChatIcon } from '$lib/components/icons';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
@@ -44,6 +48,25 @@
   let endDate = $derived(event.end ? new Date(event.end * 1000) : null);
   let isAllDay = $derived(event.kind === 31922); // Date-based events are all-day
   let isMultiDay = $derived(endDate && startDate.toDateString() !== endDate.toDateString());
+
+  let commentCount = $state(0);
+
+  // Fetch comments from relays + subscribe to RepliesModel for reactive counts
+  $effect(() => {
+    const rawEvent = event.originalEvent;
+    if (!rawEvent?.id) return;
+
+    const loader = createCommentLoaderForEvent(rawEvent);
+    const loaderSub = loader().subscribe();
+    const modelSub = eventStore.model(RepliesModel, rawEvent).subscribe((replies) => {
+      commentCount = (replies || []).length;
+    });
+
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
+  });
 
   /**
    * @param {Event} e
@@ -299,9 +322,15 @@
           </div>
         {/if}
 
-        <!-- Reactions -->
+        <!-- Reactions & Comments -->
         {#if !compact}
-          <div class="mt-2">
+          <div class="mt-2 flex items-center gap-2">
+            {#if commentCount > 0}
+              <span class="flex items-center gap-1 text-sm text-base-content/60">
+                <ChatIcon class_="w-4 h-4" />
+                {commentCount}
+              </span>
+            {/if}
             <ReactionBar event={event.originalEvent || event} />
           </div>
         {/if}

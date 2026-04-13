@@ -4,7 +4,7 @@
 -->
 
 <script>
-  import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { nip19 } from 'nostr-tools';
   import { goto } from '$app/navigation';
@@ -22,6 +22,11 @@
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { RepliesModel } from 'applesauce-common/models';
+  import { ChatIcon } from '$lib/components/icons';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -50,9 +55,6 @@
 
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, resource.pubkey.slice(0, 8) + '...'));
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile) || `https://robohash.org/${resource.pubkey}`
-  );
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
@@ -86,6 +88,25 @@
       identifier: resource.identifier,
       relays: relayHints.length > 0 ? relayHints : undefined
     });
+  });
+
+  let commentCount = $state(0);
+
+  // Fetch comments from relays + subscribe to RepliesModel for reactive counts
+  $effect(() => {
+    const rawEvent = resource?.rawEvent;
+    if (!rawEvent?.id) return;
+
+    const loader = createCommentLoaderForEvent(rawEvent);
+    const loaderSub = loader().subscribe();
+    const modelSub = eventStore.model(RepliesModel, rawEvent).subscribe((replies) => {
+      commentCount = (replies || []).length;
+    });
+
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
   });
 
   // Content type detection - only show "Open Content" for valid external URLs or nostr URIs
@@ -229,11 +250,12 @@
   >
     <!-- Author Header -->
     <div class="mb-3 flex items-center gap-3">
-      <div class="avatar">
-        <div class="h-10 w-10 rounded-full">
-          <img src={authorAvatar} alt={authorName} loading="lazy" decoding="async" />
-        </div>
-      </div>
+      <ProfileAvatar
+        pubkey={resource.pubkey}
+        profile={authorProfile}
+        size="md"
+        fallbackType="robohash"
+      />
       <div class="min-w-0 flex-1">
         <div class="truncate font-medium text-base-content">{authorName}</div>
         <div class="text-sm text-base-content/60">
@@ -408,10 +430,16 @@
         </div>
       {/if}
 
-      <!-- Reactions -->
+      <!-- Reactions & Comments -->
       {#if !compact && resource.tags}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div class="pt-2" onclick={(e) => e.stopPropagation()}>
+        <div class="flex items-center gap-2 pt-2" onclick={(e) => e.stopPropagation()}>
+          {#if commentCount > 0}
+            <span class="flex items-center gap-1 text-sm text-base-content/60">
+              <ChatIcon class_="w-4 h-4" />
+              {commentCount}
+            </span>
+          {/if}
           <ReactionBar
             event={{
               id: resource.id,

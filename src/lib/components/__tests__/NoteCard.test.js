@@ -21,8 +21,8 @@ const mockNote = {
   content: 'Hello world'
 };
 
-/** @type {Map<string, Function>} */
-const modelSubscribers = new Map();
+/** @type {Function | null} */
+let repliesModelSubscriber = null;
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
@@ -32,18 +32,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
         return { unsubscribe: vi.fn() };
       }
     })),
-    model: vi.fn((_Model, filter) => {
-      const key = JSON.stringify(filter);
-      return {
-        pipe: () => ({
-          subscribe: (/** @type {Function} */ cb) => {
-            modelSubscribers.set(key, cb);
-            cb([]);
-            return { unsubscribe: vi.fn() };
-          }
-        })
-      };
-    }),
+    model: vi.fn((_Model, _event) => ({
+      subscribe: (/** @type {Function} */ cb) => {
+        repliesModelSubscriber = cb;
+        cb([]);
+        return { unsubscribe: vi.fn() };
+      }
+    })),
     remove$: {
       subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
     }
@@ -88,32 +83,27 @@ vi.mock('$lib/paraglide/messages', () => ({
   comments_show: () => 'Comments',
   comments_hide: () => 'Hide Comments',
   comments_count_one: () => '1 Comment',
-  comments_count_other: (/** @type {{ count: number }} */ params) => `${params.count} Comments`
+  comments_count_other: (/** @type {{ count: number }} */ params) => `${params.count} Comments`,
+  profile_avatar_alt: () => 'Avatar',
+  profile_avatar_fallback: () => '?'
 }));
 
-vi.mock('applesauce-core/models', () => ({
-  TimelineModel: class TimelineModel {}
+vi.mock('applesauce-common/models', () => ({
+  RepliesModel: class RepliesModel {}
 }));
-
-vi.mock('rxjs', async () => {
-  const actual = await vi.importActual('rxjs');
-  return {
-    .../** @type {object} */ (actual),
-    debounceTime: () => (/** @type {any} */ source) => source
-  };
-});
 
 // Stub child components that aren't under test
 function StubComponent() {}
 vi.mock('../reactions/ReactionButton.svelte', () => ({ default: StubComponent }));
 vi.mock('../reactions/AddReactionButton.svelte', () => ({ default: StubComponent }));
 vi.mock('../shared/NostrContentRenderer.svelte', () => ({ default: StubComponent }));
+vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: StubComponent }));
 vi.mock('../comments/CommentList.svelte', () => ({ default: StubComponent }));
 
 describe('NoteCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    modelSubscribers.clear();
+    repliesModelSubscriber = null;
   });
 
   it('renders the chat button', () => {
@@ -180,32 +170,27 @@ describe('NoteCard', () => {
   });
 
   it('shows comment count when comments exist in EventStore', async () => {
-    const nip22Key = JSON.stringify({ kinds: [1111], '#E': ['note-123'] });
     const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
-    const nip22Cb = /** @type {Function} */ (modelSubscribers.get(nip22Key));
-    expect(nip22Cb).toBeTruthy();
-    nip22Cb([{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }]);
+    expect(repliesModelSubscriber).toBeTruthy();
+    /** @type {Function} */ (repliesModelSubscriber)([{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }]);
     await tick();
 
     await waitFor(() => {
-      // Comment count should appear as a number in the button
       const button = container.querySelector('.btn-ghost');
       expect(button?.textContent).toContain('3');
     });
   });
 
   it('shows count for exactly one comment', async () => {
-    const nip22Key = JSON.stringify({ kinds: [1111], '#E': ['note-123'] });
     const { container } = render(NoteCard, {
       props: { note: mockNote }
     });
 
-    const nip22Cb = /** @type {Function} */ (modelSubscribers.get(nip22Key));
-    expect(nip22Cb).toBeTruthy();
-    nip22Cb([{ id: 'c1' }]);
+    expect(repliesModelSubscriber).toBeTruthy();
+    /** @type {Function} */ (repliesModelSubscriber)([{ id: 'c1' }]);
     await tick();
 
     await waitFor(() => {
