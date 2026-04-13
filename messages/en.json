@@ -29,6 +29,8 @@
   "common_share": "Share",
   "common_copy": "Copy",
   "common_copied": "Copied",
+  "common_show_more": "Show more",
+  "common_show_less": "Show less",
   "navbar_brand": "{appName}",
   "navbar_feed": "Feed",
   "navbar_discover": "Discover",

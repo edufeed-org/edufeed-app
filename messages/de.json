@@ -29,6 +29,8 @@
   "common_share": "Teilen",
   "common_copy": "Kopieren",
   "common_copied": "Kopiert",
+  "common_show_more": "Mehr anzeigen",
+  "common_show_less": "Weniger anzeigen",
   "navbar_brand": "{appName}",
   "navbar_calendar": "Kalender",
   "navbar_feed": "Feed",

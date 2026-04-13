@@ -1,5 +1,11 @@
 @import 'tailwindcss';
 
+/* Prevent scroll jumps when content loads above the viewport */
+html,
+body {
+  overflow-anchor: auto;
+}
+
 /* Layout */
 :root {
   --sidebar-icon-w: 4rem;
