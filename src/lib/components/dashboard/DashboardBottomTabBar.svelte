@@ -1,8 +1,15 @@
 <script>
   import { page } from '$app/stores';
   import { resolve } from '$app/paths';
-  import { HomeIcon, BellIcon, ScrollTextIcon, PeopleIcon } from '$lib/components/icons';
+  import {
+    HomeIcon,
+    BellIcon,
+    MessageSquareIcon,
+    ScrollTextIcon,
+    PeopleIcon
+  } from '$lib/components/icons';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
+  import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
   import { getDashboardActiveSection } from '$lib/helpers/dashboardNavigation.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -13,6 +20,12 @@
       href: resolve('/c/inbox'),
       icon: BellIcon,
       label: () => m.dashboard_nav_inbox()
+    },
+    {
+      id: 'messages',
+      href: resolve('/c/messages'),
+      icon: MessageSquareIcon,
+      label: () => m.dashboard_nav_messages()
     },
     {
       id: 'your-content',
@@ -48,6 +61,12 @@
               class="absolute -top-1 -right-1.5 badge h-3.5 min-w-3.5 badge-sm text-[9px] badge-primary"
             >
               {getTotalUnreadCount() > 99 ? '99+' : getTotalUnreadCount()}
+            </span>
+          {:else if section.id === 'messages' && getUnreadDmCount() > 0}
+            <span
+              class="absolute -top-1 -right-1.5 badge h-3.5 min-w-3.5 badge-sm text-[9px] badge-primary"
+            >
+              {getUnreadDmCount() > 99 ? '99+' : getUnreadDmCount()}
             </span>
           {/if}
         </span>
