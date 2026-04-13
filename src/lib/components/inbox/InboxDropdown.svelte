@@ -1,5 +1,6 @@
 <script>
   import InboxItem from './InboxItem.svelte';
+  import InboxDmItem from './InboxDmItem.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import {
@@ -7,18 +8,71 @@
     markAsRead,
     isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
+  import { getDmConversations, isDmConversationUnread } from '$lib/services/dm-service.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   const MAX_ITEMS = 6;
+  const getActiveUser = useActiveUser();
+
+  /**
+   * @typedef {{ type: 'notification', event: import('nostr-tools').NostrEvent, timestamp: number }} NotifItem
+   * @typedef {{ type: 'dm', conversation: { id: string, participants: string[], lastMessage: any }, timestamp: number }} DmItem
+   */
+
+  let mergedItems = $derived.by(() => {
+    /** @type {(NotifItem | DmItem)[]} */
+    const items = [];
+
+    for (const event of getNotifications()) {
+      items.push({
+        type: /** @type {const} */ ('notification'),
+        event,
+        timestamp: event.created_at
+      });
+    }
+
+    const unreadDms = getDmConversations().filter((conv) =>
+      isDmConversationUnread(conv.id, conv.lastMessage.created_at)
+    );
+    for (const conv of unreadDms) {
+      items.push({
+        type: /** @type {const} */ ('dm'),
+        conversation: conv,
+        timestamp: conv.lastMessage.created_at
+      });
+    }
+
+    return items.toSorted((a, b) => b.timestamp - a.timestamp).slice(0, MAX_ITEMS);
+  });
 
   const getProfiles = useProfileMap(() => {
-    const notifs = getNotifications();
-    return notifs.slice(0, MAX_ITEMS).map((n) => n.pubkey);
+    const user = getActiveUser();
+    /** @type {string[]} */
+    const pubkeys = [];
+    for (const item of mergedItems) {
+      if (item.type === 'notification') {
+        if (!pubkeys.includes(item.event.pubkey)) pubkeys.push(item.event.pubkey);
+      } else {
+        for (const p of item.conversation.participants) {
+          if (p !== user?.pubkey && !pubkeys.includes(p)) pubkeys.push(p);
+        }
+      }
+    }
+    return pubkeys;
   });
 
   let profiles = $derived(getProfiles());
-  let items = $derived(getNotifications().slice(0, MAX_ITEMS));
+
+  /**
+   * @param {{ participants: string[] }} conv
+   * @returns {string}
+   */
+  function getDmOtherPubkey(conv) {
+    const user = getActiveUser();
+    return conv.participants.find((p) => p !== user?.pubkey) || conv.participants[0] || '';
+  }
 
   function handleMarkAllRead() {
     markAsRead();
@@ -40,17 +94,28 @@
   </div>
 
   <div class="max-h-80 overflow-y-auto">
-    {#if items.length === 0}
+    {#if mergedItems.length === 0}
       <div class="py-8 text-center text-sm text-base-content/50">
         {m.inbox_empty()}
       </div>
     {:else}
-      {#each items as event (event.id)}
-        <InboxItem
-          {event}
-          profile={profiles.get(event.pubkey)}
-          unread={isNotificationUnread(event)}
-        />
+      {#each mergedItems as item (item.type === 'dm' ? `dm-${item.conversation.id}` : item.event.id)}
+        {#if item.type === 'dm'}
+          <InboxDmItem
+            conversation={item.conversation}
+            profile={profiles.get(getDmOtherPubkey(item.conversation))}
+            unread={isDmConversationUnread(
+              item.conversation.id,
+              item.conversation.lastMessage.created_at
+            )}
+          />
+        {:else}
+          <InboxItem
+            event={item.event}
+            profile={profiles.get(item.event.pubkey)}
+            unread={isNotificationUnread(item.event)}
+          />
+        {/if}
       {/each}
     {/if}
   </div>

@@ -13,6 +13,7 @@
     ScrollTextIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   /**
@@ -146,27 +147,6 @@
     </div>
   </div>
   {#if unread}
-    <div
-      role="button"
-      tabindex="-1"
-      class="mt-2 h-2 w-2 flex-shrink-0 cursor-pointer rounded-full bg-primary transition-transform hover:scale-150 hover:ring-4 hover:ring-primary/20"
-      aria-label={m.inbox_mark_read()}
-      onclick={(e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const parentLink = /** @type {HTMLElement | null} */ (e.currentTarget.closest('a'));
-        markItemAsRead(event.id);
-        parentLink?.focus();
-      }}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.stopPropagation();
-          e.preventDefault();
-          const parentLink = /** @type {HTMLElement | null} */ (e.currentTarget.closest('a'));
-          markItemAsRead(event.id);
-          parentLink?.focus();
-        }
-      }}
-    ></div>
+    <UnreadDot onclick={() => markItemAsRead(event.id)} />
   {/if}
 </a>

@@ -1341,6 +1341,8 @@
   "inbox_filter_mentions": "Mentions",
   "inbox_filter_waves": "Waves",
   "inbox_filter_rsvps": "RSVPs",
+  "inbox_filter_messages": "Messages",
+  "inbox_action_dm": "sent you a message",
   "inbox_unread_summary": "You have {count} unread notifications",
   "inbox_bell_label": "Notifications",
   "send_form_button": "Send",

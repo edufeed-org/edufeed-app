@@ -6,15 +6,25 @@
     markAsRead,
     isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
+  import {
+    getDmConversations,
+    getUnreadDmCount,
+    isDmConversationUnread
+  } from '$lib/services/dm-service.svelte.js';
   import { getNotificationType } from '$lib/helpers/inbox.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import InboxItem from '$lib/components/inbox/InboxItem.svelte';
+  import InboxDmItem from '$lib/components/inbox/InboxDmItem.svelte';
   import * as m from '$lib/paraglide/messages.js';
+
+  const getActiveUser = useActiveUser();
 
   let activeFilter = $state('all');
 
   const filters = [
     { key: 'all', label: () => m.inbox_filter_all() },
+    { key: 'messages', label: () => m.inbox_filter_messages() },
     { key: 'formRequest', label: () => m.inbox_filter_forms() },
     { key: 'reaction', label: () => m.inbox_filter_reactions() },
     { key: 'wave', label: () => m.inbox_filter_waves() },
@@ -26,19 +36,87 @@
   let allNotifications = $derived(getNotifications());
   let countsByType = $derived(getUnreadByType());
 
-  let filteredNotifications = $derived.by(() => {
-    if (activeFilter === 'all') return allNotifications;
-    if (activeFilter === 'formRequest') {
-      return allNotifications.filter((e) => {
+  /**
+   * Build merged items list based on active filter.
+   * @typedef {{ type: 'notification', event: import('nostr-tools').NostrEvent, timestamp: number }} NotificationItem
+   * @typedef {{ type: 'dm', conversation: { id: string, participants: string[], lastMessage: any }, timestamp: number }} DmItem
+   * @typedef {NotificationItem | DmItem} InboxItem_
+   */
+  let mergedItems = $derived.by(() => {
+    if (activeFilter === 'messages') {
+      // Show all DM conversations (both read and unread), sorted by recency
+      return getDmConversations().map((conv) => ({
+        type: /** @type {const} */ ('dm'),
+        conversation: conv,
+        timestamp: conv.lastMessage.created_at
+      }));
+    }
+
+    // For notification-only filters
+    /** @type {import('nostr-tools').NostrEvent[]} */
+    let filteredNotifs;
+    if (activeFilter === 'all') {
+      filteredNotifs = allNotifications;
+    } else if (activeFilter === 'formRequest') {
+      filteredNotifs = allNotifications.filter((e) => {
         const t = getNotificationType(e);
         return t === 'formRequest' || t === 'formResponse';
       });
+    } else {
+      filteredNotifs = allNotifications.filter((e) => getNotificationType(e) === activeFilter);
     }
-    return allNotifications.filter((e) => getNotificationType(e) === activeFilter);
+
+    /** @type {InboxItem_[]} */
+    const items = filteredNotifs.map((event) => ({
+      type: /** @type {const} */ ('notification'),
+      event,
+      timestamp: event.created_at
+    }));
+
+    // For "all" filter, merge in unread DM conversations
+    if (activeFilter === 'all') {
+      const unreadDms = getDmConversations().filter((conv) =>
+        isDmConversationUnread(conv.id, conv.lastMessage.created_at)
+      );
+      for (const conv of unreadDms) {
+        items.push({
+          type: /** @type {const} */ ('dm'),
+          conversation: conv,
+          timestamp: conv.lastMessage.created_at
+        });
+      }
+    }
+
+    return items.toSorted((a, b) => b.timestamp - a.timestamp);
   });
 
-  const getProfiles = useProfileMap(() => filteredNotifications.map((n) => n.pubkey));
+  // Profile loading for both notification authors and DM participants
+  const getProfiles = useProfileMap(() => {
+    const user = getActiveUser();
+    /** @type {string[]} */
+    const pubkeys = [];
+    for (const item of mergedItems) {
+      if (item.type === 'notification') {
+        if (!pubkeys.includes(item.event.pubkey)) pubkeys.push(item.event.pubkey);
+      } else {
+        for (const p of item.conversation.participants) {
+          if (p !== user?.pubkey && !pubkeys.includes(p)) pubkeys.push(p);
+        }
+      }
+    }
+    return pubkeys;
+  });
   let profiles = $derived(getProfiles());
+
+  /**
+   * Get the "other" participant pubkey for a DM conversation.
+   * @param {{ participants: string[] }} conv
+   * @returns {string}
+   */
+  function getDmOtherPubkey(conv) {
+    const user = getActiveUser();
+    return conv.participants.find((p) => p !== user?.pubkey) || conv.participants[0] || '';
+  }
 </script>
 
 <svelte:head><title>{m.inbox_title()}</title></svelte:head>
@@ -46,7 +124,7 @@
 <div class="mx-auto max-w-3xl px-4 py-6">
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-2xl font-bold">{m.inbox_title()}</h1>
-    {#if getUnreadCount() > 0}
+    {#if getUnreadCount() + getUnreadDmCount() > 0}
       <button class="btn text-primary btn-ghost btn-sm" onclick={() => markAsRead()}>
         {m.inbox_mark_all_read()}
       </button>
@@ -58,10 +136,12 @@
     {#each filters as filter (filter.key)}
       {@const count =
         filter.key === 'all'
-          ? getUnreadCount()
-          : filter.key === 'formRequest'
-            ? (countsByType['formRequest'] || 0) + (countsByType['formResponse'] || 0)
-            : countsByType[filter.key] || 0}
+          ? getUnreadCount() + getUnreadDmCount()
+          : filter.key === 'messages'
+            ? getUnreadDmCount()
+            : filter.key === 'formRequest'
+              ? (countsByType['formRequest'] || 0) + (countsByType['formResponse'] || 0)
+              : countsByType[filter.key] || 0}
       <button
         class="btn btn-sm {activeFilter === filter.key ? 'btn-primary' : 'btn-ghost'}"
         onclick={() => (activeFilter = filter.key)}
@@ -75,7 +155,7 @@
   </div>
 
   <!-- Notification list -->
-  {#if filteredNotifications.length === 0}
+  {#if mergedItems.length === 0}
     <div
       class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
     >
@@ -83,12 +163,23 @@
     </div>
   {:else}
     <div class="divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300">
-      {#each filteredNotifications as event (event.id)}
-        <InboxItem
-          {event}
-          profile={profiles.get(event.pubkey)}
-          unread={isNotificationUnread(event)}
-        />
+      {#each mergedItems as item (item.type === 'dm' ? `dm-${item.conversation.id}` : item.event.id)}
+        {#if item.type === 'dm'}
+          <InboxDmItem
+            conversation={item.conversation}
+            profile={profiles.get(getDmOtherPubkey(item.conversation))}
+            unread={isDmConversationUnread(
+              item.conversation.id,
+              item.conversation.lastMessage.created_at
+            )}
+          />
+        {:else}
+          <InboxItem
+            event={item.event}
+            profile={profiles.get(item.event.pubkey)}
+            unread={isNotificationUnread(item.event)}
+          />
+        {/if}
       {/each}
     </div>
   {/if}

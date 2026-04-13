@@ -44,6 +44,10 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
   getRelayListLookupRelays: () => []
 }));
+vi.mock('$lib/services/dm-service.svelte.js', () => ({
+  getUnreadDmCount: () => 0,
+  markAllDmConversationsAsRead: vi.fn()
+}));
 
 describe('inbox-service pure functions', () => {
   let buildMainFilter, getNotificationRelays, parseReadMarkers;

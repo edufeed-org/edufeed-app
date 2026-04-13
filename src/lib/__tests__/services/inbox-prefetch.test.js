@@ -40,6 +40,10 @@ vi.mock('$lib/services/publish-service.js', () => ({
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
   getRelayListLookupRelays: () => ['wss://lookup1']
 }));
+vi.mock('$lib/services/dm-service.svelte.js', () => ({
+  getUnreadDmCount: () => 0,
+  markAllDmConversationsAsRead: vi.fn()
+}));
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
   parseAddressPointerFromATag: vi.fn((aTag) => {
     const value = Array.isArray(aTag) ? aTag[1] : aTag;

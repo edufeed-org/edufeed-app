@@ -5,7 +5,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
-  import { getUnreadCount } from '$lib/services/inbox-service.svelte.js';
+  import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import {
@@ -109,8 +109,8 @@
     <a href={resolve('/inbox')} onclick={onClose}>
       <BellIcon class_="w-5 h-5" />
       {m.inbox_bell_label()}
-      {#if getUnreadCount() > 0}
-        <span class="badge badge-sm badge-primary">{getUnreadCount()}</span>
+      {#if getTotalUnreadCount() > 0}
+        <span class="badge badge-sm badge-primary">{getTotalUnreadCount()}</span>
       {/if}
     </a>
   </li>

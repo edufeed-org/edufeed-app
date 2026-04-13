@@ -18,6 +18,7 @@ import {
 } from '$lib/helpers/relay-helper.js';
 import { getNotificationType, isUnread, filterSelfNotifications } from '$lib/helpers/inbox.js';
 import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
+import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
@@ -361,6 +362,8 @@ export async function markAsRead(type) {
     ]) {
       updated[t] = now;
     }
+    // Also mark all DM conversations as read
+    markAllDmConversationsAsRead();
   }
 
   readMarkers = updated;
@@ -406,6 +409,10 @@ export function getNotifications() {
 }
 export function getUnreadCount() {
   return unreadCount;
+}
+/** @returns {number} Combined inbox + DM unread count */
+export function getTotalUnreadCount() {
+  return unreadCount + getUnreadDmCount();
 }
 export function getUnreadByType() {
   return unreadByType;

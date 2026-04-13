@@ -3,9 +3,14 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { WrappedMessagesGroups } from 'applesauce-common/models';
-  import { isDmConversationUnread, isUnlockingDms } from '$lib/services/dm-service.svelte.js';
+  import {
+    isDmConversationUnread,
+    isUnlockingDms,
+    markConversationAsRead
+  } from '$lib/services/dm-service.svelte.js';
   import { formatMessageTimestamp } from '$lib/helpers/message-utils.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -127,7 +132,9 @@
             </p>
           </div>
           {#if unread}
-            <span class="badge badge-xs badge-primary"></span>
+            <UnreadDot
+              onclick={() => markConversationAsRead(conv.id, conv.lastMessage.created_at)}
+            />
           {/if}
         </button>
       {/each}

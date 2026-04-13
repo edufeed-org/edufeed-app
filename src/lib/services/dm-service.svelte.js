@@ -33,7 +33,17 @@ let hasDedicatedDmRelays = $state(false);
 let lockedCount = $state(0);
 let unlocking = $state(false);
 let readTimestamps = $state(/** @type {Record<string, number>} */ ({}));
-let unreadCount = $state(0);
+/** @type {{ id: string, participants: string[], lastMessage: any }[]} */
+let dmConversations = $state.raw([]);
+let unreadCount = $derived.by(() => {
+  let count = 0;
+  for (const conv of dmConversations) {
+    if (isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps)) {
+      count++;
+    }
+  }
+  return count;
+});
 
 /** @type {string | null} */
 let activePubkey = null;
@@ -72,6 +82,32 @@ export function getUnreadDmCount() {
 /** @returns {boolean} Whether the user has a dedicated kind 10050 DM relay list */
 export function hasDmRelayList() {
   return hasDedicatedDmRelays;
+}
+
+/** @returns {{ id: string, participants: string[], lastMessage: any }[]} */
+export function getDmConversations() {
+  return dmConversations;
+}
+
+/** @returns {{ id: string, participants: string[], lastMessage: any }[]} */
+export function getUnreadDmConversations() {
+  return dmConversations.filter((conv) =>
+    isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps)
+  );
+}
+
+/** Mark all DM conversations as read (latest message timestamp each). */
+export function markAllDmConversationsAsRead() {
+  if (dmConversations.length === 0) return;
+  /** @type {Record<string, number>} */
+  const updated = { ...readTimestamps };
+  for (const conv of dmConversations) {
+    updated[conv.id] = conv.lastMessage.created_at;
+  }
+  readTimestamps = updated;
+  if (activePubkey) {
+    saveReadTimestamps(activePubkey, updated);
+  }
 }
 
 /**
@@ -181,17 +217,7 @@ export function initializeDMs(pubkey, signer) {
 
   // 5. Watch conversations for unread count
   const convSub = eventStore.model(WrappedMessagesGroups, pubkey).subscribe((conversations) => {
-    if (!conversations) {
-      unreadCount = 0;
-      return;
-    }
-    let count = 0;
-    for (const conv of conversations) {
-      if (isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps)) {
-        count++;
-      }
-    }
-    unreadCount = count;
+    dmConversations = conversations || [];
   });
   subscriptions.push(convSub);
 }
@@ -212,7 +238,7 @@ export function cleanup() {
   lockedCount = 0;
   unlocking = false;
   readTimestamps = {};
-  unreadCount = 0;
+  dmConversations = [];
 }
 
 // --- Internal ---

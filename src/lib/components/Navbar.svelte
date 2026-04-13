@@ -17,7 +17,7 @@
   import LanguageSwitcher from './LanguageSwitcher.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
-  import { getUnreadCount } from '$lib/services/inbox-service.svelte.js';
+  import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
 
   /** @type {{ hideMobileNavbar?: boolean }} */
@@ -147,11 +147,11 @@
       <div class="dropdown dropdown-end">
         <button class="btn relative btn-circle btn-ghost" aria-label={m.inbox_bell_label()}>
           <BellIcon class_="w-5 h-5" />
-          {#if getUnreadCount() > 0}
+          {#if getTotalUnreadCount() > 0}
             <span
               class="absolute -top-1 -right-1 badge h-4 min-w-4 badge-sm text-[10px] badge-primary"
             >
-              {getUnreadCount() > 99 ? '99+' : getUnreadCount()}
+              {getTotalUnreadCount() > 99 ? '99+' : getTotalUnreadCount()}
             </span>
           {/if}
         </button>

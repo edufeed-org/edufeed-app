@@ -2,7 +2,7 @@
   import { page } from '$app/stores';
   import { resolve } from '$app/paths';
   import { HomeIcon, BellIcon, ScrollTextIcon, PeopleIcon } from '$lib/components/icons';
-  import { getUnreadCount } from '$lib/services/inbox-service.svelte.js';
+  import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getDashboardActiveSection } from '$lib/helpers/dashboardNavigation.js';
 
   import * as m from '$lib/paraglide/messages';
@@ -49,11 +49,11 @@
       >
         <span class="relative">
           <Icon class_="w-5 h-5" />
-          {#if section.id === 'inbox' && getUnreadCount() > 0}
+          {#if section.id === 'inbox' && getTotalUnreadCount() > 0}
             <span
               class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-primary"
             >
-              {getUnreadCount() > 99 ? '99+' : getUnreadCount()}
+              {getTotalUnreadCount() > 99 ? '99+' : getTotalUnreadCount()}
             </span>
           {/if}
         </span>
