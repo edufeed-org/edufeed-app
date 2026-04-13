@@ -25,7 +25,7 @@ import {
   isConversationUnread
 } from '$lib/helpers/dm.js';
 import { getRelayListLookupRelays, getWriteRelays } from '$lib/services/relay-service.svelte.js';
-import { getFallbackRelays } from '$lib/helpers/relay-helper.js';
+import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
 // --- Module-level reactive state ---
 let dmRelays = $state.raw(/** @type {string[]} */ ([]));
@@ -157,7 +157,8 @@ export function initializeDMs(pubkey, signer) {
     if (giftWrapSubStarted) return;
 
     const writeRelays = await getWriteRelays(pubkey);
-    const fallback = getFallbackRelays();
+    // DMs bypass gated mode — personal messages are not curated content
+    const fallback = runtimeConfig.fallbackRelays || [];
     const fallbackDmRelays = [...writeRelays, ...fallback].filter((r, i, a) => a.indexOf(r) === i);
 
     if (fallbackDmRelays.length > 0 && !giftWrapSubStarted) {
