@@ -7,10 +7,15 @@
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import ProfileFeedView from '$lib/components/profile/ProfileFeedView.svelte';
+  import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const activeUser = useActiveUser();
 </script>
+
+<div class="mb-3">
+  <DashboardFeedSelector />
+</div>
 
 {#if contactsStore.isLoading}
   <div class="flex flex-col items-center justify-center py-16">

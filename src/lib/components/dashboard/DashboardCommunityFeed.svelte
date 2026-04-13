@@ -32,6 +32,7 @@
   import { ChevronRightIcon, FilesIcon } from '$lib/components/icons';
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils';
   import { getEventStartTimestamp } from '$lib/helpers/calendar';
+  import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {Map<string, any[]>} */
@@ -230,6 +231,10 @@
     displayCount += 15;
   }
 </script>
+
+<div class="mb-3">
+  <DashboardFeedSelector />
+</div>
 
 {#if isLoading}
   <div class="flex justify-center py-12">

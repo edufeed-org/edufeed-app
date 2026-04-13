@@ -5,7 +5,6 @@
   import * as m from '$lib/paraglide/messages';
   import DashboardCommunityFeed from '$lib/components/dashboard/DashboardCommunityFeed.svelte';
   import DashboardFollowsFeed from '$lib/components/dashboard/DashboardFollowsFeed.svelte';
-  import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import DashboardYourContent from '$lib/components/dashboard/DashboardYourContent.svelte';
   import DashboardCommunities from '$lib/components/dashboard/DashboardCommunities.svelte';
 
@@ -19,14 +18,9 @@
     <DashboardYourContent pubkey={manager.active?.pubkey ?? ''} />
   {:else if activeSection === 'communities'}
     <DashboardCommunities />
+  {:else if appSettings.dashboardFeedSource === 'following'}
+    <DashboardFollowsFeed />
   {:else}
-    <div class="mb-3">
-      <DashboardFeedSelector />
-    </div>
-    {#if appSettings.dashboardFeedSource === 'following'}
-      <DashboardFollowsFeed />
-    {:else}
-      <DashboardCommunityFeed />
-    {/if}
+    <DashboardCommunityFeed />
   {/if}
 </div>
