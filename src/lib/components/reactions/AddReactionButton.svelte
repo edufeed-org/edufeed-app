@@ -31,7 +31,7 @@
   type="button"
   onclick={() => isLoggedIn && (showPicker = true)}
   disabled={!isLoggedIn}
-  class="btn rounded-full border-base-content/20 text-base-content/50 btn-ghost btn-xs"
+  class="btn rounded-full border-base-content/20 text-base-content/70 btn-ghost btn-xs"
   title={isLoggedIn ? m.reactions_add_reaction_title() : m.reactions_login_required()}
   data-testid="add-reaction-btn"
 >

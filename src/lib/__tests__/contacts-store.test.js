@@ -71,7 +71,18 @@ vi.mock('$lib/loaders/contact-list-loader.js', () => ({
 }));
 
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  getWriteRelays: vi.fn(async () => ['wss://relay.example.com'])
+  getWriteRelays: vi.fn(async () => ['wss://relay.example.com']),
+  getRelayListLookupRelays: vi.fn(() => ['wss://purplepag.es'])
+}));
+
+vi.mock('applesauce-loaders/loaders', () => ({
+  createTimelineLoader: vi.fn(() => () => ({
+    subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
+  }))
+}));
+
+vi.mock('$lib/loaders/base.js', () => ({
+  timedPool: vi.fn()
 }));
 
 vi.mock('$lib/loaders/profile.js', () => ({

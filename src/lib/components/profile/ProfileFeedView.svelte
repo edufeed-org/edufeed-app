@@ -7,13 +7,16 @@
 <script>
   import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
-  import { TimelineModel } from 'applesauce-core/models';
+  import { map, filter } from 'rxjs';
+  import { createTimelineLoader, createOutboxTimelineLoader } from 'applesauce-loaders/loaders';
+  import { TimelineModel, OutboxModel } from 'applesauce-core/models';
+  import { groupPubkeysByRelay } from 'applesauce-core/helpers';
+  import { includeFallbackRelays } from 'applesauce-core/observable';
   import { getNip10References } from 'applesauce-common/helpers';
   import { timedPool } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
   import {
     getProfileLookupRelays,
     getCalendarRelays,
@@ -48,13 +51,24 @@
   /**
    * @type {{
    *   pubkeys: string[],
-   *   activeUser?: any
+   *   activeUser?: any,
+   *   userPubkey?: string | null
    * }}
    */
-  let { pubkeys, activeUser = null } = $props();
+  let { pubkeys, activeUser = null, userPubkey = null } = $props();
 
-  /** Feed source config: kinds → relay function */
+  /** Feed source config: kinds → relay function (used for classic path) */
   const FEED_SOURCES = [
+    { kinds: [1], getRelays: getProfileLookupRelays },
+    { kinds: [31922, 31923], getRelays: getCalendarRelays },
+    { kinds: [30142], getRelays: getEducationalRelays },
+    { kinds: [30023], getRelays: getArticleRelays },
+    { kinds: [39701, 9802, 1111], getRelays: getAllLookupRelays }
+  ];
+
+  /** Supplemental relay sources for the outbox path.
+   *  The outbox loader covers user write relays; these catch content on dedicated relays. */
+  const APP_RELAY_SOURCES = [
     { kinds: [1], getRelays: getProfileLookupRelays },
     { kinds: [31922, 31923], getRelays: getCalendarRelays },
     { kinds: [30142], getRelays: getEducationalRelays },
@@ -134,7 +148,7 @@
   const displayedItems = $derived(feedItems.slice(0, displayLimit));
   const hasMore = $derived(feedItems.length > displayLimit);
 
-  // Loaders: one per relay set, single model subscription
+  // Loaders: outbox path (when userPubkey provided) or classic path, single model subscription
   $effect(() => {
     // Reset state without creating reactive dependencies
     untrack(() => {
@@ -152,56 +166,73 @@
     /** @type {import('rxjs').Subscription[]} */
     const subs = [];
 
-    // Create loaders for each content type's relay set
-    for (const source of FEED_SOURCES) {
-      const relays = untrack(() => source.getRelays());
-      if (relays.length === 0) continue;
+    if (userPubkey) {
+      // --- Outbox path: uses OutboxModel to send targeted filters per relay ---
 
-      const filter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
-      const loader = createTimelineLoader(timedPool, relays, filter, { eventStore });
+      // Build reactive OutboxMap from the user's contacts + their NIP-65 relay lists.
+      // OutboxModel chains: eventStore.contacts(user) → includeMailboxes → selectOptimalRelays
+      // Kind 10002 events are bulk-loaded by contactsStore, so includeMailboxes picks them up reactively.
+      const outboxMap$ = eventStore
+        .model(OutboxModel, userPubkey, {
+          type: 'outbox',
+          maxConnections: 20,
+          maxRelaysPerUser: 3
+        })
+        .pipe(
+          filter((pointers) => pointers != null && pointers.length > 0),
+          includeFallbackRelays(runtimeConfig.fallbackRelays || []),
+          map((pointers) => groupPubkeysByRelay(pointers))
+        );
+
+      // Single outbox loader for all feed kinds — sends per-relay targeted filters
+      const feedLoader = createOutboxTimelineLoader(
+        timedPool,
+        outboxMap$,
+        { kinds: ALL_FEED_KINDS, limit: 50 },
+        { eventStore }
+      );
       subs.push(
-        loader().subscribe({
-          error: (err) => console.error('ProfileFeedView: Loader error:', err)
+        feedLoader().subscribe({
+          error: (err) => console.error('ProfileFeedView: Outbox loader error:', err)
         })
       );
-    }
 
-    // Supplemental: NIP-65 write relays (batch-resolve for multiple authors)
-    const BATCH_SIZE = 20;
-    (async () => {
-      /** @type {string[]} */
-      const collectedRelays = [];
-      for (let i = 0; i < pubkeys.length; i += BATCH_SIZE) {
-        const batch = pubkeys.slice(i, i + BATCH_SIZE);
-        const results = await Promise.allSettled(batch.map((pk) => getWriteRelays(pk)));
-        for (const r of results) {
-          if (r.status === 'fulfilled') collectedRelays.push(...r.value);
-        }
-      }
-      const allWriteRelays = collectedRelays.filter((r, i) => collectedRelays.indexOf(r) === i);
+      // Supplemental: app-specific relays for content that also lives on dedicated relays
+      for (const source of APP_RELAY_SOURCES) {
+        const relays = untrack(() => source.getRelays());
+        if (relays.length === 0) continue;
 
-      for (const source of FEED_SOURCES) {
-        const primaryRelays = source.getRelays();
-        const newRelays = allWriteRelays.filter((r) => !primaryRelays.includes(r));
-        if (newRelays.length === 0) continue;
-
-        const filter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
-        const supplemental = createTimelineLoader(timedPool, newRelays, filter, { eventStore });
+        const appFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
+        const loader = createTimelineLoader(timedPool, relays, appFilter, { eventStore });
         subs.push(
-          supplemental().subscribe({
-            error: (err) => console.error('ProfileFeedView: Write relay loader error:', err)
+          loader().subscribe({
+            error: (err) => console.error('ProfileFeedView: App relay loader error:', err)
           })
         );
       }
-    })();
+    } else {
+      // --- Classic path: all pubkeys to all relays per content type ---
 
-    // Single model subscription for all kinds
+      for (const source of FEED_SOURCES) {
+        const relays = untrack(() => source.getRelays());
+        if (relays.length === 0) continue;
+
+        const sourceFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
+        const loader = createTimelineLoader(timedPool, relays, sourceFilter, { eventStore });
+        subs.push(
+          loader().subscribe({
+            error: (err) => console.error('ProfileFeedView: Loader error:', err)
+          })
+        );
+      }
+    }
+
+    // Single model subscription for all kinds (shared by both paths)
     const modelSub = eventStore
       .model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: pubkeys })
       .subscribe({
         next: (loaded) => {
           items = loaded || [];
-          // Extract unique pubkeys for profile loading (separate from items to avoid loops)
           const loadedPubkeys = [
             ...new Set((loaded || []).map((/** @type {any} */ e) => e.pubkey))
           ];
@@ -218,7 +249,7 @@
     // Loading timeout fallback
     const timer = setTimeout(() => {
       isLoading = false;
-    }, 5000);
+    }, 3000);
 
     return () => {
       for (const sub of subs) sub.unsubscribe();

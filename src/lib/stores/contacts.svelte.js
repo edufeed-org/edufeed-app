@@ -10,9 +10,12 @@
 
 import { eventStore, pool } from './nostr-infrastructure.svelte.js';
 import { createContactListLoader } from '$lib/loaders/contact-list-loader.js';
+import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { ContactsModel } from 'applesauce-core/models';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
+import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
+import { timedPool } from '$lib/loaders/base.js';
 import { profileLoader } from '$lib/loaders/profile.js';
 import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
 
@@ -30,6 +33,7 @@ import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
 let followedPubkeys = $state([]);
 let isLoading = $state(false);
 let isLoaded = $state(false);
+let mailboxLoadStarted = false;
 /** @type {import('rxjs').Subscription[]} */
 let activeSubscriptions = [];
 
@@ -80,6 +84,23 @@ export const contactsStore = {
           followedPubkeys = pubkeys;
           isLoading = false;
           isLoaded = true;
+
+          // Bulk-load kind 10002 (NIP-65 relay lists) for all contacts.
+          // This populates the eventStore so OutboxModel/includeMailboxes can
+          // reactively build outbox maps for the follows feed.
+          // Guard against duplicate loads on ContactsModel re-emission.
+          const lookupRelays = getRelayListLookupRelays();
+          if (!mailboxLoadStarted && lookupRelays.length > 0 && pubkeys.length > 0) {
+            mailboxLoadStarted = true;
+            const mailboxLoader = createTimelineLoader(
+              timedPool,
+              lookupRelays,
+              { kinds: [10002], authors: pubkeys },
+              { eventStore }
+            );
+            const mailboxSub = mailboxLoader().subscribe();
+            activeSubscriptions.push(mailboxSub);
+          }
 
           // Load profiles for contacts
           const relays = getProfileLookupRelays();
@@ -162,5 +183,6 @@ export const contactsStore = {
     followedPubkeys = [];
     isLoading = false;
     isLoaded = false;
+    mailboxLoadStarted = false;
   }
 };

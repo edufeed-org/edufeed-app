@@ -46,5 +46,9 @@
     <p class="max-w-md text-base-content/60">{m.dashboard_follows_feed_empty_description()}</p>
   </div>
 {:else}
-  <ProfileFeedView pubkeys={contactsStore.contacts} activeUser={activeUser()} />
+  <ProfileFeedView
+    pubkeys={contactsStore.contacts}
+    activeUser={activeUser()}
+    userPubkey={activeUser()?.pubkey}
+  />
 {/if}
