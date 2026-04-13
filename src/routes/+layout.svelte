@@ -7,6 +7,7 @@
   import Footer from '$lib/components/Footer.svelte';
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
+  import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
   import DashboardBottomTabBar from '$lib/components/dashboard/DashboardBottomTabBar.svelte';
@@ -200,6 +201,7 @@
   </div>
 </div>
 <PublishStatusToast />
+<ScrollToTopButton />
 {#if getActiveUser() && !$page.url.pathname.startsWith('/c/messages')}
   <GlobalFAB />
 {/if}

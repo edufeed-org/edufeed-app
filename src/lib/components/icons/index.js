@@ -9,6 +9,7 @@ export { default as ClockIcon } from './calendar/ClockIcon.svelte';
 export { default as ChevronLeftIcon } from './ui/ChevronLeftIcon.svelte';
 export { default as ChevronRightIcon } from './ui/ChevronRightIcon.svelte';
 export { default as ChevronDownIcon } from './ui/ChevronDownIcon.svelte';
+export { default as ChevronUpIcon } from './ui/ChevronUpIcon.svelte';
 export { default as CloseIcon } from './ui/CloseIcon.svelte';
 export { default as PlusIcon } from './ui/PlusIcon.svelte';
 export { default as MenuIcon } from './ui/MenuIcon.svelte';
