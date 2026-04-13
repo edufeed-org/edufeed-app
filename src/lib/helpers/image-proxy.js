@@ -6,7 +6,9 @@ const SIZE_PRESETS = {
   thumbnail: { w: 160, h: 160 },
   card: { w: 640, h: 320 },
   banner: { w: 1280, h: 720 },
-  hero: { w: 1920, h: 1080 }
+  hero: { w: 1920, h: 1080 },
+  emoji: { w: 48, h: 48 },
+  content: { w: 960, h: 960 }
 };
 
 /**

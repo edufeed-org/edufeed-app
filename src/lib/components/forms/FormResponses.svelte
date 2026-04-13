@@ -14,6 +14,7 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -304,17 +305,7 @@
           onclick={() => toggleExpand(response)}
         >
           <div class="flex items-center gap-3">
-            <div class="placeholder avatar">
-              <div class="w-8 rounded-full bg-neutral text-neutral-content">
-                {#if profile?.picture}
-                  <img src={profile.picture} alt="" />
-                {:else}
-                  <span class="text-xs"
-                    >{(profile?.name || response.pubkey.slice(0, 2)).slice(0, 2)}</span
-                  >
-                {/if}
-              </div>
-            </div>
+            <ProfileAvatar pubkey={response.pubkey} {profile} size="sm" />
             <div class="text-left">
               <div class="text-sm font-semibold">
                 {profile?.name || response.pubkey.slice(0, 8) + '...'}

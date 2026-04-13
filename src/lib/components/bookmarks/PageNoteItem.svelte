@@ -2,11 +2,12 @@
   PageNoteItem — Single page note with blue left border
 -->
 <script>
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import { ChatIcon } from '$lib/components/icons';
   import EventDeleteButton from '$lib/components/shared/EventDeleteButton.svelte';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -29,7 +30,6 @@
   let showComments = $state(false);
 
   const name = $derived(authorProfile ? getDisplayName(authorProfile) : 'Unknown');
-  const avatar = $derived(authorProfile ? getProfilePicture(authorProfile) : null);
   const timestamp = $derived(event?.created_at ? formatRelativeTime(event.created_at) : '');
 </script>
 
@@ -38,13 +38,12 @@
     <p class="text-sm text-base-content/90">{event.content}</p>
   {/if}
   <div class="mt-2 flex items-center gap-2">
-    {#if avatar}
-      <div class="avatar">
-        <div class="w-4 rounded-full">
-          <img src={avatar} alt={name} />
-        </div>
-      </div>
-    {/if}
+    <ProfileAvatar
+      pubkey={event.pubkey}
+      profile={authorProfile}
+      size="2xs"
+      fallbackType="robohash"
+    />
     <span class="text-xs text-base-content/60">{name}</span>
     {#if timestamp}
       <span class="text-xs text-base-content/40">· {timestamp}</span>

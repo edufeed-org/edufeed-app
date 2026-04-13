@@ -1,6 +1,8 @@
 <script>
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
 
   /**
    * @type {{
@@ -13,7 +15,6 @@
   let issuerName = $derived(
     issuerProfile ? getDisplayName(issuerProfile) : badge.issuerPubkey.slice(0, 12) + '...'
   );
-  let issuerPicture = $derived(issuerProfile ? getProfilePicture(issuerProfile) : null);
   let dateStr = $derived(formatCalendarDate(new Date(badge.awardedAt * 1000), 'short'));
 </script>
 
@@ -21,9 +22,10 @@
   <!-- Badge image header -->
   <figure class="h-40">
     {#if badge.badgeImage}
-      <img
+      <ImageWithFallback
         src={badge.badgeImage}
         alt={badge.badgeName || 'Badge'}
+        size="card"
         class="h-full w-full object-contain p-4"
       />
     {:else}
@@ -55,11 +57,7 @@
 
     <!-- Issuer -->
     <div class="mt-2 flex items-center gap-2">
-      {#if issuerPicture}
-        <img src={issuerPicture} alt={issuerName} class="h-5 w-5 rounded-full object-cover" />
-      {:else}
-        <div class="h-5 w-5 rounded-full bg-base-300"></div>
-      {/if}
+      <ProfileAvatar pubkey={badge.issuerPubkey} profile={issuerProfile} size="xs" />
       <span class="text-xs text-base-content/60">{issuerName}</span>
     </div>
 

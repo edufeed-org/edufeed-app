@@ -4,6 +4,7 @@
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
+  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
 
   /** @type {{ profile?: any, timestamp?: number }} */
   let { profile = null, timestamp = 0 } = $props();
@@ -17,7 +18,12 @@
   {#if avatar}
     <div class="avatar">
       <div class="w-5 rounded-full">
-        <img src={avatar} alt={name} />
+        <ImageWithFallback
+          src={avatar}
+          alt={name}
+          size="avatar_sm"
+          class="h-full w-full rounded-full object-cover"
+        />
       </div>
     </div>
   {/if}

@@ -214,18 +214,19 @@ describe('ContactSearchInput', () => {
 
     const img = container.querySelector('.absolute.z-50 img');
     expect(img).toBeTruthy();
-    expect(img?.getAttribute('src')).toBe('https://example.com/alice.jpg');
+    // Image goes through proxy, so src contains the original URL as a query param
+    expect(img?.getAttribute('src')).toContain('alice.jpg');
   });
 
-  it('shows initial letter avatar when no picture', async () => {
+  it('shows fallback avatar when no picture', async () => {
     const { container } = render(ContactSearchInput, {
       props: { value: '' }
     });
     const input = container.querySelector('input');
     await fireEvent.input(input, { target: { value: 'bo' } });
 
-    // Bob has no picture, should show initial
-    const avatar = container.querySelector('.absolute.z-50 .rounded-full:not(img)');
-    expect(avatar?.textContent?.trim()).toBe('B');
+    // Bob has no picture — ImageWithFallback renders a robohash fallback img
+    const img = container.querySelector('.absolute.z-50 img');
+    expect(img).toBeTruthy();
   });
 });

@@ -221,9 +221,10 @@
       </button>
     {/if}
     {#if getHeaderPubkey()}
+      {@const headerPubkey = getHeaderPubkey() ?? ''}
       <ProfileAvatar
-        pubkey={getHeaderPubkey()}
-        profile={userProfiles.get(getHeaderPubkey())}
+        pubkey={headerPubkey}
+        profile={userProfiles.get(headerPubkey)}
         size="sm"
         linkToProfile
         showHoverCard

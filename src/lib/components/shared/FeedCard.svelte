@@ -11,6 +11,7 @@
     FilesIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
@@ -115,7 +116,12 @@
   {:else if authorAvatar}
     <div class="avatar flex-shrink-0">
       <div class="h-10 w-10 rounded-full">
-        <img src={authorAvatar} alt={authorName || ''} loading="lazy" />
+        <ImageWithFallback
+          src={authorAvatar}
+          alt={authorName || ''}
+          size="avatar_md"
+          class="h-full w-full rounded-full object-cover"
+        />
       </div>
     </div>
   {/if}

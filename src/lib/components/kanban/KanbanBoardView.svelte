@@ -5,7 +5,7 @@
 -->
 
 <script>
-  import { getProfilePicture, getDisplayName, getTagValue } from 'applesauce-core/helpers';
+  import { getDisplayName, getTagValue } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -16,6 +16,7 @@
   const resolve = /** @type {any} */ (_resolve);
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
 
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import { KanbanIcon, TrashIcon, ExternalLinkIcon } from '$lib/components/icons';
@@ -67,9 +68,6 @@
   const getAuthorProfile = useUserProfile(event.pubkey);
   const authorProfile = $derived(getAuthorProfile());
   const authorName = $derived(getDisplayName(authorProfile, event.pubkey.slice(0, 8) + '...'));
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile) || `https://robohash.org/${event.pubkey}`
-  );
 
   // Generate naddr for the board
   const boardNaddr = $derived(encodeEventToNaddr(event) || null);
@@ -217,11 +215,12 @@
     <div class="flex flex-col gap-4 border-y border-base-300 py-4 md:flex-row md:items-center">
       <!-- Author info -->
       <div class="flex flex-1 items-center gap-3">
-        <div class="avatar">
-          <div class="h-12 w-12 rounded-full">
-            <img src={authorAvatar} alt={authorName} />
-          </div>
-        </div>
+        <ProfileAvatar
+          pubkey={event.pubkey}
+          profile={authorProfile}
+          size="lg"
+          fallbackType="robohash"
+        />
         <div>
           <div class="font-semibold text-base-content">{authorName}</div>
           <div class="text-sm text-base-content/60">

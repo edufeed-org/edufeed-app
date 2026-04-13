@@ -6,6 +6,7 @@
 <script>
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import * as m from '$lib/paraglide/messages';
+  import ImageWithFallback from './ImageWithFallback.svelte';
 
   /**
    * @type {{
@@ -118,15 +119,12 @@
           class:bg-base-200={index === selectedDropdownIndex}
           onclick={() => selectContact(contact)}
         >
-          {#if contact.picture}
-            <img src={contact.picture} alt="" class="h-8 w-8 rounded-full object-cover" />
-          {:else}
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-full bg-neutral text-sm text-neutral-content"
-            >
-              {(contact.display_name || contact.name || '?')[0]?.toUpperCase()}
-            </div>
-          {/if}
+          <ImageWithFallback
+            src={contact.picture}
+            alt=""
+            size="avatar_sm"
+            class="h-8 w-8 rounded-full object-cover"
+          />
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-medium">
               {contact.display_name || contact.name || 'Anonymous'}

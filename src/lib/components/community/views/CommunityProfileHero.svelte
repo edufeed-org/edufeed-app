@@ -8,6 +8,7 @@
   import { nip19 } from 'nostr-tools';
   import { getContext } from 'svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
   import { ChevronRightIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -99,7 +100,12 @@
     <div class="avatar">
       <div class="w-14 rounded-full ring-2 ring-base-100 md:w-12">
         {#if avatarUrl}
-          <img src={avatarUrl} alt={displayName} class="object-cover" />
+          <ImageWithFallback
+            src={avatarUrl}
+            alt={displayName}
+            size="avatar_lg"
+            class="h-full w-full rounded-full object-cover"
+          />
         {:else}
           <div
             class="flex h-full w-full items-center justify-center bg-primary/20 text-lg font-bold text-primary"

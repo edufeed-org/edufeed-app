@@ -10,6 +10,7 @@
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { fetchProfileData } from '$lib/helpers/profile.js';
+  import ImageWithFallback from './shared/ImageWithFallback.svelte';
   import CopyIcon from './icons/actions/CopyIcon.svelte';
   import CheckIcon from './icons/ui/CheckIcon.svelte';
   import ChevronLeftIcon from './icons/ui/ChevronLeftIcon.svelte';
@@ -642,7 +643,12 @@
                     <div class="flex items-center gap-4">
                       <div class="avatar">
                         <div class="w-12 rounded-full">
-                          <img src={profile.picture} alt={profile.name} />
+                          <ImageWithFallback
+                            src={profile.picture}
+                            alt={profile.name || ''}
+                            size="avatar_lg"
+                            class="h-full w-full rounded-full object-cover"
+                          />
                         </div>
                       </div>
                       <div class="flex-1">

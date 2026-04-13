@@ -28,6 +28,7 @@
   } = $props();
 
   import { getProfilePicture } from 'applesauce-core/helpers';
+  import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
 
   let communityDisplayName = $derived(
     communityProfile?.name || communityProfile?.display_name || 'Community'
@@ -96,7 +97,12 @@
       <div class="flex items-center gap-3 p-4">
         <div class="avatar">
           <div class="w-9 rounded-full ring-1 ring-base-300">
-            <img src={communityAvatarUrl} alt={communityDisplayName} class="object-cover" />
+            <ImageWithFallback
+              src={communityAvatarUrl}
+              alt={communityDisplayName}
+              size="avatar_md"
+              class="h-full w-full rounded-full object-cover"
+            />
           </div>
         </div>
         <h2 class="truncate text-sm font-semibold text-base-content">{communityDisplayName}</h2>

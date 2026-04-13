@@ -6,6 +6,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import ImageWithFallback from './shared/ImageWithFallback.svelte';
 
   let { modalId } = $props();
 
@@ -202,7 +203,12 @@
             <div class="avatar">
               <div class="w-8 rounded-full">
                 {#if getCommunityAvatar(pubkey)}
-                  <img src={getCommunityAvatar(pubkey)} alt="" />
+                  <ImageWithFallback
+                    src={getCommunityAvatar(pubkey)}
+                    alt=""
+                    size="avatar_sm"
+                    class="h-full w-full rounded-full object-cover"
+                  />
                 {:else}
                   <div
                     class="flex h-full w-full items-center justify-center bg-neutral text-xs text-neutral-content"

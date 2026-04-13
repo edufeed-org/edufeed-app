@@ -1,5 +1,6 @@
 <script>
   import * as m from '$lib/paraglide/messages';
+  import ImageWithFallback from './ImageWithFallback.svelte';
 
   let { userData, errors = $bindable({}) } = $props();
 
@@ -80,7 +81,12 @@
     {#if userData.picture}
       <div class="avatar">
         <div class="w-16 rounded-full">
-          <img src={userData.picture} alt="Profile" />
+          <ImageWithFallback
+            src={userData.picture}
+            alt="Profile"
+            size="avatar_lg"
+            class="h-full w-full rounded-full object-cover"
+          />
         </div>
       </div>
     {/if}

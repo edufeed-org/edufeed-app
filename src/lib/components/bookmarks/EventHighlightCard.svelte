@@ -6,8 +6,9 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getHighlightText } from 'applesauce-common/helpers';
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { nip19 } from 'nostr-tools';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -141,14 +142,13 @@
         <div class="ml-auto flex -space-x-1.5">
           {#each group.contributors.slice(0, 3) as pubkey (pubkey)}
             {@const profile = authorProfiles.get(pubkey)}
-            {@const avatar = profile ? getProfilePicture(profile) : null}
-            {#if avatar}
-              <div class="avatar">
-                <div class="w-4 rounded-full ring-1 ring-base-100">
-                  <img src={avatar} alt="" />
-                </div>
-              </div>
-            {/if}
+            <ProfileAvatar
+              {pubkey}
+              {profile}
+              size="2xs"
+              fallbackType="robohash"
+              class="ring-1 ring-base-100"
+            />
           {/each}
           {#if group.contributors.length > 3}
             <span class="pl-1 text-xs text-base-content/40">

@@ -5,7 +5,7 @@
 -->
 
 <script>
-  import { getDisplayName, getProfilePicture, getTagValue } from 'applesauce-core/helpers';
+  import { getDisplayName, getTagValue } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
@@ -15,6 +15,7 @@
   import { resolve as _resolve } from '$app/paths';
   /** @type {(path: string) => string} */
   const resolve = /** @type {any} */ (_resolve);
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -47,9 +48,6 @@
   const publishedAt = $derived(new Date(board.created_at * 1000));
 
   const authorName = $derived(getDisplayName(authorProfile, board.pubkey.slice(0, 8) + '...'));
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile) || `https://robohash.org/${board.pubkey}`
-  );
 
   // Generate naddr for the board
   const boardNaddr = $derived.by(() => {
@@ -130,11 +128,12 @@
   >
     <!-- Author Header -->
     <div class="mb-3 flex items-center gap-3">
-      <div class="avatar">
-        <div class="h-10 w-10 rounded-full">
-          <img src={authorAvatar} alt={authorName} loading="lazy" decoding="async" />
-        </div>
-      </div>
+      <ProfileAvatar
+        pubkey={board.pubkey}
+        profile={authorProfile}
+        size="md"
+        fallbackType="robohash"
+      />
       <div class="min-w-0 flex-1">
         <div class="truncate font-medium text-base-content">{authorName}</div>
         <div class="text-sm text-base-content/60">

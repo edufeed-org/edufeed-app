@@ -10,6 +10,7 @@
   import MobileNavMenu from '$lib/components/shared/MobileNavMenu.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { MenuIcon, CloseIcon, ChevronRightIcon } from '$lib/components/icons';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -117,7 +118,12 @@
             {:else if mobileHeaderAvatarUrl}
               <div class="avatar">
                 <div class="w-8 rounded-full ring-1 ring-base-300">
-                  <img src={mobileHeaderAvatarUrl} alt={mobileHeaderTitle} class="object-cover" />
+                  <ImageWithFallback
+                    src={mobileHeaderAvatarUrl}
+                    alt={mobileHeaderTitle || ''}
+                    size="avatar_sm"
+                    class="h-full w-full rounded-full object-cover"
+                  />
                 </div>
               </div>
             {:else}

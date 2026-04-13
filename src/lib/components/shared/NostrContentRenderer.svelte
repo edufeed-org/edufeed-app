@@ -5,6 +5,7 @@
 
 <script>
   import { parseEventContent } from '$lib/helpers/nostrContent.js';
+  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
   import NostrIdentifier from './NostrIdentifier.svelte';
 
   let { event, class: className = '', depth = 0 } = $props();
@@ -40,7 +41,7 @@
         {node.value}
       {:else if node.type === 'emoji'}
         <img
-          src={node.url}
+          src={getProxiedImageUrl(node.url, 'emoji') || node.url}
           alt=":{node.code}:"
           title=":{node.code}:"
           class="inline h-5 w-5 align-text-bottom"
@@ -49,13 +50,21 @@
         <NostrIdentifier identifier={node.encoded} inline={true} {depth} />
       {:else if node.type === 'link'}
         {#if isImageUrl(node.href)}
-          <a href={node.href} target="_blank" rel="noopener noreferrer">
-            <img src={node.href} alt="" loading="lazy" class="my-2 max-h-96 rounded-lg" />
-          </a>
+          <div class="my-2 aspect-video max-h-96 overflow-hidden rounded-lg bg-base-200">
+            <a href={node.href} target="_blank" rel="noopener noreferrer" class="block h-full">
+              <img
+                src={getProxiedImageUrl(node.href, 'content') || node.href}
+                alt=""
+                loading="lazy"
+                class="h-full w-full object-contain"
+              />
+            </a>
+          </div>
         {:else if isVideoUrl(node.href)}
-          <!-- svelte-ignore a11y_media_has_caption -->
-          <video src={node.href} controls preload="metadata" class="my-2 max-h-96 rounded-lg"
-          ></video>
+          <div class="my-2 aspect-video max-h-96 overflow-hidden rounded-lg bg-base-200">
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video src={node.href} controls preload="metadata" class="h-full w-full"></video>
+          </div>
         {:else}
           <a href={node.href} target="_blank" rel="noopener noreferrer" class="link link-primary"
             >{node.value}</a
@@ -66,8 +75,18 @@
       {:else if node.type === 'gallery'}
         <div class="my-2 flex flex-wrap gap-2">
           {#each node.links as link, j (j)}
-            <a href={link} target="_blank" rel="noopener noreferrer">
-              <img src={link} alt="" loading="lazy" class="max-h-72 rounded-lg" />
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="block aspect-square h-72 overflow-hidden rounded-lg bg-base-200"
+            >
+              <img
+                src={getProxiedImageUrl(link, 'content') || link}
+                alt=""
+                loading="lazy"
+                class="h-full w-full object-cover"
+              />
             </a>
           {/each}
         </div>

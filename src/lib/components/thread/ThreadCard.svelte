@@ -6,6 +6,7 @@
 
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { TimelineModel } from 'applesauce-core/models';
   import { debounceTime } from 'rxjs/operators';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -85,9 +86,6 @@
 
   // Author info
   const authorName = $derived(getDisplayName(authorProfile, thread.pubkey.slice(0, 8) + '...'));
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile) || `https://robohash.org/${thread.pubkey}`
-  );
 
   const relativeDate = $derived(formatRelativeTime(thread.created_at));
 
@@ -119,10 +117,13 @@
   onkeydown={handleKeydown}
 >
   <!-- Author Avatar -->
-  <div class="avatar flex-shrink-0">
-    <div class="h-10 w-10 rounded-full">
-      <img src={authorAvatar} alt={authorName} loading="lazy" decoding="async" />
-    </div>
+  <div class="flex-shrink-0">
+    <ProfileAvatar
+      pubkey={thread.pubkey}
+      profile={authorProfile}
+      size="md"
+      fallbackType="robohash"
+    />
   </div>
 
   <!-- Content Column -->

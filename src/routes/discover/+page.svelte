@@ -75,6 +75,7 @@
   } from '$lib/helpers/communityContent.js';
   import { matchesTextSearch } from '$lib/helpers/contentSearch.js';
   import AuthorSearchDropdown from '$lib/components/discover/AuthorSearchDropdown.svelte';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // State management
@@ -1675,9 +1676,7 @@
         {#each authorFilter as pubkey (pubkey)}
           {@const profile = authorProfiles.get(pubkey)}
           <div class="badge gap-2 badge-lg badge-primary">
-            {#if profile?.picture}
-              <img src={profile.picture} alt="" class="h-5 w-5 rounded-full object-cover" />
-            {/if}
+            <ProfileAvatar {pubkey} {profile} size="xs" fallbackType="robohash" />
             <span>{profile?.display_name || profile?.name || pubkey.slice(0, 12) + '...'}</span>
             <button
               type="button"
