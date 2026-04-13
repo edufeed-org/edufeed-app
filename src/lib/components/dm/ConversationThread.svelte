@@ -200,6 +200,16 @@
     if (others.length === 0) return m.dm_self_note();
     return others.map((p) => getDisplayName(p, userProfiles.get(p))).join(', ');
   }
+
+  /**
+   * Get the primary other participant's pubkey for the header avatar.
+   * @returns {string | undefined}
+   */
+  function getHeaderPubkey() {
+    const activeUser = getActiveUser();
+    const others = participants.filter((p) => p !== activeUser?.pubkey);
+    return others[0] || participants[0];
+  }
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -209,6 +219,15 @@
       <button class="btn btn-circle btn-ghost btn-sm" onclick={onBack}>
         <ChevronLeftIcon class_="h-5 w-5" />
       </button>
+    {/if}
+    {#if getHeaderPubkey()}
+      <ProfileAvatar
+        pubkey={getHeaderPubkey()}
+        profile={userProfiles.get(getHeaderPubkey())}
+        size="sm"
+        linkToProfile
+        showHoverCard
+      />
     {/if}
     <h3 class="truncate font-bold">{getHeaderName()}</h3>
   </div>

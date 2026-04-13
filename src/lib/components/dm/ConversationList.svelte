@@ -111,7 +111,16 @@
             {selectedConversationId === conv.id ? 'bg-base-200' : ''}"
           onclick={() => onSelectConversation(conv.id, conv.participants)}
         >
-          <ProfileAvatar pubkey={otherPubkey} profile={profiles.get(otherPubkey)} size="sm" />
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div onclick={(e) => e.stopPropagation()}>
+            <ProfileAvatar
+              pubkey={otherPubkey}
+              profile={profiles.get(otherPubkey)}
+              size="sm"
+              linkToProfile
+              showHoverCard
+            />
+          </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center justify-between">
               <span
