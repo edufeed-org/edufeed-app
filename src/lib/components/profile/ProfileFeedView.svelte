@@ -326,7 +326,11 @@
         {:else if entry.type === 'calendar'}
           {@const event = getCalendarEventMetadata(entry.data)}
           {#if event}
-            <CalendarEventCard {event} compact={true} />
+            <CalendarEventCard
+              {event}
+              compact={false}
+              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+            />
           {/if}
         {:else if entry.type === 'resources'}
           {@const resource = formatAMBResource(entry.data)}

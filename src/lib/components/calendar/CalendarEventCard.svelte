@@ -6,7 +6,10 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { formatCalendarDate } from '../../helpers/calendar.js';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { formatCalendarDate, formatRelativeTime } from '../../helpers/calendar.js';
   import EventTags from './EventTags.svelte';
   import LocationLink from '../shared/LocationLink.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
@@ -16,19 +19,41 @@
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
+  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
    */
 
-  /** @type {{ event: any, compact?: boolean, variant?: 'card' | 'list', onEventClick?: (event: any) => void }} */
-  let { event, compact = false, variant = 'card', onEventClick = () => {} } = $props();
+  /** @type {{ event: any, compact?: boolean, variant?: 'card' | 'list', authorProfile?: any, onEventClick?: ((event: any) => void) | null }} */
+  let {
+    event,
+    compact = false,
+    variant = 'card',
+    authorProfile = null,
+    onEventClick = null
+  } = $props();
 
   const isList = $derived(variant === 'list');
+
+  // Author display name
+  const authorName = $derived(
+    authorProfile
+      ? getDisplayName(authorProfile, event.originalEvent?.pubkey?.slice(0, 8) + '...')
+      : null
+  );
+
+  // Generate naddr for internal navigation (when onEventClick is not provided)
+  const eventNaddr = $derived.by(() => {
+    const raw = event.originalEvent;
+    if (!raw) return null;
+    return encodeEventToNaddr(raw);
+  });
 
   // Load RSVPs for this event (called at component init, not inside $derived)
   // svelte-ignore state_referenced_locally
@@ -72,8 +97,12 @@
    * @param {Event} e
    */
   function handleClick(e) {
-    e.stopPropagation(); // Prevent event from bubbling up to parent date cell
-    onEventClick(event);
+    e.stopPropagation();
+    if (onEventClick) {
+      onEventClick(event);
+    } else if (eventNaddr) {
+      goto(resolve(`/calendar/event/${eventNaddr}`));
+    }
   }
 
   /**
@@ -90,7 +119,7 @@
 {#if isList}
   <!-- List variant: horizontal row -->
   <div
-    class="calendar-event-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:border-primary hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none {isAllDay
+    class="calendar-event-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none {isAllDay
       ? 'border-l-4 border-l-info'
       : ''} {isMultiDay ? 'border-l-4 border-l-secondary' : ''}"
     role="button"
@@ -143,9 +172,9 @@
   </div>
 {:else}
   <div
-    class="calendar-event-card focus:ring-opacity-50 w-full max-w-full cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:border-primary hover:shadow-md focus:ring-2 focus:ring-primary focus:outline-none {compact
+    class="calendar-event-card focus:ring-opacity-50 w-full max-w-full cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md focus:ring-2 focus:ring-primary focus:outline-none {compact
       ? 'p-2 text-sm'
-      : 'p-3 lg:p-4'} {isAllDay ? 'border-l-4 border-l-info' : ''} {isMultiDay
+      : 'p-4'} {isAllDay ? 'border-l-4 border-l-info' : ''} {isMultiDay
       ? 'border-l-4 border-l-secondary'
       : ''}"
     role="button"
@@ -154,6 +183,26 @@
     onkeydown={handleKeydown}
     data-testid="calendar-event-card"
   >
+    <!-- Author Header (shown when authorProfile provided and not compact) -->
+    {#if authorProfile && !compact}
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="mb-3 flex items-center gap-3" onclick={(e) => e.stopPropagation()}>
+        <ProfileAvatar
+          pubkey={event.originalEvent?.pubkey}
+          profile={authorProfile}
+          size="md"
+          linkToProfile
+          fallbackType="robohash"
+        />
+        <div class="min-w-0 flex-1">
+          <span class="truncate font-medium text-base-content">{authorName}</span>
+          <div class="text-sm text-base-content/60">
+            {formatRelativeTime(event.createdAt || event.originalEvent?.created_at)}
+          </div>
+        </div>
+      </div>
+    {/if}
+
     <div class="flex flex-col gap-3 overflow-hidden lg:flex-row">
       <!-- Event Image (full mode only) -->
       {#if event.image && !compact}
