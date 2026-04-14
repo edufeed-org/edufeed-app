@@ -153,7 +153,7 @@
 {#if isList}
   <!-- List variant: horizontal row -->
   <div
-    class="amb-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:border-secondary hover:shadow-sm focus:ring-2 focus:ring-secondary focus:outline-none"
+    class="amb-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
     role="button"
     tabindex="0"
     onclick={navigateToDetail}
@@ -236,12 +236,12 @@
   </div>
 {:else}
   <div
-    class="amb-card cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:border-secondary hover:shadow-md {compact
+    class="amb-card cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md {compact
       ? 'p-3'
       : 'p-4'}"
     class:focus:outline-none={true}
     class:focus:ring-2={true}
-    class:focus:ring-secondary={true}
+    class:focus:ring-primary={true}
     class:focus:ring-opacity-50={true}
     role="button"
     tabindex="0"

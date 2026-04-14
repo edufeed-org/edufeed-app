@@ -139,7 +139,7 @@
 {#if isList}
   <!-- List variant: horizontal row -->
   <div
-    class="article-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:border-primary hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
+    class="article-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
     role="button"
     tabindex="0"
     onclick={handleClick}
@@ -190,7 +190,7 @@
 {:else}
   <!-- Card variant: vertical layout -->
   <div
-    class="article-card focus:ring-opacity-50 cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:border-primary hover:shadow-md focus:ring-2 focus:ring-primary focus:outline-none {compact
+    class="article-card focus:ring-opacity-50 cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md focus:ring-2 focus:ring-primary focus:outline-none {compact
       ? 'p-3'
       : 'p-4'}"
     role="button"
