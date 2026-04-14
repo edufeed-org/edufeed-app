@@ -31,6 +31,10 @@
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive state, only used in navigation callbacks
   const scrollPositions = new Map();
 
+  // Feed state cache: preserves display limit + filters across back-navigation
+  const feedStateCache = new Map();
+  setContext('feedStateCache', feedStateCache);
+
   beforeNavigate(({ from }) => {
     if (!from?.url) return;
     const key = from.url.pathname + from.url.search;

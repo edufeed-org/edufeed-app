@@ -5,7 +5,7 @@
 -->
 
 <script>
-  import { untrack } from 'svelte';
+  import { getContext, untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { map, filter } from 'rxjs';
   import { createTimelineLoader, createOutboxTimelineLoader } from 'applesauce-loaders/loaders';
@@ -85,6 +85,9 @@
     { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon }
   ];
 
+  /** @type {Map<string, any> | undefined} */
+  const feedStateCache = getContext('feedStateCache');
+
   const DISPLAY_BATCH = 20;
   const BOOKMARK_KINDS = new Set([39701, 9802, 1111]);
 
@@ -154,10 +157,19 @@
   $effect(() => {
     // Reset state without creating reactive dependencies
     untrack(() => {
+      const cacheKey = 'profile-feed-' + pubkeys.join(',');
+      const saved = feedStateCache?.get(cacheKey);
       items = [];
       isLoading = true;
-      displayLimit = DISPLAY_BATCH;
+      displayLimit = saved?.displayLimit ?? DISPLAY_BATCH;
       itemPubkeys = [];
+      if (saved?.activeFilters) {
+        activeFilters.clear();
+        for (const f of saved.activeFilters) activeFilters.add(f);
+      } else {
+        activeFilters.clear();
+        for (const c of FEED_CATEGORIES) activeFilters.add(c.id);
+      }
     });
 
     if (!pubkeys?.length) {
@@ -258,6 +270,14 @@
     };
   });
 
+  function saveFeedState() {
+    const cacheKey = 'profile-feed-' + pubkeys.join(',');
+    feedStateCache?.set(cacheKey, {
+      displayLimit,
+      activeFilters: [...activeFilters]
+    });
+  }
+
   /** @param {string} id */
   function toggleFilter(id) {
     if (activeFilters.has(id)) {
@@ -266,10 +286,12 @@
       activeFilters.add(id);
     }
     displayLimit = DISPLAY_BATCH;
+    saveFeedState();
   }
 
   function showMore() {
     displayLimit += DISPLAY_BATCH;
+    saveFeedState();
   }
 </script>
 
