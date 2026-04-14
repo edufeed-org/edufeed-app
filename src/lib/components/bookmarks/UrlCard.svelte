@@ -46,18 +46,48 @@
       const fragment = featuredHighlight ? `#highlight-${featuredHighlight.id}` : '';
       goto(resolve(`/c/${npub}/bookmarks/${encodedUrl}${fragment}`));
     } else {
-      // No community context — open the URL directly
-      window.open(group.displayUrl, '_blank', 'noopener,noreferrer');
+      // No community context — navigate to standalone bookmark detail route
+      const encodedUrl = encodeURIComponent(group.displayUrl);
+      const fragment = featuredHighlight ? `#highlight-${featuredHighlight.id}` : '';
+      goto(resolve(`/bookmarks/${encodedUrl}${fragment}`));
     }
   }
 </script>
 
 <button
   onclick={handleClick}
-  class="card w-full cursor-pointer border border-base-300 bg-base-100 text-left shadow-sm transition-shadow hover:shadow-md"
+  class="w-full cursor-pointer rounded-lg border border-base-300 bg-base-100 p-4 text-left shadow-sm transition-shadow hover:shadow-md"
 >
-  <div class="card-body gap-3 p-4">
-    <!-- Header: title + domain -->
+  <!-- Contributor header -->
+  {#if group.contributors.length > 0}
+    <div class="mb-3 flex items-center gap-2">
+      <div class="flex -space-x-1.5">
+        {#each group.contributors.slice(0, 3) as pubkey (pubkey)}
+          {@const profile = authorProfiles.get(pubkey)}
+          <ProfileAvatar
+            {pubkey}
+            {profile}
+            size="sm"
+            fallbackType="robohash"
+            class="ring-2 ring-base-100"
+          />
+        {/each}
+      </div>
+      <div class="min-w-0 flex-1">
+        <span class="truncate text-sm font-medium text-base-content">
+          {getAuthorName(group.contributors[0])}
+          {#if group.contributors.length > 1}
+            <span class="font-normal text-base-content/50">
+              +{group.contributors.length - 1}
+            </span>
+          {/if}
+        </span>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Title + domain -->
+  <div class="flex flex-col gap-3">
     <div>
       <h3 class="line-clamp-2 text-sm font-semibold">{group.title}</h3>
       <div class="mt-1 flex items-center gap-1">
@@ -93,7 +123,7 @@
     {/if}
 
     <!-- Stats row -->
-    <div class="mt-auto flex items-center gap-3 text-xs text-base-content/50">
+    <div class="flex items-center gap-3 text-xs text-base-content/50">
       {#if group.bookmarks.length > 0}
         <div class="flex items-center gap-1">
           <BookmarkIcon class_="w-3.5 h-3.5" />
@@ -126,26 +156,6 @@
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
           </svg>
           <span>{group.pageNotes.length}</span>
-        </div>
-      {/if}
-      <!-- Contributors avatars -->
-      {#if group.contributors.length > 0}
-        <div class="ml-auto flex -space-x-1.5">
-          {#each group.contributors.slice(0, 3) as pubkey (pubkey)}
-            {@const profile = authorProfiles.get(pubkey)}
-            <ProfileAvatar
-              {pubkey}
-              {profile}
-              size="2xs"
-              fallbackType="robohash"
-              class="ring-1 ring-base-100"
-            />
-          {/each}
-          {#if group.contributors.length > 3}
-            <span class="pl-1 text-xs text-base-content/40">
-              +{group.contributors.length - 3}
-            </span>
-          {/if}
         </div>
       {/if}
     </div>
