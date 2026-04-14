@@ -16,7 +16,6 @@
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
-  import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
@@ -78,20 +77,16 @@
 
   let commentCount = $state(0);
 
-  // Fetch comments from relays + subscribe to RepliesModel for reactive counts
+  // Subscribe to RepliesModel for cached comment counts (no relay fetching).
+  // Detail view handles relay fetching when the user navigates to the article.
   $effect(() => {
     if (!article?.id) return;
 
-    const loader = createCommentLoaderForEvent(article);
-    const loaderSub = loader().subscribe();
     const modelSub = eventStore.model(RepliesModel, article).subscribe((replies) => {
       commentCount = (replies || []).length;
     });
 
-    return () => {
-      loaderSub.unsubscribe();
-      modelSub.unsubscribe();
-    };
+    return () => modelSub.unsubscribe();
   });
 
   // Get author info

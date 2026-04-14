@@ -10,7 +10,6 @@
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
-  import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -32,12 +31,21 @@
   let commentCount = $state(0);
   let profileHref = $derived(resolve(`/p/${hexToNpub(note.pubkey) || note.pubkey}`));
 
-  // Generate nevent for navigation
+  // Generate nevent for navigation — route directly to community context when available
   const neventHref = $derived.by(() => {
     const relayHints = getSeenRelays(note);
     const relays = relayHints ? Array.from(relayHints).slice(0, 3) : [];
     const nevent = nip19.neventEncode({ id: note.id, relays, author: note.pubkey });
-    return resolve(`/${nevent}`);
+
+    // Route to community-scoped detail when community context is known
+    const hPubkey =
+      communityPubkey || note.tags?.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
+    if (hPubkey) {
+      const npub = hexToNpub(hPubkey);
+      if (npub) return resolve(`/c/${npub}/${nevent}`);
+    }
+    // Stay within the /c/ layout to avoid slow layout boundary crossing
+    return resolve(`/c/${nevent}`);
   });
 
   /**
@@ -58,23 +66,16 @@
     }
   }
 
-  // Fetch comments from relays + subscribe to RepliesModel for reactive counts
+  // Subscribe to RepliesModel for cached comment counts (no relay fetching).
+  // CommentList handles relay fetching when the user expands comments.
   $effect(() => {
     if (!note?.id) return;
 
-    // Loader: fetch from relays → populates eventStore
-    const loader = createCommentLoaderForEvent(note, extraRelays);
-    const loaderSub = loader().subscribe();
-
-    // Model: reactive subscription using RepliesModel (handles NIP-10 + NIP-22)
     const modelSub = eventStore.model(RepliesModel, note).subscribe((replies) => {
       commentCount = (replies || []).length;
     });
 
-    return () => {
-      loaderSub.unsubscribe();
-      modelSub.unsubscribe();
-    };
+    return () => modelSub.unsubscribe();
   });
 </script>
 

@@ -148,7 +148,9 @@
   const displayedItems = $derived(feedItems.slice(0, displayLimit));
   const hasMore = $derived(feedItems.length > displayLimit);
 
-  // Loaders: outbox path (when userPubkey provided) or classic path, single model subscription
+  // Loaders: outbox path (when userPubkey provided) or classic path, single model subscription.
+  // Model subscription starts immediately (emits cached data from EventStore on remount).
+  // Loaders are deferred by 100ms so quick back-nav + re-click has zero active subs to tear down.
   $effect(() => {
     // Reset state without creating reactive dependencies
     untrack(() => {
@@ -166,68 +168,7 @@
     /** @type {import('rxjs').Subscription[]} */
     const subs = [];
 
-    if (userPubkey) {
-      // --- Outbox path: uses OutboxModel to send targeted filters per relay ---
-
-      // Build reactive OutboxMap from the user's contacts + their NIP-65 relay lists.
-      // OutboxModel chains: eventStore.contacts(user) → includeMailboxes → selectOptimalRelays
-      // Kind 10002 events are bulk-loaded by contactsStore, so includeMailboxes picks them up reactively.
-      const outboxMap$ = eventStore
-        .model(OutboxModel, userPubkey, {
-          type: 'outbox',
-          maxConnections: 20,
-          maxRelaysPerUser: 3
-        })
-        .pipe(
-          filter((pointers) => pointers != null && pointers.length > 0),
-          includeFallbackRelays(runtimeConfig.fallbackRelays || []),
-          map((pointers) => groupPubkeysByRelay(pointers))
-        );
-
-      // Single outbox loader for all feed kinds — sends per-relay targeted filters
-      const feedLoader = createOutboxTimelineLoader(
-        timedPool,
-        outboxMap$,
-        { kinds: ALL_FEED_KINDS, limit: 50 },
-        { eventStore }
-      );
-      subs.push(
-        feedLoader().subscribe({
-          error: (err) => console.error('ProfileFeedView: Outbox loader error:', err)
-        })
-      );
-
-      // Supplemental: app-specific relays for content that also lives on dedicated relays
-      for (const source of APP_RELAY_SOURCES) {
-        const relays = untrack(() => source.getRelays());
-        if (relays.length === 0) continue;
-
-        const appFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
-        const loader = createTimelineLoader(timedPool, relays, appFilter, { eventStore });
-        subs.push(
-          loader().subscribe({
-            error: (err) => console.error('ProfileFeedView: App relay loader error:', err)
-          })
-        );
-      }
-    } else {
-      // --- Classic path: all pubkeys to all relays per content type ---
-
-      for (const source of FEED_SOURCES) {
-        const relays = untrack(() => source.getRelays());
-        if (relays.length === 0) continue;
-
-        const sourceFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
-        const loader = createTimelineLoader(timedPool, relays, sourceFilter, { eventStore });
-        subs.push(
-          loader().subscribe({
-            error: (err) => console.error('ProfileFeedView: Loader error:', err)
-          })
-        );
-      }
-    }
-
-    // Single model subscription for all kinds (shared by both paths)
+    // Model subscription starts immediately — emits cached data on remount
     const modelSub = eventStore
       .model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: pubkeys })
       .subscribe({
@@ -246,12 +187,72 @@
       });
     subs.push(modelSub);
 
+    // Defer loader creation so navigation isn't blocked if user clicks quickly after remount.
+    // The model above already emits cached data instantly — loaders refresh from network shortly after.
+    const loaderTimer = setTimeout(() => {
+      if (userPubkey) {
+        // --- Outbox path: uses OutboxModel to send targeted filters per relay ---
+        const outboxMap$ = eventStore
+          .model(OutboxModel, userPubkey, {
+            type: 'outbox',
+            maxConnections: 20,
+            maxRelaysPerUser: 3
+          })
+          .pipe(
+            filter((pointers) => pointers != null && pointers.length > 0),
+            includeFallbackRelays(runtimeConfig.fallbackRelays || []),
+            map((pointers) => groupPubkeysByRelay(pointers))
+          );
+
+        const feedLoader = createOutboxTimelineLoader(
+          timedPool,
+          outboxMap$,
+          { kinds: ALL_FEED_KINDS, limit: 50 },
+          { eventStore }
+        );
+        subs.push(
+          feedLoader().subscribe({
+            error: (err) => console.error('ProfileFeedView: Outbox loader error:', err)
+          })
+        );
+
+        // Supplemental: app-specific relays for content that also lives on dedicated relays
+        for (const source of APP_RELAY_SOURCES) {
+          const relays = untrack(() => source.getRelays());
+          if (relays.length === 0) continue;
+
+          const appFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
+          const loader = createTimelineLoader(timedPool, relays, appFilter, { eventStore });
+          subs.push(
+            loader().subscribe({
+              error: (err) => console.error('ProfileFeedView: App relay loader error:', err)
+            })
+          );
+        }
+      } else {
+        // --- Classic path: all pubkeys to all relays per content type ---
+        for (const source of FEED_SOURCES) {
+          const relays = untrack(() => source.getRelays());
+          if (relays.length === 0) continue;
+
+          const sourceFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
+          const loader = createTimelineLoader(timedPool, relays, sourceFilter, { eventStore });
+          subs.push(
+            loader().subscribe({
+              error: (err) => console.error('ProfileFeedView: Loader error:', err)
+            })
+          );
+        }
+      }
+    }, 100);
+
     // Loading timeout fallback
     const timer = setTimeout(() => {
       isLoading = false;
     }, 3000);
 
     return () => {
+      clearTimeout(loaderTimer);
       for (const sub of subs) sub.unsubscribe();
       clearTimeout(timer);
     };

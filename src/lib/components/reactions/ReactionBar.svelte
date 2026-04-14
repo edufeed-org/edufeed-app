@@ -6,7 +6,6 @@
    * @component
    */
   /* eslint-disable svelte/prefer-svelte-reactivity -- Map used intentionally to avoid infinite loops */
-  import { onDestroy } from 'svelte';
   import { reactionsLoader } from '$lib/loaders/reactions.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
@@ -63,7 +62,9 @@
     return agg;
   });
 
-  // Load reactions when component mounts or event changes
+  // Load reactions when component mounts or event changes.
+  // Model + remove$ start immediately (show cached reactions).
+  // Relay loader is deferred 200ms to avoid a burst of 19+ simultaneous relay queries on feed load.
   $effect(() => {
     if (!event?.id) {
       return;
@@ -71,13 +72,6 @@
 
     // Reset the map when event changes
     loadedReactions.clear();
-
-    // Subscribe to reactions loader to fetch from relays
-    loaderSubscription = reactionsLoader(event, relays).subscribe({
-      error: (error) => {
-        console.error('ReactionBar: Error loading reactions:', error);
-      }
-    });
 
     // Subscribe to eventStore.reactions() for reactive updates (handles additions)
     modelSubscription = eventStore.reactions(event).subscribe((reactionEvents) => {
@@ -102,17 +96,21 @@
       }
     });
 
+    // Defer relay fetching to avoid burst of simultaneous connections on feed load
+    const loaderTimer = setTimeout(() => {
+      loaderSubscription = reactionsLoader(event, relays).subscribe({
+        error: (error) => {
+          console.error('ReactionBar: Error loading reactions:', error);
+        }
+      });
+    }, 200);
+
     return () => {
+      clearTimeout(loaderTimer);
       loaderSubscription?.unsubscribe();
       modelSubscription?.unsubscribe();
       removeSubscription?.unsubscribe();
     };
-  });
-
-  onDestroy(() => {
-    loaderSubscription?.unsubscribe();
-    modelSubscription?.unsubscribe();
-    removeSubscription?.unsubscribe();
   });
 </script>
 

@@ -1,6 +1,6 @@
 import { nip19 } from 'nostr-tools';
 import { eventLoader, addressLoader } from '$lib/loaders';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout, catchError, of } from 'rxjs';
 import { getSeenRelays } from 'applesauce-core/helpers';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getCalendarEventStart } from 'applesauce-common/helpers';
@@ -219,7 +219,10 @@ export const fetchEventById = async (identifier) => {
           }
 
           // Use addressLoader for addressable events (fetches from relays)
-          const event$ = addressLoader(addressPointer);
+          const event$ = addressLoader(addressPointer).pipe(
+            timeout(3000),
+            catchError(() => of(null))
+          );
           const event = await firstValueFrom(event$, { defaultValue: null });
           return event || null;
         } else {
@@ -244,7 +247,10 @@ export const fetchEventById = async (identifier) => {
           const hintRelays = data.relays?.length ? data.relays : [];
           const lookupRelays = getAllLookupRelays();
           const relays = [...new Set([...hintRelays, ...lookupRelays])];
-          const event$ = eventLoader({ id: data.id, relays });
+          const event$ = eventLoader({ id: data.id, relays }).pipe(
+            timeout(3000),
+            catchError(() => of(null))
+          );
           const event = await firstValueFrom(event$, { defaultValue: null });
           return event || null;
         } else {
@@ -260,7 +266,10 @@ export const fetchEventById = async (identifier) => {
         const decoded = nip19.decode(identifier);
         if (decoded.type === 'note') {
           // Use eventLoader for event IDs
-          const event$ = eventLoader({ id: decoded.data });
+          const event$ = eventLoader({ id: decoded.data }).pipe(
+            timeout(3000),
+            catchError(() => of(null))
+          );
           const event = await firstValueFrom(event$, { defaultValue: null });
           return event || null;
         } else {
@@ -273,7 +282,10 @@ export const fetchEventById = async (identifier) => {
     } else {
       // Assume it's a raw event ID - use eventLoader
       try {
-        const event$ = eventLoader({ id: identifier });
+        const event$ = eventLoader({ id: identifier }).pipe(
+          timeout(3000),
+          catchError(() => of(null))
+        );
         const event = await firstValueFrom(event$, { defaultValue: null });
         return event || null;
       } catch (error) {

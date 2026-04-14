@@ -8,6 +8,7 @@ import {
 } from 'applesauce-common/helpers';
 import { encodePointer } from 'applesauce-core/helpers';
 import { nip19 } from 'nostr-tools';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
 /**
  * Convert a CommentPointer (from getCommentRootPointer) to a NIP-19 encoded string.
@@ -72,9 +73,15 @@ export async function resolveThreadContext(event, fetchFn) {
     if (!rootEvent) {
       const eTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'E');
       if (eTag?.[1]) {
-        const relayHint = eTag[2] || '';
-        const nevent = nip19.neventEncode({ id: eTag[1], relays: relayHint ? [relayHint] : [] });
-        rootEvent = await fetchFn(nevent);
+        // Check EventStore first
+        const cached = eventStore.getEvent(eTag[1]);
+        if (cached) {
+          rootEvent = cached;
+        } else {
+          const relayHint = eTag[2] || '';
+          const nevent = nip19.neventEncode({ id: eTag[1], relays: relayHint ? [relayHint] : [] });
+          rootEvent = await fetchFn(nevent);
+        }
       }
     }
 
@@ -128,6 +135,11 @@ export async function resolveThreadContext(event, fetchFn) {
     const refs = getNip10References(event);
     const root = refs?.root?.e;
     if (root?.id) {
+      // Check EventStore first — avoid network round-trip for cached events
+      const cached = eventStore.getEvent(root.id);
+      if (cached) {
+        return { event: cached, focusCommentId: event.id };
+      }
       const rootNevent = nip19.neventEncode({
         id: root.id,
         relays: root.relays?.[0] ? [root.relays[0]] : []

@@ -5,7 +5,7 @@ export const ssr = false;
 export const prerender = false;
 
 /**
- * Community nevent route: validates the identifier and returns immediately.
+ * Dashboard nevent route: validates the identifier and returns immediately.
  * Event fetching and thread context are handled reactively in the component.
  * @type {import('./$types').PageLoad}
  */

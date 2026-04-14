@@ -8,4 +8,4 @@ import { RelayPool } from 'applesauce-relay';
 import 'applesauce-common';
 
 export const eventStore = new EventStore();
-export const pool = new RelayPool();
+export const pool = new RelayPool({ eoseTimeout: 3_000 });

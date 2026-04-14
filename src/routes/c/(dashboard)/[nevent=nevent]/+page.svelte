@@ -59,7 +59,7 @@
    * @param {string} nevent
    */
   function handleEvent(event, nevent) {
-    // Check community h-tag → redirect to community route
+    // If event has a community h-tag, redirect to community-scoped route
     const hTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'h');
     if (hTag?.[1]) {
       const npub = hexToNpub(hTag[1]);
@@ -106,7 +106,7 @@
   <title>{pageTitle}</title>
 </svelte:head>
 
-<div class="container mx-auto px-4 py-8">
+<div class="mx-auto w-full max-w-4xl px-4 py-6">
   {#if isLoading}
     <div class="flex flex-col items-center justify-center py-16">
       <span class="loading loading-lg loading-spinner text-primary"></span>
@@ -123,8 +123,10 @@
       {scrollTo}
     />
   {:else if resolvedEvent}
-    <div class="alert alert-warning">
-      <span>{m.route_unsupported_event_kind({ kind: resolvedEvent.kind })}</span>
+    <div class="flex flex-col items-center justify-center py-16 text-center">
+      <p class="text-base-content/60">
+        {m.route_unsupported_event_kind({ kind: resolvedEvent.kind })}
+      </p>
     </div>
   {/if}
 </div>

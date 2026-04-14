@@ -145,7 +145,9 @@
     modelSubscriptions.set(comment.id, subscription);
   }
 
-  // Load comments using loader + recursive model subscriptions
+  // Load comments using loader + recursive model subscriptions.
+  // Model subscription starts immediately (shows cached comments from EventStore).
+  // Relay loader is deferred 300ms to avoid blocking content render on navigation.
   $effect(() => {
     if (!rootEvent) return;
 
@@ -156,44 +158,52 @@
     modelSubscriptions.forEach((sub) => sub.unsubscribe());
     modelSubscriptions.clear();
 
-    // Subscribe to the root event's direct comments
+    // Subscribe to the root event's direct comments (may populate from cache)
     subscribeToCommentReplies(rootEvent);
 
-    // Source: Loader fetches ALL comments from relays and adds to EventStore
-    const commentLoader = createCommentLoaderForEvent(rootEvent, extraRelays);
-    loaderSubscription = commentLoader().subscribe({
-      next: (/** @type {any} */ comment) => {
-        // Add to our loaded comments map
-        if (!loadedComments.has(comment.id)) {
-          loadedComments.set(comment.id, comment);
-          flatComments = Array.from(loadedComments.values());
+    // If cache already had comments, show them immediately (no spinner)
+    if (loadedComments.size > 0) {
+      isLoading = false;
+    }
 
-          // Subscribe to this comment's replies
-          subscribeToCommentReplies(comment);
-        }
-        // Set loading to false once we have any data to display
-        if (isLoading) {
+    // Defer relay fetching to avoid blocking content render
+    const loaderTimer = setTimeout(() => {
+      const commentLoader = createCommentLoaderForEvent(rootEvent, extraRelays);
+      loaderSubscription = commentLoader().subscribe({
+        next: (/** @type {any} */ comment) => {
+          // Add to our loaded comments map
+          if (!loadedComments.has(comment.id)) {
+            loadedComments.set(comment.id, comment);
+            flatComments = Array.from(loadedComments.values());
+
+            // Subscribe to this comment's replies
+            subscribeToCommentReplies(comment);
+          }
+          // Set loading to false once we have any data to display
+          if (isLoading) {
+            isLoading = false;
+          }
+        },
+        error: (/** @type {any} */ err) => {
+          console.error('CommentList: Error in comment loader:', err);
+          isLoading = false;
+        },
+        complete: () => {
+          // Also set loading to false on complete (handles case of no comments)
           isLoading = false;
         }
-      },
-      error: (/** @type {any} */ err) => {
-        console.error('CommentList: Error in comment loader:', err);
-        isLoading = false;
-      },
-      complete: () => {
-        // Also set loading to false on complete (handles case of no comments)
-        isLoading = false;
-      }
-    });
+      });
+    }, 300);
 
-    // Fallback timeout: If loader doesn't complete within 3s, stop loading.
+    // Fallback timeout: If loader doesn't complete within 2s, stop loading.
     const loadingTimeout = setTimeout(() => {
       if (isLoading) {
         isLoading = false;
       }
-    }, 3000);
+    }, 2000);
 
     return () => {
+      clearTimeout(loaderTimer);
       clearTimeout(loadingTimeout);
       loaderSubscription?.unsubscribe();
       // Unsubscribe from all comment model subscriptions
