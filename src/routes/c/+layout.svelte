@@ -1,5 +1,5 @@
 <script>
-  import { goto } from '$app/navigation';
+  import { goto, beforeNavigate, afterNavigate } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
@@ -21,6 +21,39 @@
   const hasWorkspaceShell = getContext('workspaceShell');
 
   let leftDrawerOpen = $state(false);
+
+  // Scroll restoration for custom scroll containers (SvelteKit only restores window scroll)
+  /** @type {HTMLDivElement | undefined} */
+  let desktopScrollContainer = $state(undefined);
+  /** @type {HTMLDivElement | undefined} */
+  let mobileScrollContainer = $state(undefined);
+  /** @type {Map<string, number>} */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive state, only used in navigation callbacks
+  const scrollPositions = new Map();
+
+  beforeNavigate(({ from }) => {
+    if (!from?.url) return;
+    const key = from.url.pathname + from.url.search;
+    const container = desktopScrollContainer ?? mobileScrollContainer;
+    if (container) {
+      scrollPositions.set(key, container.scrollTop);
+    }
+  });
+
+  afterNavigate(({ to }) => {
+    if (!to?.url) return;
+    const key = to.url.pathname + to.url.search;
+    const saved = scrollPositions.get(key);
+    if (saved == null) return;
+
+    // Wait for DOM to populate from EventStore cache before restoring
+    requestAnimationFrame(() => {
+      const container = desktopScrollContainer ?? mobileScrollContainer;
+      if (container) {
+        container.scrollTop = saved;
+      }
+    });
+  });
 
   // Mobile header info — child layouts can update this via context
   let mobileHeaderTitle = $state(runtimeConfig.appName);
@@ -73,7 +106,7 @@
 
 <!-- Desktop Layout -->
 {#if activeUser()}
-  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex">
+  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex" bind:this={desktopScrollContainer}>
     {#if !hasWorkspaceShell}
       <CommunitySidebar
         currentCommunityId={currentCommunityPubkey}
@@ -85,7 +118,7 @@
     {@render children()}
   </div>
 {:else}
-  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex">
+  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex" bind:this={desktopScrollContainer}>
     {@render children()}
   </div>
 {/if}
@@ -155,7 +188,7 @@
         </div>
 
         <!-- Main Content (child layout renders here) -->
-        <div class="flex-1 overflow-auto">
+        <div class="flex-1 overflow-auto" bind:this={mobileScrollContainer}>
           {@render children()}
         </div>
       </div>
