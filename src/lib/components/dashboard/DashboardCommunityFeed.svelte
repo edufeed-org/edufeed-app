@@ -6,7 +6,6 @@
 
 <script>
   /* eslint-disable svelte/prefer-svelte-reactivity -- Map/Set used intentionally for non-reactive internal tracking */
-  import { getContext } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -33,11 +32,9 @@
   import { ChevronRightIcon, FilesIcon } from '$lib/components/icons';
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils';
   import { getEventStartTimestamp } from '$lib/helpers/calendar';
+  import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import * as m from '$lib/paraglide/messages';
-
-  /** @type {Map<string, any> | undefined} */
-  const feedStateCache = getContext('feedStateCache');
 
   /** @type {Map<string, any[]>} */
   let perCommunityItems = new Map();
@@ -80,7 +77,7 @@
     cleanupMap.clear();
     perCommunityItems = new Map();
     perCommunityAcl = new Map();
-    displayCount = feedStateCache?.get('dashboard-community-feed')?.displayCount ?? 15;
+    displayCount = feedStateCache.get('dashboard-community-feed')?.displayCount ?? 15;
 
     if (communities.length === 0) {
       allItems = [];
@@ -233,7 +230,7 @@
 
   function loadMore() {
     displayCount += 15;
-    feedStateCache?.set('dashboard-community-feed', { displayCount });
+    feedStateCache.set('dashboard-community-feed', { displayCount });
   }
 </script>
 

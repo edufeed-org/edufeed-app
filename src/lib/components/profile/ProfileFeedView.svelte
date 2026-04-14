@@ -5,7 +5,7 @@
 -->
 
 <script>
-  import { getContext, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { map, filter } from 'rxjs';
   import { createTimelineLoader, createOutboxTimelineLoader } from 'applesauce-loaders/loaders';
@@ -46,6 +46,7 @@
     BookIcon,
     BookmarkIcon
   } from '$lib/components/icons';
+  import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -85,10 +86,8 @@
     { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon }
   ];
 
-  /** @type {Map<string, any> | undefined} */
-  const feedStateCache = getContext('feedStateCache');
   const feedCacheKey = 'profile-feed-' + (userPubkey || 'default');
-  const savedFeedState = feedStateCache?.get(feedCacheKey);
+  const savedFeedState = feedStateCache.get(feedCacheKey);
 
   const DISPLAY_BATCH = 20;
   const BOOKMARK_KINDS = new Set([39701, 9802, 1111]);
@@ -267,7 +266,7 @@
   });
 
   function saveFeedState() {
-    feedStateCache?.set(feedCacheKey, {
+    feedStateCache.set(feedCacheKey, {
       displayLimit,
       activeFilters: [...activeFilters]
     });
