@@ -87,14 +87,18 @@
 
   /** @type {Map<string, any> | undefined} */
   const feedStateCache = getContext('feedStateCache');
+  const feedCacheKey = 'profile-feed-' + (userPubkey || 'default');
+  const savedFeedState = feedStateCache?.get(feedCacheKey);
 
   const DISPLAY_BATCH = 20;
   const BOOKMARK_KINDS = new Set([39701, 9802, 1111]);
 
   let items = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
-  let displayLimit = $state(DISPLAY_BATCH);
-  let activeFilters = new SvelteSet(FEED_CATEGORIES.map((c) => c.id));
+  let displayLimit = $state(savedFeedState?.displayLimit ?? DISPLAY_BATCH);
+  let activeFilters = new SvelteSet(
+    savedFeedState?.activeFilters ?? FEED_CATEGORIES.map((c) => c.id)
+  );
 
   // Track pubkeys separately to drive useProfileMap without coupling to items
   let itemPubkeys = $state(/** @type {string[]} */ ([]));
@@ -155,21 +159,13 @@
   // Model subscription starts immediately (emits cached data from EventStore on remount).
   // Loaders are deferred by 100ms so quick back-nav + re-click has zero active subs to tear down.
   $effect(() => {
-    // Reset state without creating reactive dependencies
+    // Reset data state without creating reactive dependencies.
+    // displayLimit and activeFilters are initialized from cache at declaration
+    // time, so they persist correctly across back-navigation without resetting here.
     untrack(() => {
-      const cacheKey = 'profile-feed-' + pubkeys.join(',');
-      const saved = feedStateCache?.get(cacheKey);
       items = [];
       isLoading = true;
-      displayLimit = saved?.displayLimit ?? DISPLAY_BATCH;
       itemPubkeys = [];
-      if (saved?.activeFilters) {
-        activeFilters.clear();
-        for (const f of saved.activeFilters) activeFilters.add(f);
-      } else {
-        activeFilters.clear();
-        for (const c of FEED_CATEGORIES) activeFilters.add(c.id);
-      }
     });
 
     if (!pubkeys?.length) {
@@ -271,8 +267,7 @@
   });
 
   function saveFeedState() {
-    const cacheKey = 'profile-feed-' + pubkeys.join(',');
-    feedStateCache?.set(cacheKey, {
+    feedStateCache?.set(feedCacheKey, {
       displayLimit,
       activeFilters: [...activeFilters]
     });
