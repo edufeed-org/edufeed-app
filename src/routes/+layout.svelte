@@ -34,6 +34,11 @@
   let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
   let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
 
+  // Hide global floating buttons on views that manage their own bottom UI (chat input, DM input)
+  let hasOwnBottomUI = $derived(
+    $page.url.pathname.startsWith('/c/messages') || $page.url.searchParams.get('view') === 'chat'
+  );
+
   /**
    * Handle community selection from sidebar
    * @param {string} pubkey
@@ -190,6 +195,18 @@
         <div class="loading loading-lg loading-spinner text-primary"></div>
       </div>
     {/if}
+    <!-- Floating buttons — sticky inside main so they sit above footer.
+         Hidden on views with their own bottom UI (chat input, DM input). -->
+    {#if !hasOwnBottomUI}
+      <div class="pointer-events-none sticky bottom-0 z-[60] h-0 overflow-visible">
+        <div class="pointer-events-auto">
+          <ScrollToTopButton />
+          {#if getActiveUser()}
+            <GlobalFAB />
+          {/if}
+        </div>
+      </div>
+    {/if}
   </main>
   <div
     class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
@@ -201,10 +218,6 @@
   </div>
 </div>
 <PublishStatusToast />
-<ScrollToTopButton />
-{#if getActiveUser() && !$page.url.pathname.startsWith('/c/messages')}
-  <GlobalFAB />
-{/if}
 {#if showDashboardNav}
   <DashboardBottomTabBar />
 {/if}

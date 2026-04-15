@@ -249,7 +249,7 @@
   }
 </script>
 
-<div class="flex flex-col" style="height: calc(100vh - 20rem);">
+<div class="flex h-full min-h-0 flex-col">
   <!-- Messages container -->
   <div
     bind:this={chatContainer}

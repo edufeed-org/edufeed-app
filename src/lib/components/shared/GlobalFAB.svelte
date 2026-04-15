@@ -59,7 +59,7 @@
   }
 </script>
 
-<div class="fab fixed right-6 bottom-20 z-[60] lg:bottom-6">
+<div class="fab absolute right-6 bottom-20 z-[60] lg:bottom-6">
   <!-- Main FAB Button -->
   <div
     tabindex="0"

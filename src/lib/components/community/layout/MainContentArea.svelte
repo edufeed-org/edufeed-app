@@ -33,7 +33,11 @@
 </script>
 
 <!-- Main Content Area -->
-<div class="min-h-0 flex-1 overflow-auto transition-all duration-300 lg:ml-(--sidebar-nav-w)">
+<div
+  class="min-h-0 flex-1 transition-all duration-300 lg:ml-(--sidebar-nav-w)"
+  class:overflow-auto={selectedContentType !== 'chat'}
+  class:overflow-hidden={selectedContentType === 'chat'}
+>
   {#if !selectedCommunityId}
     <!-- Empty state: No community selected -->
     <div class="flex h-full flex-col items-center justify-center p-8 text-center">
