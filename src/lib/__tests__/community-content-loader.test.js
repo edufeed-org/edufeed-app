@@ -47,6 +47,34 @@ vi.mock('applesauce-core/helpers', () => ({
   })
 }));
 
+vi.mock('applesauce-common/helpers', async (importOriginal) => {
+  const orig = /** @type {any} */ (await importOriginal());
+  return {
+    ...orig,
+    getEmbededSharedEvent: vi.fn((event) => {
+      if (!event.content) return undefined;
+      try {
+        const parsed = JSON.parse(event.content);
+        return parsed?.id && parsed?.kind ? parsed : undefined;
+      } catch {
+        return undefined;
+      }
+    }),
+    getSharedEventPointer: vi.fn((event) => {
+      const eTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'e');
+      if (!eTag) return undefined;
+      return { id: eTag[1], relays: eTag[2] ? [eTag[2]] : [] };
+    }),
+    getSharedAddressPointer: vi.fn((event) => {
+      const aTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'a');
+      if (!aTag) return undefined;
+      const parts = aTag[1].split(':');
+      if (parts.length < 3) return undefined;
+      return { kind: parseInt(parts[0]), pubkey: parts[1], identifier: parts.slice(2).join(':') };
+    })
+  };
+});
+
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
   parseAddressPointerFromATag: vi.fn((aTag) => {
     const parts = aTag.split(':');

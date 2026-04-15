@@ -11,27 +11,11 @@ import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-import { tap } from 'rxjs';
 import { addressLoader, timedPool } from './base.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
 import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-
-/**
- * Fetch events by IDs using a one-shot pool.request().
- * Unlike singleton loaders (eventLoader/addressLoader), this bypasses deduplication
- * caches — critical when relay connections may not be ready during early requests.
- * @param {string[]} ids
- * @param {string[]} relays
- */
-function fetchEventsByIds(ids, relays) {
-  if (ids.length === 0) return;
-  const sub = pool
-    .request(relays, [{ ids }], /** @type {any} */ ({ timeout: 5000 }))
-    .pipe(tap((event) => eventStore.add(event)))
-    .subscribe();
-  return sub;
-}
+import { fetchEventsByIds, resolveRepostReferences } from '$lib/helpers/repost-resolution.js';
 
 /**
  * Create a community content loader for any content type.
@@ -126,7 +110,7 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
           }
         }
 
-        const sub = fetchEventsByIds(newEventIds, lookupRelays);
+        const sub = fetchEventsByIds(newEventIds, lookupRelays, { pool, eventStore });
         if (sub) subscriptions.set(`refById-${Date.now()}`, sub);
       });
     subscriptions.set('legacyReferenced', legacyReferencedSub);
@@ -142,44 +126,17 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
         limit: 100
       })
       .subscribe((repostEvents) => {
-        const newEventIds = [];
-
-        for (const repostEvent of repostEvents) {
-          const eTag = getTagValue(repostEvent, 'e');
-          const aTag = getTagValue(repostEvent, 'a');
-
-          if (eTag && !repostLoadedEventIds.has(eTag) && !loadedEventIds.has(eTag)) {
-            repostLoadedEventIds.add(eTag);
-            newEventIds.push(eTag);
-          }
-          if (aTag && !repostLoadedAddresses.has(aTag) && !loadedAddresses.has(aTag)) {
-            repostLoadedAddresses.add(aTag);
-            const parsed = parseAddressPointerFromATag(aTag);
-            if (parsed) {
-              addressLoader({
-                kind: parsed.kind,
-                pubkey: parsed.pubkey,
-                identifier: parsed.identifier,
-                relays: lookupRelays
-              }).subscribe();
-            }
-          }
-
-          // Also try to extract embedded event from content
-          if (repostEvent.content) {
-            try {
-              const embedded = JSON.parse(repostEvent.content);
-              if (embedded && embedded.id && embedded.kind) {
-                eventStore.add(embedded);
-              }
-            } catch {
-              // Not valid JSON — ignore
-            }
-          }
+        const subs = resolveRepostReferences(repostEvents, {
+          eventStore,
+          pool,
+          addressLoader,
+          relays: lookupRelays,
+          loadedIds: repostLoadedEventIds,
+          loadedAddresses: repostLoadedAddresses
+        });
+        for (const sub of subs) {
+          subscriptions.set(`repostRef-${Date.now()}-${Math.random()}`, sub);
         }
-
-        const sub = fetchEventsByIds(newEventIds, lookupRelays);
-        if (sub) subscriptions.set(`repostRefById-${Date.now()}`, sub);
       });
     subscriptions.set('repostReferenced', repostReferencedSub);
 

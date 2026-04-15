@@ -6,15 +6,16 @@
 
 <script>
   import { untrack } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { map, filter } from 'rxjs';
   import { createTimelineLoader, createOutboxTimelineLoader } from 'applesauce-loaders/loaders';
   import { TimelineModel, OutboxModel } from 'applesauce-core/models';
   import { groupPubkeysByRelay } from 'applesauce-core/helpers';
   import { includeFallbackRelays } from 'applesauce-core/observable';
-  import { getNip10References } from 'applesauce-common/helpers';
-  import { timedPool } from '$lib/loaders/base.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { getNip10References, getSharedEventPointer } from 'applesauce-common/helpers';
+  import { getTagValue } from 'applesauce-core/helpers';
+  import { timedPool, addressLoader } from '$lib/loaders/base.js';
+  import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import {
@@ -33,12 +34,15 @@
     kindToFeedCategory,
     filterFeedItems
   } from '$lib/helpers/profile-feed.js';
+  import { mergeRepostsIntoFeed } from '$lib/helpers/repost-feed.js';
+  import { resolveRepostReferences } from '$lib/helpers/repost-resolution.js';
   import NoteCard from '$lib/components/notes/NoteCard.svelte';
   import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
   import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
   import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import {
     ChatIcon,
     CalendarIcon,
@@ -93,19 +97,28 @@
   const BOOKMARK_KINDS = new Set([39701, 9802, 1111]);
 
   let items = $state.raw(/** @type {any[]} */ ([]));
+  let repostItems = $state.raw(/** @type {any[]} */ ([]));
+  let resolvedTargets = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let displayLimit = $state(savedFeedState?.displayLimit ?? DISPLAY_BATCH);
   let activeFilters = new SvelteSet(
     savedFeedState?.activeFilters ?? FEED_CATEGORIES.map((c) => c.id)
   );
 
-  // Track pubkeys separately to drive useProfileMap without coupling to items
-  let itemPubkeys = $state(/** @type {string[]} */ ([]));
+  // Derive pubkeys from all sources for profile loading (items + reposters + resolved targets)
+  const itemPubkeys = $derived.by(() => {
+    /** @type {string[]} */
+    const all = [];
+    for (const e of items) all.push(e.pubkey);
+    for (const r of repostItems) all.push(r.pubkey);
+    for (const t of resolvedTargets) all.push(t.pubkey);
+    return [...new SvelteSet(all)];
+  });
 
   const getAuthorProfiles = useProfileMap(() => itemPubkeys);
   let authorProfiles = $derived(getAuthorProfiles());
 
-  // Separate non-bookmark items from bookmark items, apply filters, merge
+  // Separate non-bookmark items from bookmark items, apply filters, merge reposts
   const feedItems = $derived.by(() => {
     const filtered = filterFeedItems(items, activeFilters);
 
@@ -128,7 +141,7 @@
     });
 
     // Group bookmarks
-    /** @type {Array<{type: string, data: any, ts: number}>} */
+    /** @type {Array<{type: string, data: any, ts: number, repost?: {sharers: string[], latestRepostTs: number}}>} */
     const feedEntries = regularFiltered.map((e) => ({
       type: kindToFeedCategory(e.kind) || 'unknown',
       data: e,
@@ -144,6 +157,32 @@
       for (const g of eventRefGroups) {
         feedEntries.push({ type: 'bookmark-ref', data: g, ts: g.latestActivity });
       }
+    }
+
+    // Merge reposts into feed entries (grouping + dedup against direct posts)
+    if (repostItems.length > 0) {
+      // Build lookup from direct items + resolved repost targets
+      const resolvedLookup = new SvelteMap();
+      for (const event of items) {
+        resolvedLookup.set(event.id, event);
+        const dTag = getTagValue(event, 'd');
+        if (dTag) resolvedLookup.set(`${event.kind}:${event.pubkey}:${dTag}`, event);
+      }
+      for (const event of resolvedTargets) {
+        resolvedLookup.set(event.id, event);
+        const dTag = getTagValue(event, 'd');
+        if (dTag) resolvedLookup.set(`${event.kind}:${event.pubkey}:${dTag}`, event);
+      }
+
+      const merged = mergeRepostsIntoFeed(feedEntries, repostItems, resolvedLookup);
+
+      // Filter repost entries by active categories
+      const filteredMerged = merged.filter((entry) => {
+        return activeFilters.has(entry.type);
+      });
+
+      filteredMerged.sort((a, b) => b.ts - a.ts);
+      return filteredMerged;
     }
 
     // Sort chronologically (newest first)
@@ -163,8 +202,9 @@
     // time, so they persist correctly across back-navigation without resetting here.
     untrack(() => {
       items = [];
+      repostItems = [];
+      resolvedTargets = [];
       isLoading = true;
-      itemPubkeys = [];
     });
 
     if (!pubkeys?.length) {
@@ -181,10 +221,6 @@
       .subscribe({
         next: (loaded) => {
           items = loaded || [];
-          const loadedPubkeys = [
-            ...new Set((loaded || []).map((/** @type {any} */ e) => e.pubkey))
-          ];
-          itemPubkeys = loadedPubkeys;
           isLoading = false;
         },
         error: (err) => {
@@ -193,6 +229,17 @@
         }
       });
     subs.push(modelSub);
+
+    // Repost model subscription — kind 6/16 from followed users
+    const repostModelSub = eventStore
+      .model(TimelineModel, { kinds: [6, 16], authors: pubkeys })
+      .subscribe({
+        next: (loaded) => {
+          repostItems = loaded || [];
+        },
+        error: (err) => console.error('ProfileFeedView: Repost model error:', err)
+      });
+    subs.push(repostModelSub);
 
     // Defer loader creation so navigation isn't blocked if user clicks quickly after remount.
     // The model above already emits cached data instantly — loaders refresh from network shortly after.
@@ -223,6 +270,19 @@
           })
         );
 
+        // Repost loader via outbox (reposts live on user write relays)
+        const repostOutboxLoader = createOutboxTimelineLoader(
+          timedPool,
+          outboxMap$,
+          { kinds: [6, 16], limit: 50 },
+          { eventStore }
+        );
+        subs.push(
+          repostOutboxLoader().subscribe({
+            error: (err) => console.error('ProfileFeedView: Repost outbox loader error:', err)
+          })
+        );
+
         // Supplemental: app-specific relays for content that also lives on dedicated relays
         for (const source of APP_RELAY_SOURCES) {
           const relays = untrack(() => source.getRelays());
@@ -250,6 +310,22 @@
             })
           );
         }
+
+        // Repost loader (classic path)
+        const repostRelays = untrack(() => getProfileLookupRelays());
+        if (repostRelays.length > 0) {
+          const repostLoader = createTimelineLoader(
+            timedPool,
+            repostRelays,
+            { kinds: [6, 16], authors: pubkeys, limit: 50 },
+            { eventStore }
+          );
+          subs.push(
+            repostLoader().subscribe({
+              error: (err) => console.error('ProfileFeedView: Repost loader error:', err)
+            })
+          );
+        }
       }
     }, 100);
 
@@ -263,6 +339,41 @@
       for (const sub of subs) sub.unsubscribe();
       clearTimeout(timer);
     };
+  });
+
+  // Resolve repost targets: extract embedded events, fetch by ID/address
+  const loadedRepostIds = new Set();
+  const loadedRepostAddrs = new Set();
+
+  $effect(() => {
+    if (!repostItems.length) return;
+    const subs = resolveRepostReferences(repostItems, {
+      eventStore,
+      pool,
+      addressLoader,
+      relays: getAllLookupRelays(),
+      loadedIds: loadedRepostIds,
+      loadedAddresses: loadedRepostAddrs
+    });
+    return () => subs.forEach((s) => s.unsubscribe());
+  });
+
+  // Subscribe to resolved repost target events in EventStore
+  $effect(() => {
+    /** @type {string[]} */
+    const ids = repostItems
+      .map((/** @type {any} */ r) => getSharedEventPointer(r)?.id)
+      .filter((/** @type {any} */ id) => !!id);
+    if (!ids.length) {
+      resolvedTargets = [];
+      return;
+    }
+    const sub = eventStore.model(TimelineModel, { ids }).subscribe({
+      next: (/** @type {any[]} */ events) => {
+        resolvedTargets = events || [];
+      }
+    });
+    return () => sub.unsubscribe();
   });
 
   function saveFeedState() {
@@ -333,42 +444,47 @@
   {:else}
     <div class="space-y-4">
       {#each displayedItems as entry (entry.type + '-' + (entry.data.id || entry.data.url || entry.data.aTagValue))}
-        {#if entry.type === 'notes'}
-          <NoteCard
-            note={entry.data}
-            authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-            {activeUser}
-            extraRelays={getProfileLookupRelays()}
-          />
-        {:else if entry.type === 'calendar'}
-          {@const event = getCalendarEventMetadata(entry.data)}
-          {#if event}
-            <CalendarEventCard
-              {event}
-              compact={false}
-              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-            />
+        <div>
+          {#if entry.repost}
+            <SharedByLine sharers={entry.repost.sharers} {authorProfiles} />
           {/if}
-        {:else if entry.type === 'resources'}
-          {@const resource = formatAMBResource(entry.data)}
-          {#if resource}
-            <AMBResourceCard
-              {resource}
+          {#if entry.type === 'notes'}
+            <NoteCard
+              note={entry.data}
+              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+              {activeUser}
+              extraRelays={getProfileLookupRelays()}
+            />
+          {:else if entry.type === 'calendar'}
+            {@const event = getCalendarEventMetadata(entry.data)}
+            {#if event}
+              <CalendarEventCard
+                {event}
+                compact={false}
+                authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+              />
+            {/if}
+          {:else if entry.type === 'resources'}
+            {@const resource = formatAMBResource(entry.data)}
+            {#if resource}
+              <AMBResourceCard
+                {resource}
+                authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+                compact={false}
+              />
+            {/if}
+          {:else if entry.type === 'articles'}
+            <ArticleCard
+              article={entry.data}
               authorProfile={authorProfiles.get(entry.data.pubkey) || null}
               compact={false}
             />
+          {:else if entry.type === 'bookmark-url'}
+            <UrlCard group={entry.data} {authorProfiles} />
+          {:else if entry.type === 'bookmark-ref'}
+            <EventHighlightCard group={entry.data} {authorProfiles} />
           {/if}
-        {:else if entry.type === 'articles'}
-          <ArticleCard
-            article={entry.data}
-            authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-            compact={false}
-          />
-        {:else if entry.type === 'bookmark-url'}
-          <UrlCard group={entry.data} {authorProfiles} />
-        {:else if entry.type === 'bookmark-ref'}
-          <EventHighlightCard group={entry.data} {authorProfiles} />
-        {/if}
+        </div>
       {/each}
     </div>
 
