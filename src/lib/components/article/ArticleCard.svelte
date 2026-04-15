@@ -196,7 +196,13 @@
     <!-- Author Header -->
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div class="mb-3 flex items-center gap-3" onclick={(e) => e.stopPropagation()}>
-      <ProfileAvatar pubkey={article.pubkey} profile={authorProfile} size="md" linkToProfile />
+      <ProfileAvatar
+        pubkey={article.pubkey}
+        profile={authorProfile}
+        size="md"
+        linkToProfile
+        showHoverCard
+      />
       <div class="min-w-0 flex-1">
         <a
           href={resolve(`/p/${article.pubkey}`)}

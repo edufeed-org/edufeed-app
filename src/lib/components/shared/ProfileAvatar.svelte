@@ -5,10 +5,7 @@
 -->
 
 <script>
-  import { ProfileModel } from 'applesauce-core/models';
-  import { profileLoader } from '$lib/loaders/profile.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
@@ -40,12 +37,14 @@
 
   let effectiveShowHoverCard = $derived(showHoverCard ?? (linkToProfile && !!pubkey));
 
-  // Load profile reactively when pubkey changes
+  // Load profile reactively when pubkey changes.
+  // When profile prop is explicitly provided (even as null), skip self-loading — the parent manages it.
+  // Otherwise, use eventStore.profile() which auto-loads via the unified eventLoader.
   let loadedProfile = $state(/** @type {any} */ (null));
 
   $effect(() => {
     // If profile is provided as prop, use it directly
-    if (profile) {
+    if (profile !== undefined) {
       loadedProfile = profile;
       return;
     }
@@ -53,27 +52,13 @@
     // Reset profile when pubkey changes
     loadedProfile = null;
 
-    // Load profile for the given pubkey
+    // Subscribe to eventStore.profile() — auto-loads via eventStore.eventLoader
     if (pubkey) {
-      // 1. Trigger loader to fetch from relays and populate eventStore
-      const loaderSub = profileLoader({
-        kind: 0,
-        pubkey: pubkey,
-        relays: runtimeConfig.fallbackRelays || []
-      }).subscribe(() => {
-        // Loader automatically populates eventStore
-      });
-
-      // 2. Subscribe to model for reactive parsed profile from eventStore
-      const modelSub = eventStore.model(ProfileModel, pubkey).subscribe((profileContent) => {
+      const sub = eventStore.profile(pubkey).subscribe((profileContent) => {
         loadedProfile = profileContent;
       });
 
-      // Return cleanup function to unsubscribe from both
-      return () => {
-        loaderSub.unsubscribe();
-        modelSub.unsubscribe();
-      };
+      return () => sub.unsubscribe();
     }
   });
 

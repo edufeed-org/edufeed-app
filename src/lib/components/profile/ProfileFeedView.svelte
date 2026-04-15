@@ -5,8 +5,9 @@
 -->
 
 <script>
+  /* eslint-disable svelte/prefer-svelte-reactivity -- Map/Set inside $derived.by() must be plain to avoid infinite loops */
   import { untrack } from 'svelte';
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  import { SvelteSet } from 'svelte/reactivity';
   import { map, filter } from 'rxjs';
   import { createTimelineLoader, createOutboxTimelineLoader } from 'applesauce-loaders/loaders';
   import { TimelineModel, OutboxModel } from 'applesauce-core/models';
@@ -93,7 +94,7 @@
   const feedCacheKey = 'profile-feed-' + (userPubkey || 'default');
   const savedFeedState = feedStateCache.get(feedCacheKey);
 
-  const DISPLAY_BATCH = 20;
+  const DISPLAY_BATCH = 10;
   const BOOKMARK_KINDS = new Set([39701, 9802, 1111]);
 
   let items = $state.raw(/** @type {any[]} */ ([]));
@@ -112,7 +113,7 @@
     for (const e of items) all.push(e.pubkey);
     for (const r of repostItems) all.push(r.pubkey);
     for (const t of resolvedTargets) all.push(t.pubkey);
-    return [...new SvelteSet(all)];
+    return [...new Set(all)];
   });
 
   const getAuthorProfiles = useProfileMap(() => itemPubkeys);
@@ -162,7 +163,7 @@
     // Merge reposts into feed entries (grouping + dedup against direct posts)
     if (repostItems.length > 0) {
       // Build lookup from direct items + resolved repost targets
-      const resolvedLookup = new SvelteMap();
+      const resolvedLookup = new Map();
       for (const event of items) {
         resolvedLookup.set(event.id, event);
         const dTag = getTagValue(event, 'd');
@@ -341,21 +342,31 @@
     };
   });
 
-  // Resolve repost targets: extract embedded events, fetch by ID/address
+  // Resolve repost targets: extract embedded events, fetch by ID/address.
+  // Deferred to match main loaders — avoids a burst of network requests on mount.
   const loadedRepostIds = new Set();
   const loadedRepostAddrs = new Set();
 
   $effect(() => {
     if (!repostItems.length) return;
-    const subs = resolveRepostReferences(repostItems, {
-      eventStore,
-      pool,
-      addressLoader,
-      relays: getAllLookupRelays(),
-      loadedIds: loadedRepostIds,
-      loadedAddresses: loadedRepostAddrs
-    });
-    return () => subs.forEach((s) => s.unsubscribe());
+
+    /** @type {import('rxjs').Subscription[]} */
+    let subs = [];
+    const repostTimer = setTimeout(() => {
+      subs = resolveRepostReferences(repostItems, {
+        eventStore,
+        pool,
+        addressLoader,
+        relays: getAllLookupRelays(),
+        loadedIds: loadedRepostIds,
+        loadedAddresses: loadedRepostAddrs
+      });
+    }, 100);
+
+    return () => {
+      clearTimeout(repostTimer);
+      subs.forEach((s) => s.unsubscribe());
+    };
   });
 
   // Subscribe to resolved repost target events in EventStore
@@ -398,6 +409,24 @@
     displayLimit += DISPLAY_BATCH;
     saveFeedState();
   }
+
+  // Sentinel-based infinite scroll
+  /** @type {HTMLDivElement | undefined} */
+  let sentinelEl = $state(undefined);
+
+  $effect(() => {
+    if (!sentinelEl || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) showMore();
+      },
+      { rootMargin: '200px', threshold: 0.1 }
+    );
+
+    observer.observe(sentinelEl);
+    return () => observer.disconnect();
+  });
 </script>
 
 <div class="py-4">
@@ -489,10 +518,8 @@
     </div>
 
     {#if hasMore}
-      <div class="flex justify-center py-6">
-        <button class="btn btn-outline btn-sm" onclick={showMore}>
-          {m.discover_load_more()}
-        </button>
+      <div bind:this={sentinelEl} class="flex justify-center py-6">
+        <span class="loading loading-sm loading-spinner text-primary"></span>
       </div>
     {/if}
   {/if}

@@ -187,6 +187,7 @@
           profile={authorProfile}
           size="md"
           linkToProfile
+          showHoverCard
           fallbackType="robohash"
         />
         <div class="min-w-0 flex-1">

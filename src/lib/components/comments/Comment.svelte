@@ -186,7 +186,7 @@
               {m.comments_reply_button()}
             </button>
           {/if}
-          <ReactionBar event={comment} />
+          <ReactionBar event={comment} lazy />
           <button
             class="btn btn-ghost btn-xs"
             onclick={copyCommentLink}

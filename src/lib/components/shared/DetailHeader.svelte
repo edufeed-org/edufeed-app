@@ -8,9 +8,10 @@
 <script>
   import * as m from '$lib/paraglide/messages.js';
   import { resolve } from '$app/paths';
+  import { goto } from '$app/navigation';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { ChevronLeftIcon } from '$lib/components/icons';
-  import { getHasHistory } from '$lib/helpers/navigationHistory.js';
+  import { getHasHistory, getFallbackRoute } from '$lib/helpers/navigationHistory.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import EventContextMenu from './EventContextMenu.svelte';
@@ -64,7 +65,11 @@
   <div class="flex items-center gap-2 border-b border-base-300 pb-2">
     <button
       onclick={() => {
-        if (getHasHistory()) history.back();
+        if (getHasHistory()) {
+          history.back();
+        } else {
+          goto(getFallbackRoute(event));
+        }
       }}
       class="btn btn-circle flex-shrink-0 btn-ghost btn-sm"
       aria-label={m.common_back()}

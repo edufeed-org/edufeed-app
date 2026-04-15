@@ -63,7 +63,7 @@
         {:else if isVideoUrl(node.href)}
           <div class="my-2 aspect-video max-h-96 overflow-hidden rounded-lg bg-base-200">
             <!-- svelte-ignore a11y_media_has_caption -->
-            <video src={node.href} controls preload="metadata" class="h-full w-full"></video>
+            <video src={node.href} controls preload="none" class="h-full w-full"></video>
           </div>
         {:else}
           <a href={node.href} target="_blank" rel="noopener noreferrer" class="link link-primary"

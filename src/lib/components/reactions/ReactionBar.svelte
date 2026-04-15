@@ -13,8 +13,8 @@
   import ReactionButton from './ReactionButton.svelte';
   import AddReactionButton from './AddReactionButton.svelte';
 
-  /** @type {any} */
-  let { event, relays } = $props();
+  /** @type {{ event: any, relays?: string[], lazy?: boolean }} */
+  let { event, relays, lazy = false } = $props();
 
   /** @type {import('rxjs').Subscription | undefined} */
   let loaderSubscription;
@@ -62,18 +62,12 @@
     return agg;
   });
 
-  // Load reactions when component mounts or event changes.
-  // Model + remove$ start immediately (show cached reactions).
-  // Relay loader is deferred 200ms to avoid a burst of 19+ simultaneous relay queries on feed load.
+  // Cache subscriptions: always start immediately to show cached reactions.
   $effect(() => {
-    if (!event?.id) {
-      return;
-    }
+    if (!event?.id) return;
 
-    // Reset the map when event changes
     loadedReactions.clear();
 
-    // Subscribe to eventStore.reactions() for reactive updates (handles additions)
     modelSubscription = eventStore.reactions(event).subscribe((reactionEvents) => {
       let hasChanges = false;
       for (const reaction of reactionEvents || []) {
@@ -87,8 +81,6 @@
       }
     });
 
-    // Subscribe to eventStore.remove$ to handle reaction deletions
-    // Filter subscriptions don't re-emit on removals, so we need this
     removeSubscription = eventStore.remove$.subscribe((removedEvent) => {
       if (removedEvent.kind === 7 && loadedReactions.has(removedEvent.id)) {
         loadedReactions.delete(removedEvent.id);
@@ -96,26 +88,60 @@
       }
     });
 
-    // Defer relay fetching to avoid burst of simultaneous connections on feed load
+    return () => {
+      modelSubscription?.unsubscribe();
+      removeSubscription?.unsubscribe();
+    };
+  });
+
+  // Relay loader: eager (200ms defer) or lazy (IntersectionObserver).
+  // When lazy, only fetches when the component scrolls into view.
+  /** @type {HTMLDivElement | undefined} */
+  let containerEl = $state(undefined);
+
+  $effect(() => {
+    if (!event?.id) return;
+
+    if (lazy) {
+      if (!containerEl) return;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            observer.disconnect();
+            loaderSubscription = reactionsLoader(event, relays).subscribe({
+              error: (error) => console.error('ReactionBar: Error loading reactions:', error)
+            });
+          }
+        },
+        { rootMargin: '200px', threshold: 0.1 }
+      );
+      observer.observe(containerEl);
+      return () => {
+        observer.disconnect();
+        loaderSubscription?.unsubscribe();
+      };
+    }
+
+    // Eager: defer 200ms to avoid burst on feed load
     const loaderTimer = setTimeout(() => {
       loaderSubscription = reactionsLoader(event, relays).subscribe({
-        error: (error) => {
-          console.error('ReactionBar: Error loading reactions:', error);
-        }
+        error: (error) => console.error('ReactionBar: Error loading reactions:', error)
       });
     }, 200);
 
     return () => {
       clearTimeout(loaderTimer);
       loaderSubscription?.unsubscribe();
-      modelSubscription?.unsubscribe();
-      removeSubscription?.unsubscribe();
     };
   });
 </script>
 
 {#if event?.id}
-  <div class="flex min-h-[32px] flex-wrap items-center gap-2" data-testid="reaction-bar">
+  <div
+    bind:this={containerEl}
+    class="flex min-h-[32px] flex-wrap items-center gap-2"
+    data-testid="reaction-bar"
+  >
     <!-- Display reaction buttons -->
     {#each Array.from(aggregated.entries()) as [emoji, summary] (emoji)}
       <ReactionButton

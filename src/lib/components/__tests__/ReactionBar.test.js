@@ -60,9 +60,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/loaders/reactions.js', () => ({
-  reactionsLoader: () => ({
+  reactionsLoader: vi.fn(() => ({
     subscribe: () => ({ unsubscribe: vi.fn() })
-  })
+  }))
 }));
 
 vi.mock('$lib/helpers/reactions.js', () => ({
@@ -84,6 +84,19 @@ vi.mock('$lib/helpers/reactions.js', () => ({
 function StubComponent() {}
 vi.mock('../reactions/ReactionButton.svelte', () => ({ default: StubComponent }));
 vi.mock('../reactions/AddReactionButton.svelte', () => ({ default: StubComponent }));
+
+// Mock IntersectionObserver for jsdom
+const mockObserve = vi.fn();
+const mockDisconnect = vi.fn();
+class MockIntersectionObserver {
+  constructor(callback) {
+    this.callback = callback;
+  }
+  observe = mockObserve;
+  disconnect = mockDisconnect;
+  unobserve = vi.fn();
+}
+globalThis.IntersectionObserver = MockIntersectionObserver;
 
 describe('ReactionBar', () => {
   beforeEach(() => {
@@ -180,5 +193,55 @@ describe('ReactionBar', () => {
 
     const reactionBar = container.querySelector('[data-testid="reaction-bar"]');
     expect(reactionBar).toBeFalsy();
+  });
+
+  describe('lazy prop', () => {
+    it('does not call reactionsLoader on mount when lazy=true', async () => {
+      const { reactionsLoader } = await import('$lib/loaders/reactions.js');
+
+      render(ReactionBar, {
+        props: { event: mockEvent, relays: ['wss://relay.test.com'], lazy: true }
+      });
+
+      // Even after the 200ms defer window, lazy should not have called the loader
+      await new Promise((r) => setTimeout(r, 300));
+      expect(reactionsLoader).not.toHaveBeenCalled();
+    });
+
+    it('still shows cached reactions when lazy=true', async () => {
+      const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+      vi.mocked(eventStore.reactions).mockImplementation(
+        () =>
+          /** @type {any} */ ({
+            subscribe: (/** @type {Function} */ cb) => {
+              cb(mockReactionEvents);
+              return { unsubscribe: vi.fn() };
+            }
+          })
+      );
+
+      const { container } = render(ReactionBar, {
+        props: { event: mockEvent, relays: ['wss://relay.test.com'], lazy: true }
+      });
+
+      const reactionBar = container.querySelector('[data-testid="reaction-bar"]');
+      expect(reactionBar).toBeTruthy();
+    });
+
+    it('calls reactionsLoader with 200ms defer when lazy=false (default)', async () => {
+      const { reactionsLoader } = await import('$lib/loaders/reactions.js');
+
+      render(ReactionBar, {
+        props: { event: mockEvent, relays: ['wss://relay.test.com'] }
+      });
+
+      // Not called immediately
+      expect(reactionsLoader).not.toHaveBeenCalled();
+
+      // Called after 200ms defer
+      await new Promise((r) => setTimeout(r, 250));
+      expect(reactionsLoader).toHaveBeenCalledWith(mockEvent, ['wss://relay.test.com']);
+    });
   });
 });

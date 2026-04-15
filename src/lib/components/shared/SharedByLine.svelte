@@ -23,6 +23,7 @@
           {pubkey}
           size="xs"
           linkToProfile
+          showHoverCard={false}
           fallbackType="robohash"
           class="rounded-full ring-2 ring-base-100"
         />

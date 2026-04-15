@@ -17,18 +17,10 @@ vi.mock('applesauce-core/helpers', () => ({
   getDisplayName: () => 'Test User'
 }));
 
-vi.mock('$lib/loaders/profile.js', () => ({
-  profileLoader: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
-}));
-
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    model: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+    profile: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
   }
-}));
-
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: { fallbackRelays: [] }
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
