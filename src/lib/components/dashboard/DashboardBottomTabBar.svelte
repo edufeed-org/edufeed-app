@@ -5,7 +5,7 @@
     HomeIcon,
     BellIcon,
     MessageSquareIcon,
-    ScrollTextIcon,
+    BookmarkIcon,
     PeopleIcon
   } from '$lib/components/icons';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
@@ -28,10 +28,10 @@
       label: () => m.dashboard_nav_messages()
     },
     {
-      id: 'your-content',
-      href: resolve('/c/') + '?view=your-content',
-      icon: ScrollTextIcon,
-      label: () => m.dashboard_nav_your_content()
+      id: 'my-stuff',
+      href: resolve('/c/') + '?view=my-stuff',
+      icon: BookmarkIcon,
+      label: () => m.dashboard_nav_my_stuff()
     },
     {
       id: 'communities',

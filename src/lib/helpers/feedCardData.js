@@ -69,6 +69,10 @@ export function getFeedCardData(event) {
         description: getTag('description')
       };
     }
+    case 1: {
+      const text = truncate(event.content, 120);
+      return { title: text || 'Note', typeKey: 'note', tags };
+    }
     case 11: {
       const excerpt = truncate(event.content, 120);
       return {

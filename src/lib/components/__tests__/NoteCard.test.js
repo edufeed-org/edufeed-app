@@ -49,7 +49,23 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/stores/accounts.svelte.js', () => ({
-  useActiveUser: () => () => null
+  useActiveUser: () => () => null,
+  manager: {
+    active: null,
+    active$: { subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) },
+    signer: {}
+  }
+}));
+
+vi.mock('$lib/stores/personal-bookmarks.svelte.js', () => ({
+  isBookmarked: () => false,
+  bookmark: vi.fn(),
+  unbookmark: vi.fn(),
+  getIsLoading: () => false
+}));
+
+vi.mock('$lib/stores/action-runner.svelte.js', () => ({
+  actionRunner: { run: vi.fn() }
 }));
 
 vi.mock('$lib/loaders/reactions.js', () => ({
@@ -85,7 +101,15 @@ vi.mock('$lib/paraglide/messages', () => ({
   comments_count_one: () => '1 Comment',
   comments_count_other: (/** @type {{ count: number }} */ params) => `${params.count} Comments`,
   profile_avatar_alt: () => 'Avatar',
-  profile_avatar_fallback: () => '?'
+  profile_avatar_fallback: () => '?',
+  bookmark_toast_saved: () => 'Bookmarked',
+  bookmark_toast_removed: () => 'Bookmark removed',
+  bookmark_toast_error: () => 'Failed to bookmark',
+  bookmark_toast_login_required: () => 'Sign in to bookmark'
+}));
+
+vi.mock('$lib/helpers/toast.js', () => ({
+  showToast: vi.fn()
 }));
 
 vi.mock('applesauce-common/models', () => ({
@@ -99,6 +123,7 @@ vi.mock('../reactions/AddReactionButton.svelte', () => ({ default: StubComponent
 vi.mock('../shared/NostrContentRenderer.svelte', () => ({ default: StubComponent }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: StubComponent }));
 vi.mock('../comments/CommentList.svelte', () => ({ default: StubComponent }));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: StubComponent }));
 
 describe('NoteCard', () => {
   beforeEach(() => {

@@ -5,17 +5,21 @@
   import * as m from '$lib/paraglide/messages';
   import DashboardCommunityFeed from '$lib/components/dashboard/DashboardCommunityFeed.svelte';
   import DashboardFollowsFeed from '$lib/components/dashboard/DashboardFollowsFeed.svelte';
-  import DashboardYourContent from '$lib/components/dashboard/DashboardYourContent.svelte';
+  import DashboardMyStuff from '$lib/components/dashboard/DashboardMyStuff.svelte';
   import DashboardCommunities from '$lib/components/dashboard/DashboardCommunities.svelte';
 
-  let activeSection = $derived($page.url.searchParams.get('view') || 'feed');
+  let activeSection = $derived.by(() => {
+    const view = $page.url.searchParams.get('view') || 'feed';
+    // Backward compat: old 'your-content' URL maps to 'my-stuff'
+    return view === 'your-content' ? 'my-stuff' : view;
+  });
 </script>
 
 <svelte:head><title>{m.dashboard_title()}</title></svelte:head>
 
 <div class="mx-auto w-full max-w-4xl px-4 py-6">
-  {#if activeSection === 'your-content'}
-    <DashboardYourContent pubkey={manager.active?.pubkey ?? ''} />
+  {#if activeSection === 'my-stuff'}
+    <DashboardMyStuff pubkey={manager.active?.pubkey ?? ''} />
   {:else if activeSection === 'communities'}
     <DashboardCommunities />
   {:else if appSettings.dashboardFeedSource === 'following'}

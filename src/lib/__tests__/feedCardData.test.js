@@ -100,6 +100,56 @@ describe('getFeedCardData', () => {
     });
   });
 
+  describe('kind 1 (text note)', () => {
+    it('returns typeKey "note" with content excerpt as title', () => {
+      const event = {
+        kind: 1,
+        content: 'This is a short text note about Nostr.',
+        tags: []
+      };
+      const result = getFeedCardData(event);
+      expect(result.typeKey).toBe('note');
+      expect(result.title).toBe('This is a short text note about Nostr.');
+    });
+
+    it('truncates long content', () => {
+      const longContent = 'A'.repeat(200);
+      const event = { kind: 1, content: longContent, tags: [] };
+      const result = getFeedCardData(event);
+      expect(result.title).toBe('A'.repeat(120) + '...');
+    });
+
+    it('collapses newlines into spaces', () => {
+      const event = {
+        kind: 1,
+        content: 'First line\n\nSecond line\nThird line',
+        tags: []
+      };
+      const result = getFeedCardData(event);
+      expect(result.title).toBe('First line Second line Third line');
+    });
+
+    it('falls back to "Note" when content is empty', () => {
+      const event = { kind: 1, content: '', tags: [] };
+      const result = getFeedCardData(event);
+      expect(result.typeKey).toBe('note');
+      expect(result.title).toBe('Note');
+    });
+
+    it('extracts hashtags', () => {
+      const event = {
+        kind: 1,
+        content: 'Hello #nostr',
+        tags: [
+          ['t', 'nostr'],
+          ['t', 'intro']
+        ]
+      };
+      const result = getFeedCardData(event);
+      expect(result.tags).toEqual(['nostr', 'intro']);
+    });
+  });
+
   describe('kind 1111 (page note)', () => {
     it('returns typeKey "note" with note excerpt as title', () => {
       const event = {

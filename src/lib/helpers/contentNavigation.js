@@ -55,8 +55,8 @@ export function getContentEventRoute(event, options = {}) {
     return `/${naddr}`;
   }
 
-  // Kind 11 (forum discussion)
-  if (event.kind === 11) {
+  // Non-addressable events: encode as nevent (kind 11, kind 1, etc.)
+  if (event.id) {
     const relays = getSeenRelays(event);
     const nevent = nip19.neventEncode({
       id: event.id,

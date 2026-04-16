@@ -29,8 +29,12 @@ describe('getDashboardActiveSection', () => {
     expect(getDashboardActiveSection('/c/inbox/', params())).toBe('inbox');
   });
 
-  it('returns "your-content" on /c/?view=your-content', () => {
-    expect(getDashboardActiveSection('/c/', params('view=your-content'))).toBe('your-content');
+  it('returns "my-stuff" on /c/?view=my-stuff', () => {
+    expect(getDashboardActiveSection('/c/', params('view=my-stuff'))).toBe('my-stuff');
+  });
+
+  it('returns "my-stuff" on /c/?view=your-content (backward compat)', () => {
+    expect(getDashboardActiveSection('/c/', params('view=your-content'))).toBe('my-stuff');
   });
 
   it('returns "communities" on /c/?view=communities', () => {

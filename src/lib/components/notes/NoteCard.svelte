@@ -6,7 +6,8 @@
   import { RepliesModel } from 'applesauce-common/models';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
-  import { ChatIcon, RepostIcon, LightningIcon, BookmarkIcon } from '$lib/components/icons';
+  import { ChatIcon, RepostIcon, LightningIcon } from '$lib/components/icons';
+  import BookmarkButton from '$lib/components/bookmarks/BookmarkButton.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
@@ -134,9 +135,7 @@
     <button class="btn btn-ghost btn-sm">
       <LightningIcon class_="w-4 h-4" />
     </button>
-    <button class="btn btn-ghost btn-sm">
-      <BookmarkIcon class_="w-4 h-4" />
-    </button>
+    <BookmarkButton event={note} />
   </div>
 
   {#if showComments}

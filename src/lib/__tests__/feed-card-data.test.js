@@ -194,10 +194,11 @@ describe('getFeedCardData', () => {
     expect(result.typeKey).toBe('unknown');
   });
 
-  it('returns fallback for kind 1 (text note, not explicitly handled)', () => {
-    const result = getFeedCardData(makeEvent(1, [['title', 'Ignored']]));
-    expect(result.title).toBe('Untitled');
-    expect(result.typeKey).toBe('unknown');
+  it('returns content excerpt for kind 1 (text note)', () => {
+    const event = { kind: 1, content: 'Hello world from Nostr!', tags: [] };
+    const result = getFeedCardData(event);
+    expect(result.title).toBe('Hello world from Nostr!');
+    expect(result.typeKey).toBe('note');
   });
 
   // --- Tags (universal) ---

@@ -261,15 +261,26 @@ describe('getContentEventRoute', () => {
     });
   });
 
-  describe('unknown kinds', () => {
-    it('returns undefined for kind 1 (text note)', () => {
+  describe('nevent fallback for non-addressable kinds', () => {
+    it('returns /{nevent} for kind 1 (text note)', () => {
+      /** @type {any} */ (getSeenRelays).mockReturnValue(new Set(['wss://relay.example.com']));
       const event = makeEvent({ kind: 1 });
-      expect(getContentEventRoute(event)).toBeUndefined();
+      const route = getContentEventRoute(event);
+      expect(route).toMatch(/^\/nevent1/);
     });
 
-    it('returns undefined for kind 7 (reaction)', () => {
+    it('returns /{nevent} for kind 7 (reaction)', () => {
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
       const event = makeEvent({ kind: 7 });
-      expect(getContentEventRoute(event)).toBeUndefined();
+      const route = getContentEventRoute(event);
+      expect(route).toMatch(/^\/nevent1/);
+    });
+
+    it('returns /{nevent} for kind 9 (chat message)', () => {
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
+      const event = makeEvent({ kind: 9 });
+      const route = getContentEventRoute(event);
+      expect(route).toMatch(/^\/nevent1/);
     });
   });
 });
