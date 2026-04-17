@@ -8,6 +8,7 @@
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { buildFormTemplateTags, parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
   import { TrashIcon } from '$lib/components/icons';
+  import FormBuilderFieldRow from './FormBuilderFieldRow.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ existingEvent?: import('nostr-tools').NostrEvent }} */
@@ -47,7 +48,32 @@
    * @property {number | undefined} max
    * @property {string[]} selectOptions
    * @property {boolean} multiple
+   * @property {{ address: string, relay: string } | undefined} [vocab]
+   * @property {string} [output]
+   * @property {string} [vocabNaddrInput]
+   * @property {string} [vocabError]
    */
+
+  /**
+   * Encode a vocab {address, relay} back to an naddr for the UI.
+   * @param {{ address: string, relay: string } | undefined} vocab
+   * @returns {string}
+   */
+  function vocabToNaddr(vocab) {
+    if (!vocab?.address) return '';
+    const [kindStr, pubkey, ...rest] = vocab.address.split(':');
+    const identifier = rest.join(':');
+    try {
+      return nip19.naddrEncode({
+        kind: Number(kindStr),
+        pubkey,
+        identifier,
+        relays: vocab.relay ? [vocab.relay] : []
+      });
+    } catch {
+      return '';
+    }
+  }
 
   /** @type {FieldState[]} */
   let fields = $state(
@@ -61,7 +87,11 @@
       min: f.options?.min,
       max: f.options?.max,
       selectOptions: f.options?.options || [],
-      multiple: f.options?.multiple || false
+      multiple: f.options?.multiple || false,
+      vocab: f.vocab,
+      output: f.output,
+      vocabNaddrInput: vocabToNaddr(f.vocab),
+      vocabError: ''
     })) || []
   );
 
@@ -90,7 +120,11 @@
       min: undefined,
       max: undefined,
       selectOptions: [],
-      multiple: false
+      multiple: false,
+      vocab: undefined,
+      output: '',
+      vocabNaddrInput: '',
+      vocabError: ''
     });
   }
 
@@ -160,7 +194,9 @@
           ...((f.type === 'select' || f.type === 'radio') &&
             f.selectOptions.length > 0 && { options: f.selectOptions }),
           ...(f.multiple && { multiple: true })
-        }
+        },
+        ...(f.vocab?.address ? { vocab: f.vocab } : {}),
+        ...(f.output ? { output: f.output } : {})
       }));
 
       const tags = buildFormTemplateTags(dTag, formFields, {
@@ -273,122 +309,12 @@
           </div>
 
           <!-- Field config -->
-          <div class="flex-1 space-y-2">
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                class="input-bordered input input-sm flex-1 font-semibold"
-                placeholder={m.form_builder_field_name_placeholder()}
-                bind:value={field.label}
-                onchange={() => {
-                  if (!existing) {
-                    const existingIds = fields.filter((_, j) => j !== i).map((f) => f.id);
-                    field.id = generateFieldId(field.label, existingIds);
-                  }
-                }}
-              />
-              <select class="select-bordered select select-sm" bind:value={field.type}>
-                {#each FIELD_TYPES as t (t)}
-                  <option value={t}>{t}</option>
-                {/each}
-              </select>
-            </div>
-
-            <div class="flex items-center gap-3 text-sm">
-              <label class="label cursor-pointer gap-1">
-                <input type="checkbox" class="checkbox checkbox-xs" bind:checked={field.required} />
-                <span class="label-text text-xs">{m.form_builder_field_required()}</span>
-              </label>
-              <input
-                type="text"
-                class="input-bordered input input-xs flex-1"
-                placeholder={m.form_builder_field_placeholder_text()}
-                bind:value={field.placeholder}
-              />
-            </div>
-
-            {#if field.type === 'text' || field.type === 'textarea' || field.type === 'number'}
-              {@const isNumeric = field.type === 'number'}
-              <div class="flex items-center gap-2 text-sm">
-                <span
-                  class="text-xs text-base-content/50"
-                  title={isNumeric ? 'Minimum allowed value' : 'Minimum character length'}
-                  >{isNumeric ? m.form_builder_min_value() : m.form_builder_min_length()}</span
-                >
-                <input
-                  type="number"
-                  class="input-bordered input input-xs w-16"
-                  bind:value={field.min}
-                />
-                <span
-                  class="text-xs text-base-content/50"
-                  title={isNumeric ? 'Maximum allowed value' : 'Maximum character length'}
-                  >{isNumeric ? m.form_builder_max_value() : m.form_builder_max_length()}</span
-                >
-                <input
-                  type="number"
-                  class="input-bordered input input-xs w-16"
-                  bind:value={field.max}
-                />
-              </div>
-            {/if}
-
-            {#if field.type === 'select' || field.type === 'radio'}
-              <div class="rounded bg-base-200/50 p-2">
-                <div class="mb-1 text-xs text-base-content/50">
-                  {m.form_builder_field_options_label()}
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  {#each field.selectOptions as opt, j (opt + '-' + j)}
-                    <span class="badge gap-1 badge-outline">
-                      {opt}
-                      <button
-                        class="text-xs opacity-50 hover:opacity-100"
-                        onclick={() => field.selectOptions.splice(j, 1)}>×</button
-                      >
-                    </span>
-                  {/each}
-                  <span class="inline-flex items-center gap-0.5">
-                    <input
-                      type="text"
-                      class="input-bordered input input-xs w-24 border-dashed"
-                      placeholder={m.form_builder_field_option_new()}
-                      onkeydown={(e) => {
-                        if (e.key === 'Enter' && e.currentTarget.value) {
-                          field.selectOptions.push(e.currentTarget.value);
-                          e.currentTarget.value = '';
-                        }
-                      }}
-                    />
-                    <button
-                      class="btn px-1 btn-ghost btn-xs"
-                      title={m.form_builder_add_option()}
-                      onclick={(e) => {
-                        const input = /** @type {HTMLInputElement | null} */ (
-                          e.currentTarget.previousElementSibling
-                        );
-                        if (input?.value) {
-                          field.selectOptions.push(input.value);
-                          input.value = '';
-                          input.focus();
-                        }
-                      }}>+</button
-                    >
-                  </span>
-                </div>
-                {#if field.type === 'select'}
-                  <label class="label mt-1 cursor-pointer justify-start gap-1">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-xs"
-                      bind:checked={field.multiple}
-                    />
-                    <span class="label-text text-xs">{m.form_builder_field_allow_multiple()}</span>
-                  </label>
-                {/if}
-              </div>
-            {/if}
-          </div>
+          <FormBuilderFieldRow
+            bind:field={fields[i]}
+            {fields}
+            fieldIndex={i}
+            existing={!!existing}
+          />
 
           <!-- Delete -->
           <button
