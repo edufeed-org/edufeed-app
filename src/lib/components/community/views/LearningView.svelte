@@ -21,10 +21,25 @@
   } from '$lib/helpers/educational/searchQueryBuilder.js';
   import { SearchIcon } from '$lib/components/icons';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getPreferredFormForKind } from '$lib/helpers/communityRelays.js';
+  import { formCoordinateToNaddr } from '$lib/helpers/forms.js';
+  import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{ communityPubkey: string, communityProfile?: any }} */
-  let { communityPubkey, communityProfile: _communityProfile = null } = $props();
+  /** @type {{ communityPubkey: string, communityProfile?: any, communikeyEvent?: any }} */
+  let {
+    communityPubkey,
+    communityProfile: _communityProfile = null,
+    communikeyEvent = null
+  } = $props();
+
+  // Phase C: derive a "New resource (form)" CTA from the community's preferred form.
+  let preferredFormNaddr = $derived.by(() => {
+    const pref = getPreferredFormForKind(communikeyEvent, 30142);
+    if (!pref) return null;
+    const relays = pref.relay ? [pref.relay] : [];
+    return formCoordinateToNaddr(pref.address, relays);
+  });
 
   const getAllowedAuthors = getContext('allowedAuthors');
 
@@ -221,8 +236,17 @@
   });
 </script>
 
-<!-- Search bar (always visible) -->
-<div class="flex items-center gap-2 px-4 pt-4">
+<!-- Search bar + preferred-form CTA (always visible) -->
+<div class="flex flex-wrap items-center gap-2 px-4 pt-4">
+  {#if preferredFormNaddr}
+    <a
+      class="btn btn-sm btn-primary"
+      href={resolve(`/forms/${preferredFormNaddr}/create-resource`)}
+      data-testid="community-new-resource-form-cta"
+    >
+      + {m.community_learning_new_resource_form()}
+    </a>
+  {/if}
   <div class="relative flex-1">
     <SearchIcon class_="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40" />
     <input

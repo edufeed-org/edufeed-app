@@ -107,6 +107,67 @@ describe('buildCommunityDefinitionTags', () => {
       expect(aTags).toHaveLength(0);
     });
 
+    test('emits form-marked a-tag with relay hint when formRef and formRefRelay are set', () => {
+      const data = {
+        ...baseCommunityData,
+        contentTypes: {
+          calendar: {
+            name: 'Calendar',
+            enabled: true,
+            badges: { read: null, write: null },
+            relays: [],
+            formRef: '30168:abc123:my-form',
+            formRefRelay: 'wss://forms.example'
+          }
+        }
+      };
+
+      const tags = buildCommunityDefinitionTags(data, { communityPubkey });
+
+      const formMarked = tags.filter((t) => t[0] === 'a' && t[3] === 'form');
+      expect(formMarked).toHaveLength(1);
+      expect(formMarked[0]).toEqual(['a', '30168:abc123:my-form', 'wss://forms.example', 'form']);
+    });
+
+    test('form-marked a-tag falls back to empty relay hint when formRefRelay is absent', () => {
+      const data = {
+        ...baseCommunityData,
+        contentTypes: {
+          calendar: {
+            name: 'Calendar',
+            enabled: true,
+            badges: { read: null, write: null },
+            relays: [],
+            formRef: '30168:abc123:my-form'
+          }
+        }
+      };
+
+      const tags = buildCommunityDefinitionTags(data, { communityPubkey });
+      const formMarked = tags.filter((t) => t[0] === 'a' && t[3] === 'form');
+      expect(formMarked).toHaveLength(1);
+      expect(formMarked[0]).toEqual(['a', '30168:abc123:my-form', '', 'form']);
+    });
+
+    test('does not emit form-marked a-tag when formRef is empty', () => {
+      const data = {
+        ...baseCommunityData,
+        contentTypes: {
+          calendar: {
+            name: 'Calendar',
+            enabled: true,
+            badges: { read: null, write: null },
+            relays: [],
+            formRef: ''
+          }
+        }
+      };
+
+      const tags = buildCommunityDefinitionTags(data, { communityPubkey });
+      const formMarked = tags.filter((t) => t[0] === 'a' && t[3] === 'form');
+      expect(formMarked).toHaveLength(0);
+    });
+
     test('emits profile list a-tag only for sections with formRef', () => {
       const data = {
         ...baseCommunityData,
@@ -130,9 +191,9 @@ describe('buildCommunityDefinitionTags', () => {
 
       const tags = buildCommunityDefinitionTags(data, { communityPubkey });
 
-      const aTags = tags.filter((t) => t[0] === 'a');
-      expect(aTags).toHaveLength(1);
-      expect(aTags[0][1]).toBe(`30000:${communityPubkey}:Calendar`);
+      const profileListATags = tags.filter((t) => t[0] === 'a' && t[1]?.startsWith('30000:'));
+      expect(profileListATags).toHaveLength(1);
+      expect(profileListATags[0][1]).toBe(`30000:${communityPubkey}:Calendar`);
     });
   });
 

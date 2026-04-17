@@ -886,6 +886,7 @@
   "community_learning_empty_title": "No learning resources yet",
   "community_learning_empty_description": "Educational resources shared with this community will appear here.",
   "community_learning_count": "{count} resources",
+  "community_learning_new_resource_form": "New resource (form)",
   "community_boards_title": "Boards",
   "community_boards_description": "Kanban boards shared with this community",
   "community_boards_loading": "Loading boards...",

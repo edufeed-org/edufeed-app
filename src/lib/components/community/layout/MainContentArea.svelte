@@ -88,7 +88,7 @@
           {communityProfile}
         />
       {:else if selectedContentType === 'learning'}
-        <LearningView communityPubkey={selectedCommunityId} {communityProfile} />
+        <LearningView communityPubkey={selectedCommunityId} {communityProfile} {communikeyEvent} />
       {:else if selectedContentType === 'boards'}
         <BoardsView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'articles'}

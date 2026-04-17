@@ -842,6 +842,7 @@
   "community_learning_empty_title": "Noch keine Lernressourcen",
   "community_learning_empty_description": "Bildungsressourcen, die mit dieser Community geteilt werden, erscheinen hier.",
   "community_learning_count": "{count} Ressourcen",
+  "community_learning_new_resource_form": "Neue Ressource (Formular)",
   "community_boards_title": "Boards",
   "community_boards_description": "Kanban-Boards, die mit dieser Community geteilt wurden",
   "community_boards_loading": "Boards werden geladen...",
