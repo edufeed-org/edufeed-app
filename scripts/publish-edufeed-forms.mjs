@@ -1,14 +1,33 @@
 #!/usr/bin/env node
 /**
  * Publish edufeed default form templates (kind 30168).
- * Depends on SCHEME_NADDR_SCHULFAECHER / SCHEME_NADDR_HCRT env vars
- * populated by running `publish:vocabs` first.
+ *
+ * Reads form definitions from `scripts/data/edufeed-forms.json`. Each field
+ * may carry a `vocabRef` (the d-tag of a scheme published via publish:vocabs).
+ * Scheme naddrs are resolved from env vars of the form
+ *   SCHEME_NADDR_<UPPER_SNAKE>
+ * where dashes in the d-tag become underscores (e.g. `new-lrt` →
+ * `SCHEME_NADDR_NEW_LRT`).
+ *
+ * Env:
+ *   EDUFEED_PUBLISHER_NSEC        hex secret key
+ *   EDUFEED_PUBLISH_RELAYS        comma-separated relay URLs
+ *   SCHEME_NADDR_<UPPER_SNAKE>    per-vocab naddr (paste from publish:vocabs)
+ *
+ * Usage:
+ *   pnpm run publish:forms
  */
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { hexToBytes } from 'nostr-tools/utils';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { nip19 } from 'nostr-tools';
 import { RelayPool } from 'applesauce-relay';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FORMS_DATA_PATH = resolve(__dirname, 'data/edufeed-forms.json');
 
 function req(name) {
   const v = process.env[name];
@@ -23,6 +42,10 @@ function sign(template, skHex) {
   );
 }
 
+function vocabEnvName(d) {
+  return `SCHEME_NADDR_${d.toUpperCase().replace(/-/g, '_')}`;
+}
+
 function naddrToCoord(naddr) {
   const { type, data } = nip19.decode(naddr);
   if (type !== 'naddr') throw new Error('expected naddr');
@@ -32,63 +55,36 @@ function naddrToCoord(naddr) {
   };
 }
 
-function buildAmbBasicForm({ schulfaecherNaddr, hcrtNaddr }) {
-  const about = naddrToCoord(schulfaecherNaddr);
-  const lrt = naddrToCoord(hcrtNaddr);
-
-  const fields = [
-    { id: 'name', type: 'text', label: 'Titel', required: true, output: 'amb:name' },
-    {
-      id: 'description',
-      type: 'textarea',
-      label: 'Beschreibung',
-      required: true,
-      output: 'amb:description'
-    },
-    {
-      id: 'about',
-      type: 'select',
-      label: 'Fach',
-      required: true,
-      multiple: true,
-      vocab: about,
-      output: 'amb:about'
-    },
-    {
-      id: 'learningResourceType',
-      type: 'select',
-      label: 'Ressourcentyp',
-      required: true,
-      vocab: lrt,
-      output: 'amb:learningResourceType'
-    },
-    { id: 'inLanguage', type: 'text', label: 'Sprache (BCP47)', output: 'amb:inLanguage' },
-    {
-      id: 'license',
-      type: 'text',
-      label: 'Lizenz-URI',
-      required: true,
-      output: 'amb:license'
-    }
+/**
+ * Emit tags for a single form field, including optional vocab + output tags.
+ */
+function emitFieldTags(field, vocabCoord) {
+  const options = {};
+  if (field.required) options.required = true;
+  if (field.multiple) options.multiple = true;
+  const tags = [
+    ['field', field.id, field.type, field.label, field.defaultValue || '', JSON.stringify(options)]
   ];
+  if (vocabCoord) tags.push(['field-vocab', field.id, 'a', vocabCoord.address, vocabCoord.relay]);
+  if (field.output) tags.push(['field-output', field.id, field.output]);
+  return tags;
+}
 
+/**
+ * Build a kind-30168 form template from a form definition, resolving
+ * each field's vocabRef via env.
+ */
+function buildFormTemplate(form) {
   /** @type {string[][]} */
   const tags = [
-    ['d', 'amb-basic'],
-    ['name', 'AMB Basic (Edufeed default)'],
-    [
-      'description',
-      'Minimale AMB-Ressource — Titel, Beschreibung, Fach, Ressourcentyp, Sprache, Lizenz.'
-    ]
+    ['d', form.d],
+    ['name', form.name]
   ];
+  if (form.description) tags.push(['description', form.description]);
 
-  for (const f of fields) {
-    const options = {};
-    if (f.required) options.required = true;
-    if (f.multiple) options.multiple = true;
-    tags.push(['field', f.id, f.type, f.label, '', JSON.stringify(options)]);
-    if (f.vocab) tags.push(['field-vocab', f.id, 'a', f.vocab.address, f.vocab.relay]);
-    if (f.output) tags.push(['field-output', f.id, f.output]);
+  for (const field of form.fields) {
+    const vocabCoord = field.vocabRef ? naddrToCoord(req(vocabEnvName(field.vocabRef))) : undefined;
+    for (const t of emitFieldTags(field, vocabCoord)) tags.push(t);
   }
 
   return { kind: 30168, tags, content: '' };
@@ -118,22 +114,25 @@ async function main() {
   const pubkey = getPublicKey(hexToBytes(skHex));
   const pool = new RelayPool();
 
-  const template = buildAmbBasicForm({
-    schulfaecherNaddr: req('SCHEME_NADDR_SCHULFAECHER'),
-    hcrtNaddr: req('SCHEME_NADDR_HCRT')
-  });
-  const signed = sign(template, skHex);
+  const { forms } = JSON.parse(readFileSync(FORMS_DATA_PATH, 'utf8'));
 
-  console.log('publishing amb-basic to', relays.join(', '));
-  await publishAll(pool, relays, [signed]);
+  for (const form of forms) {
+    console.log(`\n=== ${form.d} ===`);
+    const template = buildFormTemplate(form);
+    const signed = sign(template, skHex);
 
-  const naddr = nip19.naddrEncode({
-    kind: 30168,
-    pubkey,
-    identifier: 'amb-basic',
-    relays: relays.slice(0, 2)
-  });
-  console.log('form naddr:', naddr);
+    const naddr = nip19.naddrEncode({
+      kind: 30168,
+      pubkey,
+      identifier: form.d,
+      relays: relays.slice(0, 2)
+    });
+    console.log(`  naddr: ${naddr}`);
+    console.log(`  publishing to ${relays.length} relays …`);
+    await publishAll(pool, relays, [signed]);
+  }
+
+  console.log('\nDone.');
   process.exit(0);
 }
 

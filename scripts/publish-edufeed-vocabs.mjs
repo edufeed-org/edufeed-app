@@ -1,12 +1,24 @@
 #!/usr/bin/env node
 /**
  * Publish edufeed default vocabularies as kind-39737 events.
- * Reads EDUFEED_PUBLISHER_NSEC (hex) and EDUFEED_PUBLISH_RELAYS (comma list) from env.
+ *
+ * Reads vocab definitions from `scripts/data/edufeed-vocabs.json` — two
+ * source types are supported:
+ *   - `skohub`: fetched + parsed via nostr-vocab-skos-import
+ *   - `inline`: built directly from embedded concept list (for small enums
+ *     without a SkoHub source, e.g. interactivityType, conditionsOfAccess)
+ *
+ * Env:
+ *   EDUFEED_PUBLISHER_NSEC    hex secret key
+ *   EDUFEED_PUBLISH_RELAYS    comma-separated relay URLs
  *
  * Usage:
  *   pnpm run publish:vocabs
  */
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { hexToBytes } from 'nostr-tools/utils';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { nip19 } from 'nostr-tools';
@@ -15,10 +27,8 @@ import { RelayPool } from 'applesauce-relay';
 import { fetchSkohubVocab, parseSkos, convertToDrafts } from 'nostr-vocab-skos-import';
 import { buildConceptScheme, buildConcept } from 'nostr-vocab-core';
 
-const VOCABS = [
-  { d: 'schulfaecher', url: 'https://w3id.org/kim/schulfaecher/' },
-  { d: 'hcrt', url: 'https://w3id.org/kim/hcrt/scheme' }
-];
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const VOCAB_DATA_PATH = resolve(__dirname, 'data/edufeed-vocabs.json');
 
 function requireEnv(name) {
   const v = process.env[name];
@@ -61,6 +71,52 @@ function applyRelayHint(drafts, relayHint) {
   };
 }
 
+/**
+ * Build a skohub-sourced vocab into signed scheme + concept events.
+ */
+async function buildSkohubDrafts(scheme, pubkey, relayHint) {
+  const raw = await fetchSkohubVocab(scheme.source.url);
+  const parsed = await parseSkos(raw);
+  const draftsRaw = convertToDrafts(parsed, pubkey);
+
+  // Override the d slug with our canonical identifier + rewrite scheme refs in concepts
+  const originalSchemeAddress = `39737:${pubkey}:${draftsRaw.scheme.d}`;
+  const canonicalSchemeAddress = `39737:${pubkey}:${scheme.d}`;
+  draftsRaw.scheme.d = scheme.d;
+  const rewriteRef = (r) =>
+    r && r.address === originalSchemeAddress ? { ...r, address: canonicalSchemeAddress } : r;
+  draftsRaw.concepts = draftsRaw.concepts.map((c) => ({
+    ...c,
+    inScheme: rewriteRef(c.inScheme),
+    topConceptOf: rewriteRef(c.topConceptOf)
+  }));
+  return applyRelayHint(draftsRaw, relayHint);
+}
+
+/**
+ * Build an inline vocab into scheme + concept drafts (no network, no SKOS parse).
+ */
+function buildInlineDrafts(scheme, pubkey, relayHint) {
+  const schemeAddress = `39737:${pubkey}:${scheme.d}`;
+  const inScheme = { address: schemeAddress, relay: relayHint };
+  const concepts = (scheme.source.concepts || []).map((c) => ({
+    d: c.d,
+    prefLabels: c.prefLabels || [],
+    altLabels: c.altLabels || [],
+    definitions: c.definitions || [],
+    externalUri: c.externalUri,
+    inScheme
+  }));
+  return {
+    scheme: {
+      d: scheme.d,
+      prefLabels: scheme.source.prefLabels || [{ value: scheme.d, lang: 'en' }],
+      descriptions: scheme.source.descriptions || []
+    },
+    concepts
+  };
+}
+
 async function main() {
   const skHex = requireEnv('EDUFEED_PUBLISHER_NSEC');
   const relays = requireEnv('EDUFEED_PUBLISH_RELAYS')
@@ -70,23 +126,14 @@ async function main() {
   const pubkey = getPublicKey(hexToBytes(skHex));
   const pool = new RelayPool();
 
-  for (const v of VOCABS) {
-    console.log(`\n=== ${v.d} — fetching ${v.url} ===`);
-    const raw = await fetchSkohubVocab(v.url);
-    const parsed = await parseSkos(raw);
-    const draftsRaw = convertToDrafts(parsed, pubkey);
-    // Override the d slug with our canonical identifier + rewrite scheme references in concepts
-    const originalSchemeAddress = `39737:${pubkey}:${draftsRaw.scheme.d}`;
-    const canonicalSchemeAddress = `39737:${pubkey}:${v.d}`;
-    draftsRaw.scheme.d = v.d;
-    const rewriteRef = (r) =>
-      r && r.address === originalSchemeAddress ? { ...r, address: canonicalSchemeAddress } : r;
-    draftsRaw.concepts = draftsRaw.concepts.map((c) => ({
-      ...c,
-      inScheme: rewriteRef(c.inScheme),
-      topConceptOf: rewriteRef(c.topConceptOf)
-    }));
-    const drafts = applyRelayHint(draftsRaw, relays[0]);
+  const { schemes } = JSON.parse(readFileSync(VOCAB_DATA_PATH, 'utf8'));
+
+  for (const scheme of schemes) {
+    console.log(`\n=== ${scheme.d} (${scheme.source.type}) ===`);
+    const drafts =
+      scheme.source.type === 'skohub'
+        ? await buildSkohubDrafts(scheme, pubkey, relays[0])
+        : buildInlineDrafts(scheme, pubkey, relays[0]);
 
     const schemeSigned = signEvent(buildConceptScheme(drafts.scheme), skHex);
     const conceptSigneds = drafts.concepts.map((c) => signEvent(buildConcept(c), skHex));
@@ -94,10 +141,10 @@ async function main() {
     const naddr = nip19.naddrEncode({
       kind: 39737,
       pubkey,
-      identifier: v.d,
+      identifier: scheme.d,
       relays: relays.slice(0, 2)
     });
-    console.log(`  published scheme naddr: ${naddr}`);
+    console.log(`  naddr: ${naddr}`);
     console.log(`  publishing ${conceptSigneds.length + 1} events to ${relays.length} relays …`);
     await publishAll(pool, relays, [schemeSigned, ...conceptSigneds]);
   }
