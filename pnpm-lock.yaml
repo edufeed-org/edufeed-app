@@ -25,6 +25,9 @@ importers:
       nostr-tools:
         specifier: ^2.16.2
         version: 2.23.0(typescript@5.9.3)
+      nostr-vocab-core:
+        specifier: git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git#v0.1.0
+        version: git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git#e45c6907dea93c07b87103d5314d8cd7bb1c0b06
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -2882,6 +2885,10 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  nostr-vocab-core@git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git#e45c6907dea93c07b87103d5314d8cd7bb1c0b06:
+    resolution: {commit: e45c6907dea93c07b87103d5314d8cd7bb1c0b06, repo: ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git, type: git}
+    version: 0.1.0
 
   nostr-wasm@0.1.0:
     resolution: {integrity: sha512-78BTryCLcLYv96ONU8Ws3Q1JzjlAt+43pWQhIl86xZmWeegYCNLPml7yQ+gG3vR6V5h4XGj+TxO+SS5dsThQIA==}
@@ -6629,6 +6636,8 @@ snapshots:
       nostr-wasm: 0.1.0
     optionalDependencies:
       typescript: 5.9.3
+
+  nostr-vocab-core@git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git#e45c6907dea93c07b87103d5314d8cd7bb1c0b06: {}
 
   nostr-wasm@0.1.0: {}
 
