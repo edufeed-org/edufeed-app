@@ -15,7 +15,7 @@
   const getScheme = useConceptScheme(() => field.vocab);
   const getConcepts = useSchemeConcepts(
     () => field.vocab?.address,
-    () => getAllLookupRelays()
+    () => [field.vocab?.relay, ...getAllLookupRelays()].filter(Boolean)
   );
 
   const scheme = $derived(getScheme());
@@ -82,9 +82,6 @@
 </script>
 
 <div class="form-control w-full">
-  <div class="label">
-    <span class="label-text">{field.label}{field.options?.required ? ' *' : ''}</span>
-  </div>
   {#if !scheme}
     <div class="text-sm opacity-70">Lade Vokabular …</div>
   {:else if concepts.length === 0}

@@ -108,10 +108,6 @@
   {:else if !manager.active}
     <div class="alert alert-warning">Bitte anmelden, um eine Ressource anzulegen.</div>
   {:else}
-    <h1 class="mb-4 text-2xl font-bold">{parsed.name || 'Neue Ressource'}</h1>
-    {#if parsed.description}
-      <p class="mb-4 opacity-80">{parsed.description}</p>
-    {/if}
     <FormRenderer {formEvent} onsubmit={handleSubmit} />
     {#if submitting}
       <p class="mt-4">Wird veröffentlicht …</p>

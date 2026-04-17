@@ -75,8 +75,17 @@ async function main() {
     const raw = await fetchSkohubVocab(v.url);
     const parsed = await parseSkos(raw);
     const draftsRaw = convertToDrafts(parsed, pubkey);
-    // Override the d slug with our canonical identifier + populate relay hints
+    // Override the d slug with our canonical identifier + rewrite scheme references in concepts
+    const originalSchemeAddress = `39737:${pubkey}:${draftsRaw.scheme.d}`;
+    const canonicalSchemeAddress = `39737:${pubkey}:${v.d}`;
     draftsRaw.scheme.d = v.d;
+    const rewriteRef = (r) =>
+      r && r.address === originalSchemeAddress ? { ...r, address: canonicalSchemeAddress } : r;
+    draftsRaw.concepts = draftsRaw.concepts.map((c) => ({
+      ...c,
+      inScheme: rewriteRef(c.inScheme),
+      topConceptOf: rewriteRef(c.topConceptOf)
+    }));
     const drafts = applyRelayHint(draftsRaw, relays[0]);
 
     const schemeSigned = signEvent(buildConceptScheme(drafts.scheme), skHex);
