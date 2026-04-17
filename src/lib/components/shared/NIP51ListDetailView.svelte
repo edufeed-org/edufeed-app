@@ -43,7 +43,23 @@
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ event: import('nostr-tools').NostrEvent }} */
-  let { event } = $props();
+  let { event: initialEvent } = $props();
+
+  // Subscribe to eventStore for the latest version of this replaceable event
+  // so mutations (reorder, remove, edit) are immediately reactive.
+  /** @type {import('nostr-tools').NostrEvent | null} */
+  let liveEvent = $state(null);
+  $effect(() => {
+    const dTag = initialEvent.tags.find((t) => t[0] === 'd')?.[1] || '';
+    const sub = eventStore
+      .replaceable(initialEvent.kind, initialEvent.pubkey, dTag)
+      .subscribe((evt) => {
+        if (evt) liveEvent = evt;
+      });
+    return () => sub.unsubscribe();
+  });
+
+  let event = $derived(liveEvent || initialEvent);
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
@@ -206,7 +222,12 @@
     return result;
   });
 
-  const getProfiles = useProfileMap(() => resolvedEvents.map((e) => e.pubkey));
+  // Optimistic reorder: swap items instantly before async sign+publish completes
+  /** @type {import('nostr-tools').NostrEvent[] | null} */
+  let optimisticEvents = $state(null);
+  let displayEvents = $derived(optimisticEvents || resolvedEvents);
+
+  const getProfiles = useProfileMap(() => displayEvents.map((e) => e.pubkey));
 
   /** @param {import('nostr-tools').NostrEvent} evt */
   function navigateToEvent(evt) {
@@ -216,23 +237,35 @@
 
   /** @param {number} fromIndex @param {number} toIndex */
   async function handleReorder(fromIndex, toIndex) {
+    const swapped = [...displayEvents];
+    [swapped[fromIndex], swapped[toIndex]] = [swapped[toIndex], swapped[fromIndex]];
+    optimisticEvents = swapped;
     try {
       await reorderBookmarkSetItem(event, fromIndex, toIndex);
-      showToast(m.bookmark_set_reordered(), 'success');
     } catch (err) {
       console.error('Failed to reorder:', err);
       showToast(m.bookmark_toast_error(), 'error');
     }
+    optimisticEvents = null;
   }
 
-  /** @param {import('nostr-tools').NostrEvent} itemEvent */
-  async function handleRemoveItem(itemEvent) {
+  // Item removal confirmation
+  /** @type {import('nostr-tools').NostrEvent | null} */
+  let itemToRemove = $state(null);
+  let isRemovingItem = $state(false);
+
+  async function confirmRemoveItem() {
+    if (!itemToRemove) return;
+    isRemovingItem = true;
     try {
-      await removeItemFromList(event, itemEvent);
+      await removeItemFromList(event, itemToRemove);
       showToast(m.bookmark_set_item_removed(), 'info');
     } catch (err) {
       console.error('Failed to remove item:', err);
       showToast(m.bookmark_toast_error(), 'error');
+    } finally {
+      isRemovingItem = false;
+      itemToRemove = null;
     }
   }
 
@@ -330,14 +363,14 @@
     <div class="space-y-6">
       <!-- Events section -->
       {#if hasEvents}
-        {#if resolvedEvents.length > 0}
+        {#if displayEvents.length > 0}
           {@const profiles = getProfiles()}
           <section>
             <h2 class="mb-3 text-sm font-semibold text-base-content/50 uppercase">
               {m.list_detail_events_section()}
             </h2>
             <div class="space-y-3">
-              {#each resolvedEvents as itemEvent, i (itemEvent.id)}
+              {#each displayEvents as itemEvent, i (itemEvent.id)}
                 {@const cardData = getFeedCardData(itemEvent)}
                 {@const authorProfile = profiles.get(itemEvent.pubkey)}
                 <div>
@@ -371,7 +404,7 @@
                       <button
                         class="btn text-base-content/50 btn-ghost btn-xs hover:text-base-content"
                         onclick={() => handleReorder(i, i + 1)}
-                        disabled={i === resolvedEvents.length - 1}
+                        disabled={i === displayEvents.length - 1}
                         title={m.bookmark_set_move_down()}
                       >
                         <ChevronDownIcon class_="w-4 h-4" />
@@ -379,7 +412,7 @@
                       <div class="flex-1"></div>
                       <button
                         class="btn text-base-content/50 btn-ghost btn-xs hover:text-error"
-                        onclick={() => handleRemoveItem(itemEvent)}
+                        onclick={() => (itemToRemove = itemEvent)}
                         title={m.bookmark_set_remove_item()}
                       >
                         <TrashIcon class="h-4 w-4" />
@@ -549,6 +582,7 @@
 {/if}
 
 <!-- Delete Confirmation -->
+<!-- Delete List Confirmation -->
 <DeleteConfirmModal
   open={showDeleteConfirm}
   title={m.bookmark_set_delete_title()}
@@ -556,4 +590,14 @@
   {isDeleting}
   onconfirm={handleDelete}
   oncancel={() => (showDeleteConfirm = false)}
+/>
+
+<!-- Remove Item Confirmation -->
+<DeleteConfirmModal
+  open={itemToRemove !== null}
+  title={m.bookmark_set_remove_item()}
+  itemName={itemToRemove ? getFeedCardData(itemToRemove).title || 'item' : ''}
+  isDeleting={isRemovingItem}
+  onconfirm={confirmRemoveItem}
+  oncancel={() => (itemToRemove = null)}
 />

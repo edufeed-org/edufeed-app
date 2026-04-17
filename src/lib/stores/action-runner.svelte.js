@@ -16,7 +16,7 @@ import { publishEvent } from '$lib/services/publish-service.js';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-const factory = createAppEventFactory({ signer: manager.signer });
+export const factory = createAppEventFactory({ signer: manager.signer });
 
 /**
  * Publish wrapper adapting our publishEvent to applesauce's PublishMethod signature.

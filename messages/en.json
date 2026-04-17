@@ -1849,6 +1849,7 @@
   "bookmark_toast_removed": "Bookmark removed",
   "bookmark_toast_error": "Failed to bookmark",
   "bookmark_toast_login_required": "Sign in to bookmark",
+  "bookmark_toast_awaiting_signer": "Awaiting signer approval...",
   "bookmark_dropdown_default_list": "Bookmarks",
   "bookmark_dropdown_new_set": "New bookmark set...",
   "bookmark_dropdown_new_set_placeholder": "Set name",

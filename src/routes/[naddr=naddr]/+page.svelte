@@ -4,6 +4,8 @@
   import AMBResourceView from '$lib/components/educational/AMBResourceView.svelte';
   import KanbanBoardView from '$lib/components/kanban/KanbanBoardView.svelte';
   import WikiView from '$lib/components/wiki/WikiView.svelte';
+  import BookmarkSetView from '$lib/components/bookmarks/BookmarkSetView.svelte';
+  import NIP51ListDetailView from '$lib/components/shared/NIP51ListDetailView.svelte';
   import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
   import BookmarkItem from '$lib/components/bookmarks/BookmarkItem.svelte';
   import { ExternalLinkIcon } from '$lib/components/icons';
@@ -45,6 +47,14 @@
       };
     }
 
+    // Bookmark set (kind 30003)
+    if (data.kind === 30003) {
+      return {
+        type: 'bookmarkSet',
+        event: data.event
+      };
+    }
+
     // Kanban board (kind 30301)
     if (data.kind === 30301) {
       return {
@@ -67,6 +77,15 @@
       const url = rawUrl?.startsWith('http') ? rawUrl : rawUrl ? `https://${rawUrl}` : null;
       const title = data.event.tags?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1];
       return { type: 'bookmark', event: data.event, url, title };
+    }
+
+    // NIP-51 lists (all kinds not already handled above)
+    const nip51Kinds = [10000, 10001, 10002, 10003, 10007, 10015, 30000, 30002, 30004, 30015];
+    if (nip51Kinds.includes(data.kind)) {
+      return {
+        type: 'nip51list',
+        event: data.event
+      };
     }
 
     // Unsupported kind
@@ -93,6 +112,16 @@
       const wikiTitle =
         getTagValue(displayData.event, 'title') || getTagValue(displayData.event, 'd') || 'Wiki';
       return `${wikiTitle} - ${runtimeConfig.appName}`;
+    } else if (displayData?.type === 'bookmarkSet') {
+      const setTitle =
+        getTagValue(displayData.event, 'title') ||
+        getTagValue(displayData.event, 'd') ||
+        'Bookmark Set';
+      return `${setTitle} - ${runtimeConfig.appName}`;
+    } else if (displayData?.type === 'nip51list') {
+      const listTitle =
+        getTagValue(displayData.event, 'title') || getTagValue(displayData.event, 'd') || 'List';
+      return `${listTitle} - ${runtimeConfig.appName}`;
     } else if (displayData?.type === 'bookmark') {
       return `${displayData.title || 'Bookmark'} - ${runtimeConfig.appName}`;
     }
@@ -118,6 +147,12 @@
   {:else if displayData?.type === 'wiki'}
     <!-- Wiki Article -->
     <WikiView event={displayData.event} />
+  {:else if displayData?.type === 'bookmarkSet'}
+    <!-- Bookmark Set Detail -->
+    <BookmarkSetView event={displayData.event} />
+  {:else if displayData?.type === 'nip51list'}
+    <!-- NIP-51 List Detail -->
+    <NIP51ListDetailView event={displayData.event} />
   {:else if displayData?.type === 'bookmark'}
     <!-- Social Bookmark -->
     {#if displayData.url && !readerFailed}

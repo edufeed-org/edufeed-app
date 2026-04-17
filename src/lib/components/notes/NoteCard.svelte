@@ -114,10 +114,10 @@
   </div>
 
   <!-- Actions -->
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     class="flex flex-wrap items-center gap-1 border-t border-base-300 pt-3"
     onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
   >
     <button
       class="btn gap-1 btn-ghost btn-sm {showComments ? 'text-primary' : ''}"

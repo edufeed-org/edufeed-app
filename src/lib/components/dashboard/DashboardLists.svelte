@@ -24,7 +24,8 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ExpandableListCard from './ExpandableListCard.svelte';
-  import { BookmarkIcon } from '$lib/components/icons';
+  import { BookmarkIcon, ChevronRightIcon } from '$lib/components/icons';
+  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
@@ -386,6 +387,19 @@
   </div>
 {/snippet}
 
+{#snippet detailLink(/** @type {import('nostr-tools').NostrEvent} */ event)}
+  {@const naddr = encodeEventToNaddr(event)}
+  {#if naddr}
+    <a
+      href={resolve(`/${naddr}`)}
+      class="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline"
+    >
+      {m.list_view_details()}
+      <ChevronRightIcon class_="h-3.5 w-3.5" />
+    </a>
+  {/if}
+{/snippet}
+
 <section data-testid="dashboard-lists">
   <h2 class="mb-4 text-lg font-bold">{m.dashboard_lists_title()}</h2>
 
@@ -415,6 +429,7 @@
           {#if resolvedEvents.length > 0}
             {@render eventGrid()}
           {/if}
+          {@render detailLink(bookmarkList)}
         </ExpandableListCard>
       {/if}
 
@@ -431,6 +446,7 @@
           {#if resolvedEvents.length > 0}
             {@render eventGrid()}
           {/if}
+          {@render detailLink(set)}
         </ExpandableListCard>
       {/each}
 
@@ -446,6 +462,7 @@
           {#if resolvedEvents.length > 0}
             {@render eventGrid()}
           {/if}
+          {@render detailLink(pinnedList)}
         </ExpandableListCard>
       {/if}
 
@@ -502,6 +519,7 @@
               </div>
             {/if}
           </div>
+          {@render detailLink(muteList)}
         </ExpandableListCard>
       {/if}
 
@@ -516,6 +534,7 @@
         >
           {#snippet icon()}<span class="text-lg">💡</span>{/snippet}
           {@render hashtagPills(tags)}
+          {@render detailLink(interestList)}
         </ExpandableListCard>
       {/if}
 
@@ -531,6 +550,7 @@
         >
           {#snippet icon()}<span class="text-lg">💡</span>{/snippet}
           {@render hashtagPills(tags)}
+          {@render detailLink(set)}
         </ExpandableListCard>
       {/each}
 
@@ -547,6 +567,7 @@
         >
           {#snippet icon()}<span class="text-lg">👥</span>{/snippet}
           {@render profileChips(pointers)}
+          {@render detailLink(set)}
         </ExpandableListCard>
       {/each}
 
@@ -562,6 +583,7 @@
         >
           {#snippet icon()}<span class="text-lg">🔌</span>{/snippet}
           {@render relayListWithMarkers(entries)}
+          {@render detailLink(relayList)}
         </ExpandableListCard>
       {/if}
 
@@ -578,6 +600,7 @@
         >
           {#snippet icon()}<span class="text-lg">🔌</span>{/snippet}
           {@render relayUrlList(relays)}
+          {@render detailLink(set)}
         </ExpandableListCard>
       {/each}
 
@@ -593,6 +616,7 @@
         >
           {#snippet icon()}<span class="text-lg">🔍</span>{/snippet}
           {@render relayUrlList(relays)}
+          {@render detailLink(searchRelayList)}
         </ExpandableListCard>
       {/if}
 
@@ -609,6 +633,7 @@
           {#if resolvedEvents.length > 0}
             {@render eventGrid()}
           {/if}
+          {@render detailLink(set)}
         </ExpandableListCard>
       {/each}
     </div>

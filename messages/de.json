@@ -1849,6 +1849,7 @@
   "bookmark_toast_removed": "Lesezeichen entfernt",
   "bookmark_toast_error": "Lesezeichen fehlgeschlagen",
   "bookmark_toast_login_required": "Zum Setzen von Lesezeichen anmelden",
+  "bookmark_toast_awaiting_signer": "Warte auf Signer-Bestätigung...",
   "bookmark_dropdown_default_list": "Lesezeichen",
   "bookmark_dropdown_new_set": "Neue Lesezeichenliste...",
   "bookmark_dropdown_new_set_placeholder": "Name der Liste",

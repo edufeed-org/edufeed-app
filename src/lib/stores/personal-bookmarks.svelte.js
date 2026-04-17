@@ -3,10 +3,13 @@
  * Tracks the active user's kind 10003 bookmark list and kind 30003 bookmark sets.
  * Provides isBookmarked / isBookmarkedAnywhere / bookmark / unbookmark helpers.
  *
- * Uses actionRunner.exec() for optimistic UI — EventStore updates instantly
- * before relay publishing completes.
+ * Optimistic UI: bookmark/unbookmark set an override synchronously via
+ * createOptimisticState() before any async signing/publishing, so query
+ * functions return the target state instantly. The override is cleared
+ * once the async work completes (eventStore then holds the real signed event).
  */
 import { isEventInList } from 'applesauce-common/helpers';
+import { createOptimisticState } from '$lib/helpers/optimistic-action.js';
 import { setTitle, setDescription } from 'applesauce-common/operations/list';
 import { addEventBookmarkTag } from 'applesauce-common/operations/tag/bookmarks';
 import { BookmarkEvent, UnbookmarkEvent } from 'applesauce-actions/actions';
@@ -20,6 +23,8 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { actionRunner, factory } from '$lib/stores/action-runner.svelte.js';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
+import { showToast } from '$lib/helpers/toast.js';
+import * as m from '$lib/paraglide/messages';
 
 // ---------------------------------------------------------------------------
 // State
@@ -32,6 +37,15 @@ let bookmarkListEvent = $state(null);
 let bookmarkSets = $state.raw([]);
 
 let _isLoading = $state(false);
+
+/** Optimistic overrides for instant bookmark toggle feedback. */
+const optimistic = createOptimisticState();
+
+/** Shared slow-signer options: show toast after 1.5s if signing is still pending. */
+const signerSlowOpts = {
+  slowThreshold: 1500,
+  onSlow: () => showToast(m.bookmark_toast_awaiting_signer(), 'info', 0)
+};
 
 // ---------------------------------------------------------------------------
 // Lifecycle — subscribe to active user changes, load bookmark list + sets
@@ -118,32 +132,49 @@ $effect.root(() => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Build the optimistic override key for a bookmark action.
+ * @param {string} eventId
+ * @param {string} [identifier]
+ * @returns {string}
+ */
+function optimisticKey(eventId, identifier) {
+  return `${eventId}:${identifier ?? 'default'}`;
+}
+
+/**
  * Check if an event is in the user's default bookmark list (kind 10003).
+ * Checks optimistic overrides first for instant feedback.
  * @param {import('nostr-tools').NostrEvent} event
  * @returns {boolean}
  */
 export function isBookmarked(event) {
+  const key = optimisticKey(event.id);
+  if (optimistic.has(key)) return /** @type {boolean} */ (optimistic.get(key));
   if (!bookmarkListEvent) return false;
   return isEventInList(bookmarkListEvent, event);
 }
 
 /**
  * Check if an event is in the default bookmark list OR any bookmark set.
+ * Respects optimistic overrides for instant feedback.
  * @param {import('nostr-tools').NostrEvent} event
  * @returns {boolean}
  */
 export function isBookmarkedAnywhere(event) {
-  if (bookmarkListEvent && isEventInList(bookmarkListEvent, event)) return true;
-  return bookmarkSets.some((set) => isEventInList(set, event));
+  if (isBookmarked(event)) return true;
+  return bookmarkSets.some((set) => isInBookmarkSet(event, set));
 }
 
 /**
  * Check if an event is in a specific bookmark set.
+ * Checks optimistic overrides first for instant feedback.
  * @param {import('nostr-tools').NostrEvent} event
  * @param {import('nostr-tools').NostrEvent} setEvent
  * @returns {boolean}
  */
 export function isInBookmarkSet(event, setEvent) {
+  const key = optimisticKey(event.id, getBookmarkSetIdentifier(setEvent));
+  if (optimistic.has(key)) return /** @type {boolean} */ (optimistic.get(key));
   return isEventInList(setEvent, event);
 }
 
@@ -153,28 +184,44 @@ export function isInBookmarkSet(event, setEvent) {
 
 /**
  * Add an event to a bookmark list or set.
- * Uses exec() for optimistic UI — EventStore updates before relay publish.
+ * Sets optimistic override instantly, then signs and publishes in background.
  * @param {import('nostr-tools').NostrEvent} event
  * @param {string} [identifier] - d-tag of a kind 30003 set, or undefined for default list
  */
 export async function bookmark(event, identifier) {
-  await actionRunner.exec(BookmarkEvent, event, identifier).forEach(async (signed) => {
-    eventStore.add(signed);
-    await publishEvent(signed);
-  });
+  const key = optimisticKey(event.id, identifier);
+  await optimistic.run(
+    key,
+    true,
+    async () => {
+      await actionRunner.exec(BookmarkEvent, event, identifier).forEach((signed) => {
+        eventStore.add(signed);
+        publishEvent(signed).catch((err) => console.warn('Bookmark publish failed:', err));
+      });
+    },
+    signerSlowOpts
+  );
 }
 
 /**
  * Remove an event from a bookmark list or set.
- * Uses exec() for optimistic UI — EventStore updates before relay publish.
+ * Sets optimistic override instantly, then signs and publishes in background.
  * @param {import('nostr-tools').NostrEvent} event
  * @param {string} [identifier] - d-tag of a kind 30003 set, or undefined for default list
  */
 export async function unbookmark(event, identifier) {
-  await actionRunner.exec(UnbookmarkEvent, event, identifier).forEach(async (signed) => {
-    eventStore.add(signed);
-    await publishEvent(signed);
-  });
+  const key = optimisticKey(event.id, identifier);
+  await optimistic.run(
+    key,
+    false,
+    async () => {
+      await actionRunner.exec(UnbookmarkEvent, event, identifier).forEach((signed) => {
+        eventStore.add(signed);
+        publishEvent(signed).catch((err) => console.warn('Unbookmark publish failed:', err));
+      });
+    },
+    signerSlowOpts
+  );
 }
 
 /**
@@ -233,6 +280,30 @@ export async function reorderBookmarkSetItem(setEvent, fromIndex, toIndex) {
 }
 
 /**
+ * Remove an item from any NIP-51 list event by filtering out its e/a tag.
+ * Works for kind 10003, 30003, 10000, 30000, etc.
+ * @param {import('nostr-tools').NostrEvent} listEvent - The list event to modify
+ * @param {import('nostr-tools').NostrEvent} itemEvent - The event to remove
+ */
+export async function removeItemFromList(listEvent, itemEvent) {
+  const newTags = listEvent.tags.filter((t) => {
+    if (t[0] === 'e' && t[1] === itemEvent.id) return false;
+    if (t[0] === 'a') {
+      const dTag = itemEvent.tags?.find((it) => it[0] === 'd')?.[1];
+      if (dTag !== undefined) {
+        const ref = `${itemEvent.kind}:${itemEvent.pubkey}:${dTag}`;
+        if (t[1] === ref) return false;
+      }
+    }
+    return true;
+  });
+  const draft = await factory.modify(listEvent, (event) => ({ ...event, tags: newTags }));
+  const signed = await factory.sign(draft);
+  eventStore.add(signed);
+  publishEvent(signed);
+}
+
+/**
  * Update a bookmark set's title and/or description.
  * @param {import('nostr-tools').NostrEvent} setEvent - The existing kind 30003 event
  * @param {string} title - New title
@@ -252,6 +323,17 @@ export async function updateBookmarkSet(setEvent, title, description) {
 // ---------------------------------------------------------------------------
 // Accessors
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether a bookmark action (add/remove) is in-flight for an event + list.
+ * Use to show a spinner while signing/publishing completes.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string} [identifier] - d-tag of a kind 30003 set, or undefined for default list
+ * @returns {boolean}
+ */
+export function isBookmarkPending(event, identifier) {
+  return optimistic.isPending(optimisticKey(event.id, identifier));
+}
 
 /**
  * Whether the bookmark list is still loading.

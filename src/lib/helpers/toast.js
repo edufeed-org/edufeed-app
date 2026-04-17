@@ -4,10 +4,13 @@
  */
 
 /**
- * Show a toast notification
+ * Show a toast notification.
+ * Pass `duration: 0` for a persistent toast — the returned `dismiss` function
+ * must be called manually to remove it.
  * @param {string} message - The message to display (can be a translation key or plain text)
  * @param {string} type - Toast type: 'success', 'error', 'info', 'warning'
- * @param {number} duration - Duration in milliseconds (default: 3000)
+ * @param {number} duration - Duration in ms (default: 3000). 0 = persistent (call dismiss()).
+ * @returns {() => void} dismiss — removes the toast immediately
  */
 export function showToast(message, type = 'info', duration = 3000) {
   // Determine where to append the toast container
@@ -38,8 +41,9 @@ export function showToast(message, type = 'info', duration = 3000) {
   // Add to container
   toastContainer.appendChild(toast);
 
-  // Auto-remove after duration
-  setTimeout(() => {
+  /** Remove this toast with a slide-out animation. */
+  function dismiss() {
+    if (!toast.parentNode) return; // already removed
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(100%)';
     toast.style.transition = 'all 0.3s ease-in-out';
@@ -54,7 +58,14 @@ export function showToast(message, type = 'info', duration = 3000) {
         toastContainer.remove();
       }
     }, 300);
-  }, duration);
+  }
+
+  // Auto-remove after duration (skip if 0 = persistent)
+  if (duration > 0) {
+    setTimeout(dismiss, duration);
+  }
+
+  return dismiss;
 }
 
 /**
