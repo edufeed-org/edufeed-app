@@ -330,7 +330,7 @@
   </div>
 {/snippet}
 
-{#snippet profileChips(pointers)}
+{#snippet profileChips(/** @type {Array<{pubkey: string}>} */ pointers)}
   <div class="flex flex-wrap gap-3">
     {#each pointers as pointer (pointer.pubkey)}
       {@const getProfile = useUserProfile(() => pointer.pubkey)}
@@ -347,7 +347,7 @@
   </div>
 {/snippet}
 
-{#snippet hashtagPills(tags)}
+{#snippet hashtagPills(/** @type {string[]} */ tags)}
   <div class="flex flex-wrap gap-2">
     {#each tags as tag (tag)}
       <span class="badge badge-outline">#{tag}</span>
@@ -355,7 +355,7 @@
   </div>
 {/snippet}
 
-{#snippet relayUrlList(relays)}
+{#snippet relayUrlList(/** @type {string[]} */ relays)}
   <div class="space-y-1">
     {#each relays as relay (relay)}
       <div
@@ -367,7 +367,9 @@
   </div>
 {/snippet}
 
-{#snippet relayListWithMarkers(entries)}
+{#snippet relayListWithMarkers(
+  /** @type {Array<{url: string, read?: boolean, write?: boolean}>} */ entries
+)}
   <div class="space-y-1">
     {#each entries as entry (entry.url)}
       <div
