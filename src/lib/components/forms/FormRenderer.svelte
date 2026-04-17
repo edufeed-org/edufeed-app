@@ -1,11 +1,12 @@
 <script>
   import { parseFormTemplate, validateField } from '$lib/helpers/forms.js';
   import * as m from '$lib/paraglide/messages';
+  import FormConceptPicker from './FormConceptPicker.svelte';
 
   /**
    * @type {{
    *   formEvent: import('nostr-tools').NostrEvent,
-   *   onsubmit?: (values: Record<string, string>) => void,
+   *   onsubmit?: (values: Record<string, any>) => void,
    *   readonly?: boolean
    * }}
    */
@@ -13,7 +14,7 @@
 
   const form = $derived(parseFormTemplate(formEvent));
 
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, any>} */
   let values = $state({});
   /** @type {Record<string, string | null>} */
   let errors = $state({});
@@ -23,10 +24,10 @@
   $effect(() => {
     if (form && !initialized) {
       initialized = true;
-      /** @type {Record<string, string>} */
+      /** @type {Record<string, any>} */
       const initial = {};
       for (const field of form.fields) {
-        initial[field.id] = field.defaultValue || '';
+        initial[field.id] = field.vocab ? [] : field.defaultValue || '';
       }
       values = initial;
     }
@@ -77,7 +78,14 @@
         </span>
       </label>
 
-      {#if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
+      {#if field.vocab}
+        <FormConceptPicker
+          {field}
+          multiple={field.options?.multiple === true || field.type === 'checkbox'}
+          value={values[field.id] || []}
+          onchange={(v) => (values[field.id] = v)}
+        />
+      {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
         <input
           id={field.id}
           type={field.type}
