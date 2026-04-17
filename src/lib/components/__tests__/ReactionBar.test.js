@@ -89,14 +89,22 @@ vi.mock('../reactions/AddReactionButton.svelte', () => ({ default: StubComponent
 const mockObserve = vi.fn();
 const mockDisconnect = vi.fn();
 class MockIntersectionObserver {
+  /** @param {IntersectionObserverCallback} callback */
   constructor(callback) {
     this.callback = callback;
   }
+  root = null;
+  rootMargin = '';
+  /** @type {number[]} */
+  thresholds = [];
   observe = mockObserve;
   disconnect = mockDisconnect;
   unobserve = vi.fn();
+  takeRecords = vi.fn(() => []);
 }
-globalThis.IntersectionObserver = MockIntersectionObserver;
+globalThis.IntersectionObserver = /** @type {typeof IntersectionObserver} */ (
+  /** @type {unknown} */ (MockIntersectionObserver)
+);
 
 describe('ReactionBar', () => {
   beforeEach(() => {

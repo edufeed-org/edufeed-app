@@ -240,7 +240,7 @@
 <!-- Loading overlay with quote — fixed position so it's visible despite parent opacity:0 -->
 {#if !curatedReady}
   <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 bg-base-100">
-    <img src={runtimeConfig.logo || '/icon-192x192.png'} alt="" width="64" height="64" />
+    <img src={runtimeConfig.appLogo || '/icon-192x192.png'} alt="" width="64" height="64" />
     <div class="loading loading-lg loading-spinner text-primary"></div>
     <figure class="max-w-sm px-4 text-center">
       <blockquote class="text-base-content/60 italic">

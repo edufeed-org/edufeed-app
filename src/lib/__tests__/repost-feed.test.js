@@ -102,10 +102,10 @@ describe('mergeRepostsIntoFeed', () => {
     const result = mergeRepostsIntoFeed([], [repost], lookup);
 
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('notes');
-    expect(result[0].data).toBe(original);
-    expect(result[0].ts).toBe(repost.created_at);
-    expect(result[0].repost.sharers).toEqual(['alice']);
+    expect(result[0]?.type).toBe('notes');
+    expect(result[0]?.data).toBe(original);
+    expect(result[0]?.ts).toBe(repost.created_at);
+    expect(result[0]?.repost?.sharers).toEqual(['alice']);
   });
 
   it('adds a kind 16 repost of kind 30142 as "resources" category', () => {
@@ -116,8 +116,8 @@ describe('mergeRepostsIntoFeed', () => {
     const result = mergeRepostsIntoFeed([], [repost], lookup);
 
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('resources');
-    expect(result[0].repost.sharers).toEqual(['bob']);
+    expect(result[0]?.type).toBe('resources');
+    expect(result[0]?.repost?.sharers).toEqual(['bob']);
   });
 
   it('adds a kind 16 repost of kind 31922 as "calendar" category', () => {
@@ -140,9 +140,9 @@ describe('mergeRepostsIntoFeed', () => {
     const result = mergeRepostsIntoFeed([], [repost1, repost2], lookup);
 
     expect(result).toHaveLength(1);
-    expect(result[0].repost.sharers).toEqual(['alice', 'bob']);
+    expect(result[0]?.repost?.sharers).toEqual(['alice', 'bob']);
     // Sort position uses the latest repost timestamp
-    expect(result[0].ts).toBe(2500);
+    expect(result[0]?.ts).toBe(2500);
   });
 
   it('attaches repost metadata to existing direct post without changing ts', () => {
@@ -155,8 +155,8 @@ describe('mergeRepostsIntoFeed', () => {
 
     // Should still be 1 entry (not duplicated)
     expect(result).toHaveLength(1);
-    expect(result[0].ts).toBe(500); // keeps direct post's timestamp
-    expect(result[0].repost.sharers).toEqual(['alice']);
+    expect(result[0]?.ts).toBe(500); // keeps direct post's timestamp
+    expect(result[0]?.repost?.sharers).toEqual(['alice']);
   });
 
   it('skips reposts with unresolved targets', () => {
@@ -188,7 +188,7 @@ describe('mergeRepostsIntoFeed', () => {
     const result = mergeRepostsIntoFeed([], [repost1, repost2], lookup);
 
     expect(result).toHaveLength(1);
-    expect(result[0].repost.sharers).toEqual(['alice']); // not ['alice', 'alice']
+    expect(result[0]?.repost?.sharers).toEqual(['alice']); // not ['alice', 'alice']
   });
 
   it('resolves kind 16 repost via a-tag when e-tag lookup fails', () => {
@@ -242,10 +242,10 @@ describe('mergeRepostsIntoFeed', () => {
     expect(result).toHaveLength(2);
     // Direct post unchanged
     const direct = result.find((e) => e.data.id === 'n1');
-    expect(direct.repost).toBeUndefined();
+    expect(direct?.repost).toBeUndefined();
     // Reposted note appears with repost metadata
     const reposted = result.find((e) => e.data.id === 'n2');
-    expect(reposted.repost.sharers).toEqual(['followed2']);
-    expect(reposted.ts).toBe(1500);
+    expect(reposted?.repost?.sharers).toEqual(['followed2']);
+    expect(reposted?.ts).toBe(1500);
   });
 });
