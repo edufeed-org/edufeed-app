@@ -5,7 +5,7 @@ import { SvelteMap } from 'svelte/reactivity';
  * Query functions check `has(key)` / `get(key)` before falling back to real state.
  * Action functions call `run(key, value, asyncFn)` for instant UI feedback.
  *
- * @returns {{ has: (key: string) => boolean, get: (key: string) => any, isPending: (key: string) => boolean, run: (key: string, value: any, action: () => Promise<void>, opts?: { slowThreshold?: number, onSlow?: () => void }) => Promise<void> }}
+ * @returns {{ has: (key: string) => boolean, get: (key: string) => any, isPending: (key: string) => boolean, run: (key: string, value: any, action: () => Promise<void>, opts?: { slowThreshold?: number, onSlow?: () => (() => void) | void }) => Promise<void> }}
  */
 export function createOptimisticState() {
   const overrides = new SvelteMap();
@@ -28,19 +28,21 @@ export function createOptimisticState() {
      */
     async run(key, value, action, opts) {
       overrides.set(key, value);
-      /** @type {(() => void) | void} */
-      let slowCleanup;
+      /** @type {{ dismiss?: () => void }} */
+      const slow = {};
+      const onSlow = opts?.onSlow;
       const timer =
-        opts?.slowThreshold && opts?.onSlow
+        opts?.slowThreshold && onSlow
           ? setTimeout(() => {
-              slowCleanup = opts.onSlow();
+              const result = onSlow();
+              if (result) slow.dismiss = result;
             }, opts.slowThreshold)
           : undefined;
       try {
         await action();
       } finally {
         if (timer) clearTimeout(timer);
-        if (slowCleanup) slowCleanup();
+        if (slow.dismiss) slow.dismiss();
         overrides.delete(key);
       }
     }

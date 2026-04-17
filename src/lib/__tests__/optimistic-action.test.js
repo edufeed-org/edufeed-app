@@ -19,7 +19,8 @@ describe('createOptimisticState', () => {
 
   it('has()/get() return override while action is pending', async () => {
     const state = createOptimisticState();
-    let resolve;
+    /** @type {(value?: any) => void} */
+    let resolve = () => {};
     const pending = new Promise((r) => {
       resolve = r;
     });
@@ -57,7 +58,8 @@ describe('createOptimisticState', () => {
 
   it('supports false as optimistic value', async () => {
     const state = createOptimisticState();
-    let resolve;
+    /** @type {(value?: any) => void} */
+    let resolve = () => {};
     const pending = new Promise((r) => {
       resolve = r;
     });
@@ -73,7 +75,10 @@ describe('createOptimisticState', () => {
 
   it('multiple concurrent keys work independently', async () => {
     const state = createOptimisticState();
-    let resolve1, resolve2;
+    /** @type {(value?: any) => void} */
+    let resolve1 = () => {};
+    /** @type {(value?: any) => void} */
+    let resolve2 = () => {};
     const p1 = new Promise((r) => {
       resolve1 = r;
     });
@@ -102,7 +107,8 @@ describe('createOptimisticState', () => {
 
   it('isPending() returns true while action runs, false after', async () => {
     const state = createOptimisticState();
-    let resolve;
+    /** @type {(value?: any) => void} */
+    let resolve = () => {};
     const pending = new Promise((r) => {
       resolve = r;
     });
@@ -121,7 +127,8 @@ describe('createOptimisticState', () => {
   it('calls onSlow after slowThreshold when action is still pending', async () => {
     const state = createOptimisticState();
     let slowCalled = false;
-    let resolve;
+    /** @type {(value?: any) => void} */
+    let resolve = () => {};
     const pending = new Promise((r) => {
       resolve = r;
     });
@@ -162,7 +169,8 @@ describe('createOptimisticState', () => {
   it('calls cleanup returned by onSlow when action completes', async () => {
     const state = createOptimisticState();
     let cleanupCalled = false;
-    let resolve;
+    /** @type {(value?: any) => void} */
+    let resolve = () => {};
     const pending = new Promise((r) => {
       resolve = r;
     });
@@ -189,7 +197,8 @@ describe('createOptimisticState', () => {
 
   it('does not fail if onSlow returns nothing', async () => {
     const state = createOptimisticState();
-    let resolve;
+    /** @type {(value?: any) => void} */
+    let resolve = () => {};
     const pending = new Promise((r) => {
       resolve = r;
     });
