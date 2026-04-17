@@ -116,6 +116,8 @@
   <!-- Actions -->
   <div
     class="flex flex-wrap items-center gap-1 border-t border-base-300 pt-3"
+    role="toolbar"
+    tabindex="-1"
     onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => e.stopPropagation()}
   >

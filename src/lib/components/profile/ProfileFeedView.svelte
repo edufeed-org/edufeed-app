@@ -91,8 +91,8 @@
     { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon }
   ];
 
-  const feedCacheKey = 'profile-feed-' + (userPubkey || 'default');
-  const savedFeedState = feedStateCache.get(feedCacheKey);
+  const feedCacheKey = $derived('profile-feed-' + (userPubkey || 'default'));
+  const savedFeedState = $derived(feedStateCache.get(feedCacheKey));
 
   const DISPLAY_BATCH = 10;
   const BOOKMARK_KINDS = new Set([39701, 9802, 1111]);
@@ -101,9 +101,9 @@
   let repostItems = $state.raw(/** @type {any[]} */ ([]));
   let resolvedTargets = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
-  let displayLimit = $state(savedFeedState?.displayLimit ?? DISPLAY_BATCH);
+  let displayLimit = $state(untrack(() => savedFeedState)?.displayLimit ?? DISPLAY_BATCH);
   let activeFilters = new SvelteSet(
-    savedFeedState?.activeFilters ?? FEED_CATEGORIES.map((c) => c.id)
+    untrack(() => savedFeedState)?.activeFilters ?? FEED_CATEGORIES.map((c) => c.id)
   );
 
   // Derive pubkeys from all sources for profile loading (items + reposters + resolved targets)

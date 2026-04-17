@@ -123,9 +123,9 @@
 
       <!-- Room type -->
       <div class="form-control">
-        <label class="label">
+        <div class="label">
           <span class="label-text">{m.meet_room_type()}</span>
-        </label>
+        </div>
         <div class="flex gap-2">
           <button
             type="button"

@@ -309,6 +309,8 @@
           {#if isOwner}
             <div
               class="flex items-center gap-1 px-3 py-1"
+              role="toolbar"
+              tabindex="-1"
               onclick={(e) => e.stopPropagation()}
               onkeydown={(e) => e.stopPropagation()}
             >

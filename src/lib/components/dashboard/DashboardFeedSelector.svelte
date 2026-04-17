@@ -18,6 +18,7 @@
   let activeOption = $derived(
     FEED_OPTIONS.find((o) => o.id === appSettings.dashboardFeedSource) || FEED_OPTIONS[0]
   );
+  const ActiveIcon = $derived(activeOption.icon);
 
   /** @param {'communities' | 'following'} id */
   function selectFeed(id) {
@@ -29,7 +30,7 @@
 
 <div class="dropdown">
   <button class="btn gap-1 px-1 text-sm font-semibold btn-ghost btn-sm" tabindex="0">
-    <svelte:component this={activeOption.icon} class_="w-4 h-4" />
+    <ActiveIcon class_="w-4 h-4" />
     {activeOption.label()}
     <ChevronDownIcon class_="w-3 h-3 opacity-60" />
   </button>

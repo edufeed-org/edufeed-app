@@ -54,19 +54,21 @@
   }
 
   /** @type {string[]} */
-  const events = isLocal
-    ? [
-        ParticipantEvent.LocalTrackPublished,
-        ParticipantEvent.LocalTrackUnpublished,
-        ParticipantEvent.TrackMuted,
-        ParticipantEvent.TrackUnmuted
-      ]
-    : [
-        ParticipantEvent.TrackSubscribed,
-        ParticipantEvent.TrackUnsubscribed,
-        ParticipantEvent.TrackMuted,
-        ParticipantEvent.TrackUnmuted
-      ];
+  const events = $derived(
+    isLocal
+      ? [
+          ParticipantEvent.LocalTrackPublished,
+          ParticipantEvent.LocalTrackUnpublished,
+          ParticipantEvent.TrackMuted,
+          ParticipantEvent.TrackUnmuted
+        ]
+      : [
+          ParticipantEvent.TrackSubscribed,
+          ParticipantEvent.TrackUnsubscribed,
+          ParticipantEvent.TrackMuted,
+          ParticipantEvent.TrackUnmuted
+        ]
+  );
 
   // Setup listeners + initial track state; cleanup on destroy
   $effect(() => {
