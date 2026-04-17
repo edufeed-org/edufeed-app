@@ -255,3 +255,207 @@ describe('isEventInList - edge cases', () => {
     expect(isEventInList(listWithBothTags, bookmarkedArticle)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Kind 30003 bookmark set fixtures
+// ---------------------------------------------------------------------------
+
+/** A kind 30003 bookmark set with d-tag "reading-list" */
+const bookmarkSet1 = {
+  id: 'set1',
+  pubkey: 'user1',
+  kind: 30003,
+  created_at: 1000,
+  tags: [
+    ['d', 'reading-list'],
+    ['title', 'Reading List'],
+    ['e', 'event-id-1', 'wss://relay.example.com'],
+    ['a', '30142:educator1:resource-1', 'wss://relay.example.com']
+  ],
+  content: '',
+  sig: 'set-sig-1'
+};
+
+/** A kind 30003 bookmark set with d-tag "favorites" */
+const bookmarkSet2 = {
+  id: 'set2',
+  pubkey: 'user1',
+  kind: 30003,
+  created_at: 1000,
+  tags: [
+    ['d', 'favorites'],
+    ['title', 'Favorites'],
+    ['e', 'event-id-2']
+  ],
+  content: '',
+  sig: 'set-sig-2'
+};
+
+/** An empty kind 30003 bookmark set */
+const emptyBookmarkSet = {
+  id: 'set-empty',
+  pubkey: 'user1',
+  kind: 30003,
+  created_at: 1000,
+  tags: [['d', 'empty-set']],
+  content: '',
+  sig: 'set-sig-3'
+};
+
+// ---------------------------------------------------------------------------
+// Kind 30003 bookmark set tests
+// ---------------------------------------------------------------------------
+
+describe('isEventInList - kind 30003 bookmark sets', () => {
+  it('returns true for an event in a bookmark set (e-tag)', () => {
+    expect(isEventInList(bookmarkSet1, bookmarkedNote)).toBe(true);
+  });
+
+  it('returns true for an addressable event in a bookmark set (a-tag)', () => {
+    expect(isEventInList(bookmarkSet1, educationalResource)).toBe(true);
+  });
+
+  it('returns false for an event not in the bookmark set', () => {
+    expect(isEventInList(bookmarkSet1, notBookmarkedNote)).toBe(false);
+  });
+
+  it('returns false for any event in an empty bookmark set', () => {
+    expect(isEventInList(emptyBookmarkSet, bookmarkedNote)).toBe(false);
+  });
+
+  it('different sets can contain different events', () => {
+    // set1 has event-id-1, set2 has event-id-2
+    expect(isEventInList(bookmarkSet1, bookmarkedNote)).toBe(true);
+    expect(isEventInList(bookmarkSet1, secondBookmarkedNote)).toBe(false);
+    expect(isEventInList(bookmarkSet2, secondBookmarkedNote)).toBe(true);
+    expect(isEventInList(bookmarkSet2, bookmarkedNote)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getReorderedBookmarkTags — pure reorder helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Pure implementation matching the exported function in personal-bookmarks.svelte.js.
+ * Separates bookmark tags ('e' and 'a') from non-bookmark tags, swaps the
+ * bookmark tags at fromIndex and toIndex, then returns [...nonBookmarkTags, ...bookmarkTags].
+ * @param {import('nostr-tools').NostrEvent} setEvent
+ * @param {number} fromIndex
+ * @param {number} toIndex
+ * @returns {string[][]}
+ */
+function getReorderedBookmarkTags(setEvent, fromIndex, toIndex) {
+  const bookmarkTags = setEvent.tags.filter((t) => t[0] === 'e' || t[0] === 'a');
+  const nonBookmarkTags = setEvent.tags.filter((t) => t[0] !== 'e' && t[0] !== 'a');
+  const reordered = [...bookmarkTags];
+  const temp = reordered[fromIndex];
+  reordered[fromIndex] = reordered[toIndex];
+  reordered[toIndex] = temp;
+  return [...nonBookmarkTags, ...reordered];
+}
+
+describe('reorderBookmarkSetItem', () => {
+  it('swaps two bookmark tags by index (3 e-tags, swap index 0 and 2)', () => {
+    const setEvent = {
+      id: 'set-reorder-1',
+      pubkey: 'user1',
+      kind: 30003,
+      created_at: 1000,
+      tags: [
+        ['d', 'my-set'],
+        ['title', 'My Set'],
+        ['e', 'event-a'],
+        ['e', 'event-b'],
+        ['e', 'event-c']
+      ],
+      content: '',
+      sig: 'sig-reorder-1'
+    };
+
+    const result = getReorderedBookmarkTags(setEvent, 0, 2);
+
+    // Non-bookmark tags come first unchanged
+    expect(result[0]).toEqual(['d', 'my-set']);
+    expect(result[1]).toEqual(['title', 'My Set']);
+    // Bookmark tags are swapped: index 0 (event-a) and index 2 (event-c) exchange
+    expect(result[2]).toEqual(['e', 'event-c']);
+    expect(result[3]).toEqual(['e', 'event-b']);
+    expect(result[4]).toEqual(['e', 'event-a']);
+  });
+
+  it('swaps adjacent items including mixed e and a tags', () => {
+    const setEvent = {
+      id: 'set-reorder-2',
+      pubkey: 'user1',
+      kind: 30003,
+      created_at: 1000,
+      tags: [
+        ['d', 'mixed-set'],
+        ['e', 'event-x'],
+        ['a', '30142:educator1:res-1'],
+        ['e', 'event-y']
+      ],
+      content: '',
+      sig: 'sig-reorder-2'
+    };
+
+    const result = getReorderedBookmarkTags(setEvent, 1, 2);
+
+    // Non-bookmark tag unchanged
+    expect(result[0]).toEqual(['d', 'mixed-set']);
+    // Bookmark tags: index 1 (a-tag) and index 2 (event-y e-tag) are swapped
+    expect(result[1]).toEqual(['e', 'event-x']);
+    expect(result[2]).toEqual(['e', 'event-y']);
+    expect(result[3]).toEqual(['a', '30142:educator1:res-1']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isBookmarkedAnywhere — checks default list + all bookmark sets
+// ---------------------------------------------------------------------------
+
+/**
+ * Pure implementation of "is this event in any of these lists" logic.
+ * This mirrors the function that will be exported from personal-bookmarks.svelte.js.
+ * @param {import('nostr-tools').NostrEvent | null} defaultList
+ * @param {import('nostr-tools').NostrEvent[]} sets
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {boolean}
+ */
+function isBookmarkedAnywhere(defaultList, sets, event) {
+  if (defaultList && isEventInList(defaultList, event)) return true;
+  return sets.some((set) => isEventInList(set, event));
+}
+
+describe('isBookmarkedAnywhere - cross-list membership', () => {
+  it('returns true when event is in default list only', () => {
+    expect(isBookmarkedAnywhere(bookmarkList, [], bookmarkedNote)).toBe(true);
+  });
+
+  it('returns true when event is in a bookmark set only', () => {
+    // event-id-2 is not in bookmarkSet1, but is in bookmarkSet2
+    expect(isBookmarkedAnywhere(emptyBookmarkList, [bookmarkSet2], secondBookmarkedNote)).toBe(
+      true
+    );
+  });
+
+  it('returns true when event is in both default list and a set', () => {
+    // event-id-1 is in both bookmarkList and bookmarkSet1
+    expect(isBookmarkedAnywhere(bookmarkList, [bookmarkSet1], bookmarkedNote)).toBe(true);
+  });
+
+  it('returns false when event is in neither default list nor any set', () => {
+    expect(
+      isBookmarkedAnywhere(bookmarkList, [bookmarkSet1, bookmarkSet2], notBookmarkedNote)
+    ).toBe(false);
+  });
+
+  it('returns false when default list is null and no sets contain the event', () => {
+    expect(isBookmarkedAnywhere(null, [emptyBookmarkSet], bookmarkedNote)).toBe(false);
+  });
+
+  it('returns false when default list is null and sets array is empty', () => {
+    expect(isBookmarkedAnywhere(null, [], bookmarkedNote)).toBe(false);
+  });
+});
