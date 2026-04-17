@@ -266,6 +266,10 @@ export function initializeAppSettings() {
 /**
  * Compute effective theme reactively
  * Combines themeFamily + colorMode to produce the actual theme name
+ *
+ * IMPORTANT: This logic is mirrored in src/app.html (inline script) to avoid
+ * theme flash on initial load. Keep both in sync when adding/removing theme families.
+ *
  * @type {'light' | 'dark' | 'stil' | 'stil-dark' | 'rpi' | 'rpi-dark'}
  */
 let effectiveTheme = $derived(

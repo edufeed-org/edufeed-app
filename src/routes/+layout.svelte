@@ -14,6 +14,10 @@
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
+  import {
+    initializeAllCuratedAuthors,
+    initializeAllWotAuthors
+  } from '$lib/services/curated-authors-service.svelte.js';
   import { browser } from '$app/environment';
   import { afterNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -22,10 +26,15 @@
   import { setContext } from 'svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
+  import { getRandomQuote } from '$lib/data/loading-quotes.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
 
   let { children, data } = $props();
 
   const getActiveUser = useActiveUser();
+
+  // Random loading quote — picked once per page load
+  const loadingQuote = getRandomQuote(getLocale());
 
   // Sidebar navigation — active state based on current route
   let currentCommunityPubkey = $derived($page.params.pubkey ? $page.data?.pubkey : null);
@@ -69,10 +78,23 @@
     initializeAppSettings();
   });
 
-  // Apply theme to document
+  // Apply theme to document (supplements the inline script in app.html which handles initial load)
   $effect(() => {
     if (browser) {
       document.documentElement.setAttribute('data-theme', appSettings.effectiveTheme);
+    }
+  });
+
+  // Hide the static HTML loader once Svelte takes over (replaced by Svelte loading view with quote)
+  if (browser) {
+    const loader = document.getElementById('app-loader');
+    if (loader) loader.style.display = 'none';
+  }
+
+  // Reveal the app once initialization is complete (see app.html CSS hide-until-ready)
+  $effect(() => {
+    if (browser && curatedReady) {
+      document.body.classList.add('app-ready');
     }
   });
 
@@ -89,20 +111,17 @@
   });
 
   // Initialize curated/WoT authors before rendering children.
-  // Follow set naddrs require async relay fetches — without awaiting, discover page
-  // loaders fire before the cache is populated, causing getCuratedAuthors() to return
-  // null and allowing unfiltered content through.
+  // Uses localStorage cache for near-instant repeat visits, with background relay refresh.
   let curatedReady = $state(!browser);
 
   $effect(() => {
     if (!browser) return;
-    const TIMEOUT_MS = 5_000;
-    import('$lib/services/curated-authors-service.svelte.js')
-      .then(async ({ initializeAllCuratedAuthors, initializeAllWotAuthors }) => {
-        await Promise.race([
-          Promise.all([initializeAllCuratedAuthors(), initializeAllWotAuthors()]),
-          new Promise((resolve) => setTimeout(resolve, TIMEOUT_MS))
-        ]);
+    const TIMEOUT_MS = 3_000;
+    Promise.race([
+      Promise.all([initializeAllCuratedAuthors(), initializeAllWotAuthors()]),
+      new Promise((resolve) => setTimeout(resolve, TIMEOUT_MS))
+    ])
+      .then(() => {
         curatedReady = true;
       })
       .catch(() => {
@@ -190,10 +209,6 @@
   >
     {#if curatedReady}
       {@render children?.()}
-    {:else}
-      <div class="flex min-h-[60vh] items-center justify-center">
-        <div class="loading loading-lg loading-spinner text-primary"></div>
-      </div>
     {/if}
     <!-- Floating buttons — sticky inside main so they sit above footer.
          Hidden on views with their own bottom UI (chat input, DM input). -->
@@ -220,4 +235,20 @@
 <PublishStatusToast />
 {#if showDashboardNav}
   <DashboardBottomTabBar />
+{/if}
+
+<!-- Loading overlay with quote — fixed position so it's visible despite parent opacity:0 -->
+{#if !curatedReady}
+  <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 bg-base-100">
+    <img src={runtimeConfig.logo || '/icon-192x192.png'} alt="" width="64" height="64" />
+    <div class="loading loading-lg loading-spinner text-primary"></div>
+    <figure class="max-w-sm px-4 text-center">
+      <blockquote class="text-base-content/60 italic">
+        "{loadingQuote.text}"
+      </blockquote>
+      <figcaption class="mt-2 text-sm text-base-content/40">
+        — {loadingQuote.author}
+      </figcaption>
+    </figure>
+  </div>
 {/if}
