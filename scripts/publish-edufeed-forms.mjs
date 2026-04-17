@@ -5,7 +5,7 @@
  * populated by running `publish:vocabs` first.
  */
 import 'dotenv/config';
-import { hexToBytes } from '@noble/hashes/utils';
+import { hexToBytes } from 'nostr-tools/utils';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { nip19 } from 'nostr-tools';
 import { RelayPool } from 'applesauce-relay';
@@ -97,20 +97,12 @@ function buildAmbBasicForm({ schulfaecherNaddr, hcrtNaddr }) {
 async function publishAll(pool, relays, events) {
   for (const e of events) {
     await Promise.all(
-      relays.map(
-        (url) =>
-          new Promise((resolve) => {
-            pool
-              .relay(url)
-              .publish(e)
-              .subscribe({
-                next: () => resolve(),
-                error: (err) => {
-                  console.warn(`  ! publish to ${url} failed: ${err.message}`);
-                  resolve();
-                },
-                complete: () => resolve()
-              });
+      relays.map((url) =>
+        pool
+          .relay(url)
+          .publish(e)
+          .catch((err) => {
+            console.warn(`  ! publish to ${url} failed: ${err.message}`);
           })
       )
     );
