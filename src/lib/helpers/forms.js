@@ -27,6 +27,8 @@ export const FORM_REQUEST_KIND = 1070;
  * @property {string} label
  * @property {string} [defaultValue]
  * @property {Record<string, any>} [options] - { required, min, max, options, placeholder }
+ * @property {{ address: string, relay: string }} [vocab] - kind-39737 ConceptScheme binding
+ * @property {string} [output] - 'amb:<property>' or 'ext'. Defaults to 'amb:<id>' at parse time.
  */
 
 /**
@@ -63,6 +65,12 @@ export function buildFormTemplateTags(dTag, fields, options = {}) {
       field.defaultValue || '',
       JSON.stringify(field.options || {})
     ]);
+    if (field.vocab) {
+      tags.push(['field-vocab', field.id, 'a', field.vocab.address, field.vocab.relay]);
+    }
+    if (field.output) {
+      tags.push(['field-output', field.id, field.output]);
+    }
   }
 
   if (options.public) tags.push(['public']);
@@ -105,6 +113,18 @@ export function parseFormTemplate(event) {
         options
       };
     });
+
+  // Attach first field-vocab per field
+  for (const field of fields) {
+    const vt = tags.find((t) => t[0] === 'field-vocab' && t[1] === field.id && t[2] === 'a');
+    if (vt) field.vocab = { address: vt[3], relay: vt[4] || '' };
+  }
+
+  // Attach first field-output per field; default to amb:<id>
+  for (const field of fields) {
+    const ot = tags.find((t) => t[0] === 'field-output' && t[1] === field.id);
+    field.output = ot?.[2] || `amb:${field.id}`;
+  }
 
   return { dTag, name, description, fields, isPublic, confirmationMessage, autoResponse };
 }
