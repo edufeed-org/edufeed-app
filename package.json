@@ -17,7 +17,9 @@
     "test:unit": "vitest run --environment node",
     "test:component": "vitest run --environment jsdom",
     "test:e2e": "playwright test",
-    "machine-translate": "inlang machine translate --project project.inlang"
+    "machine-translate": "inlang machine translate --project project.inlang",
+    "publish:vocabs": "node scripts/publish-edufeed-vocabs.mjs",
+    "publish:forms": "node scripts/publish-edufeed-forms.mjs"
   },
   "devDependencies": {
     "@djot/djot": "^0.3.2",
@@ -49,6 +51,7 @@
     "blossom-client-sdk": "^4.1.0",
     "daisyui": "^5.0.54",
     "dompurify": "^3.3.0",
+    "dotenv": "^17.4.2",
     "embla-carousel": "^8.6.0",
     "embla-carousel-svelte": "^8.6.0",
     "eslint": "^9.18.0",
@@ -82,6 +85,7 @@
     "linkedom": "^0.18.12",
     "nostr-tools": "^2.16.2",
     "nostr-vocab-core": "git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git#v0.1.0",
+    "nostr-vocab-skos-import": "git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-skos-import.git#v0.1.0",
     "sharp": "^0.34.5"
   },
   "pnpm": {
