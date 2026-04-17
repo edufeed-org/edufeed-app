@@ -90,7 +90,7 @@ describe('forms.js: field-vocab and field-output tag round-trip', () => {
         ['field-output', 'about', 'ext']
       ]
     });
-    expect(parsed.fields[0].vocab.address).toBe('39737:pub:v1');
+    expect(parsed.fields[0].vocab?.address).toBe('39737:pub:v1');
     expect(parsed.fields[0].output).toBe('amb:about');
   });
 });
