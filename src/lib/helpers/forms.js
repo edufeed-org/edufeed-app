@@ -40,13 +40,14 @@ export const FORM_REQUEST_KIND = 1070;
  * @property {boolean} isPublic
  * @property {string} confirmationMessage
  * @property {boolean} autoResponse
+ * @property {{ address: string, relay: string }} [forkOf] - parent form this one was forked from
  */
 
 /**
  * Build tags for a form template event (kind 30168).
  * @param {string} dTag
  * @param {FormField[]} fields
- * @param {{ name?: string, description?: string, public?: boolean, confirmationMessage?: string, autoResponse?: boolean }} options
+ * @param {{ name?: string, description?: string, public?: boolean, confirmationMessage?: string, autoResponse?: boolean, forkOf?: { address: string, relay: string } }} options
  * @returns {string[][]}
  */
 export function buildFormTemplateTags(dTag, fields, options = {}) {
@@ -55,6 +56,9 @@ export function buildFormTemplateTags(dTag, fields, options = {}) {
 
   if (options.name) tags.push(['name', options.name]);
   if (options.description) tags.push(['description', options.description]);
+  if (options.forkOf?.address) {
+    tags.push(['a', options.forkOf.address, options.forkOf.relay || '', 'forkOf']);
+  }
 
   for (const field of fields) {
     tags.push([
@@ -126,7 +130,20 @@ export function parseFormTemplate(event) {
     field.output = ot?.[2] || `amb:${field.id}`;
   }
 
-  return { dTag, name, description, fields, isPublic, confirmationMessage, autoResponse };
+  // Fork provenance: first ["a", "30168:...", relay, "forkOf"] wins
+  const forkTag = tags.find((t) => t[0] === 'a' && t[3] === 'forkOf' && t[1]?.startsWith('30168:'));
+  const forkOf = forkTag ? { address: forkTag[1], relay: forkTag[2] || '' } : undefined;
+
+  return {
+    dTag,
+    name,
+    description,
+    fields,
+    isPublic,
+    confirmationMessage,
+    autoResponse,
+    forkOf
+  };
 }
 
 /**

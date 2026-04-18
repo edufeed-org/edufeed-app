@@ -9,6 +9,8 @@
   import { buildFormTemplateTags, parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
   import { TrashIcon } from '$lib/components/icons';
   import FormBuilderFieldRow from './FormBuilderFieldRow.svelte';
+  import { addressLoader } from '$lib/loaders/base.js';
+  import { firstValueFrom, timeout } from 'rxjs';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ existingEvent?: import('nostr-tools').NostrEvent }} */
@@ -35,6 +37,14 @@
   let dTag = $state(existing?.dTag || '');
   let isPublic = $state(existing?.isPublic || false);
   let confirmationMessage = $state(existing?.confirmationMessage || '');
+
+  /** @type {{ address: string, relay: string } | undefined} */
+  let forkOf = $state(existing?.forkOf);
+  let forkDialogOpen = $state(false);
+  let forkNaddrInput = $state('');
+  let forkError = $state('');
+  let forkLoading = $state(false);
+  let parentFormName = $state('');
 
   /**
    * @typedef {Object} FieldState
@@ -167,6 +177,84 @@
     dragIndex = -1;
   }
 
+  async function loadParentForm() {
+    forkError = '';
+    if (!forkNaddrInput.trim()) {
+      forkError = m.form_builder_fork_error_empty();
+      return;
+    }
+    let decoded;
+    try {
+      decoded = nip19.decode(forkNaddrInput.trim());
+    } catch {
+      forkError = m.form_builder_fork_error_invalid_naddr();
+      return;
+    }
+    if (decoded.type !== 'naddr') {
+      forkError = m.form_builder_fork_error_invalid_naddr();
+      return;
+    }
+    const d = /** @type {any} */ (decoded.data);
+    if (d.kind !== 30168) {
+      forkError = m.form_builder_fork_error_not_form();
+      return;
+    }
+
+    forkLoading = true;
+    try {
+      const relays = [...(d.relays || []), ...getCommunikeyRelays()];
+      await firstValueFrom(
+        addressLoader({ kind: 30168, pubkey: d.pubkey, identifier: d.identifier, relays }).pipe(
+          timeout({ first: 5000 })
+        )
+      ).catch(() => null);
+      const parentEvent = eventStore.getReplaceable(30168, d.pubkey, d.identifier);
+      if (!parentEvent) {
+        forkError = m.form_builder_fork_error_not_found();
+        return;
+      }
+      const parsed = parseFormTemplate(parentEvent);
+
+      // Copy fields into current builder state
+      fields = parsed.fields.map((f) => ({
+        id: f.id,
+        type: f.type,
+        label: f.label,
+        defaultValue: f.defaultValue || '',
+        required: f.options?.required || false,
+        placeholder: f.options?.placeholder || '',
+        min: f.options?.min,
+        max: f.options?.max,
+        selectOptions: f.options?.options || [],
+        multiple: f.options?.multiple || false,
+        vocab: f.vocab,
+        output: f.output,
+        vocabNaddrInput: vocabToNaddr(f.vocab),
+        vocabError: ''
+      }));
+
+      // Pre-fill metadata when empty
+      if (!formName) formName = parsed.name ? `${parsed.name} (fork)` : '';
+      if (!formDescription) formDescription = parsed.description;
+
+      // Record fork provenance
+      const relayHint = d.relays?.[0] || '';
+      forkOf = { address: `30168:${d.pubkey}:${d.identifier}`, relay: relayHint };
+      parentFormName = parsed.name;
+      forkDialogOpen = false;
+      forkNaddrInput = '';
+    } catch (err) {
+      forkError = err instanceof Error ? err.message : m.form_builder_fork_error_load_failed();
+    } finally {
+      forkLoading = false;
+    }
+  }
+
+  function clearFork() {
+    forkOf = undefined;
+    parentFormName = '';
+  }
+
   async function publish() {
     if (!manager.active) {
       error = m.form_builder_error_login();
@@ -203,7 +291,8 @@
         name: formName,
         description: formDescription,
         public: isPublic,
-        confirmationMessage
+        confirmationMessage,
+        ...(forkOf ? { forkOf } : {})
       });
 
       const factory = createAppEventFactory({ signer: manager.active.signer });
@@ -234,6 +323,11 @@
       {m.form_builder_header()}
     </div>
     <div class="flex gap-2">
+      {#if !existingEvent}
+        <button class="btn btn-ghost btn-sm" onclick={() => (forkDialogOpen = true)}>
+          {m.form_builder_fork_from()}
+        </button>
+      {/if}
       <a href="/forms" class="btn btn-ghost btn-sm">{m.common_cancel()}</a>
       <button class="btn btn-sm btn-primary" onclick={publish} disabled={isPublishing}>
         {isPublishing
@@ -244,6 +338,55 @@
       </button>
     </div>
   </div>
+
+  {#if forkOf}
+    <div class="mb-4 flex items-center justify-between rounded-lg bg-base-200 px-4 py-2 text-sm">
+      <span>
+        {m.form_builder_fork_badge()}
+        {#if parentFormName}
+          <span class="font-semibold">{parentFormName}</span>
+        {:else}
+          <code class="text-xs">{forkOf.address}</code>
+        {/if}
+      </span>
+      {#if !existingEvent}
+        <button class="btn btn-ghost btn-xs" onclick={clearFork}>{m.common_remove()}</button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if forkDialogOpen}
+    <dialog class="modal-open modal">
+      <div class="modal-box">
+        <h3 class="mb-2 text-lg font-bold">{m.form_builder_fork_dialog_title()}</h3>
+        <p class="mb-4 text-sm text-base-content/70">{m.form_builder_fork_dialog_help()}</p>
+        <input
+          type="text"
+          class="input-bordered input w-full"
+          placeholder="naddr1..."
+          bind:value={forkNaddrInput}
+        />
+        {#if forkError}
+          <div class="mt-2 text-sm text-error">{forkError}</div>
+        {/if}
+        <div class="modal-action">
+          <button
+            class="btn btn-ghost btn-sm"
+            onclick={() => {
+              forkDialogOpen = false;
+              forkError = '';
+            }}
+            disabled={forkLoading}
+          >
+            {m.common_cancel()}
+          </button>
+          <button class="btn btn-sm btn-primary" onclick={loadParentForm} disabled={forkLoading}>
+            {forkLoading ? m.form_builder_fork_loading() : m.form_builder_fork_load()}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  {/if}
 
   {#if error}
     <div class="mb-4 alert alert-error">{error}</div>

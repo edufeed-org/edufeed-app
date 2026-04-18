@@ -75,6 +75,38 @@ describe('forms.js: field-vocab and field-output tag round-trip', () => {
     expect(parsed.fields[0].output).toBe('amb:name');
   });
 
+  it('emits and parses an ["a", 30168:..., relay, "forkOf"] tag', () => {
+    const forkOf = { address: '30168:parentPub:amb-full', relay: 'wss://r.example' };
+    const tags = buildFormTemplateTags('amb-full-fork', [], { name: 'Fork', forkOf });
+    expect(tags).toContainEqual(['a', '30168:parentPub:amb-full', 'wss://r.example', 'forkOf']);
+
+    const parsed = parseFormTemplate({
+      tags,
+      kind: 30168,
+      pubkey: 'p',
+      content: '',
+      created_at: 0
+    });
+    expect(parsed.forkOf).toEqual({
+      address: '30168:parentPub:amb-full',
+      relay: 'wss://r.example'
+    });
+  });
+
+  it('omits forkOf when no parent is provided; parsed forkOf is undefined', () => {
+    const tags = buildFormTemplateTags('plain', [], {});
+    expect(tags.some((t) => t[0] === 'a' && t[3] === 'forkOf')).toBe(false);
+
+    const parsed = parseFormTemplate({
+      tags,
+      kind: 30168,
+      pubkey: 'p',
+      content: '',
+      created_at: 0
+    });
+    expect(parsed.forkOf).toBeUndefined();
+  });
+
   it('first field-vocab and field-output win when duplicates are present', () => {
     const parsed = parseFormTemplate({
       kind: 30168,

@@ -29,7 +29,12 @@ vi.mock('$lib/services/publish-service.js', () => ({
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: eventStoreAddSpy }
+  eventStore: { add: eventStoreAddSpy, getReplaceable: () => null },
+  pool: {}
+}));
+
+vi.mock('$lib/loaders/base.js', () => ({
+  addressLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
