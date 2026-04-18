@@ -910,6 +910,7 @@
   "learning_filter_active": "Aktive Filter",
   "learning_filter_search_label": "Suche",
   "learning_filter_clear_all": "Alle löschen",
+  "learning_filter_ext_heading": "Weitere Filter",
   "settings_developer_title": "Entwickler-Einstellungen",
   "settings_debug_mode_label": "Debug-Modus",
   "settings_debug_mode_description": "Debug-Panels auf Event-Karten mit Rohdaten, Tags und Identifikatoren anzeigen",

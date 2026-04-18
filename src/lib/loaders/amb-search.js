@@ -10,7 +10,10 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
-import { buildSearchQuery, hasActiveFilters } from '$lib/helpers/educational/searchQueryBuilder.js';
+import {
+  buildSearchFilterObject,
+  hasActiveFilters
+} from '$lib/helpers/educational/searchQueryBuilder.js';
 
 /**
  * @typedef {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} SearchFilters
@@ -34,17 +37,20 @@ export function ambSearchLoader(filters, limit = 50) {
     });
   }
 
-  // Build the NIP-50 search query
-  const searchQuery = buildSearchQuery(filters);
+  // Build the NIP-50 search query + dual-emit #ext:... tag filters.
+  // Tag filters act as a fallback for relays that don't yet parse ext.* paths.
+  const { search: searchQuery, tagFilters } = buildSearchFilterObject(filters);
 
-  if (!searchQuery) {
+  if (!searchQuery && Object.keys(tagFilters).length === 0) {
     return new Observable((subscriber) => {
       subscriber.complete();
     });
   }
 
   const relays = getEducationalRelays();
-  const filter = { kinds: [30142], search: searchQuery, limit };
+  /** @type {Record<string, any>} */
+  const filter = { kinds: [30142], limit, ...tagFilters };
+  if (searchQuery) filter.search = searchQuery;
 
   // Use pool.request() directly to preserve the search field
   // createTimelineLoader strips unknown filter fields during pagination
@@ -69,16 +75,18 @@ export function communityAMBSearchLoader(communityPubkey, filters, limit = 50) {
     });
   }
 
-  const searchQuery = buildSearchQuery(filters);
+  const { search: searchQuery, tagFilters } = buildSearchFilterObject(filters);
 
-  if (!searchQuery) {
+  if (!searchQuery && Object.keys(tagFilters).length === 0) {
     return new Observable((subscriber) => {
       subscriber.complete();
     });
   }
 
   const relays = getEducationalRelays();
-  const filter = { kinds: [30142], search: searchQuery, '#h': [communityPubkey], limit };
+  /** @type {Record<string, any>} */
+  const filter = { kinds: [30142], '#h': [communityPubkey], limit, ...tagFilters };
+  if (searchQuery) filter.search = searchQuery;
 
   return pool
     .request(relays, filter, /** @type {any} */ ({ timeout: 5000 }))

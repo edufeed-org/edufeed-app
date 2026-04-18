@@ -911,6 +911,7 @@
   "learning_filter_active": "Active filters",
   "learning_filter_search_label": "Search",
   "learning_filter_clear_all": "Clear all",
+  "learning_filter_ext_heading": "Additional filters",
   "settings_developer_title": "Developer Settings",
   "settings_debug_mode_label": "Debug Mode",
   "settings_debug_mode_description": "Show debug panels on event cards with raw event data, tags, and identifiers",
