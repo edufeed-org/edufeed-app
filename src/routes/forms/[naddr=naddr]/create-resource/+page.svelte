@@ -1,8 +1,9 @@
 <script>
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { nip19 } from 'nostr-tools';
   import { decodeFormNaddr, parseFormTemplate } from '$lib/helpers/forms.js';
-  import { buildAMBResourceTags } from '$lib/helpers/form-to-amb.js';
+  import { buildAMBResourceTags, parseAMBResourceForForm } from '$lib/helpers/form-to-amb.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -22,6 +23,25 @@
   let submitting = $state(false);
   let error = $state('');
 
+  // Edit mode: decode ?edit=<resource-naddr>
+  const editNaddr = $derived($page.url.searchParams.get('edit') || '');
+  /** @type {{ pubkey?: string, identifier?: string, relays?: string[], error?: string } | null} */
+  const editTarget = $derived.by(() => {
+    if (!editNaddr) return null;
+    try {
+      const decoded = nip19.decode(editNaddr);
+      if (decoded.type !== 'naddr') return { error: 'Invalid edit naddr' };
+      const d = /** @type {any} */ (decoded.data);
+      if (d.kind !== 30142) return { error: 'Edit target must be a kind-30142 resource' };
+      return { pubkey: d.pubkey, identifier: d.identifier, relays: d.relays || [] };
+    } catch {
+      return { error: 'Invalid edit naddr' };
+    }
+  });
+
+  /** @type {import('nostr-tools').NostrEvent | undefined} */
+  let resourceEvent = $state(undefined);
+
   $effect(() => {
     if (decoded.error || !decoded.pubkey || !decoded.identifier) return;
     const pubkey = decoded.pubkey;
@@ -37,6 +57,47 @@
       modelSub.unsubscribe();
     };
   });
+
+  // Load the resource being edited (if any)
+  $effect(() => {
+    resourceEvent = undefined;
+    if (!editTarget || editTarget.error || !editTarget.pubkey || !editTarget.identifier) return;
+    const pubkey = editTarget.pubkey;
+    const identifier = editTarget.identifier;
+    const relays = [...(editTarget.relays || []), ...getEducationalRelays()];
+
+    const loaderSub = addressLoader({ kind: 30142, pubkey, identifier, relays }).subscribe();
+    const modelSub = eventStore.replaceable(30142, pubkey, identifier).subscribe((e) => {
+      if (e) resourceEvent = e;
+    });
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
+  });
+
+  // Combine parsed values + selectedConcepts into a FormRenderer-shaped initialValues map
+  const initialValues = $derived.by(() => {
+    if (!parsed || !resourceEvent || !decoded.pubkey || !decoded.identifier) return undefined;
+    const { values: parsedValues, selectedConcepts } = parseAMBResourceForForm(resourceEvent, {
+      pubkey: decoded.pubkey,
+      dTag: decoded.identifier,
+      fields: parsed.fields
+    });
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const field of parsed.fields) {
+      if (field.vocab) {
+        out[field.id] = selectedConcepts[field.id] || [];
+      } else {
+        out[field.id] = parsedValues[field.id] ?? '';
+      }
+    }
+    return out;
+  });
+
+  const isEditMode = $derived(!!editNaddr && !editTarget?.error);
+  const editReady = $derived(!isEditMode || !!resourceEvent);
 
   /** @param {Record<string, any>} values */
   async function handleSubmit(values) {
@@ -62,7 +123,11 @@
         }
       }
 
-      const dTag = crypto.randomUUID();
+      // Edit mode reuses the resource's d-tag so the publish is an addressable replacement
+      const dTag =
+        isEditMode && resourceEvent
+          ? resourceEvent.tags.find((t) => t[0] === 'd')?.[1] || crypto.randomUUID()
+          : crypto.randomUUID();
       const formRelay = (decoded.relays && decoded.relays[0]) || '';
       const tags = [
         ['d', dTag],
@@ -99,7 +164,9 @@
 <div class="container mx-auto max-w-2xl p-4">
   {#if decoded.error}
     <div class="alert alert-error">{decoded.error}</div>
-  {:else if !formEvent}
+  {:else if editTarget?.error}
+    <div class="alert alert-error">{editTarget.error}</div>
+  {:else if !formEvent || !editReady}
     <div class="flex justify-center p-8">
       <span class="loading loading-lg loading-spinner"></span>
     </div>
@@ -108,7 +175,7 @@
   {:else if !manager.active}
     <div class="alert alert-warning">Bitte anmelden, um eine Ressource anzulegen.</div>
   {:else}
-    <FormRenderer {formEvent} onsubmit={handleSubmit} />
+    <FormRenderer {formEvent} {initialValues} onsubmit={handleSubmit} />
     {#if submitting}
       <p class="mt-4">Wird veröffentlicht …</p>
     {/if}

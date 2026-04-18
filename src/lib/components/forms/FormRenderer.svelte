@@ -7,10 +7,11 @@
    * @type {{
    *   formEvent: import('nostr-tools').NostrEvent,
    *   onsubmit?: (values: Record<string, any>) => void,
-   *   readonly?: boolean
+   *   readonly?: boolean,
+   *   initialValues?: Record<string, any>
    * }}
    */
-  let { formEvent, onsubmit, readonly = false } = $props();
+  let { formEvent, onsubmit, readonly = false, initialValues } = $props();
 
   const form = $derived(parseFormTemplate(formEvent));
 
@@ -19,7 +20,7 @@
   /** @type {Record<string, string | null>} */
   let errors = $state({});
 
-  // Initialize values from defaults (only once)
+  // Initialize values from initialValues (edit mode) or defaults (only once)
   let initialized = false;
   $effect(() => {
     if (form && !initialized) {
@@ -27,7 +28,12 @@
       /** @type {Record<string, any>} */
       const initial = {};
       for (const field of form.fields) {
-        initial[field.id] = field.vocab ? [] : field.defaultValue || '';
+        const provided = initialValues?.[field.id];
+        if (provided !== undefined) {
+          initial[field.id] = provided;
+        } else {
+          initial[field.id] = field.vocab ? [] : field.defaultValue || '';
+        }
       }
       values = initial;
     }

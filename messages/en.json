@@ -948,6 +948,7 @@
   "amb_resource_uploaded_files": "Uploaded Files",
   "amb_resource_discussion": "Discussion",
   "amb_resource_published": "Published {date}",
+  "amb_resource_edit_in_form": "Edit in form",
   "content_relay_label": "Content-Specific Relays",
   "content_relay_help": "Gated content will use these relays instead of community relays",
   "form_config_toggle": "Configure access control",

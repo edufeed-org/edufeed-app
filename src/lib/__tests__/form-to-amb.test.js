@@ -1,6 +1,10 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { buildAMBResourceTags } from '../helpers/form-to-amb.js';
+import {
+  buildAMBResourceTags,
+  parseAMBResourceForForm,
+  getFormReferenceFromResource
+} from '../helpers/form-to-amb.js';
 
 describe('buildAMBResourceTags', () => {
   const formRelay = 'wss://relay.example';
@@ -101,6 +105,71 @@ describe('buildAMBResourceTags', () => {
   it('emits the informative form back-reference a-tag', () => {
     const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
     expect(tags).toContainEqual(['a', '30168:edupub:amb-basic', 'wss://relay.example', 'form']);
+  });
+
+  it('round-trips via parseAMBResourceForForm (restores values + selectedConcepts)', () => {
+    const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
+    const event = {
+      id: 'evt',
+      pubkey: 'author',
+      kind: 30142,
+      created_at: 0,
+      sig: '',
+      content: '',
+      tags: [['d', 'resource-id'], ...tags]
+    };
+
+    const { values: v, selectedConcepts: sc } = parseAMBResourceForForm(event, baseForm);
+
+    expect(v.name).toBe('Pythagoras-Video');
+    expect(v.description).toBe('Ein Video zum Satz des Pythagoras.');
+    expect(v.about).toEqual(['https://w3id.org/kim/schulfaecher/s1017']);
+    expect(v.kompetenz).toEqual(['https://example.org/komp/arg']);
+    expect(v.klassenstufe).toBe('7');
+
+    expect(sc.about).toHaveLength(1);
+    expect(sc.about[0].id).toBe('https://w3id.org/kim/schulfaecher/s1017');
+    expect(sc.about[0].nostrCoord).toBe('39737:edupub:s1017');
+    expect(sc.about[0].relay).toBe('wss://vocab.example');
+    expect(sc.about[0].labels.de).toBe('Mathematik');
+    expect(sc.about[0].labels.en).toBe('Mathematics');
+
+    expect(sc.kompetenz).toHaveLength(1);
+    expect(sc.kompetenz[0].id).toBe('https://example.org/komp/arg');
+    expect(sc.kompetenz[0].nostrCoord).toBe('39737:mbi:arg');
+    expect(sc.kompetenz[0].labels.de).toBe('Argumentieren');
+  });
+
+  it('getFormReferenceFromResource extracts the form back-reference a-tag', () => {
+    const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
+    const event = {
+      id: 'evt',
+      pubkey: 'author',
+      kind: 30142,
+      created_at: 0,
+      sig: '',
+      content: '',
+      tags: [['d', 'resource-id'], ...tags]
+    };
+
+    const ref = getFormReferenceFromResource(event);
+    expect(ref).toEqual({ address: '30168:edupub:amb-basic', relay: 'wss://relay.example' });
+  });
+
+  it('getFormReferenceFromResource returns null for events without a form back-ref', () => {
+    const event = {
+      id: 'evt',
+      pubkey: 'author',
+      kind: 30142,
+      created_at: 0,
+      sig: '',
+      content: '',
+      tags: [
+        ['d', 'resource-id'],
+        ['name', 'No form']
+      ]
+    };
+    expect(getFormReferenceFromResource(event)).toBeNull();
   });
 
   it('skips empty values (no tag emission for blank fields)', () => {

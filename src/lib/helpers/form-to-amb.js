@@ -51,6 +51,107 @@ export function buildAMBResourceTags({ form, formRelay, values, selectedConcepts
 }
 
 /**
+ * Inverse of buildAMBResourceTags: read a kind-30142 event's tags using the
+ * form template that produced it and restore the original field values +
+ * per-field selectedConcepts (for vocab-bound fields). Useful for pre-populating
+ * FormRenderer when editing an existing resource via the form.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {ParsedFormForSerialization} form
+ * @returns {{ values: Record<string, string|string[]>, selectedConcepts: Record<string, SelectedConcept[]> }}
+ */
+export function parseAMBResourceForForm(event, form) {
+  const formCoord = `30168:${form.pubkey}:${form.dTag}`;
+  /** @type {Record<string, string|string[]>} */
+  const values = {};
+  /** @type {Record<string, SelectedConcept[]>} */
+  const selectedConcepts = {};
+
+  // Index a-tags by role for concept metadata (nostrCoord + relay)
+  /** @type {Map<string, { nostrCoord: string, relay: string }[]>} */
+  const aTagsByRole = new Map();
+  for (const t of event.tags) {
+    if (t[0] !== 'a' || !t[1] || !t[3]) continue;
+    const role = t[3];
+    if (role === 'form' || role === 'forkOf') continue;
+    const list = aTagsByRole.get(role) || [];
+    list.push({ nostrCoord: t[1], relay: t[2] || '' });
+    aTagsByRole.set(role, list);
+  }
+
+  for (const field of form.fields) {
+    const output = field.output || `amb:${field.id}`;
+    let keyBase;
+    let role;
+    if (output.startsWith('amb:')) {
+      keyBase = output.slice(4);
+      role = keyBase;
+    } else if (output === 'ext') {
+      keyBase = `ext:${formCoord}:${field.id}`;
+      role = `ext:${field.id}`;
+    } else {
+      continue;
+    }
+
+    if (field.vocab) {
+      // Concept-valued: collect :id occurrences + matching prefLabel tags
+      /** @type {{ id: string, labels: Record<string,string> }[]} */
+      const entries = [];
+      for (const t of event.tags) {
+        if (t[0] === `${keyBase}:id` && t[1]) {
+          entries.push({ id: t[1], labels: {} });
+        }
+      }
+      if (entries.length === 0) continue;
+
+      // Collect prefLabels; if multiple concepts share the same keyBase the
+      // spec doesn't disambiguate by position, so attach all prefLabels to
+      // each concept — round-trip is lossy here for multi-concept fields, but
+      // adequate for single-concept fields (the common case).
+      /** @type {Record<string,string>} */
+      const sharedLabels = {};
+      for (const t of event.tags) {
+        if (t[0]?.startsWith(`${keyBase}:prefLabel:`) && t[1]) {
+          const lang = t[0].slice(`${keyBase}:prefLabel:`.length);
+          sharedLabels[lang] = t[1];
+        }
+      }
+      const aRefs = aTagsByRole.get(role) || [];
+
+      values[field.id] = entries.map((e) => e.id);
+      selectedConcepts[field.id] = entries.map((entry, i) => ({
+        id: entry.id,
+        nostrCoord: aRefs[i]?.nostrCoord || '',
+        relay: aRefs[i]?.relay || '',
+        labels: { ...sharedLabels }
+      }));
+    } else {
+      // Scalar: collect flat tag values
+      const vals = event.tags.filter((t) => t[0] === keyBase && t[1]).map((t) => t[1]);
+      if (vals.length === 0) continue;
+      values[field.id] = vals.length === 1 ? vals[0] : vals;
+    }
+  }
+
+  return { values, selectedConcepts };
+}
+
+/**
+ * Extract the informative form back-reference from a resource event.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {{ address: string, relay: string } | null}
+ */
+export function getFormReferenceFromResource(event) {
+  for (const t of event.tags) {
+    if (t[0] === 'a' && t[3] === 'form' && t[1]?.startsWith('30168:')) {
+      return { address: t[1], relay: t[2] || '' };
+    }
+  }
+  return null;
+}
+
+/**
  * @param {string[][]} out
  * @param {string} propOrFieldId
  * @param {import('./forms.js').FormField} field
