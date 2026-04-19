@@ -120,8 +120,9 @@ describe('FormConceptPicker', () => {
 
     const options = container.querySelectorAll('[role="option"]');
     expect(options.length).toBe(2);
-    expect(options[0].textContent).toContain('Mathematik');
-    expect(options[1].textContent).toContain('Biologie');
+    // Roots are sorted alphabetically by the toSkosTree helper.
+    expect(options[0].textContent).toContain('Biologie');
+    expect(options[1].textContent).toContain('Mathematik');
   });
 
   it('emits the rich SelectedConcept shape when an option is chosen', async () => {

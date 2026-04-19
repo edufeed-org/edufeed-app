@@ -2,6 +2,7 @@
   import { useConceptScheme, useSchemeConcepts } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+  import { conceptEventsToSkosTree } from '$lib/helpers/educational/conceptEventsToSkosTree.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
 
   /**
@@ -85,18 +86,11 @@
     return map;
   });
 
-  // Concepts adapted to SKOSDropdown's SKOSConcept shape ({ id, labels, notation? }).
+  // Concepts adapted to SKOSDropdown's SKOSConcept shape, with hierarchy
+  // (level/parentId) extracted from `broader` tags and concepts emitted in
+  // DFS order so SKOSDropdown's tree UI renders correctly.
   const dropdownConcepts = $derived(
-    conceptEvents.map((e) => {
-      const notation = e.tags.find((t) => t[0] === 'notation')?.[1];
-      /** @type {import('$lib/helpers/educational/skosLoader.js').SKOSConcept} */
-      const c = {
-        id: conceptId(e),
-        labels: labelsFromEvent(e)
-      };
-      if (notation) c.notation = notation;
-      return c;
-    })
+    conceptEventsToSkosTree(conceptEvents, conceptId, labelsFromEvent, locale)
   );
 
   // Translate incoming rich value[] into SKOSDropdown's { id, label } shape.
