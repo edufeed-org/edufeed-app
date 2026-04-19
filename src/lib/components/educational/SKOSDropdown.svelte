@@ -267,7 +267,13 @@
       case ' ':
         if (activeIndex >= 0 && activeIndex < visibleConcepts.length) {
           event.preventDefault();
-          toggleSelection(visibleConcepts[activeIndex]);
+          const concept = visibleConcepts[activeIndex];
+          // Match the click behaviour: parent rows (outside search) expand/collapse.
+          if (parentIds.has(concept.id) && !searchTerm.trim()) {
+            toggleCategory(concept.id, event);
+          } else {
+            toggleSelection(concept);
+          }
         }
         break;
 
@@ -437,6 +443,7 @@
                 {@const hasChildren = parentIds.has(concept.id)}
                 {@const isCollapsed = collapsedCategories.has(concept.id)}
                 {@const isActive = index === activeIndex}
+                {@const parentToggles = hasChildren && !searchTerm.trim()}
 
                 <div
                   data-option-index={index}
@@ -469,11 +476,17 @@
                     <span class="w-[1.625rem] flex-shrink-0"></span>
                   {/if}
 
-                  <!-- Selection button -->
+                  <!-- Label/selection button.
+                       For parent rows (has children, not searching), clicking the
+                       label toggles expand/collapse so the whole row becomes a big
+                       navigation target. Leaves — and all rows during search —
+                       click to select. The chevron button keeps its Expand/Collapse
+                       aria-label for screen readers. -->
                   <button
                     type="button"
                     class="flex min-w-0 flex-1 items-center gap-2 py-2 text-left"
-                    onclick={() => toggleSelection(concept)}
+                    onclick={(e) =>
+                      parentToggles ? toggleCategory(concept.id, e) : toggleSelection(concept)}
                     tabindex="-1"
                   >
                     {#if multiple}

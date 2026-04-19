@@ -327,6 +327,177 @@ describe('SKOSDropdown', () => {
       const collapseBtns = listbox.querySelectorAll('[aria-label="Collapse"]');
       expect(expandBtns.length + collapseBtns.length).toBe(0);
     });
+
+    it('clicking a parent row label toggles expand/collapse without selecting', async () => {
+      // >30 so auto-collapse triggers and children start hidden
+      /** @type {any[]} */
+      const hierarchy = [];
+      for (let i = 0; i < 10; i++) {
+        hierarchy.push({
+          id: `https://example.com/cat${i}`,
+          prefLabel: { en: `Cat ${i}` },
+          level: 0
+        });
+        for (let j = 0; j < 3; j++) {
+          hierarchy.push({
+            id: `https://example.com/cat${i}/sub${j}`,
+            prefLabel: { en: `Sub ${i}-${j}` },
+            level: 1,
+            parentId: `https://example.com/cat${i}`
+          });
+        }
+      }
+      fetchVocabularyMock.mockResolvedValue(hierarchy);
+
+      const onchange = vi.fn();
+      const { container } = render(SKOSDropdown, {
+        props: { vocabularyKey: 'about', multiple: true, onchange }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger).toBeTruthy();
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // Auto-collapsed: only parents visible initially
+      const optionsBefore = container.querySelectorAll('[role="option"]');
+      expect(optionsBefore.length).toBe(10);
+
+      // Find the first parent row's inner selection button (the label area)
+      const parentRow = /** @type {HTMLElement} */ (optionsBefore[0]);
+      const labelButton = /** @type {HTMLButtonElement} */ (
+        parentRow.querySelector('button:not([aria-label="Expand"]):not([aria-label="Collapse"])')
+      );
+      expect(labelButton).toBeTruthy();
+
+      await fireEvent.click(labelButton);
+
+      // Children should now be visible (expanded)
+      const optionsAfter = container.querySelectorAll('[role="option"]');
+      expect(optionsAfter.length).toBeGreaterThan(10);
+
+      // Selection must NOT have been triggered
+      expect(onchange).not.toHaveBeenCalled();
+
+      // Clicking again collapses back
+      const parentRowAgain = /** @type {HTMLElement} */ (
+        container.querySelectorAll('[role="option"]')[0]
+      );
+      const labelButton2 = /** @type {HTMLButtonElement} */ (
+        parentRowAgain.querySelector(
+          'button:not([aria-label="Expand"]):not([aria-label="Collapse"])'
+        )
+      );
+      await fireEvent.click(labelButton2);
+      expect(container.querySelectorAll('[role="option"]').length).toBe(10);
+      expect(onchange).not.toHaveBeenCalled();
+    });
+
+    it('clicking a leaf row label still selects', async () => {
+      /** @type {any[]} */
+      const hierarchy = [{ id: 'https://example.com/cat0', prefLabel: { en: 'Cat 0' }, level: 0 }];
+      for (let i = 0; i < 32; i++) {
+        // pad to >30 to trigger auto-collapse path (then we expand)
+        hierarchy.push({
+          id: `https://example.com/leaf${i}`,
+          prefLabel: { en: `Leaf ${i}` },
+          level: 1,
+          parentId: 'https://example.com/cat0'
+        });
+      }
+      fetchVocabularyMock.mockResolvedValue(hierarchy);
+
+      const onchange = vi.fn();
+      const { container } = render(SKOSDropdown, {
+        props: { vocabularyKey: 'about', multiple: true, onchange }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // Expand the parent by clicking its label (auto-collapsed initially)
+      const parentRow = /** @type {HTMLElement} */ (
+        container.querySelectorAll('[role="option"]')[0]
+      );
+      const parentLabelBtn = /** @type {HTMLButtonElement} */ (
+        parentRow.querySelector('button:not([aria-label="Expand"]):not([aria-label="Collapse"])')
+      );
+      await fireEvent.click(parentLabelBtn);
+
+      // Pick the first leaf (index 1 after expand)
+      const options = container.querySelectorAll('[role="option"]');
+      const leafRow = /** @type {HTMLElement} */ (options[1]);
+      const leafLabelBtn = /** @type {HTMLButtonElement} */ (
+        leafRow.querySelector('button:not([aria-label="Expand"]):not([aria-label="Collapse"])')
+      );
+      await fireEvent.click(leafLabelBtn);
+
+      expect(onchange).toHaveBeenCalledTimes(1);
+      expect(onchange.mock.calls[0][0]).toHaveLength(1);
+    });
+
+    it('during search, clicking any row label selects (chevrons hide)', async () => {
+      /** @type {any[]} */
+      const hierarchy = [];
+      for (let i = 0; i < 10; i++) {
+        hierarchy.push({
+          id: `https://example.com/cat${i}`,
+          prefLabel: { en: `Cat ${i}` },
+          level: 0
+        });
+        for (let j = 0; j < 3; j++) {
+          hierarchy.push({
+            id: `https://example.com/cat${i}/sub${j}`,
+            prefLabel: { en: `Sub ${i}-${j}` },
+            level: 1,
+            parentId: `https://example.com/cat${i}`
+          });
+        }
+      }
+      fetchVocabularyMock.mockResolvedValue(hierarchy);
+
+      const onchange = vi.fn();
+      const { container } = render(SKOSDropdown, {
+        props: { vocabularyKey: 'about', multiple: true, onchange }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      const searchInput = /** @type {HTMLInputElement} */ (
+        container.querySelector('input[type="text"]')
+      );
+      await fireEvent.input(searchInput, { target: { value: 'Cat 0' } });
+
+      // In search mode, the "Cat 0" parent should select when clicked
+      const options = container.querySelectorAll('[role="option"]');
+      const parentRow = /** @type {HTMLElement} */ (
+        Array.from(options).find((o) => o.textContent?.includes('Cat 0'))
+      );
+      const labelBtn = /** @type {HTMLButtonElement} */ (
+        parentRow.querySelector('button:not([aria-label="Expand"]):not([aria-label="Collapse"])')
+      );
+      await fireEvent.click(labelBtn);
+
+      expect(onchange).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Keyboard navigation', () => {
