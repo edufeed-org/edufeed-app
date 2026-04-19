@@ -166,7 +166,7 @@ describe('FormConceptPicker', () => {
     });
   });
 
-  it('disables the trigger when disabled prop is true (readonly preview)', async () => {
+  it('disables the trigger when disabled prop is true', async () => {
     const { container } = render(FormConceptPicker, {
       props: { field: fieldFixture, value: [], multiple: true, disabled: true }
     });

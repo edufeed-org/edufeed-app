@@ -89,7 +89,6 @@
           {field}
           multiple={field.options?.multiple === true || field.type === 'checkbox'}
           value={values[field.id] || []}
-          disabled={readonly}
           onchange={(v) => (values[field.id] = v)}
         />
       {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
@@ -100,7 +99,6 @@
           class:input-error={errors[field.id]}
           placeholder={field.options?.placeholder || ''}
           bind:value={values[field.id]}
-          disabled={readonly}
         />
       {:else if field.type === 'textarea'}
         <textarea
@@ -109,7 +107,6 @@
           class:textarea-error={errors[field.id]}
           placeholder={field.options?.placeholder || ''}
           bind:value={values[field.id]}
-          disabled={readonly}
           rows="4"
         ></textarea>
         {#if field.options?.min}
@@ -139,7 +136,6 @@
                   }
                   values[field.id] = current.join(',');
                 }}
-                disabled={readonly}
               />
               <span class="label-text">{opt}</span>
             </label>
@@ -151,7 +147,6 @@
           class="select-bordered select w-full"
           class:select-error={errors[field.id]}
           bind:value={values[field.id]}
-          disabled={readonly}
         >
           <option value="">{m.form_select_placeholder()}</option>
           {#each field.options?.options || [] as opt (opt)}
@@ -169,7 +164,6 @@
                 value={opt}
                 checked={values[field.id] === opt}
                 onchange={() => (values[field.id] = opt)}
-                disabled={readonly}
               />
               <span class="label-text">{opt}</span>
             </label>
@@ -183,7 +177,6 @@
             class:checkbox-error={errors[field.id]}
             checked={values[field.id] === 'true'}
             onchange={(e) => (values[field.id] = String(e.currentTarget.checked))}
-            disabled={readonly}
           />
           <span class="label-text">{field.label}</span>
         </label>
