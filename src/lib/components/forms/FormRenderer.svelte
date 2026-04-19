@@ -1,32 +1,39 @@
 <script>
   import { parseFormTemplate, validateField } from '$lib/helpers/forms.js';
   import * as m from '$lib/paraglide/messages';
+  import FormConceptPicker from './FormConceptPicker.svelte';
 
   /**
    * @type {{
    *   formEvent: import('nostr-tools').NostrEvent,
-   *   onsubmit?: (values: Record<string, string>) => void,
-   *   readonly?: boolean
+   *   onsubmit?: (values: Record<string, any>) => void,
+   *   readonly?: boolean,
+   *   initialValues?: Record<string, any>
    * }}
    */
-  let { formEvent, onsubmit, readonly = false } = $props();
+  let { formEvent, onsubmit, readonly = false, initialValues } = $props();
 
   const form = $derived(parseFormTemplate(formEvent));
 
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, any>} */
   let values = $state({});
   /** @type {Record<string, string | null>} */
   let errors = $state({});
 
-  // Initialize values from defaults (only once)
+  // Initialize values from initialValues (edit mode) or defaults (only once)
   let initialized = false;
   $effect(() => {
     if (form && !initialized) {
       initialized = true;
-      /** @type {Record<string, string>} */
+      /** @type {Record<string, any>} */
       const initial = {};
       for (const field of form.fields) {
-        initial[field.id] = field.defaultValue || '';
+        const provided = initialValues?.[field.id];
+        if (provided !== undefined) {
+          initial[field.id] = provided;
+        } else {
+          initial[field.id] = field.vocab ? [] : field.defaultValue || '';
+        }
       }
       values = initial;
     }
@@ -77,7 +84,15 @@
         </span>
       </label>
 
-      {#if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
+      {#if field.vocab}
+        <FormConceptPicker
+          {field}
+          multiple={field.options?.multiple === true || field.type === 'checkbox'}
+          value={values[field.id] || []}
+          disabled={readonly}
+          onchange={(v) => (values[field.id] = v)}
+        />
+      {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
         <input
           id={field.id}
           type={field.type}

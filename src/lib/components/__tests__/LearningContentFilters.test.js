@@ -7,8 +7,38 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import LearningContentFilters from '../educational/LearningContentFilters.svelte';
+
+// Mock vocab-store so ext facet chip-lists resolve concepts offline
+vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
+  useConceptScheme: () => () => null,
+  useSchemeConcepts: () => () => [
+    {
+      id: 'concept-active-evt',
+      pubkey: 'vocabPub',
+      kind: 39737,
+      tags: [
+        ['d', 'active'],
+        ['type', 'Concept'],
+        ['prefLabel', 'Aktiv', 'de'],
+        ['prefLabel', 'Active', 'en'],
+        ['i', 'http://purl.org/dcx/lrmi-vocabs/interactivityType/active']
+      ],
+      content: ''
+    }
+  ]
+}));
+
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getAllLookupRelays: () => ['wss://r.example']
+}));
+
+// Forms helper transitively imports event-factory which depends on app-settings
+// (window.matchMedia). Stub event-factory to keep the import chain jsdom-safe.
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: () => ({ build: async () => ({}), sign: async () => ({}) })
+}));
 
 // Mock paraglide messages - return the key as the string
 vi.mock('$lib/paraglide/messages', () => ({
@@ -21,6 +51,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   learning_filter_active: () => 'Active filters',
   learning_filter_search_label: () => 'Search',
   learning_filter_clear_all: () => 'Clear all',
+  learning_filter_ext_heading: () => 'Additional filters',
   skos_dropdown_select: () => 'Select...',
   skos_dropdown_search: () => 'Search...',
   skos_dropdown_no_results: () => 'No results found',
@@ -104,5 +135,82 @@ describe('LearningContentFilters', () => {
     // Should NOT show the active filters summary
     const summary = container.querySelector('.bg-base-200');
     expect(summary).toBeFalsy();
+  });
+});
+
+/** @type {import('nostr-tools').NostrEvent} */
+const extFormEvent = {
+  id: 'form-evt',
+  kind: 30168,
+  pubkey: 'formPub',
+  sig: '',
+  content: '',
+  created_at: 0,
+  tags: [
+    ['d', 'amb-full'],
+    ['name', 'AMB Full'],
+    [
+      'field',
+      'interactivityType',
+      'select',
+      'Interaktivität',
+      '',
+      JSON.stringify({ required: false })
+    ],
+    [
+      'field-vocab',
+      'interactivityType',
+      'a',
+      '39737:vocabPub:interactivity-type',
+      'wss://r.example'
+    ],
+    ['field-output', 'interactivityType', 'ext']
+  ]
+};
+
+describe('LearningContentFilters ext facets (Phase D)', () => {
+  it('renders no ext section when no form prop is provided', () => {
+    render(LearningContentFilters, {
+      props: {
+        onfilterchange: vi.fn()
+      }
+    });
+    expect(screen.queryByTestId('ext-facet-section')).toBeNull();
+  });
+
+  it('renders an ext facet chip for each vocab-bound ext concept', async () => {
+    render(LearningContentFilters, {
+      props: {
+        form: extFormEvent,
+        onfilterchange: vi.fn()
+      }
+    });
+    const section = await screen.findByTestId('ext-facet-section');
+    expect(section).toBeTruthy();
+    const chip = await screen.findByText('Active');
+    expect(chip).toBeTruthy();
+  });
+
+  it('emits extFields with the concept URI when a chip is toggled', async () => {
+    /** @type {any} */
+    let lastFilters = null;
+    render(LearningContentFilters, {
+      props: {
+        form: extFormEvent,
+        onfilterchange: (/** @type {any} */ f) => {
+          lastFilters = f;
+        }
+      }
+    });
+
+    const chip = await screen.findByText('Active');
+    await fireEvent.click(chip);
+
+    expect(lastFilters).toBeTruthy();
+    expect(lastFilters.extFields).toBeTruthy();
+    const key = '30168:formPub:amb-full:interactivityType';
+    expect(lastFilters.extFields[key]).toEqual([
+      { id: 'http://purl.org/dcx/lrmi-vocabs/interactivityType/active' }
+    ]);
   });
 });

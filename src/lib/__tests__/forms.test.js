@@ -109,7 +109,8 @@ describe('forms — template parsing', () => {
       type: 'text',
       label: 'Full Name',
       defaultValue: '',
-      options: { required: true }
+      options: { required: true },
+      output: 'amb:full-name'
     });
     expect(/** @type {any} */ (parsed.fields[1]).options.min).toBe(50);
   });

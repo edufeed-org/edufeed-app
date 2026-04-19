@@ -8,6 +8,9 @@
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { buildFormTemplateTags, parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
   import { TrashIcon } from '$lib/components/icons';
+  import FormBuilderFieldRow from './FormBuilderFieldRow.svelte';
+  import { addressLoader } from '$lib/loaders/base.js';
+  import { firstValueFrom, timeout } from 'rxjs';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ existingEvent?: import('nostr-tools').NostrEvent }} */
@@ -35,6 +38,14 @@
   let isPublic = $state(existing?.isPublic || false);
   let confirmationMessage = $state(existing?.confirmationMessage || '');
 
+  /** @type {{ address: string, relay: string } | undefined} */
+  let forkOf = $state(existing?.forkOf);
+  let forkDialogOpen = $state(false);
+  let forkNaddrInput = $state('');
+  let forkError = $state('');
+  let forkLoading = $state(false);
+  let parentFormName = $state('');
+
   /**
    * @typedef {Object} FieldState
    * @property {string} id
@@ -47,7 +58,32 @@
    * @property {number | undefined} max
    * @property {string[]} selectOptions
    * @property {boolean} multiple
+   * @property {{ address: string, relay: string } | undefined} [vocab]
+   * @property {string} [output]
+   * @property {string} [vocabNaddrInput]
+   * @property {string} [vocabError]
    */
+
+  /**
+   * Encode a vocab {address, relay} back to an naddr for the UI.
+   * @param {{ address: string, relay: string } | undefined} vocab
+   * @returns {string}
+   */
+  function vocabToNaddr(vocab) {
+    if (!vocab?.address) return '';
+    const [kindStr, pubkey, ...rest] = vocab.address.split(':');
+    const identifier = rest.join(':');
+    try {
+      return nip19.naddrEncode({
+        kind: Number(kindStr),
+        pubkey,
+        identifier,
+        relays: vocab.relay ? [vocab.relay] : []
+      });
+    } catch {
+      return '';
+    }
+  }
 
   /** @type {FieldState[]} */
   let fields = $state(
@@ -61,7 +97,11 @@
       min: f.options?.min,
       max: f.options?.max,
       selectOptions: f.options?.options || [],
-      multiple: f.options?.multiple || false
+      multiple: f.options?.multiple || false,
+      vocab: f.vocab,
+      output: f.output,
+      vocabNaddrInput: vocabToNaddr(f.vocab),
+      vocabError: ''
     })) || []
   );
 
@@ -90,7 +130,11 @@
       min: undefined,
       max: undefined,
       selectOptions: [],
-      multiple: false
+      multiple: false,
+      vocab: undefined,
+      output: '',
+      vocabNaddrInput: '',
+      vocabError: ''
     });
   }
 
@@ -133,6 +177,84 @@
     dragIndex = -1;
   }
 
+  async function loadParentForm() {
+    forkError = '';
+    if (!forkNaddrInput.trim()) {
+      forkError = m.form_builder_fork_error_empty();
+      return;
+    }
+    let decoded;
+    try {
+      decoded = nip19.decode(forkNaddrInput.trim());
+    } catch {
+      forkError = m.form_builder_fork_error_invalid_naddr();
+      return;
+    }
+    if (decoded.type !== 'naddr') {
+      forkError = m.form_builder_fork_error_invalid_naddr();
+      return;
+    }
+    const d = /** @type {any} */ (decoded.data);
+    if (d.kind !== 30168) {
+      forkError = m.form_builder_fork_error_not_form();
+      return;
+    }
+
+    forkLoading = true;
+    try {
+      const relays = [...(d.relays || []), ...getCommunikeyRelays()];
+      await firstValueFrom(
+        addressLoader({ kind: 30168, pubkey: d.pubkey, identifier: d.identifier, relays }).pipe(
+          timeout({ first: 5000 })
+        )
+      ).catch(() => null);
+      const parentEvent = eventStore.getReplaceable(30168, d.pubkey, d.identifier);
+      if (!parentEvent) {
+        forkError = m.form_builder_fork_error_not_found();
+        return;
+      }
+      const parsed = parseFormTemplate(parentEvent);
+
+      // Copy fields into current builder state
+      fields = parsed.fields.map((f) => ({
+        id: f.id,
+        type: f.type,
+        label: f.label,
+        defaultValue: f.defaultValue || '',
+        required: f.options?.required || false,
+        placeholder: f.options?.placeholder || '',
+        min: f.options?.min,
+        max: f.options?.max,
+        selectOptions: f.options?.options || [],
+        multiple: f.options?.multiple || false,
+        vocab: f.vocab,
+        output: f.output,
+        vocabNaddrInput: vocabToNaddr(f.vocab),
+        vocabError: ''
+      }));
+
+      // Pre-fill metadata when empty
+      if (!formName) formName = parsed.name ? `${parsed.name} (fork)` : '';
+      if (!formDescription) formDescription = parsed.description;
+
+      // Record fork provenance
+      const relayHint = d.relays?.[0] || '';
+      forkOf = { address: `30168:${d.pubkey}:${d.identifier}`, relay: relayHint };
+      parentFormName = parsed.name;
+      forkDialogOpen = false;
+      forkNaddrInput = '';
+    } catch (err) {
+      forkError = err instanceof Error ? err.message : m.form_builder_fork_error_load_failed();
+    } finally {
+      forkLoading = false;
+    }
+  }
+
+  function clearFork() {
+    forkOf = undefined;
+    parentFormName = '';
+  }
+
   async function publish() {
     if (!manager.active) {
       error = m.form_builder_error_login();
@@ -160,14 +282,17 @@
           ...((f.type === 'select' || f.type === 'radio') &&
             f.selectOptions.length > 0 && { options: f.selectOptions }),
           ...(f.multiple && { multiple: true })
-        }
+        },
+        ...(f.vocab?.address ? { vocab: f.vocab } : {}),
+        ...(f.output ? { output: f.output } : {})
       }));
 
       const tags = buildFormTemplateTags(dTag, formFields, {
         name: formName,
         description: formDescription,
         public: isPublic,
-        confirmationMessage
+        confirmationMessage,
+        ...(forkOf ? { forkOf } : {})
       });
 
       const factory = createAppEventFactory({ signer: manager.active.signer });
@@ -198,6 +323,11 @@
       {m.form_builder_header()}
     </div>
     <div class="flex gap-2">
+      {#if !existingEvent}
+        <button class="btn btn-ghost btn-sm" onclick={() => (forkDialogOpen = true)}>
+          {m.form_builder_fork_from()}
+        </button>
+      {/if}
       <a href="/forms" class="btn btn-ghost btn-sm">{m.common_cancel()}</a>
       <button class="btn btn-sm btn-primary" onclick={publish} disabled={isPublishing}>
         {isPublishing
@@ -208,6 +338,55 @@
       </button>
     </div>
   </div>
+
+  {#if forkOf}
+    <div class="mb-4 flex items-center justify-between rounded-lg bg-base-200 px-4 py-2 text-sm">
+      <span>
+        {m.form_builder_fork_badge()}
+        {#if parentFormName}
+          <span class="font-semibold">{parentFormName}</span>
+        {:else}
+          <code class="text-xs">{forkOf.address}</code>
+        {/if}
+      </span>
+      {#if !existingEvent}
+        <button class="btn btn-ghost btn-xs" onclick={clearFork}>{m.common_remove()}</button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if forkDialogOpen}
+    <dialog class="modal-open modal">
+      <div class="modal-box">
+        <h3 class="mb-2 text-lg font-bold">{m.form_builder_fork_dialog_title()}</h3>
+        <p class="mb-4 text-sm text-base-content/70">{m.form_builder_fork_dialog_help()}</p>
+        <input
+          type="text"
+          class="input-bordered input w-full"
+          placeholder="naddr1..."
+          bind:value={forkNaddrInput}
+        />
+        {#if forkError}
+          <div class="mt-2 text-sm text-error">{forkError}</div>
+        {/if}
+        <div class="modal-action">
+          <button
+            class="btn btn-ghost btn-sm"
+            onclick={() => {
+              forkDialogOpen = false;
+              forkError = '';
+            }}
+            disabled={forkLoading}
+          >
+            {m.common_cancel()}
+          </button>
+          <button class="btn btn-sm btn-primary" onclick={loadParentForm} disabled={forkLoading}>
+            {forkLoading ? m.form_builder_fork_loading() : m.form_builder_fork_load()}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  {/if}
 
   {#if error}
     <div class="mb-4 alert alert-error">{error}</div>
@@ -273,122 +452,12 @@
           </div>
 
           <!-- Field config -->
-          <div class="flex-1 space-y-2">
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                class="input-bordered input input-sm flex-1 font-semibold"
-                placeholder={m.form_builder_field_name_placeholder()}
-                bind:value={field.label}
-                onchange={() => {
-                  if (!existing) {
-                    const existingIds = fields.filter((_, j) => j !== i).map((f) => f.id);
-                    field.id = generateFieldId(field.label, existingIds);
-                  }
-                }}
-              />
-              <select class="select-bordered select select-sm" bind:value={field.type}>
-                {#each FIELD_TYPES as t (t)}
-                  <option value={t}>{t}</option>
-                {/each}
-              </select>
-            </div>
-
-            <div class="flex items-center gap-3 text-sm">
-              <label class="label cursor-pointer gap-1">
-                <input type="checkbox" class="checkbox checkbox-xs" bind:checked={field.required} />
-                <span class="label-text text-xs">{m.form_builder_field_required()}</span>
-              </label>
-              <input
-                type="text"
-                class="input-bordered input input-xs flex-1"
-                placeholder={m.form_builder_field_placeholder_text()}
-                bind:value={field.placeholder}
-              />
-            </div>
-
-            {#if field.type === 'text' || field.type === 'textarea' || field.type === 'number'}
-              {@const isNumeric = field.type === 'number'}
-              <div class="flex items-center gap-2 text-sm">
-                <span
-                  class="text-xs text-base-content/50"
-                  title={isNumeric ? 'Minimum allowed value' : 'Minimum character length'}
-                  >{isNumeric ? m.form_builder_min_value() : m.form_builder_min_length()}</span
-                >
-                <input
-                  type="number"
-                  class="input-bordered input input-xs w-16"
-                  bind:value={field.min}
-                />
-                <span
-                  class="text-xs text-base-content/50"
-                  title={isNumeric ? 'Maximum allowed value' : 'Maximum character length'}
-                  >{isNumeric ? m.form_builder_max_value() : m.form_builder_max_length()}</span
-                >
-                <input
-                  type="number"
-                  class="input-bordered input input-xs w-16"
-                  bind:value={field.max}
-                />
-              </div>
-            {/if}
-
-            {#if field.type === 'select' || field.type === 'radio'}
-              <div class="rounded bg-base-200/50 p-2">
-                <div class="mb-1 text-xs text-base-content/50">
-                  {m.form_builder_field_options_label()}
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  {#each field.selectOptions as opt, j (opt + '-' + j)}
-                    <span class="badge gap-1 badge-outline">
-                      {opt}
-                      <button
-                        class="text-xs opacity-50 hover:opacity-100"
-                        onclick={() => field.selectOptions.splice(j, 1)}>×</button
-                      >
-                    </span>
-                  {/each}
-                  <span class="inline-flex items-center gap-0.5">
-                    <input
-                      type="text"
-                      class="input-bordered input input-xs w-24 border-dashed"
-                      placeholder={m.form_builder_field_option_new()}
-                      onkeydown={(e) => {
-                        if (e.key === 'Enter' && e.currentTarget.value) {
-                          field.selectOptions.push(e.currentTarget.value);
-                          e.currentTarget.value = '';
-                        }
-                      }}
-                    />
-                    <button
-                      class="btn px-1 btn-ghost btn-xs"
-                      title={m.form_builder_add_option()}
-                      onclick={(e) => {
-                        const input = /** @type {HTMLInputElement | null} */ (
-                          e.currentTarget.previousElementSibling
-                        );
-                        if (input?.value) {
-                          field.selectOptions.push(input.value);
-                          input.value = '';
-                          input.focus();
-                        }
-                      }}>+</button
-                    >
-                  </span>
-                </div>
-                {#if field.type === 'select'}
-                  <label class="label mt-1 cursor-pointer justify-start gap-1">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-xs"
-                      bind:checked={field.multiple}
-                    />
-                    <span class="label-text text-xs">{m.form_builder_field_allow_multiple()}</span>
-                  </label>
-                {/if}
-              </div>
-            {/if}
-          </div>
+          <FormBuilderFieldRow
+            bind:field={fields[i]}
+            {fields}
+            fieldIndex={i}
+            existing={!!existing}
+          />
 
           <!-- Delete -->
           <button

@@ -28,6 +28,7 @@
   import { page } from '$app/stores';
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { EditIcon, TrashIcon } from '$lib/components/icons';
@@ -85,6 +86,28 @@
       identifier: dTag
     });
     goto(resolve(`/create/resource?edit=${editNaddr}`));
+  }
+
+  // Form back-reference: if the resource was produced by a kind-30168 form, offer
+  // "Edit in form" that routes through the form-driven create-resource page.
+  const formRef = $derived(getFormReferenceFromResource(event));
+
+  function handleEditInFormClick() {
+    if (!formRef) return;
+    const [kindStr, pubkey, identifier] = formRef.address.split(':');
+    const formNaddr = nip19.naddrEncode({
+      kind: Number(kindStr),
+      pubkey,
+      identifier,
+      relays: formRef.relay ? [formRef.relay] : undefined
+    });
+    const dTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
+    const editNaddr = nip19.naddrEncode({
+      kind: event.kind,
+      pubkey: event.pubkey,
+      identifier: dTag
+    });
+    goto(resolve(`/forms/${formNaddr}/create-resource?edit=${editNaddr}`));
   }
 
   /**
@@ -329,6 +352,16 @@
             <EditIcon class="h-4 w-4" />
             {m.common_edit()}
           </button>
+          {#if formRef}
+            <button
+              class="btn btn-outline btn-sm"
+              onclick={handleEditInFormClick}
+              aria-label={m.amb_resource_edit_in_form()}
+            >
+              <EditIcon class="h-4 w-4" />
+              {m.amb_resource_edit_in_form()}
+            </button>
+          {/if}
           <button
             class="btn btn-outline btn-sm btn-error"
             onclick={() => (showDeleteConfirmation = true)}

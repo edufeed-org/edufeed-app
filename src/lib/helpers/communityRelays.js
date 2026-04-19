@@ -14,6 +14,8 @@
  * @property {string[]} relays
  * @property {string|null} profileList - Profile list address: "30000:pubkey:d-tag" (new spec)
  * @property {string|null} profileListRelay - Relay hint for the profile list (new spec)
+ * @property {string|null} formRef - Preferred form address: "30168:pubkey:d-tag" (form-driven authoring)
+ * @property {string|null} formRefRelay - Relay hint for the preferred form
  */
 
 /**
@@ -57,7 +59,9 @@ export function parseCommunityContentTypes(event) {
         badges: { read: null, write: null },
         relays: [],
         profileList: null,
-        profileListRelay: null
+        profileListRelay: null,
+        formRef: null,
+        formRefRelay: null
       };
     } else if (key === 'k' && currentContentType) {
       const kind = parseInt(tag[1], 10);
@@ -78,6 +82,17 @@ export function parseCommunityContentTypes(event) {
     } else if (key === 'a' && currentContentType && tag[1]?.startsWith('30000:')) {
       currentContentType.profileList = tag[1];
       currentContentType.profileListRelay = tag[2] || null;
+    } else if (
+      key === 'a' &&
+      currentContentType &&
+      tag[1]?.startsWith('30168:') &&
+      tag[3] === 'form'
+    ) {
+      // Only the first form-marked 30168 a-tag per content section is recorded.
+      if (!currentContentType.formRef) {
+        currentContentType.formRef = tag[1];
+        currentContentType.formRefRelay = tag[2] || null;
+      }
     } else if (key === 'r' && currentContentType && tag[2] === 'content') {
       currentContentType.relays.push(tag[1]);
     }
@@ -241,6 +256,23 @@ export function getCommunityRelaysByEnforcement(communityEvent) {
     enforced: metadata.relays.filter((r) => r.enforced).map((r) => r.url),
     open: metadata.relays.filter((r) => !r.enforced).map((r) => r.url)
   };
+}
+
+/**
+ * Get the community's preferred form for a given content kind.
+ * Walks the content sections in order and returns the formRef of the first
+ * section that includes the kind and declares a form-marked a-tag.
+ *
+ * @param {any} communityEvent - The kind 10222 community event
+ * @param {number} kind - The event kind to resolve a form for
+ * @returns {{ address: string, relay: string } | null}
+ */
+export function getPreferredFormForKind(communityEvent, kind) {
+  if (!communityEvent) return null;
+  const contentTypes = parseCommunityContentTypes(communityEvent);
+  const match = contentTypes.find((ct) => ct.kinds.includes(kind) && ct.formRef);
+  if (!match || !match.formRef) return null;
+  return { address: match.formRef, relay: match.formRefRelay || '' };
 }
 
 /**

@@ -1,0 +1,158 @@
+{
+  "forms": [
+    {
+      "d": "amb-basic",
+      "name": "AMB Basic (Edufeed default)",
+      "description": "Minimale AMB-Ressource — Titel, Beschreibung, Fach, Ressourcentyp, Sprache, Lizenz.",
+      "fields": [
+        {
+          "id": "name",
+          "type": "text",
+          "label": "Titel",
+          "required": true,
+          "output": "amb:name"
+        },
+        {
+          "id": "description",
+          "type": "textarea",
+          "label": "Beschreibung",
+          "required": true,
+          "output": "amb:description"
+        },
+        {
+          "id": "about",
+          "type": "select",
+          "label": "Fach",
+          "required": true,
+          "multiple": true,
+          "vocabRef": "schulfaecher",
+          "output": "amb:about"
+        },
+        {
+          "id": "learningResourceType",
+          "type": "select",
+          "label": "Ressourcentyp",
+          "required": true,
+          "vocabRef": "hcrt",
+          "output": "amb:learningResourceType"
+        },
+        {
+          "id": "inLanguage",
+          "type": "text",
+          "label": "Sprache (BCP47)",
+          "output": "amb:inLanguage"
+        },
+        {
+          "id": "license",
+          "type": "text",
+          "label": "Lizenz-URI",
+          "required": true,
+          "output": "amb:license"
+        }
+      ]
+    },
+    {
+      "d": "amb-full",
+      "name": "AMB Full (Edufeed default)",
+      "description": "Vollständiges AMB-Formular mit allen Core-Facetten (Fach, Ressourcentyp, Zielgruppe, Niveau, Interaktivität, Zugang, Sprache, Lizenz, Schlagworte).",
+      "fields": [
+        {
+          "id": "name",
+          "type": "text",
+          "label": "Titel",
+          "required": true,
+          "output": "amb:name"
+        },
+        {
+          "id": "description",
+          "type": "textarea",
+          "label": "Beschreibung",
+          "required": true,
+          "output": "amb:description"
+        },
+        {
+          "id": "about",
+          "type": "select",
+          "label": "Fach (Schule)",
+          "multiple": true,
+          "vocabRef": "schulfaecher",
+          "output": "amb:about"
+        },
+        {
+          "id": "aboutHochschule",
+          "type": "select",
+          "label": "Fach (Hochschule)",
+          "multiple": true,
+          "vocabRef": "hochschulfaecher",
+          "output": "amb:about"
+        },
+        {
+          "id": "learningResourceType",
+          "type": "select",
+          "label": "Ressourcentyp (HCRT)",
+          "required": true,
+          "multiple": true,
+          "vocabRef": "hcrt",
+          "output": "amb:learningResourceType"
+        },
+        {
+          "id": "learningResourceTypeNew",
+          "type": "select",
+          "label": "Ressourcentyp (KIM LRT)",
+          "multiple": true,
+          "vocabRef": "new-lrt",
+          "output": "amb:learningResourceType"
+        },
+        {
+          "id": "audience",
+          "type": "select",
+          "label": "Zielgruppe",
+          "multiple": true,
+          "vocabRef": "lrmi-audience",
+          "output": "amb:audience"
+        },
+        {
+          "id": "educationalLevel",
+          "type": "select",
+          "label": "Bildungsstufe",
+          "multiple": true,
+          "vocabRef": "educational-level",
+          "output": "amb:educationalLevel"
+        },
+        {
+          "id": "interactivityType",
+          "type": "select",
+          "label": "Interaktivität",
+          "vocabRef": "interactivity-type",
+          "output": "amb:interactivityType"
+        },
+        {
+          "id": "conditionsOfAccess",
+          "type": "select",
+          "label": "Zugangsbedingungen",
+          "vocabRef": "conditions-of-access",
+          "output": "amb:conditionsOfAccess"
+        },
+        {
+          "id": "inLanguage",
+          "type": "text",
+          "label": "Sprache (BCP47)",
+          "output": "amb:inLanguage"
+        },
+        {
+          "id": "license",
+          "type": "text",
+          "label": "Lizenz-URI",
+          "required": true,
+          "output": "amb:license"
+        },
+        {
+          "id": "keywords",
+          "type": "text",
+          "label": "Schlagworte (kommagetrennt)",
+          "output": "amb:keywords"
+        }
+      ]
+    }
+  ]
+}

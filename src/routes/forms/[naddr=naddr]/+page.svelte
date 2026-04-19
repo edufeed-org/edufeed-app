@@ -3,7 +3,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { decodeFormNaddr } from '$lib/helpers/forms.js';
+  import { decodeFormNaddr, parseFormTemplate, formEventToNaddr } from '$lib/helpers/forms.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import FormResponses from '$lib/components/forms/FormResponses.svelte';
   import SendFormModal from '$lib/components/forms/SendFormModal.svelte';
@@ -57,6 +57,38 @@
     formEvent && manager.active && formEvent.pubkey === manager.active.pubkey
   );
 
+  const parsedForm = $derived(formEvent ? parseFormTemplate(formEvent) : null);
+  const forkOf = $derived(parsedForm?.forkOf);
+
+  let parentFormEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+
+  $effect(() => {
+    parentFormEvent = null;
+    if (!forkOf?.address) return;
+    const [kindStr, pubkey, ...rest] = forkOf.address.split(':');
+    const kind = Number(kindStr);
+    const identifier = rest.join(':');
+    if (!Number.isFinite(kind) || !pubkey || !identifier) return;
+    const relays = [...(forkOf.relay ? [forkOf.relay] : []), ...getCommunikeyRelays()];
+    const loaderSub = addressLoader({ kind, pubkey, identifier, relays }).subscribe();
+    const modelSub = eventStore.replaceable(kind, pubkey, identifier).subscribe((e) => {
+      if (e) parentFormEvent = e;
+    });
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
+  });
+
+  const parentNaddr = $derived(
+    parentFormEvent ? formEventToNaddr(parentFormEvent, forkOf?.relay ? [forkOf.relay] : []) : ''
+  );
+  const parentName = $derived(
+    parentFormEvent?.tags.find((/** @type {string[]} */ t) => t[0] === 'name')?.[1] ||
+      forkOf?.address ||
+      ''
+  );
+
   let showSendModal = $state(false);
 </script>
 
@@ -88,6 +120,17 @@
         <EventContextMenu event={formEvent} />
       </div>
     </div>
+
+    {#if forkOf}
+      <div class="mb-4 rounded-lg bg-base-200 px-4 py-2 text-sm">
+        {m.form_builder_fork_badge()}
+        {#if parentNaddr}
+          <a class="link font-semibold" href="/forms/{parentNaddr}">{parentName}</a>
+        {:else}
+          <span class="font-semibold">{parentName}</span>
+        {/if}
+      </div>
+    {/if}
 
     <!-- Tabs -->
     <div role="tablist" class="tabs-bordered mb-4 tabs">
