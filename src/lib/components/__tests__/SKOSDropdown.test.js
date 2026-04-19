@@ -630,6 +630,63 @@ describe('SKOSDropdown', () => {
       expect(spinner).toBeTruthy();
     });
 
+    it('opens panel with spinner when trigger is clicked while isLoading=true', async () => {
+      const { container } = render(SKOSDropdown, {
+        props: {
+          concepts: [],
+          isLoading: true
+        }
+      });
+
+      const trigger = /** @type {HTMLElement} */ (
+        await waitFor(() => {
+          const t = container.querySelector('[role="combobox"]');
+          if (!t) throw new Error('combobox not found');
+          return t;
+        })
+      );
+
+      await fireEvent.click(trigger);
+
+      // Panel opens but shows a loading indicator instead of options / search
+      const panelLoader = container.querySelector('[data-testid="skos-panel-loading"]');
+      expect(panelLoader).toBeTruthy();
+      expect(container.querySelector('[role="listbox"]')).toBeFalsy();
+      expect(container.querySelector('input[type="text"]')).toBeFalsy();
+    });
+
+    it('swaps panel contents from spinner to listbox when isLoading flips false', async () => {
+      const { container, rerender } = render(SKOSDropdown, {
+        props: {
+          concepts: /** @type {any} */ ([]),
+          isLoading: true
+        }
+      });
+
+      const trigger = /** @type {HTMLElement} */ (
+        await waitFor(() => {
+          const t = container.querySelector('[role="combobox"]');
+          if (!t) throw new Error('combobox not found');
+          return t;
+        })
+      );
+      await fireEvent.click(trigger);
+      expect(container.querySelector('[data-testid="skos-panel-loading"]')).toBeTruthy();
+
+      // Simulate concepts arriving
+      await rerender({
+        concepts: /** @type {any} */ ([
+          { id: 'https://example.com/alpha', prefLabel: { en: 'Alpha' }, level: 0 }
+        ]),
+        isLoading: false
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('[data-testid="skos-panel-loading"]')).toBeFalsy();
+        expect(container.querySelector('[role="listbox"]')).toBeTruthy();
+      });
+    });
+
     it('generates unique aria-controls when no vocabularyKey is provided', async () => {
       const { container } = render(SKOSDropdown, {
         props: {
