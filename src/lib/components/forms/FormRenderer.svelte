@@ -89,6 +89,7 @@
           {field}
           multiple={field.options?.multiple === true || field.type === 'checkbox'}
           value={values[field.id] || []}
+          disabled={readonly}
           onchange={(v) => (values[field.id] = v)}
         />
       {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}

@@ -567,6 +567,88 @@ describe('SKOSDropdown', () => {
     });
   });
 
+  describe('External concepts prop', () => {
+    it('does not call fetchVocabulary when concepts prop is supplied', async () => {
+      fetchVocabularyMock.mockClear();
+      const externalConcepts = [
+        { id: 'https://example.com/a', prefLabel: { en: 'Alpha' }, level: 0 },
+        { id: 'https://example.com/b', prefLabel: { en: 'Beta' }, level: 0 }
+      ];
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          concepts: /** @type {any} */ (externalConcepts),
+          isLoading: false
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger).toBeTruthy();
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      expect(fetchVocabularyMock).not.toHaveBeenCalled();
+    });
+
+    it('renders options from externally supplied concepts', async () => {
+      const externalConcepts = [
+        { id: 'https://example.com/a', prefLabel: { en: 'Alpha' }, level: 0 },
+        { id: 'https://example.com/b', prefLabel: { en: 'Beta' }, level: 0 }
+      ];
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          concepts: /** @type {any} */ (externalConcepts),
+          isLoading: false
+        }
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('[role="combobox"]')).toBeTruthy();
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      const options = container.querySelectorAll('[role="option"]');
+      expect(options.length).toBe(2);
+      expect(options[0].textContent).toContain('Alpha');
+      expect(options[1].textContent).toContain('Beta');
+    });
+
+    it('shows spinner when external isLoading prop is true', () => {
+      const { container } = render(SKOSDropdown, {
+        props: {
+          concepts: [],
+          isLoading: true
+        }
+      });
+
+      const spinner = container.querySelector('.loading-spinner');
+      expect(spinner).toBeTruthy();
+    });
+
+    it('generates unique aria-controls when no vocabularyKey is provided', async () => {
+      const { container } = render(SKOSDropdown, {
+        props: {
+          concepts: /** @type {any} */ ([{ id: 'x', prefLabel: { en: 'X' }, level: 0 }]),
+          isLoading: false
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger).toBeTruthy();
+        const controls = trigger.getAttribute('aria-controls');
+        expect(controls).toBeTruthy();
+        expect(controls).not.toBe('skos-listbox-undefined');
+        expect(controls).toMatch(/^skos-listbox-/);
+      });
+    });
+  });
+
   describe('Selection', () => {
     it('shows selected item as badge in trigger', async () => {
       const { container } = render(SKOSDropdown, {

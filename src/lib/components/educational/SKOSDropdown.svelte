@@ -29,9 +29,12 @@
    * @property {string} label - The display label
    */
 
-  /** @type {{ vocabularyKey: 'learningResourceType' | 'about' | 'intendedEndUserRole', selected?: SelectedConcept[], multiple?: boolean, required?: boolean, label?: string, placeholder?: string, helpText?: string, disabled?: boolean, maxSelections?: number, compact?: boolean, onchange?: (selected: SelectedConcept[]) => void }} */
+  /** @type {{ vocabularyKey?: 'learningResourceType' | 'about' | 'intendedEndUserRole', concepts?: SKOSConcept[], isLoading?: boolean, error?: string | null, selected?: SelectedConcept[], multiple?: boolean, required?: boolean, label?: string, placeholder?: string, helpText?: string, disabled?: boolean, maxSelections?: number, compact?: boolean, onchange?: (selected: SelectedConcept[]) => void }} */
   let {
     vocabularyKey,
+    concepts: propConcepts = undefined,
+    isLoading: propIsLoading = undefined,
+    error: propError = undefined,
     selected = $bindable([]),
     multiple = true,
     required = false,
@@ -44,10 +47,20 @@
     onchange = () => {}
   } = $props();
 
-  // State
-  let concepts = $state(/** @type {SKOSConcept[]} */ ([]));
-  let isLoading = $state(true);
-  let error = $state(/** @type {string | null} */ (null));
+  // Internal state used only when concepts/isLoading/error are not provided by the caller.
+  let internalConcepts = $state(/** @type {SKOSConcept[]} */ ([]));
+  let internalIsLoading = $state(true);
+  let internalError = $state(/** @type {string | null} */ (null));
+
+  // Effective data — props take precedence over internal fetch state.
+  const concepts = $derived(propConcepts ?? internalConcepts);
+  const isLoading = $derived(propIsLoading ?? internalIsLoading);
+  const error = $derived(propError ?? internalError);
+
+  // Stable id seed for ARIA so multiple instances without a vocabularyKey do not collide.
+  // Falls back to a per-mount random token; tracks vocabularyKey reactively if it changes.
+  const _fallbackInstanceId = `skos-${Math.random().toString(36).slice(2, 9)}`;
+  const instanceId = $derived(vocabularyKey ?? _fallbackInstanceId);
   let isOpen = $state(false);
   let searchTerm = $state('');
   /** @type {HTMLDivElement | null} */
@@ -90,15 +103,20 @@
     });
   });
 
-  // Load vocabulary on mount
+  // Load vocabulary on mount — skipped when data is supplied via props.
   onMount(async () => {
+    if (propConcepts !== undefined) return;
+    if (!vocabularyKey) {
+      internalIsLoading = false;
+      return;
+    }
     try {
-      concepts = await fetchVocabulary(vocabularyKey);
-      setCachedConcepts(vocabularyKey, concepts);
-      isLoading = false;
+      internalConcepts = await fetchVocabulary(vocabularyKey);
+      setCachedConcepts(vocabularyKey, internalConcepts);
+      internalIsLoading = false;
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load vocabulary';
-      isLoading = false;
+      internalError = e instanceof Error ? e.message : 'Failed to load vocabulary';
+      internalIsLoading = false;
     }
   });
 
@@ -315,9 +333,9 @@
       role="combobox"
       aria-haspopup="listbox"
       aria-expanded={isOpen}
-      aria-controls="skos-listbox-{vocabularyKey}"
+      aria-controls="skos-listbox-{instanceId}"
       aria-activedescendant={activeIndex >= 0
-        ? `skos-option-${vocabularyKey}-${activeIndex}`
+        ? `skos-option-${instanceId}-${activeIndex}`
         : undefined}
       class="select-bordered select-trigger select w-full pr-8"
       class:select-disabled={disabled}
@@ -394,7 +412,7 @@
           bind:this={listRef}
           class="flex-1 overflow-y-auto"
           role="listbox"
-          id="skos-listbox-{vocabularyKey}"
+          id="skos-listbox-{instanceId}"
           aria-multiselectable={multiple}
         >
           {#if visibleConcepts.length === 0}
@@ -412,7 +430,7 @@
 
               <div
                 data-option-index={index}
-                id="skos-option-{vocabularyKey}-{index}"
+                id="skos-option-{instanceId}-{index}"
                 role="option"
                 aria-selected={conceptSelected}
                 class="flex min-h-[2.75rem] w-full items-center transition-colors hover:bg-base-200 {conceptSelected
