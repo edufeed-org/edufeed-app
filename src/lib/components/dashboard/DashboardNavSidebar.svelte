@@ -64,13 +64,13 @@
           <Icon class_="w-5 h-5" />
           {#if section.id === 'inbox' && getTotalUnreadCount() > 0}
             <span
-              class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-primary"
+              class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-secondary"
             >
               {getTotalUnreadCount() > 99 ? '99+' : getTotalUnreadCount()}
             </span>
           {:else if section.id === 'messages' && getUnreadDmCount() > 0}
             <span
-              class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-primary"
+              class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-secondary"
             >
               {getUnreadDmCount() > 99 ? '99+' : getUnreadDmCount()}
             </span>

@@ -58,13 +58,13 @@
           <Icon class_="size-[1.2em]" />
           {#if section.id === 'inbox' && getTotalUnreadCount() > 0}
             <span
-              class="absolute -top-1 -right-1.5 badge h-3.5 min-w-3.5 badge-sm text-[9px] badge-primary"
+              class="absolute -top-1 -right-1.5 badge h-3.5 min-w-3.5 badge-sm text-[9px] badge-secondary"
             >
               {getTotalUnreadCount() > 99 ? '99+' : getTotalUnreadCount()}
             </span>
           {:else if section.id === 'messages' && getUnreadDmCount() > 0}
             <span
-              class="absolute -top-1 -right-1.5 badge h-3.5 min-w-3.5 badge-sm text-[9px] badge-primary"
+              class="absolute -top-1 -right-1.5 badge h-3.5 min-w-3.5 badge-sm text-[9px] badge-secondary"
             >
               {getUnreadDmCount() > 99 ? '99+' : getUnreadDmCount()}
             </span>

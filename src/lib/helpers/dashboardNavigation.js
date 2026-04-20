@@ -1,8 +1,21 @@
 import { resolve } from '$app/paths';
 
-const resolvedBase = resolve('/c/');
-const resolvedInbox = resolve('/c/inbox');
-const resolvedMessages = resolve('/c/messages');
+/**
+ * Strip a single trailing slash (except when the path is exactly '/').
+ *
+ * Needed because SvelteKit's default `trailingSlash: 'never'` normalizes the
+ * URL to `/c` on server loads, while client-side links still produce `/c/`
+ * briefly — comparisons must be slash-agnostic.
+ *
+ * @param {string} path
+ */
+function stripTrailingSlash(path) {
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+}
+
+const resolvedBase = stripTrailingSlash(resolve('/c/'));
+const resolvedInbox = stripTrailingSlash(resolve('/c/inbox'));
+const resolvedMessages = stripTrailingSlash(resolve('/c/messages'));
 
 /**
  * Derive the active section for DashboardNavSidebar / DashboardBottomTabBar.
@@ -12,9 +25,11 @@ const resolvedMessages = resolve('/c/messages');
  * @returns {'feed' | 'inbox' | 'messages' | 'my-stuff' | 'communities' | null}
  */
 export function getDashboardActiveSection(pathname, searchParams) {
-  if (!pathname.startsWith(resolvedBase)) return null;
-  if (pathname.startsWith(resolvedMessages)) return 'messages';
-  if (pathname === resolvedInbox || pathname === resolvedInbox + '/') return 'inbox';
+  const normalized = stripTrailingSlash(pathname);
+  if (normalized !== resolvedBase && !normalized.startsWith(resolvedBase + '/')) return null;
+  if (normalized === resolvedMessages || normalized.startsWith(resolvedMessages + '/'))
+    return 'messages';
+  if (normalized === resolvedInbox) return 'inbox';
   const view = searchParams.get('view') || 'feed';
   // Backward compat: old 'your-content' URL maps to 'my-stuff'
   if (view === 'your-content') return 'my-stuff';
