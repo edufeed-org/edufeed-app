@@ -1545,6 +1545,8 @@
   "form_builder_field_vocab_invalid": "Invalid scheme naddr (must be a kind 39737 naddr).",
   "form_builder_field_vocab_concepts_count": "{n} concepts",
   "form_builder_field_vocab_loading": "Loading vocab…",
+  "form_builder_field_vocab_samples_label": "Includes:",
+  "form_builder_field_vocab_clear": "Change vocabulary",
   "form_builder_field_output_label": "Output:",
   "form_builder_field_output_auto": "Auto (amb:{id})",
   "sidebar_joined_communities": "Joined Communities",

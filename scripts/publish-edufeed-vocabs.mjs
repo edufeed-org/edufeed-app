@@ -128,27 +128,47 @@ async function main() {
 
   const { schemes } = JSON.parse(readFileSync(VOCAB_DATA_PATH, 'utf8'));
 
+  /** @type {string[]} */
+  const failed = [];
+
   for (const scheme of schemes) {
     console.log(`\n=== ${scheme.d} (${scheme.source.type}) ===`);
-    const drafts =
-      scheme.source.type === 'skohub'
-        ? await buildSkohubDrafts(scheme, pubkey, relays[0])
-        : buildInlineDrafts(scheme, pubkey, relays[0]);
+    try {
+      const drafts =
+        scheme.source.type === 'skohub'
+          ? await buildSkohubDrafts(scheme, pubkey, relays[0])
+          : buildInlineDrafts(scheme, pubkey, relays[0]);
 
-    const schemeSigned = signEvent(buildConceptScheme(drafts.scheme), skHex);
-    const conceptSigneds = drafts.concepts.map((c) => signEvent(buildConcept(c), skHex));
+      // Stamp `published_at` on the scheme so picker clients (which filter
+      // drafts — schemes without this tag) surface it. Concepts are not
+      // stamped; the draft/published distinction is scheme-level only,
+      // matching the `nocabs` convention.
+      const publishedAt = Math.floor(Date.now() / 1000);
+      const schemeSigned = signEvent(
+        buildConceptScheme({ ...drafts.scheme, publishedAt }),
+        skHex
+      );
+      const conceptSigneds = drafts.concepts.map((c) => signEvent(buildConcept(c), skHex));
 
-    const naddr = nip19.naddrEncode({
-      kind: 39737,
-      pubkey,
-      identifier: scheme.d,
-      relays: relays.slice(0, 2)
-    });
-    console.log(`  naddr: ${naddr}`);
-    console.log(`  publishing ${conceptSigneds.length + 1} events to ${relays.length} relays …`);
-    await publishAll(pool, relays, [schemeSigned, ...conceptSigneds]);
+      const naddr = nip19.naddrEncode({
+        kind: 39737,
+        pubkey,
+        identifier: scheme.d,
+        relays: relays.slice(0, 2)
+      });
+      console.log(`  naddr: ${naddr}`);
+      console.log(`  publishing ${conceptSigneds.length + 1} events to ${relays.length} relays …`);
+      await publishAll(pool, relays, [schemeSigned, ...conceptSigneds]);
+    } catch (err) {
+      console.warn(`  ! skipped ${scheme.d}: ${err.message || err}`);
+      failed.push(scheme.d);
+    }
   }
 
+  if (failed.length > 0) {
+    console.log(`\nDone (with ${failed.length} skipped: ${failed.join(', ')}).`);
+    process.exit(1);
+  }
   console.log('\nDone.');
   process.exit(0);
 }

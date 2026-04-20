@@ -19,6 +19,11 @@ supported:
   Used for small enums without a SkoHub source (interactivityType,
   conditionsOfAccess).
 
+Each scheme is stamped with a `published_at` tag set to the current Unix
+timestamp. This is the app-level signal (established by `nocabs`) that
+distinguishes a released vocabulary from a work-in-progress draft —
+picker clients skip schemes without it.
+
 ```
 pnpm run publish:vocabs
 ```

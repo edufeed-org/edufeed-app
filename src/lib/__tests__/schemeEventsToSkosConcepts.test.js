@@ -1,12 +1,23 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { schemeEventsToSkosConcepts } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
+import {
+  schemeEventsToSkosConcepts,
+  pickSchemeDescription
+} from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
 
 /**
  * Build a minimal kind-39737 ConceptScheme event.
- * @param {{ d: string, prefLabels?: Record<string,string>, pubkey?: string, id?: string }} opts
+ * A `published_at` tag is included by default so the helper treats the event
+ * as a published (non-draft) scheme. Pass `publishedAt: null` to omit it.
+ * @param {{ d: string, prefLabels?: Record<string,string>, pubkey?: string, id?: string, publishedAt?: string | null }} opts
  */
-function scheme({ d, prefLabels = { de: d }, pubkey = 'pub', id = `scheme-${d}` }) {
+function scheme({
+  d,
+  prefLabels = { de: d },
+  pubkey = 'pub',
+  id = `scheme-${d}`,
+  publishedAt = '1710000000'
+}) {
   /** @type {string[][]} */
   const tags = [
     ['d', d],
@@ -15,6 +26,7 @@ function scheme({ d, prefLabels = { de: d }, pubkey = 'pub', id = `scheme-${d}` 
   for (const [lang, label] of Object.entries(prefLabels)) {
     tags.push(['prefLabel', label, lang]);
   }
+  if (publishedAt !== null) tags.push(['published_at', publishedAt]);
   return { id, pubkey, kind: 39737, tags, content: '', sig: '', created_at: 0 };
 }
 
@@ -111,7 +123,8 @@ describe('schemeEventsToSkosConcepts', () => {
         kind: 39737,
         tags: [
           ['d', 'orphan'],
-          ['type', 'ConceptScheme']
+          ['type', 'ConceptScheme'],
+          ['published_at', '1710000000']
         ],
         content: '',
         sig: '',
@@ -122,5 +135,85 @@ describe('schemeEventsToSkosConcepts', () => {
     expect(out).toHaveLength(1);
     expect(out[0].labels).toEqual({ de: 'orphan' });
     expect(out[0].notation).toBe('orphan');
+  });
+
+  it('filters out scheme events without a published_at tag (drafts)', () => {
+    const events = [
+      scheme({ d: 'published-one', prefLabels: { de: 'Published' } }),
+      scheme({ d: 'draft-one', prefLabels: { de: 'Draft' }, publishedAt: null })
+    ];
+    const out = schemeEventsToSkosConcepts(events, 'de');
+    expect(out.map((o) => o.notation)).toEqual(['published-one']);
+  });
+
+  it('treats an empty published_at tag value as unpublished', () => {
+    const events = [scheme({ d: 'empty-ts', publishedAt: '' })];
+    expect(schemeEventsToSkosConcepts(events, 'de')).toEqual([]);
+  });
+
+  it('keeps a scheme whose published_at is a non-empty timestamp string', () => {
+    const events = [scheme({ d: 'real', publishedAt: '1710000000' })];
+    const out = schemeEventsToSkosConcepts(events, 'de');
+    expect(out).toHaveLength(1);
+    expect(out[0].notation).toBe('real');
+  });
+});
+
+describe('pickSchemeDescription', () => {
+  /**
+   * @param {{ descriptions?: Record<string,string> }} opts
+   */
+  function eventWith({ descriptions }) {
+    /** @type {string[][]} */
+    const tags = [
+      ['d', 'x'],
+      ['type', 'ConceptScheme']
+    ];
+    if (descriptions) {
+      for (const [lang, value] of Object.entries(descriptions)) {
+        tags.push(['description', value, lang]);
+      }
+    }
+    return { id: 'ev', pubkey: 'pub', kind: 39737, tags, content: '', sig: '', created_at: 0 };
+  }
+
+  it("returns '' when the scheme carries no description tag", () => {
+    expect(pickSchemeDescription(eventWith({}), 'de')).toBe('');
+  });
+
+  it('returns the locale-matched description when present', () => {
+    const ev = eventWith({ descriptions: { de: 'Deutsche Beschreibung', en: 'English desc' } });
+    expect(pickSchemeDescription(ev, 'de')).toBe('Deutsche Beschreibung');
+    expect(pickSchemeDescription(ev, 'en')).toBe('English desc');
+  });
+
+  it('falls back locale → de → en → first when preferred language is missing', () => {
+    const onlyEn = eventWith({ descriptions: { en: 'only english' } });
+    expect(pickSchemeDescription(onlyEn, 'de')).toBe('only english');
+
+    const deAndEn = eventWith({ descriptions: { de: 'deutsch', en: 'english' } });
+    expect(pickSchemeDescription(deAndEn, 'fr')).toBe('deutsch');
+
+    const onlyFr = eventWith({ descriptions: { fr: 'francais' } });
+    expect(pickSchemeDescription(onlyFr, 'de')).toBe('francais');
+  });
+
+  it('ignores malformed description tags (missing value or lang)', () => {
+    const ev = {
+      id: 'ev',
+      pubkey: 'pub',
+      kind: 39737,
+      tags: [
+        ['d', 'x'],
+        ['type', 'ConceptScheme'],
+        ['description'], // no value, no lang
+        ['description', '', 'de'], // empty value
+        ['description', 'Gute Beschreibung', 'de'] // the good one
+      ],
+      content: '',
+      sig: '',
+      created_at: 0
+    };
+    expect(pickSchemeDescription(ev, 'de')).toBe('Gute Beschreibung');
   });
 });

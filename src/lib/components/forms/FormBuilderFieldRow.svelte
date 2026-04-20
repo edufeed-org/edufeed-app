@@ -4,7 +4,11 @@
   import { useSchemeConcepts, useConceptSchemes } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { generateFieldId } from '$lib/helpers/forms.js';
-  import { schemeEventsToSkosConcepts } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
+  import {
+    schemeEventsToSkosConcepts,
+    pickSchemeDescription
+  } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
+  import { getConceptLabel } from '$lib/helpers/educational/skosLoader.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -110,6 +114,41 @@
     // Reset so the combobox returns to its idle state — picker is one-shot.
     vocabPickerSelected = [];
   }
+
+  /**
+   * Reset all vocab state so the picker returns to idle — used by the
+   * "Change vocabulary" button on the post-selection preview card.
+   */
+  function clearVocabSelection() {
+    field.vocab = undefined;
+    field.vocabNaddrInput = '';
+    field.vocabError = '';
+    vocabPickerSelected = [];
+  }
+
+  // Post-selection preview: description + sample concept labels.
+  const selectedParts = $derived(field.vocab?.address?.split(':') || []);
+  const selectedPubkey = $derived(selectedParts[1] || '');
+  const selectedDTag = $derived(selectedParts[2] || '');
+  const selectedSchemeEvent = $derived(
+    field.vocab?.address
+      ? getDiscoveredSchemes().find(
+          (e) =>
+            e.pubkey === selectedPubkey && e.tags.some((t) => t[0] === 'd' && t[1] === selectedDTag)
+        )
+      : undefined
+  );
+  const selectedDescription = $derived(
+    selectedSchemeEvent ? pickSchemeDescription(selectedSchemeEvent, getLocale()) : ''
+  );
+  const sampleConceptLabels = $derived(
+    field.vocab?.address
+      ? getConcepts()
+          .slice(0, 5)
+          .map((c) => getConceptLabel(/** @type {any} */ (c), getLocale()))
+          .filter(Boolean)
+      : []
+  );
 
   /**
    * Attempt to decode a naddr into { address, relay } when the user blurs the input.
@@ -280,12 +319,26 @@
       <div class="mb-1 text-xs text-error">{field.vocabError}</div>
     {/if}
     {#if field.vocab?.address}
-      <div class="mb-1 text-xs text-base-content/50">
-        {#if conceptCount !== undefined && conceptCount > 0}
-          {m.form_builder_field_vocab_concepts_count({ n: conceptCount })}
-        {:else}
-          {m.form_builder_field_vocab_loading()}
+      <div class="mb-1 rounded border border-base-300 bg-base-100 p-2 text-xs">
+        {#if selectedDescription}
+          <p class="mb-1 text-base-content/80">{selectedDescription}</p>
         {/if}
+        <div class="text-base-content/50">
+          {#if conceptCount !== undefined && conceptCount > 0}
+            {m.form_builder_field_vocab_concepts_count({ n: conceptCount })}
+          {:else}
+            {m.form_builder_field_vocab_loading()}
+          {/if}
+          {#if sampleConceptLabels.length > 0}
+            — <span
+              >{m.form_builder_field_vocab_samples_label()}
+              {sampleConceptLabels.join(', ')}…</span
+            >
+          {/if}
+        </div>
+        <button type="button" class="btn mt-1 btn-ghost btn-xs" onclick={clearVocabSelection}
+          >{m.form_builder_field_vocab_clear()}</button
+        >
       </div>
     {/if}
     <div class="flex items-center gap-2">

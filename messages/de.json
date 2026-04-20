@@ -1545,6 +1545,8 @@
   "form_builder_field_vocab_invalid": "Ungültiger Vokabular-naddr (muss ein Kind-39737-naddr sein).",
   "form_builder_field_vocab_concepts_count": "{n} Konzepte",
   "form_builder_field_vocab_loading": "Vokabular wird geladen …",
+  "form_builder_field_vocab_samples_label": "Enthält:",
+  "form_builder_field_vocab_clear": "Vokabular ändern",
   "form_builder_field_output_label": "Ausgabe:",
   "form_builder_field_output_auto": "Automatisch (amb:{id})",
   "sidebar_joined_communities": "Beigetretene Gruppen",

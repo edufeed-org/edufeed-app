@@ -61,6 +61,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_vocab_loading: () => 'Loading concepts…',
   form_builder_field_vocab_picker_label: () => 'Choose vocab',
   form_builder_field_vocab_picker_placeholder: () => 'Select a vocabulary',
+  form_builder_field_vocab_samples_label: () => 'Includes:',
+  form_builder_field_vocab_clear: () => 'Change vocabulary',
   form_builder_field_output_label: () => 'Output',
   form_builder_field_output_auto: (/** @type {{ id: string }} */ { id }) => `auto (${id})`
 }));
@@ -84,7 +86,8 @@ vi.mock('$lib/helpers/educational/skosLoader.js', () => ({
   }
 }));
 
-// Two discovered schemes — one is what the test picks.
+// Two discovered schemes — one is what the test picks. Both carry a
+// `published_at` tag so the helper treats them as published (non-draft).
 const schemeEvents = [
   {
     id: 'sch1',
@@ -93,7 +96,8 @@ const schemeEvents = [
     tags: [
       ['d', 'schulfaecher'],
       ['type', 'ConceptScheme'],
-      ['prefLabel', 'Schulfächer', 'de']
+      ['prefLabel', 'Schulfächer', 'de'],
+      ['published_at', '1710000000']
     ],
     content: '',
     sig: '',
@@ -106,8 +110,71 @@ const schemeEvents = [
     tags: [
       ['d', 'hochschulfaecher'],
       ['type', 'ConceptScheme'],
-      ['prefLabel', 'Hochschulfächersystematik', 'de']
+      ['prefLabel', 'Hochschulfächersystematik', 'de'],
+      ['description', 'Systematik aller deutschen Hochschulfächer.', 'de'],
+      ['published_at', '1710000000']
     ],
+    content: '',
+    sig: '',
+    created_at: 0
+  },
+  // Draft scheme — intentionally missing `published_at`. The helper should
+  // filter it out so it never appears in the picker combobox.
+  {
+    id: 'sch-draft',
+    pubkey: 'a'.repeat(64),
+    kind: 39737,
+    tags: [
+      ['d', 'entwurf-vokabular'],
+      ['type', 'ConceptScheme'],
+      ['prefLabel', 'Entwurf Vokabular', 'de']
+    ],
+    content: '',
+    sig: '',
+    created_at: 0
+  }
+];
+
+// Fake concepts to feed the preview's sample-labels row post-selection.
+const hochschulConcepts = [
+  {
+    id: 'c1',
+    pubkey: 'a'.repeat(64),
+    kind: 39737,
+    tags: [
+      ['d', 'mathe'],
+      ['type', 'Concept'],
+      ['prefLabel', 'Mathematik', 'de']
+    ],
+    labels: { de: 'Mathematik' },
+    content: '',
+    sig: '',
+    created_at: 0
+  },
+  {
+    id: 'c2',
+    pubkey: 'a'.repeat(64),
+    kind: 39737,
+    tags: [
+      ['d', 'physik'],
+      ['type', 'Concept'],
+      ['prefLabel', 'Physik', 'de']
+    ],
+    labels: { de: 'Physik' },
+    content: '',
+    sig: '',
+    created_at: 0
+  },
+  {
+    id: 'c3',
+    pubkey: 'a'.repeat(64),
+    kind: 39737,
+    tags: [
+      ['d', 'informatik'],
+      ['type', 'Concept'],
+      ['prefLabel', 'Informatik', 'de']
+    ],
+    labels: { de: 'Informatik' },
     content: '',
     sig: '',
     created_at: 0
@@ -116,7 +183,11 @@ const schemeEvents = [
 
 vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
   useConceptSchemes: () => () => schemeEvents,
-  useSchemeConcepts: () => () => []
+  useSchemeConcepts: (/** @type {() => string | undefined} */ getCoord) => () => {
+    // Only emit concepts once a scheme has been selected — keeps the
+    // pre-selection picker showing the loading state.
+    return getCoord() ? hochschulConcepts : [];
+  }
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
@@ -124,6 +195,7 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
 }));
 
 import FormBuilderFieldRow from '../forms/FormBuilderFieldRow.svelte';
+import FormBuilderFieldRowTestWrapper from './FormBuilderFieldRowTestWrapper.svelte';
 
 /**
  * @returns {any}
@@ -207,6 +279,29 @@ describe('FormBuilderFieldRow vocab picker', () => {
     expect(field.vocabError).toBe('');
   });
 
+  it('omits draft schemes (missing published_at) from the picker combobox', async () => {
+    const field = makeField();
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+
+    const trigger = /** @type {HTMLElement} */ (
+      await waitFor(() => {
+        const t = container.querySelector('[role="combobox"]');
+        if (!t) throw new Error('combobox not found');
+        return t;
+      })
+    );
+    await fireEvent.click(trigger);
+
+    const texts = Array.from(container.querySelectorAll('[role="option"]')).map(
+      (o) => o.textContent || ''
+    );
+    expect(texts.some((t) => t.includes('Entwurf Vokabular'))).toBe(false);
+    // Sanity: published schemes still show — ensures we didn't filter everything.
+    expect(texts.some((t) => t.includes('Schulfächer'))).toBe(true);
+  });
+
   it('does not render the picker combobox for non-select fields', async () => {
     const field = makeField();
     field.type = 'text';
@@ -219,5 +314,97 @@ describe('FormBuilderFieldRow vocab picker', () => {
 
     // The vocab section (and its picker) is select/radio-only.
     expect(container.querySelector('[role="combobox"]')).toBeFalsy();
+  });
+});
+
+/**
+ * Render via the wrapper (which holds `field` in $state so child mutations
+ * trigger reactive updates in the preview block), pick Hochschulfächersystematik,
+ * and return the container plus a live snapshot accessor.
+ *
+ * Plain JS objects passed as props don't propagate mutations back as reactive
+ * signals — we need $state-ownership at the wrapper boundary for the
+ * post-selection {#if field.vocab?.address} block to render.
+ * @param {any} initialField
+ */
+async function renderAndPickHochschul(initialField) {
+  /** @type {any} */
+  let latestField = initialField;
+  const { container } = render(FormBuilderFieldRowTestWrapper, {
+    props: {
+      initialField,
+      fieldIndex: 0,
+      existing: false,
+      onUpdate: (/** @type {any} */ f) => {
+        latestField = f;
+      }
+    }
+  });
+
+  const trigger = /** @type {HTMLElement} */ (
+    await waitFor(() => {
+      const t = container.querySelector('[role="combobox"]');
+      if (!t) throw new Error('combobox not found');
+      return t;
+    })
+  );
+  await fireEvent.click(trigger);
+
+  const options = Array.from(container.querySelectorAll('[role="option"]'));
+  const hochschul = /** @type {HTMLElement} */ (
+    options.find((o) => o.textContent?.includes('Hochschulfächersystematik'))
+  );
+  const selectButton = /** @type {HTMLElement} */ (hochschul.querySelector('button') || hochschul);
+  await fireEvent.click(selectButton);
+
+  await waitFor(() => {
+    if (!latestField.vocab) throw new Error('vocab not set yet');
+  });
+
+  return { container, getField: () => latestField };
+}
+
+describe('FormBuilderFieldRow vocab preview (post-selection)', () => {
+  it('renders the scheme description after selection', async () => {
+    const field = makeField();
+    const { container } = await renderAndPickHochschul(field);
+    await waitFor(() => {
+      if (!(container.textContent || '').includes('Systematik aller deutschen Hochschulfächer.'))
+        throw new Error('description not rendered yet');
+    });
+  });
+
+  it('renders sample concept labels after selection', async () => {
+    const field = makeField();
+    const { container } = await renderAndPickHochschul(field);
+    await waitFor(() => {
+      const text = container.textContent || '';
+      if (!text.includes('Includes:')) throw new Error('Includes: label not rendered yet');
+    });
+    const text = container.textContent || '';
+    const anyLabel = ['Mathematik', 'Physik', 'Informatik'].some((l) => text.includes(l));
+    expect(anyLabel).toBe(true);
+  });
+
+  it('clears field.vocab when the "Change vocabulary" button is clicked', async () => {
+    const field = makeField();
+    const { container, getField } = await renderAndPickHochschul(field);
+
+    const clearBtn = /** @type {HTMLButtonElement} */ (
+      await waitFor(() => {
+        const btn = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Change vocabulary')
+        );
+        if (!btn) throw new Error('Change vocabulary button not found');
+        return btn;
+      })
+    );
+    await fireEvent.click(clearBtn);
+
+    await waitFor(() => {
+      expect(getField().vocab).toBeUndefined();
+    });
+    expect(getField().vocabNaddrInput).toBe('');
+    expect(getField().vocabError).toBe('');
   });
 });

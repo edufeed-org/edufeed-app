@@ -5,6 +5,12 @@
  * set to the `d`-tag so SKOSDropdown renders it inline beside the label —
  * useful for distinguishing e.g. `schulfaecher` vs `hochschulfaecher`.
  *
+ * **Draft filter:** schemes that don't carry a truthy `published_at` tag are
+ * skipped. This is an app-level convention established by `nocabs` (the
+ * vocab-authoring app) — unpublished drafts are not surfaced in pickers so
+ * form authors only bind `field-vocab` to stable, published taxonomies. The
+ * VOCAB NIP itself does not specify a draft/published distinction.
+ *
  * prefLabels are preserved by language; the callers' locale drives the
  * alphabetical sort (via locale → de → en → first-label fallback) so the
  * picker reads top-to-bottom in the user's preferred language.
@@ -25,6 +31,10 @@ export function schemeEventsToSkosConcepts(events, locale) {
   for (const e of events) {
     const isScheme = e.tags.some((t) => t[0] === 'type' && t[1] === 'ConceptScheme');
     if (!isScheme) continue;
+
+    // Skip drafts — schemes without a truthy `published_at` tag value.
+    const publishedAt = e.tags.find((t) => t[0] === 'published_at')?.[1];
+    if (!publishedAt) continue;
 
     const d = e.tags.find((t) => t[0] === 'd')?.[1] || '';
 
@@ -50,4 +60,25 @@ export function schemeEventsToSkosConcepts(events, locale) {
   out.sort((a, b) => labelFor(a).toLowerCase().localeCompare(labelFor(b).toLowerCase(), locale));
 
   return out;
+}
+
+/**
+ * Pick the best-matching `['description', value, lang]` tag value for a given
+ * locale. Uses the same fallback chain as labels (`locale → de → en → first`).
+ * Returns '' when the scheme has no usable description tag.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string} locale
+ * @returns {string}
+ */
+export function pickSchemeDescription(event, locale) {
+  if (!event?.tags) return '';
+
+  /** @type {Record<string,string>} */
+  const byLang = {};
+  for (const t of event.tags) {
+    if (t[0] === 'description' && t[1] && t[2]) byLang[t[2]] = t[1];
+  }
+
+  return byLang[locale] || byLang.de || byLang.en || Object.values(byLang)[0] || '';
 }
