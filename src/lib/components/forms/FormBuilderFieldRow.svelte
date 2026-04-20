@@ -6,7 +6,8 @@
   import { generateFieldId } from '$lib/helpers/forms.js';
   import {
     schemeEventsToSkosConcepts,
-    pickSchemeDescription
+    pickSchemeDescription,
+    pickSchemeLabel
   } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
@@ -38,18 +39,6 @@
 
   /** @type {Props} */
   let { field = $bindable(), fields, fieldIndex, existing } = $props();
-
-  const FIELD_TYPES = [
-    'text',
-    'textarea',
-    'number',
-    'email',
-    'url',
-    'select',
-    'checkbox',
-    'radio',
-    'date'
-  ];
 
   // Common AMB output targets — human-readable label + machine value.
   const AMB_OUTPUTS = [
@@ -151,6 +140,9 @@
   );
   const selectedDescription = $derived(
     selectedSchemeEvent ? pickSchemeDescription(selectedSchemeEvent, getLocale()) : ''
+  );
+  const selectedSchemeLabel = $derived(
+    selectedSchemeEvent ? pickSchemeLabel(selectedSchemeEvent, getLocale()) : selectedDTag
   );
   /**
    * Read the best-matching prefLabel from a Concept event's tags, using the
@@ -265,11 +257,6 @@
         }
       }}
     />
-    <select class="select-bordered select select-sm" bind:value={field.type}>
-      {#each FIELD_TYPES as t (t)}
-        <option value={t}>{t}</option>
-      {/each}
-    </select>
   </div>
 
   <div class="flex items-center gap-3 text-sm">
@@ -378,36 +365,43 @@
     {:else}
       <!-- fieldMode === 'vocab' -->
       <div class="rounded bg-base-200/30 p-2 text-sm">
-        <div class="mb-2">
-          <SKOSDropdown
-            concepts={pickerConcepts}
-            isLoading={pickerConcepts.length === 0}
-            bind:selected={vocabPickerSelected}
-            multiple={false}
-            maxSelections={1}
-            label={m.form_builder_field_vocab_picker_label()}
-            placeholder={m.form_builder_field_vocab_picker_placeholder()}
-            compact
-            onchange={handleVocabPicked}
-          />
-        </div>
-        <div class="mb-1 flex items-center gap-2">
-          <span class="text-xs text-base-content/50">{m.form_builder_field_vocab_label()}</span>
-          <input
-            type="text"
-            class="input-bordered input input-xs flex-1 font-mono"
-            placeholder={m.form_builder_field_vocab_placeholder()}
-            data-testid="field-vocab-input"
-            value={field.vocabNaddrInput || ''}
-            oninput={(e) => (field.vocabNaddrInput = e.currentTarget.value)}
-            onblur={handleVocabBlur}
-          />
-        </div>
+        {#if !field.vocab?.address}
+          <div class="mb-2">
+            <SKOSDropdown
+              concepts={pickerConcepts}
+              isLoading={pickerConcepts.length === 0}
+              bind:selected={vocabPickerSelected}
+              multiple={false}
+              maxSelections={1}
+              label={m.form_builder_field_vocab_picker_label()}
+              placeholder={m.form_builder_field_vocab_picker_placeholder()}
+              compact
+              onchange={handleVocabPicked}
+            />
+          </div>
+          <div class="mb-1 flex items-center gap-2">
+            <span class="text-xs text-base-content/50">{m.form_builder_field_vocab_label()}</span>
+            <input
+              type="text"
+              class="input-bordered input input-xs flex-1 font-mono"
+              placeholder={m.form_builder_field_vocab_placeholder()}
+              data-testid="field-vocab-input"
+              value={field.vocabNaddrInput || ''}
+              oninput={(e) => (field.vocabNaddrInput = e.currentTarget.value)}
+              onblur={handleVocabBlur}
+            />
+          </div>
+        {/if}
         {#if field.vocabError}
           <div class="mb-1 text-xs text-error">{field.vocabError}</div>
         {/if}
         {#if field.vocab?.address}
           <div class="mb-1 rounded border border-base-300 bg-base-100 p-2 text-xs">
+            {#if selectedSchemeLabel}
+              <p class="mb-1 font-semibold text-base-content" data-testid="selected-scheme-title">
+                {selectedSchemeLabel}
+              </p>
+            {/if}
             {#if selectedDescription}
               <p class="mb-1 text-base-content/80">{selectedDescription}</p>
             {/if}

@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   schemeEventsToSkosConcepts,
-  pickSchemeDescription
+  pickSchemeDescription,
+  pickSchemeLabel
 } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
 
 /**
@@ -215,5 +216,58 @@ describe('pickSchemeDescription', () => {
       created_at: 0
     };
     expect(pickSchemeDescription(ev, 'de')).toBe('Gute Beschreibung');
+  });
+});
+
+describe('pickSchemeLabel', () => {
+  /**
+   * @param {{ labels?: Record<string,string>, d?: string }} opts
+   */
+  function eventWith({ labels, d = 'x' }) {
+    /** @type {string[][]} */
+    const tags = [
+      ['d', d],
+      ['type', 'ConceptScheme']
+    ];
+    if (labels) {
+      for (const [lang, value] of Object.entries(labels)) {
+        tags.push(['prefLabel', value, lang]);
+      }
+    }
+    return { id: 'ev', pubkey: 'pub', kind: 39737, tags, content: '', sig: '', created_at: 0 };
+  }
+
+  it('returns the locale-matched prefLabel when present', () => {
+    const ev = eventWith({ labels: { de: 'Schulfächer', en: 'Subjects' } });
+    expect(pickSchemeLabel(ev, 'de')).toBe('Schulfächer');
+    expect(pickSchemeLabel(ev, 'en')).toBe('Subjects');
+  });
+
+  it('falls back locale → de → en → first when preferred language is missing', () => {
+    const onlyEn = eventWith({ labels: { en: 'Subjects' } });
+    expect(pickSchemeLabel(onlyEn, 'de')).toBe('Subjects');
+
+    const deAndEn = eventWith({ labels: { de: 'Fächer', en: 'Subjects' } });
+    expect(pickSchemeLabel(deAndEn, 'fr')).toBe('Fächer');
+
+    const onlyFr = eventWith({ labels: { fr: 'Matières' } });
+    expect(pickSchemeLabel(onlyFr, 'de')).toBe('Matières');
+  });
+
+  it('falls back to the d-tag when no prefLabel is present', () => {
+    expect(pickSchemeLabel(eventWith({ d: 'hochschulfaecher' }), 'de')).toBe('hochschulfaecher');
+  });
+
+  it("returns '' when neither prefLabel nor d-tag is present", () => {
+    const ev = {
+      id: 'ev',
+      pubkey: 'pub',
+      kind: 39737,
+      tags: [['type', 'ConceptScheme']],
+      content: '',
+      sig: '',
+      created_at: 0
+    };
+    expect(pickSchemeLabel(ev, 'de')).toBe('');
   });
 });

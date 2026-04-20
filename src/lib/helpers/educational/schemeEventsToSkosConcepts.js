@@ -63,6 +63,32 @@ export function schemeEventsToSkosConcepts(events, locale) {
 }
 
 /**
+ * Pick the best-matching `['prefLabel', value, lang]` tag value for a given
+ * locale. Uses the same fallback chain as `schemeEventsToSkosConcepts`
+ * (`locale → de → en → first`), falling back to the d-tag so the caller
+ * always has something to display. Returns '' only if the event has no
+ * prefLabel *and* no d-tag.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string} locale
+ * @returns {string}
+ */
+export function pickSchemeLabel(event, locale) {
+  if (!event?.tags) return '';
+
+  /** @type {Record<string,string>} */
+  const byLang = {};
+  for (const t of event.tags) {
+    if (t[0] === 'prefLabel' && t[1] && t[2]) byLang[t[2]] = t[1];
+  }
+
+  const fromLabel = byLang[locale] || byLang.de || byLang.en || Object.values(byLang)[0];
+  if (fromLabel) return fromLabel;
+
+  return event.tags.find((t) => t[0] === 'd')?.[1] || '';
+}
+
+/**
  * Pick the best-matching `['description', value, lang]` tag value for a given
  * locale. Uses the same fallback chain as labels (`locale → de → en → first`).
  * Returns '' when the scheme has no usable description tag.

@@ -494,6 +494,37 @@ describe('FormBuilderFieldRow source switch (manual ↔ vocab)', () => {
     });
   });
 
+  it('when vocab is selected: picker + naddr input hide, and title card is shown', async () => {
+    const initialField = makeField();
+    // Use the first hochschulfaecher pubkey published by makeSchemes so the
+    // scheme event matches what the discovery mock returns.
+    initialField.vocab = {
+      address:
+        '39737:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:hochschulfaecher',
+      relay: 'wss://vocab.example'
+    };
+    const { container } = render(FormBuilderFieldRowTestWrapper, {
+      props: {
+        initialField,
+        fieldIndex: 0,
+        existing: false,
+        onUpdate: () => {}
+      }
+    });
+
+    // Both picker and naddr input are hidden now that a vocab is bound.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(container.querySelector('[role="combobox"]')).toBeFalsy();
+    expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
+
+    // Selected-scheme title card renders.
+    await waitFor(() => {
+      const title = container.querySelector('[data-testid="selected-scheme-title"]');
+      if (!title || !(title.textContent || '').trim()) throw new Error('title not rendered');
+    });
+  });
+
   it('in vocab mode: "switch to manual" clears vocab/output and reveals the badge editor', async () => {
     /** @type {any} */
     let latest;
@@ -512,10 +543,13 @@ describe('FormBuilderFieldRow source switch (manual ↔ vocab)', () => {
       }
     });
 
-    // Preview visible (description or samples line).
+    // Preview card is the signal that we're in vocab-with-selection: the
+    // picker and naddr input are hidden once `field.vocab` is set.
     await waitFor(() => {
-      if (!container.querySelector('[data-testid="field-vocab-input"]'))
-        throw new Error('not in vocab mode');
+      const switchLink = Array.from(container.querySelectorAll('button')).find((b) =>
+        (b.textContent || '').includes('Add options manually instead')
+      );
+      if (!switchLink) throw new Error('not in vocab mode');
     });
 
     await fireEvent.click(findButton(container, 'Add options manually instead'));
