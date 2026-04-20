@@ -349,6 +349,33 @@ describe('FormBuilderFieldRow vocab picker', () => {
       expect(container.querySelector('[role="combobox"]')).toBeFalsy();
       expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
       expect(container.querySelector('[data-testid="field-output-select"]')).toBeFalsy();
+
+      // Placeholder input DOES render for non-choice types — it's meaningful
+      // for text-like inputs.
+      const placeholderInput = Array.from(container.querySelectorAll('input')).find(
+        (i) => i.placeholder === 'Placeholder'
+      );
+      expect(placeholderInput).toBeTruthy();
+    }
+  });
+
+  it('does not render the placeholder input for choice-based field types', async () => {
+    for (const type of ['select', 'checkbox', 'radio']) {
+      cleanup();
+      const field = makeField();
+      field.type = type;
+      const { container } = render(FormBuilderFieldRow, {
+        props: { field, fields: [field], fieldIndex: 0, existing: false }
+      });
+      await Promise.resolve();
+
+      // The `Placeholder` (`Platzhaltertext`) input has no effect on
+      // select/checkbox/radio controls — the vocab picker or option list
+      // provides its own hint. It should not render.
+      const placeholderInput = Array.from(container.querySelectorAll('input')).find(
+        (i) => i.placeholder === 'Placeholder'
+      );
+      expect(placeholderInput).toBeFalsy();
     }
   });
 });

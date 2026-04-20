@@ -265,12 +265,14 @@
       <input type="checkbox" class="checkbox checkbox-xs" bind:checked={field.required} />
       <span class="label-text text-xs">{m.form_builder_field_required()}</span>
     </label>
-    <input
-      type="text"
-      class="input-bordered input input-xs flex-1"
-      placeholder={m.form_builder_field_placeholder_text()}
-      bind:value={field.placeholder}
-    />
+    {#if !isChoiceType}
+      <input
+        type="text"
+        class="input-bordered input input-xs flex-1"
+        placeholder={m.form_builder_field_placeholder_text()}
+        bind:value={field.placeholder}
+      />
+    {/if}
   </div>
 
   {#if field.type === 'text' || field.type === 'textarea' || field.type === 'number'}
