@@ -21,6 +21,10 @@ describe('getDashboardActiveSection', () => {
     expect(getDashboardActiveSection('/c/', params())).toBe('feed');
   });
 
+  it('returns "feed" on /c (no trailing slash)', () => {
+    expect(getDashboardActiveSection('/c', params())).toBe('feed');
+  });
+
   it('returns "inbox" on /c/inbox', () => {
     expect(getDashboardActiveSection('/c/inbox', params())).toBe('inbox');
   });
@@ -33,12 +37,20 @@ describe('getDashboardActiveSection', () => {
     expect(getDashboardActiveSection('/c/', params('view=my-stuff'))).toBe('my-stuff');
   });
 
+  it('returns "my-stuff" on /c?view=my-stuff (no trailing slash)', () => {
+    expect(getDashboardActiveSection('/c', params('view=my-stuff'))).toBe('my-stuff');
+  });
+
   it('returns "my-stuff" on /c/?view=your-content (backward compat)', () => {
     expect(getDashboardActiveSection('/c/', params('view=your-content'))).toBe('my-stuff');
   });
 
   it('returns "communities" on /c/?view=communities', () => {
     expect(getDashboardActiveSection('/c/', params('view=communities'))).toBe('communities');
+  });
+
+  it('returns "communities" on /c?view=communities (no trailing slash)', () => {
+    expect(getDashboardActiveSection('/c', params('view=communities'))).toBe('communities');
   });
 
   it('returns null on /discover', () => {
