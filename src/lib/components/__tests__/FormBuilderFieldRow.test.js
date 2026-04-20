@@ -64,7 +64,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_vocab_samples_label: () => 'Includes:',
   form_builder_field_vocab_clear: () => 'Change vocabulary',
   form_builder_field_output_label: () => 'Output',
-  form_builder_field_output_auto: (/** @type {{ id: string }} */ { id }) => `auto (${id})`
+  form_builder_field_output_auto: (/** @type {{ id: string }} */ { id }) => `auto (${id})`,
+  form_builder_field_source_prompt: () => 'How should options be configured?',
+  form_builder_field_source_manual: () => 'Add options manually',
+  form_builder_field_source_vocab: () => 'Use a vocabulary',
+  form_builder_field_source_switch_to_manual: () => 'Add options manually instead',
+  form_builder_field_source_switch_to_vocab: () => 'Use a vocabulary instead'
 }));
 
 vi.mock('$lib/helpers/educational/skosLoader.js', () => ({
@@ -224,6 +229,37 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
+/**
+ * Find a button by its visible text, throw if not present.
+ * @param {HTMLElement} container
+ * @param {string | RegExp} text
+ * @returns {HTMLButtonElement}
+ */
+function findButton(container, text) {
+  const matcher =
+    typeof text === 'string'
+      ? (/** @type {string} */ s) => s.includes(text)
+      : (/** @type {string} */ s) => text.test(s);
+  const btn = Array.from(container.querySelectorAll('button')).find((b) =>
+    matcher(b.textContent || '')
+  );
+  if (!btn) throw new Error(`button with text "${text}" not found`);
+  return /** @type {HTMLButtonElement} */ (btn);
+}
+
+/**
+ * Click the "Use a vocabulary" CTA in the unset-state chooser. Returns once
+ * the combobox is on screen.
+ * @param {HTMLElement} container
+ */
+async function clickVocabCta(container) {
+  const cta = await waitFor(() => findButton(container, 'Use a vocabulary'));
+  await fireEvent.click(cta);
+  await waitFor(() => {
+    if (!container.querySelector('[role="combobox"]')) throw new Error('combobox not visible');
+  });
+}
+
 describe('FormBuilderFieldRow vocab picker', () => {
   it('renders discovered schemes inside a SKOSDropdown combobox for select fields', async () => {
     const field = makeField();
@@ -231,13 +267,8 @@ describe('FormBuilderFieldRow vocab picker', () => {
       props: { field, fields: [field], fieldIndex: 0, existing: false }
     });
 
-    const trigger = /** @type {HTMLElement} */ (
-      await waitFor(() => {
-        const t = container.querySelector('[role="combobox"]');
-        if (!t) throw new Error('combobox not found');
-        return t;
-      })
-    );
+    await clickVocabCta(container);
+    const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
     await fireEvent.click(trigger);
 
     const options = Array.from(container.querySelectorAll('[role="option"]'));
@@ -252,13 +283,8 @@ describe('FormBuilderFieldRow vocab picker', () => {
       props: { field, fields: [field], fieldIndex: 0, existing: false }
     });
 
-    const trigger = /** @type {HTMLElement} */ (
-      await waitFor(() => {
-        const t = container.querySelector('[role="combobox"]');
-        if (!t) throw new Error('combobox not found');
-        return t;
-      })
-    );
+    await clickVocabCta(container);
+    const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
     await fireEvent.click(trigger);
 
     const options = Array.from(container.querySelectorAll('[role="option"]'));
@@ -285,13 +311,8 @@ describe('FormBuilderFieldRow vocab picker', () => {
       props: { field, fields: [field], fieldIndex: 0, existing: false }
     });
 
-    const trigger = /** @type {HTMLElement} */ (
-      await waitFor(() => {
-        const t = container.querySelector('[role="combobox"]');
-        if (!t) throw new Error('combobox not found');
-        return t;
-      })
-    );
+    await clickVocabCta(container);
+    const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
     await fireEvent.click(trigger);
 
     const texts = Array.from(container.querySelectorAll('[role="option"]')).map(
@@ -302,18 +323,173 @@ describe('FormBuilderFieldRow vocab picker', () => {
     expect(texts.some((t) => t.includes('Schulfächer'))).toBe(true);
   });
 
-  it('does not render the picker combobox for non-select fields', async () => {
+  it('does not render any options UI for non-choice field types', async () => {
+    for (const type of ['text', 'textarea', 'number', 'email', 'url', 'date']) {
+      cleanup();
+      const field = makeField();
+      field.type = type;
+      const { container } = render(FormBuilderFieldRow, {
+        props: { field, fields: [field], fieldIndex: 0, existing: false }
+      });
+      await Promise.resolve();
+
+      // No CTA chooser
+      expect(
+        Array.from(container.querySelectorAll('button')).some((b) =>
+          (b.textContent || '').includes('Use a vocabulary')
+        )
+      ).toBe(false);
+      expect(
+        Array.from(container.querySelectorAll('button')).some((b) =>
+          (b.textContent || '').includes('Add options manually')
+        )
+      ).toBe(false);
+
+      // No vocab picker, no vocab naddr input, no output selector
+      expect(container.querySelector('[role="combobox"]')).toBeFalsy();
+      expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
+      expect(container.querySelector('[data-testid="field-output-select"]')).toBeFalsy();
+    }
+  });
+});
+
+describe('FormBuilderFieldRow source chooser (unset → manual | vocab)', () => {
+  it('shows both CTA buttons and hides both editors when unset', async () => {
     const field = makeField();
-    field.type = 'text';
     const { container } = render(FormBuilderFieldRow, {
       props: { field, fields: [field], fieldIndex: 0, existing: false }
     });
-
-    // Give any async rendering a tick.
     await Promise.resolve();
 
-    // The vocab section (and its picker) is select/radio-only.
+    expect(findButton(container, 'Add options manually').textContent).toContain(
+      'Add options manually'
+    );
+    expect(findButton(container, 'Use a vocabulary').textContent).toContain('Use a vocabulary');
+
+    // Neither editor visible yet.
     expect(container.querySelector('[role="combobox"]')).toBeFalsy();
+    expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
+    // Manual badge-list has a distinctive "New option" placeholder input.
+    const newOptionInput = Array.from(container.querySelectorAll('input')).find(
+      (i) => i.placeholder === 'New option'
+    );
+    expect(newOptionInput).toBeFalsy();
+  });
+
+  it('clicking "Add options manually" reveals the badge-list editor', async () => {
+    const field = makeField();
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await fireEvent.click(findButton(container, 'Add options manually'));
+
+    await waitFor(() => {
+      const newOption = Array.from(container.querySelectorAll('input')).find(
+        (i) => i.placeholder === 'New option'
+      );
+      if (!newOption) throw new Error('manual editor not shown');
+    });
+    // Vocab combobox should not appear on manual branch.
+    expect(container.querySelector('[role="combobox"]')).toBeFalsy();
+  });
+
+  it('clicking "Use a vocabulary" reveals the combobox', async () => {
+    const field = makeField();
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await clickVocabCta(container);
+
+    // Manual badge-list editor should not appear on vocab branch.
+    const newOption = Array.from(container.querySelectorAll('input')).find(
+      (i) => i.placeholder === 'New option'
+    );
+    expect(newOption).toBeFalsy();
+  });
+
+  for (const type of ['select', 'radio', 'checkbox']) {
+    it(`offers the chooser for field type "${type}"`, async () => {
+      const field = makeField();
+      field.type = type;
+      const { container } = render(FormBuilderFieldRow, {
+        props: { field, fields: [field], fieldIndex: 0, existing: false }
+      });
+      await Promise.resolve();
+      expect(findButton(container, 'Add options manually')).toBeTruthy();
+      expect(findButton(container, 'Use a vocabulary')).toBeTruthy();
+    });
+  }
+});
+
+describe('FormBuilderFieldRow source switch (manual ↔ vocab)', () => {
+  it('in manual mode: "switch to vocabulary" clears options and reveals the combobox', async () => {
+    /** @type {any} */
+    let latest;
+    const initialField = makeField();
+    initialField.selectOptions = ['Ja', 'Nein']; // pre-seeded manual mode
+    const { container } = render(FormBuilderFieldRowTestWrapper, {
+      props: {
+        initialField,
+        fieldIndex: 0,
+        existing: false,
+        onUpdate: (/** @type {any} */ f) => {
+          latest = f;
+        }
+      }
+    });
+
+    // Badges visible as expected.
+    await waitFor(() => {
+      if (!(container.textContent || '').includes('Ja')) throw new Error('not in manual mode');
+    });
+
+    await fireEvent.click(findButton(container, 'Use a vocabulary instead'));
+
+    await waitFor(() => {
+      if (latest.selectOptions.length !== 0) throw new Error('selectOptions not cleared');
+    });
+    await waitFor(() => {
+      if (!container.querySelector('[role="combobox"]'))
+        throw new Error('combobox not shown post-switch');
+    });
+  });
+
+  it('in vocab mode: "switch to manual" clears vocab/output and reveals the badge editor', async () => {
+    /** @type {any} */
+    let latest;
+    const initialField = makeField();
+    initialField.vocab = { address: `39737:${'a'.repeat(64)}:hochschulfaecher`, relay: 'wss://r' };
+    initialField.vocabNaddrInput = 'naddr1fake';
+    initialField.output = 'amb:about';
+    const { container } = render(FormBuilderFieldRowTestWrapper, {
+      props: {
+        initialField,
+        fieldIndex: 0,
+        existing: false,
+        onUpdate: (/** @type {any} */ f) => {
+          latest = f;
+        }
+      }
+    });
+
+    // Preview visible (description or samples line).
+    await waitFor(() => {
+      if (!container.querySelector('[data-testid="field-vocab-input"]'))
+        throw new Error('not in vocab mode');
+    });
+
+    await fireEvent.click(findButton(container, 'Add options manually instead'));
+
+    await waitFor(() => {
+      if (latest.vocab) throw new Error('vocab not cleared');
+    });
+    expect(latest.output).toBe('');
+    await waitFor(() => {
+      const newOption = Array.from(container.querySelectorAll('input')).find(
+        (i) => i.placeholder === 'New option'
+      );
+      if (!newOption) throw new Error('manual editor not shown post-switch');
+    });
   });
 });
 
@@ -341,13 +517,9 @@ async function renderAndPickHochschul(initialField) {
     }
   });
 
-  const trigger = /** @type {HTMLElement} */ (
-    await waitFor(() => {
-      const t = container.querySelector('[role="combobox"]');
-      if (!t) throw new Error('combobox not found');
-      return t;
-    })
-  );
+  // New flow: click "Use a vocabulary" CTA first — the combobox is behind it.
+  await clickVocabCta(container);
+  const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
   await fireEvent.click(trigger);
 
   const options = Array.from(container.querySelectorAll('[role="option"]'));

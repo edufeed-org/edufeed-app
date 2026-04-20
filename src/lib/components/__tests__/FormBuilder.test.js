@@ -95,8 +95,17 @@ describe('FormBuilder: vocab + output authoring', () => {
     await fireEvent.input(labelInput, { target: { value: 'Fach' } });
     await fireEvent.change(labelInput, { target: { value: 'Fach' } });
 
+    // The new field starts in the "unset" source-chooser state. Click the
+    // "Use a vocabulary" CTA to reveal the per-field vocab naddr input.
+    const vocabCta = /** @type {HTMLButtonElement | undefined} */ (
+      Array.from(container.querySelectorAll('button')).find((b) =>
+        /vocabulary|vokabular/i.test(b.textContent || '')
+      )
+    );
+    expect(vocabCta, 'FormBuilder must offer a "Use a vocabulary" CTA').toBeTruthy();
+    await fireEvent.click(/** @type {HTMLButtonElement} */ (vocabCta));
+
     // Paste scheme naddr into the per-field vocab input.
-    // Identify by data-testid that the component must render.
     const vocabInput = /** @type {HTMLInputElement} */ (
       container.querySelector('[data-testid="field-vocab-input"]')
     );
