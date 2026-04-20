@@ -51,19 +51,31 @@
     'date'
   ];
 
-  // Common AMB output targets — extendable without a code change to the spec
+  // Common AMB output targets — human-readable label + machine value.
   const AMB_OUTPUTS = [
-    'amb:name',
-    'amb:description',
-    'amb:about',
-    'amb:learningResourceType',
-    'amb:audience',
-    'amb:educationalLevel',
-    'amb:interactivityType',
-    'amb:conditionsOfAccess',
-    'amb:license',
-    'amb:inLanguage',
-    'amb:keywords'
+    { value: 'amb:name', label: () => m.form_builder_field_output_amb_name() },
+    { value: 'amb:description', label: () => m.form_builder_field_output_amb_description() },
+    { value: 'amb:about', label: () => m.form_builder_field_output_amb_about() },
+    {
+      value: 'amb:learningResourceType',
+      label: () => m.form_builder_field_output_amb_learningResourceType()
+    },
+    { value: 'amb:audience', label: () => m.form_builder_field_output_amb_audience() },
+    {
+      value: 'amb:educationalLevel',
+      label: () => m.form_builder_field_output_amb_educationalLevel()
+    },
+    {
+      value: 'amb:interactivityType',
+      label: () => m.form_builder_field_output_amb_interactivityType()
+    },
+    {
+      value: 'amb:conditionsOfAccess',
+      label: () => m.form_builder_field_output_amb_conditionsOfAccess()
+    },
+    { value: 'amb:license', label: () => m.form_builder_field_output_amb_license() },
+    { value: 'amb:inLanguage', label: () => m.form_builder_field_output_amb_inLanguage() },
+    { value: 'amb:keywords', label: () => m.form_builder_field_output_amb_keywords() }
   ];
 
   // Concept-count preview — reactive via useSchemeConcepts
@@ -426,11 +438,10 @@
             onchange={handleOutputChange}
           >
             <option value="">{m.form_builder_field_output_auto({ id: field.id || 'id' })}</option>
-            <option value={`amb:${field.id}`}>amb:{field.id}</option>
-            {#each AMB_OUTPUTS as out (out)}
-              <option value={out}>{out}</option>
+            {#each AMB_OUTPUTS as out (out.value)}
+              <option value={out.value}>{out.label()}</option>
             {/each}
-            <option value="ext">ext</option>
+            <option value="ext">{m.form_builder_field_output_ext()}</option>
           </select>
         </div>
         <div class="mt-1">
