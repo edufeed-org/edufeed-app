@@ -84,8 +84,8 @@
     "applesauce-common": "^5.1.0",
     "linkedom": "^0.18.12",
     "nostr-tools": "^2.16.2",
-    "nostr-vocab-core": "git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git#v0.1.0",
-    "nostr-vocab-skos-import": "git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-skos-import.git#v0.1.0",
+    "nostr-vocab-core": "git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-core.git#v0.2.0",
+    "nostr-vocab-skos-import": "git+ssh://git@git.edufeed.org/edufeed/nostr-vocab-skos-import.git#v0.2.0",
     "sharp": "^0.34.5"
   },
   "pnpm": {
