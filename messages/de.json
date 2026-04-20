@@ -1539,6 +1539,8 @@
   "form_builder_min_length": "Min. Länge:",
   "form_builder_max_length": "Max. Länge:",
   "form_builder_field_vocab_label": "Vokabular:",
+  "form_builder_field_vocab_picker_label": "Vokabular wählen",
+  "form_builder_field_vocab_picker_placeholder": "Veröffentlichtes Vokabular auswählen …",
   "form_builder_field_vocab_placeholder": "Vokabular-naddr einfügen (Kind 39737) …",
   "form_builder_field_vocab_invalid": "Ungültiger Vokabular-naddr (muss ein Kind-39737-naddr sein).",
   "form_builder_field_vocab_concepts_count": "{n} Konzepte",

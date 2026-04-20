@@ -1,8 +1,12 @@
 <script>
   import { nip19 } from 'nostr-tools';
-  import { useSchemeConcepts } from '$lib/stores/vocab-store.svelte.js';
+  import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
+  import { useSchemeConcepts, useConceptSchemes } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { generateFieldId } from '$lib/helpers/forms.js';
+  import { schemeEventsToSkosConcepts } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
+  import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -65,6 +69,47 @@
     () => /** @type {string[]} */ ([field.vocab?.relay, ...getAllLookupRelays()].filter(Boolean))
   );
   const conceptCount = $derived(field.vocab?.address ? getConcepts().length : undefined);
+
+  // Discover published ConceptScheme events on the lookup relays.
+  const getDiscoveredSchemes = useConceptSchemes(() => getAllLookupRelays());
+  /** @type {import('$lib/helpers/educational/skosLoader.js').SKOSConcept[]} */
+  const pickerConcepts = $derived(schemeEventsToSkosConcepts(getDiscoveredSchemes(), getLocale()));
+
+  // Picker is a one-shot trigger; we clear selection after each pick so the
+  // dropdown returns to idle. Bindable prop on SKOSDropdown requires $state.
+  /** @type {{id: string, label: string}[]} */
+  let vocabPickerSelected = $state([]);
+
+  /**
+   * Resolve the scheme the author just picked: populate field.vocab, mirror
+   * an naddr into the text input, clear the error.
+   * @param {{id: string, label: string}[]} selection
+   */
+  function handleVocabPicked(selection) {
+    const pick = selection[0];
+    if (!pick) return;
+
+    const [, pubkey, d] = pick.id.split(':');
+    const event = getDiscoveredSchemes().find(
+      (e) => e.pubkey === pubkey && e.tags.some((t) => t[0] === 'd' && t[1] === d)
+    );
+
+    const seen = event ? getSeenRelays(event) : undefined;
+    const fromSeen = seen && seen.size > 0 ? [...seen][0] : undefined;
+    const relay = fromSeen ? normalizeURL(fromSeen) : getAllLookupRelays()[0] || '';
+
+    field.vocab = { address: pick.id, relay };
+    field.vocabNaddrInput = nip19.naddrEncode({
+      kind: 39737,
+      pubkey,
+      identifier: d,
+      relays: relay ? [relay] : []
+    });
+    field.vocabError = '';
+
+    // Reset so the combobox returns to its idle state — picker is one-shot.
+    vocabPickerSelected = [];
+  }
 
   /**
    * Attempt to decode a naddr into { address, relay } when the user blurs the input.
@@ -204,6 +249,21 @@
 
   <!-- Vocab binding + output target -->
   <div class="rounded bg-base-200/30 p-2 text-sm">
+    {#if field.type === 'select' || field.type === 'radio'}
+      <div class="mb-2">
+        <SKOSDropdown
+          concepts={pickerConcepts}
+          isLoading={pickerConcepts.length === 0}
+          bind:selected={vocabPickerSelected}
+          multiple={false}
+          maxSelections={1}
+          label={m.form_builder_field_vocab_picker_label()}
+          placeholder={m.form_builder_field_vocab_picker_placeholder()}
+          compact
+          onchange={handleVocabPicked}
+        />
+      </div>
+    {/if}
     <div class="mb-1 flex items-center gap-2">
       <span class="text-xs text-base-content/50">{m.form_builder_field_vocab_label()}</span>
       <input

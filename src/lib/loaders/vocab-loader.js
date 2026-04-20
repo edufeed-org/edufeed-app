@@ -45,3 +45,21 @@ export function loadSchemeConcepts(schemeCoord, relays) {
   );
   return loader().subscribe();
 }
+
+/**
+ * Stream all kind-39737 events on the given relays. The caller filters
+ * ConceptScheme vs Concept client-side (kind 39737 is shared across
+ * ConceptScheme / Concept / Collection, distinguished only by `type` tag).
+ * Used by the FormBuilder vocab picker to discover published schemes.
+ * @param {string[]} relays
+ * @returns {import('rxjs').Subscription}
+ */
+export function loadAllSchemes(relays) {
+  const loader = createTimelineLoader(
+    timedPool,
+    relays,
+    { kinds: [VOCAB_KIND] },
+    { eventStore, limit: 500 }
+  );
+  return loader().subscribe();
+}

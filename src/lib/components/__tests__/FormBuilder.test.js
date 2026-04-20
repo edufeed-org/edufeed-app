@@ -52,7 +52,8 @@ vi.mock('$app/navigation', () => ({ goto: gotoSpy }));
 // we return stable getters to avoid real network activity.
 vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
   useConceptScheme: () => () => undefined,
-  useSchemeConcepts: () => () => []
+  useSchemeConcepts: () => () => [],
+  useConceptSchemes: () => () => []
 }));
 
 import FormBuilder from '../forms/FormBuilder.svelte';

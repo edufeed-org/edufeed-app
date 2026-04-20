@@ -1,6 +1,10 @@
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel, ReplaceableModel } from 'applesauce-core/models';
-import { loadConceptScheme, loadSchemeConcepts } from '$lib/loaders/vocab-loader.js';
+import {
+  loadConceptScheme,
+  loadSchemeConcepts,
+  loadAllSchemes
+} from '$lib/loaders/vocab-loader.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
 /**
@@ -79,4 +83,43 @@ export function useSchemeConcepts(getSchemeCoord, getRelays) {
   });
 
   return () => concepts;
+}
+
+/**
+ * Reactive hook: returns all kind-39737 ConceptScheme events discovered on
+ * the given relays. Used by the FormBuilder vocab picker.
+ *
+ * Kind 39737 is addressable, so EventStore dedupes by coordinate
+ * automatically — we only need to client-filter the shared kind down to
+ * `type === 'ConceptScheme'` (excludes Concept / Collection events).
+ *
+ * @param {() => string[]} getRelays
+ * @returns {() => import('nostr-tools').NostrEvent[]}
+ */
+export function useConceptSchemes(getRelays) {
+  /** @type {import('nostr-tools').NostrEvent[]} */
+  let schemes = $state.raw([]);
+
+  $effect(() => {
+    const relays = getRelays();
+    if (!relays || relays.length === 0) {
+      schemes = [];
+      return;
+    }
+
+    const loaderSub = loadAllSchemes(relays);
+    const modelSub = eventStore.model(TimelineModel, { kinds: [39737] }).subscribe((events) => {
+      const onlySchemes = (events || []).filter((e) =>
+        e.tags.some((t) => t[0] === 'type' && t[1] === 'ConceptScheme')
+      );
+      schemes = onlySchemes;
+    });
+
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
+  });
+
+  return () => schemes;
 }
