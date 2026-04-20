@@ -8,7 +8,6 @@
     schemeEventsToSkosConcepts,
     pickSchemeDescription
   } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
-  import { getConceptLabel } from '$lib/helpers/educational/skosLoader.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -141,11 +140,36 @@
   const selectedDescription = $derived(
     selectedSchemeEvent ? pickSchemeDescription(selectedSchemeEvent, getLocale()) : ''
   );
+  /**
+   * Read the best-matching prefLabel from a Concept event's tags, using the
+   * same locale → de → en → first fallback chain as schemeEventsToSkosConcepts.
+   * Falls back to the d-tag (and finally the event id prefix) so we never
+   * render an empty chip.
+   * @param {import('nostr-tools').NostrEvent} evt
+   * @param {string} locale
+   * @returns {string}
+   */
+  function pickConceptLabel(evt, locale) {
+    /** @type {Record<string, string>} */
+    const byLang = {};
+    for (const t of evt.tags) {
+      if (t[0] === 'prefLabel' && t[1] && t[2]) byLang[t[2]] = t[1];
+    }
+    return (
+      byLang[locale] ||
+      byLang.de ||
+      byLang.en ||
+      Object.values(byLang)[0] ||
+      evt.tags.find((t) => t[0] === 'd')?.[1] ||
+      evt.id.slice(0, 8)
+    );
+  }
+
   const sampleConceptLabels = $derived(
     field.vocab?.address
       ? getConcepts()
           .slice(0, 5)
-          .map((c) => getConceptLabel(/** @type {any} */ (c), getLocale()))
+          .map((c) => pickConceptLabel(c, getLocale()))
           .filter(Boolean)
       : []
   );
