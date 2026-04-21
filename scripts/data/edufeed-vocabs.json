@@ -39,7 +39,7 @@
       "d": "educational-level",
       "source": {
         "type": "skohub",
-        "url": "https://w3id.org/kim/educationalLevel/scheme"
+        "url": "https://w3id.org/kim/educationalLevel/"
       }
     },
     {

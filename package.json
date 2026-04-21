@@ -19,7 +19,8 @@
     "test:e2e": "playwright test",
     "machine-translate": "inlang machine translate --project project.inlang",
     "publish:vocabs": "node scripts/publish-edufeed-vocabs.mjs",
-    "publish:forms": "node scripts/publish-edufeed-forms.mjs"
+    "publish:forms": "node scripts/publish-edufeed-forms.mjs",
+    "cleanup:legacy-vocab": "node scripts/delete-legacy-concept-kinds.mjs"
   },
   "devDependencies": {
     "@djot/djot": "^0.3.2",
