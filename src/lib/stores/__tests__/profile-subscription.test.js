@@ -11,12 +11,12 @@ const profileLoaderMock = vi.fn();
 const modelMock = vi.fn();
 
 vi.mock('$lib/loaders/profile.js', () => ({
-  profileLoader: (...args) => profileLoaderMock(...args)
+  profileLoader: (/** @type {any[]} */ ...args) => profileLoaderMock(...args)
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    model: (...args) => modelMock(...args)
+    model: (/** @type {any[]} */ ...args) => modelMock(...args)
   }
 }));
 
@@ -48,7 +48,7 @@ describe('subscribeProfile', () => {
     modelMock.mockReset();
 
     profileLoaderMock.mockImplementation(() => ({
-      subscribe: (obs) => {
+      subscribe: (/** @type {any} */ obs) => {
         const sub = loaderSubject.subscribe(obs);
         const orig = sub.unsubscribe.bind(sub);
         sub.unsubscribe = () => {
@@ -60,7 +60,7 @@ describe('subscribeProfile', () => {
     }));
 
     modelMock.mockImplementation(() => ({
-      subscribe: (obs) => {
+      subscribe: (/** @type {any} */ obs) => {
         const sub = modelSubject.subscribe(obs);
         const orig = sub.unsubscribe.bind(sub);
         sub.unsubscribe = () => {
