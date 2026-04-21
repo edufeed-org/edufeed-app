@@ -1,19 +1,21 @@
 /**
  * Generic community content loader factory.
- * Extracts the shared 3-step loading pattern used by amb.js and kanban-community.js:
- * 1. Direct content (h-tagged events from content relays)
- * 2. Targeted publications (kind 30222 from communikey relays)
- * 3. Reference resolution (load events referenced by targeted publications)
+ * Extracts the shared loading pattern used by community content views:
+ * 1. Direct content (h-tagged events from content relays + community relays)
+ * 2. NIP-18 reposts (kind 6/16 with h-tag targeting the community)
+ * 3. Targeted publications (kind 30222 from communikey relays) — legacy, read-only
+ * 4. Reference resolution for both reposts and legacy shares
  */
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-import { onlyEvents } from 'applesauce-relay/operators';
-import { mapEventsToStore } from 'applesauce-core/observable';
 import { addressLoader, timedPool } from './base.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
+import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
+import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+import { fetchEventsByIds, resolveRepostReferences } from '$lib/helpers/repost-resolution.js';
 
 /**
  * Create a community content loader for any content type.
@@ -35,7 +37,15 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
       return { subscriptions, cleanup: () => {} };
     }
 
-    const relays = getRelays();
+    const appRelays = getRelays();
+
+    // Merge app relays with the community's own relays from its kind 10222 event.
+    const communityEvent = eventStore.getReplaceable(10222, communityPubkey);
+    const communityRelays = getCommunityGlobalRelays(communityEvent);
+    const relays = [...new Set([...appRelays, ...communityRelays])];
+
+    // Broad relay set for reference resolution — includes all app + fallback relays
+    const lookupRelays = [...new Set([...getAllLookupRelays(), ...communityRelays])];
 
     // 1. Direct community content (events with h-tag matching community)
     const directFilter = { kinds, '#h': [communityPubkey] };
@@ -46,19 +56,29 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
     });
     subscriptions.set('direct', directLoader().subscribe());
 
-    // 2. Targeted publications (kind 30222) referencing this content type
+    // 2. NIP-18 reposts (kind 6/16 with h-tag targeting this community)
+    // Reposts are published to the author's write relays (outbox model), not content-type relays.
+    // Use broad relay set to discover them.
+    const repostLoader = createTimelineLoader(
+      timedPool,
+      lookupRelays,
+      { kinds: [6, 16], '#h': [communityPubkey] },
+      { eventStore, limit: 50 }
+    );
+    subscriptions.set('reposts', repostLoader().subscribe());
+
+    // 3. Legacy targeted publications (kind 30222) — backward compat
     const targetedPubSub = communityTargetedPublicationsLoader(
       communityPubkey,
       kinds
     )().subscribe();
     subscriptions.set('targetedPublications', targetedPubSub);
 
-    // 3. Watch targeted publications and load referenced content on-demand
-    // Uses plain Set (not SvelteSet) for internal tracking — avoids reactive read/write loops
+    // 4a. Watch legacy 30222 shares and load referenced content on-demand
     const loadedEventIds = new Set();
     const loadedAddresses = new Set();
 
-    const referencedSub = eventStore
+    const legacyReferencedSub = eventStore
       .model(TimelineModel, {
         kinds: [30222],
         '#p': [communityPubkey],
@@ -67,8 +87,6 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
       })
       .subscribe((shareEvents) => {
         const newEventIds = [];
-        /** @type {Array<{kind: number, pubkey: string, identifier: string}>} */
-        const newAddressRefs = [];
 
         for (const shareEvent of shareEvents) {
           const eTag = getTagValue(shareEvent, 'e');
@@ -82,34 +100,45 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
             loadedAddresses.add(aTag);
             const parsed = parseAddressPointerFromATag(aTag);
             if (parsed) {
-              newAddressRefs.push({
+              addressLoader({
                 kind: parsed.kind,
                 pubkey: parsed.pubkey,
-                identifier: parsed.identifier
-              });
+                identifier: parsed.identifier,
+                relays: lookupRelays
+              }).subscribe();
             }
           }
         }
 
-        if (newEventIds.length > 0) {
-          const sub = pool
-            .subscription(relays, { ids: newEventIds })
-            .pipe(onlyEvents(), mapEventsToStore(eventStore))
-            .subscribe();
-          subscriptions.set(`refById-${Date.now()}`, sub);
-        }
+        const sub = fetchEventsByIds(newEventIds, lookupRelays, { pool, eventStore });
+        if (sub) subscriptions.set(`refById-${Date.now()}`, sub);
+      });
+    subscriptions.set('legacyReferenced', legacyReferencedSub);
 
-        if (newAddressRefs.length > 0) {
-          for (const ref of newAddressRefs) {
-            addressLoader({
-              kind: ref.kind,
-              pubkey: ref.pubkey,
-              identifier: ref.identifier
-            }).subscribe();
-          }
+    // 4b. Watch NIP-18 reposts and load referenced content on-demand
+    const repostLoadedEventIds = new Set();
+    const repostLoadedAddresses = new Set();
+
+    const repostReferencedSub = eventStore
+      .model(TimelineModel, {
+        kinds: [6, 16],
+        '#h': [communityPubkey],
+        limit: 100
+      })
+      .subscribe((repostEvents) => {
+        const subs = resolveRepostReferences(repostEvents, {
+          eventStore,
+          pool,
+          addressLoader,
+          relays: lookupRelays,
+          loadedIds: repostLoadedEventIds,
+          loadedAddresses: repostLoadedAddresses
+        });
+        for (const sub of subs) {
+          subscriptions.set(`repostRef-${Date.now()}-${Math.random()}`, sub);
         }
       });
-    subscriptions.set('referenced', referencedSub);
+    subscriptions.set('repostReferenced', repostReferencedSub);
 
     function cleanup() {
       subscriptions.forEach((sub) => {
@@ -123,3 +152,6 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
     return { subscriptions, cleanup };
   };
 }
+
+/** Community meet room loader for kinds 30312/30313 */
+export const useMeetRoomLoader = createCommunityContentLoader([30312, 30313], getCommunikeyRelays);

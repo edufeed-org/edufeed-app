@@ -406,8 +406,19 @@ export function getLabelsWithFallback(tags, prefix, userLang = 'en', concepts = 
   const enTagName = `${prefix}:prefLabel:en`;
   const prefLabelPrefix = `${prefix}:prefLabel:`;
 
-  // Get all IDs
-  const ids = getTagValues(tags, idTagName);
+  // Get all IDs (deduplicated, keeping first occurrence index for positional label matching)
+  const allIds = getTagValues(tags, idTagName);
+  const seenIds = new Set();
+  const ids = [];
+  /** @type {number[]} */
+  const idIndexes = [];
+  for (let i = 0; i < allIds.length; i++) {
+    if (!seenIds.has(allIds[i])) {
+      seenIds.add(allIds[i]);
+      ids.push(allIds[i]);
+      idIndexes.push(i);
+    }
+  }
 
   // Get all labels in user's language
   const userLangLabels = getTagValues(tags, userLangTagName);
@@ -430,26 +441,29 @@ export function getLabelsWithFallback(tags, prefix, userLang = 'en', concepts = 
   }
 
   return ids.map((id, index) => {
+    // Map back to original positional index for label array lookups
+    const origIndex = idIndexes[index];
+
     // Helper: some publishers write the URI into prefLabel tags — treat as missing
     const isUri = (/** @type {string | undefined} */ v) =>
       v?.startsWith('http://') || v?.startsWith('https://');
 
     // Try user's language first
-    let label = isUri(userLangLabels[index]) ? undefined : userLangLabels[index];
+    let label = isUri(userLangLabels[origIndex]) ? undefined : userLangLabels[origIndex];
     /** @type {string | undefined} */
     let fallbackLang;
 
     // Fallback to English
     if (!label && userLang !== 'en') {
-      label = isUri(enLabels[index]) ? undefined : enLabels[index];
+      label = isUri(enLabels[origIndex]) ? undefined : enLabels[origIndex];
       if (label) fallbackLang = 'en';
     }
 
     // Fallback to any other available language from tags
     if (!label) {
       for (const [lang, labels] of Object.entries(otherLangLabels)) {
-        if (labels[index] && !isUri(labels[index])) {
-          label = labels[index];
+        if (labels[origIndex] && !isUri(labels[origIndex])) {
+          label = labels[origIndex];
           fallbackLang = lang;
           break;
         }

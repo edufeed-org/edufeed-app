@@ -5,8 +5,14 @@
 -->
 
 <script>
+  import { getContext } from 'svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { matchesEventSearch } from '$lib/helpers/contentSearch.js';
+  import { SearchIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
+
+  const getAllowedAuthors = getContext('allowedAuthors');
 
   /**
    * @typedef {Object} Props
@@ -14,37 +20,74 @@
    * @property {any} [communityProfile]
    * @property {(pubkey: string) => { subscriptions: Map<string, any>, cleanup: () => void }} loaderHook
    * @property {(pubkey: string) => (eventStore: any) => import('rxjs').Observable<any[]>} model
-   * @property {string} title
-   * @property {string} description
    * @property {string} loadingText
    * @property {string} emptyTitle
    * @property {string} emptyDescription
    * @property {(count: number) => string} formatCount - Function to format the item count
+   * @property {(items: any[]) => number} [countTransform] - Optional transform to derive display count from items
    * @property {string} emptyIconPath - SVG path for empty state icon
+   * @property {boolean} [searchable] - Show search input in header
+   * @property {string} [searchPlaceholder] - Placeholder text for search input
    */
 
-  /** @type {Props & { content: import('svelte').Snippet<[any[], Map<string, any>]>, fab?: import('svelte').Snippet }} */
+  /** @type {Props & { content: import('svelte').Snippet<[any[], Map<string, any>]>, headerAction?: import('svelte').Snippet }} */
   let {
     communityPubkey,
     communityProfile: _communityProfile = null,
     loaderHook,
     model,
-    title,
-    description,
     loadingText,
     emptyTitle,
     emptyDescription,
     formatCount,
+    countTransform = /** @type {any[]} */ (items) => items.length,
     emptyIconPath,
+    searchable = false,
+    searchPlaceholder = 'Search...',
     content,
-    fab
+    headerAction
   } = $props();
+
+  let searchQuery = $state('');
 
   let items = $state(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let error = $state(/** @type {string | null} */ (null));
-  const getAuthorProfiles = useProfileMap(() => items.map((i) => i.pubkey));
+  const getAuthorProfiles = useProfileMap(() => {
+    const pubkeys = [];
+    for (const i of items) {
+      const pk = i.pubkey || i.event?.pubkey;
+      if (pk) pubkeys.push(pk);
+      if (i._allSharers) {
+        for (const pk of i._allSharers) pubkeys.push(pk);
+      } else if (i._sharedBy) {
+        pubkeys.push(i._sharedBy);
+      }
+    }
+    return pubkeys;
+  });
   let authorProfiles = $derived(getAuthorProfiles());
+
+  let accessFilteredItems = $derived.by(() => {
+    const allowed = getAllowedAuthors?.();
+    if (!allowed) return items;
+    return items.filter(
+      (item) =>
+        allowed.includes(item.pubkey || item.event?.pubkey) ||
+        (item._allSharers &&
+          item._allSharers.some((/** @type {string} */ pk) => allowed.includes(pk))) ||
+        (item._sharedBy && allowed.includes(item._sharedBy))
+    );
+  });
+
+  let displayedItems = $derived.by(() => {
+    if (!searchable || !searchQuery.trim()) return accessFilteredItems;
+    return accessFilteredItems.filter((item) =>
+      matchesEventSearch(item, searchQuery, authorProfiles)
+    );
+  });
+
+  let isSearchFiltered = $derived(searchable && searchQuery.trim().length > 0);
 
   let loaderCleanup = /** @type {(() => void) | null} */ (null);
 
@@ -100,11 +143,37 @@
 </script>
 
 <div class="community-content-view p-4">
-  <!-- Header -->
-  <div class="mb-6">
-    <h2 class="text-2xl font-bold text-base-content">{title}</h2>
-    <p class="mt-1 text-base-content/60">{description}</p>
-  </div>
+  {#if searchable || headerAction}
+    <div class="mb-4 flex items-center gap-2">
+      {#if searchable}
+        <div class="relative flex-1">
+          <SearchIcon
+            class_="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40"
+          />
+          <input
+            type="text"
+            bind:value={searchQuery}
+            placeholder={searchPlaceholder}
+            class="input-bordered input input-sm w-full pl-9"
+          />
+          {#if searchQuery}
+            <button
+              class="btn absolute top-1/2 right-2 btn-circle -translate-y-1/2 btn-ghost btn-xs"
+              onclick={() => (searchQuery = '')}
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          {/if}
+        </div>
+      {:else}
+        <div class="flex-1"></div>
+      {/if}
+      {#if headerAction}
+        {@render headerAction()}
+      {/if}
+    </div>
+  {/if}
 
   <!-- Loading State -->
   {#if isLoading}
@@ -130,8 +199,13 @@
       </svg>
       <span>{error}</span>
     </div>
+    <!-- No search results -->
+  {:else if displayedItems.length === 0 && isSearchFiltered}
+    <div class="py-8 text-center text-base-content/60">
+      {m.community_search_no_results({ query: searchQuery.trim() })}
+    </div>
     <!-- Empty State -->
-  {:else if items.length === 0}
+  {:else if displayedItems.length === 0}
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <div class="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-base-200">
         <svg
@@ -149,17 +223,13 @@
     </div>
     <!-- Content -->
   {:else}
-    {@render content(items, authorProfiles)}
+    {@render content(displayedItems, authorProfiles)}
 
     <div class="mt-6 text-center text-sm text-base-content/60">
-      {formatCount(items.length)}
+      {formatCount(countTransform(displayedItems))}
     </div>
   {/if}
 </div>
-
-{#if fab}
-  {@render fab()}
-{/if}
 
 <style>
   .community-content-view {

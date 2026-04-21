@@ -27,10 +27,11 @@
   import LocationLink from '../shared/LocationLink.svelte';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import PersonalCalendarShare from './PersonalCalendarShare.svelte';
-  import CommunityCalendarShare from './CommunityCalendarShare.svelte';
+  import CommunityShare from '../shared/CommunityShare.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import ProfileCard from '../shared/ProfileCard.svelte';
   import EventManagementActions from './EventManagementActions.svelte';
+  import EventContextMenu from '../shared/EventContextMenu.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
 
   /**
@@ -252,6 +253,9 @@
                 onEdit={handleEdit}
                 onDeleteSuccess={handleDeleteSuccess}
               />
+            {/if}
+            {#if event?.originalEvent}
+              <EventContextMenu event={event.originalEvent} />
             {/if}
             <a
               href={resolve(eventDetailUrl)}
@@ -482,7 +486,7 @@
           <h3 class="mb-3 text-lg font-semibold text-base-content">
             {m.event_details_share_communities()}
           </h3>
-          <CommunityCalendarShare {event} activeUser={manager.active} />
+          <CommunityShare event={event.originalEvent} activeUser={manager.active} />
         </div>
       {/if}
 

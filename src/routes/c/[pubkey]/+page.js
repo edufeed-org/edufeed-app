@@ -1,25 +1,25 @@
-import { npubToHex } from '$lib/helpers/nostrUtils.js';
-import { error } from '@sveltejs/kit';
-
 /**
- * Load function to validate and convert npub parameter
+ * Community home page load function.
+ * Layout already validates npub → hex pubkey.
+ * This just passes the ?view= param as contentView.
  * @type {import('./$types').PageLoad}
  */
-export async function load({ params }) {
-  const { pubkey } = params;
+export async function load({ url }) {
+  const validContentTypes = new Set([
+    'home',
+    'chat',
+    'calendar',
+    'learning',
+    'boards',
+    'articles',
+    'forum',
+    'social-bookmarks',
+    'meet',
+    'settings'
+  ]);
 
-  // Validate and convert npub to hex
-  const hexPubkey = npubToHex(pubkey);
+  const viewParam = url.searchParams.get('view');
+  const contentView = viewParam && validContentTypes.has(viewParam) ? viewParam : undefined;
 
-  if (!hexPubkey) {
-    throw error(
-      400,
-      'Invalid community identifier. Community URLs should be in the format /c/npub1...'
-    );
-  }
-
-  return {
-    pubkey: hexPubkey,
-    npub: pubkey
-  };
+  return { contentView };
 }

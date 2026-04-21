@@ -9,7 +9,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { PlusIcon, ChevronDownIcon } from '../icons';
   import PersonalCalendarShare from './PersonalCalendarShare.svelte';
-  import CommunityCalendarShare from './CommunityCalendarShare.svelte';
+  import CommunityShare from '../shared/CommunityShare.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ event: any, disabled?: boolean }} */
@@ -83,7 +83,7 @@
 
         <div class="divider my-2"></div>
 
-        <CommunityCalendarShare {event} {activeUser} compact={true} />
+        <CommunityShare event={event.originalEvent} {activeUser} compact={true} />
       {:else}
         <div class="py-4 text-center text-sm text-base-content/60">
           {m.add_to_calendar_dropdown_signin_required()}
@@ -121,7 +121,7 @@
 
           <div class="divider my-3"></div>
 
-          <CommunityCalendarShare {event} {activeUser} compact={false} />
+          <CommunityShare event={event.originalEvent} {activeUser} compact={false} />
         {:else}
           <div class="py-8 text-center text-base-content/60">
             {m.add_to_calendar_dropdown_signin_required()}

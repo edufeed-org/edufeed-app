@@ -1,4 +1,5 @@
 <script>
+  import * as m from '$lib/paraglide/messages';
   import CalendarView from '$lib/components/calendar/CalendarView.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
@@ -16,7 +17,7 @@
     <CalendarView authorPubkey={data.pubkey} globalMode={false} />
   {:else}
     <div class="alert alert-error">
-      <span>Invalid user identifier</span>
+      <span>{m.route_invalid_user_id()}</span>
     </div>
   {/if}
 </div>

@@ -38,13 +38,14 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: vi.fn(() => ['wss://relay.example.com'])
+  getAllLookupRelays: vi.fn(() => ['wss://relay.example.com']),
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   kindToAppRelayCategory: vi.fn((/** @type {number} */ kind) => {
     if ([31922, 31923, 31924, 31925].includes(kind)) return 'calendar';
-    if ([10222, 30222, 30382].includes(kind)) return 'communikey';
+    if ([10222, 30222].includes(kind)) return 'communikey';
     if ([30142].includes(kind)) return 'educational';
     if ([30023].includes(kind)) return 'longform';
     if ([30301, 30302, 8571].includes(kind)) return 'kanban';
@@ -1231,6 +1232,122 @@ describe('curated-authors-service', () => {
 
       // pool.request should only be called once
       expect(requestMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('localStorage cache (loadCachedAuthors / saveCachedAuthors)', () => {
+    const CACHE_KEY = 'curated-authors-cache';
+    /** @type {Map<string, string>} */
+    let storage;
+
+    beforeEach(() => {
+      storage = new Map();
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((/** @type {string} */ key) => storage.get(key) ?? null),
+        setItem: vi.fn((/** @type {string} */ key, /** @type {string} */ val) =>
+          storage.set(key, val)
+        ),
+        removeItem: vi.fn((/** @type {string} */ key) => storage.delete(key))
+      });
+    });
+
+    it('loadCachedAuthors returns null when no cache exists', async () => {
+      vi.resetModules();
+      const { loadCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
+      expect(loadCachedAuthors()).toBeNull();
+    });
+
+    it('loadCachedAuthors returns null when cache is expired', async () => {
+      vi.resetModules();
+      const { loadCachedAuthors, CACHE_TTL_MS } = await import(
+        '../services/curated-authors-service.svelte.js'
+      );
+
+      const expiredCache = {
+        version: 1,
+        timestamp: Date.now() - CACHE_TTL_MS - 1000,
+        curated: { calendar: ['a'.repeat(64)] },
+        wot: {}
+      };
+      storage.set(CACHE_KEY, JSON.stringify(expiredCache));
+
+      expect(loadCachedAuthors()).toBeNull();
+    });
+
+    it('loadCachedAuthors returns data when cache is fresh', async () => {
+      vi.resetModules();
+      const { loadCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
+
+      const pubkey = 'a'.repeat(64);
+      const freshCache = {
+        version: 1,
+        timestamp: Date.now() - 1000,
+        curated: { calendar: [pubkey] },
+        wot: { calendar: ['b'.repeat(64)] }
+      };
+      storage.set(CACHE_KEY, JSON.stringify(freshCache));
+
+      const result = loadCachedAuthors();
+      expect(result).not.toBeNull();
+      expect(result?.curated.calendar).toEqual([pubkey]);
+      expect(result?.wot.calendar).toEqual(['b'.repeat(64)]);
+    });
+
+    it('loadCachedAuthors returns null for malformed JSON', async () => {
+      vi.resetModules();
+      const { loadCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
+
+      storage.set(CACHE_KEY, 'not valid json');
+      expect(loadCachedAuthors()).toBeNull();
+    });
+
+    it('loadCachedAuthors returns null for wrong cache version', async () => {
+      vi.resetModules();
+      const { loadCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
+
+      const wrongVersion = {
+        version: 999,
+        timestamp: Date.now(),
+        curated: { calendar: ['a'.repeat(64)] },
+        wot: {}
+      };
+      storage.set(CACHE_KEY, JSON.stringify(wrongVersion));
+      expect(loadCachedAuthors()).toBeNull();
+    });
+
+    it('saveCachedAuthors persists curated and wot maps', async () => {
+      vi.resetModules();
+      const { saveCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
+
+      const curated = new Map([['calendar', ['a'.repeat(64)]]]);
+      const wot = new Map([['calendar', ['b'.repeat(64)]]]);
+      saveCachedAuthors(curated, wot);
+
+      const stored = JSON.parse(storage.get(CACHE_KEY) || '{}');
+      expect(stored.version).toBe(1);
+      expect(stored.timestamp).toBeGreaterThan(0);
+      expect(stored.curated.calendar).toEqual(['a'.repeat(64)]);
+      expect(stored.wot.calendar).toEqual(['b'.repeat(64)]);
+    });
+
+    it('saveCachedAuthors handles empty maps', async () => {
+      vi.resetModules();
+      const { saveCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
+
+      saveCachedAuthors(new Map(), new Map());
+      const stored = JSON.parse(storage.get(CACHE_KEY) || '{}');
+      expect(stored.version).toBe(1);
+      expect(stored.curated).toEqual({});
+      expect(stored.wot).toEqual({});
+    });
+
+    it('clearCachedAuthors removes the cache entry', async () => {
+      vi.resetModules();
+      const { clearCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
+
+      storage.set(CACHE_KEY, JSON.stringify({ version: 1 }));
+      clearCachedAuthors();
+      expect(storage.has(CACHE_KEY)).toBe(false);
     });
   });
 });

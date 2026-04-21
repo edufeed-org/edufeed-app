@@ -9,6 +9,7 @@ export { default as ClockIcon } from './calendar/ClockIcon.svelte';
 export { default as ChevronLeftIcon } from './ui/ChevronLeftIcon.svelte';
 export { default as ChevronRightIcon } from './ui/ChevronRightIcon.svelte';
 export { default as ChevronDownIcon } from './ui/ChevronDownIcon.svelte';
+export { default as ChevronUpIcon } from './ui/ChevronUpIcon.svelte';
 export { default as CloseIcon } from './ui/CloseIcon.svelte';
 export { default as PlusIcon } from './ui/PlusIcon.svelte';
 export { default as MenuIcon } from './ui/MenuIcon.svelte';
@@ -20,6 +21,7 @@ export { default as UserIcon } from './ui/UserIcon.svelte';
 export { default as GlobeIcon } from './ui/GlobeIcon.svelte';
 export { default as SettingsIcon } from './ui/SettingsIcon.svelte';
 export { default as LockIcon } from './ui/LockIcon.svelte';
+export { default as LockOpenIcon } from './ui/LockOpenIcon.svelte';
 export { default as HomeIcon } from './ui/HomeIcon.svelte';
 export { default as BellIcon } from './ui/BellIcon.svelte';
 export { default as FilesIcon } from './ui/FilesIcon.svelte';
@@ -30,7 +32,13 @@ export { default as RelayIcon } from './ui/RelayIcon.svelte';
 export { default as SearchIcon } from './ui/SearchIcon.svelte';
 export { default as TagIcon } from './ui/TagIcon.svelte';
 export { default as BookIcon } from './ui/BookIcon.svelte';
+export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
+export { default as InfoIcon } from './ui/InfoIcon.svelte';
+export { default as BadgeIcon } from './ui/BadgeIcon.svelte';
+export { default as BookOpenIcon } from './ui/BookOpenIcon.svelte';
+export { default as ChatTextIcon } from './ui/ChatTextIcon.svelte';
+export { default as VolumeUpIcon } from './ui/VolumeUpIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';
@@ -38,6 +46,8 @@ export { default as RefreshIcon } from './actions/RefreshIcon.svelte';
 export { default as ExternalLinkIcon } from './actions/ExternalLinkIcon.svelte';
 export { default as EditIcon } from './actions/EditIcon.svelte';
 export { default as TrashIcon } from './actions/TrashIcon.svelte';
+export { default as ReplyIcon } from './actions/ReplyIcon.svelte';
+export { default as SendIcon } from './actions/SendIcon.svelte';
 
 // Social Icons
 export { default as ChatIcon } from './social/ChatIcon.svelte';
@@ -47,3 +57,7 @@ export { default as RepostIcon } from './social/RepostIcon.svelte';
 export { default as HeartIcon } from './social/HeartIcon.svelte';
 export { default as SmilePlusIcon } from './social/SmilePlusIcon.svelte';
 export { default as PeopleIcon } from './social/People.svelte';
+export { default as ForumIcon } from './social/ForumIcon.svelte';
+export { default as BookmarkShareIcon } from './social/BookmarkShareIcon.svelte';
+export { default as MeetIcon } from './social/MeetIcon.svelte';
+export { default as MessageSquareIcon } from './social/MessageSquareIcon.svelte';

@@ -4,6 +4,8 @@
 -->
 
 <script>
+  import * as m from '$lib/paraglide/messages';
+
   /**
    * @typedef {Object} Calendar
    * @property {string} id - Calendar ID
@@ -76,7 +78,7 @@
           onclick={selectAllCalendars}
           disabled={selectedCalendarIds.length === calendars.length}
         >
-          Select All
+          {m.calendar_selector_select_all()}
         </button>
         <button
           type="button"
@@ -84,7 +86,7 @@
           onclick={deselectAllCalendars}
           disabled={selectedCalendarIds.length === 0}
         >
-          Deselect All
+          {m.calendar_selector_deselect_all()}
         </button>
       </div>
     {/if}
@@ -109,23 +111,23 @@
           {/if}
         </div>
         {#if isAlreadyInCalendar && !isSelected}
-          <span class="text-xs font-medium text-success">(Added - click to remove)</span>
+          <span class="text-xs font-medium text-success">{m.calendar_selector_added()}</span>
         {:else if isAlreadyInCalendar && isSelected}
-          <span class="text-xs font-medium text-warning">(Will be removed)</span>
+          <span class="text-xs font-medium text-warning">{m.calendar_selector_will_remove()}</span>
         {:else if isSelected}
-          <span class="text-xs font-medium text-info">(Will be added)</span>
+          <span class="text-xs font-medium text-info">{m.calendar_selector_will_add()}</span>
         {/if}
       </label>
     {/each}
     {#if calendars.length === 0}
-      <div class="py-4 text-center text-base-content/60">No calendars available</div>
+      <div class="py-4 text-center text-base-content/60">{m.calendar_selector_no_calendars()}</div>
     {/if}
   </div>
 
   <!-- Selected Calendars Summary -->
   {#if selectedCalendarIds.length > 0}
     <div class="mt-2 text-sm text-base-content/70">
-      {selectedCalendarIds.length} calendar{selectedCalendarIds.length > 1 ? 's' : ''} selected
+      {m.calendar_selector_count({ count: String(selectedCalendarIds.length) })}
     </div>
   {/if}
 </div>

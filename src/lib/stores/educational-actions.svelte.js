@@ -3,7 +3,7 @@
  * Actions for creating and managing educational resources (AMB) with Nostr integration
  */
 
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { flattenAMBToNostrTags } from '$lib/helpers/educational/ambTransform.js';
 import { extractLabelFromUri } from '$lib/helpers/educational/skosLoader.js';
@@ -11,7 +11,6 @@ import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
-import { createTargetedPublication } from '$lib/services/targeted-publication.js';
 
 /**
  * @typedef {Object} Creator
@@ -55,7 +54,6 @@ import { createTargetedPublication } from '$lib/services/targeted-publication.js
  * @typedef {Object} EducationalActions
  * @property {(formData: EducationalFormData, communityPubkey: string, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
  * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
- * @property {(resourceEvent: import('nostr-tools').NostrEvent, communityPubkey: string, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<void>} createTargetedPublication
  */
 
 /** Kind number for AMB Educational Resource events */
@@ -236,7 +234,7 @@ export function createEducationalActions() {
         }
 
         // Create the event using EventFactory
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         const eventTemplate = await eventFactory.build({
           kind: AMB_RESOURCE_KIND,
@@ -253,11 +251,6 @@ export function createEducationalActions() {
 
         console.log('📚 Educational resource created:', resourceEvent.id);
         console.log('📚 Resource naddr:', naddr);
-
-        // Create targeted publication if community is specified
-        if (communityPubkey) {
-          await this.createTargetedPublication(resourceEvent, communityPubkey, communityEvent);
-        }
 
         return { event: resourceEvent, naddr };
       } catch (error) {
@@ -330,7 +323,7 @@ export function createEducationalActions() {
         }
 
         // Create the updated event
-        const eventFactory = new EventFactory();
+        const eventFactory = createAppEventFactory();
 
         const eventTemplate = await eventFactory.build({
           kind: AMB_RESOURCE_KIND,
@@ -353,17 +346,6 @@ export function createEducationalActions() {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Failed to update educational resource: ${errorMessage}`);
       }
-    },
-
-    /**
-     * Create a targeted publication event to associate resource with community
-     * @param {import('nostr-tools').NostrEvent} resourceEvent - The educational resource event
-     * @param {string} communityPubkey - Target community public key
-     * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
-     * @returns {Promise<void>}
-     */
-    async createTargetedPublication(resourceEvent, communityPubkey, communityEvent = null) {
-      await createTargetedPublication(resourceEvent, communityPubkey, communityEvent);
     }
   };
 }

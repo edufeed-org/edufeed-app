@@ -10,7 +10,11 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { matchesTextSearch, searchProfileMap } from '../helpers/contentSearch.js';
+import {
+  matchesTextSearch,
+  matchesEventSearch,
+  searchProfileMap
+} from '../helpers/contentSearch.js';
 
 /** @param {Partial<Record<string, string>>} [overrides] */
 function makeProfile(overrides = {}) {
@@ -336,5 +340,263 @@ describe('searchProfileMap', () => {
 
   it('does not match when no profiles match', () => {
     expect(searchProfileMap('zzz', profiles)).toEqual([]);
+  });
+});
+
+describe('matchesEventSearch', () => {
+  /**
+   * Helper to build a raw Nostr event
+   * @param {number} kind
+   * @param {Record<string, any>} overrides
+   */
+  function makeEvent(kind, overrides = {}) {
+    return {
+      id: 'test-id',
+      pubkey: PK,
+      kind,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [],
+      content: '',
+      sig: 'test-sig',
+      ...overrides
+    };
+  }
+
+  describe('kind 30023 (articles)', () => {
+    function makeArticle(overrides = {}) {
+      return makeEvent(30023, {
+        tags: [
+          ['title', 'Sermon on the Mount'],
+          ['summary', 'A deep dive into scripture']
+        ],
+        ...overrides
+      });
+    }
+
+    it('matches on title tag', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeArticle(), 'sermon', profiles)).toBe(true);
+    });
+
+    it('matches on summary tag', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeArticle(), 'scripture', profiles)).toBe(true);
+    });
+
+    it('matches on author profile name', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeArticle(), 'alice', profiles)).toBe(true);
+    });
+
+    it('does NOT match unrelated query', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeArticle(), 'blockchain', profiles)).toBe(false);
+    });
+  });
+
+  describe('kind 30142 (AMB)', () => {
+    function makeAMB(overrides = {}) {
+      return makeEvent(30142, {
+        tags: [
+          ['name', 'Physics Course'],
+          ['description', 'An intro to physics'],
+          ['keyword', 'quantum'],
+          ['keyword', 'mechanics']
+        ],
+        content: JSON.stringify({
+          name: 'Physics Course',
+          description: 'An intro to physics'
+        }),
+        ...overrides
+      });
+    }
+
+    it('matches on name tag', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeAMB(), 'physics', profiles)).toBe(true);
+    });
+
+    it('matches on description tag', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeAMB(), 'intro', profiles)).toBe(true);
+    });
+
+    it('matches on keyword tags', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeAMB(), 'quantum', profiles)).toBe(true);
+    });
+
+    it('matches on author profile name', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeAMB(), 'alice', profiles)).toBe(true);
+    });
+
+    it('does NOT match unrelated query', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeAMB(), 'blockchain', profiles)).toBe(false);
+    });
+
+    it('handles missing optional tags gracefully', () => {
+      const event = makeEvent(30142, { tags: [['name', 'Physics']] });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'physics', profiles)).toBe(true);
+      expect(matchesEventSearch(event, 'blockchain', profiles)).toBe(false);
+    });
+  });
+
+  describe('kind 30301 (boards)', () => {
+    function makeBoard(overrides = {}) {
+      return makeEvent(30301, {
+        tags: [
+          ['title', 'Project Board'],
+          ['description', 'Track tasks and progress']
+        ],
+        ...overrides
+      });
+    }
+
+    it('matches on title tag', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeBoard(), 'project', profiles)).toBe(true);
+    });
+
+    it('matches on description tag', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeBoard(), 'tasks', profiles)).toBe(true);
+    });
+
+    it('matches on author profile name', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeBoard(), 'alice', profiles)).toBe(true);
+    });
+
+    it('does NOT match unrelated query', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeBoard(), 'blockchain', profiles)).toBe(false);
+    });
+  });
+
+  describe('kind 30818 (wikis)', () => {
+    function makeWiki(overrides = {}) {
+      return makeEvent(30818, {
+        tags: [['d', 'quantum-physics']],
+        content: 'An overview of quantum physics principles',
+        ...overrides
+      });
+    }
+
+    it('matches on d-tag (title)', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeWiki(), 'quantum', profiles)).toBe(true);
+    });
+
+    it('matches on content', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeWiki(), 'principles', profiles)).toBe(true);
+    });
+
+    it('matches on author profile name', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeWiki(), 'alice', profiles)).toBe(true);
+    });
+
+    it('does NOT match unrelated query', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeWiki(), 'blockchain', profiles)).toBe(false);
+    });
+  });
+
+  describe('kind 11 (forum threads)', () => {
+    function makeThread(overrides = {}) {
+      return makeEvent(11, {
+        tags: [['title', 'Help with homework']],
+        content: 'I need help with my physics assignment',
+        ...overrides
+      });
+    }
+
+    it('matches on title tag', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeThread(), 'homework', profiles)).toBe(true);
+    });
+
+    it('matches on content', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeThread(), 'physics', profiles)).toBe(true);
+    });
+
+    it('matches on author profile name', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeThread(), 'alice', profiles)).toBe(true);
+    });
+
+    it('does NOT match unrelated query', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(makeThread(), 'blockchain', profiles)).toBe(false);
+    });
+  });
+
+  describe('kind 39701/9802/1111 (bookmarks)', () => {
+    it('matches kind 39701 on r-tag URL', () => {
+      const event = makeEvent(39701, { tags: [['r', 'https://example.com/article']] });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'example.com', profiles)).toBe(true);
+    });
+
+    it('matches kind 9802 on content', () => {
+      const event = makeEvent(9802, { content: 'This is a highlighted passage' });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'highlighted', profiles)).toBe(true);
+    });
+
+    it('matches kind 1111 on content', () => {
+      const event = makeEvent(1111, { content: 'Great article about physics' });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'physics', profiles)).toBe(true);
+    });
+
+    it('matches on author profile name', () => {
+      const event = makeEvent(39701, { tags: [['r', 'https://example.com']] });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'alice', profiles)).toBe(true);
+    });
+
+    it('does NOT match unrelated query', () => {
+      const event = makeEvent(39701, { tags: [['r', 'https://example.com']] });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'blockchain', profiles)).toBe(false);
+    });
+  });
+
+  describe('unknown kind', () => {
+    it('returns false for unknown kinds', () => {
+      const event = makeEvent(99999, { content: 'anything' });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'anything', profiles)).toBe(false);
+    });
+  });
+
+  describe('missing profiles', () => {
+    it('still matches on event fields when profile is missing', () => {
+      const event = makeEvent(30023, {
+        pubkey: 'no-profile',
+        tags: [['title', 'Physics Article']]
+      });
+      expect(matchesEventSearch(event, 'physics', new Map())).toBe(true);
+    });
+
+    it('does not crash when profile map is empty', () => {
+      const event = makeEvent(30023, { pubkey: 'no-profile', tags: [] });
+      expect(matchesEventSearch(event, 'something', new Map())).toBe(false);
+    });
+  });
+
+  describe('case insensitivity', () => {
+    it('is case insensitive', () => {
+      const event = makeEvent(30023, { tags: [['title', 'Physics Article']] });
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesEventSearch(event, 'PHYSICS', profiles)).toBe(true);
+      expect(matchesEventSearch(event, 'physics', profiles)).toBe(true);
+    });
   });
 });

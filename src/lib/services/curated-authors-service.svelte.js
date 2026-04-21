@@ -19,6 +19,7 @@
  * Both sets and direct pubkeys are unioned per category.
  * When not configured for a category, functions return null (no filtering applied).
  */
+import { browser } from '$app/environment';
 import { nip19 } from 'nostr-tools';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -27,6 +28,78 @@ import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { lastValueFrom, toArray } from 'rxjs';
 
 /** @typedef {'calendar' | 'communikey' | 'educational' | 'longform' | 'kanban'} CuratedCategory */
+
+// --- localStorage cache for curated/WoT author lists ---
+
+const CURATED_CACHE_KEY = 'curated-authors-cache';
+const CACHE_VERSION = 1;
+export const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * @typedef {Object} CachedAuthorsData
+ * @property {Record<string, string[]>} curated
+ * @property {Record<string, string[]>} wot
+ */
+
+/**
+ * Load cached curated/WoT author lists from localStorage.
+ * Returns null if no cache, expired, or invalid.
+ * @returns {CachedAuthorsData | null}
+ */
+export function loadCachedAuthors() {
+  try {
+    const raw = localStorage.getItem(CURATED_CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data.version !== CACHE_VERSION) return null;
+    if (Date.now() - data.timestamp > CACHE_TTL_MS) return null;
+    return { curated: data.curated || {}, wot: data.wot || {} };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save curated/WoT author lists to localStorage.
+ * @param {Map<string, string[] | null>} curated
+ * @param {Map<string, string[]>} wot
+ */
+export function saveCachedAuthors(curated, wot) {
+  try {
+    /** @type {Record<string, string[]>} */
+    const curatedObj = {};
+    for (const [key, val] of curated) {
+      if (val) curatedObj[key] = val;
+    }
+    /** @type {Record<string, string[]>} */
+    const wotObj = {};
+    for (const [key, val] of wot) {
+      wotObj[key] = val;
+    }
+    localStorage.setItem(
+      CURATED_CACHE_KEY,
+      JSON.stringify({
+        version: CACHE_VERSION,
+        timestamp: Date.now(),
+        curated: curatedObj,
+        wot: wotObj
+      })
+    );
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+/**
+ * Clear the cached author lists.
+ */
+export function clearCachedAuthors() {
+  try {
+    localStorage.removeItem(CURATED_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 const ALL_CATEGORIES = /** @type {const} */ ([
   'calendar',
@@ -367,11 +440,58 @@ export async function initializeCuratedAuthors(category) {
 }
 
 /**
+ * Read cache once and share between curated + WoT init (avoid double JSON.parse).
+ * @type {CachedAuthorsData | null | undefined} undefined = not yet read
+ */
+let _sharedCachedData;
+
+/**
+ * Get the shared cached data (reads localStorage at most once per session).
+ * @returns {CachedAuthorsData | null}
+ */
+function getSharedCachedData() {
+  if (_sharedCachedData === undefined) {
+    _sharedCachedData = browser ? loadCachedAuthors() : null;
+  }
+  return _sharedCachedData;
+}
+
+/**
  * Initialize curated authors for all categories in parallel.
- * Call this after runtime config is loaded.
+ * Uses localStorage cache for instant startup on repeat visits,
+ * then refreshes from relays in the background.
  */
 export async function initializeAllCuratedAuthors() {
+  const cached = getSharedCachedData();
+  if (cached && Object.keys(cached.curated).length > 0) {
+    // Populate in-memory caches from localStorage (instant)
+    for (const [cat, pubkeys] of Object.entries(cached.curated)) {
+      if (!curatedAuthorsCache.has(cat) && pubkeys.length > 0) {
+        curatedAuthorsCache.set(cat, pubkeys);
+        directPubkeysInitialized.add(cat);
+        followSetsInitialized.add(cat);
+      }
+    }
+    curatedCacheVersion++;
+    // Background refresh — don't await, just fire
+    _refreshAllCuratedAuthors();
+    return;
+  }
   await Promise.all(ALL_CATEGORIES.map((cat) => initializeCuratedAuthors(cat)));
+  if (browser) saveCachedAuthors(curatedAuthorsCache, wotAuthorsCache);
+}
+
+/**
+ * Background refresh: re-fetch from relays and update cache.
+ * Resets initialization guards so categories are re-fetched.
+ */
+async function _refreshAllCuratedAuthors() {
+  for (const cat of ALL_CATEGORIES) {
+    directPubkeysInitialized.delete(cat);
+    followSetsInitialized.delete(cat);
+  }
+  await Promise.all(ALL_CATEGORIES.map((cat) => initializeCuratedAuthors(cat)));
+  if (browser) saveCachedAuthors(curatedAuthorsCache, wotAuthorsCache);
 }
 
 // --- WoT initialization ---
@@ -435,11 +555,37 @@ export async function initializeWotAuthors(category) {
 
 /**
  * Initialize WoT authors for all categories in parallel.
- * Call this after runtime config is loaded.
+ * Uses localStorage cache for instant startup, refreshes in background.
  */
 export async function initializeAllWotAuthors() {
   if (!runtimeConfig.wotMode?.enabled) return;
+
+  const cached = getSharedCachedData();
+  if (cached && Object.keys(cached.wot).length > 0) {
+    for (const [cat, pubkeys] of Object.entries(cached.wot)) {
+      if (!wotAuthorsCache.has(cat) && pubkeys.length > 0) {
+        wotAuthorsCache.set(cat, pubkeys);
+        wotInitialized.add(cat);
+      }
+    }
+    curatedCacheVersion++;
+    // Background refresh
+    _refreshAllWotAuthors();
+    return;
+  }
   await Promise.all(ALL_CATEGORIES.map((cat) => initializeWotAuthors(cat)));
+  if (browser) saveCachedAuthors(curatedAuthorsCache, wotAuthorsCache);
+}
+
+/**
+ * Background refresh for WoT authors.
+ */
+async function _refreshAllWotAuthors() {
+  for (const cat of ALL_CATEGORIES) {
+    wotInitialized.delete(cat);
+  }
+  await Promise.all(ALL_CATEGORIES.map((cat) => initializeWotAuthors(cat)));
+  if (browser) saveCachedAuthors(curatedAuthorsCache, wotAuthorsCache);
 }
 
 /**
@@ -498,6 +644,7 @@ export function _resetForTesting(category) {
     wotInitialized.clear();
     userFollowPubkeys = [];
     activeUserPubkey = '';
+    _sharedCachedData = undefined;
     curatedCacheVersion = 0;
   }
 }

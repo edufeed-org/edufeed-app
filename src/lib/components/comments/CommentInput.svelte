@@ -1,9 +1,8 @@
 <script>
-  import { EventFactory } from 'applesauce-core/event-factory';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { CommentBlueprint } from 'applesauce-common/blueprints';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
-  import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { generateCommentTags } from '$lib/helpers/commentTags.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -15,6 +14,7 @@
    * @property {(event: any) => void} [onCommentPosted] - Callback when comment is successfully posted
    * @property {(() => void)|null} [onCancel] - Callback when cancel is clicked (for reply forms)
    * @property {boolean} [autoFocus] - Whether to auto-focus the textarea
+   * @property {string} [communityPubkey] - Community hex pubkey to add as #h tag
    */
 
   /** @type {CommentInputProps} */
@@ -25,7 +25,8 @@
     placeholder = 'Write a comment...',
     onCommentPosted = (/** @type {any} */ _event) => {},
     onCancel = null,
-    autoFocus = false
+    autoFocus = false,
+    communityPubkey = undefined
   } = $props();
 
   let content = $state('');
@@ -54,29 +55,19 @@
     isPosting = true; // Show loading during signing (may require user approval)
 
     try {
-      // Create EventFactory for the user
-      const factory = new EventFactory({
-        signer: activeUser.signer
-      });
+      const factory = createAppEventFactory({ signer: activeUser.signer });
 
-      // Get relay hint for the root event author
-      const relayHint = await getPrimaryWriteRelay(rootEvent.pubkey);
+      // CommentBlueprint handles NIP-22 tag generation (root/reply pointers)
+      const parent = parentItem || rootEvent;
+      const draft = await factory.create(CommentBlueprint, parent, commentContent);
 
-      // Generate NIP-22 tags
-      const tags = generateCommentTags(rootEvent, parentItem, relayHint);
+      // Add community #h tag for deep-linking support
+      if (communityPubkey) {
+        draft.tags.push(['h', communityPubkey]);
+      }
 
-      // Create the comment event
-      const commentEvent = await factory.build({
-        kind: 1111,
-        content: commentContent,
-        tags
-      });
-
-      // Sign the event (may require user approval in browser extension)
-      const signedEvent = await factory.sign(commentEvent);
-      isPosting = false; // Signing complete
-
-      console.log('Comment event created:', signedEvent);
+      const signedEvent = await factory.sign(draft);
+      isPosting = false;
 
       // Add to eventStore immediately for instant UI update
       eventStore.add(signedEvent);

@@ -15,6 +15,7 @@ const defaultConfig = {
   name: 'ComCal',
   logo: 'https://blossom.edufeed.org/f22e1410f09a9130757704b6dcd4c34774d2926b9cfd6cf2e4c4675c64d4333b.webp',
   gitRepo: 'https://github.com/edufeed-org/comcal',
+  clientName: 'ComCal',
   // NIP-65 relay list discovery relays
   relayListLookupRelays: [],
   // Profile indexer relays for bulk profile lookups
@@ -24,7 +25,7 @@ const defaultConfig = {
   // App-specific relays (content goes here IN ADDITION to user's outbox)
   appRelays: {
     calendar: [], // kinds 31922-31925
-    communikey: [], // kinds 10222, 30222, 30382
+    communikey: [], // kinds 10222, 30222
     educational: [], // kind 30142
     longform: [], // kind 30023
     kanban: [] // kinds 30301, 30302, 8571
@@ -186,6 +187,7 @@ export function initializeConfig(runtimeConfig) {
     name: runtimeConfig.appName || defaultConfig.name,
     logo: runtimeConfig.appLogo || defaultConfig.logo,
     gitRepo: runtimeConfig.gitRepo || defaultConfig.gitRepo,
+    clientName: runtimeConfig.clientName || defaultConfig.clientName,
     relayListLookupRelays:
       runtimeConfig.relayListLookupRelays || defaultConfig.relayListLookupRelays,
     indexerRelays: runtimeConfig.indexerRelays || defaultConfig.indexerRelays,
@@ -275,8 +277,6 @@ export function initializeConfig(runtimeConfig) {
     }
   };
 
-  console.log('Config initialized with runtime values');
-
   // Signal that config is ready for dependent code
   configReady.set(true);
 }
@@ -304,6 +304,9 @@ export const runtimeConfig = {
   },
   get gitRepo() {
     return config.gitRepo;
+  },
+  get clientName() {
+    return config.clientName;
   },
   get relayListLookupRelays() {
     return config.relayListLookupRelays;

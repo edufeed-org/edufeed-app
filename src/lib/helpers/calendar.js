@@ -38,6 +38,21 @@ export function parseCalendarTimestamp(value, _eventKind) {
 }
 
 /**
+ * Format a unix timestamp as a relative time string (e.g. "3m ago", "2d ago")
+ * Falls back to short date format (e.g. "Mar 6") for dates older than a week.
+ * @param {number} unixSeconds - Unix timestamp in seconds
+ * @returns {string} Relative time string
+ */
+export function formatRelativeTime(unixSeconds) {
+  const diff = Date.now() - unixSeconds * 1000;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.max(1, Math.floor(diff / 60000))}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  return formatCalendarDate(new Date(unixSeconds * 1000), 'short');
+}
+
+/**
  * Format a date for calendar display using configured locale
  * @param {Date} date - Date to format
  * @param {string} format - Format string ('YYYY-MM-DD', 'MM/DD', 'full', 'long', 'short', 'time')
@@ -214,19 +229,6 @@ export function groupEventsByDate(events) {
   });
 
   return groupedEvents;
-}
-
-/**
- * Create targeting tags for community-specific events
- * @param {string} communityPubkey - Community public key
- * @returns {string[][]} Array of tag arrays for Nostr event
- */
-export function createEventTargetingTags(communityPubkey) {
-  return [
-    ['a', `34550:${communityPubkey}:communikey`], // Target the community
-    ['k', '34550'], // Reference community kind
-    ['p', communityPubkey] // Tag community pubkey
-  ];
 }
 
 /**
@@ -521,8 +523,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
   const { getTagValue } = await import('applesauce-core/helpers');
   const { bufferTime, mergeMap, firstValueFrom } = await import('rxjs');
 
-  console.log('📅 fetchCommunityCalendarEvents: Fetching events for community:', communityPubkey);
-
   /** @type {import('nostr-tools').NostrEvent[]} */
   const allEvents = [];
   /** @type {Set<string>} */
@@ -550,8 +550,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
     const directEventsArray = Array.isArray(directEventsBuffered)
       ? directEventsBuffered.flat()
       : [];
-
-    console.log(`📅 fetchCommunityCalendarEvents: Found ${directEventsArray.length} direct events`);
 
     for (const event of directEventsArray) {
       if (!eventIds.has(event.id)) {
@@ -584,10 +582,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
     const targetedPubsArray = Array.isArray(targetedPubsBuffered)
       ? targetedPubsBuffered.flat()
       : [];
-
-    console.log(
-      `📅 fetchCommunityCalendarEvents: Found ${targetedPubsArray.length} targeted publications`
-    );
 
     // Resolve referenced events from targeted publications
     // Now using addressable references ('a' tags) instead of event IDs ('e' tags)
@@ -700,7 +694,6 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
     // Wait for all referenced events to be resolved
     await Promise.all(referencedEventPromises);
 
-    console.log(`📅 fetchCommunityCalendarEvents: Total events fetched: ${allEvents.length}`);
     return allEvents;
   } catch (error) {
     console.error(
@@ -718,7 +711,7 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
  * @param {EventFormData} formData - Raw form data (startDate as "YYYY-MM-DD")
  * @param {Partial<CalendarEvent>} eventData - Converted event data from convertFormDataToEvent
  * @param {string} dTag - The d-tag identifier
- * @param {string} [hTag] - Optional community h-tag
+ * @param {string | string[]} [hTag] - Optional community h-tag(s)
  * @returns {string[][]} Array of NIP-52 compliant tags
  */
 export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
@@ -728,9 +721,12 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
   // d-tag (addressable/replaceable event identifier)
   tags.push(['d', dTag]);
 
-  // h-tag for community targeting (Communikey spec)
+  // h-tag(s) for community targeting (Communikey spec)
   if (hTag) {
-    tags.push(['h', hTag]);
+    const hTags = Array.isArray(hTag) ? hTag : [hTag];
+    for (const h of hTags) {
+      if (h) tags.push(['h', h]);
+    }
   }
 
   // Title

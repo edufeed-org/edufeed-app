@@ -95,8 +95,24 @@ export function getAllLookupRelays() {
     ...getAppRelaysForCategory('educational'),
     ...getAppRelaysForCategory('longform'),
     ...getAppRelaysForCategory('kanban'),
-    ...getFallbackRelays()
+    ...(runtimeConfig.fallbackRelays || [])
   ];
+}
+
+/**
+ * Get lookup relays for the EventStore auto-load path (applesauce's
+ * `lookupRelays` option on the unified/address loaders).
+ *
+ * This slot is applesauce's fallback-on-miss, intended for profile indexers
+ * (e.g. `wss://purplepag.es`). Without indexer relays here, auto-loaded
+ * profiles fetched via `eventStore.profile(pubkey)` / `useProfileMap`
+ * never reach the indexer and silently fail to resolve when the author's
+ * kind 0 isn't on one of the app content relays.
+ *
+ * @returns {string[]}
+ */
+export function getEventLoaderLookupRelays() {
+  return [...(runtimeConfig.indexerRelays || []), ...getAllLookupRelays()];
 }
 
 /**

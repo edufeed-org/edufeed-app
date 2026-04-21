@@ -2,7 +2,7 @@
  * Comment helper functions for NIP-22 comments
  * Handles creating and deleting comments
  */
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -27,7 +27,7 @@ export async function deleteComment(commentEvent, options = {}) {
   }
 
   // Create EventFactory with the signer
-  const factory = new EventFactory({
+  const factory = createAppEventFactory({
     signer: account.signer
   });
 

@@ -75,6 +75,7 @@
   } from '$lib/helpers/communityContent.js';
   import { matchesTextSearch } from '$lib/helpers/contentSearch.js';
   import AuthorSearchDropdown from '$lib/components/discover/AuthorSearchDropdown.svelte';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // State management
@@ -281,10 +282,8 @@
   let hasMoreCommunities = $state(true);
   let displayedCommunitiesCount = $state(20);
 
-  // Get joined community pubkeys for filtering
-  const joinedCommunityPubkeys = $derived(
-    joinedCommunities.map((rel) => getTagValue(rel, 'd')).filter(Boolean)
-  );
+  // Get joined community pubkeys for filtering (already strings from follow set)
+  const joinedCommunityPubkeys = $derived(joinedCommunities);
 
   // Build content-to-community map from targeted publications
   const contentToCommunityMap = $derived(buildContentToCommunityMap(targetedPubs));
@@ -966,6 +965,22 @@
       author: authorFilter.length > 0 ? authorFilter.join(',') : null
     });
   }
+
+  // Auto-search: debounce searchQuery → activeSearchQuery
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let searchDebounceTimer;
+  $effect(() => {
+    const text = searchQuery;
+
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      activeSearchQuery = text.trim();
+    }, 300);
+
+    return () => {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    };
+  });
 
   // Track previous search query to avoid unnecessary re-triggers
   let previousActiveSearchQuery = '';
@@ -1661,15 +1676,13 @@
         {#each authorFilter as pubkey (pubkey)}
           {@const profile = authorProfiles.get(pubkey)}
           <div class="badge gap-2 badge-lg badge-primary">
-            {#if profile?.picture}
-              <img src={profile.picture} alt="" class="h-5 w-5 rounded-full object-cover" />
-            {/if}
+            <ProfileAvatar {pubkey} {profile} size="xs" fallbackType="robohash" />
             <span>{profile?.display_name || profile?.name || pubkey.slice(0, 12) + '...'}</span>
             <button
               type="button"
               class="btn btn-circle btn-ghost btn-xs"
               onclick={() => clearAuthorFilter(pubkey)}
-              aria-label="Remove author filter"
+              aria-label={m.discover_remove_author_filter()}
             >
               ✕
             </button>
@@ -1680,9 +1693,9 @@
             type="button"
             class="btn btn-ghost btn-xs"
             onclick={() => clearAuthorFilter()}
-            aria-label="Clear all author filters"
+            aria-label={m.discover_clear_author_filters()}
           >
-            Clear all
+            {m.discover_clear_author_filters()}
           </button>
         {/if}
       </div>

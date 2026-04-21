@@ -1,0 +1,127 @@
+{
+  "schemes": [
+    {
+      "d": "schulfaecher",
+      "source": {
+        "type": "skohub",
+        "url": "https://w3id.org/kim/schulfaecher/"
+      }
+    },
+    {
+      "d": "hochschulfaecher",
+      "source": {
+        "type": "skohub",
+        "url": "https://w3id.org/kim/hochschulfaechersystematik/scheme"
+      }
+    },
+    {
+      "d": "hcrt",
+      "source": {
+        "type": "skohub",
+        "url": "https://w3id.org/kim/hcrt/scheme"
+      }
+    },
+    {
+      "d": "new-lrt",
+      "source": {
+        "type": "skohub",
+        "url": "https://w3id.org/openeduhub/vocabs/new_lrt/"
+      }
+    },
+    {
+      "d": "lrmi-audience",
+      "source": {
+        "type": "skohub",
+        "url": "https://w3id.org/kim/lrmi-audience/"
+      }
+    },
+    {
+      "d": "educational-level",
+      "source": {
+        "type": "skohub",
+        "url": "https://w3id.org/kim/educationalLevel/"
+      }
+    },
+    {
+      "d": "interactivity-type",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          { "value": "Interactivity Type", "lang": "en" },
+          { "value": "Interaktionstyp", "lang": "de" }
+        ],
+        "descriptions": [
+          {
+            "value": "IMS LOM interactivity types for learning resources.",
+            "lang": "en"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "active",
+            "prefLabels": [
+              { "value": "Active", "lang": "en" },
+              { "value": "Aktiv", "lang": "de" }
+            ]
+          },
+          {
+            "d": "expositive",
+            "prefLabels": [
+              { "value": "Expositive", "lang": "en" },
+              { "value": "Expositorisch", "lang": "de" }
+            ]
+          },
+          {
+            "d": "mixed",
+            "prefLabels": [
+              { "value": "Mixed", "lang": "en" },
+              { "value": "Gemischt", "lang": "de" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "d": "conditions-of-access",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          { "value": "Conditions of Access", "lang": "en" },
+          { "value": "Zugangsbedingungen", "lang": "de" }
+        ],
+        "descriptions": [
+          {
+            "value": "Whether a resource requires login or payment to access.",
+            "lang": "en"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "no-login",
+            "prefLabels": [
+              { "value": "No login required", "lang": "en" },
+              { "value": "Kein Login nötig", "lang": "de" }
+            ],
+            "externalUri": "https://w3id.org/kim/conditionsOfAccess/no_login"
+          },
+          {
+            "d": "login",
+            "prefLabels": [
+              { "value": "Login required", "lang": "en" },
+              { "value": "Login erforderlich", "lang": "de" }
+            ],
+            "externalUri": "https://w3id.org/kim/conditionsOfAccess/login"
+          },
+          {
+            "d": "login-with-fee",
+            "prefLabels": [
+              { "value": "Login with fee", "lang": "en" },
+              { "value": "Login mit Gebühr", "lang": "de" }
+            ],
+            "externalUri": "https://w3id.org/kim/conditionsOfAccess/login_with_fee"
+          }
+        ]
+      }
+    }
+  ]
+}

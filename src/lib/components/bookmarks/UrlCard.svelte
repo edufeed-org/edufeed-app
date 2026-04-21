@@ -1,0 +1,163 @@
+<!--
+  UrlCard — URL-grouped card showing bookmark/highlight/page note preview
+-->
+<script>
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { getHighlightText } from 'applesauce-common/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { ExternalLinkIcon, BookmarkIcon } from '$lib/components/icons';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+
+  /**
+   * @type {{
+   *   group: import('$lib/helpers/urlGrouping.js').UrlGroup,
+   *   authorProfiles: Map<string, any>,
+   *   communityPubkey?: string
+   * }}
+   */
+  let { group, authorProfiles, communityPubkey } = $props();
+
+  const domain = $derived.by(() => {
+    try {
+      const url = new URL(group.displayUrl);
+      return url.hostname.replace(/^www\./, '');
+    } catch {
+      return group.url.split('/')[0];
+    }
+  });
+
+  const featuredHighlight = $derived(group.highlights[0]);
+  const featuredHighlightText = $derived(
+    featuredHighlight ? getHighlightText(featuredHighlight) : ''
+  );
+  const featuredPageNote = $derived(group.pageNotes[0]);
+
+  function getAuthorName(/** @type {string} */ pubkey) {
+    const profile = authorProfiles.get(pubkey);
+    return profile ? getDisplayName(profile) : 'Unknown';
+  }
+
+  function handleClick() {
+    if (communityPubkey) {
+      const npub = hexToNpub(communityPubkey);
+      const encodedUrl = encodeURIComponent(group.displayUrl);
+      const fragment = featuredHighlight ? `#highlight-${featuredHighlight.id}` : '';
+      goto(resolve(`/c/${npub}/bookmarks/${encodedUrl}${fragment}`));
+    } else {
+      // No community context — navigate to standalone bookmark detail route
+      const encodedUrl = encodeURIComponent(group.displayUrl);
+      const fragment = featuredHighlight ? `#highlight-${featuredHighlight.id}` : '';
+      goto(resolve(`/bookmarks/${encodedUrl}${fragment}`));
+    }
+  }
+</script>
+
+<button
+  onclick={handleClick}
+  class="w-full cursor-pointer rounded-lg border border-base-300 bg-base-100 p-4 text-left shadow-sm transition-shadow hover:shadow-md"
+>
+  <!-- Contributor header -->
+  {#if group.contributors.length > 0}
+    <div class="mb-3 flex items-center gap-2">
+      <div class="flex -space-x-1.5">
+        {#each group.contributors.slice(0, 3) as pubkey (pubkey)}
+          {@const profile = authorProfiles.get(pubkey)}
+          <ProfileAvatar
+            {pubkey}
+            {profile}
+            size="sm"
+            fallbackType="robohash"
+            class="ring-2 ring-base-100"
+          />
+        {/each}
+      </div>
+      <div class="min-w-0 flex-1">
+        <span class="truncate text-sm font-medium text-base-content">
+          {getAuthorName(group.contributors[0])}
+          {#if group.contributors.length > 1}
+            <span class="font-normal text-base-content/50">
+              +{group.contributors.length - 1}
+            </span>
+          {/if}
+        </span>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Title + domain -->
+  <div class="flex flex-col gap-3">
+    <div>
+      <h3 class="line-clamp-2 text-sm font-semibold">{group.title}</h3>
+      <div class="mt-1 flex items-center gap-1">
+        <ExternalLinkIcon class_="w-3 h-3 text-base-content/40" />
+        <span class="text-xs text-base-content/50">{domain}</span>
+      </div>
+    </div>
+
+    {#if group.description}
+      <p class="line-clamp-2 text-xs text-base-content/60">{group.description}</p>
+    {/if}
+
+    <!-- Featured highlight (yellow border) -->
+    {#if featuredHighlightText}
+      <div class="border-l-3 border-warning bg-warning/5 py-1 pl-3">
+        <p class="line-clamp-3 text-xs text-base-content/80 italic">
+          &ldquo;{featuredHighlightText}&rdquo;
+        </p>
+        <span class="text-xs text-base-content/50">
+          {getAuthorName(featuredHighlight.pubkey)}
+        </span>
+      </div>
+    {/if}
+
+    <!-- Featured page note (blue border) -->
+    {#if featuredPageNote && !featuredHighlightText}
+      <div class="border-l-3 border-info bg-info/5 py-1 pl-3">
+        <p class="line-clamp-3 text-xs text-base-content/80">{featuredPageNote.content}</p>
+        <span class="text-xs text-base-content/50">
+          {getAuthorName(featuredPageNote.pubkey)}
+        </span>
+      </div>
+    {/if}
+
+    <!-- Stats row -->
+    <div class="flex items-center gap-3 text-xs text-base-content/50">
+      {#if group.bookmarks.length > 0}
+        <div class="flex items-center gap-1">
+          <BookmarkIcon class_="w-3.5 h-3.5" />
+          <span>{group.bookmarks.length}</span>
+        </div>
+      {/if}
+      {#if group.highlights.length > 0}
+        <div class="flex items-center gap-1">
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M9 11l3 3L22 4" />
+          </svg>
+          <span>{group.highlights.length}</span>
+        </div>
+      {/if}
+      {#if group.pageNotes.length > 0}
+        <div class="flex items-center gap-1">
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+          <span>{group.pageNotes.length}</span>
+        </div>
+      {/if}
+    </div>
+  </div>
+</button>

@@ -7,6 +7,7 @@
   import { useKanbanCommunityLoader } from '$lib/loaders/kanban-community.js';
   import { CommunityBoardModel } from '$lib/models/community-content.js';
   import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
+  import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -19,22 +20,27 @@
   {communityProfile}
   loaderHook={useKanbanCommunityLoader}
   model={CommunityBoardModel}
-  title={m.community_boards_title()}
-  description={m.community_boards_description()}
   loadingText={m.community_boards_loading()}
   emptyTitle={m.community_boards_empty_title()}
   emptyDescription={m.community_boards_empty_description()}
   formatCount={(count) => m.community_boards_count({ count })}
+  searchable
+  searchPlaceholder={m.community_boards_search_placeholder()}
   emptyIconPath="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
 >
   {#snippet content(items, authorProfiles)}
     <div class="space-y-4">
       {#each items as board (board.id)}
-        <KanbanBoardCard
-          {board}
-          authorProfile={authorProfiles.get(board.pubkey) || null}
-          compact={false}
-        />
+        <div>
+          {#if board._sharedBy}
+            <SharedByLine sharers={board._allSharers || [board._sharedBy]} {authorProfiles} />
+          {/if}
+          <KanbanBoardCard
+            {board}
+            authorProfile={authorProfiles.get(board.pubkey) || null}
+            compact={false}
+          />
+        </div>
       {/each}
     </div>
   {/snippet}

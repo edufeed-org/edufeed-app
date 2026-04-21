@@ -2,6 +2,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import LoginModal from './LoginModal.svelte';
   import LoginWithPrivateKey from './LoginWithPrivateKey.svelte';
+  import LoginWithBunker from './LoginWithBunker.svelte';
   import SignupModal from './SignupModal.svelte';
   import CalendarEventDetailsModal from './calendar/CalendarEventDetailsModal.svelte';
   import CalendarCreationModal from './calendar/CalendarCreationModal.svelte';
@@ -10,6 +11,10 @@
   import EditCommunityModal from './EditCommunityModal.svelte';
   import WebcalQRCodeModal from './calendar/WebcalQRCodeModal.svelte';
   import EditProfileModal from './EditProfileModal.svelte';
+  import CommunityMigrationModal from './CommunityMigrationModal.svelte';
+  import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
+  import ShareByNaddrModal from './shared/ShareByNaddrModal.svelte';
+  import CreateRoomModal from './meet/CreateRoomModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -31,10 +36,15 @@
   // Generate unique modal IDs for each modal instance
   const loginModalId = 'global-login-modal';
   const privateKeyModalId = 'global-private-key-modal';
+  const bunkerModalId = 'global-bunker-modal';
   const signupModalId = 'global-signup-modal';
   const createCommunityModalId = 'create-community-modal';
   const editCommunityModalId = 'edit-community-modal';
   const editProfileModalId = 'edit-profile-modal';
+  const communityMigrationModalId = 'community-migration-modal';
+  const addBookmarkModalId = 'add-bookmark-modal';
+  const shareByNaddrModalId = 'share-by-naddr-modal';
+  const createRoomModalId = 'create-room-modal';
 
   /**
    * Reactive effect to handle modal opening/closing based on store state
@@ -61,34 +71,55 @@
       );
 
       if (loginModal && loginModal.open) {
-        console.log('ModalManager: Closing login modal');
         loginModal.close();
       }
       if (privateKeyModal && privateKeyModal.open) {
-        console.log('ModalManager: Closing private key modal');
         privateKeyModal.close();
       }
+      const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
+      if (bunkerModal && bunkerModal.open) {
+        bunkerModal.close();
+      }
       if (signupModal && signupModal.open) {
-        console.log('ModalManager: Closing signup modal');
         signupModal.close();
       }
       if (createCommunityModal && createCommunityModal.open) {
-        console.log('ModalManager: Closing create community modal');
         createCommunityModal.close();
       }
       if (editCommunityModal && editCommunityModal.open) {
-        console.log('ModalManager: Closing edit community modal');
         editCommunityModal.close();
       }
       if (editProfileModal && editProfileModal.open) {
-        console.log('ModalManager: Closing edit profile modal');
         editProfileModal.close();
+      }
+      const communityMigrationModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(communityMigrationModalId)
+      );
+      if (communityMigrationModal && communityMigrationModal.open) {
+        communityMigrationModal.close();
+      }
+      const addBookmarkModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(addBookmarkModalId)
+      );
+      if (addBookmarkModal && addBookmarkModal.open) {
+        addBookmarkModal.close();
+      }
+      const shareByNaddrModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(shareByNaddrModalId)
+      );
+      if (shareByNaddrModal && shareByNaddrModal.open) {
+        shareByNaddrModal.close();
+      }
+      const createRoomModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(createRoomModalId)
+      );
+      if (createRoomModal && createRoomModal.open) {
+        createRoomModal.close();
       }
     } else if (currentModal === 'login') {
       // Open login modal
       const loginModal = /** @type {HTMLDialogElement} */ (document.getElementById(loginModalId));
       if (loginModal && !loginModal.open) {
-        console.log('ModalManager: Opening login modal');
         loginModal.showModal();
       }
     } else if (currentModal === 'privateKey') {
@@ -97,14 +128,17 @@
         document.getElementById(privateKeyModalId)
       );
       if (privateKeyModal && !privateKeyModal.open) {
-        console.log('ModalManager: Opening private key modal');
         privateKeyModal.showModal();
+      }
+    } else if (currentModal === 'bunker') {
+      const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
+      if (bunkerModal && !bunkerModal.open) {
+        bunkerModal.showModal();
       }
     } else if (currentModal === 'signup') {
       // Open signup modal
       const signupModal = /** @type {HTMLDialogElement} */ (document.getElementById(signupModalId));
       if (signupModal && !signupModal.open) {
-        console.log('ModalManager: Opening signup modal');
         signupModal.showModal();
       }
     } else if (currentModal === 'createCommunity') {
@@ -113,7 +147,6 @@
         document.getElementById(createCommunityModalId)
       );
       if (createCommunityModal && !createCommunityModal.open) {
-        console.log('ModalManager: Opening create community modal');
         createCommunityModal.showModal();
       }
     } else if (currentModal === 'profile') {
@@ -122,7 +155,6 @@
         document.getElementById(editProfileModalId)
       );
       if (editProfileModal && !editProfileModal.open) {
-        console.log('ModalManager: Opening edit profile modal');
         editProfileModal.showModal();
       }
     } else if (currentModal === 'editCommunity') {
@@ -131,8 +163,36 @@
         document.getElementById(editCommunityModalId)
       );
       if (editCommunityModal && !editCommunityModal.open) {
-        console.log('ModalManager: Opening edit community modal');
         editCommunityModal.showModal();
+      }
+    } else if (currentModal === 'communityMigration') {
+      // Open community migration modal
+      const communityMigrationModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(communityMigrationModalId)
+      );
+      if (communityMigrationModal && !communityMigrationModal.open) {
+        communityMigrationModal.showModal();
+      }
+    } else if (currentModal === 'addBookmark') {
+      const addBookmarkModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(addBookmarkModalId)
+      );
+      if (addBookmarkModal && !addBookmarkModal.open) {
+        addBookmarkModal.showModal();
+      }
+    } else if (currentModal === 'shareByNaddr') {
+      const shareByNaddrModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(shareByNaddrModalId)
+      );
+      if (shareByNaddrModal && !shareByNaddrModal.open) {
+        shareByNaddrModal.showModal();
+      }
+    } else if (currentModal === 'createRoom') {
+      const createRoomModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(createRoomModalId)
+      );
+      if (createRoomModal && !createRoomModal.open) {
+        createRoomModal.showModal();
       }
     }
   });
@@ -152,13 +212,35 @@
   function handleAccountCreated() {
     modal.transitionModal('privateKey', 'login');
   }
+
+  function handleBunkerTransition() {
+    modal.transitionModal('login', 'bunker');
+  }
+
+  function handleBunkerBack() {
+    modal.transitionModal('bunker', 'login');
+  }
+
+  function handleBunkerAccountCreated() {
+    modal.transitionModal('bunker', 'login');
+  }
 </script>
 
 <!-- Render modals based on active modal state -->
 {#if modal.activeModal === 'login'}
-  <LoginModal modalId={loginModalId} onNSECTransition={handleNSECTransition} />
+  <LoginModal
+    modalId={loginModalId}
+    onNSECTransition={handleNSECTransition}
+    onBunkerTransition={handleBunkerTransition}
+  />
 {:else if modal.activeModal === 'privateKey'}
   <LoginWithPrivateKey modalId={privateKeyModalId} onAccountCreated={handleAccountCreated} />
+{:else if modal.activeModal === 'bunker'}
+  <LoginWithBunker
+    modalId={bunkerModalId}
+    onAccountCreated={handleBunkerAccountCreated}
+    onBack={handleBunkerBack}
+  />
 {:else if modal.activeModal === 'signup'}
   <SignupModal modalId={signupModalId} />
 {:else if modal.activeModal === 'eventDetails'}
@@ -175,4 +257,12 @@
   <CalendarCreationModal />
 {:else if modal.activeModal === 'calendarEvent'}
   <CalendarEventModal />
+{:else if modal.activeModal === 'communityMigration'}
+  <CommunityMigrationModal modalId={communityMigrationModalId} />
+{:else if modal.activeModal === 'addBookmark'}
+  <AddBookmarkModal modalId={addBookmarkModalId} />
+{:else if modal.activeModal === 'shareByNaddr'}
+  <ShareByNaddrModal modalId={shareByNaddrModalId} />
+{:else if modal.activeModal === 'createRoom'}
+  <CreateRoomModal modalId={createRoomModalId} />
 {/if}

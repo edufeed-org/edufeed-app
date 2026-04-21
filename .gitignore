@@ -57,3 +57,11 @@ playwright-report/
 screenshots/
 
 .claude/settings.local.json
+.playwright-mcp
+
+# Git worktrees
+.worktrees/
+
+# Local tooling
+.superpowers/
+docs/

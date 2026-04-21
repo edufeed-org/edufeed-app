@@ -29,9 +29,12 @@
    * @property {string} label - The display label
    */
 
-  /** @type {{ vocabularyKey: 'learningResourceType' | 'about' | 'intendedEndUserRole', selected?: SelectedConcept[], multiple?: boolean, required?: boolean, label?: string, placeholder?: string, helpText?: string, disabled?: boolean, maxSelections?: number, compact?: boolean, onchange?: (selected: SelectedConcept[]) => void }} */
+  /** @type {{ vocabularyKey?: 'learningResourceType' | 'about' | 'intendedEndUserRole', concepts?: SKOSConcept[], isLoading?: boolean, error?: string | null, selected?: SelectedConcept[], multiple?: boolean, required?: boolean, label?: string, placeholder?: string, helpText?: string, disabled?: boolean, maxSelections?: number, compact?: boolean, onchange?: (selected: SelectedConcept[]) => void }} */
   let {
     vocabularyKey,
+    concepts: propConcepts = undefined,
+    isLoading: propIsLoading = undefined,
+    error: propError = undefined,
     selected = $bindable([]),
     multiple = true,
     required = false,
@@ -44,10 +47,20 @@
     onchange = () => {}
   } = $props();
 
-  // State
-  let concepts = $state(/** @type {SKOSConcept[]} */ ([]));
-  let isLoading = $state(true);
-  let error = $state(/** @type {string | null} */ (null));
+  // Internal state used only when concepts/isLoading/error are not provided by the caller.
+  let internalConcepts = $state(/** @type {SKOSConcept[]} */ ([]));
+  let internalIsLoading = $state(true);
+  let internalError = $state(/** @type {string | null} */ (null));
+
+  // Effective data — props take precedence over internal fetch state.
+  const concepts = $derived(propConcepts ?? internalConcepts);
+  const isLoading = $derived(propIsLoading ?? internalIsLoading);
+  const error = $derived(propError ?? internalError);
+
+  // Stable id seed for ARIA so multiple instances without a vocabularyKey do not collide.
+  // Falls back to a per-mount random token; tracks vocabularyKey reactively if it changes.
+  const _fallbackInstanceId = `skos-${Math.random().toString(36).slice(2, 9)}`;
+  const instanceId = $derived(vocabularyKey ?? _fallbackInstanceId);
   let isOpen = $state(false);
   let searchTerm = $state('');
   /** @type {HTMLDivElement | null} */
@@ -90,15 +103,20 @@
     });
   });
 
-  // Load vocabulary on mount
+  // Load vocabulary on mount — skipped when data is supplied via props.
   onMount(async () => {
+    if (propConcepts !== undefined) return;
+    if (!vocabularyKey) {
+      internalIsLoading = false;
+      return;
+    }
     try {
-      concepts = await fetchVocabulary(vocabularyKey);
-      setCachedConcepts(vocabularyKey, concepts);
-      isLoading = false;
+      internalConcepts = await fetchVocabulary(vocabularyKey);
+      setCachedConcepts(vocabularyKey, internalConcepts);
+      internalIsLoading = false;
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load vocabulary';
-      isLoading = false;
+      internalError = e instanceof Error ? e.message : 'Failed to load vocabulary';
+      internalIsLoading = false;
     }
   });
 
@@ -249,7 +267,13 @@
       case ' ':
         if (activeIndex >= 0 && activeIndex < visibleConcepts.length) {
           event.preventDefault();
-          toggleSelection(visibleConcepts[activeIndex]);
+          const concept = visibleConcepts[activeIndex];
+          // Match the click behaviour: parent rows (outside search) expand/collapse.
+          if (parentIds.has(concept.id) && !searchTerm.trim()) {
+            toggleCategory(concept.id, event);
+          } else {
+            toggleSelection(concept);
+          }
         }
         break;
 
@@ -315,9 +339,9 @@
       role="combobox"
       aria-haspopup="listbox"
       aria-expanded={isOpen}
-      aria-controls="skos-listbox-{vocabularyKey}"
+      aria-controls="skos-listbox-{instanceId}"
       aria-activedescendant={activeIndex >= 0
-        ? `skos-option-${vocabularyKey}-${activeIndex}`
+        ? `skos-option-${instanceId}-${activeIndex}`
         : undefined}
       class="select-bordered select-trigger select w-full pr-8"
       class:select-disabled={disabled}
@@ -326,7 +350,7 @@
     >
       {#if isLoading}
         <span class="loading loading-sm loading-spinner"></span>
-        <span class="text-base-content/50">Loading...</span>
+        <span class="text-base-content/50">{m.skos_loading()}</span>
       {:else if error}
         <span class="text-sm text-error">{error}</span>
       {:else if selected.length === 0}
@@ -367,147 +391,168 @@
     </div>
 
     <!-- Dropdown panel -->
-    {#if !isLoading && !error && isOpen}
+    {#if !error && isOpen}
       <div
         class="dropdown-content z-[100] mt-1 flex {panelMaxHeight} w-full min-w-[min(20rem,100%)] flex-col overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-lg sm:min-w-[min(24rem,100%)]"
       >
-        <!-- Search Input -->
-        <div class="sticky top-0 z-10 border-b border-base-300 bg-base-100 p-2">
-          <div class="relative">
-            <SearchIcon
-              class_="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50"
-            />
-            <input
-              type="text"
-              bind:this={inputRef}
-              bind:value={searchTerm}
-              placeholder={m.skos_dropdown_search()}
-              aria-label={m.skos_dropdown_search()}
-              class="input-bordered input input-sm w-full pl-9"
-              onclick={(e) => e.stopPropagation()}
-            />
+        {#if isLoading}
+          <!-- Loading state inside panel -->
+          <div
+            class="flex items-center justify-center gap-2 p-6 text-base-content/60"
+            data-testid="skos-panel-loading"
+          >
+            <span class="loading loading-sm loading-spinner"></span>
+            <span>{m.skos_loading()}</span>
           </div>
-        </div>
-
-        <!-- Options List -->
-        <div
-          bind:this={listRef}
-          class="flex-1 overflow-y-auto"
-          role="listbox"
-          id="skos-listbox-{vocabularyKey}"
-          aria-multiselectable={multiple}
-        >
-          {#if visibleConcepts.length === 0}
-            <div class="p-4 text-center text-base-content/50">
-              {m.skos_dropdown_no_results()}
+        {:else}
+          <!-- Search Input -->
+          <div class="sticky top-0 z-10 border-b border-base-300 bg-base-100 p-2">
+            <div class="relative">
+              <SearchIcon
+                class_="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50"
+              />
+              <input
+                type="text"
+                bind:this={inputRef}
+                bind:value={searchTerm}
+                placeholder={m.skos_dropdown_search()}
+                aria-label={m.skos_dropdown_search()}
+                class="input-bordered input input-sm w-full pl-9"
+                onclick={(e) => e.stopPropagation()}
+              />
             </div>
-          {:else}
-            {#each visibleConcepts as concept, index (concept.id)}
-              {@const conceptLabel = getConceptLabel(concept, locale)}
-              {@const conceptSelected = isSelected(concept.id)}
-              {@const indentLevel = concept.level || 0}
-              {@const hasChildren = parentIds.has(concept.id)}
-              {@const isCollapsed = collapsedCategories.has(concept.id)}
-              {@const isActive = index === activeIndex}
+          </div>
 
-              <div
-                data-option-index={index}
-                id="skos-option-{vocabularyKey}-{index}"
-                role="option"
-                aria-selected={conceptSelected}
-                class="flex min-h-[2.75rem] w-full items-center transition-colors hover:bg-base-200 {conceptSelected
-                  ? 'bg-primary/10'
-                  : ''} {isActive
-                  ? 'bg-base-200 outline outline-2 -outline-offset-2 outline-primary/30'
-                  : ''}"
-                style="padding-left: {8 + indentLevel * 20}px; padding-right: 8px;"
-              >
-                <!-- Collapse/expand toggle for parent concepts -->
-                {#if hasChildren && !searchTerm.trim()}
+          <!-- Options List -->
+          <div
+            bind:this={listRef}
+            class="flex-1 overflow-y-auto"
+            role="listbox"
+            id="skos-listbox-{instanceId}"
+            aria-multiselectable={multiple}
+          >
+            {#if visibleConcepts.length === 0}
+              <div class="p-4 text-center text-base-content/50">
+                {m.skos_dropdown_no_results()}
+              </div>
+            {:else}
+              {#each visibleConcepts as concept, index (concept.id)}
+                {@const conceptLabel = getConceptLabel(concept, locale)}
+                {@const conceptSelected = isSelected(concept.id)}
+                {@const indentLevel = concept.level || 0}
+                {@const hasChildren = parentIds.has(concept.id)}
+                {@const isCollapsed = collapsedCategories.has(concept.id)}
+                {@const isActive = index === activeIndex}
+                {@const parentToggles = hasChildren && !searchTerm.trim()}
+
+                <div
+                  data-option-index={index}
+                  id="skos-option-{instanceId}-{index}"
+                  role="option"
+                  aria-selected={conceptSelected}
+                  class="flex min-h-[2.75rem] w-full items-center transition-colors hover:bg-base-200 {conceptSelected
+                    ? 'bg-primary/10'
+                    : ''} {isActive
+                    ? 'bg-base-200 outline outline-2 -outline-offset-2 outline-primary/30'
+                    : ''}"
+                  style="padding-left: {8 + indentLevel * 20}px; padding-right: 8px;"
+                >
+                  <!-- Collapse/expand toggle for parent concepts -->
+                  {#if hasChildren && !searchTerm.trim()}
+                    <button
+                      type="button"
+                      class="flex-shrink-0 rounded p-1 transition-transform hover:bg-base-300"
+                      class:rotate-90={!isCollapsed}
+                      onclick={(e) => toggleCategory(concept.id, e)}
+                      aria-label={isCollapsed
+                        ? m.skos_dropdown_expand()
+                        : m.skos_dropdown_collapse()}
+                      tabindex="-1"
+                    >
+                      <ChevronRightIcon class_="w-3.5 h-3.5 text-base-content/50" />
+                    </button>
+                  {:else if indentLevel > 0 && !searchTerm.trim()}
+                    <!-- Spacer for leaf nodes to align with parents that have toggles -->
+                    <span class="w-[1.625rem] flex-shrink-0"></span>
+                  {/if}
+
+                  <!-- Label/selection button.
+                       For parent rows (has children, not searching), clicking the
+                       label toggles expand/collapse so the whole row becomes a big
+                       navigation target. Leaves — and all rows during search —
+                       click to select. The chevron button keeps its Expand/Collapse
+                       aria-label for screen readers. -->
                   <button
                     type="button"
-                    class="flex-shrink-0 rounded p-1 transition-transform hover:bg-base-300"
-                    class:rotate-90={!isCollapsed}
-                    onclick={(e) => toggleCategory(concept.id, e)}
-                    aria-label={isCollapsed ? m.skos_dropdown_expand() : m.skos_dropdown_collapse()}
+                    class="flex min-w-0 flex-1 items-center gap-2 py-2 text-left"
+                    onclick={(e) =>
+                      parentToggles ? toggleCategory(concept.id, e) : toggleSelection(concept)}
                     tabindex="-1"
                   >
-                    <ChevronRightIcon class_="w-3.5 h-3.5 text-base-content/50" />
-                  </button>
-                {:else if indentLevel > 0 && !searchTerm.trim()}
-                  <!-- Spacer for leaf nodes to align with parents that have toggles -->
-                  <span class="w-[1.625rem] flex-shrink-0"></span>
-                {/if}
-
-                <!-- Selection button -->
-                <button
-                  type="button"
-                  class="flex min-w-0 flex-1 items-center gap-2 py-2 text-left"
-                  onclick={() => toggleSelection(concept)}
-                  tabindex="-1"
-                >
-                  {#if multiple}
-                    <input
-                      type="checkbox"
-                      class="checkbox flex-shrink-0 checkbox-sm checkbox-primary"
-                      checked={conceptSelected}
-                      readonly
-                      tabindex="-1"
-                    />
-                  {/if}
-                  <span
-                    class="flex-1 {indentLevel > 0 && !conceptSelected
-                      ? 'text-base-content/70'
-                      : ''}"
-                    class:font-semibold={indentLevel === 0 && hasChildren}
-                    class:font-medium={conceptSelected}
-                  >
-                    {#if searchTerm.trim()}
-                      {#each getHighlightSegments(conceptLabel, searchTerm) as segment, i (i)}
-                        {#if segment.highlight}
-                          <mark class="rounded-sm bg-warning/30 text-inherit">{segment.text}</mark>
-                        {:else}
-                          {segment.text}
-                        {/if}
-                      {/each}
-                    {:else}
-                      {conceptLabel}
-                    {/if}
-                  </span>
-                  <!-- Child count badge for collapsed parents -->
-                  {#if hasChildren && isCollapsed && !searchTerm.trim()}
-                    {@const childCount = concepts.filter((c) => c.parentId === concept.id).length}
-                    <span class="badge flex-shrink-0 badge-ghost badge-xs">{childCount}</span>
-                  {/if}
-                  {#if conceptSelected && !multiple}
-                    <svg
-                      class="h-4 w-4 flex-shrink-0 text-primary"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fill-rule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clip-rule="evenodd"
+                    {#if multiple}
+                      <input
+                        type="checkbox"
+                        class="checkbox flex-shrink-0 checkbox-sm checkbox-primary"
+                        checked={conceptSelected}
+                        readonly
+                        tabindex="-1"
                       />
-                    </svg>
-                  {/if}
-                </button>
-              </div>
-            {/each}
-          {/if}
-        </div>
-
-        <!-- Selection count (for multi-select) -->
-        {#if multiple && selected.length > 0}
-          <div
-            class="flex items-center justify-between border-t border-base-300 bg-base-200 p-2 text-xs text-base-content/70"
-          >
-            <span>{selected.length} selected</span>
-            {#if selected.length >= maxSelections}
-              <span class="text-warning">Maximum reached</span>
+                    {/if}
+                    <span
+                      class="flex-1 {indentLevel > 0 && !conceptSelected
+                        ? 'text-base-content/70'
+                        : ''}"
+                      class:font-semibold={indentLevel === 0 && hasChildren}
+                      class:font-medium={conceptSelected}
+                    >
+                      {#if searchTerm.trim()}
+                        {#each getHighlightSegments(conceptLabel, searchTerm) as segment, i (i)}
+                          {#if segment.highlight}
+                            <mark class="rounded-sm bg-warning/30 text-inherit">{segment.text}</mark
+                            >
+                          {:else}
+                            {segment.text}
+                          {/if}
+                        {/each}
+                      {:else}
+                        {conceptLabel}
+                      {/if}
+                    </span>
+                    <!-- Child count badge for collapsed parents -->
+                    {#if hasChildren && isCollapsed && !searchTerm.trim()}
+                      {@const childCount = concepts.filter((c) => c.parentId === concept.id).length}
+                      <span class="badge flex-shrink-0 badge-ghost badge-xs">{childCount}</span>
+                    {/if}
+                    {#if conceptSelected && !multiple}
+                      <svg
+                        class="h-4 w-4 flex-shrink-0 text-primary"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                    {/if}
+                  </button>
+                </div>
+              {/each}
             {/if}
           </div>
+
+          <!-- Selection count (for multi-select) -->
+          {#if multiple && selected.length > 0}
+            <div
+              class="flex items-center justify-between border-t border-base-300 bg-base-200 p-2 text-xs text-base-content/70"
+            >
+              <span>{m.skos_selected({ count: String(selected.length) })}</span>
+              {#if selected.length >= maxSelections}
+                <span class="text-warning">{m.skos_maximum_reached()}</span>
+              {/if}
+            </div>
+          {/if}
         {/if}
       </div>
     {/if}

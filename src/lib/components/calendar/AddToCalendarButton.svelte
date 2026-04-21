@@ -62,10 +62,10 @@
     try {
       const webcalUrl = generateWebcalUrl();
       await navigator.clipboard.writeText(webcalUrl);
-      showToast('calendar.link.copied', 'success');
+      showToast(m.toast_calendar_link_copied(), 'success');
     } catch (error) {
       console.error('Error copying webcal link:', error);
-      showToast('calendar.link.error', 'error');
+      showToast(m.toast_calendar_link_error(), 'error');
     }
   };
 
@@ -76,7 +76,7 @@
       showToast(m.add_to_calendar_toast_subscription_added(), 'success');
     } catch (error) {
       console.error('Error opening webcal link:', error);
-      showToast('calendar link error', 'error');
+      showToast(m.toast_calendar_link_error(), 'error');
     }
   };
 
@@ -92,7 +92,7 @@
       showToast(m.add_to_calendar_toast_download_success(), 'success');
     } catch (error) {
       console.error('Error downloading ICS:', error);
-      showToast('calendar link error', 'error');
+      showToast(m.toast_calendar_link_error(), 'error');
     }
   };
 

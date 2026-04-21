@@ -7,7 +7,7 @@
   import { BlossomClient } from 'blossom-client-sdk';
   import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
 
-  let { userData, signer = null, errors = $bindable({}) } = $props();
+  let { userData = $bindable(), signer = null, errors = $bindable({}) } = $props();
 
   // UI state
   let uploadingImage = $state(false);

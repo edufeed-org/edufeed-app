@@ -1,0 +1,154 @@
+import { Readability } from '@mozilla/readability';
+import { parseHTML } from 'linkedom';
+import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
+
+const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const FETCH_TIMEOUT = 10_000;
+
+/**
+ * @param {URL} parsedUrl
+ * @returns {boolean}
+ */
+function isPrivateIp(parsedUrl) {
+  const hostname = parsedUrl.hostname;
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('172.') ||
+    hostname === '0.0.0.0' ||
+    hostname.endsWith('.local')
+  );
+}
+
+/** @type {import('@sveltejs/kit').RequestHandler} */
+export async function GET({ url }) {
+  const articleUrl = url.searchParams.get('url');
+
+  if (!articleUrl) {
+    return Response.json({ success: false, error: 'Missing url parameter' }, { status: 400 });
+  }
+
+  /** @type {URL} */
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(articleUrl);
+  } catch {
+    return Response.json({ success: false, error: 'Invalid url parameter' }, { status: 400 });
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return Response.json({ success: false, error: 'URL must be http or https' }, { status: 400 });
+  }
+
+  if (isPrivateIp(parsedUrl)) {
+    return Response.json(
+      { success: false, error: 'Private/local URLs are not allowed' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+    const response = await fetch(articleUrl, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'text/html, application/pdf',
+        'User-Agent': 'Mozilla/5.0 (compatible; ReaderBot/1.0)'
+      }
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return Response.json(
+        { success: false, error: `Fetch failed with status ${response.status}` },
+        { status: 502 }
+      );
+    }
+
+    const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+    if (contentLength > MAX_SIZE) {
+      return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
+    }
+
+    // PDF branch
+    if (isPdfResponse(response.headers, articleUrl)) {
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > MAX_SIZE) {
+        return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
+      }
+
+      const pdfArticle = await extractPdfContent(buffer);
+
+      if (!pdfArticle.textContent) {
+        return Response.json(
+          { success: false, error: 'Could not extract text from PDF (may be image-only)' },
+          { status: 422 }
+        );
+      }
+
+      return Response.json(
+        {
+          success: true,
+          article: {
+            title: pdfArticle.title,
+            content: pdfArticle.content,
+            textContent: pdfArticle.textContent,
+            byline: pdfArticle.byline,
+            siteName: parsedUrl.hostname
+          }
+        },
+        {
+          headers: {
+            'Cache-Control': 'public, max-age=3600'
+          }
+        }
+      );
+    }
+
+    // HTML branch
+    const html = await response.text();
+    if (html.length > MAX_SIZE) {
+      return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
+    }
+
+    const { document } = parseHTML(html);
+    const reader = new Readability(document);
+    const article = reader.parse();
+
+    if (!article) {
+      return Response.json(
+        { success: false, error: 'Could not extract article content' },
+        { status: 422 }
+      );
+    }
+
+    return Response.json(
+      {
+        success: true,
+        article: {
+          title: article.title,
+          content: article.content,
+          textContent: article.textContent,
+          byline: article.byline,
+          siteName: article.siteName
+        }
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=3600'
+        }
+      }
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return Response.json({ success: false, error: 'Fetch timed out' }, { status: 504 });
+    }
+    return Response.json({ success: false, error: 'Failed to process article' }, { status: 502 });
+  }
+}

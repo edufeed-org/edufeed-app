@@ -95,6 +95,7 @@ export async function GET({ url }) {
     }
 
     const resized = await sharp(buffer)
+      .rotate()
       .resize(width, height, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality })
       .toBuffer();

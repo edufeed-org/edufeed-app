@@ -2,7 +2,6 @@
  * Custom models export
  * For models not provided by applesauce-core
  */
-export { CommunityRelationshipModel, CommunityMembersModel } from './community-relationship.js';
 export { CommunityCalendarEventModel } from './community-content.js';
 export { GlobalCalendarEventModel } from './global-calendar-event.js';
 export { CalendarEventRangeModel } from './calendar-event-range.js';

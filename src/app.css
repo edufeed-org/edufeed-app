@@ -1,4 +1,18 @@
 @import 'tailwindcss';
+
+/* Prevent scroll jumps when content loads above the viewport */
+html,
+body {
+  overflow-anchor: auto;
+}
+
+/* Layout */
+:root {
+  --sidebar-icon-w: 4rem;
+  --sidebar-nav-w: 15rem;
+  --sidebar-total-w: calc(var(--sidebar-icon-w) + var(--sidebar-nav-w));
+}
+
 @plugin '@tailwindcss/typography';
 @plugin "daisyui" {
   themes:
@@ -183,6 +197,15 @@
  * exceeds the default height, while matching native select otherwise.
  * Hides the DaisyUI CSS chevron since custom dropdowns render their own.
  */
+/* Ensure readable code blocks in prose across all themes */
+.prose pre {
+  color: var(--color-base-content);
+}
+
+.prose :where(code):not(:where(pre *)) {
+  color: var(--color-base-content);
+}
+
 .select.select-trigger {
   height: auto;
   min-height: var(--size);

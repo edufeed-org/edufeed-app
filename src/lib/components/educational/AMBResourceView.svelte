@@ -17,7 +17,7 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
-  import CommunityShare from '../shared/CommunityShare.svelte';
+
   import { getLocale } from '$lib/paraglide/runtime.js';
   import {
     getLabelsWithFallback,
@@ -28,9 +28,11 @@
   import { page } from '$app/stores';
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { EditIcon, TrashIcon } from '$lib/components/icons';
+  import EventContextMenu from '../shared/EventContextMenu.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
@@ -66,9 +68,6 @@
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
 
-  // Share UI state
-  let showShareUI = $state(false);
-
   // Delete state
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
@@ -89,6 +88,28 @@
     goto(resolve(`/create/resource?edit=${editNaddr}`));
   }
 
+  // Form back-reference: if the resource was produced by a kind-30168 form, offer
+  // "Edit in form" that routes through the form-driven create-resource page.
+  const formRef = $derived(getFormReferenceFromResource(event));
+
+  function handleEditInFormClick() {
+    if (!formRef) return;
+    const [kindStr, pubkey, identifier] = formRef.address.split(':');
+    const formNaddr = nip19.naddrEncode({
+      kind: Number(kindStr),
+      pubkey,
+      identifier,
+      relays: formRef.relay ? [formRef.relay] : undefined
+    });
+    const dTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
+    const editNaddr = nip19.naddrEncode({
+      kind: event.kind,
+      pubkey: event.pubkey,
+      identifier: dTag
+    });
+    goto(resolve(`/forms/${formNaddr}/create-resource?edit=${editNaddr}`));
+  }
+
   /**
    * Handle resource deletion
    */
@@ -100,16 +121,16 @@
       const result = await deleteEvent(event, activeUser);
 
       if (result.success) {
-        showToast('Resource deleted successfully', 'success');
+        showToast(m.toast_resource_deleted(), 'success');
         showDeleteConfirmation = false;
         // Navigate to discover page
         goto(resolve('/discover'));
       } else {
-        showToast(result.error || 'Failed to delete resource', 'error');
+        showToast(result.error || m.toast_resource_delete_failed(), 'error');
       }
     } catch (error) {
       console.error('Failed to delete resource:', error);
-      showToast('An error occurred while deleting the resource', 'error');
+      showToast(m.toast_resource_delete_error(), 'error');
     } finally {
       isDeleting = false;
     }
@@ -278,7 +299,7 @@
               <img
                 src={getProfilePicture(creatorProfile) ||
                   `https://robohash.org/${firstCreator.pubkey}`}
-                alt="Creator"
+                alt={m.amb_resource_creator_alt()}
               />
             </div>
           </div>
@@ -288,7 +309,7 @@
             </div>
             {#if creators.length > 1}
               <div class="text-sm text-base-content/60">
-                +{creators.length - 1} more creator{creators.length > 2 ? 's' : ''}
+                {m.amb_resource_more_creators({ count: creators.length - 1 })}
               </div>
             {/if}
           </div>
@@ -298,7 +319,7 @@
             <div class="h-12 w-12 rounded-full">
               <img
                 src={`https://robohash.org/${encodeURIComponent(resource.creatorNames[0])}`}
-                alt="Creator"
+                alt={m.amb_resource_creator_alt()}
               />
             </div>
           </div>
@@ -315,13 +336,13 @@
         <!-- Published date -->
         {#if publishedAt}
           <div class="ml-auto text-sm text-base-content/60">
-            Published {formatCalendarDate(publishedAt, 'short')}
+            {m.amb_resource_published({ date: formatCalendarDate(publishedAt, 'short') })}
           </div>
         {/if}
       </div>
 
       <!-- Actions -->
-      <div class="flex gap-2">
+      <div class="flex items-center gap-2">
         {#if isOwner}
           <button
             class="btn btn-outline btn-sm"
@@ -331,6 +352,16 @@
             <EditIcon class="h-4 w-4" />
             {m.common_edit()}
           </button>
+          {#if formRef}
+            <button
+              class="btn btn-outline btn-sm"
+              onclick={handleEditInFormClick}
+              aria-label={m.amb_resource_edit_in_form()}
+            >
+              <EditIcon class="h-4 w-4" />
+              {m.amb_resource_edit_in_form()}
+            </button>
+          {/if}
           <button
             class="btn btn-outline btn-sm btn-error"
             onclick={() => (showDeleteConfirmation = true)}
@@ -340,20 +371,9 @@
             {m.common_delete()}
           </button>
         {/if}
-        {#if activeUser}
-          <button class="btn btn-sm btn-secondary" onclick={() => (showShareUI = !showShareUI)}>
-            {showShareUI ? m.common_close() : m.common_share()}
-          </button>
-        {/if}
+        <EventContextMenu {event} />
       </div>
     </div>
-
-    <!-- Share UI -->
-    {#if showShareUI && activeUser}
-      <div class="mt-4 rounded-lg bg-base-200 p-4">
-        <CommunityShare {event} {activeUser} shareButtonText={m.common_share()} />
-      </div>
-    {/if}
   </header>
 
   <!-- FEATURED IMAGE -->
@@ -530,7 +550,7 @@
                 <img
                   src={getProfilePicture(creatorProfile) ||
                     `https://robohash.org/${creator.pubkey}`}
-                  alt="Creator"
+                  alt={m.amb_resource_creator_alt()}
                 />
               </div>
             </div>
@@ -605,8 +625,7 @@
       </h3>
       {#if isNostrNativeOnly}
         <p class="mb-4 text-sm text-base-content/70">
-          This content is stored on the Nostr network and available directly without external
-          dependencies.
+          {m.amb_resource_nostr_native_description()}
         </p>
       {/if}
       <div class="space-y-2">
@@ -646,7 +665,7 @@
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                 />
               </svg>
-              View
+              {m.amb_resource_view_file()}
             </a>
             <a href={file.url} download class="btn btn-ghost btn-sm">
               <svg
@@ -663,7 +682,7 @@
                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                 />
               </svg>
-              Download
+              {m.amb_resource_download_file()}
             </a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </div>
@@ -676,7 +695,9 @@
   {#if hasExternalRefs}
     <div class="mb-8">
       <h3 class="mb-3 text-lg font-semibold text-base-content">
-        External Reference{resource.externalUrls.length > 1 ? 's' : ''}
+        {resource.externalUrls.length > 1
+          ? m.amb_resource_external_references()
+          : m.amb_resource_external_reference()}
       </h3>
       <div class="space-y-2">
         {#each resource.externalUrls as url (url)}

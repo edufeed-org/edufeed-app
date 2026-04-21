@@ -2,6 +2,7 @@
  * Content type configuration for community features
  * Maps event kinds to UI metadata and implementation status
  */
+import { parseCommunityContentTypes } from './communityRelays.js';
 
 /**
  * @typedef {Object} ContentTypeConfig
@@ -26,7 +27,7 @@ export const CONTENT_TYPE_CONFIG = {
   30142: {
     kind: 30142,
     name: 'Learning',
-    icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+    icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222',
     supported: true,
     component: 'LearningView',
     description: 'Educational resources (AMB/OER)'
@@ -95,13 +96,53 @@ export const CONTENT_TYPE_CONFIG = {
     component: null,
     description: 'Curated publications (books, journals, courses)'
   },
+  30818: {
+    kind: 30818,
+    name: 'Wikis',
+    icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+    supported: true,
+    component: 'WikisView',
+    description: 'Collaborative wiki articles (NIP-54)'
+  },
+  39701: {
+    kind: 39701,
+    name: 'Social Bookmarks',
+    icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z',
+    supported: true,
+    component: 'SocialBookmarksView',
+    description: 'Web bookmarks, highlights, and page notes'
+  },
+  9802: {
+    kind: 9802,
+    name: 'Social Bookmarks',
+    icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z',
+    supported: true,
+    component: 'SocialBookmarksView',
+    description: 'Web highlights'
+  },
   11: {
     kind: 11,
     name: 'Forum',
     icon: 'M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z',
-    supported: false,
-    component: null,
+    supported: true,
+    component: 'ForumView',
     description: 'Forum discussions'
+  },
+  30312: {
+    kind: 30312,
+    name: 'Meet',
+    icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
+    supported: true,
+    component: 'MeetView',
+    description: 'Video and audio rooms'
+  },
+  30313: {
+    kind: 30313,
+    name: 'Meet',
+    icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
+    supported: true,
+    component: 'MeetView',
+    description: 'Meet room participants'
   }
 };
 
@@ -113,6 +154,8 @@ export const CONTENT_TYPE_CONFIG = {
 export function getCommunityAvailableContentTypes(communikeyEvent) {
   // NIP-52 calendar kinds that should enable calendar functionality
   const CALENDAR_KINDS = [31922, 31923, 31924, 31925];
+  // Meet kinds that should consolidate into a single Meet tab
+  const MEET_KINDS = [30312, 30313, 10312];
 
   // Always include Chat as a core feature
   const alwaysAvailable = [9];
@@ -120,14 +163,17 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
   const processedKinds = new Set();
 
   // Parse community's defined content types
-  const definedContentTypes = getCommunityContentTypes(communikeyEvent);
+  const definedContentTypes = parseCommunityContentTypes(communikeyEvent);
 
   // Check if community has any calendar-related kinds
   let hasCalendarKinds = false;
+  let hasMeetKinds = false;
   for (const contentType of definedContentTypes) {
     if (contentType.kinds.some((kind) => CALENDAR_KINDS.includes(kind))) {
       hasCalendarKinds = true;
-      break;
+    }
+    if (contentType.kinds.some((kind) => MEET_KINDS.includes(kind))) {
+      hasMeetKinds = true;
     }
   }
 
@@ -139,6 +185,12 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
 
       // Skip calendar kinds - they'll be represented by a single Calendar tab
       if (CALENDAR_KINDS.includes(kind)) {
+        processedKinds.add(kind);
+        continue;
+      }
+
+      // Skip meet kinds - they'll be represented by a single Meet tab
+      if (MEET_KINDS.includes(kind)) {
         processedKinds.add(kind);
         continue;
       }
@@ -207,10 +259,86 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
     });
   }
 
+  // Add consolidated meet tab if any meet kinds are present
+  if (hasMeetKinds) {
+    const config = CONTENT_TYPE_CONFIG[30312];
+    result.push({
+      kind: 30312,
+      name: config.name,
+      icon: config.icon,
+      supported: config.supported,
+      enabled: config.supported,
+      description: config.description
+    });
+  }
+
   // Sort: enabled first, then by kind number
   return result.sort((a, b) => {
     if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
     return a.kind - b.kind;
+  });
+}
+
+/** @type {Record<string, string>} Maps content type ID to community section name (UI default) */
+export const CONTENT_TYPE_TO_SECTION = {
+  calendar: 'Calendar',
+  chat: 'Chat',
+  articles: 'Articles',
+  forum: 'Forum',
+  wikis: 'Wikis',
+  learning: 'Learning',
+  boards: 'Boards',
+  'social-bookmarks': 'Social Bookmarks',
+  meet: 'Meet'
+};
+
+/**
+ * Get the actual section name from a community event for a given content type.
+ * Looks up by kind number, not by hardcoded name — resilient to naming changes.
+ * @param {any} communityEvent - The community's kind:10222 event
+ * @param {string} contentTypeId - The content type ID (e.g., 'forum', 'calendar')
+ * @returns {string|null} The section name from the event, or null if not found
+ */
+export function getSectionNameForContentType(communityEvent, contentTypeId) {
+  if (!communityEvent || !contentTypeId) return null;
+  const sections = parseCommunityContentTypes(communityEvent);
+  for (const section of sections) {
+    for (const kind of section.kinds) {
+      if (kindToContentType(kind) === contentTypeId) return section.name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Filter events by profile-list access restrictions.
+ * Uses parseCommunityContentTypes to map event kinds to section names directly,
+ * so section names always match the community event's own content tags.
+ * @param {any[]} events
+ * @param {any} communityEvent - kind 10222 event (or null)
+ * @param {{ getAllowedAuthors: (name: string) => string[] | null, isLoading: boolean }} profileAccess
+ * @returns {any[]}
+ */
+export function filterEventsByAccess(events, communityEvent, profileAccess) {
+  if (!communityEvent || profileAccess.isLoading) return events;
+
+  const sections = parseCommunityContentTypes(communityEvent);
+  /** @type {Map<number, string>} kind → section name from the community event */
+  const kindToSection = new Map();
+  for (const section of sections) {
+    for (const kind of section.kinds) {
+      kindToSection.set(kind, section.name);
+    }
+  }
+
+  return events.filter((event) => {
+    const sectionName = kindToSection.get(event.kind);
+    if (!sectionName) return true;
+
+    const allowed = profileAccess.getAllowedAuthors(sectionName);
+    if (allowed === null) return true;
+
+    return allowed.includes(event.pubkey) || (event._sharedBy && allowed.includes(event._sharedBy));
   });
 }
 
@@ -223,15 +351,62 @@ export function kindToContentType(kind) {
   /** @type {Record<number, string>} */
   const mapping = {
     9: 'chat',
+    11: 'forum',
+    9802: 'social-bookmarks',
     30023: 'articles',
     30142: 'learning',
     30301: 'boards',
+    30818: 'wikis',
     31923: 'calendar',
     31922: 'calendar',
     31924: 'calendar',
-    31925: 'calendar'
+    31925: 'calendar',
+    39701: 'social-bookmarks',
+    30312: 'meet',
+    30313: 'meet',
+    10312: 'meet'
   };
   return mapping[kind] || null;
+}
+
+/**
+ * Get tab IDs that have profile-list access restrictions
+ * @param {any} communikeyEvent - The community's kind:10222 event
+ * @returns {Set<string>} Set of restricted tab IDs
+ */
+export function getRestrictedTabIds(communikeyEvent) {
+  if (!communikeyEvent) return new Set();
+  const sections = parseCommunityContentTypes(communikeyEvent);
+  const restricted = new Set();
+  for (const section of sections) {
+    if (!section.profileList) continue;
+    for (const kind of section.kinds) {
+      const tabId = kindToContentType(kind);
+      if (tabId) restricted.add(tabId);
+    }
+  }
+  return restricted;
+}
+
+/**
+ * Get tab IDs where the current user has publish access (subset of restricted tabs)
+ * @param {any} communikeyEvent - The community's kind:10222 event
+ * @param {{ canPublish: (name: string) => boolean }} profileAccess
+ * @returns {Set<string>}
+ */
+export function getAccessibleTabIds(communikeyEvent, profileAccess) {
+  if (!communikeyEvent) return new Set();
+  const sections = parseCommunityContentTypes(communikeyEvent);
+  const accessible = new Set();
+  for (const section of sections) {
+    if (!section.profileList) continue;
+    if (!profileAccess.canPublish(section.name)) continue;
+    for (const kind of section.kinds) {
+      const tabId = kindToContentType(kind);
+      if (tabId) accessible.add(tabId);
+    }
+  }
+  return accessible;
 }
 
 /**
@@ -252,91 +427,38 @@ export function getDefaultCommunityTabs() {
     }
   }
 
-  tabs.push('activity', 'settings');
+  tabs.push('settings');
   return tabs;
 }
 
 /**
- * @typedef {Object} ContentTypeBadges
- * @property {string|null} read - Badge address required to read this content type
- * @property {string|null} write - Badge address required to write/publish this content type
+ * Get verified members from profile-list access data across all gated sections.
+ * Returns a deduplicated union of members plus the community owner.
+ * @param {{ getMembers: (name: string) => string[], isLoading: boolean }} profileAccess
+ * @param {any} communityEvent - kind 10222 event (or null)
+ * @returns {{ allMembers: string[], perSection: Map<string, string[]> }}
  */
+export function getVerifiedMembers(profileAccess, communityEvent) {
+  if (!communityEvent) return { allMembers: [], perSection: new Map() };
 
-/**
- * @typedef {Object} CommunityContentType
- * @property {string} name - The name of the content type
- * @property {number[]} kinds - Array of numeric kinds
- * @property {boolean} exclusive - Whether content must have h-tag (community-exclusive)
- * @property {string[]} roles - Role-based access (legacy)
- * @property {{amount: string, unit: string}=} fee - Optional fee
- * @property {ContentTypeBadges} badges - Badge requirements for read/write access
- * @property {string[]} relays - Per-content-type relay URLs
- */
+  const sections = parseCommunityContentTypes(communityEvent);
+  /** @type {Map<string, string[]>} */
+  const perSection = new Map();
+  const allSet = new Set();
 
-/**
- * Parse community content type definitions from a Nostr event's tags.
- * Supports badge-based access control and per-content-type relays.
- *
- * Tag structure:
- * - ["content", "Name"] - Start new content type section
- * - ["k", "30023"] - Add kind to current section
- * - ["a", "30009:pubkey:badge-id", "write"] - Write access badge
- * - ["a", "30009:pubkey:badge-id", "read"] - Read access badge
- * - ["r", "wss://relay.example.com", "content"] - Per-content-type relay
- * - ["fee", "amount", "unit"] - Publishing fee
- * - ["exclusive", "true"] - Requires h-tag
- * - ["role", "role1", "role2"] - Legacy role-based access
- *
- * @param {any} event
- * @returns {CommunityContentType[]}
- */
-function getCommunityContentTypes(event) {
-  /** @type {CommunityContentType[]} */
-  const contentTypes = [];
-  /** @type {CommunityContentType|null} */
-  let currentContentType = null;
+  // Always include community owner
+  allSet.add(communityEvent.pubkey);
 
-  if (!event || !Array.isArray(event.tags)) return contentTypes;
-
-  for (const tag of event.tags) {
-    if (!Array.isArray(tag) || tag.length === 0) continue;
-    const key = tag[0];
-
-    if (key === 'content') {
-      if (currentContentType) contentTypes.push(currentContentType);
-      currentContentType = {
-        name: tag[1],
-        kinds: [],
-        exclusive: false,
-        roles: [],
-        badges: { read: null, write: null },
-        relays: []
-      };
-    } else if (key === 'k' && currentContentType) {
-      const kind = parseInt(tag[1], 10);
-      if (!Number.isNaN(kind)) currentContentType.kinds.push(kind);
-    } else if (key === 'fee' && currentContentType) {
-      currentContentType.fee = { amount: tag[1], unit: tag[2] || 'sat' };
-    } else if (key === 'exclusive' && currentContentType) {
-      currentContentType.exclusive = tag[1] === 'true';
-    } else if (key === 'role' && currentContentType) {
-      currentContentType.roles = tag.slice(1);
-    }
-    // Parse badge requirements (NIP-58 badge addresses)
-    else if (key === 'a' && currentContentType && tag[1]?.startsWith('30009:')) {
-      const qualifier = tag[2] || 'write'; // Default to write if no qualifier
-      if (qualifier === 'read') {
-        currentContentType.badges.read = tag[1];
-      } else {
-        currentContentType.badges.write = tag[1];
+  for (const section of sections) {
+    if (!section.profileList) continue;
+    const members = profileAccess.getMembers(section.name);
+    if (members && members.length > 0) {
+      perSection.set(section.name, members);
+      for (const pubkey of members) {
+        allSet.add(pubkey);
       }
-    }
-    // Parse per-content-type relays (distinguished by 'content' marker)
-    else if (key === 'r' && currentContentType && tag[2] === 'content') {
-      currentContentType.relays.push(tag[1]);
     }
   }
 
-  if (currentContentType) contentTypes.push(currentContentType);
-  return contentTypes;
+  return { allMembers: Array.from(allSet), perSection };
 }

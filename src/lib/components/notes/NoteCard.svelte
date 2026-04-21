@@ -1,101 +1,148 @@
 <script>
-  import { getProfilePicture } from 'applesauce-core/helpers';
-  import { formatCalendarDate } from '$lib/helpers/calendar.js';
-  import { ChatIcon, RepostIcon, LightningIcon, BookmarkIcon } from '$lib/components/icons';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { getDisplayName, getSeenRelays } from 'applesauce-core/helpers';
+  import { nip19 } from 'nostr-tools';
+  import { RepliesModel } from 'applesauce-common/models';
+  import { formatRelativeTime } from '$lib/helpers/calendar.js';
+  import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import { ChatIcon, RepostIcon, LightningIcon } from '$lib/components/icons';
+  import BookmarkButton from '$lib/components/bookmarks/BookmarkButton.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
+  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import CommentList from '$lib/components/comments/CommentList.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
 
-  /** @type {any} */
-  let { note, profileEvent = null } = $props();
+  /** @type {{ note: any, authorProfile?: any, activeUser?: any, communityPubkey?: string, extraRelays?: string[] }} */
+  let {
+    note,
+    authorProfile = null,
+    activeUser = null,
+    communityPubkey = undefined,
+    extraRelays = undefined
+  } = $props();
+
+  // Load profile internally when none provided via prop
+  const getInternalProfile = useUserProfile(() => (authorProfile ? null : note.pubkey));
+  const effectiveProfile = $derived(authorProfile ?? getInternalProfile());
+
+  let showComments = $state(false);
+  let commentCount = $state(0);
+  let profileHref = $derived(resolve(`/p/${hexToNpub(note.pubkey) || note.pubkey}`));
+
+  // Generate nevent for navigation — route directly to community context when available
+  const neventHref = $derived.by(() => {
+    const relayHints = getSeenRelays(note);
+    const relays = relayHints ? Array.from(relayHints).slice(0, 3) : [];
+    const nevent = nip19.neventEncode({ id: note.id, relays, author: note.pubkey });
+
+    // Route to community-scoped detail when community context is known
+    const hPubkey =
+      communityPubkey || note.tags?.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
+    if (hPubkey) {
+      const npub = hexToNpub(hPubkey);
+      if (npub) return resolve(`/c/${npub}/${nevent}`);
+    }
+    // Stay within the /c/ layout to avoid slow layout boundary crossing
+    return resolve(`/c/${nevent}`);
+  });
 
   /**
-   * Format timestamp for display
-   * @param {number} timestamp
+   * @param {MouseEvent} e
    */
-  function formatTimestamp(timestamp) {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-    if (diffMinutes < 1) return 'now';
-    if (diffMinutes < 60) return `${diffMinutes}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    if (diffDays < 7) return `${diffDays}d`;
-
-    return formatCalendarDate(date, 'short');
+  function handleCardClick(e) {
+    if (e.target instanceof HTMLElement && e.target.closest('button, a')) return;
+    goto(neventHref);
   }
 
   /**
-   * Get display name from profile
-   * @param {any} profile
+   * @param {KeyboardEvent} e
    */
-  function getDisplayName(profile) {
-    if (!profile) return 'Anonymous';
-    return profile.name || profile.display_name || 'Anonymous';
+  function handleKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      goto(neventHref);
+    }
   }
 
-  /**
-   * Get username from profile
-   * @param {any} profile
-   */
-  function getUsername(profile) {
-    if (!profile) return 'anonymous';
-    return profile.display_name || profile.name || 'anonymous';
-  }
+  // Subscribe to RepliesModel for cached comment counts (no relay fetching).
+  // CommentList handles relay fetching when the user expands comments.
+  $effect(() => {
+    if (!note?.id) return;
+
+    const modelSub = eventStore.model(RepliesModel, note).subscribe((replies) => {
+      commentCount = (replies || []).length;
+    });
+
+    return () => modelSub.unsubscribe();
+  });
 </script>
 
-<div class="rounded-lg border border-gray-700 bg-gray-800 p-4">
-  <div class="flex items-start gap-3">
-    <!-- Profile Picture -->
-    <div class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full">
-      <img
-        src={getProfilePicture(profileEvent) || `https://robohash.org/${note.pubkey}`}
-        alt="Profile"
-        class="h-full w-full object-cover"
-      />
-    </div>
-
-    <!-- Note Content -->
-    <div class="flex-1">
-      <!-- Header -->
-      <div class="mb-2 flex items-center gap-2">
-        <span class="font-medium text-white">{getDisplayName(profileEvent)}</span>
-        <span class="text-sm text-gray-400">@{getUsername(profileEvent)}</span>
-        <span class="text-sm text-gray-500">• {formatTimestamp(note.created_at)}</span>
-      </div>
-
-      <!-- Note Text -->
-      <p class="mb-3 break-words whitespace-pre-wrap text-gray-200">{note.content}</p>
-
-      <!-- Reactions -->
-      <div class="mb-3">
-        <ReactionBar event={note} />
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-6 text-sm text-gray-400">
-        <!-- Reply -->
-        <button class="flex items-center gap-1 transition-colors hover:text-blue-400">
-          <ChatIcon class_="w-4 h-4" />
-        </button>
-
-        <!-- Repost -->
-        <button class="flex items-center gap-1 transition-colors hover:text-green-400">
-          <RepostIcon class_="w-4 h-4" />
-        </button>
-
-        <!-- Like/Zap -->
-        <button class="flex items-center gap-1 transition-colors hover:text-yellow-400">
-          <LightningIcon class_="w-4 h-4" />
-        </button>
-
-        <!-- Bookmark -->
-        <button class="flex items-center gap-1 transition-colors hover:text-gray-200">
-          <BookmarkIcon class_="w-4 h-4" />
-        </button>
+<div
+  class="cursor-pointer rounded-lg border border-base-300 bg-base-100 p-4 shadow-sm transition-shadow hover:shadow-md"
+  role="button"
+  tabindex="0"
+  onclick={handleCardClick}
+  onkeydown={handleKeydown}
+>
+  <!-- Author Header -->
+  <div class="mb-3 flex items-center gap-3">
+    <ProfileAvatar
+      pubkey={note.pubkey}
+      profile={effectiveProfile}
+      size="md"
+      linkToProfile
+      showHoverCard
+      fallbackType="robohash"
+    />
+    <div class="min-w-0 flex-1">
+      <a href={profileHref} class="truncate font-medium text-base-content hover:underline">
+        {getDisplayName(effectiveProfile) ||
+          `${note.pubkey.slice(0, 8)}...${note.pubkey.slice(-4)}`}
+      </a>
+      <div class="text-sm text-base-content/60">
+        {formatRelativeTime(note.created_at)}
       </div>
     </div>
   </div>
+
+  <!-- Note Content -->
+  <div class="mb-3 text-base-content/80">
+    <NostrContentRenderer event={note} />
+  </div>
+
+  <!-- Actions -->
+  <div
+    class="flex flex-wrap items-center gap-1 border-t border-base-300 pt-3"
+    role="toolbar"
+    tabindex="-1"
+    onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
+  >
+    <button
+      class="btn gap-1 btn-ghost btn-sm {showComments ? 'text-primary' : ''}"
+      onclick={() => (showComments = !showComments)}
+    >
+      <ChatIcon class_="w-4 h-4" />
+      {#if commentCount > 0}
+        <span class="text-xs">{commentCount}</span>
+      {/if}
+    </button>
+    <button class="btn btn-ghost btn-sm">
+      <RepostIcon class_="w-4 h-4" />
+    </button>
+    <ReactionBar event={note} />
+    <button class="btn btn-ghost btn-sm">
+      <LightningIcon class_="w-4 h-4" />
+    </button>
+    <BookmarkButton event={note} />
+  </div>
+
+  {#if showComments}
+    <div class="mt-3 border-t border-base-300 pt-3">
+      <CommentList rootEvent={note} {activeUser} {communityPubkey} {extraRelays} />
+    </div>
+  {/if}
 </div>

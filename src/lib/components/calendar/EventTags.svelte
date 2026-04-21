@@ -38,6 +38,10 @@
     maxDisplay && uniqueTags.length > maxDisplay ? uniqueTags.length - maxDisplay : 0
   );
 
+  let hiddenTags = $derived(
+    maxDisplay && uniqueTags.length > maxDisplay ? uniqueTags.slice(maxDisplay) : []
+  );
+
   /**
    * Handle tag click
    * @param {MouseEvent} e
@@ -50,7 +54,7 @@
 </script>
 
 {#if tags.length > 0}
-  <div class="flex flex-wrap gap-1">
+  <div class="flex flex-wrap items-center gap-1">
     {#each displayTags as tag (tag)}
       <a
         href={resolve(`${targetRoute}?tags=${encodeURIComponent(tag)}`)}
@@ -62,9 +66,30 @@
       </a>
     {/each}
     {#if showCount && remainingCount > 0}
-      <span class="badge badge-ghost badge-{size} text-base-content/40">
-        {m.event_tags_more_count({ count: remainingCount })}
-      </span>
+      <div class="dropdown dropdown-end dropdown-bottom inline-flex">
+        <div
+          tabindex="0"
+          role="button"
+          class="badge badge-ghost badge-{size} cursor-pointer text-base-content/40 hover:text-base-content/60"
+        >
+          {m.event_tags_more_count({ count: remainingCount })}
+        </div>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <div
+          tabindex="0"
+          class="dropdown-content z-10 mt-1 flex flex-col gap-1 rounded-box bg-base-200 p-2 shadow-lg"
+        >
+          {#each hiddenTags as tag (tag)}
+            <a
+              href={resolve(`${targetRoute}?tags=${encodeURIComponent(tag)}`)}
+              class="badge badge-outline badge-{size} transition-colors hover:badge-primary"
+              title={m.event_tags_view_all_tooltip({ tag })}
+            >
+              #{tag}
+            </a>
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 {/if}

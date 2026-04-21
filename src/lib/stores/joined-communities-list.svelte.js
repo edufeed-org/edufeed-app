@@ -1,17 +1,20 @@
 import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getTagValue } from 'applesauce-core/helpers';
-import { createRelationshipLoader } from '$lib/loaders/community';
-import { CommunityRelationshipModel } from '$lib/models/community-relationship';
+import { addressLoader } from '$lib/loaders/base.js';
+import { getProfilePointersFromList } from 'applesauce-common/helpers';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
+
+const COMMUNITIES_SET_ID = 'communities';
 
 /**
  * Custom hook for loading and managing joined communities list
- * Uses loader + model pattern for efficient reactive updates
- * @returns {() => Array<import('nostr-tools').Event>} - Function returning reactive array of joined community events
+ * Uses kind 30000 follow set with d="communities" (NIP-51)
+ * @returns {() => string[]} - Function returning reactive array of joined community pubkeys
  */
 export function useJoinedCommunitiesList() {
   let activeUser = $state(manager.active);
-  let joinedCommunities = $state(/** @type {import('nostr-tools').Event[]} */ ([]));
+  let joinedCommunities = $state(/** @type {string[]} */ ([]));
 
   // Subscribe to account changes
   $effect(() => {
@@ -21,30 +24,62 @@ export function useJoinedCommunitiesList() {
     return () => subscription.unsubscribe();
   });
 
-  // Load relationship events using loader + model pattern
+  // Load follow set using addressLoader + replaceable subscription
   $effect(() => {
     if (!activeUser?.pubkey) {
       joinedCommunities = [];
       return;
     }
 
-    // 1. Bootstrap EventStore with author-specific relationship loader (fetches from relays)
-    const loaderSubscription = createRelationshipLoader(activeUser.pubkey)().subscribe();
+    const pubkey = activeUser.pubkey;
+    // Use all lookup relays as initial set
+    const relays = getAllLookupRelays();
 
-    // 2. Subscribe to model for reactive filtered data from EventStore
+    /** @type {import('rxjs').Subscription | undefined} */
+    let writeRelaySub;
+
+    // 1. Fetch the follow set from app/lookup relays
+    const loaderSubscription = addressLoader({
+      kind: 30000,
+      pubkey,
+      identifier: COMMUNITIES_SET_ID,
+      relays
+    }).subscribe();
+
+    // 2. Also fetch from user's NIP-65 write relays (outbox model)
+    // The follow set is a user-owned event that may only exist on their write relays,
+    // which may not overlap with app relays (especially in gated mode)
+    getWriteRelays(pubkey).then((writeRelays) => {
+      const newRelays = writeRelays.filter((r) => !relays.includes(r));
+      if (newRelays.length > 0) {
+        writeRelaySub = addressLoader({
+          kind: 30000,
+          pubkey,
+          identifier: COMMUNITIES_SET_ID,
+          relays: newRelays
+        }).subscribe();
+      }
+    });
+
+    // 3. Subscribe to EventStore for reactive updates
     const modelSubscription = eventStore
-      .model(CommunityRelationshipModel, activeUser.pubkey)
-      .subscribe((events) => {
-        joinedCommunities = events;
+      .replaceable(30000, pubkey, COMMUNITIES_SET_ID)
+      .subscribe((event) => {
+        if (event) {
+          const pointers = getProfilePointersFromList(event);
+          joinedCommunities = pointers.map((p) => p.pubkey);
+        } else {
+          joinedCommunities = [];
+        }
       });
 
     return () => {
       loaderSubscription.unsubscribe();
+      writeRelaySub?.unsubscribe();
       modelSubscription.unsubscribe();
     };
   });
 
-  // Return a function that provides reactive access to joined communities
   return () => joinedCommunities;
 }
 
@@ -72,12 +107,8 @@ export function useCommunityMembership(communityPubkeyOrGetter) {
     }
 
     const joinedCommunities = getJoinedCommunities();
-    return joinedCommunities.some((event) => {
-      const community = getTagValue(event, 'd');
-      return community === communityPubkey;
-    });
+    return joinedCommunities.includes(communityPubkey);
   });
 
-  // Return a getter function that provides reactive access to the joined state
   return () => joined;
 }

@@ -19,7 +19,8 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEducationalRelays: vi.fn(() => [
     'wss://amb-relay.example.com',
     'wss://oersi-relay.example.com'
-  ])
+  ]),
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({

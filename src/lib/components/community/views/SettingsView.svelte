@@ -1,5 +1,4 @@
 <script>
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { SettingsIcon } from '$lib/components/icons';
   import { leaveCommunity } from '$lib/helpers/community';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
@@ -8,7 +7,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import CompactCommunityHeader from '$lib/components/community/layout/CompactCommunityHeader.svelte';
+  import FormLinkManager from '$lib/components/forms/FormLinkManager.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { communityId, communikeyEvent, profileEvent } = $props();
@@ -33,7 +32,7 @@
 
   async function handleLeaveClick() {
     if (!activeUser) {
-      showToast('Please login to leave communities', 'error');
+      showToast(m.toast_login_to_leave(), 'error');
       return;
     }
 
@@ -43,15 +42,15 @@
     try {
       const result = await leaveCommunity(communityId);
       if (result.success) {
-        showToast('Left community', 'success');
+        showToast(m.toast_community_unfollowed(), 'success');
         // Redirect to discover page after leaving
         await goto(/** @type {string} */ (resolve('/discover')));
       } else {
-        showToast(result.error || 'Failed to leave community', 'error');
+        showToast(result.error || m.toast_community_leave_failed(), 'error');
       }
     } catch (error) {
       console.error('Error leaving community:', error);
-      showToast('An error occurred', 'error');
+      showToast(m.toast_generic_error(), 'error');
     } finally {
       isLeaving = false;
     }
@@ -59,11 +58,6 @@
 </script>
 
 <div class="bg-base-100">
-  <!-- Community Context Header -->
-  {#if profileEvent && communityId}
-    <CompactCommunityHeader communityProfile={profileEvent} communityPubkey={communityId} />
-  {/if}
-
   <div class="p-6">
     <div class="container mx-auto max-w-4xl">
       <div class="mb-6 flex items-center gap-3">
@@ -72,49 +66,46 @@
       </div>
 
       {#if profileEvent && communikeyEvent}
-        <!-- Community Information -->
-        <div class="card mb-6 bg-base-200 shadow-xl">
-          <div class="card-body">
-            <h2 class="mb-4 card-title">{m.community_views_settings_info_title()}</h2>
-
-            <div class="space-y-4">
-              <div class="flex items-center gap-4">
-                <div class="avatar">
-                  <div
-                    class="h-16 w-16 rounded-full ring ring-primary ring-offset-2 ring-offset-base-100"
-                  >
-                    <img
-                      src={getProfilePicture(profileEvent) || `https://robohash.org/${communityId}`}
-                      alt={getDisplayName(profileEvent)}
-                      onerror={(e) => {
-                        const img = /** @type {HTMLImageElement} */ (
-                          /** @type {unknown} */ (e.target)
-                        );
-                        if (img) img.src = `https://robohash.org/${communityId}`;
-                      }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold">{getDisplayName(profileEvent)}</h3>
-                  <p class="text-sm text-base-content/60">
-                    Community ID: {communityId.slice(0, 16)}...
-                  </p>
-                </div>
-              </div>
-
-              {#if communikeyEvent?.content}
-                <div>
-                  <h4 class="mb-2 font-medium">{m.community_views_settings_description_label()}</h4>
-                  <p class="text-base-content/80">{communikeyEvent.content}</p>
-                </div>
-              {/if}
+        <!-- Community Description -->
+        {#if communikeyEvent?.content}
+          <div class="card mb-6 bg-base-200 shadow-xl">
+            <div class="card-body">
+              <h2 class="mb-2 card-title">{m.community_views_settings_info_title()}</h2>
+              <p class="text-base-content/80">{communikeyEvent.content}</p>
             </div>
           </div>
-        </div>
+        {/if}
+
+        <!-- Admin Settings -->
+        {#if isOwner}
+          <div class="card bg-base-200 shadow-xl">
+            <div class="card-body">
+              <h2 class="mb-4 card-title">
+                {m.community_views_settings_admin_title()}
+              </h2>
+              <p class="mb-4 text-sm text-base-content/70">
+                {m.community_views_settings_admin_description()}
+              </p>
+
+              <div class="space-y-3">
+                <button onclick={handleEditCommunity} class="btn w-full btn-primary">
+                  {m.community_views_settings_edit_button()}
+                </button>
+                <p class="text-center text-xs text-base-content/60">
+                  {m.community_views_settings_edit_help()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Form Link Manager -->
+          <div class="mt-6">
+            <FormLinkManager communityEvent={communikeyEvent} communityPubkey={communityId} />
+          </div>
+        {/if}
 
         <!-- Community Actions -->
-        <div class="card bg-base-200 shadow-xl">
+        <div class="card mt-6 bg-base-200 shadow-xl">
           <div class="card-body">
             <h2 class="mb-4 card-title">{m.community_views_settings_actions_title()}</h2>
 
@@ -137,31 +128,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Admin Settings -->
-        {#if isOwner}
-          <div class="card mt-6 bg-base-200 shadow-xl">
-            <div class="card-body">
-              <h2 class="mb-4 card-title">
-                {m.community_views_settings_admin_title?.() || 'Admin Settings'}
-              </h2>
-              <p class="mb-4 text-sm text-base-content/70">
-                {m.community_views_settings_admin_description?.() ||
-                  'As the community owner, you can edit community settings.'}
-              </p>
-
-              <div class="space-y-3">
-                <button onclick={handleEditCommunity} class="btn w-full btn-primary">
-                  {m.community_views_settings_edit_button?.() || 'Edit Community Settings'}
-                </button>
-                <p class="text-center text-xs text-base-content/60">
-                  {m.community_views_settings_edit_help?.() ||
-                    'Configure relays, content types, badge requirements, and more.'}
-                </p>
-              </div>
-            </div>
-          </div>
-        {/if}
       {:else}
         <div class="flex items-center justify-center py-12">
           <div class="loading loading-lg loading-spinner text-primary"></div>

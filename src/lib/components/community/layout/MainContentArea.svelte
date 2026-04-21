@@ -1,103 +1,43 @@
 <script>
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { ProfileModel } from 'applesauce-core/models';
-  import { profileLoader } from '$lib/loaders/profile.js';
-  import { addressLoader } from '$lib/loaders/base.js';
+  import { getContext } from 'svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import Chat from '../views/Chat.svelte';
   import CalendarView from '$lib/components/calendar/CalendarView.svelte';
   import LearningView from '../views/LearningView.svelte';
   import BoardsView from '../views/BoardsView.svelte';
   import ArticlesView from '../views/ArticlesView.svelte';
+  import ForumView from '../views/ForumView.svelte';
+  import WikisView from '../views/WikisView.svelte';
+  import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
+  import MeetView from '$lib/components/meet/MeetView.svelte';
+  import MembersView from '../views/MembersView.svelte';
   import HomeView from '../views/HomeView.svelte';
-  import ActivityView from '../views/ActivityView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
+  import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
+  import { manager } from '$lib/stores/accounts.svelte';
+  import { getSectionNameForContentType } from '$lib/helpers/contentTypes.js';
   import * as m from '$lib/paraglide/messages';
-
-  /**
-   * Get communikey relays from app config
-   * @returns {string[]}
-   */
-  function getCommunikeyRelays() {
-    return [
-      ...(runtimeConfig.appRelays?.communikey || []),
-      ...(runtimeConfig.fallbackRelays || [])
-    ];
-  }
 
   let { selectedCommunityId, selectedContentType, onKindNavigation } = $props();
 
-  let communikeyEvent = $state(/** @type {any} */ (null));
-  let communityProfile = $state(/** @type {any} */ (null));
-  let isLoading = $state(true);
+  // Consume shared data from layout context (eliminates duplicate loading)
+  const getCommunikeyEvent = getContext('communikeyEvent');
+  const getCommunityProfile = getContext('communityProfile');
+  const getCommunikeyLoaded = getContext('communikeyLoaded');
+  const profileAccess = getContext('profileAccess');
+  const getIsMember = getContext('isCommunityMember');
 
-  // Load community profile with proper reactivity to selectedCommunityId changes
-  $effect(() => {
-    // Reset profile when community changes
-    communityProfile = null;
-
-    if (selectedCommunityId) {
-      // 1. Trigger loader to fetch profile from relays
-      const loaderSub = profileLoader({
-        kind: 0,
-        pubkey: selectedCommunityId,
-        relays: getCommunikeyRelays()
-      }).subscribe(() => {
-        // Loader automatically populates eventStore
-      });
-
-      // 2. Subscribe to model for reactive parsed profile from eventStore
-      const modelSub = eventStore
-        .model(ProfileModel, selectedCommunityId)
-        .subscribe((profileContent) => {
-          communityProfile = profileContent;
-        });
-
-      // Cleanup subscriptions when community changes
-      return () => {
-        loaderSub.unsubscribe();
-        modelSub.unsubscribe();
-      };
-    }
-  });
-
-  // Communikey Creation Pointer
-  $effect(() => {
-    if (selectedCommunityId) {
-      isLoading = true;
-
-      const pointer = {
-        kind: 10222,
-        pubkey: selectedCommunityId
-      };
-
-      // 1. Trigger loader to fetch community event from relays
-      const loaderSub = addressLoader({
-        ...pointer,
-        relays: getCommunikeyRelays()
-      }).subscribe(() => {
-        // Loader automatically populates eventStore
-      });
-
-      // 2. Subscribe to eventStore for reactive updates
-      const sub = eventStore.replaceable(pointer).subscribe((event) => {
-        communikeyEvent = event || null;
-        isLoading = false;
-      });
-
-      return () => {
-        loaderSub.unsubscribe();
-        sub.unsubscribe();
-      };
-    } else {
-      communikeyEvent = null;
-      isLoading = false;
-    }
-  });
+  let communikeyEvent = $derived(getCommunikeyEvent());
+  let communityProfile = $derived(getCommunityProfile());
+  let isLoading = $derived(!getCommunikeyLoaded());
 </script>
 
 <!-- Main Content Area -->
-<div class="flex-1 overflow-auto pb-16 transition-all duration-300 lg:ml-[304px] lg:pb-0">
+<div
+  class="min-h-0 flex-1 transition-all duration-300 lg:ml-(--sidebar-nav-w)"
+  class:overflow-auto={selectedContentType !== 'chat'}
+  class:overflow-hidden={selectedContentType === 'chat'}
+>
   {#if !selectedCommunityId}
     <!-- Empty state: No community selected -->
     <div class="flex h-full flex-col items-center justify-center p-8 text-center">
@@ -118,6 +58,15 @@
   {:else}
     <!-- Key block ensures views remount when community changes -->
     {#key selectedCommunityId}
+      {@const sectionName = getSectionNameForContentType(communikeyEvent, selectedContentType)}
+      {@const formRef = sectionName ? profileAccess.getFormRef(sectionName) : null}
+      {@const userPubkey = manager.active?.pubkey}
+      {@const canPublish = sectionName ? profileAccess.canPublish(sectionName) : true}
+
+      {#if userPubkey && getIsMember() && !canPublish && formRef && !profileAccess.isLoading}
+        <AccessGateBanner {formRef} {sectionName} {userPubkey} />
+      {/if}
+
       {#if selectedContentType === 'home'}
         <HomeView
           {communikeyEvent}
@@ -126,7 +75,12 @@
           {onKindNavigation}
         />
       {:else if selectedContentType === 'chat'}
-        <Chat {communikeyEvent} {communityProfile} communityPubkey={selectedCommunityId} />
+        <Chat
+          {communikeyEvent}
+          {communityProfile}
+          communityPubkey={selectedCommunityId}
+          {canPublish}
+        />
       {:else if selectedContentType === 'calendar'}
         <CalendarView
           communityPubkey={selectedCommunityId}
@@ -134,18 +88,21 @@
           {communityProfile}
         />
       {:else if selectedContentType === 'learning'}
-        <LearningView communityPubkey={selectedCommunityId} {communityProfile} />
+        <LearningView communityPubkey={selectedCommunityId} {communityProfile} {communikeyEvent} />
       {:else if selectedContentType === 'boards'}
         <BoardsView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'articles'}
         <ArticlesView communityPubkey={selectedCommunityId} {communityProfile} />
-      {:else if selectedContentType === 'activity'}
-        <ActivityView
-          communityId={selectedCommunityId}
-          {communikeyEvent}
-          {communityProfile}
-          communityPubkey={selectedCommunityId}
-        />
+      {:else if selectedContentType === 'forum'}
+        <ForumView communityPubkey={selectedCommunityId} {communityProfile} {canPublish} />
+      {:else if selectedContentType === 'wikis'}
+        <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
+      {:else if selectedContentType === 'social-bookmarks'}
+        <SocialBookmarksView communityPubkey={selectedCommunityId} {communityProfile} />
+      {:else if selectedContentType === 'meet'}
+        <MeetView communityPubkey={selectedCommunityId} {communityProfile} />
+      {:else if selectedContentType === 'members'}
+        <MembersView {communikeyEvent} />
       {:else if selectedContentType === 'settings'}
         <SettingsView
           communityId={selectedCommunityId}

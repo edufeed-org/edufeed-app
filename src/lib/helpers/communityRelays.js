@@ -12,14 +12,32 @@
  * @property {{amount: string, unit: string}=} fee
  * @property {{read: string|null, write: string|null}} badges
  * @property {string[]} relays
+ * @property {string|null} profileList - Profile list address: "30000:pubkey:d-tag" (new spec)
+ * @property {string|null} profileListRelay - Relay hint for the profile list (new spec)
+ * @property {string|null} formRef - Preferred form address: "30168:pubkey:d-tag" (form-driven authoring)
+ * @property {string|null} formRefRelay - Relay hint for the preferred form
  */
 
 /**
- * Parse content types from a community event (inline to avoid circular dependencies)
+ * @typedef {Object} CommunityMetadata
+ * @property {{ url: string, enforced: boolean }[]} relays
+ * @property {string[]} blossomServers
+ * @property {string[]} mints
+ * @property {string|null} tos
+ * @property {string|null} location
+ * @property {string|null} geohash
+ * @property {string[]} languages
+ * @property {string|null} livekitUrl
+ */
+
+/**
+ * Parse content types from a community event.
+ * Supports both old-spec tags (badges, exclusive, fee, roles, per-section relays)
+ * and new-spec tags (profile list a-tags).
  * @param {any} event - The kind 10222 community event
  * @returns {ContentTypeConfig[]}
  */
-function parseCommunityContentTypes(event) {
+export function parseCommunityContentTypes(event) {
   /** @type {ContentTypeConfig[]} */
   const contentTypes = [];
   /** @type {ContentTypeConfig|null} */
@@ -39,7 +57,11 @@ function parseCommunityContentTypes(event) {
         exclusive: false,
         roles: [],
         badges: { read: null, write: null },
-        relays: []
+        relays: [],
+        profileList: null,
+        profileListRelay: null,
+        formRef: null,
+        formRefRelay: null
       };
     } else if (key === 'k' && currentContentType) {
       const kind = parseInt(tag[1], 10);
@@ -57,6 +79,20 @@ function parseCommunityContentTypes(event) {
       } else {
         currentContentType.badges.write = tag[1];
       }
+    } else if (key === 'a' && currentContentType && tag[1]?.startsWith('30000:')) {
+      currentContentType.profileList = tag[1];
+      currentContentType.profileListRelay = tag[2] || null;
+    } else if (
+      key === 'a' &&
+      currentContentType &&
+      tag[1]?.startsWith('30168:') &&
+      tag[3] === 'form'
+    ) {
+      // Only the first form-marked 30168 a-tag per content section is recorded.
+      if (!currentContentType.formRef) {
+        currentContentType.formRef = tag[1];
+        currentContentType.formRefRelay = tag[2] || null;
+      }
     } else if (key === 'r' && currentContentType && tag[2] === 'content') {
       currentContentType.relays.push(tag[1]);
     }
@@ -64,6 +100,54 @@ function parseCommunityContentTypes(event) {
 
   if (currentContentType) contentTypes.push(currentContentType);
   return contentTypes;
+}
+
+/**
+ * Parse global community metadata from a kind 10222 event.
+ * Only parses tags before the first 'content' section.
+ * @param {any} event - The kind 10222 community event
+ * @returns {CommunityMetadata}
+ */
+export function parseCommunityMetadata(event) {
+  /** @type {CommunityMetadata} */
+  const metadata = {
+    relays: [],
+    blossomServers: [],
+    mints: [],
+    tos: null,
+    location: null,
+    geohash: null,
+    languages: [],
+    livekitUrl: null
+  };
+
+  if (!event || !Array.isArray(event.tags)) return metadata;
+
+  for (const tag of event.tags) {
+    if (!Array.isArray(tag) || tag.length === 0) continue;
+    const key = tag[0];
+    if (key === 'content') break;
+
+    if (key === 'r') {
+      metadata.relays.push({ url: tag[1], enforced: tag[2] === 'enforced' });
+    } else if (key === 'blossom') {
+      metadata.blossomServers.push(tag[1]);
+    } else if (key === 'mint') {
+      metadata.mints.push(tag[1]);
+    } else if (key === 'tos') {
+      metadata.tos = tag[1];
+    } else if (key === 'location') {
+      metadata.location = tag[1];
+    } else if (key === 'g') {
+      metadata.geohash = tag[1];
+    } else if (key === 'l' && tag[2] === 'ISO-639-1') {
+      metadata.languages.push(tag[1]);
+    } else if (key === 'livekit') {
+      metadata.livekitUrl = tag[1];
+    }
+  }
+
+  return metadata;
 }
 
 /**
@@ -159,6 +243,36 @@ export function getAllCommunityRelays(communityEvent) {
   }
 
   return Array.from(allRelays);
+}
+
+/**
+ * Get community relays split by enforcement status
+ * @param {any} communityEvent - The kind 10222 community event
+ * @returns {{ enforced: string[], open: string[] }}
+ */
+export function getCommunityRelaysByEnforcement(communityEvent) {
+  const metadata = parseCommunityMetadata(communityEvent);
+  return {
+    enforced: metadata.relays.filter((r) => r.enforced).map((r) => r.url),
+    open: metadata.relays.filter((r) => !r.enforced).map((r) => r.url)
+  };
+}
+
+/**
+ * Get the community's preferred form for a given content kind.
+ * Walks the content sections in order and returns the formRef of the first
+ * section that includes the kind and declares a form-marked a-tag.
+ *
+ * @param {any} communityEvent - The kind 10222 community event
+ * @param {number} kind - The event kind to resolve a form for
+ * @returns {{ address: string, relay: string } | null}
+ */
+export function getPreferredFormForKind(communityEvent, kind) {
+  if (!communityEvent) return null;
+  const contentTypes = parseCommunityContentTypes(communityEvent);
+  const match = contentTypes.find((ct) => ct.kinds.includes(kind) && ct.formRef);
+  if (!match || !match.formRef) return null;
+  return { address: match.formRef, relay: match.formRefRelay || '' };
 }
 
 /**

@@ -34,9 +34,9 @@
     if (event.color) {
       return `background-color: ${event.color}; color: #000000`;
     }
-    const colors = colorValues;
-    if (!colors) return 'color: #000000';
-    return `background-color: hsl(${colors.hue}, ${colors.saturation}%, ${colors.lightness}%); color: #000000`;
+    const color = colorValues;
+    if (!color) return 'color: #000000';
+    return `background-color: ${color}; color: #000000`;
   });
 
   /**

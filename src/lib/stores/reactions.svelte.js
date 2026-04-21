@@ -6,12 +6,14 @@ import { SvelteMap } from 'svelte/reactivity';
 import { reactionsLoader } from '$lib/loaders/reactions.js';
 import {
   normalizeReactionContent,
+  getCustomEmojiUrl,
   publishReaction,
   deleteReaction
 } from '$lib/helpers/reactions.js';
 import { manager } from './accounts.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { showToast } from '$lib/helpers/toast.js';
+import * as m from '$lib/paraglide/messages';
 import { eventStore } from './nostr-infrastructure.svelte.js';
 
 /**
@@ -140,7 +142,8 @@ class ReactionsStore {
       const existing = aggregated.get(emoji) || {
         count: 0,
         userReacted: false,
-        userReactionEvent: null
+        userReactionEvent: null,
+        emojiUrl: null
       };
 
       const isUserReaction = currentUser && reaction.pubkey === currentUser.pubkey;
@@ -148,7 +151,8 @@ class ReactionsStore {
       aggregated.set(emoji, {
         count: existing.count + 1,
         userReacted: existing.userReacted || isUserReaction,
-        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent
+        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
+        emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction)
       });
     }
 
@@ -156,36 +160,28 @@ class ReactionsStore {
   }
 
   /**
-   * React to an event
+   * React to an event (fire-and-forget — UI updates via EventStore subscription)
    * @param {any} event - The event to react to
-   * @param {string} emoji - The emoji to react with
+   * @param {string | import('applesauce-common/helpers').Emoji} emoji - The emoji to react with (string or {shortcode, url})
    * @param {string[]} [relays] - Optional relay list
    */
-  async react(event, emoji, relays) {
-    if (!event?.id) {
-      throw new Error('Invalid event');
-    }
+  react(event, emoji, relays) {
+    if (!event?.id) return;
 
     const currentUser = manager.active;
     if (!currentUser) {
-      showToast('Please sign in to react', 'error');
-      throw new Error('No active account');
+      showToast(m.toast_sign_in_to_react(), 'error');
+      return;
     }
 
-    try {
-      // Publish the reaction
-      const result = await publishReaction(event, emoji, { relays });
-
-      if (result.success) {
-        showToast('Reaction added!', 'success');
-      } else {
-        throw new Error('Failed to publish reaction');
-      }
-    } catch (error) {
-      console.error('Failed to react:', error);
-      showToast('Failed to add reaction', 'error');
-      throw error;
-    }
+    publishReaction(event, emoji, { relays })
+      .then((result) => {
+        if (!result.success) showToast(m.toast_reaction_failed(), 'error');
+      })
+      .catch((error) => {
+        console.error('Failed to react:', error);
+        showToast(m.toast_reaction_failed(), 'error');
+      });
   }
 
   /**
@@ -222,10 +218,10 @@ class ReactionsStore {
       // Remove from store
       eventStore.add(deletedEvent);
 
-      showToast('Reaction removed', 'success');
+      showToast(m.toast_reaction_removed(), 'success');
     } catch (error) {
       console.error('Failed to remove reaction:', error);
-      showToast('Failed to remove reaction', 'error');
+      showToast(m.toast_reaction_remove_failed(), 'error');
       throw error;
     }
   }

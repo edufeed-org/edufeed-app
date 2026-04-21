@@ -3,11 +3,16 @@
     HomeIcon,
     ChatIcon,
     CalendarIcon,
-    BellIcon,
     SettingsIcon,
     BookIcon,
+    GraduationCapIcon,
     KanbanIcon,
-    ScrollTextIcon
+    ScrollTextIcon,
+    ForumIcon,
+    BookmarkShareIcon,
+    MeetIcon,
+    LockIcon,
+    LockOpenIcon
   } from '$lib/components/icons';
   import { getDefaultCommunityTabs } from '$lib/helpers/contentTypes.js';
   import * as m from '$lib/paraglide/messages';
@@ -15,18 +20,33 @@
   let {
     selectedContentType = $bindable(),
     onContentTypeSelect,
-    communitySelected = true
+    communitySelected = true,
+    communityProfile = /** @type {any} */ (null),
+    communityPubkey: _communityPubkey = /** @type {string | null} */ (null),
+    restrictedTabs = /** @type {Set<string>} */ (new Set()),
+    accessibleTabs = /** @type {Set<string>} */ (new Set())
   } = $props();
+
+  import { getProfilePicture } from 'applesauce-core/helpers';
+  import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
+
+  let communityDisplayName = $derived(
+    communityProfile?.name || communityProfile?.display_name || 'Community'
+  );
+  let communityAvatarUrl = $derived(getProfilePicture(communityProfile));
 
   /** @type {Record<string, any>} */
   const iconMap = {
     home: HomeIcon,
     chat: ChatIcon,
     calendar: CalendarIcon,
-    learning: BookIcon,
+    learning: GraduationCapIcon,
     boards: KanbanIcon,
     articles: ScrollTextIcon,
-    activity: BellIcon,
+    forum: ForumIcon,
+    wikis: BookIcon,
+    'social-bookmarks': BookmarkShareIcon,
+    meet: MeetIcon,
     settings: SettingsIcon
   };
 
@@ -38,7 +58,10 @@
     learning: () => m.community_layout_bottom_tab_bar_learning(),
     boards: () => m.community_layout_bottom_tab_bar_boards(),
     articles: () => m.community_layout_bottom_tab_bar_articles(),
-    activity: () => m.community_layout_bottom_tab_bar_activity(),
+    forum: () => m.community_layout_bottom_tab_bar_forum(),
+    wikis: () => m.community_wikis_title(),
+    'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
+    meet: () => m.community_layout_bottom_tab_bar_meet(),
     settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 
@@ -61,7 +84,7 @@
 
 <!-- Desktop: Fixed right sidebar -->
 <div
-  class="fixed top-16 left-16 hidden h-[calc(100vh-8rem)] w-60 flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
+  class="fixed top-16 left-(--sidebar-icon-w) hidden h-[calc(100vh-8rem)] w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
 >
   {#if !communitySelected}
     <div
@@ -70,6 +93,21 @@
       <p class="text-sm">{m.community_layout_content_nav_select_community()}</p>
     </div>
   {:else}
+    {#if communityProfile}
+      <div class="flex items-center gap-3 p-4">
+        <div class="avatar">
+          <div class="w-9 rounded-full ring-1 ring-base-300">
+            <ImageWithFallback
+              src={communityAvatarUrl}
+              alt={communityDisplayName}
+              size="avatar_md"
+              class="h-full w-full rounded-full object-cover"
+            />
+          </div>
+        </div>
+        <h2 class="truncate text-sm font-semibold text-base-content">{communityDisplayName}</h2>
+      </div>
+    {/if}
     <nav class="menu space-y-1 p-4">
       {#each contentTypes as type (type.id)}
         {@const isActive = selectedContentType === type.id}
@@ -81,7 +119,26 @@
             : 'hover:bg-base-200'}"
         >
           <Icon class_="w-5 h-5" />
-          <span class="text-sm font-medium">{type.label}</span>
+          <span class="relative">
+            <span class="text-sm font-medium">{type.label}</span>
+            {#if restrictedTabs.has(type.id)}
+              {#if accessibleTabs.has(type.id)}
+                <span
+                  class="absolute -top-1.5 -right-3"
+                  title={m.community_content_tab_access_granted()}
+                >
+                  <LockOpenIcon class_="w-2.5 h-2.5 text-success" />
+                </span>
+              {:else}
+                <span
+                  class="absolute -top-1.5 -right-3 opacity-60"
+                  title={m.community_content_tab_restricted()}
+                >
+                  <LockIcon class_="w-2.5 h-2.5" />
+                </span>
+              {/if}
+            {/if}
+          </span>
         </button>
       {/each}
     </nav>

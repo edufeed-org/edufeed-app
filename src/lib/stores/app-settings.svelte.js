@@ -16,6 +16,8 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {'default' | 'stil' | 'rpi'} themeFamily
  * @property {'light' | 'dark' | 'system'} colorMode
  * @property {boolean} gatedMode
+ * @property {boolean} includeClientTag
+ * @property {'communities' | 'following'} dashboardFeedSource
  */
 
 /**
@@ -91,7 +93,9 @@ function getDefaultSettings() {
     debugMode: false,
     themeFamily,
     colorMode,
-    gatedMode: runtimeConfig.gatedMode?.default ?? false
+    gatedMode: runtimeConfig.gatedMode?.default ?? false,
+    includeClientTag: true,
+    dashboardFeedSource: 'communities'
   };
 }
 
@@ -109,7 +113,9 @@ function migrateSettings(stored) {
       debugMode: stored.debugMode ?? defaults.debugMode,
       themeFamily: stored.themeFamily ?? defaults.themeFamily,
       colorMode: stored.colorMode ?? defaults.colorMode,
-      gatedMode: stored.gatedMode ?? defaults.gatedMode
+      gatedMode: stored.gatedMode ?? defaults.gatedMode,
+      includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
+      dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
     };
   }
 
@@ -145,7 +151,9 @@ function migrateSettings(stored) {
     debugMode: stored.debugMode ?? defaults.debugMode,
     themeFamily,
     colorMode,
-    gatedMode: stored.gatedMode ?? defaults.gatedMode
+    gatedMode: stored.gatedMode ?? defaults.gatedMode,
+    includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
+    dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
   };
 }
 
@@ -258,6 +266,10 @@ export function initializeAppSettings() {
 /**
  * Compute effective theme reactively
  * Combines themeFamily + colorMode to produce the actual theme name
+ *
+ * IMPORTANT: This logic is mirrored in src/app.html (inline script) to avoid
+ * theme flash on initial load. Keep both in sync when adding/removing theme families.
+ *
  * @type {'light' | 'dark' | 'stil' | 'stil-dark' | 'rpi' | 'rpi-dark'}
  */
 let effectiveTheme = $derived(
@@ -376,6 +388,40 @@ export const appSettings = {
    */
   get canToggleGatedMode() {
     return !runtimeConfig.gatedMode?.force;
+  },
+
+  /**
+   * Get includeClientTag setting
+   * @returns {boolean}
+   */
+  get includeClientTag() {
+    return settings.includeClientTag;
+  },
+
+  /**
+   * Set includeClientTag setting
+   * @param {boolean} value
+   */
+  set includeClientTag(value) {
+    settings.includeClientTag = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get dashboard feed source
+   * @returns {'communities' | 'following'}
+   */
+  get dashboardFeedSource() {
+    return settings.dashboardFeedSource;
+  },
+
+  /**
+   * Set dashboard feed source
+   * @param {'communities' | 'following'} value
+   */
+  set dashboardFeedSource(value) {
+    settings.dashboardFeedSource = value;
+    saveSettings(settings);
   },
 
   /**

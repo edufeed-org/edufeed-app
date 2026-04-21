@@ -4,7 +4,7 @@
 -->
 
 <script>
-  import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { nip19 } from 'nostr-tools';
   import { goto } from '$app/navigation';
@@ -22,6 +22,10 @@
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { RepliesModel } from 'applesauce-common/models';
+  import { ChatIcon } from '$lib/components/icons';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -50,9 +54,6 @@
 
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, resource.pubkey.slice(0, 8) + '...'));
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile) || `https://robohash.org/${resource.pubkey}`
-  );
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
@@ -86,6 +87,21 @@
       identifier: resource.identifier,
       relays: relayHints.length > 0 ? relayHints : undefined
     });
+  });
+
+  let commentCount = $state(0);
+
+  // Subscribe to RepliesModel for cached comment counts (no relay fetching).
+  // Detail view handles relay fetching when the user navigates to the resource.
+  $effect(() => {
+    const rawEvent = resource?.rawEvent;
+    if (!rawEvent?.id) return;
+
+    const modelSub = eventStore.model(RepliesModel, rawEvent).subscribe((replies) => {
+      commentCount = (replies || []).length;
+    });
+
+    return () => modelSub.unsubscribe();
   });
 
   // Content type detection - only show "Open Content" for valid external URLs or nostr URIs
@@ -132,7 +148,7 @@
 {#if isList}
   <!-- List variant: horizontal row -->
   <div
-    class="amb-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:border-secondary hover:shadow-sm focus:ring-2 focus:ring-secondary focus:outline-none"
+    class="amb-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
     role="button"
     tabindex="0"
     onclick={navigateToDetail}
@@ -215,12 +231,12 @@
   </div>
 {:else}
   <div
-    class="amb-card cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:border-secondary hover:shadow-md {compact
+    class="amb-card cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md {compact
       ? 'p-3'
       : 'p-4'}"
     class:focus:outline-none={true}
     class:focus:ring-2={true}
-    class:focus:ring-secondary={true}
+    class:focus:ring-primary={true}
     class:focus:ring-opacity-50={true}
     role="button"
     tabindex="0"
@@ -229,11 +245,14 @@
   >
     <!-- Author Header -->
     <div class="mb-3 flex items-center gap-3">
-      <div class="avatar">
-        <div class="h-10 w-10 rounded-full">
-          <img src={authorAvatar} alt={authorName} loading="lazy" decoding="async" />
-        </div>
-      </div>
+      <ProfileAvatar
+        pubkey={resource.pubkey}
+        profile={authorProfile}
+        size="md"
+        linkToProfile
+        showHoverCard
+        fallbackType="robohash"
+      />
       <div class="min-w-0 flex-1">
         <div class="truncate font-medium text-base-content">{authorName}</div>
         <div class="text-sm text-base-content/60">
@@ -408,10 +427,16 @@
         </div>
       {/if}
 
-      <!-- Reactions -->
+      <!-- Reactions & Comments -->
       {#if !compact && resource.tags}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div class="pt-2" onclick={(e) => e.stopPropagation()}>
+        <div class="flex items-center gap-2 pt-2" onclick={(e) => e.stopPropagation()}>
+          {#if commentCount > 0}
+            <span class="flex items-center gap-1 text-sm text-base-content/60">
+              <ChatIcon class_="w-4 h-4" />
+              {commentCount}
+            </span>
+          {/if}
           <ReactionBar
             event={{
               id: resource.id,

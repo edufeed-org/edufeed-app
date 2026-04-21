@@ -20,6 +20,7 @@
    * @property {boolean} [showNpub] - Show truncated npub
    * @property {boolean} [showIcon] - Show trailing icon
    * @property {boolean} [linkToProfile] - Make clickable link to profile page
+   * @property {boolean} [showHoverCard] - Show hover card on inner avatar (default false, ProfileCard already shows profile info)
    * @property {() => void} [onClose] - Optional callback for modal close
    * @property {string} [class] - Additional CSS classes
    */
@@ -32,6 +33,7 @@
     showNpub = true,
     showIcon = true,
     linkToProfile = true,
+    showHoverCard = false,
     onClose = undefined,
     class: className = ''
   } = $props();
@@ -86,7 +88,7 @@
     ]} {gapClasses[size]} {className}"
     onclick={handleClick}
   >
-    <ProfileAvatar {pubkey} profile={loadedProfile} size={avatarSizes[size]} />
+    <ProfileAvatar {pubkey} profile={loadedProfile} size={avatarSizes[size]} {showHoverCard} />
     <div class="flex-1">
       <div class="font-medium text-base-content">
         {displayName}
@@ -107,7 +109,7 @@
       size
     ]} {className}"
   >
-    <ProfileAvatar {pubkey} profile={loadedProfile} size={avatarSizes[size]} />
+    <ProfileAvatar {pubkey} profile={loadedProfile} size={avatarSizes[size]} {showHoverCard} />
     <div class="flex-1">
       <div class="font-medium text-base-content">
         {displayName}

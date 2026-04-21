@@ -16,7 +16,7 @@
   import { relayUpdateSignal } from '$lib/services/app-relay-service.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
-  import { manager, useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { GlobalCalendarEventModel } from '$lib/models/global-calendar-event.js';
@@ -38,7 +38,6 @@
   import AddToCalendarButton from './AddToCalendarButton.svelte';
   import CalendarMapView from './CalendarMapView.svelte';
   import CompactCommunityHeader from '$lib/components/community/layout/CompactCommunityHeader.svelte';
-  import FloatingActionButton from './FloatingActionButton.svelte';
 
   /**
    * @typedef {import('$lib/types/calendar.js').CalendarEvent} CalendarEvent
@@ -787,8 +786,3 @@
     {/if}
   </div>
 </div>
-
-<!-- Floating Action Button for community calendars -->
-{#if communityMode && manager.active}
-  <FloatingActionButton {communityPubkey} />
-{/if}

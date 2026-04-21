@@ -33,8 +33,6 @@ import { runtimeConfig } from '$lib/stores/config.svelte.js';
  */
 export function loadFollowList(userPubkey) {
   return new Promise((resolve, reject) => {
-    console.log('👥 FollowListLoader: Loading follow list for user:', userPubkey);
-
     /** @type {string[]} */
     const relays = runtimeConfig.fallbackRelays || [];
     let hasResolved = false;
@@ -51,8 +49,6 @@ export function loadFollowList(userPubkey) {
         next: (event) => {
           if (hasResolved) return; // Ignore subsequent events
 
-          console.log('👥 FollowListLoader: Received follow list event:', event);
-
           const followList = parseFollowListEvent(event);
           hasResolved = true;
           subscription.unsubscribe();
@@ -64,7 +60,6 @@ export function loadFollowList(userPubkey) {
         },
         complete: () => {
           if (!hasResolved) {
-            console.log('👥 FollowListLoader: No follow list found for user');
             hasResolved = true;
             resolve(null);
           }
@@ -74,7 +69,6 @@ export function loadFollowList(userPubkey) {
     // Set a timeout to resolve with null if no response after 5 seconds
     setTimeout(() => {
       if (!hasResolved) {
-        console.log('👥 FollowListLoader: Timeout - no follow list received');
         hasResolved = true;
         subscription.unsubscribe();
         resolve(null);
@@ -112,12 +106,6 @@ export function parseFollowListEvent(event) {
     createdAt: event.created_at
   };
 
-  console.log('👥 FollowListLoader: Parsed follow list:', {
-    name: followList.name,
-    count: followList.count,
-    pubkeys: followList.pubkeys.slice(0, 5) // Log first 5 for debugging
-  });
-
   return followList;
 }
 
@@ -128,8 +116,6 @@ export function parseFollowListEvent(event) {
  */
 export function loadFollowSets(userPubkey) {
   return new Promise((resolve, reject) => {
-    console.log('👥 FollowListLoader: Loading follow sets (NIP-51) for user:', userPubkey);
-
     /** @type {string[]} */
     const relays = runtimeConfig.fallbackRelays || [];
     /** @type {FollowList[]} */
@@ -145,7 +131,6 @@ export function loadFollowSets(userPubkey) {
       .pipe(onlyEvents())
       .subscribe({
         next: (event) => {
-          console.log('👥 FollowListLoader: Received follow set event:', event);
           const followSet = parseFollowSetEvent(event);
           followSets.push(followSet);
         },
@@ -155,7 +140,6 @@ export function loadFollowSets(userPubkey) {
         },
         complete: () => {
           if (!hasCompleted) {
-            console.log(`👥 FollowListLoader: Loaded ${followSets.length} follow sets`);
             hasCompleted = true;
             resolve(followSets);
           }
@@ -165,9 +149,6 @@ export function loadFollowSets(userPubkey) {
     // Set a timeout to resolve with current sets after 5 seconds
     setTimeout(() => {
       if (!hasCompleted) {
-        console.log(
-          `👥 FollowListLoader: Timeout - returning ${followSets.length} follow sets received so far`
-        );
         hasCompleted = true;
         subscription.unsubscribe();
         resolve(followSets);
@@ -213,13 +194,6 @@ export function parseFollowSetEvent(event) {
     createdAt: event.created_at
   };
 
-  console.log('👥 FollowListLoader: Parsed follow set:', {
-    name: followSet.name,
-    description: followSet.description,
-    count: followSet.count,
-    pubkeys: followSet.pubkeys.slice(0, 5) // Log first 5 for debugging
-  });
-
   return followSet;
 }
 
@@ -243,9 +217,6 @@ export function getAuthorsFromFollowLists(followLists, selectedListIds) {
   });
 
   const uniquePubkeys = Array.from(pubkeysSet);
-  console.log(
-    `👥 FollowListLoader: Extracted ${uniquePubkeys.length} unique authors from ${selectedLists.length} follow lists`
-  );
 
   return uniquePubkeys;
 }

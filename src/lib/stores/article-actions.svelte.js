@@ -3,12 +3,11 @@
  * Actions for creating and managing long-form articles (NIP-23, kind 30023)
  */
 
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
-import { createTargetedPublication } from '$lib/services/targeted-publication.js';
 
 /** Kind number for NIP-23 long-form articles */
 const ARTICLE_KIND = 30023;
@@ -91,7 +90,7 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
 
   const tags = buildArticleTags(formData, undefined, communityPubkey);
 
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const eventTemplate = await eventFactory.build({
     kind: ARTICLE_KIND,
     content: formData.content,
@@ -102,10 +101,6 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
   publishEventOptimistic(articleEvent, [], { communityEvent });
 
   const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
-
-  if (communityPubkey) {
-    await createTargetedPublication(articleEvent, communityPubkey, communityEvent);
-  }
 
   return { event: articleEvent, naddr };
 }
@@ -144,7 +139,7 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
 
   const tags = buildArticleTags(formData, dTag, hTag || undefined);
 
-  const eventFactory = new EventFactory();
+  const eventFactory = createAppEventFactory();
   const eventTemplate = await eventFactory.build({
     kind: ARTICLE_KIND,
     content: formData.content,

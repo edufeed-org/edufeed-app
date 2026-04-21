@@ -9,30 +9,11 @@
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.js';
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
-import { getRelaysForKind, getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
-import { manager } from '$lib/stores/accounts.svelte.js';
-import { isWarmAndAuthenticated } from './relay-warming-service.svelte.js';
-
-/**
- * Authenticate with a relay, with timeout
- * @param {import('applesauce-relay').Relay} relay
- * @param {any} signer
- * @param {number} timeout
- * @returns {Promise<boolean>} Whether auth succeeded
- */
-async function authenticateRelay(relay, signer, timeout = 3000) {
-  try {
-    await Promise.race([
-      relay.authenticate(signer),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Auth timeout')), timeout))
-    ]);
-    return true;
-  } catch {
-    // Auth not required or timed out - continue anyway
-    return false;
-  }
-}
-
+import {
+  getRelaysForKind,
+  getCommunityGlobalRelays,
+  getCommunityRelaysByEnforcement
+} from '$lib/helpers/communityRelays.js';
 /**
  * @typedef {Object} PublishStatus
  * @property {string} eventId - Event ID being published
@@ -117,8 +98,12 @@ export async function publishEvent(signedEvent, taggedPubkeys = [], opts = {}) {
     // Add community's relays for this content type
     getRelaysForKind(communityEvent, signedEvent.kind).forEach((r) => relaySet.add(r));
 
-    // Add community's global relays
+    // Add community's global relays (including enforced)
     getCommunityGlobalRelays(communityEvent).forEach((r) => relaySet.add(r));
+
+    // Ensure enforced relays are always included
+    const { enforced } = getCommunityRelaysByEnforcement(communityEvent);
+    enforced.forEach((r) => relaySet.add(r));
   }
 
   // 4. Additional relays (explicit)
@@ -130,12 +115,6 @@ export async function publishEvent(signedEvent, taggedPubkeys = [], opts = {}) {
   const publishPromises = publishRelays.map(async (relayUrl) => {
     try {
       const relay = pool.relay(relayUrl);
-
-      // Authenticate if not already warm+authenticated (with 3s timeout)
-      if (!isWarmAndAuthenticated(relayUrl) && manager.active?.signer) {
-        await authenticateRelay(relay, manager.active.signer, 3000);
-      }
-
       await relay.publish(signedEvent, { timeout });
       return { relay: relayUrl, success: true };
     } catch (err) {
@@ -224,6 +203,8 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
       getAppRelaysForCategory('communikey').forEach((r) => relaySet.add(r));
       getRelaysForKind(communityEvent, signedEvent.kind).forEach((r) => relaySet.add(r));
       getCommunityGlobalRelays(communityEvent).forEach((r) => relaySet.add(r));
+      const { enforced } = getCommunityRelaysByEnforcement(communityEvent);
+      enforced.forEach((r) => relaySet.add(r));
     }
 
     // Additional relays
@@ -241,12 +222,6 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
     const publishPromises = publishRelays.map(async (relayUrl) => {
       try {
         const relay = pool.relay(relayUrl);
-
-        // Authenticate if not already warm+authenticated (with 3s timeout)
-        if (!isWarmAndAuthenticated(relayUrl) && manager.active?.signer) {
-          await authenticateRelay(relay, manager.active.signer, 3000);
-        }
-
         await relay.publish(signedEvent, { timeout });
 
         // Update success count

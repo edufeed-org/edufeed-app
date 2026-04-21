@@ -20,11 +20,7 @@ export {
 } from './calendar.js';
 
 // Community loaders
-export {
-  communikeyTimelineLoader,
-  createRelationshipLoader,
-  createCommunityMembersLoader
-} from './community.js';
+export { communikeyTimelineLoader } from './community.js';
 
 // Profile utilities
 export { profileLoader, loadUserProfile, kind1Loader } from './profile.js';
@@ -49,7 +45,7 @@ export {
 } from './calendar-event-loader.svelte';
 
 // Comments loader
-export { createCommentLoader } from './comments.js';
+export { createCommentLoaderForEvent } from './comments.js';
 
 // Reactions loader
 export { reactionsLoader } from './reactions.js';

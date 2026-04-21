@@ -10,6 +10,7 @@
   /** @type {(path: string) => string} */
   const resolve = /** @type {any} */ (_resolve);
   import { getLocale } from '$lib/paraglide/runtime.js';
+  import * as m from '$lib/paraglide/messages';
   import { manager } from '$lib/stores/accounts.svelte';
   import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, CloseIcon } from '$lib/components/icons';
   import SKOSDropdown from './SKOSDropdown.svelte';
@@ -22,7 +23,7 @@
   /**
    * @typedef {{ id: string, label: string }} SelectedConcept
    * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
-   * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string }} Creator
+   * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string }} Creator
    */
 
   /**
@@ -145,12 +146,12 @@
   ];
 
   // Step titles
-  const stepTitles = [
-    'Basic Information',
-    'Classification',
-    'Content & Creators',
-    'License & Publish'
-  ];
+  const stepTitles = $derived([
+    m.amb_form_step_basic(),
+    m.amb_form_step_classification(),
+    m.amb_form_step_content(),
+    m.amb_form_step_license()
+  ]);
 
   // Import helper functions for extracting data from events
   import {
@@ -281,7 +282,7 @@
    */
   function handleIdentifierBlur() {
     if (formData.identifier?.trim() && !isValidUrl(formData.identifier)) {
-      identifierUrlError = 'Please enter a valid URL or leave empty';
+      identifierUrlError = m.amb_form_validation_url();
     } else {
       identifierUrlError = '';
     }
@@ -297,29 +298,29 @@
     switch (currentStep) {
       case 1:
         if (formData.identifier?.trim() && !isValidUrl(formData.identifier)) {
-          validationErrors.push('Resource URL must be a valid URL or left empty');
-          identifierUrlError = 'Please enter a valid URL or leave empty';
+          validationErrors.push(m.amb_form_validation_identifier());
+          identifierUrlError = m.amb_form_validation_url();
         }
         if (!formData.name.trim()) {
-          validationErrors.push('Title is required');
+          validationErrors.push(m.amb_form_validation_title());
         }
         if (!formData.description.trim()) {
-          validationErrors.push('Description is required');
+          validationErrors.push(m.amb_form_validation_description());
         }
         break;
       case 2:
         if (formData.learningResourceType.length === 0) {
-          validationErrors.push('Please select at least one resource type');
+          validationErrors.push(m.amb_form_validation_resource_type());
         }
         if (formData.about.length === 0) {
-          validationErrors.push('Please select at least one subject');
+          validationErrors.push(m.amb_form_validation_subject());
         }
         break;
       case 3:
         break;
       case 4:
         if (!formData.license) {
-          validationErrors.push('Please select a license');
+          validationErrors.push(m.amb_form_validation_license());
         }
         break;
     }
@@ -346,7 +347,7 @@
   async function handleSubmit() {
     if (!validateCurrentStep()) return;
     if (!activeUser) {
-      submitError = 'Please log in to publish';
+      submitError = m.amb_form_validation_login();
       return;
     }
 
@@ -390,7 +391,7 @@
       }
     } catch (error) {
       console.error('Error publishing resource:', error);
-      submitError = error instanceof Error ? error.message : 'Failed to publish';
+      submitError = error instanceof Error ? error.message : m.amb_form_error_publish_failed();
     } finally {
       isSubmitting = false;
     }
@@ -441,10 +442,14 @@
   <!-- Header -->
   <div class="mb-6">
     <h2 id="form-title" class="text-xl font-semibold text-base-content">
-      {isEditMode ? 'Edit Educational Resource' : 'Create Educational Resource'}
+      {isEditMode ? m.amb_form_title_edit() : m.amb_form_title_create()}
     </h2>
     <p class="mt-1 text-sm text-base-content/60">
-      Step {currentStep} of {totalSteps}: {stepTitles[currentStep - 1]}
+      {m.amb_form_step_indicator({
+        currentStep: String(currentStep),
+        totalSteps: String(totalSteps)
+      })}
+      {stepTitles[currentStep - 1]}
     </p>
   </div>
 
@@ -482,7 +487,7 @@
         <!-- Resource URL (Identifier) -->
         <div class="form-control">
           <label class="label" for="amb-identifier">
-            <span class="label-text font-medium">Resource URL (optional)</span>
+            <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
           </label>
           <input
             id="amb-identifier"
@@ -491,7 +496,7 @@
             class:input-error={identifierUrlError}
             bind:value={formData.identifier}
             onblur={handleIdentifierBlur}
-            placeholder="https://example.com/my-resource"
+            placeholder={m.amb_form_placeholder_identifier()}
             readonly={isEditMode}
             disabled={isEditMode}
           />
@@ -502,9 +507,7 @@
           {:else}
             <div class="label">
               <span class="label-text-alt text-base-content/60">
-                {isEditMode
-                  ? 'URL cannot be changed when editing.'
-                  : 'Enter the URL where this content is hosted. Leave empty to auto-generate an identifier.'}
+                {isEditMode ? m.amb_form_help_url_no_edit() : m.amb_form_help_url_enter()}
               </span>
             </div>
           {/if}
@@ -513,28 +516,31 @@
         <!-- Title -->
         <div class="form-control">
           <label class="label" for="amb-title">
-            <span class="label-text font-medium">Title <span class="text-error">*</span></span>
+            <span class="label-text font-medium"
+              >{m.amb_form_label_title()} <span class="text-error">*</span></span
+            >
           </label>
           <input
             id="amb-title"
             type="text"
             class="input-bordered input w-full"
             bind:value={formData.name}
-            placeholder="Enter a descriptive title"
+            placeholder={m.amb_form_placeholder_title()}
           />
         </div>
 
         <!-- Description -->
         <div class="form-control">
           <label class="label" for="amb-description">
-            <span class="label-text font-medium">Description <span class="text-error">*</span></span
+            <span class="label-text font-medium"
+              >{m.amb_form_label_description()} <span class="text-error">*</span></span
             >
           </label>
           <textarea
             id="amb-description"
             class="textarea-bordered resize-vertical textarea w-full"
             bind:value={formData.description}
-            placeholder="Describe the educational content"
+            placeholder={m.amb_form_placeholder_description()}
             rows="4"
           ></textarea>
         </div>
@@ -542,7 +548,9 @@
         <!-- Language -->
         <div class="form-control">
           <label class="label" for="amb-language">
-            <span class="label-text font-medium">Language <span class="text-error">*</span></span>
+            <span class="label-text font-medium"
+              >{m.amb_form_label_language()} <span class="text-error">*</span></span
+            >
           </label>
           <select
             id="amb-language"
@@ -558,14 +566,14 @@
         <!-- Image URL -->
         <div class="form-control">
           <label class="label" for="amb-image">
-            <span class="label-text font-medium">Thumbnail Image URL (optional)</span>
+            <span class="label-text font-medium">{m.amb_form_label_image()}</span>
           </label>
           <input
             id="amb-image"
             type="url"
             class="input-bordered input w-full"
             bind:value={formData.image}
-            placeholder="https://..."
+            placeholder={m.amb_form_placeholder_image()}
           />
         </div>
       </div>
@@ -578,34 +586,34 @@
         <SKOSDropdown
           vocabularyKey="learningResourceType"
           bind:selected={formData.learningResourceType}
-          label="Resource Type"
-          placeholder="Select resource type(s)"
+          label={m.amb_form_label_resource_type()}
+          placeholder={m.amb_form_placeholder_resource_type()}
           required={true}
           multiple={true}
-          helpText="What type of educational content is this?"
+          helpText={m.amb_form_help_resource_type()}
         />
 
         <!-- Subject -->
         <SKOSDropdown
           vocabularyKey="about"
           bind:selected={formData.about}
-          label="Subject / Topic"
-          placeholder="Select subject(s)"
+          label={m.amb_form_label_subject()}
+          placeholder={m.amb_form_placeholder_subject()}
           required={true}
           multiple={true}
-          helpText="What subjects does this resource cover?"
+          helpText={m.amb_form_help_subject()}
         />
 
         <!-- Keywords -->
         <div class="form-control">
           <label class="label" for="amb-keywords">
-            <span class="label-text font-medium">Keywords (optional)</span>
+            <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
           </label>
           <input
             id="amb-keywords"
             type="text"
             class="input-bordered input w-full"
-            placeholder="Type and press Enter to add"
+            placeholder={m.amb_form_placeholder_keywords()}
             onkeydown={handleAddKeyword}
           />
           {#if formData.keywords.length > 0}
@@ -634,23 +642,23 @@
         <!-- Creators -->
         <CreatorInput
           bind:creators={formData.creators}
-          label="Creators / Authors"
-          helpText="Add the people or organizations who created this content"
+          label={m.amb_form_label_creators()}
+          helpText={m.amb_form_help_creators()}
         />
 
         <!-- File Upload -->
         <BlossomUploader
           bind:files={formData.encodings}
-          label="Content Files (optional)"
-          helpText="Upload PDFs, videos, or other content files"
+          label={m.amb_form_label_content_files()}
+          helpText={m.amb_form_help_content_files()}
           multiple={true}
         />
 
         <!-- External URLs -->
         <ExternalUrlInput
           bind:urls={formData.externalUrls}
-          label="External References (optional)"
-          helpText="Add links to external content (YouTube, Vimeo, websites, etc.)"
+          label={m.amb_form_label_external_refs()}
+          helpText={m.amb_form_help_external_refs()}
         />
       </div>
     {/if}
@@ -661,7 +669,9 @@
         <!-- License -->
         <div class="form-control">
           <label class="label" for="amb-license">
-            <span class="label-text font-medium">License <span class="text-error">*</span></span>
+            <span class="label-text font-medium"
+              >{m.amb_form_label_license()} <span class="text-error">*</span></span
+            >
           </label>
           <select
             id="amb-license"
@@ -680,7 +690,7 @@
               rel="noopener noreferrer"
               class="label-text-alt link link-primary"
             >
-              View license details →
+              {m.amb_form_link_license_details()}
             </a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </div>
@@ -694,51 +704,51 @@
               class="checkbox checkbox-primary"
               bind:checked={formData.isAccessibleForFree}
             />
-            <span class="label-text">This resource is freely accessible</span>
+            <span class="label-text">{m.amb_form_checkbox_free_access()}</span>
           </label>
         </div>
 
         <!-- Preview Summary -->
         <div class="rounded-lg bg-base-200 p-4">
-          <h3 class="mb-3 font-medium">Summary</h3>
+          <h3 class="mb-3 font-medium">{m.amb_form_label_summary()}</h3>
           <dl class="space-y-2 text-sm">
             <div class="flex">
-              <dt class="w-28 text-base-content/60">Title:</dt>
+              <dt class="w-28 text-base-content/60">{m.amb_form_summary_title()}</dt>
               <dd class="flex-1 font-medium">{formData.name || '—'}</dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">Language:</dt>
+              <dt class="w-28 text-base-content/60">{m.amb_form_summary_language()}</dt>
               <dd class="flex-1">
                 {languageOptions.find((l) => l.code === formData.inLanguage)?.label}
               </dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">Type:</dt>
+              <dt class="w-28 text-base-content/60">{m.amb_form_summary_type()}</dt>
               <dd class="flex-1">
                 {formData.learningResourceType.map((t) => t.label).join(', ') || '—'}
               </dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">Subject:</dt>
+              <dt class="w-28 text-base-content/60">{m.amb_form_summary_subject()}</dt>
               <dd class="flex-1">{formData.about.map((s) => s.label).join(', ') || '—'}</dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">Creators:</dt>
+              <dt class="w-28 text-base-content/60">{m.amb_form_summary_creators()}</dt>
               <dd class="flex-1">{formData.creators.map((c) => c.name).join(', ') || '—'}</dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">Files:</dt>
+              <dt class="w-28 text-base-content/60">{m.amb_form_summary_files()}</dt>
               <dd class="flex-1">{formData.encodings.length} file(s)</dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">License:</dt>
+              <dt class="w-28 text-base-content/60">{m.amb_form_summary_license()}</dt>
               <dd class="flex-1">
                 {licenseOptions.find((l) => l.id === formData.license)?.label}
               </dd>
             </div>
             {#if formData.externalUrls.length > 0}
               <div class="flex">
-                <dt class="w-28 text-base-content/60">External URLs:</dt>
+                <dt class="w-28 text-base-content/60">{m.amb_form_summary_external_urls()}</dt>
                 <dd class="flex-1">{formData.externalUrls.length} link(s)</dd>
               </div>
             {/if}
@@ -761,7 +771,7 @@
                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <span>This resource will be shared with the community.</span>
+            <span>{m.amb_form_info_community_share()}</span>
           </div>
         {/if}
       </div>
@@ -790,27 +800,27 @@
   <div class="mt-6 flex items-center justify-between border-t border-base-300 pt-4">
     {#if currentStep === 1}
       <button type="button" class="btn btn-outline" onclick={handleCancel} disabled={isSubmitting}>
-        Cancel
+        {m.common_cancel()}
       </button>
     {:else}
       <button type="button" class="btn btn-outline" onclick={prevStep} disabled={isSubmitting}>
         <ChevronLeftIcon class_="w-4 h-4" />
-        Back
+        {m.common_back()}
       </button>
     {/if}
 
     {#if currentStep < totalSteps}
       <button type="button" class="btn btn-primary" onclick={nextStep}>
-        Next
+        {m.common_next()}
         <ChevronRightIcon class_="w-4 h-4" />
       </button>
     {:else}
       <button type="button" class="btn btn-primary" onclick={handleSubmit} disabled={isSubmitting}>
         {#if isSubmitting}
           <span class="loading loading-sm loading-spinner"></span>
-          {isEditMode ? 'Updating...' : 'Publishing...'}
+          {isEditMode ? m.amb_form_button_updating() : m.amb_form_button_publishing()}
         {:else}
-          {isEditMode ? 'Update Resource' : 'Publish Resource'}
+          {isEditMode ? m.amb_form_button_update() : m.amb_form_button_publish()}
         {/if}
       </button>
     {/if}

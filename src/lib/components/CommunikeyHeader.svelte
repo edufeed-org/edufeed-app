@@ -1,10 +1,7 @@
 <script>
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
-  import { EventFactory } from 'applesauce-core/event-factory';
-  import { manager } from '$lib/stores/accounts.svelte';
-  import { publishEvent } from '$lib/services/publish-service.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { joinCommunity as joinCommunityHelper } from '$lib/helpers/community';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -69,25 +66,7 @@
    * Join the community
    */
   async function joinCommunity() {
-    const factory = new EventFactory({ signer: manager.active?.signer });
-    const joinEvent = await factory.build({
-      kind: 30382,
-      tags: [
-        ['d', communikeyEvent.pubkey],
-        ['n', 'follow']
-      ]
-    });
-    // Sign the event
-    const signedEvent = await factory.sign(joinEvent);
-    console.log('Signed Join Event:', signedEvent);
-
-    // Publish using outbox model + communikey relays (for kind 30382)
-    const result = await publishEvent(signedEvent, [communikeyEvent.pubkey]);
-
-    if (result.success) {
-      eventStore.add(signedEvent);
-    }
-
+    const result = await joinCommunityHelper(communikeyEvent.pubkey);
     return result.success;
   }
 </script>
@@ -133,71 +112,76 @@
   </div>
 
   <!-- Bottom Section: Interactive Content Type Tabs -->
-  <div class="border-t border-base-200">
-    <div class="relative">
-      <!-- Left scroll indicator -->
-      {#if showLeftScroll}
-        <button
-          onclick={() => scrollTabs('left')}
-          class="absolute top-0 bottom-0 left-0 z-10 flex w-8 items-center justify-start bg-gradient-to-r from-base-100 to-transparent pl-1"
-          aria-label="Scroll tabs left"
-        >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
-      {/if}
-
-      <!-- Right scroll indicator -->
-      {#if showRightScroll}
-        <button
-          onclick={() => scrollTabs('right')}
-          class="absolute top-0 right-0 bottom-0 z-10 flex w-8 items-center justify-end bg-gradient-to-l from-base-100 to-transparent pr-1"
-          aria-label="Scroll tabs right"
-        >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-        </button>
-      {/if}
-
-      <div bind:this={tabScrollContainer} class="tabs-bordered scrollbar-hide tabs overflow-x-auto">
-        {#each communikeyContentTypes as contentType (contentType.kind)}
+  {#if communikeyContentTypes?.length > 0}
+    <div class="border-t border-base-200">
+      <div class="relative">
+        <!-- Left scroll indicator -->
+        {#if showLeftScroll}
           <button
-            class="tab-bordered tab {activeTab === contentType.kind
-              ? 'tab-active'
-              : ''} {!contentType.enabled ? 'cursor-not-allowed opacity-50' : ''}"
-            onclick={() => handleTabClick(contentType.kind, contentType.enabled)}
-            disabled={!contentType.enabled}
-            title={contentType.description}
+            onclick={() => scrollTabs('left')}
+            class="absolute top-0 bottom-0 left-0 z-10 flex w-8 items-center justify-start bg-gradient-to-r from-base-100 to-transparent pl-1"
+            aria-label={m.aria_scroll_tabs_left()}
           >
-            <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
-                d={contentType.icon}
+                d="M15 19l-7-7 7-7"
               />
             </svg>
-            {contentType.name}
-            {#if !contentType.enabled}
-              <span class="ml-1 text-xs">🔒</span>
-            {/if}
           </button>
-        {/each}
+        {/if}
+
+        <!-- Right scroll indicator -->
+        {#if showRightScroll}
+          <button
+            onclick={() => scrollTabs('right')}
+            class="absolute top-0 right-0 bottom-0 z-10 flex w-8 items-center justify-end bg-gradient-to-l from-base-100 to-transparent pr-1"
+            aria-label={m.aria_scroll_tabs_right()}
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </button>
+        {/if}
+
+        <div
+          bind:this={tabScrollContainer}
+          class="tabs-bordered scrollbar-hide tabs overflow-x-auto"
+        >
+          {#each communikeyContentTypes as contentType (contentType.kind)}
+            <button
+              class="tab-bordered tab {activeTab === contentType.kind
+                ? 'tab-active'
+                : ''} {!contentType.enabled ? 'cursor-not-allowed opacity-50' : ''}"
+              onclick={() => handleTabClick(contentType.kind, contentType.enabled)}
+              disabled={!contentType.enabled}
+              title={contentType.description}
+            >
+              <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d={contentType.icon}
+                />
+              </svg>
+              {contentType.name}
+              {#if !contentType.enabled}
+                <span class="ml-1 text-xs">🔒</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
       </div>
     </div>
-  </div>
+  {/if}
 </div>
 
 <style>

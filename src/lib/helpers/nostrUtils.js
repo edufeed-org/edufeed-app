@@ -1,7 +1,8 @@
 import { nip19 } from 'nostr-tools';
 import { eventLoader, addressLoader } from '$lib/loaders';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout, catchError, of } from 'rxjs';
 import { getSeenRelays } from 'applesauce-core/helpers';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getCalendarEventStart } from 'applesauce-common/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { parseCalendarTimestamp } from '$lib/helpers/calendar.js';
@@ -169,6 +170,15 @@ export function isCalendarIdentifier(decoded) {
 }
 
 /**
+ * Check if identifier points to a wiki event (NIP-54)
+ * @param {ReturnType<typeof decodeNostrIdentifier>} decoded - Decoded identifier
+ * @returns {boolean}
+ */
+export function isWikiIdentifier(decoded) {
+  return decoded.success && decoded.type === 'naddr' && decoded.data.kind === 30818;
+}
+
+/**
  * Fetches a Nostr event using various identifier types
  *
  * @param identifier {string} - Can be an event ID, naddr, or other identifier
@@ -201,10 +211,18 @@ export const fetchEventById = async (identifier) => {
           // Include relay hints if present (addressLoader will prioritize them)
           if (data.relays && data.relays.length > 0) {
             addressPointer.relays = data.relays;
+          } else {
+            // No relay hints in naddr — provide lookup relays explicitly.
+            // addressLoader's lookupRelays config is captured at module init
+            // (before runtimeConfig loads), so we must pass relays in the pointer.
+            addressPointer.relays = getAllLookupRelays();
           }
 
           // Use addressLoader for addressable events (fetches from relays)
-          const event$ = addressLoader(addressPointer);
+          const event$ = addressLoader(addressPointer).pipe(
+            timeout(3000),
+            catchError(() => of(null))
+          );
           const event = await firstValueFrom(event$, { defaultValue: null });
           return event || null;
         } else {
@@ -214,13 +232,44 @@ export const fetchEventById = async (identifier) => {
         console.error('Error decoding naddr:', error);
         return null;
       }
+    } else if (identifier.startsWith('nevent')) {
+      // If it's a nevent, decode it to get the event pointer
+      try {
+        const decoded = nip19.decode(identifier);
+        if (decoded.type === 'nevent') {
+          const data = decoded.data;
+
+          // Check EventStore first
+          const localEvent = eventStore.getEvent(data.id);
+          if (localEvent) return localEvent;
+
+          // Union hint relays with lookup relays (hints may point to dead relays)
+          const hintRelays = data.relays?.length ? data.relays : [];
+          const lookupRelays = getAllLookupRelays();
+          const relays = [...new Set([...hintRelays, ...lookupRelays])];
+          const event$ = eventLoader({ id: data.id, relays }).pipe(
+            timeout(3000),
+            catchError(() => of(null))
+          );
+          const event = await firstValueFrom(event$, { defaultValue: null });
+          return event || null;
+        } else {
+          throw new Error('Invalid nevent format');
+        }
+      } catch (error) {
+        console.error('Error decoding nevent:', error);
+        return null;
+      }
     } else if (identifier.startsWith('note')) {
       // If it's a note ID
       try {
         const decoded = nip19.decode(identifier);
         if (decoded.type === 'note') {
           // Use eventLoader for event IDs
-          const event$ = eventLoader({ id: decoded.data });
+          const event$ = eventLoader({ id: decoded.data }).pipe(
+            timeout(3000),
+            catchError(() => of(null))
+          );
           const event = await firstValueFrom(event$, { defaultValue: null });
           return event || null;
         } else {
@@ -233,7 +282,10 @@ export const fetchEventById = async (identifier) => {
     } else {
       // Assume it's a raw event ID - use eventLoader
       try {
-        const event$ = eventLoader({ id: identifier });
+        const event$ = eventLoader({ id: identifier }).pipe(
+          timeout(3000),
+          catchError(() => of(null))
+        );
         const event = await firstValueFrom(event$, { defaultValue: null });
         return event || null;
       } catch (error) {
@@ -432,29 +484,77 @@ export const encodeEventToNaddr = (event, relays = []) => {
 };
 
 /**
- * Generate a color based on the author's pubkey
- * Algorithm:
- * 1. Convert HEX pubkey to Int (using first 8 chars)
- * 2. Calculate Hue: Int % 360
- * 3. Set Saturation: 90 for Hues 216-273, otherwise 80
- * 4. Set Brightness: 65 for Hues 32-212, otherwise 85
+ * NIP-C1 core: convert a hue (0-359) to RGB using fixed saturation
+ * and adaptive brightness. Shared by pubkey and kind color functions.
+ *
+ * @param {number} hue - Hue value (0-359)
+ * @returns {{r: number, g: number, b: number}}
+ */
+function hueToRGB(hue) {
+  const s = 0.7;
+  const v = hue >= 32 && hue <= 204 ? 0.75 : hue >= 216 && hue <= 273 ? 0.96 : 0.9;
+
+  const c = v * s;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = v - c;
+  let r1, g1, b1;
+  if (hue < 60) [r1, g1, b1] = [c, x, 0];
+  else if (hue < 120) [r1, g1, b1] = [x, c, 0];
+  else if (hue < 180) [r1, g1, b1] = [0, c, x];
+  else if (hue < 240) [r1, g1, b1] = [0, x, c];
+  else if (hue < 300) [r1, g1, b1] = [x, 0, c];
+  else [r1, g1, b1] = [c, 0, x];
+
+  return {
+    r: Math.round((r1 + m) * 255),
+    g: Math.round((g1 + m) * 255),
+    b: Math.round((b1 + m) * 255)
+  };
+}
+
+/**
+ * Generate deterministic RGB values from a pubkey (NIP-C1).
  *
  * @param {string} pubkey - Hex public key
- * @returns {{ hue: number, saturation: number, lightness: number }} HSL color values
+ * @returns {{r: number, g: number, b: number}} RGB values (0-255)
+ */
+export function generateAuthorColorRGB(pubkey) {
+  if (!pubkey || typeof pubkey !== 'string') return { r: 128, g: 128, b: 128 };
+  const hue = Number(BigInt('0x' + pubkey) % 360n);
+  return hueToRGB(hue);
+}
+
+/**
+ * Generate deterministic RGB values from a Nostr event kind number.
+ * Uses Knuth multiplicative hash for good hue distribution of small integers.
+ *
+ * @param {number} kind - Nostr event kind
+ * @returns {{r: number, g: number, b: number}}
+ */
+export function generateKindColorRGB(kind) {
+  if (kind === undefined || kind === null) return { r: 128, g: 128, b: 128 };
+  const hue = Number((BigInt(kind) * 2654435761n) % 360n);
+  return hueToRGB(hue);
+}
+
+/**
+ * Generate a deterministic CSS color string from a Nostr event kind number.
+ *
+ * @param {number} kind - Nostr event kind
+ * @returns {string} CSS rgb() color string
+ */
+export function generateKindColor(kind) {
+  const { r, g, b } = generateKindColorRGB(kind);
+  return `rgb(${r},${g},${b})`;
+}
+
+/**
+ * Generate a deterministic CSS color from a pubkey (NIP-C1).
+ *
+ * @param {string} pubkey - Hex public key
+ * @returns {string} CSS rgb() color string
  */
 export function generateAuthorColor(pubkey) {
-  // Use first 8 hex characters to avoid BigInt complexity
-  const hexSubset = pubkey.slice(0, 8);
-  const int = parseInt(hexSubset, 16);
-
-  // Calculate hue (0-360)
-  const hue = int % 360;
-
-  // Set saturation based on hue range
-  const saturation = hue >= 216 && hue <= 273 ? 90 : 80;
-
-  // Set lightness (brightness) based on hue range
-  const lightness = hue >= 32 && hue <= 212 ? 65 : 85;
-
-  return { hue, saturation, lightness };
+  const { r, g, b } = generateAuthorColorRGB(pubkey);
+  return `rgb(${r},${g},${b})`;
 }

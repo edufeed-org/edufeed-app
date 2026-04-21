@@ -348,25 +348,135 @@ export function generateTestEvents() {
   );
 
   // 30 kind 10222 community definitions (one per unique keypair)
+  // Community 1 gets profile-list-gated content sections for access filtering tests
   for (let i = 0; i < COMMUNITY_COUNT; i++) {
     const a = communityAuthors[i];
-    events.push(
-      make(
-        a,
-        10222,
-        [
-          ['d', ''],
-          ['name', `Test Community ${i}: ${subjects[i % subjects.length]}`],
-          ['about', `A community about ${subjects[i % subjects.length]}`]
-        ],
-        JSON.stringify({
-          name: `Test Community ${i}: ${subjects[i % subjects.length]}`,
-          about: `A community about ${subjects[i % subjects.length]}`
-        }),
-        BASE + (150 + i) * 600
-      )
-    );
+
+    if (i === 1) {
+      // Community 1: gated forum (Posts) + open chat
+      const profileListAddress = `30000:${a.pk}:forum-members`;
+      events.push(
+        make(
+          a,
+          10222,
+          [
+            ['d', ''],
+            ['name', `Test Community ${i}: ${subjects[i % subjects.length]}`],
+            ['about', `A gated community about ${subjects[i % subjects.length]}`],
+            // Posts section (kind 11) gated by profile list
+            ['content', 'Posts'],
+            ['k', '11'],
+            ['a', profileListAddress],
+            // Chat section (kind 9) — open, no profile list
+            ['content', 'Chat'],
+            ['k', '9']
+          ],
+          JSON.stringify({
+            name: `Test Community ${i}: ${subjects[i % subjects.length]}`,
+            about: `A gated community about ${subjects[i % subjects.length]}`
+          }),
+          BASE + (150 + i) * 600
+        )
+      );
+    } else {
+      events.push(
+        make(
+          a,
+          10222,
+          [
+            ['d', ''],
+            ['name', `Test Community ${i}: ${subjects[i % subjects.length]}`],
+            ['about', `A community about ${subjects[i % subjects.length]}`]
+          ],
+          JSON.stringify({
+            name: `Test Community ${i}: ${subjects[i % subjects.length]}`,
+            about: `A community about ${subjects[i % subjects.length]}`
+          }),
+          BASE + (150 + i) * 600
+        )
+      );
+    }
   }
+
+  // Kind 30000 profile list for community 1's forum-members gate
+  // Only contentAuthors[0] (TEST_AUTHOR) is a member
+  events.push(
+    make(
+      communityAuthors[1],
+      30000,
+      [
+        ['d', 'forum-members'],
+        ['p', contentAuthors[0].pk]
+      ],
+      '',
+      BASE + 170 * 600
+    )
+  );
+
+  // Kind 30000 follow set owned by TEST_AUTHOR (contentAuthors[0]) for
+  // people-list CRUD E2E tests. Has one initial p-tag so the remove-affordance
+  // has something to attach to.
+  events.push(
+    make(
+      contentAuthors[0],
+      30000,
+      [
+        ['d', 'e2e-friends'],
+        ['title', 'My E2E Friends'],
+        ['p', contentAuthors[1].pk]
+      ],
+      '',
+      BASE + 175 * 600
+    )
+  );
+
+  // Forum threads (kind 11) targeting community 1
+  // Thread from contentAuthors[0] (member) — should be visible in gated forum
+  events.push(
+    make(
+      contentAuthors[0],
+      11,
+      [
+        ['h', communityAuthors[1].pk],
+        ['title', 'Member Thread: Welcome to the Forum']
+      ],
+      'This is a thread from an approved member.',
+      BASE + 171 * 600
+    )
+  );
+  // Thread from contentAuthors[1] (non-member) — should be hidden in gated forum
+  events.push(
+    make(
+      contentAuthors[1],
+      11,
+      [
+        ['h', communityAuthors[1].pk],
+        ['title', 'Non-Member Thread: Hello World']
+      ],
+      'This is a thread from a non-member.',
+      BASE + 172 * 600
+    )
+  );
+
+  // Chat messages (kind 9) targeting community 1 — both should be visible (open section)
+  events.push(
+    make(
+      contentAuthors[0],
+      9,
+      [['h', communityAuthors[1].pk]],
+      'Chat from member author',
+      BASE + 173 * 600
+    )
+  );
+  events.push(
+    make(
+      contentAuthors[1],
+      9,
+      [['h', communityAuthors[1].pk]],
+      'Chat from non-member author',
+      BASE + 174 * 600
+    )
+  );
 
   // Kind 0 profiles for content authors
   for (let i = 0; i < AUTHOR_COUNT; i++) {
@@ -547,6 +657,12 @@ export const TEST_COMMUNITY = {
   npub: npubEncode(communityAuthors[0].pk)
 };
 
+/** Second test community with profile-list-gated forum section */
+export const TEST_COMMUNITY_GATED = {
+  pubkey: communityAuthors[1].pk,
+  npub: npubEncode(communityAuthors[1].pk)
+};
+
 /** First test author info for profile page E2E tests */
 export const TEST_AUTHOR = {
   pubkey: contentAuthors[0].pk,
@@ -595,6 +711,13 @@ export const TEST_NADDRS = {
     pubkey: contentAuthors[0].pk,
     identifier: 'https://example.com/resource-0',
     relays: [RELAY_URLS.amb]
+  }),
+  /** Follow set (kind 30000) owned by TEST_AUTHOR for people-list CRUD tests */
+  followSet: naddrEncode({
+    kind: 30000,
+    pubkey: contentAuthors[0].pk,
+    identifier: 'e2e-friends',
+    relays: [RELAY_URLS.strfry]
   })
 };
 
@@ -618,7 +741,11 @@ export const TEST_COUNTS = {
   /** Reactions on first calendar event (date-event-0) */
   reactionsOnCalendarEvent: 3,
   /** Date range test events */
-  dateRangeTestEvents: 4
+  dateRangeTestEvents: 4,
+  /** Gated community forum threads (1 member + 1 non-member) */
+  gatedForumThreads: 2,
+  /** Gated community chat messages (both visible, open section) */
+  gatedChatMessages: 2
 };
 
 /** Date range test event identifiers and titles for E2E assertions */

@@ -29,6 +29,7 @@
   import { publishEvent } from '$lib/services/publish-service.js';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
+  import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
@@ -274,7 +275,7 @@
     // Check for duplicates
     const normalizedUrl = newRelayUrl.trim().replace(/\/$/, '');
     if (relays.some((r) => r.url.replace(/\/$/, '') === normalizedUrl)) {
-      validationError = 'This relay is already in your list';
+      validationError = m.settings_relay_duplicate();
       return;
     }
 
@@ -324,7 +325,7 @@
   // Save relay list
   async function handleSave() {
     if (relays.length === 0) {
-      error = 'At least one relay is required';
+      error = m.settings_relay_error_min();
       return;
     }
 
@@ -334,7 +335,7 @@
 
     try {
       await saveRelayList(relays, activeAccount.pubkey);
-      success = 'Relay preferences saved successfully!';
+      success = m.settings_relay_saved();
       hasChanges = false;
       _hasRelayList = true;
       setTimeout(() => (success = null), 3000);
@@ -370,7 +371,7 @@
     // Check for duplicates
     const normalizedUrl = newBlossomUrl.trim().replace(/\/$/, '');
     if (blossomServers.some((s) => s.url.replace(/\/$/, '') === normalizedUrl)) {
-      blossomValidationError = 'This server is already in your list';
+      blossomValidationError = m.settings_blossom_duplicate();
       return;
     }
 
@@ -390,7 +391,7 @@
   // Save Blossom server list
   async function handleBlossomSave() {
     if (blossomServers.length === 0) {
-      blossomError = 'At least one Blossom server is required';
+      blossomError = m.settings_blossom_error_min();
       return;
     }
 
@@ -400,7 +401,7 @@
 
     try {
       await saveBlossomServers(blossomServers, activeAccount.pubkey);
-      blossomSuccess = 'Blossom server list saved successfully!';
+      blossomSuccess = m.settings_blossom_saved();
       hasBlossomChanges = false;
       hasBlossomList = true;
       setTimeout(() => (blossomSuccess = null), 3000);
@@ -462,7 +463,7 @@
    */
   async function saveAppRelaySet(category, relays) {
     if (!activeAccount?.signer) {
-      appRelaysError = 'No signer available';
+      appRelaysError = m.settings_no_signer();
       return;
     }
 
@@ -483,7 +484,7 @@
       const lookupRelays = getRelayListLookupRelays();
       const result = await publishEvent(signedEvent, [], { additionalRelays: lookupRelays });
       if (!result.success) {
-        appRelaysError = 'Failed to save relay settings to any relay';
+        appRelaysError = m.settings_app_relay_save_failed();
         return;
       }
       eventStore.add(signedEvent);
@@ -492,7 +493,9 @@
       appRelayOverrides = new SvelteMap(appRelayOverrides.set(category, relays));
       updateUserOverrideCache(category, relays);
 
-      appRelaysSuccess = `${/** @type {any} */ (CATEGORIES)[category]?.label || category} relays saved!`;
+      appRelaysSuccess = m.settings_app_relay_saved({
+        category: CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (category)]?.label || category
+      });
       setTimeout(() => (appRelaysSuccess = null), 3000);
     } catch (err) {
       appRelaysError = err instanceof Error ? err.message : 'Unknown error';
@@ -517,7 +520,7 @@
    */
   async function addAppRelay(category) {
     if (!newAppRelayUrl.trim()) {
-      appRelayValidationError = 'Please enter a relay URL';
+      appRelayValidationError = m.settings_app_relay_enter_url();
       return;
     }
 
@@ -531,7 +534,7 @@
     const currentRelays = getRelaysForCategory(category);
 
     if (currentRelays.includes(normalizedUrl)) {
-      appRelayValidationError = 'This relay is already in the list';
+      appRelayValidationError = m.settings_app_relay_duplicate();
       return;
     }
 
@@ -573,16 +576,16 @@
     <!-- Header -->
     <div class="mb-8 text-center">
       <h1 class="mb-2 text-4xl font-bold">{m.common_settings()}</h1>
-      <p class="text-base-content/70">Manage your Nostr preferences</p>
+      <p class="text-base-content/70">{m.settings_subtitle()}</p>
     </div>
 
     <!-- Appearance Card (visible to all users) -->
     <div class="card mb-6 bg-base-200 shadow-xl">
       <div class="card-body">
         <h2 class="mb-2 card-title text-2xl">
-          <span class="text-2xl">Appearance</span>
+          <span class="text-2xl">{m.settings_appearance_title()}</span>
         </h2>
-        <p class="mb-6 text-base-content/70">Customize the look and feel of the application.</p>
+        <p class="mb-6 text-base-content/70">{m.settings_appearance_description()}</p>
         <ThemeSwitcher />
       </div>
     </div>
@@ -602,13 +605,13 @@
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
           />
         </svg>
-        <span>Please login to manage your settings.</span>
+        <span>{m.settings_login_required()}</span>
       </div>
     {:else if loading}
       <div class="flex justify-center py-12">
         <div class="text-center">
           <span class="loading loading-lg loading-spinner"></span>
-          <p class="mt-4 text-base-content/70">Loading relay preferences...</p>
+          <p class="mt-4 text-base-content/70">{m.settings_relay_loading()}</p>
         </div>
       </div>
     {:else}
@@ -616,12 +619,14 @@
       <div class="card bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">
           <h2 class="mb-2 card-title text-2xl">
-            <span class="text-2xl">Relay Preferences</span>
+            <span class="text-2xl">{m.settings_relay_title()}</span>
           </h2>
           <p class="mb-6 text-base-content/70">
-            Your relays determine where your events are published and where others can find them.
-            <strong>Read</strong> relays are where you receive mentions; <strong>Write</strong> relays
-            are where you publish.
+            {m.settings_relay_description()}
+            {m.settings_relay_description_detail({
+              read: m.settings_relay_read_checkbox(),
+              write: m.settings_relay_write_checkbox()
+            })}
           </p>
 
           {#if relays.length === 0}
@@ -641,14 +646,14 @@
                 ></path>
               </svg>
               <div>
-                <p class="font-semibold">No relay list found</p>
+                <p class="font-semibold">{m.settings_relay_no_list()}</p>
                 <p class="text-sm">
-                  You don't have a relay list yet. Create one to improve discoverability.
+                  {m.settings_relay_no_list_description()}
                 </p>
               </div>
             </div>
             <button class="btn btn-primary" onclick={createDefaultRelayList}>
-              Create Relay List with Defaults
+              {m.settings_relay_create_defaults()}
             </button>
           {:else}
             <!-- Relay list -->
@@ -663,7 +668,7 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <label class="label cursor-pointer gap-1">
-                      <span class="label-text text-xs">R</span>
+                      <span class="label-text text-xs">{m.settings_relay_read_label()}</span>
                       <input
                         type="checkbox"
                         class="checkbox checkbox-sm checkbox-primary"
@@ -672,7 +677,7 @@
                       />
                     </label>
                     <label class="label cursor-pointer gap-1">
-                      <span class="label-text text-xs">W</span>
+                      <span class="label-text text-xs">{m.settings_relay_write_label()}</span>
                       <input
                         type="checkbox"
                         class="checkbox checkbox-sm checkbox-secondary"
@@ -683,7 +688,7 @@
                     <button
                       class="btn btn-square text-error btn-ghost btn-sm"
                       onclick={() => removeRelay(index)}
-                      title="Remove relay"
+                      title={m.settings_relay_remove_aria()}
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -706,7 +711,7 @@
             </div>
 
             <!-- Add relay form -->
-            <div class="divider">Add Relay</div>
+            <div class="divider">{m.settings_relay_add_divider()}</div>
             <div class="flex flex-col gap-3">
               <div class="join w-full">
                 <input
@@ -716,7 +721,9 @@
                   bind:value={newRelayUrl}
                   onkeydown={handleKeyDown}
                 />
-                <button class="btn join-item btn-primary" onclick={addRelay}> Add </button>
+                <button class="btn join-item btn-primary" onclick={addRelay}>
+                  {m.settings_add_button()}
+                </button>
               </div>
               <div class="flex items-center gap-4">
                 <label class="label cursor-pointer gap-2">
@@ -725,7 +732,7 @@
                     class="checkbox checkbox-sm checkbox-primary"
                     bind:checked={newRelayRead}
                   />
-                  <span class="label-text">Read</span>
+                  <span class="label-text">{m.settings_relay_read_checkbox()}</span>
                 </label>
                 <label class="label cursor-pointer gap-2">
                   <input
@@ -733,7 +740,7 @@
                     class="checkbox checkbox-sm checkbox-secondary"
                     bind:checked={newRelayWrite}
                   />
-                  <span class="label-text">Write</span>
+                  <span class="label-text">{m.settings_relay_write_checkbox()}</span>
                 </label>
               </div>
               {#if validationError}
@@ -743,8 +750,12 @@
 
             <!-- Legend -->
             <div class="mt-6 text-sm text-base-content/60">
-              <span class="mr-2 badge badge-sm badge-primary">R</span> Read - receive mentions
-              <span class="mr-2 ml-4 badge badge-sm badge-secondary">W</span> Write - publish events
+              <span class="mr-2 badge badge-sm badge-primary">{m.settings_relay_read_label()}</span>
+              {m.settings_relay_read_help()}
+              <span class="mr-2 ml-4 badge badge-sm badge-secondary"
+                >{m.settings_relay_write_label()}</span
+              >
+              {m.settings_relay_write_help()}
             </div>
 
             <!-- Save button -->
@@ -756,9 +767,9 @@
               >
                 {#if saving}
                   <span class="loading loading-sm loading-spinner"></span>
-                  Saving...
+                  {m.settings_relay_saving()}
                 {:else}
-                  Save Changes
+                  {m.settings_relay_save_changes()}
                 {/if}
               </button>
             </div>
@@ -773,7 +784,7 @@
             <div class="flex justify-center py-8">
               <div class="text-center">
                 <span class="loading loading-md loading-spinner"></span>
-                <p class="mt-2 text-sm text-base-content/70">Loading Blossom servers...</p>
+                <p class="mt-2 text-sm text-base-content/70">{m.settings_blossom_loading()}</p>
               </div>
             </div>
           </div>
@@ -782,11 +793,10 @@
         <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
           <div class="card-body">
             <h2 class="mb-2 card-title text-2xl">
-              <span class="text-2xl">Blossom Media Servers</span>
+              <span class="text-2xl">{m.settings_blossom_title()}</span>
             </h2>
             <p class="mb-6 text-base-content/70">
-              Blossom servers store your media files (images, videos). When a media URL becomes
-              unavailable, clients can use your server list to find the file elsewhere.
+              {m.settings_blossom_description()}
             </p>
 
             {#if !hasBlossomList && blossomServers.length === 0}
@@ -806,14 +816,14 @@
                   ></path>
                 </svg>
                 <div>
-                  <p class="font-semibold">No Blossom server list found</p>
+                  <p class="font-semibold">{m.settings_blossom_no_list()}</p>
                   <p class="text-sm">
-                    Add Blossom servers to enable media redundancy and fallback.
+                    {m.settings_blossom_no_list_description()}
                   </p>
                 </div>
               </div>
               <button class="btn btn-primary" onclick={createDefaultBlossomList}>
-                Create Server List with Defaults
+                {m.settings_blossom_create_defaults()}
               </button>
             {:else}
               <!-- Server list -->
@@ -829,7 +839,7 @@
                     <button
                       class="btn btn-square text-error btn-ghost btn-sm"
                       onclick={() => removeBlossomServer(index)}
-                      title="Remove server"
+                      title={m.settings_blossom_remove_aria()}
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -851,7 +861,7 @@
               </div>
 
               <!-- Add server form -->
-              <div class="divider">Add Server</div>
+              <div class="divider">{m.settings_blossom_add_divider()}</div>
               <div class="flex flex-col gap-3">
                 <div class="join w-full">
                   <input
@@ -862,7 +872,7 @@
                     onkeydown={handleBlossomKeyDown}
                   />
                   <button class="btn join-item btn-primary" onclick={addBlossomServer}>
-                    Add
+                    {m.settings_add_button()}
                   </button>
                 </div>
                 {#if blossomValidationError}
@@ -879,9 +889,9 @@
                 >
                   {#if blossomSaving}
                     <span class="loading loading-sm loading-spinner"></span>
-                    Saving...
+                    {m.settings_relay_saving()}
                   {:else}
-                    Save Changes
+                    {m.settings_relay_save_changes()}
                   {/if}
                 </button>
               </div>
@@ -897,7 +907,7 @@
             <div class="flex justify-center py-8">
               <div class="text-center">
                 <span class="loading loading-md loading-spinner"></span>
-                <p class="mt-2 text-sm text-base-content/70">Loading app relay settings...</p>
+                <p class="mt-2 text-sm text-base-content/70">{m.settings_app_relay_loading()}</p>
               </div>
             </div>
           </div>
@@ -906,12 +916,10 @@
         <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
           <div class="card-body">
             <h2 class="mb-2 card-title text-2xl">
-              <span class="text-2xl">App-Specific Relays</span>
+              <span class="text-2xl">{m.settings_app_relay_title()}</span>
             </h2>
             <p class="mb-6 text-base-content/70">
-              These relays store specific content types. Events are published here
-              <strong>in addition to</strong> your personal relay list. Your custom settings sync across
-              devices via Nostr.
+              {m.settings_app_relay_description()}
             </p>
 
             {#each Object.entries(CATEGORIES) as [category, config] (category)}
@@ -924,9 +932,12 @@
                 <h3 class="mb-3 flex items-center gap-2 font-semibold">
                   {config.label}
                   {#if override.length > 0}
-                    <span class="badge badge-sm badge-primary">Custom</span>
+                    <span class="badge badge-sm badge-primary">{m.settings_app_relay_custom()}</span
+                    >
                   {:else}
-                    <span class="badge badge-ghost badge-sm">Server default</span>
+                    <span class="badge badge-ghost badge-sm"
+                      >{m.settings_app_relay_server_default()}</span
+                    >
                   {/if}
                 </h3>
 
@@ -940,7 +951,7 @@
                           class="btn btn-square text-error btn-ghost btn-xs"
                           onclick={() => removeAppRelay(category, relay)}
                           disabled={appRelaysSaving}
-                          title="Remove relay"
+                          title={m.settings_relay_remove_aria()}
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -962,7 +973,9 @@
                   {/each}
 
                   {#if effectiveRelays.length === 0}
-                    <p class="text-sm text-base-content/50 italic">No relays configured</p>
+                    <p class="text-sm text-base-content/50 italic">
+                      {m.settings_app_relay_no_relays()}
+                    </p>
                   {/if}
                 </div>
 
@@ -977,7 +990,7 @@
                       {#if appRelaysSaving}
                         <span class="loading loading-xs loading-spinner"></span>
                       {/if}
-                      Save as my defaults
+                      {m.settings_app_relay_save_defaults()}
                     </button>
                   {/if}
 
@@ -997,7 +1010,7 @@
                           onclick={() => addAppRelay(category)}
                           disabled={appRelaysSaving}
                         >
-                          Add
+                          {m.settings_add_button()}
                         </button>
                         <button
                           class="btn join-item btn-ghost btn-sm"
@@ -1007,7 +1020,7 @@
                             appRelayValidationError = null;
                           }}
                         >
-                          Cancel
+                          {m.common_cancel()}
                         </button>
                       </div>
                       {#if appRelayValidationError}
@@ -1023,7 +1036,7 @@
                       }}
                       disabled={appRelaysSaving}
                     >
-                      Add relay
+                      {m.settings_app_relay_add()}
                     </button>
 
                     {#if hasOverride(category)}
@@ -1032,7 +1045,7 @@
                         onclick={() => resetToDefault(category)}
                         disabled={appRelaysSaving}
                       >
-                        Reset to defaults
+                        {m.settings_app_relay_reset()}
                       </button>
                     {/if}
                   {/if}
@@ -1126,6 +1139,39 @@
               </p>
             {/if}
           </div>
+        </div>
+      </div>
+
+      <!-- Client Tag Card -->
+      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <h2 class="mb-2 card-title text-2xl">
+            <span class="text-2xl">{m.settings_client_tag_title()}</span>
+          </h2>
+          <p class="mb-6 text-base-content/70">
+            {m.settings_client_tag_description()}
+          </p>
+
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="checkbox"
+                class="toggle toggle-primary"
+                checked={appSettings.includeClientTag}
+                onchange={() => (appSettings.includeClientTag = !appSettings.includeClientTag)}
+              />
+              <span class="label-text font-medium">
+                {m.settings_client_tag_label({ clientName: runtimeConfig.clientName })}
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- DM Relay Settings Card -->
+      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <DmRelaySettings />
         </div>
       </div>
 

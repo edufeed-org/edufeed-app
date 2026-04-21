@@ -12,7 +12,11 @@ import CommunityFilterDropdown from '../feed/CommunityFilterDropdown.svelte';
 
 // Mock paraglide messages
 vi.mock('$lib/paraglide/messages', () => ({
-  discover_community_label: () => 'Community:'
+  discover_community_label: () => 'Community:',
+  community_filter_all: () => 'All',
+  community_filter_my: () => 'My Communities',
+  community_filter_joined: () => 'Joined',
+  community_filter_discover: () => 'Discover'
 }));
 
 const joinedCommunities = [

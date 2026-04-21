@@ -12,6 +12,11 @@ vi.mock('$lib/helpers/nostrUtils', () => ({
   fetchEventById: vi.fn()
 }));
 
+// Mock config store — initializeConfig is called by the load function
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  initializeConfig: vi.fn()
+}));
+
 // Mock @sveltejs/kit — redirect throws, error throws
 vi.mock('@sveltejs/kit', () => ({
   redirect: (/** @type {number} */ status, /** @type {string} */ location) => {
@@ -30,12 +35,13 @@ vi.mock('@sveltejs/kit', () => ({
 const { load } = await import('../../routes/[naddr=naddr]/+page.js');
 
 const FAKE_PUBKEY = 'a'.repeat(64);
+const fakeParent = () => Promise.resolve({ config: {} });
 
 describe('[naddr] route redirect', () => {
   it('redirects kind 31922 (date-based calendar event) to /calendar/event/', async () => {
     const naddr = naddrEncode({ kind: 31922, pubkey: FAKE_PUBKEY, identifier: 'test-event' });
     try {
-      await load({ params: { naddr } });
+      await load({ params: { naddr }, parent: fakeParent });
       expect.unreachable('should have thrown redirect');
     } catch (/** @type {any} */ err) {
       expect(err.status).toBe(307);
@@ -46,7 +52,7 @@ describe('[naddr] route redirect', () => {
   it('redirects kind 31923 (time-based calendar event) to /calendar/event/', async () => {
     const naddr = naddrEncode({ kind: 31923, pubkey: FAKE_PUBKEY, identifier: 'test-event' });
     try {
-      await load({ params: { naddr } });
+      await load({ params: { naddr }, parent: fakeParent });
       expect.unreachable('should have thrown redirect');
     } catch (/** @type {any} */ err) {
       expect(err.status).toBe(307);
@@ -57,7 +63,7 @@ describe('[naddr] route redirect', () => {
   it('redirects kind 31924 (calendar collection) to /calendar/', async () => {
     const naddr = naddrEncode({ kind: 31924, pubkey: FAKE_PUBKEY, identifier: 'test-cal' });
     try {
-      await load({ params: { naddr } });
+      await load({ params: { naddr }, parent: fakeParent });
       expect.unreachable('should have thrown redirect');
     } catch (/** @type {any} */ err) {
       expect(err.status).toBe(307);
@@ -78,7 +84,7 @@ describe('[naddr] route redirect', () => {
     });
 
     const naddr = naddrEncode({ kind: 30023, pubkey: FAKE_PUBKEY, identifier: 'test' });
-    const result = await load({ params: { naddr } });
+    const result = await load({ params: { naddr }, parent: fakeParent });
     expect(result.kind).toBe(30023);
     expect(result.naddr).toBe(naddr);
   });

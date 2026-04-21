@@ -5,20 +5,22 @@
 -->
 
 <script>
-  import { ProfileModel } from 'applesauce-core/models';
-  import { profileLoader } from '$lib/loaders/profile.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
+  import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
   import ImageWithFallback from './ImageWithFallback.svelte';
+  import HoverCard from './HoverCard.svelte';
+  import ProfileHoverCardContent from './ProfileHoverCardContent.svelte';
 
   /**
    * @typedef {Object} Props
    * @property {string} [pubkey] - User pubkey (optional - if not provided, uses active user)
    * @property {any} [profile] - Profile object (optional - if not provided, loads internally)
-   * @property {'xs' | 'sm' | 'md' | 'lg' | 'xl'} [size] - Avatar size
+   * @property {'2xs' | 'xs' | 'sm' | 'md' | 'lg' | 'xl'} [size] - Avatar size
    * @property {'initial' | 'robohash'} [fallbackType] - Type of fallback to use
+   * @property {boolean} [linkToProfile] - Wrap avatar in a link to the user's profile page
+   * @property {boolean} [showHoverCard] - Show profile hover card on hover (defaults to linkToProfile && !!pubkey)
    * @property {string} [class] - Additional CSS classes
    */
 
@@ -28,15 +30,21 @@
     profile = undefined,
     size = 'md',
     fallbackType = 'initial',
+    linkToProfile = false,
+    showHoverCard = undefined,
     class: className = ''
   } = $props();
 
-  // Load profile reactively when pubkey changes
+  let effectiveShowHoverCard = $derived(showHoverCard ?? (linkToProfile && !!pubkey));
+
+  // Load profile reactively when pubkey changes.
+  // When profile prop is explicitly provided (even as null), skip self-loading — the parent manages it.
+  // Otherwise, use eventStore.profile() which auto-loads via the unified eventLoader.
   let loadedProfile = $state(/** @type {any} */ (null));
 
   $effect(() => {
     // If profile is provided as prop, use it directly
-    if (profile) {
+    if (profile !== undefined) {
       loadedProfile = profile;
       return;
     }
@@ -44,32 +52,19 @@
     // Reset profile when pubkey changes
     loadedProfile = null;
 
-    // Load profile for the given pubkey
+    // Subscribe to eventStore.profile() — auto-loads via eventStore.eventLoader
     if (pubkey) {
-      // 1. Trigger loader to fetch from relays and populate eventStore
-      const loaderSub = profileLoader({
-        kind: 0,
-        pubkey: pubkey,
-        relays: runtimeConfig.fallbackRelays || []
-      }).subscribe(() => {
-        // Loader automatically populates eventStore
-      });
-
-      // 2. Subscribe to model for reactive parsed profile from eventStore
-      const modelSub = eventStore.model(ProfileModel, pubkey).subscribe((profileContent) => {
+      const sub = eventStore.profile(pubkey).subscribe((profileContent) => {
         loadedProfile = profileContent;
       });
 
-      // Return cleanup function to unsubscribe from both
-      return () => {
-        loaderSub.unsubscribe();
-        modelSub.unsubscribe();
-      };
+      return () => sub.unsubscribe();
     }
   });
 
   // Size mappings
   const sizeClasses = {
+    '2xs': 'w-4',
     xs: 'w-6',
     sm: 'w-8',
     md: 'w-10',
@@ -79,6 +74,7 @@
 
   /** @type {Record<string, string>} */
   const sizeToProxy = {
+    '2xs': 'avatar_sm',
     xs: 'avatar_sm',
     sm: 'avatar_sm',
     md: 'avatar_md',
@@ -105,8 +101,8 @@
   let showRobohashFallback = $derived(fallbackType === 'robohash' && !avatarUrl);
 </script>
 
-<div class="avatar {className}">
-  <div class="{sizeClasses[size]} rounded-full">
+{#snippet avatarContent()}
+  <div class="not-prose {sizeClasses[size]} rounded-full">
     {#if avatarUrl}
       <ImageWithFallback
         src={avatarUrl}
@@ -131,4 +127,25 @@
       </div>
     {/if}
   </div>
-</div>
+{/snippet}
+
+{#if effectiveShowHoverCard && pubkey}
+  <HoverCard>
+    {#snippet trigger()}
+      <div class="avatar {className}">
+        {@render avatarContent()}
+      </div>
+    {/snippet}
+    {#snippet content()}
+      <ProfileHoverCardContent {pubkey} profile={loadedProfile} />
+    {/snippet}
+  </HoverCard>
+{:else if linkToProfile && pubkey}
+  <a href={resolve(`/p/${pubkey}`)} class="avatar {className}">
+    {@render avatarContent()}
+  </a>
+{:else}
+  <div class="avatar {className}">
+    {@render avatarContent()}
+  </div>
+{/if}

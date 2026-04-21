@@ -1,6 +1,6 @@
 <script>
   /**
-   * ReactionButton - Individual pill-style reaction button
+   * ReactionButton - Individual reaction button with who-reacted popover
    * Shows emoji and count, highlights if user reacted
    * @component
    */
@@ -10,13 +10,20 @@
   import { deleteReaction } from '$lib/helpers/reactions.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import HoverCard from '$lib/components/shared/HoverCard.svelte';
+  import ReactionReactorsList from './ReactionReactorsList.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {any} */
-  let { event, emoji, count = 0, userReacted = false, userReactionEvent = null } = $props();
-
-  let loading = $state(false);
-  let isHovering = $state(false);
+  let {
+    event,
+    emoji,
+    count = 0,
+    userReacted = false,
+    userReactionEvent = null,
+    emojiUrl = null,
+    reactors = []
+  } = $props();
 
   // Track active user with direct subscription for proper reactivity
   let activeUser = $state(manager.active);
@@ -36,86 +43,86 @@
     userReactionEvent && activeUser && userReactionEvent.pubkey === activeUser.pubkey
   );
 
-  async function toggleReaction() {
-    if (loading || !isLoggedIn) return;
+  function toggleReaction() {
+    if (!isLoggedIn) return;
 
-    loading = true;
-    try {
-      if (userReacted && userReactionEvent) {
-        // Use deleteReaction directly with the reaction event we already have
-        await deleteReaction(userReactionEvent, {
-          relays: runtimeConfig.fallbackRelays || []
+    if (userReacted && userReactionEvent) {
+      deleteReaction(userReactionEvent, {
+        relays: runtimeConfig.fallbackRelays || []
+      })
+        .then(() => showToast(m.reactions_remove_success(), 'success'))
+        .catch((err) => {
+          console.error('Failed to remove reaction:', err);
+          showToast(m.reactions_remove_error(), 'error');
         });
-        showToast(m.reactions_remove_success(), 'success');
-      } else {
-        await reactionsStore.react(event, emoji);
-      }
-    } catch (error) {
-      console.error('Failed to toggle reaction:', error);
-      if (userReacted) {
-        showToast(m.reactions_remove_error(), 'error');
-      }
-    } finally {
-      loading = false;
+    } else {
+      reactionsStore.react(event, emoji);
     }
   }
 
-  async function handleDelete() {
-    if (loading || !canDelete) return;
-    loading = true;
-    try {
-      // Delete the reaction event using the helper
-      await deleteReaction(userReactionEvent, {
-        relays: runtimeConfig.fallbackRelays || []
+  function handleDelete() {
+    if (!canDelete) return;
+    deleteReaction(userReactionEvent, {
+      relays: runtimeConfig.fallbackRelays || []
+    })
+      .then(() => showToast(m.reactions_remove_success(), 'success'))
+      .catch((err) => {
+        console.error('Failed to delete reaction:', err);
+        showToast(m.reactions_remove_error(), 'error');
       });
-      showToast(m.reactions_remove_success(), 'success');
-    } catch (error) {
-      console.error('Failed to delete reaction:', error);
-      showToast(m.reactions_remove_error(), 'error');
-    } finally {
-      loading = false;
-    }
   }
 </script>
 
-<button
-  type="button"
-  onclick={toggleReaction}
-  onmouseenter={() => (isHovering = true)}
-  onmouseleave={() => (isHovering = false)}
-  disabled={loading || !isLoggedIn}
-  data-testid="reaction-button"
-  data-emoji={emoji}
-  data-count={count}
-  data-user-reacted={userReacted}
-  class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm shadow-sm backdrop-blur-sm transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 {userReacted
-    ? 'border-blue-400/60 bg-blue-900/30 text-blue-300 hover:border-blue-400/80 hover:bg-blue-500/20'
-    : 'border-gray-700/50 bg-gray-800/30 text-gray-300 hover:border-gray-600/60 hover:bg-gray-800/40'}"
->
-  <span class="text-base leading-none">{emoji}</span>
-  {#if count > 0}
-    <span class="text-xs font-medium">{count}</span>
-  {/if}
-
-  {#if canDelete && isHovering}
-    <span
-      role="button"
-      tabindex="0"
-      onclick={(e) => {
-        e.stopPropagation();
-        handleDelete();
-      }}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          handleDelete();
-        }
-      }}
-      class="ml-0.5 inline-flex cursor-pointer items-center transition-opacity"
-      aria-label={m.reactions_delete_title()}
+<HoverCard enterDelay={300} leaveDelay={200} fixed>
+  {#snippet trigger()}
+    <button
+      type="button"
+      onclick={toggleReaction}
+      disabled={!isLoggedIn}
+      data-testid="reaction-button"
+      data-emoji={emoji}
+      data-count={count}
+      data-user-reacted={userReacted}
+      class="btn gap-1 rounded-full btn-ghost btn-xs {userReacted
+        ? 'btn-active border-primary/40 text-primary'
+        : 'border-base-content/20'}"
     >
-      <TrashIcon class="h-3 w-3 text-red-400 transition-colors hover:text-red-300" />
-    </span>
-  {/if}
-</button>
+      {#if emojiUrl}
+        <img src={emojiUrl} alt={emoji} title={emoji} class="inline h-4 w-4 object-contain" />
+      {:else}
+        <span class="text-sm leading-none">{emoji}</span>
+      {/if}
+      {#if count > 0}
+        <span class="text-xs font-medium">{count}</span>
+      {/if}
+
+      {#if canDelete}
+        <span
+          role="button"
+          tabindex="0"
+          onclick={(e) => {
+            e.stopPropagation();
+            handleDelete();
+          }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              handleDelete();
+            }
+          }}
+          class="ml-0.5 inline-flex cursor-pointer items-center"
+          aria-label={m.reactions_delete_title()}
+        >
+          <TrashIcon class="h-3 w-3 text-error transition-colors hover:text-error/80" />
+        </span>
+      {/if}
+    </button>
+  {/snippet}
+
+  {#snippet content()}
+    {#if reactors.length > 0}
+      <ReactionReactorsList {reactors} {emoji} {emojiUrl} />
+    {/if}
+  {/snippet}
+</HoverCard>

@@ -1,4 +1,5 @@
 <script>
+  import * as m from '$lib/paraglide/messages';
   import CalendarView from '$lib/components/calendar/CalendarView.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
@@ -16,7 +17,7 @@
     <CalendarView calendar={data.calendar} rawCalendar={data.rawCalendar} globalMode={false} />
   {:else}
     <div class="alert alert-error">
-      <span>Calendar not found</span>
+      <span>{m.route_calendar_not_found()}</span>
     </div>
   {/if}
 </div>

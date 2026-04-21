@@ -10,7 +10,10 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
-import { buildSearchQuery, hasActiveFilters } from '$lib/helpers/educational/searchQueryBuilder.js';
+import {
+  buildSearchFilterObject,
+  hasActiveFilters
+} from '$lib/helpers/educational/searchQueryBuilder.js';
 
 /**
  * @typedef {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} SearchFilters
@@ -34,23 +37,60 @@ export function ambSearchLoader(filters, limit = 50) {
     });
   }
 
-  // Build the NIP-50 search query
-  const searchQuery = buildSearchQuery(filters);
+  // Build the NIP-50 search query + dual-emit #ext:... tag filters.
+  // Tag filters act as a fallback for relays that don't yet parse ext.* paths.
+  const { search: searchQuery, tagFilters } = buildSearchFilterObject(filters);
 
-  if (!searchQuery) {
+  if (!searchQuery && Object.keys(tagFilters).length === 0) {
     return new Observable((subscriber) => {
       subscriber.complete();
     });
   }
 
   const relays = getEducationalRelays();
-  const filter = { kinds: [30142], search: searchQuery, limit };
+  /** @type {Record<string, any>} */
+  const filter = { kinds: [30142], limit, ...tagFilters };
+  if (searchQuery) filter.search = searchQuery;
 
   // Use pool.request() directly to preserve the search field
   // createTimelineLoader strips unknown filter fields during pagination
   return pool.request(relays, filter, /** @type {any} */ ({ timeout: 5000 })).pipe(
     tap((event) => eventStore.add(event)) // Add to eventStore for caching
   );
+}
+
+/**
+ * Create a search loader for AMB resources within a community using NIP-50 full-text search.
+ * Adds `#h` filter to scope results to a specific community.
+ *
+ * @param {string} communityPubkey - Community pubkey to scope search to
+ * @param {SearchFilters} filters - The search filters
+ * @param {number} limit - Maximum number of results
+ * @returns {import('rxjs').Observable<import('nostr-tools').Event>}
+ */
+export function communityAMBSearchLoader(communityPubkey, filters, limit = 50) {
+  if (!hasActiveFilters(filters)) {
+    return new Observable((subscriber) => {
+      subscriber.complete();
+    });
+  }
+
+  const { search: searchQuery, tagFilters } = buildSearchFilterObject(filters);
+
+  if (!searchQuery && Object.keys(tagFilters).length === 0) {
+    return new Observable((subscriber) => {
+      subscriber.complete();
+    });
+  }
+
+  const relays = getEducationalRelays();
+  /** @type {Record<string, any>} */
+  const filter = { kinds: [30142], '#h': [communityPubkey], limit, ...tagFilters };
+  if (searchQuery) filter.search = searchQuery;
+
+  return pool
+    .request(relays, filter, /** @type {any} */ ({ timeout: 5000 }))
+    .pipe(tap((event) => eventStore.add(event)));
 }
 
 /**

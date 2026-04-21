@@ -13,7 +13,6 @@
   }
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
-  import { showToast } from '$lib/helpers/toast.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import {
@@ -21,14 +20,16 @@
     ClockIcon,
     LocationIcon,
     UserIcon,
-    CopyIcon,
     ExternalLinkIcon
   } from '$lib/components/icons';
+  import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
   import AddToCalendarDropdown from '$lib/components/calendar/AddToCalendarDropdown.svelte';
+  import { showToast } from '$lib/helpers/toast.js';
+  import { deleteCalendarEvent } from '$lib/helpers/eventDeletion.js';
   import EventTags from '$lib/components/calendar/EventTags.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import LocationLink from '$lib/components/shared/LocationLink.svelte';
-  import MarkdownRenderer from '$lib/components/shared/MarkdownRenderer.svelte';
+
   import EventLocationMap from '$lib/components/calendar/EventLocationMap.svelte';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
@@ -36,7 +37,7 @@
   import { useCalendarEventRsvps } from '$lib/stores/calendar-event-rsvps.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
-  import EventManagementActions from '$lib/components/calendar/EventManagementActions.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {import('./$types').PageProps} */
   let { data } = $props();
@@ -152,23 +153,6 @@
   }
 
   /**
-   * Copy event naddr to clipboard
-   */
-  async function copyNaddr() {
-    if (rawEvent) {
-      try {
-        const naddr = encodeEventToNaddr(rawEvent);
-        await navigator.clipboard.writeText(naddr);
-        console.log('Event naddr copied to clipboard:', naddr);
-        showToast('Event link copied to clipboard!', 'success');
-      } catch (err) {
-        console.error('Failed to copy event naddr:', err);
-        showToast('Failed to copy link', 'error');
-      }
-    }
-  }
-
-  /**
    * Handle edit action - open edit modal
    */
   function handleEdit() {
@@ -182,10 +166,18 @@
   }
 
   /**
-   * Handle delete success - navigate back
+   * Handle delete action - delete and navigate back
    */
-  function handleDeleteSuccess() {
-    window.history.back();
+  async function handleDelete() {
+    if (!activeUser || !event) return;
+    const result = await deleteCalendarEvent(event, activeUser);
+    if (result.success) {
+      showToast(m.event_management_delete_success(), 'success');
+      window.history.back();
+    } else {
+      showToast(result.error || m.event_management_delete_failed(), 'error');
+      throw new Error(result.error || 'Delete failed');
+    }
   }
 </script>
 
@@ -198,7 +190,7 @@
   <div class="container mx-auto max-w-4xl px-4 py-8">
     <!-- Event Header with Image -->
     {#if event.image}
-      <div class="mb-8">
+      <div class="mb-4">
         <img
           src={event.image}
           alt={event.title}
@@ -208,74 +200,47 @@
       </div>
     {/if}
 
-    <!-- Event Owner Badge -->
-    {#if isUserEvent}
-      <div class="mb-4 flex items-center gap-2">
-        <div class="badge gap-2 badge-primary">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="inline-block h-4 w-4 stroke-current"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
-          Your Event
-        </div>
-      </div>
-    {/if}
-
-    <!-- Title Row with Copy Icon, Add to Calendar, and Edit -->
-    <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <!-- Event Title with Copy Icon -->
-      <div class="flex flex-1 items-start gap-2">
-        <h1 class="text-4xl font-bold text-base-content">
-          {event.title}
-        </h1>
-        <button class="btn btn-square btn-ghost btn-sm" onclick={copyNaddr} title="Copy event link">
-          <CopyIcon />
-        </button>
-      </div>
-
-      <!-- Actions (right side) -->
-      <div class="flex flex-shrink-0 items-center gap-2">
+    <DetailHeader
+      title={event.title || ''}
+      subtitle={event.summary || undefined}
+      event={rawEvent || {
+        id: '',
+        kind: event.kind || 31923,
+        pubkey: event.pubkey || '',
+        tags: [],
+        created_at: 0,
+        content: '',
+        sig: ''
+      }}
+      authorPubkey={event.pubkey || ''}
+      onEdit={isUserEvent ? handleEdit : undefined}
+      onDelete={isUserEvent ? handleDelete : undefined}
+      deleteTitle={m.event_management_delete_confirm_title()}
+      deleteItemName={event.title || ''}
+    >
+      {#snippet actions()}
         <AddToCalendarDropdown {event} disabled={!activeUser} />
-        {#if isUserEvent}
-          <EventManagementActions
-            {event}
-            {activeUser}
-            onEdit={handleEdit}
-            onDeleteSuccess={handleDeleteSuccess}
-          />
+      {/snippet}
+      {#snippet metadata()}
+        {#if event.hashtags?.length > 0}
+          <EventTags tags={event.hashtags} size="xs" maxDisplay={3} />
         {/if}
-      </div>
-    </div>
-
-    <!-- Event Description -->
-    {#if event.summary}
-      <div class="mb-8">
-        <MarkdownRenderer content={event.summary} />
-      </div>
-    {/if}
+      {/snippet}
+    </DetailHeader>
 
     <!-- Date and Time Card -->
     <div class="card mb-8 bg-base-200 shadow-lg">
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <CalendarIcon class_="w-6 h-6" />
-          Date & Time
+          {m.calendar_detail_date_time()}
         </h2>
 
         {#if isAllDay}
           <div class="mt-4 space-y-2">
             <div class="flex items-center gap-3">
               <CalendarIcon class_="w-5 h-5 text-info" />
-              <span class="font-semibold">All Day Event</span>
+              <span class="font-semibold">{m.calendar_detail_all_day()}</span>
             </div>
             <div class="ml-8 text-base-content/70">
               {#if isMultiDay && endDate && startDate}
@@ -291,7 +256,7 @@
               <div class="flex items-start gap-3">
                 <ClockIcon class_="w-5 h-5 text-primary mt-0.5" />
                 <div>
-                  <div class="font-semibold">Start</div>
+                  <div class="font-semibold">{m.calendar_detail_start()}</div>
                   <div class="text-base-content/80">
                     {formatCalendarDate(startDate, 'long')} at {formatCalendarDate(
                       startDate,
@@ -308,7 +273,7 @@
               <div class="flex items-start gap-3">
                 <ClockIcon class_="w-5 h-5 text-secondary mt-0.5" />
                 <div>
-                  <div class="font-semibold">End</div>
+                  <div class="font-semibold">{m.calendar_detail_end()}</div>
                   <div class="text-base-content/80">
                     {formatCalendarDate(endDate, 'long')} at {formatCalendarDate(endDate, 'time')}
                     {#if event.endTimezone}
@@ -328,7 +293,7 @@
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <UserIcon class_="w-6 h-6" />
-          Event Author
+          {m.calendar_detail_author()}
         </h2>
         <div class="mt-4">
           <ProfileCard pubkey={event.pubkey} size="lg" class="bg-base-100" />
@@ -342,7 +307,7 @@
         <div class="card-body">
           <h2 class="card-title text-2xl">
             <LocationIcon class_="w-6 h-6" />
-            Location
+            {m.calendar_event_location()}
           </h2>
           <div class="mt-4">
             <div class="flex items-start gap-3">
@@ -365,7 +330,7 @@
     {#if event.hashtags && event.hashtags.length > 0}
       <div class="card mb-8 bg-base-200 shadow-lg">
         <div class="card-body">
-          <h2 class="card-title text-2xl">Tags</h2>
+          <h2 class="card-title text-2xl">{m.calendar_detail_tags()}</h2>
           <div class="mt-4">
             <EventTags tags={event.hashtags} size="lg" />
           </div>
@@ -377,7 +342,7 @@
     {#if event.references && event.references.length > 0}
       <div class="card mb-8 bg-base-200 shadow-lg">
         <div class="card-body">
-          <h2 class="card-title text-2xl">Further Links</h2>
+          <h2 class="card-title text-2xl">{m.calendar_detail_links()}</h2>
           <div class="mt-4 space-y-2">
             {#each event.references as reference (reference)}
               <!-- eslint-disable svelte/no-navigation-without-resolve -- external: event reference URL -->
@@ -400,11 +365,11 @@
     <!-- Featured in Calendars -->
     <div class="card mb-8 bg-base-200 shadow-lg">
       <div class="card-body">
-        <h2 class="card-title text-2xl">Featured in Calendars</h2>
+        <h2 class="card-title text-2xl">{m.calendar_detail_featured_calendars()}</h2>
         {#if isLoadingCalendars}
           <div class="mt-4 flex items-center gap-2">
             <span class="loading loading-sm loading-spinner"></span>
-            <span class="text-base-content/70">Loading calendars...</span>
+            <span class="text-base-content/70">{m.calendar_detail_loading_calendars()}</span>
           </div>
         {:else if featuredCalendars.length > 0}
           <div class="mt-4 space-y-2">
@@ -422,7 +387,7 @@
           </div>
         {:else}
           <div class="mt-4 text-center text-base-content/60">
-            This event is not featured in any calendars yet
+            {m.calendar_detail_no_calendars()}
           </div>
         {/if}
       </div>
@@ -466,7 +431,7 @@
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <UserIcon class_="w-6 h-6" />
-          RSVP to Event
+          {m.calendar_detail_rsvp_title()}
         </h2>
         <div class="mt-4">
           <InlineRsvp
@@ -477,7 +442,7 @@
             compact={false}
           />
           <p class="mt-3 text-sm text-base-content/60">
-            Let the organizer and other attendees know if you're coming
+            {m.calendar_detail_rsvp_help()}
           </p>
         </div>
       </div>
@@ -502,7 +467,7 @@
     {#if rawEvent}
       <div class="card mb-8 bg-base-200 shadow-lg">
         <div class="card-body">
-          <h2 class="card-title text-2xl">Reactions</h2>
+          <h2 class="card-title text-2xl">{m.calendar_detail_reactions()}</h2>
           <div class="mt-4">
             <ReactionBar event={rawEvent} relays={getCalendarRelays()} />
           </div>
@@ -518,7 +483,7 @@
 {:else}
   <div class="container mx-auto px-4 py-8">
     <div class="alert alert-error">
-      <span>Event not found</span>
+      <span>{m.calendar_detail_not_found()}</span>
     </div>
   </div>
 {/if}

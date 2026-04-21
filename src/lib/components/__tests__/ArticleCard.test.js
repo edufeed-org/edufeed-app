@@ -18,6 +18,7 @@ vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/EventDebugPanel.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
+vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/paraglide/messages', () => ({
   event_tags_view_all_tooltip: () => '',
   event_tags_more_count: () => '',
@@ -28,6 +29,9 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 vi.mock('$app/navigation', () => ({
   goto: vi.fn()
+}));
+vi.mock('$app/paths', () => ({
+  resolve: (/** @type {string} */ path) => path
 }));
 vi.mock('applesauce-core/helpers', () => ({
   getProfilePicture: (/** @type {any} */ profile) => profile?.picture || null,
@@ -45,6 +49,33 @@ vi.mock('$lib/helpers/calendar.js', () => ({
 }));
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
   encodeEventToNaddr: () => 'naddr1test'
+}));
+vi.mock('$lib/loaders/comments.js', () => ({
+  createCommentLoaderForEvent: () => () => ({
+    subscribe: () => ({ unsubscribe: vi.fn() })
+  })
+}));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: {
+    model: vi.fn(() => ({
+      subscribe: (/** @type {Function} */ cb) => {
+        cb([]);
+        return { unsubscribe: vi.fn() };
+      }
+    })),
+    reactions: vi.fn(() => ({
+      subscribe: (/** @type {Function} */ cb) => {
+        cb([]);
+        return { unsubscribe: vi.fn() };
+      }
+    })),
+    remove$: {
+      subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
+    }
+  }
+}));
+vi.mock('applesauce-common/models', () => ({
+  RepliesModel: class RepliesModel {}
 }));
 
 const mockArticle = {

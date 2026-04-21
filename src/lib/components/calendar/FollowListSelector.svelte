@@ -9,6 +9,7 @@
   import { loadFollowList, loadFollowSets } from '$lib/helpers/followListLoader.js';
   import { UserIcon } from '../icons';
   import { onMount } from 'svelte';
+  import * as m from '$lib/paraglide/messages';
 
   // Props
   let { onApplyFilters = () => {} } = $props();
@@ -171,12 +172,14 @@
   >
     <div class="flex items-center gap-3">
       <UserIcon class_="h-5 w-5 text-base-content/70" />
-      <span class="font-medium text-base-content">Filter by Follow Lists</span>
+      <span class="font-medium text-base-content">{m.follow_list_filter_title()}</span>
       {#if hasActiveFilters}
-        <span class="badge badge-sm badge-primary">{totalAuthors} authors</span>
+        <span class="badge badge-sm badge-primary"
+          >{m.follow_list_authors({ count: String(totalAuthors) })}</span
+        >
       {/if}
       {#if !isLoggedIn}
-        <span class="badge badge-ghost badge-sm">Login Required</span>
+        <span class="badge badge-ghost badge-sm">{m.follow_list_login_required()}</span>
       {/if}
     </div>
     <svg
@@ -197,7 +200,7 @@
         <!-- Not logged in state -->
         <div class="py-4 text-center">
           <p class="mb-2 text-sm text-base-content/60">
-            Log in to filter events by people you follow
+            {m.follow_list_login_hint()}
           </p>
         </div>
       {:else if isLoading}
@@ -206,13 +209,13 @@
           {#if isLoadingNip02}
             <div class="flex items-center gap-3">
               <div class="loading loading-sm loading-spinner"></div>
-              <span class="text-sm text-base-content/60">Loading follow list (NIP-02)...</span>
+              <span class="text-sm text-base-content/60">{m.follow_list_loading_nip02()}</span>
             </div>
           {/if}
           {#if isLoadingNip51}
             <div class="flex items-center gap-3">
               <div class="loading loading-sm loading-spinner"></div>
-              <span class="text-sm text-base-content/60">Loading follow sets (NIP-51)...</span>
+              <span class="text-sm text-base-content/60">{m.follow_list_loading_nip51()}</span>
             </div>
           {/if}
         </div>
@@ -245,19 +248,23 @@
               <span class="text-sm">NIP-51: {loadErrorNip51}</span>
             </div>
           {/if}
-          <button class="btn btn-ghost btn-xs" onclick={loadUserFollowLists}>Retry</button>
+          <button class="btn btn-ghost btn-xs" onclick={loadUserFollowLists}
+            >{m.follow_list_retry()}</button
+          >
         </div>
       {:else if followLists.length === 0}
         <!-- Empty state -->
         <div class="py-4 text-center">
           <p class="mb-2 text-sm text-base-content/60">
-            No follow lists found. Create a follow list on Nostr to use this feature.
+            {m.follow_list_empty()}
           </p>
         </div>
       {:else}
         <!-- Follow lists section -->
         <div class="mb-4">
-          <h4 class="mb-2 text-sm font-medium text-base-content/70">Your Follow Lists</h4>
+          <h4 class="mb-2 text-sm font-medium text-base-content/70">
+            {m.follow_list_your_lists()}
+          </h4>
           <div class="space-y-2">
             {#each followLists as list (list.id)}
               <label
@@ -280,7 +287,9 @@
                             ? 'badge-primary'
                             : 'badge-secondary'}"
                         >
-                          {list.type === 'nip02' ? 'Main' : 'Set'}
+                          {list.type === 'nip02'
+                            ? m.follow_list_type_main()
+                            : m.follow_list_type_set()}
                         </span>
                       </div>
                       {#if list.description}
@@ -288,7 +297,9 @@
                       {/if}
                     </div>
                   </div>
-                  <span class="text-xs text-base-content/50">{list.count} authors</span>
+                  <span class="text-xs text-base-content/50"
+                    >{m.follow_list_authors({ count: String(list.count) })}</span
+                  >
                 </div>
               </label>
             {/each}
@@ -302,26 +313,26 @@
             onclick={applyFilters}
             disabled={selectedListIds.length === 0}
           >
-            Apply Filters
+            {m.follow_list_apply()}
             {#if selectedListIds.length > 0}
-              <span class="badge badge-sm">({totalAuthors} authors)</span>
+              <span class="badge badge-sm"
+                >({m.follow_list_authors({ count: String(totalAuthors) })})</span
+              >
             {/if}
           </button>
           <button class="btn btn-ghost btn-sm" onclick={clearFilters} disabled={!hasActiveFilters}>
-            Clear
+            {m.follow_list_clear()}
           </button>
         </div>
 
         <!-- Info text -->
         {#if hasActiveFilters}
           <p class="mt-3 text-xs text-base-content/60">
-            Showing events only from {totalAuthors}
-            {totalAuthors === 1 ? 'author' : 'authors'} in selected follow
-            {selectedListIds.length === 1 ? 'list' : 'lists'}
+            {m.follow_list_showing({ totalAuthors: String(totalAuthors) })}
           </p>
         {:else}
           <p class="mt-3 text-xs text-base-content/60">
-            Select follow lists to filter events by their authors
+            {m.follow_list_help()}
           </p>
         {/if}
       {/if}

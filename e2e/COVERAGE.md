@@ -2,36 +2,39 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-02-20
-**Total tests:** 262
+**Last updated:** 2026-04-21
+**Total tests:** 278
 
 ## Quick Summary
 
-| File                                | Tests | Auth | Coverage                                           |
-| ----------------------------------- | ----- | ---- | -------------------------------------------------- |
-| `account-management.test.js`        | 14    | Both | Login, logout, persistence, account switching      |
-| `calendar.test.js`                  | 4     | No   | Calendar page, events, modal                       |
-| `calendar-creation.test.js`         | 10    | Yes  | FAB, event creation, validation, deletion          |
-| `calendar-editing.test.js`          | 10    | Yes  | Edit button, form pre-population, validation       |
-| `calendar-date-filtering.test.js`   | 10    | No   | Date range loading, navigation, view modes         |
-| `amb-creation.test.js`              | 18    | Yes  | FAB, creation page, all 4 steps, validation        |
-| `amb-creation-full.test.js`         | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay       |
-| `profile.test.js`                   | 4     | No   | Profile page, notes, not-found                     |
-| `profile-editing.test.js`           | 10    | Yes  | Edit modal, form pre-population, save flow         |
-| `event-detail.test.js`              | 4     | No   | naddr routes (articles, calendar, AMB)             |
-| `community.test.js`                 | 5     | No   | Community Learning/Chat tabs                       |
-| `community-membership.test.js`      | 12    | Both | Join/leave flows, persistence, error handling      |
-| `community-creation.test.js`        | 23    | Yes  | Both keypair flows, all steps, settings            |
-| `discover.test.js`                  | 11    | No   | Discovery tabs, infinite scroll, profiles          |
-| `discover-events-filter.test.js`    | 9     | No   | Events tab date range filter, URL persistence      |
-| `learning-search.test.js`           | 14    | No   | Search input, SKOS filters, tab visibility, layout |
-| `relay-override-pagination.test.js` | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination |
-| `comments-reactions.test.js`        | 18    | Both | Comments, reactions, auth flows                    |
-| `chat-posting.test.js`              | 8     | Both | Chat input visibility, message posting flow        |
-| `signup.test.js`                    | 15    | No   | 4-step signup wizard, key generation               |
-| `settings.test.js`                  | 20    | Both | Theme, relays, relay editing, gated/debug          |
-| `settings-blossom.test.js`          | 6     | Yes  | Blossom server management                          |
-| `mobile-navigation.test.js`         | 8     | No   | Mobile hamburger menu, responsive layout           |
+| File                                 | Tests | Auth | Coverage                                                          |
+| ------------------------------------ | ----- | ---- | ----------------------------------------------------------------- |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                     |
+| `calendar.test.js`                   | 4     | No   | Calendar page, events, modal                                      |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                         |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                      |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                 |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                        |
+| `amb-creation.test.js`               | 18    | Yes  | FAB, creation page, all 4 steps, validation                       |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                      |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                    |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                        |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                            |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                      |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                     |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                     |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                           |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                         |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                     |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                   |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                       |
+| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation                              |
+| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                         |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                         |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                          |
+| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances |
 
 ## Detailed Coverage
 
@@ -348,6 +351,22 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 
 ---
 
+### calendar-context-menu.test.js (4 tests)
+
+**Route:** `/calendar`
+**Auth required:** No
+
+| Test                                                     | What it verifies                                        |
+| -------------------------------------------------------- | ------------------------------------------------------- |
+| three-dots context menu button is visible in modal       | EventContextMenu button present in details modal        |
+| clicking context menu button opens dropdown with options | Dropdown shows Copy event ID, Copy share link, View raw |
+| view raw event opens raw event dialog                    | Raw event dialog shows JSON with kind, pubkey, tags     |
+| no critical JavaScript errors when using context menu    | No JS errors during menu interaction                    |
+
+**Components exercised:** CalendarEventDetailsModal, EventContextMenu
+
+---
+
 ### profile.test.js (4 tests)
 
 **Route:** `/p/[npub]`
@@ -443,6 +462,22 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 
 ---
 
+### community-access-filtering.test.js (3 tests)
+
+**Route:** `/c/[pubkey]` (gated community)
+**Auth required:** No
+**Seed data:** Community 1 with profile-list-gated Posts section, open Chat section
+
+| Test                                               | What it verifies                                         |
+| -------------------------------------------------- | -------------------------------------------------------- |
+| shows only member threads in gated forum section   | Member thread visible, non-member thread filtered out    |
+| shows all messages in open chat section            | Both member and non-member messages visible in open chat |
+| no critical JavaScript errors when navigating tabs | Tab switching between Forum/Chat works cleanly           |
+
+**Components exercised:** MainContentArea (allowedAuthors context), CommunityContentView (displayedItems filter), Chat (displayedMessages filter), ForumView, useProfileListAccess
+
+---
+
 ### community-membership.test.js (12 tests)
 
 **Route:** `/discover` (Communities tab), `/c/[pubkey]`
@@ -535,11 +570,11 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 
 #### Creation Flow (3 tests)
 
-| Test                                   | What it verifies                  |
-| -------------------------------------- | --------------------------------- |
-| can advance to confirmation step       | Next button navigates to step 2   |
-| can complete community creation        | Creation navigates to /c/[pubkey] |
-| created community shows user as joined | Auto-join works (kind 30382)      |
+| Test                                   | What it verifies                        |
+| -------------------------------------- | --------------------------------------- |
+| can advance to confirmation step       | Next button navigates to step 2         |
+| can complete community creation        | Creation navigates to /c/[pubkey]       |
+| created community shows user as joined | Auto-join works (kind 30000 follow set) |
 
 #### Error Handling (1 test)
 
@@ -1042,6 +1077,42 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 | Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                          | -                                                  |
 
 ---
+
+### list-management.test.js (9 tests)
+
+**Routes:** `/c?view=my-stuff&tab=lists`, `/[naddr]` (follow set)
+**Auth required:** Both — modal tests use authenticated user; the final
+people-CRUD gating test exercises the logged-out path.
+
+Covers the NIP-51 lists dashboard tab, the "New list" modal UI, and the
+add/remove affordances that render on an owner's follow-set detail page.
+AddProfileRow is a combobox (ContactSearchInput with `showExcluded` +
+`acceptPubkeyInput` flags); unit tests cover the dropdown/keyboard logic,
+the E2E cases lock in the user-visible surface + owner gating.
+
+#### Dashboard Lists Tab (1 test)
+
+| Test                                       | What it verifies                                              |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| renders lists section with New list button | `[data-testid="dashboard-lists"]` + `new-list-button` visible |
+
+#### New List Modal (5 tests)
+
+| Test                                                      | What it verifies                                                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| clicking New list opens modal with kind picker and fields | `#new-list-kind`, `#new-list-title`, `#new-list-description` render; Create disabled while empty |
+| kind picker offers multiple NIP-51 parameterized kinds    | `<select>` has ≥4 options                                                                        |
+| filling the title enables the Create button               | Whitespace-only title stays disabled; real text enables submit                                   |
+| Cancel button closes the modal                            | Click Cancel → modal hidden                                                                      |
+| clicking the backdrop closes the modal                    | Click backdrop → modal hidden                                                                    |
+
+#### People-list CRUD affordances (3 tests)
+
+| Test                                                           | What it verifies                                                                                         |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| owner sees AddProfileRow and remove button on their follow set | Combobox placeholder + `data-testid="remove-profile-{pubkey}"` visible on own kind 30000                 |
+| pasting an already-added npub surfaces "Already added" badge   | Typing TEST_AUTHOR_2 npub renders a dropdown row with the `Already added` badge + `aria-disabled="true"` |
+| unauthenticated visitor does not see add/remove UI             | Without auth, combobox and remove button are absent on same naddr                                        |
 
 ## Maintenance Guidelines
 

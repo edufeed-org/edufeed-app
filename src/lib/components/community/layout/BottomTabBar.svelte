@@ -3,11 +3,16 @@
     HomeIcon,
     ChatIcon,
     CalendarIcon,
-    BellIcon,
     SettingsIcon,
     BookIcon,
+    GraduationCapIcon,
     KanbanIcon,
-    ScrollTextIcon
+    ScrollTextIcon,
+    ForumIcon,
+    BookmarkShareIcon,
+    MeetIcon,
+    LockIcon,
+    LockOpenIcon
   } from '$lib/components/icons';
   import {
     getCommunityAvailableContentTypes,
@@ -20,7 +25,9 @@
   let {
     selectedContentType = $bindable(),
     onContentTypeSelect,
-    communityEvent = null // The community's kind:10222 event
+    communityEvent = null, // The community's kind:10222 event
+    restrictedTabs = /** @type {Set<string>} */ (new Set()),
+    accessibleTabs = /** @type {Set<string>} */ (new Set())
   } = $props();
 
   // Icon mapping for content types
@@ -29,10 +36,13 @@
     home: HomeIcon,
     chat: ChatIcon,
     calendar: CalendarIcon,
-    learning: BookIcon,
+    learning: GraduationCapIcon,
     boards: KanbanIcon,
     articles: ScrollTextIcon,
-    activity: BellIcon,
+    forum: ForumIcon,
+    wikis: BookIcon,
+    'social-bookmarks': BookmarkShareIcon,
+    meet: MeetIcon,
     settings: SettingsIcon
   };
 
@@ -42,7 +52,12 @@
     calendar: () => m.community_layout_bottom_tab_bar_calendar(),
     learning: () => m.community_layout_bottom_tab_bar_learning(),
     boards: () => m.community_layout_bottom_tab_bar_boards(),
-    articles: () => m.community_layout_bottom_tab_bar_articles()
+    articles: () => m.community_layout_bottom_tab_bar_articles(),
+    forum: () => m.community_layout_bottom_tab_bar_forum(),
+    wikis: () => m.community_wikis_title(),
+    'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
+    meet: () => m.community_layout_bottom_tab_bar_meet(),
+    settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 
   // State for scroll indicators
@@ -86,7 +101,7 @@
 
     // Ensure all default tabs are present (replaces per-type forced blocks)
     for (const tabId of getDefaultCommunityTabs()) {
-      if (tabId === 'home' || tabId === 'activity' || tabId === 'settings') continue;
+      if (tabId === 'home' || tabId === 'settings') continue;
       if (!types.some((t) => t.id === tabId)) {
         types.push({
           id: tabId,
@@ -96,11 +111,12 @@
       }
     }
 
-    // Add common types at the end
-    types.push(
-      { id: 'activity', label: m.community_layout_bottom_tab_bar_activity(), icon: BellIcon },
-      { id: 'settings', label: m.community_layout_bottom_tab_bar_settings(), icon: SettingsIcon }
-    );
+    // Add settings tab at the end
+    types.push({
+      id: 'settings',
+      label: m.community_layout_bottom_tab_bar_settings(),
+      icon: SettingsIcon
+    });
 
     return types;
   }
@@ -204,17 +220,34 @@
       style="scroll-behavior: smooth;"
     >
       <!-- DaisyUI Dock Component -->
-      <div class="dock dock-lg mx-auto min-w-max px-4 py-2">
+      <div class="flex w-max items-center gap-3 px-4 py-2">
         {#each contentTypes as type (type.id)}
           {@const isActive = selectedContentType === type.id}
           {@const Icon = type.icon}
           <button
-            class:dock-active={isActive}
             onclick={() => handleDockClick(type.id)}
-            class="snap-center"
+            class="flex-shrink-0 snap-center rounded-lg p-2 {isActive
+              ? 'bg-primary/10 text-primary'
+              : 'text-base-content/70'}"
+            title={type.label}
           >
-            <Icon class_="size-[1.2em]" />
-            <span class="dock-label text-xs">{type.label}</span>
+            <span class="relative">
+              <Icon class_="size-[1.4em]" />
+              {#if restrictedTabs.has(type.id)}
+                <span
+                  class="absolute -top-1 -right-1.5"
+                  title={accessibleTabs.has(type.id)
+                    ? m.community_content_tab_access_granted()
+                    : m.community_content_tab_restricted()}
+                >
+                  {#if accessibleTabs.has(type.id)}
+                    <LockOpenIcon class_="w-2.5 h-2.5 text-success" />
+                  {:else}
+                    <LockIcon class_="w-2.5 h-2.5 opacity-60" />
+                  {/if}
+                </span>
+              {/if}
+            </span>
           </button>
         {/each}
       </div>

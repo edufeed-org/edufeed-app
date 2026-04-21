@@ -1,4 +1,4 @@
-import { EventFactory } from 'applesauce-core/event-factory';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import {
@@ -49,30 +49,18 @@ export async function deleteEvent(event, activeUser) {
 
   try {
     // Create EventFactory
-    const factory = new EventFactory({
+    const factory = createAppEventFactory({
       signer: activeUser.signer
     });
 
     // Use factory.delete() - properly constructs NIP-09 deletion events
     const eventToDelete = event.originalEvent || event;
-    console.log('🗑️ Creating deletion event for:', {
-      id: eventToDelete.id,
-      kind: eventToDelete.kind,
-      pubkey: eventToDelete.pubkey
-    });
 
     const deleteTemplate = await factory.delete([eventToDelete]);
     const signedDelete = await factory.sign(deleteTemplate);
 
-    console.log('🗑️ Deletion event created:', {
-      id: signedDelete.id,
-      kind: signedDelete.kind,
-      tags: signedDelete.tags
-    });
-
     // OPTIMISTIC UI: Add to EventStore IMMEDIATELY
     eventStore.add(signedDelete);
-    console.log('✅ Deletion event added to EventStore (optimistic)');
 
     // Determine additional relays based on event kind
     const category = kindToAppRelayCategory(kind);

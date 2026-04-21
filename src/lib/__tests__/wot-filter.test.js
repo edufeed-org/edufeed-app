@@ -27,13 +27,14 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: vi.fn(() => ['wss://relay.example.com'])
+  getAllLookupRelays: vi.fn(() => ['wss://relay.example.com']),
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   kindToAppRelayCategory: vi.fn((/** @type {number} */ kind) => {
     if ([31922, 31923, 31924, 31925].includes(kind)) return 'calendar';
-    if ([10222, 30222, 30382].includes(kind)) return 'communikey';
+    if ([10222, 30222].includes(kind)) return 'communikey';
     if ([30142].includes(kind)) return 'educational';
     if ([30023].includes(kind)) return 'longform';
     if ([30301, 30302, 8571].includes(kind)) return 'kanban';

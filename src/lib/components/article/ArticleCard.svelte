@@ -5,7 +5,7 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { goto } from '$app/navigation';
@@ -15,6 +15,10 @@
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { RepliesModel } from 'applesauce-common/models';
+  import { ChatIcon } from '$lib/components/icons';
 
   /**
    * @typedef {Object} Props
@@ -22,10 +26,17 @@
    * @property {any} [authorProfile] - Author's profile
    * @property {boolean} [compact=false] - Compact display mode
    * @property {'card'|'list'} [variant='card'] - Display variant
+   * @property {string} [communityNpub] - Community npub for route construction
    */
 
   /** @type {Props} */
-  let { article, authorProfile = null, compact = false, variant = 'card' } = $props();
+  let {
+    article,
+    authorProfile = null,
+    compact = false,
+    variant = 'card',
+    communityNpub = undefined
+  } = $props();
 
   const isList = $derived(variant === 'list');
 
@@ -64,12 +75,22 @@
     );
   });
 
+  let commentCount = $state(0);
+
+  // Subscribe to RepliesModel for cached comment counts (no relay fetching).
+  // Detail view handles relay fetching when the user navigates to the article.
+  $effect(() => {
+    if (!article?.id) return;
+
+    const modelSub = eventStore.model(RepliesModel, article).subscribe((replies) => {
+      commentCount = (replies || []).length;
+    });
+
+    return () => modelSub.unsubscribe();
+  });
+
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, article.pubkey.slice(0, 8) + '...'));
-  const authorAvatar = $derived(
-    getProfilePicture(authorProfile) || `https://robohash.org/${article.pubkey}`
-  );
-
   // Generate naddr for the article (includes relay hints for discoverability)
   const articleNaddr = $derived.by(() => {
     const naddr = encodeEventToNaddr(article);
@@ -77,12 +98,23 @@
   });
 
   /**
+   * Build the resolved route for this article.
+   * @returns {string | null}
+   */
+  function getArticleHref() {
+    if (!articleNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/article/${articleNaddr}`);
+    return resolve(`/${articleNaddr}`);
+  }
+
+  /**
    * Handle card click
    * @param {MouseEvent} e
    */
   function handleClick(e) {
-    if (articleNaddr && e.target instanceof HTMLElement && !e.target.closest('button, a')) {
-      goto(resolve(`/${articleNaddr}`));
+    const href = getArticleHref();
+    if (href && e.target instanceof HTMLElement && !e.target.closest('button, a')) {
+      goto(href);
     }
   }
 
@@ -91,9 +123,10 @@
    * @param {KeyboardEvent} e
    */
   function handleKeydown(e) {
-    if ((e.key === 'Enter' || e.key === ' ') && articleNaddr) {
+    const href = getArticleHref();
+    if ((e.key === 'Enter' || e.key === ' ') && href) {
       e.preventDefault();
-      goto(resolve(`/${articleNaddr}`));
+      goto(href);
     }
   }
 </script>
@@ -101,7 +134,7 @@
 {#if isList}
   <!-- List variant: horizontal row -->
   <div
-    class="article-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:border-primary hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
+    class="article-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
     role="button"
     tabindex="0"
     onclick={handleClick}
@@ -127,7 +160,12 @@
     <div class="min-w-0 flex-1">
       <div class="truncate font-semibold text-base-content">{title}</div>
       <div class="truncate text-sm text-base-content/60">
-        {authorName} · {formatCalendarDate(publishedAt, 'short')}
+        <a
+          href={resolve(`/p/${article.pubkey}`)}
+          class="hover:underline"
+          onclick={(e) => e.stopPropagation()}>{authorName}</a
+        >
+        · {formatCalendarDate(publishedAt, 'short')}
       </div>
       {#if summary}
         <div class="hidden text-sm text-base-content/50 sm:line-clamp-2 sm:block">{summary}</div>
@@ -147,7 +185,7 @@
 {:else}
   <!-- Card variant: vertical layout -->
   <div
-    class="article-card focus:ring-opacity-50 cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:border-primary hover:shadow-md focus:ring-2 focus:ring-primary focus:outline-none {compact
+    class="article-card focus:ring-opacity-50 cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md focus:ring-2 focus:ring-primary focus:outline-none {compact
       ? 'p-3'
       : 'p-4'}"
     role="button"
@@ -156,14 +194,20 @@
     onkeydown={handleKeydown}
   >
     <!-- Author Header -->
-    <div class="mb-3 flex items-center gap-3">
-      <div class="avatar">
-        <div class="h-10 w-10 rounded-full">
-          <img src={authorAvatar} alt={authorName} loading="lazy" decoding="async" />
-        </div>
-      </div>
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="mb-3 flex items-center gap-3" onclick={(e) => e.stopPropagation()}>
+      <ProfileAvatar
+        pubkey={article.pubkey}
+        profile={authorProfile}
+        size="md"
+        linkToProfile
+        showHoverCard
+      />
       <div class="min-w-0 flex-1">
-        <div class="truncate font-medium text-base-content">{authorName}</div>
+        <a
+          href={resolve(`/p/${article.pubkey}`)}
+          class="truncate font-medium text-base-content hover:underline">{authorName}</a
+        >
         <div class="text-sm text-base-content/60">
           {formatCalendarDate(publishedAt, 'short')}
         </div>
@@ -207,10 +251,10 @@
       {/if}
 
       <!-- Read More Button -->
-      {#if articleNaddr}
+      {#if getArticleHref()}
         <div class="pt-2">
           <a
-            href={resolve(`/${articleNaddr}`)}
+            href={getArticleHref()}
             class="btn btn-sm btn-primary"
             onclick={(e) => e.stopPropagation()}
           >
@@ -219,9 +263,15 @@
         </div>
       {/if}
 
-      <!-- Reactions -->
+      <!-- Reactions & Comments -->
       {#if !compact}
-        <div class="pt-2">
+        <div class="flex items-center gap-2 pt-2">
+          {#if commentCount > 0}
+            <span class="flex items-center gap-1 text-sm text-base-content/60">
+              <ChatIcon class_="w-4 h-4" />
+              {commentCount}
+            </span>
+          {/if}
           <ReactionBar event={article} />
         </div>
       {/if}

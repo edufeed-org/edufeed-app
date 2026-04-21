@@ -14,31 +14,39 @@ export const communikeyTimelineLoader = () => {
   return createTimelineLoader(timedPool, getCommunikeyRelays(), filter, { eventStore });
 };
 
-// Membership tracking loader factory for community relationships (kind 30382)
-// Takes an author pubkey and returns a loader that fetches only that author's relationships
-export function createRelationshipLoader(/** @type {string} */ authorPubkey) {
-  return createTimelineLoader(
+/**
+ * Load form templates (kind 30168) for given pubkey(s).
+ * @param {string | string[]} pubkeys
+ */
+export const formTemplateLoader = (pubkeys) =>
+  createTimelineLoader(
     timedPool,
     getCommunikeyRelays(),
-    {
-      kinds: [30382], // Relationship events
-      authors: [authorPubkey], // Filter by specific author
-      limit: 100
-    },
+    { kinds: [30168], authors: Array.isArray(pubkeys) ? pubkeys : [pubkeys] },
     { eventStore }
   );
-}
 
-// Community members loader factory - fetches all relationship events for a specific community
-// Takes a community pubkey and returns a loader that fetches all users who have relationships with that community
-export function createCommunityMembersLoader(/** @type {string} */ communityPubkey) {
-  return createTimelineLoader(
+/**
+ * Load form requests (kind 1070) sent to a specific user.
+ * @param {string} recipientPubkey
+ */
+export const formRequestLoader = (recipientPubkey) =>
+  createTimelineLoader(
     timedPool,
     getCommunikeyRelays(),
-    {
-      kinds: [30382], // Relationship events
-      '#d': [communityPubkey] // Filter by community ID
-    },
+    { kinds: [1070], '#p': [recipientPubkey] },
     { eventStore }
   );
-}
+
+/**
+ * Load form responses (kind 1069) for a specific form.
+ * @param {string} formAddress - Form coordinate: "30168:pubkey:d-tag"
+ * @param {string} creatorPubkey - Form creator's pubkey (for #p filter efficiency)
+ */
+export const formResponseLoader = (formAddress, creatorPubkey) =>
+  createTimelineLoader(
+    timedPool,
+    getCommunikeyRelays(),
+    { kinds: [1069], '#a': [formAddress], '#p': [creatorPubkey] },
+    { eventStore }
+  );

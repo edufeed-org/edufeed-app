@@ -1,5 +1,5 @@
 <script>
-  let { modalId, onNSECTransition } = $props();
+  let { modalId, onNSECTransition, onBunkerTransition } = $props();
 
   import * as m from '$lib/paraglide/messages';
   import { ExtensionSigner } from 'applesauce-signers';
@@ -59,6 +59,9 @@
         }
         return null;
       case 'Bunker':
+        if (onBunkerTransition) {
+          onBunkerTransition();
+        }
         return null;
       default:
         throw new Error('Unknown signer');
@@ -79,7 +82,7 @@
         <button onclick={() => createSigner('NSEC')} class="btn join-item"
           >{m.auth_login_modal_nsec()}</button
         >
-        <button disabled onclick={() => createSigner('Bunker')} class="btn join-item"
+        <button onclick={() => createSigner('Bunker')} class="btn join-item"
           >{m.auth_login_modal_bunker()}</button
         >
       </div>
