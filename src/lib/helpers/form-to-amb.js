@@ -1,7 +1,7 @@
 /**
  * @typedef {Object} SelectedConcept
  * @property {string} id - external URI of the concept
- * @property {string} nostrCoord - "39737:<pubkey>:<d>"
+ * @property {string} nostrCoord - addressable Concept coordinate "<kind>:<pubkey>:<d>" (kind 39738 under NIP-VOCAB v0.2)
  * @property {string} relay
  * @property {Record<string, string>} labels - { [lang]: label }
  */

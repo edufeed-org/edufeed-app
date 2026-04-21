@@ -1,11 +1,10 @@
 import { createAddressLoader, createTimelineLoader } from 'applesauce-loaders/loaders';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool } from '$lib/loaders/base.js';
-
-const VOCAB_KIND = 39737;
+import { VOCAB_KIND, CONCEPT_KIND } from 'nostr-vocab-core/constants';
 
 /**
- * Parse "39737:<pub>:<d>" into parts.
+ * Parse "<kind>:<pub>:<d>" into parts.
  * @param {string} address
  */
 function parseVocabAddress(address) {
@@ -30,8 +29,9 @@ export function loadConceptScheme(ref, extraRelays = []) {
 }
 
 /**
- * Stream all Concept events that reference a given scheme via its a-tag.
- * Uses the vocab relays (addr's relay hint + any extras) and #a filter.
+ * Stream all Concept events (kind CONCEPT_KIND = 39738) that reference a given
+ * scheme via their `a` tag. The scheme coord itself stays on VOCAB_KIND
+ * (39737); only the queried entity kind changed in NIP-VOCAB v0.2.
  * @param {string} schemeCoord - "39737:<pub>:<d>"
  * @param {string[]} relays
  * @returns {import('rxjs').Subscription}
@@ -40,16 +40,17 @@ export function loadSchemeConcepts(schemeCoord, relays) {
   const loader = createTimelineLoader(
     timedPool,
     relays,
-    { kinds: [VOCAB_KIND], '#a': [schemeCoord] },
+    { kinds: [CONCEPT_KIND], '#a': [schemeCoord] },
     { eventStore, limit: 2000 }
   );
   return loader().subscribe();
 }
 
 /**
- * Stream all kind-39737 events on the given relays. The caller filters
- * ConceptScheme vs Concept client-side (kind 39737 is shared across
- * ConceptScheme / Concept / Collection, distinguished only by `type` tag).
+ * Stream all ConceptScheme events (kind VOCAB_KIND = 39737) on the given
+ * relays. Since the NIP-VOCAB v0.2 split, each vocab entity has its own kind —
+ * schemes are exclusively 39737, concepts are 39738, collections are 39739 —
+ * so this filter already excludes concepts/collections at the relay level.
  * Used by the FormBuilder vocab picker to discover published schemes.
  * @param {string[]} relays
  * @returns {import('rxjs').Subscription}

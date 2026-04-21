@@ -4,6 +4,16 @@
   import { getLocale } from '$lib/paraglide/runtime.js';
   import { conceptEventsToSkosTree } from '$lib/helpers/educational/conceptEventsToSkosTree.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
+  import { parseConcept } from 'nostr-vocab-core/parsers';
+  import { CONCEPT_KIND } from 'nostr-vocab-core/constants';
+  import { createReplaceableAddress } from 'applesauce-core/helpers';
+
+  /**
+   * @typedef {Object} ParsedConcept
+   * @property {string | undefined} d
+   * @property {string | undefined} externalUri
+   * @property {{ value: string, lang: string }[]} prefLabels
+   */
 
   /**
    * @typedef {Object} Props
@@ -27,27 +37,30 @@
   const locale = $derived(getLocale());
 
   /**
-   * Derive a stable concept id from a kind-39737 event:
-   * prefer the external URI (`i` tag), else fall back to a Nostr coord URI.
+   * Derive a stable concept id from a Concept event (kind CONCEPT_KIND):
+   * prefer the external URI (parsed `externalUri`), else fall back to a
+   * Nostr coord URI built from the canonical `createReplaceableAddress`.
    * @param {import('nostr-tools').NostrEvent} evt
    * @returns {string}
    */
   function conceptId(evt) {
-    const d = evt.tags.find((t) => t[0] === 'd')?.[1] || '';
-    const iTag = evt.tags.find((t) => t[0] === 'i')?.[1];
-    return iTag || `nostr:39737:${evt.pubkey}:${d}`;
+    const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));
+    if (parsed.externalUri) return parsed.externalUri;
+    const coord = createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '');
+    return `nostr:${coord}`;
   }
 
   /**
-   * Extract prefLabels by language from a kind-39737 event.
+   * Extract prefLabels by language from a Concept event using the library parser.
    * @param {import('nostr-tools').NostrEvent} evt
    * @returns {Record<string,string>}
    */
   function labelsFromEvent(evt) {
+    const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));
     /** @type {Record<string,string>} */
     const labels = {};
-    for (const t of evt.tags) {
-      if (t[0] === 'prefLabel' && t[1] && t[2]) labels[t[2]] = t[1];
+    for (const { value, lang } of parsed.prefLabels || []) {
+      if (value && lang) labels[lang] = value;
     }
     return labels;
   }
@@ -64,15 +77,17 @@
   }
 
   /**
-   * Build the rich SelectedConcept shape expected by form-to-amb from a concept event.
+   * Build the rich SelectedConcept shape expected by form-to-amb from a
+   * concept event. `nostrCoord` is built via `createReplaceableAddress` so it
+   * uses the canonical CONCEPT_KIND prefix regardless of any future NIP shift.
    * @param {import('nostr-tools').NostrEvent} evt
    * @returns {import('$lib/helpers/form-to-amb.js').SelectedConcept}
    */
   function toRichSelected(evt) {
-    const d = evt.tags.find((t) => t[0] === 'd')?.[1] || '';
+    const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));
     return {
       id: conceptId(evt),
-      nostrCoord: `39737:${evt.pubkey}:${d}`,
+      nostrCoord: createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || ''),
       relay: field.vocab?.relay || '',
       labels: labelsFromEvent(evt)
     };

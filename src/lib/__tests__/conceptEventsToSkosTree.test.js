@@ -1,9 +1,14 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { conceptEventsToSkosTree } from '$lib/helpers/educational/conceptEventsToSkosTree.js';
+import { CONCEPT_KIND } from 'nostr-vocab-core/constants';
+import { createReplaceableAddress } from 'applesauce-core/helpers';
+
+const conceptCoord = (/** @type {string} */ pubkey, /** @type {string} */ d) =>
+  createReplaceableAddress(CONCEPT_KIND, pubkey, d);
 
 /**
- * Build a minimal kind-39737 concept event.
+ * Build a minimal Concept event (NIP-VOCAB kind 39738).
  * @param {{ d: string, label: string, broader?: { coord: string, relay?: string }[], pubkey?: string, id?: string }} opts
  */
 function concept({ d, label, broader = [], pubkey = 'pub', id = d }) {
@@ -16,13 +21,13 @@ function concept({ d, label, broader = [], pubkey = 'pub', id = d }) {
   for (const b of broader) {
     tags.push(['a', b.coord, b.relay ?? 'wss://r.example', 'broader']);
   }
-  return { id, pubkey, kind: 39737, tags, content: '', sig: '', created_at: 0 };
+  return { id, pubkey, kind: CONCEPT_KIND, tags, content: '', sig: '', created_at: 0 };
 }
 
 /** @param {any} e */
 const getId = (e) => {
   const d = e.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
-  return `nostr:39737:${e.pubkey}:${d}`;
+  return `nostr:${conceptCoord(e.pubkey, d)}`;
 };
 
 /** @param {any} e */
@@ -57,18 +62,18 @@ describe('conceptEventsToSkosTree', () => {
       concept({
         d: 'subfield',
         label: 'Algebra',
-        broader: [{ coord: '39737:pub:dept1' }]
+        broader: [{ coord: conceptCoord('pub', 'dept1') }]
       }),
       concept({ d: 'faculty-a', label: 'Faculty A' }),
       concept({
         d: 'dept1',
         label: 'Dept 1',
-        broader: [{ coord: '39737:pub:faculty-a' }]
+        broader: [{ coord: conceptCoord('pub', 'faculty-a') }]
       }),
       concept({
         d: 'dept2',
         label: 'Dept 2',
-        broader: [{ coord: '39737:pub:faculty-a' }]
+        broader: [{ coord: conceptCoord('pub', 'faculty-a') }]
       })
     ];
     const out = conceptEventsToSkosTree(events, getId, getLabels, 'de');
@@ -76,9 +81,9 @@ describe('conceptEventsToSkosTree', () => {
 
     expect(byLabel).toEqual([
       { label: 'Faculty A', level: 0, parentId: undefined },
-      { label: 'Dept 1', level: 1, parentId: 'nostr:39737:pub:faculty-a' },
-      { label: 'Algebra', level: 2, parentId: 'nostr:39737:pub:dept1' },
-      { label: 'Dept 2', level: 1, parentId: 'nostr:39737:pub:faculty-a' }
+      { label: 'Dept 1', level: 1, parentId: `nostr:${conceptCoord('pub', 'faculty-a')}` },
+      { label: 'Algebra', level: 2, parentId: `nostr:${conceptCoord('pub', 'dept1')}` },
+      { label: 'Dept 2', level: 1, parentId: `nostr:${conceptCoord('pub', 'faculty-a')}` }
     ]);
   });
 
@@ -87,7 +92,7 @@ describe('conceptEventsToSkosTree', () => {
       concept({
         d: 'orphan',
         label: 'Orphan',
-        broader: [{ coord: '39737:pub:never-loaded' }]
+        broader: [{ coord: conceptCoord('pub', 'never-loaded') }]
       }),
       concept({ d: 'root', label: 'Root' })
     ];
@@ -104,12 +109,12 @@ describe('conceptEventsToSkosTree', () => {
       concept({
         d: 'a',
         label: 'A',
-        broader: [{ coord: '39737:pub:b' }]
+        broader: [{ coord: conceptCoord('pub', 'b') }]
       }),
       concept({
         d: 'b',
         label: 'B',
-        broader: [{ coord: '39737:pub:a' }]
+        broader: [{ coord: conceptCoord('pub', 'a') }]
       })
     ];
     // If cycle-breaking is broken this will throw (recursion limit) or timeout.
@@ -125,7 +130,7 @@ describe('conceptEventsToSkosTree', () => {
       {
         id: 'x',
         pubkey: 'pub',
-        kind: 39737,
+        kind: CONCEPT_KIND,
         content: '',
         sig: '',
         created_at: 0,
@@ -139,5 +144,25 @@ describe('conceptEventsToSkosTree', () => {
     ];
     const out = conceptEventsToSkosTree(events, getId, getLabels, 'de');
     expect(out[0].notation).toBe('s1017');
+  });
+
+  it('drops concept events that have no d tag (cannot be addressed)', () => {
+    const events = [
+      {
+        id: 'no-d',
+        pubkey: 'pub',
+        kind: CONCEPT_KIND,
+        content: '',
+        sig: '',
+        created_at: 0,
+        tags: [
+          ['type', 'Concept'],
+          ['prefLabel', 'Ghost', 'de']
+        ]
+      },
+      concept({ d: 'real', label: 'Real' })
+    ];
+    const out = conceptEventsToSkosTree(events, getId, getLabels, 'de');
+    expect(out.map((c) => c.labels.de)).toEqual(['Real']);
   });
 });

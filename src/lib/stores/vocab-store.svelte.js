@@ -6,6 +6,7 @@ import {
   loadAllSchemes
 } from '$lib/loaders/vocab-loader.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { VOCAB_KIND, CONCEPT_KIND } from 'nostr-vocab-core/constants';
 
 /**
  * Reactive hook: returns the kind-39737 ConceptScheme event for a given address.
@@ -61,13 +62,10 @@ export function useSchemeConcepts(getSchemeCoord, getRelays) {
     const relays = getRelays();
     const loaderSub = loadSchemeConcepts(coord, relays);
     const modelSub = eventStore
-      .model(TimelineModel, { kinds: [39737], '#a': [coord] })
+      .model(TimelineModel, { kinds: [CONCEPT_KIND], '#a': [coord] })
       .subscribe((events) => {
         let changed = false;
         for (const e of events || []) {
-          // Only keep events that are Concepts (not Collections, not the scheme itself)
-          const isConcept = e.tags.some((t) => t[0] === 'type' && t[1] === 'Concept');
-          if (!isConcept) continue;
           if (!loadedIds.has(e.id)) {
             loadedIds.set(e.id, e);
             changed = true;
@@ -86,12 +84,13 @@ export function useSchemeConcepts(getSchemeCoord, getRelays) {
 }
 
 /**
- * Reactive hook: returns all kind-39737 ConceptScheme events discovered on
- * the given relays. Used by the FormBuilder vocab picker.
+ * Reactive hook: returns all ConceptScheme events (kind VOCAB_KIND = 39737)
+ * discovered on the given relays. Used by the FormBuilder vocab picker.
  *
- * Kind 39737 is addressable, so EventStore dedupes by coordinate
- * automatically — we only need to client-filter the shared kind down to
- * `type === 'ConceptScheme'` (excludes Concept / Collection events).
+ * Since NIP-VOCAB v0.2, kind 39737 is exclusive to ConceptSchemes — concepts
+ * live on 39738 and collections on 39739 — so no type-tag filter is needed.
+ * A pre-split legacy guard keeps any residual `type: Concept` events that
+ * happen to still be published on kind 39737 out of the scheme list.
  *
  * @param {() => string[]} getRelays
  * @returns {() => import('nostr-tools').NostrEvent[]}
@@ -108,12 +107,17 @@ export function useConceptSchemes(getRelays) {
     }
 
     const loaderSub = loadAllSchemes(relays);
-    const modelSub = eventStore.model(TimelineModel, { kinds: [39737] }).subscribe((events) => {
-      const onlySchemes = (events || []).filter((e) =>
-        e.tags.some((t) => t[0] === 'type' && t[1] === 'ConceptScheme')
-      );
-      schemes = onlySchemes;
-    });
+    const modelSub = eventStore
+      .model(TimelineModel, { kinds: [VOCAB_KIND] })
+      .subscribe((events) => {
+        // Legacy guard: reject pre-split events that are concepts/collections
+        // accidentally stored on kind 39737. Post-split relays never see them.
+        const onlySchemes = (events || []).filter((e) => {
+          const typeTag = e.tags.find((t) => t[0] === 'type')?.[1];
+          return !typeTag || typeTag === 'ConceptScheme';
+        });
+        schemes = onlySchemes;
+      });
 
     return () => {
       loaderSub.unsubscribe();
