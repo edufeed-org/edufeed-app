@@ -1,6 +1,8 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
+import { CONCEPT_KIND } from 'nostr-vocab-core/constants';
+import { createReplaceableAddress } from 'applesauce-core/helpers';
 
 // Paraglide runtime used by both FormConceptPicker (locale) and SKOSDropdown.
 vi.mock('$lib/paraglide/runtime.js', () => ({
@@ -57,7 +59,7 @@ vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
     {
       id: 'c1',
       pubkey: 'pub',
-      kind: 39737,
+      kind: CONCEPT_KIND,
       tags: [
         ['d', 's1017'],
         ['type', 'Concept'],
@@ -70,7 +72,7 @@ vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
     {
       id: 'c2',
       pubkey: 'pub',
-      kind: 39737,
+      kind: CONCEPT_KIND,
       tags: [
         ['d', 's1002'],
         ['type', 'Concept'],
@@ -161,7 +163,7 @@ describe('FormConceptPicker', () => {
     expect(selected.length).toBe(1);
     expect(selected[0]).toMatchObject({
       id: 'https://w3id.org/kim/schulfaecher/s1017',
-      nostrCoord: '39737:pub:s1017',
+      nostrCoord: createReplaceableAddress(CONCEPT_KIND, 'pub', 's1017'),
       relay: 'wss://r.example',
       labels: { de: 'Mathematik', en: 'Mathematics' }
     });

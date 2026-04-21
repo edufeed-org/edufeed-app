@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 /**
- * Publish edufeed default vocabularies as kind-39737 events.
+ * Publish edufeed default vocabularies as NIP-VOCAB events.
+ *
+ * Under NIP-VOCAB v0.2 each vocab entity has its own kind:
+ *   - ConceptScheme → kind 39737 (VOCAB_KIND)
+ *   - Concept       → kind 39738 (CONCEPT_KIND)
+ *   - Collection    → kind 39739 (COLLECTION_KIND)
+ * The library builders (`buildConceptScheme` / `buildConcept`) emit the right
+ * kind automatically; this script doesn't set kinds by hand.
  *
  * Reads vocab definitions from `scripts/data/edufeed-vocabs.json` — two
  * source types are supported:
@@ -144,10 +151,7 @@ async function main() {
       // stamped; the draft/published distinction is scheme-level only,
       // matching the `nocabs` convention.
       const publishedAt = Math.floor(Date.now() / 1000);
-      const schemeSigned = signEvent(
-        buildConceptScheme({ ...drafts.scheme, publishedAt }),
-        skHex
-      );
+      const schemeSigned = signEvent(buildConceptScheme({ ...drafts.scheme, publishedAt }), skHex);
       const conceptSigneds = drafts.concepts.map((c) => signEvent(buildConcept(c), skHex));
 
       const naddr = nip19.naddrEncode({

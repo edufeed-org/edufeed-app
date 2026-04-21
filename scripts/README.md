@@ -9,9 +9,10 @@ that the configurable content is separate from the publishing logic.
 
 ## publish:vocabs
 
-Publishes edufeed default vocabularies as kind 39737. Reads scheme
-definitions from `scripts/data/edufeed-vocabs.json`. Two source types are
-supported:
+Publishes edufeed default vocabularies under NIP-VOCAB v0.2 (schemes on
+kind 39737, concepts on kind 39738 — the library builders pick the right
+kind). Reads scheme definitions from `scripts/data/edufeed-vocabs.json`.
+Two source types are supported:
 
 - `skohub`: the scheme is fetched + parsed from a SkoHub URL via
   `nostr-vocab-skos-import`. Used for large vocabs (Schulfächer, HCRT, …).
@@ -51,6 +52,39 @@ Ships with two forms out of the box:
 ```
 pnpm run publish:forms
 ```
+
+## cleanup:legacy-vocab
+
+NIP-09 cleanup for legacy kind-39737 concept/collection events emitted by
+pre-v0.2 publish runs. Under NIP-VOCAB v0.2, kind 39737 is
+ConceptScheme-only; concepts moved to 39738 and collections to 39739. This
+script publishes kind-5 deletions for any stale `type: Concept` /
+`type: Collection` events still owned by the publisher on kind 39737.
+
+**Safety:** Dry-run by default. `--apply` is required to actually publish
+the deletions. Schemes (and events with no `type` tag) are always
+preserved. The script only touches events authored by the
+`EDUFEED_PUBLISHER_NSEC` pubkey.
+
+```
+# 1. Inspect what would be deleted (dry-run)
+pnpm run cleanup:legacy-vocab
+
+# 2. Publish NIP-09 deletions
+pnpm run cleanup:legacy-vocab -- --apply
+
+# 3. Verify 0 legacy events remain
+pnpm run cleanup:legacy-vocab
+```
+
+**Full migration sequence (NIP-VOCAB v0.2 rollout):**
+
+1. `pnpm run publish:vocabs` — re-emit schemes + concepts at new kinds
+   (schemes on 39737, concepts on 39738).
+2. `pnpm run cleanup:legacy-vocab` — dry-run to inspect legacy
+   concept/collection events on kind 39737.
+3. `pnpm run cleanup:legacy-vocab -- --apply` — publish deletions.
+4. `pnpm run cleanup:legacy-vocab` — verify the relay reports 0 remaining.
 
 ## Adding a new vocab or form
 

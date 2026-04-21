@@ -1,13 +1,30 @@
+import { parseConcept } from 'nostr-vocab-core/parsers';
+import { CONCEPT_KIND } from 'nostr-vocab-core/constants';
+import { createReplaceableAddress } from 'applesauce-core/helpers';
+
 /**
- * Convert a set of kind-39737 SKOS Concept events into SKOSConcept[] with
- * level/parentId derived from `['a', <coord>, <relay>, 'broader']` tags, emitted
- * in depth-first order (root alphabetical → children alphabetical). This matches
- * what `extractConceptsRecursively` in `skosLoader.js` produces for the JSON path,
- * so SKOSDropdown's tree UI (indentation, collapse/expand, auto-collapse > 30)
- * works without any component changes.
+ * @typedef {Object} ParsedConcept
+ * @property {string | undefined} d
+ * @property {string} pubkey
+ * @property {{ value: string, lang: string }[]} prefLabels
+ * @property {string | undefined} notation
+ * @property {{ address: string, relay: string }[]} broader
+ */
+
+/**
+ * Convert a set of Concept events (kind CONCEPT_KIND = 39738) into
+ * SKOSConcept[] with level/parentId derived from the library-parsed
+ * `broader` relations, emitted in depth-first order (root alphabetical →
+ * children alphabetical). This matches what `extractConceptsRecursively` in
+ * `skosLoader.js` produces for the JSON path, so SKOSDropdown's tree UI
+ * (indentation, collapse/expand, auto-collapse > 30) works without any
+ * component changes.
  *
  * Polyhierarchy note: SKOS permits multiple broader parents. SKOSDropdown's
- * `parentId` is a single string, so we take the first `broader` tag per event.
+ * `parentId` is a single string, so we take the first broader entry per concept.
+ *
+ * Concepts that cannot be addressed (missing `d` tag) are dropped — their
+ * coordinate would be unstable and they couldn't be referenced as a parent.
  *
  * @param {import('nostr-tools').NostrEvent[]} events
  * @param {(e: import('nostr-tools').NostrEvent) => string} getId - stable id for a concept (e.g., external URI or Nostr coord)
@@ -21,25 +38,32 @@ export function conceptEventsToSkosTree(events, getId, getLabels, locale) {
   // coord → id map, plus per-event index for O(1) lookup during tree walks.
   /** @type {Map<string,string>} */
   const coordToId = new Map();
-  /** @type {Map<string, {event: import('nostr-tools').NostrEvent, id: string, labels: Record<string,string>, notation?: string}>} */
+  /** @type {Map<string, {parsed: ParsedConcept, id: string, labels: Record<string,string>, notation?: string}>} */
   const byId = new Map();
 
   for (const e of events) {
-    const d = e.tags.find((t) => t[0] === 'd')?.[1] || '';
-    const coord = `39737:${e.pubkey}:${d}`;
+    const parsed = /** @type {ParsedConcept} */ (parseConcept(e));
+    // Drop concepts without a `d` tag — they have no stable address.
+    if (!parsed.d) continue;
+
+    const coord = createReplaceableAddress(CONCEPT_KIND, e.pubkey, parsed.d);
     const id = getId(e);
     coordToId.set(coord, id);
-    const notation = e.tags.find((t) => t[0] === 'notation')?.[1];
-    byId.set(id, { event: e, id, labels: getLabels(e), ...(notation ? { notation } : {}) });
+    byId.set(id, {
+      parsed,
+      id,
+      labels: getLabels(e),
+      ...(parsed.notation ? { notation: parsed.notation } : {})
+    });
   }
 
   // id → parentId map (first broader wins). Missing parent → undefined → treated as root.
   /** @type {Map<string, string>} */
   const idToParentId = new Map();
   for (const [id, entry] of byId) {
-    const firstBroader = entry.event.tags.find((t) => t[0] === 'a' && t[3] === 'broader');
+    const firstBroader = entry.parsed.broader?.[0];
     if (!firstBroader) continue;
-    const parentId = coordToId.get(firstBroader[1]);
+    const parentId = coordToId.get(firstBroader.address);
     if (parentId && parentId !== id) idToParentId.set(id, parentId);
   }
 

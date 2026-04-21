@@ -5,6 +5,7 @@ import {
   pickSchemeDescription,
   pickSchemeLabel
 } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
+import { VOCAB_KIND, CONCEPT_KIND } from 'nostr-vocab-core/constants';
 
 /**
  * Build a minimal kind-39737 ConceptScheme event.
@@ -32,14 +33,37 @@ function scheme({
 }
 
 /**
- * Build a kind-39737 Concept event — should be filtered out by the helper.
+ * Build a kind-CONCEPT_KIND (39738) Concept event — should be filtered out by the helper
+ * because it is not a ConceptScheme kind.
  * @param {{ d: string, label: string, pubkey?: string, id?: string }} opts
  */
 function concept({ d, label, pubkey = 'pub', id = `concept-${d}` }) {
   return {
     id,
     pubkey,
-    kind: 39737,
+    kind: CONCEPT_KIND,
+    tags: [
+      ['d', d],
+      ['type', 'Concept'],
+      ['prefLabel', label, 'de']
+    ],
+    content: '',
+    sig: '',
+    created_at: 0
+  };
+}
+
+/**
+ * Build a legacy pre-split Concept event: kind 39737 with `type: Concept` tag.
+ * The helper must still filter this out via the ConceptScheme type-tag guard
+ * so we don't regress on backwards-compatible reading of old relay data.
+ * @param {{ d: string, label: string, pubkey?: string, id?: string }} opts
+ */
+function legacyConcept({ d, label, pubkey = 'pub', id = `legacy-${d}` }) {
+  return {
+    id,
+    pubkey,
+    kind: VOCAB_KIND,
     tags: [
       ['d', d],
       ['type', 'Concept'],
@@ -74,11 +98,17 @@ describe('schemeEventsToSkosConcepts', () => {
   it('filters out Concept and Collection events, keeping only ConceptSchemes', () => {
     const events = [
       scheme({ d: 'hcrt', prefLabels: { de: 'HCRT' } }),
+      // Post-split: concept carries its own kind — must be filtered by kind.
       concept({ d: 'some-concept', label: 'Leaf' }),
+      // Pre-split legacy: concept stored on kind 39737 with type tag — must be
+      // filtered by the `type === 'ConceptScheme'` guard, proving
+      // backwards-compatible reading of old relay data.
+      legacyConcept({ d: 'legacy-concept', label: 'Old Leaf' }),
+      // Post-split collection (kind 39739) — not a scheme kind.
       {
         id: 'coll',
         pubkey: 'pub',
-        kind: 39737,
+        kind: 39739,
         tags: [
           ['d', 'some-collection'],
           ['type', 'Collection'],

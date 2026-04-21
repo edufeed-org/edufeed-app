@@ -1,17 +1,45 @@
+import { parseConceptScheme } from 'nostr-vocab-core/parsers';
+import { VOCAB_KIND } from 'nostr-vocab-core/constants';
+import { createReplaceableAddress } from 'applesauce-core/helpers';
+
 /**
- * Flatten a set of kind-39737 ConceptScheme events into SKOSConcept[] for
- * consumption by SKOSDropdown. Filters out Concept and Collection events so
- * only schemes surface; each scheme becomes a root-level item. `notation` is
- * set to the `d`-tag so SKOSDropdown renders it inline beside the label —
- * useful for distinguishing e.g. `schulfaecher` vs `hochschulfaecher`.
+ * @typedef {Object} ParsedScheme
+ * @property {string | undefined} d
+ * @property {string} pubkey
+ * @property {number | null} publishedAt
+ * @property {{ value: string, lang: string }[]} prefLabels
+ */
+
+/**
+ * Fold a library-parsed `prefLabels: [{value, lang}]` array into the
+ * `Record<string,string>` shape SKOSDropdown expects.
+ * @param {{ value: string, lang: string }[]} prefLabels
+ * @returns {Record<string,string>}
+ */
+function prefLabelsToMap(prefLabels) {
+  /** @type {Record<string,string>} */
+  const out = {};
+  for (const { value, lang } of prefLabels || []) {
+    if (value && lang) out[lang] = value;
+  }
+  return out;
+}
+
+/**
+ * Flatten a set of ConceptScheme events (kind VOCAB_KIND = 39737) into
+ * SKOSConcept[] for consumption by SKOSDropdown. Filters out anything that is
+ * not a ConceptScheme (post-split concepts/collections live on different kinds;
+ * pre-split events are guarded by a `type === 'ConceptScheme'` check on the
+ * parsed output). Each scheme becomes a root-level item. `notation` is set
+ * to the `d`-tag so SKOSDropdown renders it inline beside the label — useful
+ * for distinguishing e.g. `schulfaecher` vs `hochschulfaecher`.
  *
- * **Draft filter:** schemes that don't carry a truthy `published_at` tag are
+ * **Draft filter:** schemes whose parsed `publishedAt` is null/falsy are
  * skipped. This is an app-level convention established by `nocabs` (the
  * vocab-authoring app) — unpublished drafts are not surfaced in pickers so
- * form authors only bind `field-vocab` to stable, published taxonomies. The
- * VOCAB NIP itself does not specify a draft/published distinction.
+ * form authors only bind `field-vocab` to stable, published taxonomies.
  *
- * prefLabels are preserved by language; the callers' locale drives the
+ * prefLabels are preserved by language; the caller's locale drives the
  * alphabetical sort (via locale → de → en → first-label fallback) so the
  * picker reads top-to-bottom in the user's preferred language.
  *
@@ -29,27 +57,30 @@ export function schemeEventsToSkosConcepts(events, locale) {
   const out = [];
 
   for (const e of events) {
-    const isScheme = e.tags.some((t) => t[0] === 'type' && t[1] === 'ConceptScheme');
-    if (!isScheme) continue;
+    // Post-split: only kind VOCAB_KIND is a ConceptScheme. Anything else
+    // (concepts on 39738, collections on 39739) falls out here.
+    if (e.kind !== VOCAB_KIND) continue;
 
-    // Skip drafts — schemes without a truthy `published_at` tag value.
-    const publishedAt = e.tags.find((t) => t[0] === 'published_at')?.[1];
-    if (!publishedAt) continue;
+    const parsed = /** @type {ParsedScheme} */ (parseConceptScheme(e));
 
-    const d = e.tags.find((t) => t[0] === 'd')?.[1] || '';
+    // Pre-split legacy guard: a kind-39737 event with `type: Concept` or
+    // `type: Collection` tag is not a scheme. Library's parseConceptScheme
+    // parses any kind-39737 event blindly, so we re-assert the type here.
+    const typeTag = e.tags.find((t) => t[0] === 'type')?.[1];
+    if (typeTag && typeTag !== 'ConceptScheme') continue;
 
-    /** @type {Record<string,string>} */
-    const labels = {};
-    for (const t of e.tags) {
-      if (t[0] === 'prefLabel' && t[1] && t[2]) labels[t[2]] = t[1];
-    }
-    if (Object.keys(labels).length === 0 && d) labels[locale] = d;
+    // Skip drafts — parsed.publishedAt is null/NaN when unpublished.
+    if (!parsed.publishedAt) continue;
+    if (!parsed.d) continue;
+
+    const labels = prefLabelsToMap(parsed.prefLabels);
+    if (Object.keys(labels).length === 0) labels[locale] = parsed.d;
 
     out.push({
-      id: `39737:${e.pubkey}:${d}`,
+      id: createReplaceableAddress(VOCAB_KIND, parsed.pubkey, parsed.d),
       labels,
       level: 0,
-      notation: d
+      notation: parsed.d
     });
   }
 

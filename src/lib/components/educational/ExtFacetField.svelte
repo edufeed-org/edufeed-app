@@ -11,6 +11,16 @@
   import { useSchemeConcepts } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+  import { parseConcept } from 'nostr-vocab-core/parsers';
+  import { CONCEPT_KIND } from 'nostr-vocab-core/constants';
+  import { createReplaceableAddress } from 'applesauce-core/helpers';
+
+  /**
+   * @typedef {Object} ParsedConcept
+   * @property {string | undefined} d
+   * @property {string | undefined} externalUri
+   * @property {{ value: string, lang: string }[]} prefLabels
+   */
 
   /**
    * @typedef {import('$lib/helpers/forms.js').FormField} FormField
@@ -40,10 +50,10 @@
    * @returns {string}
    */
   function conceptUri(evt) {
-    const iTag = evt.tags.find((t) => t[0] === 'i')?.[1];
-    if (iTag) return iTag;
-    const d = evt.tags.find((t) => t[0] === 'd')?.[1] || '';
-    return `nostr:39737:${evt.pubkey}:${d}`;
+    const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));
+    if (parsed.externalUri) return parsed.externalUri;
+    const coord = createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '');
+    return `nostr:${coord}`;
   }
 
   /**
@@ -51,14 +61,11 @@
    * @returns {string}
    */
   function conceptLabel(evt) {
-    const lang = locale;
-    const pref = evt.tags.find((t) => t[0] === 'prefLabel' && t[2] === lang)?.[1];
-    return (
-      pref ||
-      evt.tags.find((t) => t[0] === 'prefLabel')?.[1] ||
-      evt.tags.find((t) => t[0] === 'd')?.[1] ||
-      evt.id.slice(0, 8)
-    );
+    const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));
+    const labels = parsed.prefLabels || [];
+    const byLocale = labels.find((l) => l.lang === locale)?.value;
+    const first = labels[0]?.value;
+    return byLocale || first || parsed.d || evt.id.slice(0, 8);
   }
 
   /**
