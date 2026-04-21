@@ -29,7 +29,7 @@
   const getScheme = useConceptScheme(() => field.vocab);
   const getConcepts = useSchemeConcepts(
     () => field.vocab?.address,
-    () => [field.vocab?.relay, ...getAllLookupRelays()].filter(Boolean)
+    () => /** @type {string[]} */ ([field.vocab?.relay, ...getAllLookupRelays()].filter(Boolean))
   );
 
   const scheme = $derived(getScheme());
