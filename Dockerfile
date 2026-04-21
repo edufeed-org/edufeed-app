@@ -7,8 +7,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 COPY patches/ ./patches/
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install git (needed by pnpm/corepack in some paths) and enable pnpm
+RUN apk add --no-cache git && corepack enable && corepack prepare pnpm@latest --activate
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -24,8 +24,8 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install git (needed by pnpm/corepack in some paths) and enable pnpm
+RUN apk add --no-cache git && corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy package files, lockfile, and patches
 COPY package.json pnpm-lock.yaml ./
