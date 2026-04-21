@@ -79,8 +79,11 @@
       return { type: 'bookmark', event: data.event, url, title };
     }
 
-    // NIP-51 lists (all kinds not already handled above)
-    const nip51Kinds = [10000, 10001, 10002, 10003, 10007, 10015, 30000, 30002, 30004, 30015];
+    // NIP-51 lists (all kinds not already handled above — 30003 routes to BookmarkSetView)
+    const nip51Kinds = [
+      10000, 10001, 10002, 10003, 10004, 10005, 10006, 10007, 10015, 10030, 10050, 30000, 30002,
+      30004, 30015, 30030, 39089
+    ];
     if (nip51Kinds.includes(data.kind)) {
       return {
         type: 'nip51list',

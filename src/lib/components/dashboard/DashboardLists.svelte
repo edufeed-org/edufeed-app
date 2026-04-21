@@ -1,9 +1,13 @@
 <!--
-  DashboardLists — Shows the user's NIP-51 lists (bookmarks, follow sets, curation sets, etc.)
+  DashboardLists — Shows the user's NIP-51 lists.
+
+  Data sourcing is delegated to `personal-lists.svelte.js` which subscribes
+  to every list kind enumerated in `$lib/helpers/list-kinds.js`. This file
+  is responsible only for the render tree (one section per kind).
 -->
 <script>
+  import * as kinds from 'nostr-tools/kinds';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
-  import { TimelineModel } from 'applesauce-core/models';
   import { timedPool } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import {
@@ -12,7 +16,6 @@
     getProfilePointersFromList,
     getRelaysFromList
   } from 'applesauce-common/helpers';
-  import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { parseRelayListEvent } from '$lib/services/relay-settings-service.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -24,65 +27,80 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ExpandableListCard from './ExpandableListCard.svelte';
-  import { BookmarkIcon, ChevronRightIcon } from '$lib/components/icons';
+  import NewListModal from '$lib/components/lists/NewListModal.svelte';
+  import { BookmarkIcon, ChevronRightIcon, PlusIcon } from '$lib/components/icons';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
+  import { useList, useAllLists, isListsLoading } from '$lib/stores/personal-lists.svelte.js';
+  import { STARTER_PACK_KIND } from '$lib/helpers/list-kinds.js';
 
   /** @type {{ pubkey: string }} */
   let { pubkey } = $props();
 
-  // List kinds to fetch
-  const SET_KINDS = [30003, 30000, 30004, 30002, 30015];
-  const STANDARD_KINDS = [10003, 10001, 10000, 10002, 10007, 10015];
+  // --- Data via the generic personal-lists store --------------------------
 
-  // Standard (replaceable) list state
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let bookmarkList = $state(null);
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let pinnedList = $state(null);
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let muteList = $state(null);
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let relayList = $state(null);
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let searchRelayList = $state(null);
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let interestList = $state(null);
+  const getBookmarkList = useList(kinds.BookmarkList);
+  const getPinnedList = useList(kinds.Pinlist);
+  const getMuteList = useList(kinds.Mutelist);
+  const getRelayList = useList(kinds.RelayList);
+  const getSearchRelayList = useList(kinds.SearchRelaysList);
+  const getInterestList = useList(kinds.InterestsList);
+  const getContactsList = useList(kinds.Contacts);
+  const getCommunitiesList = useList(kinds.CommunitiesList);
+  const getPublicChatsList = useList(kinds.PublicChatsList);
+  const getBlockedRelaysList = useList(kinds.BlockedRelaysList);
+  const getDmRelaysList = useList(kinds.DirectMessageRelaysList);
+  const getEmojiList = useList(kinds.UserEmojiList);
 
-  // Parameterized set state
-  /** @type {import('nostr-tools').NostrEvent[]} */
-  let sets = $state.raw([]);
-  let isLoading = $state(true);
+  const getBookmarkSets = useAllLists(kinds.Bookmarksets);
+  const getFollowSets = useAllLists(kinds.Followsets);
+  const getCurationSets = useAllLists(kinds.Curationsets);
+  const getRelaySets = useAllLists(kinds.Relaysets);
+  const getInterestSets = useAllLists(kinds.Interestsets);
+  const getEmojiSets = useAllLists(kinds.Emojisets);
+  const getStarterPacks = useAllLists(STARTER_PACK_KIND);
+
+  let bookmarkList = $derived(getBookmarkList());
+  let pinnedList = $derived(getPinnedList());
+  let muteList = $derived(getMuteList());
+  let relayList = $derived(getRelayList());
+  let searchRelayList = $derived(getSearchRelayList());
+  let interestList = $derived(getInterestList());
+  let contactsList = $derived(getContactsList());
+  let communitiesList = $derived(getCommunitiesList());
+  let publicChatsList = $derived(getPublicChatsList());
+  let blockedRelaysList = $derived(getBlockedRelaysList());
+  let dmRelaysList = $derived(getDmRelaysList());
+  let emojiList = $derived(getEmojiList());
+
+  let bookmarkSets = $derived(getBookmarkSets());
+  let followSets = $derived(getFollowSets().filter((s) => getSetDTag(s) !== 'communities'));
+  let curationSets = $derived(getCurationSets());
+  let relaySets = $derived(
+    getRelaySets().filter((s) => {
+      const dTag = getSetDTag(s);
+      const appPrefix = (runtimeConfig.appName || 'ComCal') + '/';
+      return !dTag.startsWith(appPrefix);
+    })
+  );
+  let interestSets = $derived(getInterestSets());
+  let emojiSets = $derived(getEmojiSets());
+  let starterPacks = $derived(getStarterPacks());
+
+  let isLoading = $derived(isListsLoading());
 
   /** @type {string | null} */
   let expandedListId = $state(null);
   /** @type {import('nostr-tools').NostrEvent | null} */
   let expandedListEvent = $state(null);
 
-  // Resolved events for expanded list items (event/address pointer lists)
   /** @type {import('nostr-tools').NostrEvent[]} */
   let resolvedEvents = $state.raw([]);
 
   const getProfiles = useProfileMap(() => resolvedEvents.map((e) => e.pubkey));
   let profiles = $derived(getProfiles());
-
-  // Categorize sets
-  let bookmarkSets = $derived(sets.filter((s) => s.kind === 30003));
-  let followSets = $derived(
-    sets.filter((s) => s.kind === 30000 && getSetDTag(s) !== 'communities')
-  );
-  let curationSets = $derived(sets.filter((s) => s.kind === 30004));
-  let relaySets = $derived(
-    sets.filter((s) => {
-      if (s.kind !== 30002) return false;
-      const dTag = getSetDTag(s);
-      const appPrefix = (runtimeConfig.appName || 'ComCal') + '/';
-      return !dTag.startsWith(appPrefix);
-    })
-  );
-  let interestSets = $derived(sets.filter((s) => s.kind === 30015));
 
   /**
    * @param {import('nostr-tools').NostrEvent} event
@@ -101,7 +119,7 @@
   }
 
   /**
-   * Count event references in a list (public + private, matching what gets rendered)
+   * Count event references in a list (e + a tags).
    * @param {import('nostr-tools').NostrEvent} event
    * @returns {number}
    */
@@ -110,7 +128,6 @@
   }
 
   /**
-   * Get hashtags from a list event
    * @param {import('nostr-tools').NostrEvent} event
    * @returns {string[]}
    */
@@ -119,9 +136,8 @@
   }
 
   /**
-   * Pure mute list parser (avoids applesauce caching that triggers state_unsafe_mutation)
+   * Pure mute list parser.
    * @param {import('nostr-tools').NostrEvent} event
-   * @returns {{ pubkeys: Set<string>, hashtags: Set<string>, words: Set<string>, threads: Set<string> }}
    */
   function parseMutedThings(event) {
     const pubkeys = new Set(event.tags.filter((t) => t[0] === 'p').map((t) => t[1]));
@@ -132,7 +148,17 @@
   }
 
   /**
-   * Toggle expanding a list to show its contents
+   * Extract {shortcode, url} tuples from a kind-10030/30030 event.
+   * @param {import('nostr-tools').NostrEvent} event
+   * @returns {Array<{ shortcode: string, url: string }>}
+   */
+  function parseEmojiTags(event) {
+    return event.tags
+      .filter((t) => t[0] === 'emoji' && t[1] && t[2])
+      .map((t) => ({ shortcode: t[1], url: t[2] }));
+  }
+
+  /**
    * @param {string} listId
    * @param {import('nostr-tools').NostrEvent | null} listEvent
    */
@@ -161,7 +187,6 @@
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to $effect, not reactive state
     const collected = new Map();
 
-    // Subscribe to EventStore immediately (sync)
     for (const pointer of eventPointers) {
       const sub = eventStore.event(pointer.id).subscribe((event) => {
         if (event && !collected.has(event.id)) {
@@ -184,12 +209,9 @@
       subs.push(sub);
     }
 
-    // Fetch from relays — use broad lookup relays since referenced events
-    // can be from any author on any relay, not just the current user's relays
     const lookupRelays = getAllLookupRelays();
 
     if (eventPointers.length > 0) {
-      // Collect relay hints from pointers and merge with lookup relays
       const hintRelays = eventPointers.flatMap((p) => p.relays || []);
       const relays = [...new Set([...hintRelays, ...lookupRelays])];
       const ids = eventPointers.map((p) => p.id);
@@ -218,80 +240,6 @@
     if (route) goto(resolve(/** @type {any} */ (route)));
   }
 
-  // Load user's NIP-51 lists
-  $effect(() => {
-    if (!pubkey) {
-      isLoading = false;
-      return;
-    }
-
-    isLoading = true;
-    /** @type {import('rxjs').Subscription[]} */
-    const subs = [];
-    let cancelled = false;
-
-    // Subscribe to EventStore immediately (sync — doesn't need relays)
-    subs.push(
-      eventStore.replaceable(10003, pubkey).subscribe((event) => {
-        bookmarkList = event ?? null;
-        isLoading = false;
-      })
-    );
-    subs.push(
-      eventStore.replaceable(10001, pubkey).subscribe((event) => {
-        pinnedList = event ?? null;
-      })
-    );
-    subs.push(
-      eventStore.replaceable(10000, pubkey).subscribe((event) => {
-        muteList = event ?? null;
-      })
-    );
-    subs.push(
-      eventStore.replaceable(10002, pubkey).subscribe((event) => {
-        relayList = event ?? null;
-      })
-    );
-    subs.push(
-      eventStore.replaceable(10007, pubkey).subscribe((event) => {
-        searchRelayList = event ?? null;
-      })
-    );
-    subs.push(
-      eventStore.replaceable(10015, pubkey).subscribe((event) => {
-        interestList = event ?? null;
-      })
-    );
-
-    subs.push(
-      eventStore
-        .model(TimelineModel, { kinds: SET_KINDS, authors: [pubkey] })
-        .subscribe((loaded) => {
-          sets = loaded || [];
-          isLoading = false;
-        })
-    );
-
-    // Fetch from user's NIP-65 write relays (async)
-    getWriteRelays(pubkey).then((relays) => {
-      if (cancelled) return;
-      const allKinds = [...SET_KINDS, ...STANDARD_KINDS];
-      const loader = createTimelineLoader(
-        timedPool,
-        relays,
-        { kinds: allKinds, authors: [pubkey], limit: 50 },
-        { eventStore }
-      );
-      subs.push(loader().subscribe());
-    });
-
-    return () => {
-      cancelled = true;
-      subs.forEach((s) => s.unsubscribe());
-    };
-  });
-
-  // Check if there are any lists at all
   let hasAnyLists = $derived(
     bookmarkList !== null ||
       pinnedList !== null ||
@@ -299,12 +247,28 @@
       relayList !== null ||
       searchRelayList !== null ||
       interestList !== null ||
+      contactsList !== null ||
+      communitiesList !== null ||
+      publicChatsList !== null ||
+      blockedRelaysList !== null ||
+      dmRelaysList !== null ||
+      emojiList !== null ||
       bookmarkSets.length > 0 ||
       followSets.length > 0 ||
       curationSets.length > 0 ||
       relaySets.length > 0 ||
-      interestSets.length > 0
+      interestSets.length > 0 ||
+      emojiSets.length > 0 ||
+      starterPacks.length > 0
   );
+
+  // Keep pubkey in scope for future per-user initialization hooks
+  $effect(() => {
+    void pubkey;
+  });
+
+  // New list modal state
+  let showNewListModal = $state(false);
 </script>
 
 <!-- Reusable snippets for expanded content -->
@@ -389,6 +353,31 @@
   </div>
 {/snippet}
 
+{#snippet addressList(
+  /** @type {Array<{kind: number, pubkey: string, identifier: string}>} */ pointers
+)}
+  <div class="space-y-1">
+    {#each pointers as p (`${p.kind}:${p.pubkey}:${p.identifier}`)}
+      <div
+        class="flex items-center gap-2 rounded border border-base-300 bg-base-100 px-3 py-1.5 font-mono text-xs break-all"
+      >
+        {p.kind}:{p.pubkey.slice(0, 10)}…:{p.identifier}
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet emojiGrid(/** @type {Array<{shortcode: string, url: string}>} */ emojis)}
+  <div class="flex flex-wrap gap-3">
+    {#each emojis as emoji (emoji.shortcode)}
+      <div class="flex items-center gap-2 rounded border border-base-300 bg-base-100 px-2 py-1">
+        <img src={emoji.url} alt={emoji.shortcode} class="h-6 w-6 object-contain" />
+        <span class="font-mono text-xs">:{emoji.shortcode}:</span>
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
 {#snippet detailLink(/** @type {import('nostr-tools').NostrEvent} */ event)}
   {@const naddr = encodeEventToNaddr(event)}
   {#if naddr}
@@ -403,7 +392,17 @@
 {/snippet}
 
 <section data-testid="dashboard-lists">
-  <h2 class="mb-4 text-lg font-bold">{m.dashboard_lists_title()}</h2>
+  <div class="mb-4 flex items-center justify-between">
+    <h2 class="text-lg font-bold">{m.dashboard_lists_title()}</h2>
+    <button
+      class="btn gap-1 btn-sm btn-primary"
+      onclick={() => (showNewListModal = true)}
+      data-testid="new-list-button"
+    >
+      <PlusIcon class_="h-4 w-4" />
+      {m.dashboard_lists_new()}
+    </button>
+  </div>
 
   {#if isLoading}
     <div class="flex justify-center py-8">
@@ -419,6 +418,27 @@
     </div>
   {:else}
     <div class="space-y-3">
+      <!-- Contacts / Following (kind 3) — read-only, edit on profile -->
+      {#if contactsList}
+        {@const pointers = getProfilePointersFromList(contactsList)}
+        <a
+          href={resolve(`/p/${pubkey}`)}
+          class="flex items-center justify-between rounded-lg border border-base-300 bg-base-100 p-3 hover:bg-base-200"
+          data-testid="list-contacts"
+        >
+          <div class="flex items-center gap-3">
+            <span class="text-lg">👤</span>
+            <div>
+              <div class="font-medium">{m.dashboard_lists_contacts()}</div>
+              <div class="text-xs text-base-content/60">
+                {pointers.length} · {m.dashboard_lists_contacts_hint()}
+              </div>
+            </div>
+          </div>
+          <ChevronRightIcon class_="h-4 w-4 text-base-content/40" />
+        </a>
+      {/if}
+
       <!-- Bookmarks (kind 10003) -->
       {#if bookmarkList}
         <ExpandableListCard
@@ -465,6 +485,22 @@
             {@render eventGrid()}
           {/if}
           {@render detailLink(pinnedList)}
+        </ExpandableListCard>
+      {/if}
+
+      <!-- Public Chats (kind 10005) -->
+      {#if publicChatsList}
+        <ExpandableListCard
+          title={m.dashboard_lists_public_chats()}
+          count={getEventItemCount(publicChatsList)}
+          expanded={expandedListId === 'public-chats'}
+          toggle={() => toggleExpand('public-chats', publicChatsList)}
+        >
+          {#snippet icon()}<span class="text-lg">💬</span>{/snippet}
+          {#if resolvedEvents.length > 0}
+            {@render eventGrid()}
+          {/if}
+          {@render detailLink(publicChatsList)}
         </ExpandableListCard>
       {/if}
 
@@ -556,6 +592,21 @@
         </ExpandableListCard>
       {/each}
 
+      <!-- Communities (kind 10004) -->
+      {#if communitiesList}
+        {@const pointers = getAddressPointersFromList(communitiesList)}
+        <ExpandableListCard
+          title={m.dashboard_lists_communities()}
+          count={pointers.length}
+          expanded={expandedListId === 'communities'}
+          toggle={() => toggleExpand('communities', null)}
+        >
+          {#snippet icon()}<span class="text-lg">🏘️</span>{/snippet}
+          {@render addressList(pointers)}
+          {@render detailLink(communitiesList)}
+        </ExpandableListCard>
+      {/if}
+
       <!-- Follow Sets (kind 30000, excluding d="communities") -->
       {#each followSets as set (set.id)}
         {@const pointers = getProfilePointersFromList(set)}
@@ -568,6 +619,23 @@
           toggle={() => toggleExpand(listId, null)}
         >
           {#snippet icon()}<span class="text-lg">👥</span>{/snippet}
+          {@render profileChips(pointers)}
+          {@render detailLink(set)}
+        </ExpandableListCard>
+      {/each}
+
+      <!-- Starter Packs (kind 39089) -->
+      {#each starterPacks as set (set.id)}
+        {@const pointers = getProfilePointersFromList(set)}
+        {@const listId = `sp-${set.id}`}
+        <ExpandableListCard
+          title={getSetTitle(set)}
+          count={pointers.length}
+          countLabel="people"
+          expanded={expandedListId === listId}
+          toggle={() => toggleExpand(listId, null)}
+        >
+          {#snippet icon()}<span class="text-lg">🎁</span>{/snippet}
           {@render profileChips(pointers)}
           {@render detailLink(set)}
         </ExpandableListCard>
@@ -622,6 +690,38 @@
         </ExpandableListCard>
       {/if}
 
+      <!-- Blocked Relays (kind 10006) -->
+      {#if blockedRelaysList}
+        {@const relays = getRelaysFromList(blockedRelaysList)}
+        <ExpandableListCard
+          title={m.dashboard_lists_blocked_relays()}
+          count={relays.length}
+          countLabel="relays"
+          expanded={expandedListId === 'blocked-relays'}
+          toggle={() => toggleExpand('blocked-relays', null)}
+        >
+          {#snippet icon()}<span class="text-lg">🚫</span>{/snippet}
+          {@render relayUrlList(relays)}
+          {@render detailLink(blockedRelaysList)}
+        </ExpandableListCard>
+      {/if}
+
+      <!-- DM Relays (kind 10050) -->
+      {#if dmRelaysList}
+        {@const relays = getRelaysFromList(dmRelaysList)}
+        <ExpandableListCard
+          title={m.dashboard_lists_dm_relays()}
+          count={relays.length}
+          countLabel="relays"
+          expanded={expandedListId === 'dm-relays'}
+          toggle={() => toggleExpand('dm-relays', null)}
+        >
+          {#snippet icon()}<span class="text-lg">✉️</span>{/snippet}
+          {@render relayUrlList(relays)}
+          {@render detailLink(dmRelaysList)}
+        </ExpandableListCard>
+      {/if}
+
       <!-- Curation Sets (kind 30004) -->
       {#each curationSets as set (set.id)}
         {@const listId = `cset-${set.id}`}
@@ -638,6 +738,39 @@
           {@render detailLink(set)}
         </ExpandableListCard>
       {/each}
+
+      <!-- Emoji List (kind 10030) -->
+      {#if emojiList}
+        {@const emojis = parseEmojiTags(emojiList)}
+        <ExpandableListCard
+          title={m.dashboard_lists_emoji()}
+          count={emojis.length}
+          expanded={expandedListId === 'emoji'}
+          toggle={() => toggleExpand('emoji', null)}
+        >
+          {#snippet icon()}<span class="text-lg">😀</span>{/snippet}
+          {@render emojiGrid(emojis)}
+          {@render detailLink(emojiList)}
+        </ExpandableListCard>
+      {/if}
+
+      <!-- Emoji Sets (kind 30030) -->
+      {#each emojiSets as set (set.id)}
+        {@const emojis = parseEmojiTags(set)}
+        {@const listId = `eset-${set.id}`}
+        <ExpandableListCard
+          title={getSetTitle(set)}
+          count={emojis.length}
+          expanded={expandedListId === listId}
+          toggle={() => toggleExpand(listId, null)}
+        >
+          {#snippet icon()}<span class="text-lg">😀</span>{/snippet}
+          {@render emojiGrid(emojis)}
+          {@render detailLink(set)}
+        </ExpandableListCard>
+      {/each}
     </div>
   {/if}
 </section>
+
+<NewListModal open={showNewListModal} onclose={() => (showNewListModal = false)} />

@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
+import { nip19 } from 'nostr-tools';
+import { contactsStore } from '$lib/stores/contacts.svelte.js';
 import ContactSearchInput from '../shared/ContactSearchInput.svelte';
 
 // Mock contacts data
@@ -228,5 +230,256 @@ describe('ContactSearchInput', () => {
     // Bob has no picture — ImageWithFallback renders a robohash fallback img
     const img = container.querySelector('.absolute.z-50 img');
     expect(img).toBeTruthy();
+  });
+});
+
+// ===========================================================================
+// New combobox flags: showExcluded + acceptPubkeyInput
+// ===========================================================================
+
+const FRESH_HEX = 'f'.repeat(64);
+const FRESH_NPUB = nip19.npubEncode(FRESH_HEX);
+
+describe('ContactSearchInput — showExcluded flag', () => {
+  it('renders excluded contacts with a badge + aria-disabled instead of hiding them', async () => {
+    const onselect = vi.fn();
+    const { container, getByText } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        exclude: ['abc123'],
+        showExcluded: true,
+        excludedLabel: 'Already added',
+        onselect
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'al' } });
+
+    const dropdown = container.querySelector('.absolute.z-50');
+    expect(dropdown).toBeTruthy();
+    expect(dropdown.textContent).toContain('Alice Smith');
+    expect(getByText('Already added')).toBeTruthy();
+
+    const button = dropdown.querySelector('button');
+    expect(button?.getAttribute('aria-disabled')).toBe('true');
+    expect(button?.disabled).toBe(true);
+
+    await fireEvent.click(button);
+    expect(onselect).not.toHaveBeenCalled();
+  });
+
+  it('does not render a badge for non-excluded rows', async () => {
+    const { container, queryByText } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        exclude: ['def456'],
+        showExcluded: true,
+        excludedLabel: 'Already added'
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'al' } });
+
+    // Alice is not excluded — no badge text should appear
+    expect(queryByText('Already added')).toBeNull();
+
+    const button = container.querySelector('.absolute.z-50 button');
+    expect(button?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(button?.disabled).toBe(false);
+  });
+});
+
+describe('ContactSearchInput — acceptPubkeyInput flag', () => {
+  it('appends a synthetic "Add profile" row when a valid npub has no name match', async () => {
+    const onrawpubkey = vi.fn();
+    const { container, getByText } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        acceptPubkeyInput: true,
+        addPubkeyLabel: 'Add profile',
+        onrawpubkey
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_NPUB } });
+
+    expect(getByText('Add profile')).toBeTruthy();
+
+    const button = container.querySelector('.absolute.z-50 button');
+    await fireEvent.click(button);
+    expect(onrawpubkey).toHaveBeenCalledWith(FRESH_HEX);
+  });
+
+  it('accepts a raw 64-char hex pubkey just like an npub', async () => {
+    const onrawpubkey = vi.fn();
+    const { container } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        acceptPubkeyInput: true,
+        addPubkeyLabel: 'Add profile',
+        onrawpubkey
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_HEX } });
+
+    const button = container.querySelector('.absolute.z-50 button');
+    await fireEvent.click(button);
+    expect(onrawpubkey).toHaveBeenCalledWith(FRESH_HEX);
+  });
+
+  it('omits the synthetic row when the npub decodes to a pubkey already in matches', async () => {
+    // Make searchContacts return a contact whose pubkey equals the decoded hex,
+    // simulating the edge case where the typed npub belongs to a known contact.
+    vi.mocked(contactsStore.searchContacts).mockReturnValueOnce([
+      {
+        pubkey: FRESH_HEX,
+        name: 'fresh',
+        display_name: 'Fresh',
+        picture: null,
+        nip05: null,
+        about: null
+      }
+    ]);
+
+    const onrawpubkey = vi.fn();
+    const { container, queryByText } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        acceptPubkeyInput: true,
+        addPubkeyLabel: 'Add profile',
+        onrawpubkey
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_NPUB } });
+
+    // The contact row represents this pubkey — no separate synthetic row
+    expect(queryByText('Add profile')).toBeNull();
+
+    const buttons = container.querySelectorAll('.absolute.z-50 button');
+    expect(buttons.length).toBe(1);
+  });
+
+  it('marks the synthetic row as excluded when showExcluded + exclude contain the pubkey', async () => {
+    const onrawpubkey = vi.fn();
+    const { container, getByText } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        acceptPubkeyInput: true,
+        showExcluded: true,
+        addPubkeyLabel: 'Add profile',
+        excludedLabel: 'Already added',
+        exclude: [FRESH_HEX],
+        onrawpubkey
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_NPUB } });
+
+    expect(getByText('Add profile')).toBeTruthy();
+    expect(getByText('Already added')).toBeTruthy();
+
+    const button = container.querySelector('.absolute.z-50 button');
+    expect(button?.getAttribute('aria-disabled')).toBe('true');
+    expect(button?.disabled).toBe(true);
+
+    await fireEvent.click(button);
+    expect(onrawpubkey).not.toHaveBeenCalled();
+  });
+
+  it('does not show the synthetic row for gibberish (no dropdown at all)', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        acceptPubkeyInput: true,
+        addPubkeyLabel: 'Add profile'
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'not-a-valid-npub' } });
+
+    expect(container.querySelector('.absolute.z-50')).toBeNull();
+  });
+
+  it('fires onrawpubkey when Enter is pressed on the synthetic row', async () => {
+    const onrawpubkey = vi.fn();
+    const { container } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        acceptPubkeyInput: true,
+        addPubkeyLabel: 'Add profile',
+        onrawpubkey
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_NPUB } });
+
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onrawpubkey).toHaveBeenCalledWith(FRESH_HEX);
+  });
+
+  it('navigates through contacts and then the synthetic pubkey row with ArrowDown', async () => {
+    // Search term 'al' matches Alice; acceptPubkeyInput=false keeps behaviour unchanged,
+    // but with acceptPubkeyInput=true + a npub we should have two nav items max when
+    // combined. Here we test a term that yields one contact AND is a valid npub via
+    // a mock override.
+    vi.mocked(contactsStore.searchContacts).mockReturnValueOnce([
+      {
+        pubkey: 'abc123',
+        name: 'alice',
+        display_name: 'Alice Smith',
+        picture: null,
+        nip05: null,
+        about: null
+      }
+    ]);
+    const onselect = vi.fn();
+    const onrawpubkey = vi.fn();
+    const { container } = render(ContactSearchInput, {
+      props: {
+        value: '',
+        acceptPubkeyInput: true,
+        addPubkeyLabel: 'Add profile',
+        onselect,
+        onrawpubkey
+      }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_NPUB } });
+
+    // ArrowDown should land on the contact first
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    // ArrowDown again should land on the pubkey row
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onselect).not.toHaveBeenCalled();
+    expect(onrawpubkey).toHaveBeenCalledWith(FRESH_HEX);
+  });
+});
+
+describe('ContactSearchInput — regression: default flags preserve existing behaviour', () => {
+  it('hides excluded contacts from the dropdown (showExcluded=false)', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', exclude: ['abc123'] }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'al' } });
+
+    const dropdown = container.querySelector('.absolute.z-50');
+    expect(dropdown).toBeNull();
+  });
+
+  it('does not add a synthetic row for a valid npub (acceptPubkeyInput=false)', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '' }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_NPUB } });
+
+    expect(container.querySelector('.absolute.z-50')).toBeNull();
   });
 });
