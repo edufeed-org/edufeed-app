@@ -1,25 +1,28 @@
 /**
  * Reactive hook for batch profile loading.
- * Subscribes to eventStore.profile() which auto-loads via the unified eventLoader
- * (configured in base.js with bufferTime for batching).
+ * Delegates per-pubkey load+subscribe to `subscribeProfile`, which fires an
+ * explicit `profileLoader` fetch (with indexer relays) and subscribes to the
+ * eventStore ProfileModel. This matches the pattern used by `useUserProfile`
+ * for single-pubkey loading.
  *
  * NOTE: This hook intentionally uses regular Map (not SvelteMap) for internal tracking.
  * Using SvelteMap inside subscription callbacks causes effect_update_depth_exceeded errors.
  * See: https://svelte.dev/docs/svelte/svelte-reactivity#SvelteMap
  */
 /* eslint-disable svelte/prefer-svelte-reactivity -- Map used intentionally to avoid infinite loops */
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { subscribeProfile } from '$lib/stores/profile-subscription.js';
 
 /**
  * Hook: Subscribe to profiles for a reactive collection of pubkeys.
- * Creates one profile subscription per unique pubkey via eventStore.profile(),
- * which auto-loads from the network through eventStore.eventLoader.
+ * Creates one `subscribeProfile` primitive per unique pubkey — each fires
+ * an explicit profileLoader fetch (batched via addressLoader bufferTime)
+ * and subscribes to the eventStore ProfileModel.
  *
  * @param {() => Iterable<string>} getPubkeys - Reactive getter returning pubkeys to load
  * @returns {() => Map<string, any>} Reactive getter for pubkey → profile Map
  */
 export function useProfileMap(getPubkeys) {
-  /** @type {Map<string, import('rxjs').Subscription>} */
+  /** @type {Map<string, { unsubscribe: () => void }>} */
   const subscriptions = new Map();
   const profilesMap = new Map();
   let profiles = $state(/** @type {Map<string, any>} */ (new Map()));
@@ -39,11 +42,11 @@ export function useProfileMap(getPubkeys) {
       }
     }
 
-    // Subscribe to new pubkeys — eventStore.profile() auto-loads via eventLoader
+    // Subscribe to new pubkeys via the shared loader + model primitive
     for (const pubkey of pubkeys) {
       if (subscriptions.has(pubkey)) continue;
 
-      const sub = eventStore.profile(pubkey).subscribe((profile) => {
+      const sub = subscribeProfile(pubkey, (profile) => {
         if (profile) {
           profilesMap.set(pubkey, profile);
           clearTimeout(updateTimer);

@@ -27,7 +27,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: vi.fn(() => ['wss://communikey-relay.example.com']),
-  getAllLookupRelays: vi.fn(() => [])
+  getAllLookupRelays: vi.fn(() => []),
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({

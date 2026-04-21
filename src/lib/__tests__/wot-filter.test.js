@@ -27,7 +27,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: vi.fn(() => ['wss://relay.example.com'])
+  getAllLookupRelays: vi.fn(() => ['wss://relay.example.com']),
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('$lib/services/app-relay-service.svelte.js', () => ({

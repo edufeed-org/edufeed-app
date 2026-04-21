@@ -2,7 +2,10 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock modules that trigger browser-only code via nostrUtils import chain
-vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => [] }));
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getAllLookupRelays: () => [],
+  getEventLoaderLookupRelays: () => []
+}));
 vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({ eventStore: {} }));
 vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: {} }));
 vi.mock('$lib/loaders', () => ({ eventLoader: vi.fn(), addressLoader: vi.fn() }));

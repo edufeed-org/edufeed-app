@@ -12,7 +12,7 @@ import {
   createTimelineLoader
 } from 'applesauce-loaders/loaders';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getAllLookupRelays, getEventLoaderLookupRelays } from '$lib/helpers/relay-helper.js';
 
 /**
  * Pool wrapper for use with createTimelineLoader.
@@ -28,22 +28,27 @@ import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 export const timedPool = (relays, filters) => pool.request(relays, filters);
 
 // Standalone address loader for direct use in components/loaders
-// Uses a getter function for lookupRelays to ensure config updates are reflected
+// Uses a getter function for lookupRelays to ensure config updates are reflected.
+// lookupRelays is applesauce's fallback-on-miss slot and must include profile
+// indexer relays (e.g. purplepag.es) so kind 0 lookups can resolve when the
+// author's profile isn't on the app content relays.
 export const addressLoader = createAddressLoader(pool, {
   eventStore,
   get lookupRelays() {
-    return getAllLookupRelays();
+    return getEventLoaderLookupRelays();
   }
 });
 
 // Standalone event-by-ID loader for direct use
 export const eventLoader = createEventLoader(pool, { eventStore });
 
-// Unified loader for EventStore - handles both EventPointer and AddressPointer
+// Unified loader for EventStore - handles both EventPointer and AddressPointer.
+// Drives eventStore.profile() / eventStore.replaceable() auto-loading, so
+// lookupRelays must include profile indexer relays (see addressLoader above).
 const unifiedLoader = createUnifiedEventLoader(pool, {
   eventStore,
   get lookupRelays() {
-    return getAllLookupRelays();
+    return getEventLoaderLookupRelays();
   }
 });
 eventStore.eventLoader = unifiedLoader;

@@ -58,7 +58,8 @@ vi.mock('$lib/helpers/toast.js', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getCommunikeyRelays: vi.fn(() => ['wss://relay.example.com'])
+  getCommunikeyRelays: vi.fn(() => ['wss://relay.example.com']),
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('nostr-tools', () => ({

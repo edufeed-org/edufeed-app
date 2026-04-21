@@ -80,7 +80,8 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: vi.fn(() => ['wss://communikey.relay']),
-  getAllLookupRelays: vi.fn(() => ['wss://lookup.relay'])
+  getAllLookupRelays: vi.fn(() => ['wss://lookup.relay']),
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('$lib/services/relay-service.svelte.js', () => ({

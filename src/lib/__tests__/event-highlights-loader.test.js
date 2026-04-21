@@ -25,7 +25,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: vi.fn(() => ['wss://relay1.example.com', 'wss://relay2.example.com'])
+  getAllLookupRelays: vi.fn(() => ['wss://relay1.example.com', 'wss://relay2.example.com']),
+  getEventLoaderLookupRelays: () => []
 }));
 vi.mock('$lib/loaders/targeted-publications.js', () => ({
   communityTargetedPublicationsLoader: vi.fn(() => vi.fn(() => ({ subscribe: vi.fn() })))
