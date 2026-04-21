@@ -413,6 +413,23 @@ export function generateTestEvents() {
     )
   );
 
+  // Kind 30000 follow set owned by TEST_AUTHOR (contentAuthors[0]) for
+  // people-list CRUD E2E tests. Has one initial p-tag so the remove-affordance
+  // has something to attach to.
+  events.push(
+    make(
+      contentAuthors[0],
+      30000,
+      [
+        ['d', 'e2e-friends'],
+        ['title', 'My E2E Friends'],
+        ['p', contentAuthors[1].pk]
+      ],
+      '',
+      BASE + 175 * 600
+    )
+  );
+
   // Forum threads (kind 11) targeting community 1
   // Thread from contentAuthors[0] (member) — should be visible in gated forum
   events.push(
@@ -694,6 +711,13 @@ export const TEST_NADDRS = {
     pubkey: contentAuthors[0].pk,
     identifier: 'https://example.com/resource-0',
     relays: [RELAY_URLS.amb]
+  }),
+  /** Follow set (kind 30000) owned by TEST_AUTHOR for people-list CRUD tests */
+  followSet: naddrEncode({
+    kind: 30000,
+    pubkey: contentAuthors[0].pk,
+    identifier: 'e2e-friends',
+    relays: [RELAY_URLS.strfry]
   })
 };
 

@@ -20,9 +20,17 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import {
     reorderBookmarkSetItem,
-    removeItemFromList,
-    updateBookmarkSet
+    removeItemFromList
   } from '$lib/stores/personal-bookmarks.svelte.js';
+  import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+  import {
+    SetListMetadata,
+    AddUserToFollowSet,
+    RemoveUserFromFollowSet
+  } from 'applesauce-actions/actions';
+  import { ModifyListTags } from '$lib/actions/list-actions.js';
+  import { getListKindSpec } from '$lib/helpers/list-kinds.js';
+  import AddProfileRow from '$lib/components/lists/AddProfileRow.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
@@ -65,6 +73,13 @@
   let activeUser = $derived(getActiveUser());
   let isOwner = $derived(activeUser?.pubkey === event.pubkey);
 
+  // d-tag for addressable lists (empty string for replaceable kinds like 3)
+  let dTag = $derived(event.tags.find((t) => t[0] === 'd')?.[1] || '');
+  let kindSpec = $derived(getListKindSpec(event.kind));
+  // Kind 3 (contacts) is intentionally read-only here — editing happens on /p/[self].
+  let canEditPeople = $derived(isOwner && kindSpec?.render === 'people' && event.kind !== 3);
+  let profileMutationPending = $state(false);
+
   // Detect what content types this list contains
   let eventPointers = $derived(getEventPointersFromList(event));
   let addressPointers = $derived(getAddressPointersFromList(event));
@@ -91,29 +106,38 @@
     !hasEvents && !hasProfiles && !hasHashtags && !hasWords && !hasThreads && !hasRelays
   );
 
+  // Map LIST_KINDS spec.key → i18n message getter. Extend when new kinds are added.
+  /** @type {Record<string, () => string>} */
+  const KIND_TITLE_KEY = {
+    contacts: () => m.dashboard_lists_contacts(),
+    pinned: () => m.dashboard_lists_pinned(),
+    mute: () => m.dashboard_lists_mute(),
+    bookmarks: () => m.dashboard_lists_bookmarks(),
+    relays: () => m.dashboard_lists_relay_list(),
+    search_relays: () => m.dashboard_lists_search_relays(),
+    interests: () => m.dashboard_lists_interests(),
+    communities: () => m.dashboard_lists_communities(),
+    public_chats: () => m.dashboard_lists_public_chats(),
+    blocked_relays: () => m.dashboard_lists_blocked_relays(),
+    dm_relays: () => m.dashboard_lists_dm_relays(),
+    emoji: () => m.dashboard_lists_emoji(),
+    emoji_sets: () => m.dashboard_lists_emoji_sets(),
+    starter_pack: () => m.dashboard_lists_starter_packs(),
+    follow_set: () => m.dashboard_lists_follow_sets(),
+    relay_set: () => m.dashboard_lists_relay_sets(),
+    bookmark_set: () => m.dashboard_lists_bookmarks(),
+    curation_set: () => m.dashboard_lists_curation_sets()
+  };
+
   // Title: parameterized kinds use title/d-tag, replaceable kinds use i18n
   let title = $derived.by(() => {
     const titleTag = event.tags.find((t) => t[0] === 'title')?.[1];
     if (titleTag) return titleTag;
     const dTag = event.tags.find((t) => t[0] === 'd')?.[1];
     if (dTag) return dTag;
-    // Fall back to kind-specific i18n names
-    switch (event.kind) {
-      case 10003:
-        return m.dashboard_lists_bookmarks();
-      case 10001:
-        return m.dashboard_lists_pinned();
-      case 10000:
-        return m.dashboard_lists_mute();
-      case 10015:
-        return m.dashboard_lists_interests();
-      case 10002:
-        return m.dashboard_lists_relay_list();
-      case 10007:
-        return m.dashboard_lists_search_relays();
-      default:
-        return 'List';
-    }
+    const spec = getListKindSpec(event.kind);
+    const getter = spec ? KIND_TITLE_KEY[spec.key] : undefined;
+    return getter ? getter() : 'List';
   });
 
   let description = $derived(event.tags.find((t) => t[0] === 'description')?.[1] || '');
@@ -259,13 +283,58 @@
     isRemovingItem = true;
     try {
       await removeItemFromList(event, itemToRemove);
-      showToast(m.bookmark_set_item_removed(), 'info');
+      showToast(m.list_detail_item_removed(), 'info');
     } catch (err) {
       console.error('Failed to remove item:', err);
-      showToast(m.bookmark_toast_error(), 'error');
+      showToast(m.list_detail_update_error(), 'error');
     } finally {
       isRemovingItem = false;
       itemToRemove = null;
+    }
+  }
+
+  /** @param {string} pubkey */
+  async function handleAddProfile(pubkey) {
+    profileMutationPending = true;
+    try {
+      if (event.kind === 30000) {
+        await actionRunner.run(AddUserToFollowSet, pubkey, dTag);
+      } else {
+        // 39089 starter pack (no pre-built action) — generic tag add
+        await actionRunner.run(ModifyListTags, {
+          kind: event.kind,
+          dTag,
+          add: [['p', pubkey]]
+        });
+      }
+      showToast(m.list_detail_updated(), 'success');
+    } catch (err) {
+      console.error('Failed to add profile:', err);
+      showToast(m.list_detail_update_error(), 'error');
+    } finally {
+      profileMutationPending = false;
+    }
+  }
+
+  /** @param {string} pubkey */
+  async function handleRemoveProfile(pubkey) {
+    profileMutationPending = true;
+    try {
+      if (event.kind === 30000) {
+        await actionRunner.run(RemoveUserFromFollowSet, pubkey, dTag);
+      } else {
+        await actionRunner.run(ModifyListTags, {
+          kind: event.kind,
+          dTag,
+          remove: [['p', pubkey]]
+        });
+      }
+      showToast(m.list_detail_item_removed(), 'info');
+    } catch (err) {
+      console.error('Failed to remove profile:', err);
+      showToast(m.list_detail_update_error(), 'error');
+    } finally {
+      profileMutationPending = false;
     }
   }
 
@@ -282,12 +351,15 @@
 
   async function saveEdit() {
     try {
-      await updateBookmarkSet(event, editTitle.trim(), editDescription.trim());
-      showToast(m.bookmark_set_updated(), 'success');
+      await actionRunner.run(SetListMetadata, event, {
+        title: editTitle.trim(),
+        description: editDescription.trim()
+      });
+      showToast(m.list_detail_updated(), 'success');
       showEditModal = false;
     } catch (err) {
       console.error('Failed to update list:', err);
-      showToast(m.bookmark_toast_error(), 'error');
+      showToast(m.list_detail_update_error(), 'error');
     }
   }
 
@@ -301,13 +373,13 @@
     try {
       const result = await deleteEvent(event, activeUser);
       if (result.success) {
-        showToast(m.bookmark_set_delete(), 'success');
+        showToast(m.list_detail_delete(), 'success');
         goto(resolve('/dashboard'));
       } else {
-        showToast(result.error || m.bookmark_toast_error(), 'error');
+        showToast(result.error || m.list_detail_update_error(), 'error');
       }
     } catch (_err) {
-      showToast(m.bookmark_toast_error(), 'error');
+      showToast(m.list_detail_update_error(), 'error');
     } finally {
       isDeleting = false;
       showDeleteConfirm = false;
@@ -338,13 +410,13 @@
     </div>
     {#if isOwner}
       <div class="flex gap-2">
-        <button class="btn btn-ghost btn-sm" onclick={openEditModal} title={m.bookmark_set_edit()}>
+        <button class="btn btn-ghost btn-sm" onclick={openEditModal} title={m.list_detail_edit()}>
           <EditIcon class="h-4 w-4" />
         </button>
         <button
           class="btn text-error btn-ghost btn-sm"
           onclick={() => (showDeleteConfirm = true)}
-          title={m.bookmark_set_delete()}
+          title={m.list_detail_delete()}
         >
           <TrashIcon class="h-4 w-4" />
         </button>
@@ -415,7 +487,7 @@
                       <button
                         class="btn text-base-content/50 btn-ghost btn-xs hover:text-error"
                         onclick={() => (itemToRemove = itemEvent)}
-                        title={m.bookmark_set_remove_item()}
+                        title={m.list_detail_remove_item()}
                       >
                         <TrashIcon class="h-4 w-4" />
                       </button>
@@ -433,16 +505,49 @@
       {/if}
 
       <!-- Profiles section -->
-      {#if hasProfiles}
+      {#if hasProfiles || canEditPeople}
         <section>
           <h2 class="mb-3 text-sm font-semibold text-base-content/50 uppercase">
             {m.list_detail_profiles_section()}
           </h2>
-          <div class="grid gap-2 sm:grid-cols-2">
-            {#each profilePointers as pointer (pointer.pubkey)}
-              <ProfileCard pubkey={pointer.pubkey} size="sm" showNpub={false} showIcon={false} />
-            {/each}
-          </div>
+
+          {#if canEditPeople}
+            <div class="mb-3">
+              <AddProfileRow
+                excludePubkeys={profilePointers.map((p) => p.pubkey)}
+                onadd={handleAddProfile}
+                disabled={profileMutationPending}
+              />
+            </div>
+          {/if}
+
+          {#if hasProfiles}
+            <div class="grid gap-2 sm:grid-cols-2">
+              {#each profilePointers as pointer (pointer.pubkey)}
+                <div class="flex items-center gap-2">
+                  <div class="min-w-0 flex-1">
+                    <ProfileCard
+                      pubkey={pointer.pubkey}
+                      size="sm"
+                      showNpub={false}
+                      showIcon={false}
+                    />
+                  </div>
+                  {#if canEditPeople}
+                    <button
+                      class="btn text-base-content/50 btn-ghost btn-xs hover:text-error"
+                      onclick={() => handleRemoveProfile(pointer.pubkey)}
+                      disabled={profileMutationPending}
+                      title={m.list_detail_remove_item()}
+                      data-testid="remove-profile-{pointer.pubkey}"
+                    >
+                      <TrashIcon class="h-4 w-4" />
+                    </button>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
         </section>
       {/if}
 
@@ -537,7 +642,7 @@
 {#if showEditModal}
   <dialog class="modal-open modal">
     <div class="modal-box">
-      <h3 class="mb-4 text-lg font-bold">{m.bookmark_set_edit()}</h3>
+      <h3 class="mb-4 text-lg font-bold">{m.list_detail_edit()}</h3>
       <form
         onsubmit={(e) => {
           e.preventDefault();
@@ -547,7 +652,7 @@
         <div class="space-y-4">
           <div class="form-control">
             <label class="label" for="edit-title">
-              <span class="label-text">{m.bookmark_set_edit_title_label()}</span>
+              <span class="label-text">{m.list_detail_edit_title_label()}</span>
             </label>
             <input
               id="edit-title"
@@ -558,13 +663,13 @@
           </div>
           <div class="form-control">
             <label class="label" for="edit-description">
-              <span class="label-text">{m.bookmark_set_edit_description_label()}</span>
+              <span class="label-text">{m.list_detail_edit_description_label()}</span>
             </label>
             <textarea
               id="edit-description"
               class="textarea-bordered textarea w-full"
               rows="3"
-              placeholder={m.bookmark_set_edit_description_placeholder()}
+              placeholder={m.list_detail_edit_description_placeholder()}
               bind:value={editDescription}
             ></textarea>
           </div>
@@ -574,7 +679,7 @@
             {m.common_cancel()}
           </button>
           <button type="submit" class="btn btn-primary" disabled={!editTitle.trim()}>
-            {m.bookmark_set_edit_save()}
+            {m.list_detail_edit_save()}
           </button>
         </div>
       </form>
@@ -583,11 +688,10 @@
   </dialog>
 {/if}
 
-<!-- Delete Confirmation -->
 <!-- Delete List Confirmation -->
 <DeleteConfirmModal
   open={showDeleteConfirm}
-  title={m.bookmark_set_delete_title()}
+  title={m.list_detail_delete_title()}
   itemName={title}
   {isDeleting}
   onconfirm={handleDelete}
@@ -597,7 +701,7 @@
 <!-- Remove Item Confirmation -->
 <DeleteConfirmModal
   open={itemToRemove !== null}
-  title={m.bookmark_set_remove_item()}
+  title={m.list_detail_remove_item()}
   itemName={itemToRemove ? getFeedCardData(itemToRemove).title || 'item' : ''}
   isDeleting={isRemovingItem}
   onconfirm={confirmRemoveItem}
