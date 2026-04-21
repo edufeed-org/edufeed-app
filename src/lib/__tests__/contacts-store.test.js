@@ -92,7 +92,8 @@ vi.mock('$lib/loaders/profile.js', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getProfileLookupRelays: vi.fn(() => ['wss://relay.example.com'])
+  getProfileLookupRelays: vi.fn(() => ['wss://relay.example.com']),
+  getEventLoaderLookupRelays: () => []
 }));
 
 // Helper to create a kind 0 event

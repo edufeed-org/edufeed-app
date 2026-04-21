@@ -85,7 +85,8 @@ vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: () => ['wss://r.example']
+  getAllLookupRelays: () => ['wss://r.example'],
+  getEventLoaderLookupRelays: () => []
 }));
 
 import FormConceptPicker from '../forms/FormConceptPicker.svelte';

@@ -31,7 +31,8 @@ vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: () => ['wss://r.example']
+  getAllLookupRelays: () => ['wss://r.example'],
+  getEventLoaderLookupRelays: () => []
 }));
 
 // Forms helper transitively imports event-factory which depends on app-settings

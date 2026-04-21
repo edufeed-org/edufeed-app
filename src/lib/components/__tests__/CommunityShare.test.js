@@ -193,7 +193,8 @@ vi.mock('$lib/components/icons', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: () => ['wss://relay.test.com', 'wss://app.relay.com']
+  getAllLookupRelays: () => ['wss://relay.test.com', 'wss://app.relay.com'],
+  getEventLoaderLookupRelays: () => []
 }));
 
 describe('CommunityShare', () => {

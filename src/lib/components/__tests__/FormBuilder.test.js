@@ -43,7 +43,8 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://communikey.example'],
-  getAllLookupRelays: () => ['wss://lookup.example']
+  getAllLookupRelays: () => ['wss://lookup.example'],
+  getEventLoaderLookupRelays: () => []
 }));
 
 vi.mock('$app/navigation', () => ({ goto: gotoSpy }));

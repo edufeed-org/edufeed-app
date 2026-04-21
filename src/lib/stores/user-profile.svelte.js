@@ -1,7 +1,4 @@
-import { ProfileModel } from 'applesauce-core/models';
-import { profileLoader } from '$lib/loaders/profile.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
+import { subscribeProfile } from '$lib/stores/profile-subscription.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 
 /**
@@ -34,25 +31,10 @@ export function useUserProfile(pubkeyOrGetter) {
     const targetPubkey = getPubkey() || getActiveUser()?.pubkey;
 
     if (targetPubkey) {
-      // 1. Trigger loader to fetch from relays and populate eventStore
-      const loaderSub = profileLoader({
-        kind: 0,
-        pubkey: targetPubkey,
-        relays: getProfileLookupRelays()
-      }).subscribe(() => {
-        // Loader automatically populates eventStore
-      });
-
-      // 2. Subscribe to model for reactive parsed profile from eventStore
-      const modelSub = eventStore.model(ProfileModel, targetPubkey).subscribe((profileContent) => {
+      const sub = subscribeProfile(targetPubkey, (profileContent) => {
         profile = profileContent;
       });
-
-      // Return cleanup function to unsubscribe from both
-      return () => {
-        loaderSub.unsubscribe();
-        modelSub.unsubscribe();
-      };
+      return () => sub.unsubscribe();
     }
   });
 

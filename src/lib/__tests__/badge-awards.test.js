@@ -25,7 +25,8 @@ vi.mock('applesauce-core/models', () => ({
   TimelineModel: vi.fn()
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: () => ['wss://relay.test']
+  getAllLookupRelays: () => ['wss://relay.test'],
+  getEventLoaderLookupRelays: () => []
 }));
 
 const { buildBadgeDisplayItems } = await import('../stores/badge-awards.svelte.js');
