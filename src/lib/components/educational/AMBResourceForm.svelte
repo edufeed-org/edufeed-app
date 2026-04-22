@@ -1,7 +1,20 @@
 <!--
   AMBResourceForm Component
-  Paginated wizard for creating/editing educational resources (kind:30142)
-  Used as a full-page form (not a modal).
+  Paginated wizard for creating/editing educational resources (kind:30142).
+
+  Step layout:
+    1. Bildungsbereich       (new in create flow; inferred in edit flow)
+    2. URL / naddr           (new; MetadataFetchStep-driven)
+    3. Basic                 (identifier is read-only, derives from step 2)
+    4. Classification        (adds educationalLevel + multi-vocab `about`)
+    5. Content & Creators    (unchanged)
+    6. Rights                (unchanged)
+    7. Share to communities  (new, create-only — uses NIP-18 reposts)
+
+  Edit mode: steps 1 + 2 are still shown (for transparency / re-selection) but
+  the URL field is read-only (d-tag is immutable on a replaceable event) and
+  step 7 is skipped (post-hoc sharing is done from the resource page via
+  CommunityShare.svelte).
 -->
 
 <script>
@@ -17,16 +30,38 @@
   import BlossomUploader from './BlossomUploader.svelte';
   import CreatorInput from './CreatorInput.svelte';
   import ExternalUrlInput from './ExternalUrlInput.svelte';
+  import MetadataFetchStep from './MetadataFetchStep.svelte';
+  import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
+  import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
   import { fetchProfileData } from '$lib/helpers/profile.js';
+  import {
+    BILDUNGSBEREICHE,
+    BILDUNGSBEREICH_KEYS,
+    inferBildungsbereichFromEducationalLevels,
+    getSubjectVocabLabel
+  } from '$lib/helpers/educational/bildungsbereich.js';
+  import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
+  import { splitKeywordInput, mergeKeywords } from '$lib/helpers/educational/keywordInput.js';
+  import {
+    ambJsonLdToPrefillEvent,
+    ogToFormDataPrefill
+  } from '$lib/helpers/educational/ambJsonLdToFormData.js';
+  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
 
   /**
-   * @typedef {{ id: string, label: string }} SelectedConcept
+   * @typedef {{ id: string, label: string }} CompactConcept
    * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
    * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string }} Creator
+   * @typedef {keyof typeof BILDUNGSBEREICHE} BildungsbereichKey
    */
 
   /**
+   * `communityPubkey` is now a **preselection hint** for step 7, not a write
+   * target. The event itself no longer carries an implicit h-tag.
+   *
    * @type {{
    *   communityPubkey?: string,
    *   editEvent?: any,
@@ -38,41 +73,91 @@
   // Determine if we're in edit mode
   const isEditMode = $derived(editEvent !== null && editResource !== null);
 
-  // Current wizard step (1-4)
+  // Total step count — share step is skipped in edit mode.
+  const totalSteps = $derived(isEditMode ? 6 : 7);
+
+  // Current wizard step (1..totalSteps)
   let currentStep = $state(1);
-  const totalSteps = 4;
+
+  // Image preview error flag for step 3 image field
+  let imagePreviewError = $state(false);
 
   // Form data state
   let formData = $state({
-    // Basic Info (Step 1)
+    // Step 1: Bildungsbereich
+    bildungsbereich: /** @type {'' | BildungsbereichKey} */ (''),
+
+    // Step 2: URL/naddr input (what the user typed, also carried into step 3 as identifier)
+    urlInput: '',
+
+    // Step 3: Basic Info
     name: '',
     description: '',
     inLanguage: 'de',
     image: '',
     identifier: '',
 
-    // Classification (Step 2)
-    learningResourceType: /** @type {SelectedConcept[]} */ ([]),
-    about: /** @type {SelectedConcept[]} */ ([]),
+    // Step 4: Classification
+    learningResourceType: /** @type {CompactConcept[]} */ ([]),
+    educationalLevels: /** @type {CompactConcept[]} */ ([]),
     keywords: /** @type {string[]} */ ([]),
 
-    // Content & Creators (Step 3)
+    // Step 5: Content & Creators
     creators: /** @type {Creator[]} */ ([]),
     encodings: /** @type {UploadedFile[]} */ ([]),
     externalUrls: /** @type {string[]} */ ([]),
 
-    // Rights (Step 4)
+    // Step 6: Rights
     license: 'https://creativecommons.org/licenses/by/4.0/',
     isAccessibleForFree: true
   });
+
+  // Per-vocab subject selection (merged into formData.about on submit).
+  // Keys are vocab slugs (e.g. 'schulfaecher', 'hochschulfaecher').
+  let aboutByVocab = $state(/** @type {Record<string, CompactConcept[]>} */ ({}));
+
+  // Step 7: which communities to share into (hex pubkeys).
+  let selectedCommunityPubkeys = $state(/** @type {string[]} */ ([]));
+
+  // Joined communities (reactive).
+  const getJoinedCommunities = useJoinedCommunitiesList();
+  const joinedCommunities = $derived(getJoinedCommunities());
+
+  // Batch-load profiles for joined communities (used by the Share step to show
+  // name + avatar instead of raw hex pubkeys).
+  const getJoinedCommunityProfiles = useProfileMap(() => joinedCommunities);
+  const joinedCommunityProfiles = $derived(getJoinedCommunityProfiles());
+
+  // Preselect the community that was passed via `?community=` if the user is a member.
+  $effect(() => {
+    if (!communityPubkey || isEditMode) return;
+    if (
+      joinedCommunities.includes(communityPubkey) &&
+      !selectedCommunityPubkeys.includes(communityPubkey)
+    ) {
+      selectedCommunityPubkeys = [...selectedCommunityPubkeys, communityPubkey];
+    }
+  });
+
+  // Resolve vocab field descriptors for the pickers that depend on Bildungsbereich.
+  const subjectVocabFields = $derived.by(() => {
+    if (!formData.bildungsbereich)
+      return /** @type {Array<{key: string, field: NonNullable<ReturnType<typeof resolveVocabField>>}>} */ ([]);
+    const keys = BILDUNGSBEREICHE[formData.bildungsbereich]?.subjectVocabKeys ?? [];
+    return /** @type {Array<{key: string, field: NonNullable<ReturnType<typeof resolveVocabField>>}>} */ (
+      keys.map((k) => ({ key: k, field: resolveVocabField(k) })).filter((e) => e.field !== null)
+    );
+  });
+
+  const educationalLevelField = $derived(resolveVocabField('educationalLevel'));
 
   // Validation and submission state
   let validationErrors = $state(/** @type {string[]} */ ([]));
   let isSubmitting = $state(false);
   let submitError = $state('');
 
-  // URL validation for identifier field
-  let identifierUrlError = $state('');
+  // Step 2 renders its own error state; the parent only reacts to `onresult`
+  // to prefill form fields or navigate into edit mode.
 
   // Get active user
   let activeUser = $state(manager.active);
@@ -147,10 +232,13 @@
 
   // Step titles
   const stepTitles = $derived([
+    m.amb_form_step_bildungsbereich?.() ?? 'Bildungsbereich',
+    m.amb_form_step_url?.() ?? 'Resource URL',
     m.amb_form_step_basic(),
     m.amb_form_step_classification(),
     m.amb_form_step_content(),
-    m.amb_form_step_license()
+    m.amb_form_step_license(),
+    m.amb_form_step_share?.() ?? 'Share'
   ]);
 
   // Import helper functions for extracting data from events
@@ -162,6 +250,7 @@
     getAMBLanguages,
     getAMBLearningResourceTypes,
     getAMBSubjects,
+    getAMBEducationalLevels,
     getAMBKeywords,
     getAMBLicense,
     isAMBFree,
@@ -176,6 +265,37 @@
       prefillEditData();
     }
   });
+
+  /**
+   * Adapt a compact `{id, label}` to the rich shape FormConceptPicker takes.
+   * @param {CompactConcept} c
+   * @param {string} [vocabRelay]
+   * @returns {import('$lib/helpers/form-to-amb.js').SelectedConcept}
+   */
+  function toRichConcept(c, vocabRelay = '') {
+    const locale = getLocale();
+    return {
+      id: c.id,
+      nostrCoord: '',
+      relay: vocabRelay,
+      labels: c.label ? { [locale]: c.label } : {}
+    };
+  }
+
+  /**
+   * Inverse adapter — FormConceptPicker emits rich concepts; keep only the bits
+   * the form data shape cares about.
+   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept} rich
+   * @returns {CompactConcept}
+   */
+  function toCompactConcept(rich) {
+    const locale = getLocale();
+    const labels = rich.labels || {};
+    return {
+      id: rich.id,
+      label: labels[locale] || labels.de || labels.en || Object.values(labels)[0] || ''
+    };
+  }
 
   /**
    * Prefill form with existing data for edit mode
@@ -222,18 +342,24 @@
       }
     }
 
-    // Get learning resource types and subjects
     const lrtTypes = getAMBLearningResourceTypes(editEvent, getLocale());
     const subjects = getAMBSubjects(editEvent, getLocale());
+    const eduLevels = getAMBEducationalLevels(editEvent, getLocale());
+
+    const inferred = inferBildungsbereichFromEducationalLevels(eduLevels.map((l) => l.id));
+    const identifier = getAMBIdentifier(editEvent) || '';
 
     formData = {
+      ...formData,
+      bildungsbereich: inferred ?? '',
+      urlInput: identifier,
       name: getAMBName(editEvent),
       description: getAMBDescription(editEvent),
       inLanguage: getAMBLanguages(editEvent)[0] || 'de',
       image: getAMBImage(editEvent) || '',
-      identifier: getAMBIdentifier(editEvent) || '',
+      identifier,
       learningResourceType: lrtTypes.map((t) => ({ id: t.id, label: t.label })),
-      about: subjects.map((s) => ({ id: s.id, label: s.label })),
+      educationalLevels: eduLevels.map((t) => ({ id: t.id, label: t.label })),
       keywords: getAMBKeywords(editEvent),
       creators:
         editCreators.length > 0
@@ -260,7 +386,98 @@
       license: getAMBLicense(editEvent)?.id || 'https://creativecommons.org/licenses/by/4.0/',
       isAccessibleForFree: isAMBFree(editEvent)
     };
+
+    // Bucket pre-existing subjects into a single vocab slot for display.
+    // In edit mode we don't know which vocab each subject came from, so we
+    // surface them under the first vocab key of the inferred Bildungsbereich.
+    if (inferred) {
+      const firstKey = BILDUNGSBEREICHE[inferred].subjectVocabKeys[0];
+      aboutByVocab = { [firstKey]: subjects.map((s) => ({ id: s.id, label: s.label })) };
+    } else {
+      aboutByVocab = {};
+    }
   }
+
+  /**
+   * Accept the result from MetadataFetchStep and act on it.
+   * @param {import('$lib/helpers/educational/resolveMetadataInput.js').ResolveResult} result
+   */
+  async function handleMetadataResult(result) {
+    switch (result.kind) {
+      case 'empty':
+      case 'invalid':
+      case 'naddr-wrong-kind':
+      case 'naddr-not-owned':
+        // Error states are rendered by MetadataFetchStep itself.
+        return;
+      case 'naddr-edit':
+        await goto(resolve(`/create/resource?edit=${result.naddrString}`));
+        return;
+      case 'url': {
+        formData.identifier = result.url;
+        if (result.metadata.source === 'amb-jsonld' && result.metadata.amb) {
+          const prefillEvent = ambJsonLdToPrefillEvent(result.metadata.amb);
+          if (prefillEvent) {
+            applyPrefillFromAmbEvent(prefillEvent);
+          }
+        } else if (result.metadata.source === 'opengraph' && result.metadata.og) {
+          const og = ogToFormDataPrefill(result.metadata.og);
+          if (og.name) formData.name = og.name;
+          if (og.description) formData.description = og.description;
+          if (og.image) formData.image = og.image;
+          if (og.inLanguage) formData.inLanguage = og.inLanguage;
+        }
+      }
+    }
+  }
+
+  /**
+   * Reuse the edit-mode prefill path: feed the synthetic 30142 event from
+   * amb-nostr-converter into the same `getAMB*` helpers that edit mode uses.
+   * @param {any} prefillEvent
+   */
+  function applyPrefillFromAmbEvent(prefillEvent) {
+    const lrtTypes = getAMBLearningResourceTypes(prefillEvent, getLocale());
+    const subjects = getAMBSubjects(prefillEvent, getLocale());
+    const eduLevels = getAMBEducationalLevels(prefillEvent, getLocale());
+
+    formData.name = getAMBName(prefillEvent) || formData.name;
+    formData.description = getAMBDescription(prefillEvent) || formData.description;
+    const img = getAMBImage(prefillEvent);
+    if (img) formData.image = img;
+    const lang = getAMBLanguages(prefillEvent)[0];
+    if (lang) formData.inLanguage = lang;
+
+    if (lrtTypes.length > 0) {
+      formData.learningResourceType = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
+    }
+    if (eduLevels.length > 0) {
+      formData.educationalLevels = eduLevels.map((t) => ({ id: t.id, label: t.label }));
+    }
+
+    if (subjects.length > 0 && formData.bildungsbereich) {
+      const firstKey = BILDUNGSBEREICHE[formData.bildungsbereich].subjectVocabKeys[0];
+      aboutByVocab = {
+        ...aboutByVocab,
+        [firstKey]: subjects.map((s) => ({ id: s.id, label: s.label }))
+      };
+    }
+
+    const kw = getAMBKeywords(prefillEvent);
+    if (kw.length > 0) formData.keywords = kw;
+    const license = getAMBLicense(prefillEvent);
+    if (license) formData.license = license.id;
+  }
+
+  // Preselect educational levels when Bildungsbereich changes (create mode only,
+  // and only if the user hasn't already picked any).
+  $effect(() => {
+    if (isEditMode) return;
+    if (!formData.bildungsbereich) return;
+    if (formData.educationalLevels.length > 0) return;
+    const defaults = BILDUNGSBEREICHE[formData.bildungsbereich].educationalLevelDefaults;
+    formData.educationalLevels = defaults.map((id) => ({ id, label: '' }));
+  });
 
   /**
    * Validate URL format
@@ -278,17 +495,6 @@
   }
 
   /**
-   * Handle identifier URL blur - validate on focus loss
-   */
-  function handleIdentifierBlur() {
-    if (formData.identifier?.trim() && !isValidUrl(formData.identifier)) {
-      identifierUrlError = m.amb_form_validation_url();
-    } else {
-      identifierUrlError = '';
-    }
-  }
-
-  /**
    * Validate current step
    * @returns {boolean}
    */
@@ -297,9 +503,23 @@
 
     switch (currentStep) {
       case 1:
+        if (!formData.bildungsbereich) {
+          validationErrors.push(
+            m.amb_form_validation_bildungsbereich?.() ?? 'Please choose a Bildungsbereich.'
+          );
+        }
+        break;
+      case 2:
+        if (!formData.identifier?.trim()) {
+          validationErrors.push(
+            m.amb_form_validation_url_required?.() ??
+              'Please enter a URL or naddr before continuing.'
+          );
+        }
+        break;
+      case 3:
         if (formData.identifier?.trim() && !isValidUrl(formData.identifier)) {
           validationErrors.push(m.amb_form_validation_identifier());
-          identifierUrlError = m.amb_form_validation_url();
         }
         if (!formData.name.trim()) {
           validationErrors.push(m.amb_form_validation_title());
@@ -308,20 +528,26 @@
           validationErrors.push(m.amb_form_validation_description());
         }
         break;
-      case 2:
+      case 4: {
         if (formData.learningResourceType.length === 0) {
           validationErrors.push(m.amb_form_validation_resource_type());
         }
-        if (formData.about.length === 0) {
+        const totalSubjects = Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0);
+        if (totalSubjects === 0) {
           validationErrors.push(m.amb_form_validation_subject());
         }
         break;
-      case 3:
+      }
+      case 5:
         break;
-      case 4:
+      case 6:
         if (!formData.license) {
           validationErrors.push(m.amb_form_validation_license());
         }
+        break;
+      case 7:
+        // Share step — zero communities is fine (user may want to publish only
+        // to their outbox for now and share later).
         break;
     }
 
@@ -342,6 +568,26 @@
   }
 
   /**
+   * Merge per-vocab `about` selections into a single array for submission.
+   * @returns {CompactConcept[]}
+   */
+  function mergedAbout() {
+    /** @type {CompactConcept[]} */
+    const out = [];
+    /** @type {Record<string, true>} */
+    const seen = {};
+    for (const arr of Object.values(aboutByVocab)) {
+      for (const c of arr) {
+        if (!seen[c.id]) {
+          seen[c.id] = true;
+          out.push(c);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
    * Handle form submission
    */
   async function handleSubmit() {
@@ -356,6 +602,7 @@
 
     try {
       const actions = createEducationalActions();
+      const about = mergedAbout();
 
       const resourceData = {
         name: formData.name,
@@ -363,8 +610,13 @@
         slug: formData.identifier?.trim() || '',
         learningResourceType: formData.learningResourceType[0]?.id || '',
         learningResourceTypeLabel: formData.learningResourceType[0]?.label || '',
-        about: formData.about.map((s) => s.id),
-        aboutLabels: formData.about.map((s) => ({ id: s.id, label: s.label })),
+        about: about.map((s) => s.id),
+        aboutLabels: about.map((s) => ({ id: s.id, label: s.label })),
+        educationalLevels: formData.educationalLevels.map((e) => e.id),
+        educationalLevelLabels: formData.educationalLevels.map((e) => ({
+          id: e.id,
+          label: e.label
+        })),
         inLanguage: formData.inLanguage,
         license: formData.license,
         creators: formData.creators,
@@ -378,16 +630,29 @@
       if (isEditMode && editEvent) {
         result = await actions.updateResource(/** @type {any} */ (resourceData), editEvent);
       } else {
-        result = await actions.createResource(/** @type {any} */ (resourceData), communityPubkey);
+        result = await actions.createResource(/** @type {any} */ (resourceData));
+      }
+
+      // Share into selected communities (NIP-18 reposts) — create mode only.
+      if (
+        !isEditMode &&
+        result?.event &&
+        selectedCommunityPubkeys.length > 0 &&
+        activeUser?.signer
+      ) {
+        try {
+          await createCommunityReposts(result.event, selectedCommunityPubkeys, activeUser.signer);
+        } catch (err) {
+          console.error('Failed to share to communities:', err);
+          // Non-fatal — the resource is already published. Surface a warning.
+          submitError =
+            (err instanceof Error ? err.message : 'Community share failed') +
+            ' — the resource was published but community shares did not all succeed.';
+        }
       }
 
       if (result.naddr) {
-        if (isEditMode) {
-          // Navigate back to the resource page
-          await goto(resolve(`/${result.naddr}`));
-        } else {
-          await goto(resolve(`/${result.naddr}`));
-        }
+        await goto(resolve(`/${result.naddr}`));
       }
     } catch (error) {
       console.error('Error publishing resource:', error);
@@ -406,19 +671,61 @@
   }
 
   /**
-   * Add keyword
-   * @param {Event} e
+   * Commit the current input value as one or more keywords.
+   * @param {HTMLInputElement} input
+   */
+  function commitKeywordInput(input) {
+    const tokens = splitKeywordInput(input.value);
+    if (tokens.length === 0) {
+      input.value = '';
+      return;
+    }
+    formData.keywords = mergeKeywords(formData.keywords, tokens);
+    input.value = '';
+  }
+
+  /**
+   * Handle keydown on the keyword input — Enter, Tab, comma all commit.
+   * @param {KeyboardEvent} e
    */
   function handleAddKeyword(e) {
     const input = /** @type {HTMLInputElement} */ (e.target);
-    if (e instanceof KeyboardEvent && e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
+      // Don't trap Shift+Tab (keyboard backward nav out of field).
+      if (e.key === 'Tab' && e.shiftKey) return;
+      // Only trap Tab if there's content to commit — otherwise let focus move.
+      if (e.key === 'Tab' && !input.value.trim()) return;
       e.preventDefault();
-      const keyword = input.value.trim();
-      if (keyword && !formData.keywords.includes(keyword)) {
-        formData.keywords = [...formData.keywords, keyword];
-      }
-      input.value = '';
+      commitKeywordInput(input);
     }
+  }
+
+  /**
+   * Commit pending content when the input loses focus.
+   * @param {FocusEvent} e
+   */
+  function handleKeywordBlur(e) {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    if (input.value.trim()) commitKeywordInput(input);
+  }
+
+  /**
+   * Handle paste: split comma / newline separated blobs into tokens.
+   * @param {ClipboardEvent} e
+   */
+  function handleKeywordPaste(e) {
+    const pasted = e.clipboardData?.getData('text') ?? '';
+    if (!pasted) return;
+    // Only take over if the paste contains separators — otherwise let default
+    // paste behavior run so single-word pastes go into the input as-is.
+    if (!/[,\n\r]/.test(pasted)) return;
+    e.preventDefault();
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const tokens = splitKeywordInput(pasted);
+    if (tokens.length > 0) {
+      formData.keywords = mergeKeywords(formData.keywords, tokens);
+    }
+    input.value = '';
   }
 
   /**
@@ -436,15 +743,43 @@
   function handleRemoveKeyword(keyword) {
     return () => removeKeyword(keyword);
   }
+
+  /**
+   * Toggle a community on/off in the share-step selection.
+   * @param {string} pubkey
+   */
+  function toggleCommunity(pubkey) {
+    if (selectedCommunityPubkeys.includes(pubkey)) {
+      selectedCommunityPubkeys = selectedCommunityPubkeys.filter((p) => p !== pubkey);
+    } else {
+      selectedCommunityPubkeys = [...selectedCommunityPubkeys, pubkey];
+    }
+  }
+
+  /**
+   * FormConceptPicker change handler for the educationalLevel picker.
+   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
+   */
+  function handleEduLevelChange(rich) {
+    formData.educationalLevels = rich.map(toCompactConcept);
+  }
+
+  /**
+   * FormConceptPicker change handler for a specific subject vocab bucket.
+   * @param {string} vocabKey
+   */
+  function makeAboutHandler(vocabKey) {
+    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+      aboutByVocab = { ...aboutByVocab, [vocabKey]: rich.map(toCompactConcept) };
+    };
+  }
 </script>
 
 <div class="mx-auto w-full max-w-2xl px-4 py-6">
-  <!-- Header -->
+  <!-- Step indicator — the page's top-bar <h1> provides the stable title;
+       this line tells the user where they are in the wizard. -->
   <div class="mb-6">
-    <h2 id="form-title" class="text-xl font-semibold text-base-content">
-      {isEditMode ? m.amb_form_title_edit() : m.amb_form_title_create()}
-    </h2>
-    <p class="mt-1 text-sm text-base-content/60">
+    <p class="text-base font-medium text-base-content/70">
       {m.amb_form_step_indicator({
         currentStep: String(currentStep),
         totalSteps: String(totalSteps)
@@ -471,7 +806,7 @@
       </div>
       {#if i < totalSteps - 1}
         <div
-          class="h-1 w-12 rounded transition-colors"
+          class="h-1 w-6 rounded transition-colors"
           class:bg-primary={i + 1 < currentStep}
           class:bg-base-300={i + 1 >= currentStep}
         ></div>
@@ -481,10 +816,78 @@
 
   <!-- Form Content -->
   <div class="min-h-[40vh]">
-    <!-- Step 1: Basic Info -->
+    <!-- Step 1: Bildungsbereich -->
     {#if currentStep === 1}
+      <div class="space-y-3">
+        <p class="text-sm text-base-content/70">
+          {m.amb_form_help_bildungsbereich?.() ??
+            'Pick the educational area. This preselects subject vocabulary and educational level.'}
+        </p>
+        <div class="grid gap-2">
+          {#each BILDUNGSBEREICH_KEYS as key (key)}
+            {@const cfg = BILDUNGSBEREICHE[key]}
+            <label
+              class="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3 transition-colors hover:bg-base-200"
+              class:border-primary={formData.bildungsbereich === key}
+              class:bg-base-200={formData.bildungsbereich === key}
+            >
+              <input
+                type="radio"
+                name="bildungsbereich"
+                class="radio mt-1 radio-primary"
+                value={key}
+                bind:group={formData.bildungsbereich}
+                onchange={() => {
+                  // Auto-advance after a brief delay so the selected-card
+                  // styling visibly registers before the transition.
+                  setTimeout(() => nextStep(), 200);
+                }}
+              />
+              <span>
+                <span class="block font-medium">{cfg.label[getLocale()] ?? cfg.label.en}</span>
+              </span>
+            </label>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Step 2: URL / naddr -->
+    {#if currentStep === 2}
+      <div class="space-y-3">
+        <MetadataFetchStep
+          bind:value={formData.urlInput}
+          activeUserPubkey={activeUser?.pubkey ?? null}
+          readOnly={isEditMode}
+          onresult={handleMetadataResult}
+        />
+        {#if isEditMode}
+          <p class="text-xs text-base-content/60">
+            {m.amb_form_help_url_no_edit?.() ??
+              'The resource URL cannot be changed after publishing.'}
+          </p>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Step 3: Basic Info -->
+    {#if currentStep === 3}
       <div class="space-y-4">
-        <!-- Resource URL (Identifier) -->
+        <!-- Image preview — surfaced at the top so the resource has a visual anchor.
+             The Image URL input itself stays below with the other optional fields. -->
+        {#if formData.image && !imagePreviewError}
+          <img
+            src={formData.image}
+            alt=""
+            data-testid="amb-image-preview"
+            class="mx-auto block max-h-64 max-w-full rounded border border-base-300"
+            onerror={() => {
+              imagePreviewError = true;
+            }}
+          />
+        {/if}
+
+        <!-- Resource URL (Identifier) — derived from step 2, read-only here -->
         <div class="form-control">
           <label class="label" for="amb-identifier">
             <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
@@ -493,24 +896,15 @@
             id="amb-identifier"
             type="url"
             class="input-bordered input w-full"
-            class:input-error={identifierUrlError}
-            bind:value={formData.identifier}
-            onblur={handleIdentifierBlur}
-            placeholder={m.amb_form_placeholder_identifier()}
-            readonly={isEditMode}
-            disabled={isEditMode}
+            value={formData.identifier}
+            readonly
+            disabled
           />
-          {#if identifierUrlError}
-            <div class="label">
-              <span class="label-text-alt text-error">{identifierUrlError}</span>
-            </div>
-          {:else}
-            <div class="label">
-              <span class="label-text-alt text-base-content/60">
-                {isEditMode ? m.amb_form_help_url_no_edit() : m.amb_form_help_url_enter()}
-              </span>
-            </div>
-          {/if}
+          <div class="label">
+            <span class="label-text-alt text-base-content/60">
+              {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
+            </span>
+          </div>
         </div>
 
         <!-- Title -->
@@ -574,15 +968,21 @@
             class="input-bordered input w-full"
             bind:value={formData.image}
             placeholder={m.amb_form_placeholder_image()}
+            oninput={() => {
+              imagePreviewError = false;
+            }}
           />
+          {#if formData.image && imagePreviewError}
+            <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
+          {/if}
         </div>
       </div>
     {/if}
 
-    <!-- Step 2: Classification -->
-    {#if currentStep === 2}
+    <!-- Step 4: Classification -->
+    {#if currentStep === 4}
       <div class="space-y-4">
-        <!-- Resource Type -->
+        <!-- Resource Type (still static SKOSDropdown — HCRT vocabulary) -->
         <SKOSDropdown
           vocabularyKey="learningResourceType"
           bind:selected={formData.learningResourceType}
@@ -593,16 +993,51 @@
           helpText={m.amb_form_help_resource_type()}
         />
 
-        <!-- Subject -->
-        <SKOSDropdown
-          vocabularyKey="about"
-          bind:selected={formData.about}
-          label={m.amb_form_label_subject()}
-          placeholder={m.amb_form_placeholder_subject()}
-          required={true}
-          multiple={true}
-          helpText={m.amb_form_help_subject()}
-        />
+        <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
+        {#if educationalLevelField}
+          <div class="space-y-1">
+            <span class="label-text font-medium">
+              {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+            </span>
+            <FormConceptPicker
+              field={educationalLevelField}
+              multiple={true}
+              value={formData.educationalLevels.map((c) =>
+                toRichConcept(c, educationalLevelField.vocab.relay)
+              )}
+              onchange={handleEduLevelChange}
+            />
+          </div>
+        {/if}
+
+        <!-- Subject pickers — one per Bildungsbereich vocab -->
+        {#if subjectVocabFields.length === 0}
+          <p class="text-sm text-base-content/60">
+            {m.amb_form_help_subject_pick_bildungsbereich?.() ??
+              'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
+          </p>
+        {/if}
+        {#each subjectVocabFields as entry (entry.key)}
+          <div class="space-y-1">
+            <span class="label-text font-medium">
+              {m.amb_form_label_subject()}
+              <span class="text-error">*</span>
+            </span>
+            {#if subjectVocabFields.length > 1}
+              <p class="text-xs text-base-content/60">
+                {getSubjectVocabLabel(entry.key, getLocale())}
+              </p>
+            {/if}
+            <FormConceptPicker
+              field={entry.field}
+              multiple={true}
+              value={(aboutByVocab[entry.key] ?? []).map((c) =>
+                toRichConcept(c, entry.field.vocab.relay)
+              )}
+              onchange={makeAboutHandler(entry.key)}
+            />
+          </div>
+        {/each}
 
         <!-- Keywords -->
         <div class="form-control">
@@ -615,7 +1050,10 @@
             class="input-bordered input w-full"
             placeholder={m.amb_form_placeholder_keywords()}
             onkeydown={handleAddKeyword}
+            onblur={handleKeywordBlur}
+            onpaste={handleKeywordPaste}
           />
+          <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
           {#if formData.keywords.length > 0}
             <div class="mt-2 flex flex-wrap gap-2">
               {#each formData.keywords as keyword (keyword)}
@@ -636,17 +1074,15 @@
       </div>
     {/if}
 
-    <!-- Step 3: Content & Creators -->
-    {#if currentStep === 3}
+    <!-- Step 5: Content & Creators -->
+    {#if currentStep === 5}
       <div class="space-y-4">
-        <!-- Creators -->
         <CreatorInput
           bind:creators={formData.creators}
           label={m.amb_form_label_creators()}
           helpText={m.amb_form_help_creators()}
         />
 
-        <!-- File Upload -->
         <BlossomUploader
           bind:files={formData.encodings}
           label={m.amb_form_label_content_files()}
@@ -654,7 +1090,6 @@
           multiple={true}
         />
 
-        <!-- External URLs -->
         <ExternalUrlInput
           bind:urls={formData.externalUrls}
           label={m.amb_form_label_external_refs()}
@@ -663,8 +1098,8 @@
       </div>
     {/if}
 
-    <!-- Step 4: License & Publish -->
-    {#if currentStep === 4}
+    <!-- Step 6: License & (in edit mode) Publish -->
+    {#if currentStep === 6}
       <div class="space-y-4">
         <!-- License -->
         <div class="form-control">
@@ -730,7 +1165,11 @@
             </div>
             <div class="flex">
               <dt class="w-28 text-base-content/60">{m.amb_form_summary_subject()}</dt>
-              <dd class="flex-1">{formData.about.map((s) => s.label).join(', ') || '—'}</dd>
+              <dd class="flex-1">
+                {mergedAbout()
+                  .map((s) => s.label || s.id)
+                  .join(', ') || '—'}
+              </dd>
             </div>
             <div class="flex">
               <dt class="w-28 text-base-content/60">{m.amb_form_summary_creators()}</dt>
@@ -754,25 +1193,54 @@
             {/if}
           </dl>
         </div>
+      </div>
+    {/if}
 
-        <!-- Community Info -->
-        {#if communityPubkey}
-          <div class="alert alert-info">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-6 w-6 shrink-0 stroke-current"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <span>{m.amb_form_info_community_share()}</span>
+    <!-- Step 7: Share to communities (create mode only) -->
+    {#if currentStep === 7 && !isEditMode}
+      <div class="space-y-3">
+        <p class="text-sm text-base-content/70">
+          {m.amb_form_help_share?.() ??
+            'Share this resource into communities you belong to. Each share is a NIP-18 repost you can remove later.'}
+        </p>
+        {#if joinedCommunities.length === 0}
+          <div class="alert text-sm alert-info">
+            {m.amb_form_share_no_communities?.() ??
+              'You are not a member of any community yet. You can still publish the resource and share it later.'}
           </div>
+        {:else}
+          <ul class="space-y-2">
+            {#each joinedCommunities as pubkey (pubkey)}
+              {@const profile = joinedCommunityProfiles.get(pubkey)}
+              {@const displayName =
+                getDisplayName(profile) || `${pubkey.slice(0, 12)}…${pubkey.slice(-8)}`}
+              {@const picture = profile ? getProfilePicture(profile) : undefined}
+              <li>
+                <label
+                  class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
+                >
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-primary"
+                    checked={selectedCommunityPubkeys.includes(pubkey)}
+                    onchange={() => toggleCommunity(pubkey)}
+                  />
+                  {#if picture}
+                    <img
+                      src={picture}
+                      alt=""
+                      class="h-8 w-8 rounded-full border border-base-300 object-cover"
+                    />
+                  {:else}
+                    <div
+                      class="h-8 w-8 shrink-0 rounded-full border border-base-300 bg-base-200"
+                    ></div>
+                  {/if}
+                  <span class="truncate text-sm" data-testid="community-name">{displayName}</span>
+                </label>
+              </li>
+            {/each}
+          </ul>
         {/if}
       </div>
     {/if}

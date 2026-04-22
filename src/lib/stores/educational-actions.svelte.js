@@ -45,14 +45,16 @@ import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
  * @property {string[]} keywords - Array of keywords/tags
  * @property {UploadedFile[]} files - Array of uploaded files
  * @property {boolean} [isAccessibleForFree] - Whether the resource is freely accessible
- * @property {string} [educationalLevel] - Optional SKOS URI for educational level
- * @property {string} [educationalLevelLabel] - Human-readable label
+ * @property {string} [educationalLevel] - Optional SKOS URI for educational level (singular, legacy)
+ * @property {string} [educationalLevelLabel] - Human-readable label (singular, legacy)
+ * @property {string[]} [educationalLevels] - Optional SKOS URIs for educational levels (plural, preferred)
+ * @property {{id: string, label: string}[]} [educationalLevelLabels] - Labels for `educationalLevels`
  * @property {string[]} [externalUrls] - Array of external reference URLs (r-tags)
  */
 
 /**
  * @typedef {Object} EducationalActions
- * @property {(formData: EducationalFormData, communityPubkey: string, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
+ * @property {(formData: EducationalFormData) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
  * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
  */
 
@@ -112,7 +114,16 @@ function convertFormDataToAMB(formData) {
 
   // Educational level with language-tagged prefLabel
   // NIP spec: ["educationalLevel:prefLabel:lang", <label>]
-  if (formData.educationalLevel) {
+  // Preferred plural form (`educationalLevels`) wins; falls back to legacy singular.
+  if (formData.educationalLevels && formData.educationalLevels.length > 0) {
+    amb.educationalLevel = formData.educationalLevels.map((uri, index) => {
+      /** @type {Record<string, any>} */
+      const eduObj = { id: uri };
+      eduObj[`prefLabel:${lang}`] =
+        formData.educationalLevelLabels?.[index]?.label || extractLabelFromUri(uri);
+      return eduObj;
+    });
+  } else if (formData.educationalLevel) {
     /** @type {Record<string, any>} */
     const eduObj = { id: formData.educationalLevel };
     eduObj[`prefLabel:${lang}`] =
@@ -168,13 +179,16 @@ function convertFormDataToAMB(formData) {
 export function createEducationalActions() {
   return {
     /**
-     * Create a new educational resource (kind:30142)
+     * Create a new educational resource (kind:30142).
+     *
+     * Does not target any community directly. Sharing into communities is
+     * performed by the caller as a separate NIP-18 repost step (see
+     * `createCommunityReposts` in `helpers/communityRepost.js`).
+     *
      * @param {EducationalFormData} formData - Form data from upload modal
-     * @param {string} communityPubkey - Target community public key
-     * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
      * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
      */
-    async createResource(formData, communityPubkey, communityEvent = null) {
+    async createResource(formData) {
       // Get current account from manager
       const currentAccount = manager.active;
       if (!currentAccount) {
@@ -209,11 +223,6 @@ export function createEducationalActions() {
         // Flatten AMB to Nostr tags
         const tags = flattenAMBToNostrTags(ambData);
 
-        // Add h-tag for community targeting (Communikey spec)
-        if (communityPubkey) {
-          tags.push(['h', communityPubkey]);
-        }
-
         // Add p-tags for creators with Nostr pubkeys and relay hints
         if (formData.creators) {
           for (const creator of formData.creators) {
@@ -244,7 +253,7 @@ export function createEducationalActions() {
 
         // Sign and publish optimistically (adds to store immediately)
         const resourceEvent = await currentAccount.signEvent(eventTemplate);
-        publishEventOptimistic(resourceEvent, [], { communityEvent });
+        publishEventOptimistic(resourceEvent, []);
 
         // Generate naddr using educational relays for hint
         const naddr = encodeEventToNaddr(resourceEvent, getAppRelaysForCategory('educational'));

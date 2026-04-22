@@ -296,6 +296,19 @@ export function GET() {
         learningResourceType: env.EDUCATIONAL_VOCAB_LEARNING_RESOURCE_TYPE || 'hcrt',
         about: env.EDUCATIONAL_VOCAB_ABOUT || 'hochschulfaechersystematik',
         audience: env.EDUCATIONAL_VOCAB_AUDIENCE || 'intendedEndUserRole'
+      },
+      // naddr references to kind 39737 ConceptScheme events. Keys match the
+      // `SCHEME_NADDR_<UPPER_SNAKE>` env var slugs and are consumed by the
+      // AMB wizard's vocab resolver (see `helpers/educational/vocabResolver.js`).
+      schemeNaddrs: {
+        schulfaecher: env.SCHEME_NADDR_SCHULFAECHER || '',
+        hochschulfaecher: env.SCHEME_NADDR_HOCHSCHULFAECHER || '',
+        educationalLevel: env.SCHEME_NADDR_EDUCATIONAL_LEVEL || '',
+        hcrt: env.SCHEME_NADDR_HCRT || '',
+        newLrt: env.SCHEME_NADDR_NEW_LRT || '',
+        lrmiAudience: env.SCHEME_NADDR_LRMI_AUDIENCE || '',
+        interactivityType: env.SCHEME_NADDR_INTERACTIVITY_TYPE || '',
+        conditionsOfAccess: env.SCHEME_NADDR_CONDITIONS_OF_ACCESS || ''
       }
     },
 

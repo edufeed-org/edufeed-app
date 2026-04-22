@@ -155,18 +155,121 @@ export async function openEventCreationModal(page) {
 }
 
 /**
- * Helper to navigate to the AMB resource creation page.
- * Navigates directly to /create/resource with the community query param.
+ * Stub `/api/reader?mode=metadata` so the wizard's URL step resolves instantly
+ * without hitting the network. The default stub returns "none" so the form
+ * simply advances without prefilling anything.
+ *
+ * Callers can pass `opts.mode` to simulate metadata presence:
+ *   - 'none' (default): page has no metadata; empty form after fetch
+ *   - 'og': return Open Graph mapping
+ *   - 'amb': return AMB JSON-LD mapping
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{ mode?: 'none' | 'og' | 'amb', og?: object, amb?: object }} [opts]
+ */
+export async function setupMetadataMock(page, opts = {}) {
+  const mode = opts.mode || 'none';
+  // Playwright routes are LIFO-matched. Unroute any prior handler for this
+  // pattern so repeated calls REPLACE rather than stack. This makes the
+  // MOST RECENT setupMetadataMock call authoritative, regardless of call order
+  // relative to navigateToAMBCreation's default install.
+  await page.unroute('**/api/reader?mode=metadata*').catch(() => {});
+  await page.route('**/api/reader?mode=metadata*', async (route) => {
+    /** @type {any} */
+    let metadata = { source: 'none' };
+    if (mode === 'og') {
+      metadata = {
+        source: 'opengraph',
+        og: opts.og || {
+          title: 'Mock Page Title',
+          description: 'Mock page description from OG meta',
+          image: 'https://example.com/thumb.jpg',
+          locale: 'en'
+        }
+      };
+    } else if (mode === 'amb') {
+      metadata = {
+        source: 'amb-jsonld',
+        amb: opts.amb || {}
+      };
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, metadata })
+    });
+  });
+}
+
+/**
+ * Helper to navigate to the AMB resource creation page and advance past the new
+ * intro steps (Bildungsbereich + URL) so callers land on the Basic step.
+ *
  * @param {import('@playwright/test').Page} page
  * @param {string} communityNpub - The community's npub (bech32)
+ * @param {{ bildungsbereich?: 'schule' | 'hochschule' | 'extra', url?: string, skipAdvance?: boolean, skipMockSetup?: boolean }} [opts]
+ *   - bildungsbereich: which educational area radio to select (default: 'hochschule')
+ *   - url: URL to enter on step 2 (default: synthesized per-test URL)
+ *   - skipAdvance: if true, leave on step 1 so the caller can drive the wizard manually
+ *   - skipMockSetup: if true, caller has already installed their own metadata
+ *     mock and wants it to remain in force (default false: install "none" stub)
  */
-export async function navigateToAMBCreation(page, communityNpub) {
+export async function navigateToAMBCreation(page, communityNpub, opts = {}) {
+  // Install default metadata stub unless the caller has already installed one
+  // and doesn't want us to clobber it. (`setupMetadataMock` unroutes prior
+  // handlers, so calling it unconditionally here would otherwise replace a
+  // test-provided OG/AMB mock with the default "none".)
+  if (!opts.skipMockSetup) {
+    await setupMetadataMock(page);
+  }
+
   // Navigate directly to the creation page with community param
   await page.goto(`/create/resource?community=${communityNpub}`);
   await page.waitForTimeout(2000);
 
-  // Wait for the form to render (title input should be visible on step 1)
+  if (opts.skipAdvance) return;
+
+  // Step 1: pick a Bildungsbereich
+  const bildungsbereich = opts.bildungsbereich || 'hochschule';
+  await selectBildungsbereich(page, bildungsbereich);
+  await page.locator('button:has-text("Next")').click();
+  await page.waitForTimeout(500);
+
+  // Step 2: enter a URL — inspection runs automatically after debounce
+  const url = opts.url || `https://example.com/e2e-resource-${Date.now()}`;
+  await enterResourceUrl(page, url);
+  await page.locator('button:has-text("Next")').click();
+  await page.waitForTimeout(500);
+
+  // Now on the Basic step — title input should be visible
   await expect(page.locator('#amb-title')).toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * Pick a Bildungsbereich radio on step 1 of the AMB wizard.
+ * @param {import('@playwright/test').Page} page
+ * @param {'schule' | 'hochschule' | 'extra'} key
+ */
+export async function selectBildungsbereich(page, key) {
+  await page.locator(`input[name="bildungsbereich"][value="${key}"]`).check();
+}
+
+/**
+ * Fill the URL input on step 2. Inspection runs automatically:
+ *   - debounced 500 ms after the value changes, and
+ *   - immediately on paste.
+ * `fill()` in Playwright dispatches an `input` event (not a paste), so we
+ * wait out the debounce plus a small buffer for the async resolve.
+ * Does NOT click Next — caller decides.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} url
+ */
+export async function enterResourceUrl(page, url) {
+  const urlInput = page.locator('#metadata-input');
+  await expect(urlInput).toBeVisible({ timeout: 5000 });
+  await urlInput.fill(url);
+  // 500 ms debounce + async resolve. Metadata fetch is mocked → near-instant.
+  await page.waitForTimeout(1000);
 }
 
 /**
@@ -261,15 +364,20 @@ export async function clearSKOSCache(page) {
 // ============================================================================
 
 /**
- * Complete AMB wizard Step 1 (Basic Info).
- * Fills the title, description, and language fields.
+ * Complete AMB wizard Basic Info step (step 3 in the new wizard; the caller is
+ * expected to arrive here via `navigateToAMBCreation`, which auto-advances past
+ * the new Bildungsbereich + URL steps).
+ *
+ * NOTE: the `identifier` field is now **read-only** and derives from the URL
+ * entered on step 2; `data.identifier` is accepted only for backwards
+ * compatibility with old tests and is silently ignored.
  *
  * @param {import('@playwright/test').Page} page
  * @param {object} [data] - Form data
  * @param {string} [data.title] - Resource title (default: 'Test Educational Resource')
  * @param {string} [data.description] - Description (default: 'Test description for E2E')
  * @param {string} [data.language] - Language code (default: 'en')
- * @param {string} [data.identifier] - Optional URL identifier
+ * @param {string} [data.identifier] - Ignored (see note above)
  * @param {string} [data.image] - Optional image URL
  */
 export async function completeAMBStep1(page, data = {}) {
@@ -281,15 +389,11 @@ export async function completeAMBStep1(page, data = {}) {
   await page.locator('#amb-description').fill(description);
   await page.locator('#amb-language').selectOption(language);
 
-  if (data.identifier) {
-    await page.locator('#amb-identifier').fill(data.identifier);
-  }
-
   if (data.image) {
     await page.locator('#amb-image').fill(data.image);
   }
 
-  // Click Next to advance to step 2
+  // Click Next to advance to the Classification step
   await page.locator('button:has-text("Next")').click();
   await page.waitForTimeout(500);
 }
@@ -361,9 +465,7 @@ export async function completeAMBStep2(page, data = {}) {
   // Close dropdown by clicking outside it (on the page title)
   // Clicking the trigger toggles, which might not work reliably
   await page
-    .locator(
-      'h2:has-text("Create Educational Resource"), h1:has-text("Create Educational Resource")'
-    )
+    .locator('h2:has-text("Share Educational Resource"), h1:has-text("Share Educational Resource")')
     .first()
     .click();
   await page.waitForTimeout(300);
@@ -383,7 +485,7 @@ export async function completeAMBStep2(page, data = {}) {
   await page.waitForTimeout(300);
 
   // Close dropdown by clicking outside it (on the modal title)
-  await page.locator('h2:has-text("Create Educational Resource")').click();
+  await page.locator('h2:has-text("Share Educational Resource")').click();
   await page.waitForTimeout(200);
 
   // Add keywords if provided

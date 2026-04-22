@@ -131,6 +131,16 @@ const defaultConfig = {
       learningResourceType: 'hcrt',
       about: 'hochschulfaechersystematik',
       audience: 'intendedEndUserRole'
+    },
+    schemeNaddrs: {
+      schulfaecher: '',
+      hochschulfaecher: '',
+      educationalLevel: '',
+      hcrt: '',
+      newLrt: '',
+      lrmiAudience: '',
+      interactivityType: '',
+      conditionsOfAccess: ''
     }
   },
   ui: {
@@ -265,6 +275,10 @@ export function initializeConfig(runtimeConfig) {
       vocabularies: {
         ...defaultConfig.educational.vocabularies,
         ...runtimeConfig.educational?.vocabularies
+      },
+      schemeNaddrs: {
+        ...defaultConfig.educational.schemeNaddrs,
+        ...runtimeConfig.educational?.schemeNaddrs
       }
     },
     ui: {
