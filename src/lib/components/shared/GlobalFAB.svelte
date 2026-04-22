@@ -74,98 +74,114 @@
     </div>
 
     <!-- Create Event -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.fab_create_event()}
-      onclick={handleCreateEvent}
-      aria-label={m.fab_create_event_aria()}
-    >
-      <CalendarIcon class_="h-5 w-5" />
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.fab_create_event()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleCreateEvent}
+        aria-label={m.fab_create_event_aria()}
+      >
+        <CalendarIcon class_="h-5 w-5" />
+      </button>
+    </div>
 
     <!-- Create Calendar -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.fab_create_calendar()}
-      onclick={handleCreateCalendar}
-      aria-label={m.fab_create_calendar_aria()}
-    >
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-        />
-      </svg>
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.fab_create_calendar()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleCreateCalendar}
+        aria-label={m.fab_create_calendar_aria()}
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+          />
+        </svg>
+      </button>
+    </div>
 
     <!-- Create Learning Content -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.fab_create_resource()}
-      onclick={handleCreateResource}
-      aria-label={m.fab_create_resource_aria()}
-    >
-      <GraduationCapIcon class_="h-5 w-5" />
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.fab_create_resource()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleCreateResource}
+        aria-label={m.fab_create_resource_aria()}
+      >
+        <GraduationCapIcon class_="h-5 w-5" />
+      </button>
+    </div>
 
     <!-- Write Article -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.article_fab_write()}
-      onclick={handleCreateArticle}
-      aria-label={m.article_fab_write()}
-    >
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-        />
-      </svg>
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.article_fab_write()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleCreateArticle}
+        aria-label={m.article_fab_write()}
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+      </button>
+    </div>
 
     <!-- Write Wiki -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.wiki_fab_write()}
-      onclick={handleCreateWiki}
-      aria-label={m.wiki_fab_write()}
-    >
-      <BookIcon class_="h-5 w-5" />
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.wiki_fab_write()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleCreateWiki}
+        aria-label={m.wiki_fab_write()}
+      >
+        <BookIcon class_="h-5 w-5" />
+      </button>
+    </div>
 
     <!-- Create Form -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.fab_create_form()}
-      onclick={handleCreateForm}
-      aria-label={m.fab_create_form()}
-    >
-      <ScrollTextIcon class_="h-5 w-5" />
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.fab_create_form()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleCreateForm}
+        aria-label={m.fab_create_form()}
+      >
+        <ScrollTextIcon class_="h-5 w-5" />
+      </button>
+    </div>
 
     <!-- Add Bookmark -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.fab_add_bookmark()}
-      onclick={handleAddBookmark}
-      aria-label={m.fab_add_bookmark()}
-    >
-      <BookmarkIcon class_="h-5 w-5" />
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.fab_add_bookmark()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleAddBookmark}
+        aria-label={m.fab_add_bookmark()}
+      >
+        <BookmarkIcon class_="h-5 w-5" />
+      </button>
+    </div>
 
     <!-- Share Existing Content -->
-    <button
-      class="tooltip btn tooltip-left btn-circle btn-lg"
-      data-tip={m.fab_share_existing()}
-      onclick={handleShareExisting}
-      aria-label={m.fab_share_existing_aria()}
-    >
-      <RepostIcon class_="h-5 w-5" />
-    </button>
+    <div class="fab-item">
+      <span class="fab-label">{m.fab_share_existing()}</span>
+      <button
+        class="btn btn-circle btn-lg"
+        onclick={handleShareExisting}
+        aria-label={m.fab_share_existing_aria()}
+      >
+        <RepostIcon class_="h-5 w-5" />
+      </button>
+    </div>
   </div>
 {/if}
 
@@ -173,53 +189,70 @@
   .fab {
     display: flex;
     flex-direction: column-reverse;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.75rem;
   }
 
-  .fab > button {
+  .fab-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
     opacity: 0;
-    transform: scale(0.8) translateY(10px);
+    transform: scale(0.8) translateX(-10px);
     pointer-events: none;
     transition: all 0.2s ease;
   }
 
-  .fab:hover > button,
-  .fab:focus-within > button {
+  .fab-label {
+    background-color: var(--color-base-100, hsl(var(--b1)));
+    color: var(--color-base-content, hsl(var(--bc)));
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    box-shadow:
+      0 1px 2px 0 rgb(0 0 0 / 0.05),
+      0 1px 3px 0 rgb(0 0 0 / 0.1);
+  }
+
+  .fab:hover > .fab-item,
+  .fab:focus-within > .fab-item {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: scale(1) translateX(0);
     pointer-events: auto;
   }
 
-  .fab > button:nth-child(2) {
+  .fab > .fab-item:nth-child(2) {
     transition-delay: 0.05s;
   }
 
-  .fab > button:nth-child(3) {
+  .fab > .fab-item:nth-child(3) {
     transition-delay: 0.1s;
   }
 
-  .fab > button:nth-child(4) {
+  .fab > .fab-item:nth-child(4) {
     transition-delay: 0.15s;
   }
 
-  .fab > button:nth-child(5) {
+  .fab > .fab-item:nth-child(5) {
     transition-delay: 0.2s;
   }
 
-  .fab > button:nth-child(6) {
+  .fab > .fab-item:nth-child(6) {
     transition-delay: 0.25s;
   }
 
-  .fab > button:nth-child(7) {
+  .fab > .fab-item:nth-child(7) {
     transition-delay: 0.3s;
   }
 
-  .fab > button:nth-child(8) {
+  .fab > .fab-item:nth-child(8) {
     transition-delay: 0.35s;
   }
 
-  .fab > button:nth-child(9) {
+  .fab > .fab-item:nth-child(9) {
     transition-delay: 0.4s;
   }
 </style>
