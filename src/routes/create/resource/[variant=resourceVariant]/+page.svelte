@@ -1,11 +1,18 @@
 <script>
   import { nip19 } from 'nostr-tools';
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { resolve as _resolve } from '$app/paths';
   import { ChevronLeftIcon } from '$lib/components/icons';
   import ResourceFormWizard from '$lib/components/educational/ResourceFormWizard.svelte';
   import { fetchEventById } from '$lib/helpers/nostrUtils';
   import { formatAMBResource } from '$lib/helpers/educational';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { runtimeConfig, configReady } from '$lib/stores/config.svelte.js';
+  import { getEnabledVariants, getDefaultVariantId } from '$lib/config/resource-form-variants.js';
   import * as m from '$lib/paraglide/messages';
+
+  /** @type {(path: string) => string} */
+  const resolve = /** @type {any} */ (_resolve);
 
   /** @type {{ data: { variantId: string, communityPubkey: string, editNaddr: string } }} */
   let { data } = $props();
@@ -15,8 +22,41 @@
   let editResource = $state(/** @type {any} */ (null));
   let isLoadingEdit = $state(false);
   let editError = $state('');
+  // True while we're awaiting runtime config to decide whether to redirect a
+  // registered-but-disabled variant id to the default. Matchers can't do this
+  // check themselves (see src/params/resourceVariant.js).
+  let isResolvingVariant = $state(true);
 
   const isEditMode = $derived(!!data.editNaddr);
+
+  onMount(async () => {
+    await new Promise((done) => {
+      const unsub = configReady.subscribe((ready) => {
+        if (ready) {
+          unsub();
+          done(undefined);
+        }
+      });
+    });
+
+    const enabled = getEnabledVariants();
+    if (!enabled.some((v) => v.id === data.variantId)) {
+      // Variant is registered but not enabled on this deployment — redirect
+      // to the default variant, preserving ?community= and ?edit=.
+      const queryParts = [];
+      if (data.communityPubkey)
+        queryParts.push(`community=${encodeURIComponent(data.communityPubkey)}`);
+      if (data.editNaddr) queryParts.push(`edit=${encodeURIComponent(data.editNaddr)}`);
+      const query = queryParts.join('&');
+      const target = resolve(
+        `/create/resource/${getDefaultVariantId()}${query ? `?${query}` : ''}`
+      );
+      await goto(target, { replaceState: true });
+      return;
+    }
+
+    isResolvingVariant = false;
+  });
 
   // Resolve edit naddr to event
   $effect(() => {
@@ -75,7 +115,7 @@
   </div>
 
   <!-- Content -->
-  {#if isLoadingEdit}
+  {#if isResolvingVariant || isLoadingEdit}
     <div class="flex items-center justify-center py-20">
       <span class="loading loading-lg loading-spinner text-primary"></span>
     </div>
