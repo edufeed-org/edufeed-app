@@ -312,6 +312,12 @@ export function GET() {
       }
     },
 
+    // Resource form variants (AMB vs EKW, etc.)
+    // Order in the env var determines picker display order + default variant.
+    resourceFormVariants: {
+      enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb'])
+    },
+
     // UI settings
     ui: {
       defaultLightTheme: parseTheme(env.THEME_DEFAULT_LIGHT, 'light'),

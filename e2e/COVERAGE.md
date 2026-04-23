@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-04-22
-**Total tests:** 289
+**Last updated:** 2026-04-23
+**Total tests:** 292
 
 ## Quick Summary
 
@@ -17,6 +17,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                        |
 | `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata      |
 | `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                      |
+| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject |
 | `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                    |
 | `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                        |
 | `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                            |
@@ -307,7 +308,7 @@ Tests use `setupMetadataMock(page, { mode: 'og' | 'amb' | 'none', ... })` to stu
 | ----------------------------------------------------- | ----------------------------- |
 | no critical JavaScript errors during page interaction | Error capture throughout flow |
 
-**Components exercised:** EducationalFAB, AMBResourceForm (/create/resource page), SKOSDropdown (partial)
+**Components exercised:** EducationalFAB, ResourceFormWizard (/create/resource page), SKOSDropdown (partial)
 
 ---
 
@@ -371,13 +372,39 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 | resource visible on community Learning tab | Card appears after publish |
 | back button preserves form state on step 2 | Title preserved after back |
 
-**Components exercised:** AMBResourceForm (all steps, /create/resource page), SKOSDropdown (with mocks), BlossomUploader, CreatorInput, ExternalUrlInput, educational-actions.svelte.js
+**Components exercised:** ResourceFormWizard (all steps, /create/resource page), SKOSDropdown (with mocks), BlossomUploader, CreatorInput, ExternalUrlInput, educational-actions.svelte.js
 
 **New infrastructure files:**
 
 - `e2e/mock-skos-data.js` - Mock SKOS vocabulary data
 - `e2e/relay-verification.js` - WebSocket relay query helpers
 - `e2e/fixtures.js` - Added `setupSKOSMocks()`, `clearSKOSCache()`, step completion helpers
+
+---
+
+### resource-form-variants.test.js (3 tests)
+
+**Route:** `/create/resource`, `/create/resource/[variant]`
+**Auth required:** Yes (all tests use `authenticatedPage` fixture)
+**Note:** Phase 1 plumbing for the multi-variant resource form wizard. The
+default E2E `webServer` config runs single-variant (`RESOURCE_FORM_VARIANTS=amb`)
+so the 29 existing AMB regression tests in `amb-creation.test.js` keep working
+unchanged. These tests cover the routing shape only.
+
+#### Routing (3 tests)
+
+| Test                                                         | What it verifies                                                                |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| direct navigation to /create/resource/amb renders the wizard | Variant-addressed route mounts `ResourceFormWizard` on Bildungsbereich step     |
+| legacy /create/resource redirects to default variant route   | Thin redirector awaits `configReady`, lands on /create/resource/amb?community=… |
+| invalid variant id in URL does not resolve the wizard route  | `[variant=resourceVariant]` matcher rejects unknown ids; wizard not rendered    |
+
+**Components exercised:** `/create/resource/+page.svelte` (redirector), `/create/resource/[variant=resourceVariant]/+page.svelte`, `ResourceFormWizard`, `resourceVariant` param matcher
+
+**Deferred (not covered by E2E):**
+
+- Multi-variant picker modal shown from `GlobalFAB` when `RESOURCE_FORM_VARIANTS=amb,ekw`. Would require a second webServer project in `playwright.config.js` or a test-only config override. Covered instead by the component test `src/lib/components/__tests__/ResourceVariantPickerModal.test.js` + the FAB unit test `src/lib/components/__tests__/GlobalFAB.test.js`.
+- Edit-flow variant resolution (`?edit=<naddr>` → NIP-32 `metadata-form` label lookup → variant route). Covered by the unit test for `resolveVariantIdFromEvent()` in `src/lib/__tests__/resource-form-variants.test.js`.
 
 ---
 

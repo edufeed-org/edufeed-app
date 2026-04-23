@@ -14,6 +14,16 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
+  import ResourceVariantPickerModal from '$lib/components/educational/ResourceVariantPickerModal.svelte';
+  import { getEnabledVariants, getDefaultVariantId } from '$lib/config/resource-form-variants.js';
+
+  let variantPickerOpen = $state(false);
+
+  /** Build the create URL for a given variant, preserving the community param. */
+  function resourceUrlFor(/** @type {string} */ variantId) {
+    const query = communityPubkey ? `?community=${communityPubkey}` : '';
+    return resolve(`/create/resource/${variantId}${query}`);
+  }
 
   // Detect community context from route (convert npub param to hex for consistent matching)
   let communityPubkey = $derived(
@@ -37,7 +47,19 @@
   }
 
   function handleCreateResource() {
-    goto(resolve(`/create/resource${communityPubkey ? `?community=${communityPubkey}` : ''}`));
+    // Single-variant deployments skip the picker and navigate directly.
+    // Multi-variant deployments open the step-0 picker modal.
+    const variants = getEnabledVariants();
+    if (variants.length <= 1) {
+      goto(resourceUrlFor(getDefaultVariantId()));
+      return;
+    }
+    variantPickerOpen = true;
+  }
+
+  function handleVariantSelect(/** @type {string} */ variantId) {
+    variantPickerOpen = false;
+    goto(resourceUrlFor(variantId));
   }
 
   function handleCreateArticle() {
@@ -60,6 +82,12 @@
     modalStore.openModal('shareByNaddr', { communityPubkey });
   }
 </script>
+
+<ResourceVariantPickerModal
+  open={variantPickerOpen}
+  onSelect={handleVariantSelect}
+  onClose={() => (variantPickerOpen = false)}
+/>
 
 {#if !isDetailPage}
   <div class="fab absolute right-6 bottom-20 z-[60] lg:bottom-6">

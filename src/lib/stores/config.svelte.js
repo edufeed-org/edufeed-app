@@ -143,6 +143,11 @@ const defaultConfig = {
       conditionsOfAccess: ''
     }
   },
+  // Resource form variants (AMB vs EKW, etc.). Order defines picker order + default.
+  resourceFormVariants: {
+    /** @type {string[]} */
+    enabled: ['amb']
+  },
   ui: {
     defaultLightTheme: 'light',
     defaultDarkTheme: 'dark',
@@ -281,6 +286,10 @@ export function initializeConfig(runtimeConfig) {
         ...runtimeConfig.educational?.schemeNaddrs
       }
     },
+    resourceFormVariants: {
+      enabled:
+        runtimeConfig.resourceFormVariants?.enabled || defaultConfig.resourceFormVariants.enabled
+    },
     ui: {
       ...defaultConfig.ui,
       ...runtimeConfig.ui
@@ -372,5 +381,8 @@ export const runtimeConfig = {
   },
   get favicon() {
     return config.favicon;
+  },
+  get resourceFormVariants() {
+    return config.resourceFormVariants;
   }
 };

@@ -10,9 +10,14 @@ import {
 } from '$lib/helpers/educational/bildungsbereich.js';
 
 describe('BILDUNGSBEREICHE config', () => {
-  it('exposes the three Bildungsbereiche', () => {
-    expect(Object.keys(BILDUNGSBEREICHE).sort()).toEqual(['extra', 'hochschule', 'schule']);
-    expect(BILDUNGSBEREICH_KEYS).toEqual(['schule', 'hochschule', 'extra']);
+  it('exposes all four Bildungsbereiche', () => {
+    expect(Object.keys(BILDUNGSBEREICHE).sort()).toEqual([
+      'extra',
+      'hochschule',
+      'konfi',
+      'schule'
+    ]);
+    expect(BILDUNGSBEREICH_KEYS).toEqual(['schule', 'hochschule', 'extra', 'konfi']);
   });
 
   it('Schule maps to schulfaecher vocab and KIM Primar/Sek I/Sek II level URIs', () => {
@@ -40,6 +45,16 @@ describe('BILDUNGSBEREICHE config', () => {
     expect(extra.educationalLevelMapping).toEqual([
       'https://w3id.org/kim/educationalLevel/level_C'
     ]);
+  });
+
+  it('Konfi-Arbeit is a placeholder with no subject vocab and no educationalLevel mapping', () => {
+    const konfi = BILDUNGSBEREICHE.konfi;
+    expect(konfi.label.de).toBe('Konfi-Arbeit');
+    expect(konfi.label.en).toBe('Confirmation program');
+    // Downstream behavior is intentionally deferred: no subject picker rendered,
+    // no educationalLevel URI tagged, no legacy events to infer.
+    expect(konfi.subjectVocabKeys).toEqual([]);
+    expect(konfi.educationalLevelMapping).toEqual([]);
   });
 });
 

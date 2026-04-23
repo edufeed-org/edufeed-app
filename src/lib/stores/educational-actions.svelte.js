@@ -11,6 +11,11 @@ import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
+import {
+  appendCreatorPTags,
+  appendExternalUrlTags,
+  appendVariantLabelTags
+} from '$lib/helpers/educational/eventTags.js';
 
 /**
  * @typedef {Object} Creator
@@ -65,8 +70,8 @@ import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
 
 /**
  * @typedef {Object} EducationalActions
- * @property {(formData: EducationalFormData) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
- * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
+ * @property {(formData: EducationalFormData, variantId?: string) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
+ * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null, variantId?: string) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
  */
 
 /** Kind number for AMB Educational Resource events */
@@ -130,9 +135,10 @@ export function createEducationalActions() {
      * `createCommunityReposts` in `helpers/communityRepost.js`).
      *
      * @param {EducationalFormData} formData - Form data from upload modal
+     * @param {string} [variantId='amb'] - Metadata-form variant id (NIP-32 label)
      * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
      */
-    async createResource(formData) {
+    async createResource(formData, variantId = 'amb') {
       // Get current account from manager
       const currentAccount = manager.active;
       if (!currentAccount) {
@@ -165,24 +171,9 @@ export function createEducationalActions() {
         // for hasPart/isPartOf when `relatedEvents` is supplied.
         const { tags, content } = buildAMBEventTagsFromFormData(formData, currentAccount.pubkey);
 
-        // Add p-tags for creators with Nostr pubkeys and relay hints
-        if (formData.creators) {
-          for (const creator of formData.creators) {
-            if (creator.pubkey) {
-              const relayHint = await getPrimaryWriteRelay(creator.pubkey);
-              tags.push(['p', creator.pubkey, relayHint, 'creator']);
-            }
-          }
-        }
-
-        // Add r-tags for external reference URLs (NIP-24)
-        if (formData.externalUrls && formData.externalUrls.length > 0) {
-          for (const url of formData.externalUrls) {
-            if (url.trim()) {
-              tags.push(['r', url.trim()]);
-            }
-          }
-        }
+        await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
+        appendExternalUrlTags(tags, formData.externalUrls);
+        appendVariantLabelTags(tags, variantId);
 
         // Create the event using EventFactory
         const eventFactory = createAppEventFactory();
@@ -216,9 +207,10 @@ export function createEducationalActions() {
      * @param {EducationalFormData} formData - Updated form data
      * @param {import('nostr-tools').NostrEvent} existingEvent - Existing event to update
      * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
+     * @param {string} [variantId='amb'] - Metadata-form variant id (NIP-32 label)
      * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
      */
-    async updateResource(formData, existingEvent, communityEvent = null) {
+    async updateResource(formData, existingEvent, communityEvent = null, variantId = 'amb') {
       // Get current account
       const currentAccount = manager.active;
       if (!currentAccount) {
@@ -251,24 +243,9 @@ export function createEducationalActions() {
           tags.push(['h', hTag]);
         }
 
-        // Add p-tags for creators with Nostr pubkeys and relay hints
-        if (formData.creators) {
-          for (const creator of formData.creators) {
-            if (creator.pubkey) {
-              const relayHint = await getPrimaryWriteRelay(creator.pubkey);
-              tags.push(['p', creator.pubkey, relayHint, 'creator']);
-            }
-          }
-        }
-
-        // Add r-tags for external reference URLs (NIP-24)
-        if (formData.externalUrls && formData.externalUrls.length > 0) {
-          for (const url of formData.externalUrls) {
-            if (url.trim()) {
-              tags.push(['r', url.trim()]);
-            }
-          }
-        }
+        await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
+        appendExternalUrlTags(tags, formData.externalUrls);
+        appendVariantLabelTags(tags, variantId);
 
         // Create the updated event
         const eventFactory = createAppEventFactory();

@@ -1,5 +1,5 @@
 <!--
-  AMBResourceForm Component
+  ResourceFormWizard Component
   Paginated wizard for creating/editing educational resources (kind:30142).
 
   Step layout:
@@ -39,10 +39,10 @@
   import { fetchProfileData } from '$lib/helpers/profile.js';
   import {
     BILDUNGSBEREICHE,
-    BILDUNGSBEREICH_KEYS,
     inferBildungsbereichFromEducationalLevels,
     getSubjectVocabLabel
   } from '$lib/helpers/educational/bildungsbereich.js';
+  import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
   import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
   import { splitKeywordInput, mergeKeywords } from '$lib/helpers/educational/keywordInput.js';
   import {
@@ -71,13 +71,19 @@
    * `communityPubkey` is now a **preselection hint** for step 7, not a write
    * target. The event itself no longer carries an implicit h-tag.
    *
+   * `variantId` identifies which metadata-form variant this wizard instance
+   * represents (e.g. `'amb'` or `'ekw'`). Phase 1: the variant id only
+   * affects the NIP-32 label tag emitted on the event. Step content is
+   * currently identical across variants.
+   *
    * @type {{
    *   communityPubkey?: string,
    *   editEvent?: any,
-   *   editResource?: any
+   *   editResource?: any,
+   *   variantId?: string
    * }}
    */
-  let { communityPubkey = '', editEvent = null, editResource = null } = $props();
+  let { communityPubkey = '', editEvent = null, editResource = null, variantId = 'amb' } = $props();
 
   // Determine if we're in edit mode
   const isEditMode = $derived(editEvent !== null && editResource !== null);
@@ -151,6 +157,9 @@
       selectedCommunityPubkeys = [...selectedCommunityPubkeys, communityPubkey];
     }
   });
+
+  // Bildungsbereich options available in step 1 depend on the variant.
+  const bildungsbereichKeys = $derived(getBildungsbereichKeysForVariant(variantId));
 
   // Resolve vocab field descriptors for the pickers that depend on Bildungsbereich.
   const subjectVocabFields = $derived.by(() => {
@@ -547,9 +556,13 @@
         if (formData.learningResourceType.length === 0) {
           validationErrors.push(m.amb_form_validation_resource_type());
         }
-        const totalSubjects = Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0);
-        if (totalSubjects === 0) {
-          validationErrors.push(m.amb_form_validation_subject());
+        // Skip the subject-required check when the current Bildungsbereich has no
+        // subject vocab (e.g. Konfi-Arbeit) — there is nothing for the user to pick.
+        if (subjectVocabFields.length > 0) {
+          const totalSubjects = Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0);
+          if (totalSubjects === 0) {
+            validationErrors.push(m.amb_form_validation_subject());
+          }
         }
         break;
       }
@@ -648,9 +661,14 @@
 
       let result;
       if (isEditMode && editEvent) {
-        result = await actions.updateResource(/** @type {any} */ (resourceData), editEvent);
+        result = await actions.updateResource(
+          /** @type {any} */ (resourceData),
+          editEvent,
+          null,
+          variantId
+        );
       } else {
-        result = await actions.createResource(/** @type {any} */ (resourceData));
+        result = await actions.createResource(/** @type {any} */ (resourceData), variantId);
       }
 
       // Share into selected communities (NIP-18 reposts) — create mode only.
@@ -844,7 +862,7 @@
             'Pick the educational area. This preselects subject vocabulary and educational level.'}
         </p>
         <div class="grid gap-2">
-          {#each BILDUNGSBEREICH_KEYS as key (key)}
+          {#each bildungsbereichKeys as key (key)}
             {@const cfg = BILDUNGSBEREICHE[key]}
             <label
               class="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3 transition-colors hover:bg-base-200"

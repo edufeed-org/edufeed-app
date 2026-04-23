@@ -19,11 +19,15 @@
 /**
  * @typedef {Object} BildungsbereichConfig
  * @property {{ de: string, en: string }} label
- * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`)
- * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only)
+ * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`). Empty array = no subject picker rendered on step 4.
+ * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only). Empty array = never auto-inferred.
  */
 
-/** @type {Record<'schule' | 'hochschule' | 'extra', BildungsbereichConfig>} */
+/**
+ * @typedef {'schule' | 'hochschule' | 'extra' | 'konfi'} BildungsbereichKey
+ */
+
+/** @type {Record<BildungsbereichKey, BildungsbereichConfig>} */
 export const BILDUNGSBEREICHE = {
   schule: {
     label: { de: 'Schule', en: 'School' },
@@ -47,14 +51,23 @@ export const BILDUNGSBEREICHE = {
     educationalLevelMapping: [
       'https://w3id.org/kim/educationalLevel/level_C' // Fortbildung
     ]
+  },
+  konfi: {
+    // EKW-specific. Downstream config (vocab, level mapping) is intentionally
+    // deferred; see plan 2a. Empty vocab/level arrays naturally suppress the
+    // step 4 subject picker and the edit-mode inference path.
+    label: { de: 'Konfi-Arbeit', en: 'Confirmation program' },
+    subjectVocabKeys: [],
+    educationalLevelMapping: []
   }
 };
 
 /** Declaration order is significant — used as fallback priority by `inferBildungsbereichFromEducationalLevels`. */
-export const BILDUNGSBEREICH_KEYS = /** @type {Array<keyof typeof BILDUNGSBEREICHE>} */ ([
+export const BILDUNGSBEREICH_KEYS = /** @type {BildungsbereichKey[]} */ ([
   'schule',
   'hochschule',
-  'extra'
+  'extra',
+  'konfi'
 ]);
 
 /**
