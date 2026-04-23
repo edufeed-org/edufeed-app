@@ -82,13 +82,13 @@ describe('getContentEventRoute', () => {
   });
 
   describe('educational content (kind 30142)', () => {
-    it('returns /discover?resource={naddr}', () => {
+    it('returns /{naddr} (detail page via naddr catch-all route)', () => {
       const event = makeEvent({
         kind: 30142,
         tags: [['d', 'my-resource']]
       });
       const route = getContentEventRoute(event);
-      expect(route).toMatch(/^\/discover\?resource=naddr1/);
+      expect(route).toMatch(/^\/naddr1/);
     });
   });
 
