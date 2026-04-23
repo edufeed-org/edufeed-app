@@ -409,19 +409,18 @@ unchanged. These tests cover the routing shape only.
 
 ---
 
-### resource-form-no-url.test.js (2 tests)
+### resource-form-no-url.test.js (2 tests — 1 active, 1 skipped)
 
-- **Happy path:** Index a resource without entering a URL — click the
-  "Index a new Nostr-only resource" button on step 2, verify the state card,
-  confirm step 3 hides the URL field, confirm step 5 blocks submit until an
-  attachment is present, publish, land on the `/naddr1…` detail page.
-- **Edit round-trip:** After publishing a no-URL resource, reopen it via
-  `/create/resource/amb?edit=<naddr>` and verify the wizard restores the
-  state card on step 2 and hides the URL field on step 3.
-
-Covers: `ResourceFormWizard.svelte` no-URL branches, `prefillEditData`
-detection, step-5 attachment validation, `formDataToAmb.js:29` empty-slug
-auto-gen path.
+- **Happy path (active):** Verifies no-URL flow through step 3 — clicks
+  "Index a new Nostr-only resource" on step 2, confirms state card, confirms
+  step 3 hides `#amb-identifier`, fills title/description, advances to step 4,
+  and asserts the Classification step heading is visible. Does NOT interact
+  with SKOS/FormConceptPicker (concept events, kind 39737, are not seeded on
+  E2E relays — see line 237 above).
+- **Edit round-trip (skipped):** Requires publishing a no-URL resource first,
+  which requires completing step 4 SKOS selection. Blocked by the same
+  ConceptScheme seeding gap. Re-enable once concept events are seeded on
+  `amb-relay`.
 
 ---
 
