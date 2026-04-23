@@ -62,7 +62,7 @@
   // Calendar view state (local to this component)
   let currentDate = $state(new Date());
   let viewMode = $state(/** @type {CalendarViewMode} */ ('month'));
-  let presentationViewMode = $state(/** @type {'calendar' | 'list' | 'map'} */ ('calendar'));
+  let presentationViewMode = $state(/** @type {'calendar' | 'list' | 'map'} */ ('list'));
 
   // Sidebar state
   let sidebarExpanded = $state(false); // Desktop sidebar collapsed by default

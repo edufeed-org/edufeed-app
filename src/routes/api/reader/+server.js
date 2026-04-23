@@ -1,6 +1,7 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
+import { extractMetadataFromHtml } from '$lib/server/metadataExtraction.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
@@ -26,6 +27,7 @@ function isPrivateIp(parsedUrl) {
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function GET({ url }) {
   const articleUrl = url.searchParams.get('url');
+  const mode = url.searchParams.get('mode'); // 'metadata' for AMB/OG extraction; default = full Readability
 
   if (!articleUrl) {
     return Response.json({ success: false, error: 'Missing url parameter' }, { status: 400 });
@@ -115,6 +117,15 @@ export async function GET({ url }) {
     const html = await response.text();
     if (html.length > MAX_SIZE) {
       return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
+    }
+
+    // Metadata-only branch: skip Readability, extract AMB JSON-LD or Open Graph
+    if (mode === 'metadata') {
+      const metadata = extractMetadataFromHtml(html);
+      return Response.json(
+        { success: true, metadata },
+        { headers: { 'Cache-Control': 'public, max-age=3600' } }
+      );
     }
 
     const { document } = parseHTML(html);

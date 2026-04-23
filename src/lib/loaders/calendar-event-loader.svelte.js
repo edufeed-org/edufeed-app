@@ -541,7 +541,7 @@ export function createUrlSyncHandler(onPresentationViewModeChange, onViewModeCha
     const presentationView =
       urlFilters?.view && typeof urlFilters.view === 'string'
         ? /** @type {'calendar' | 'list' | 'map'} */ (urlFilters.view)
-        : 'calendar';
+        : 'list';
 
     let period =
       urlFilters?.period && typeof urlFilters.period === 'string' ? urlFilters.period : 'month';
@@ -575,7 +575,7 @@ export function syncInitialUrlState(searchParams, onPresentationViewModeChange, 
   const presentationView =
     urlFilters?.view && typeof urlFilters.view === 'string'
       ? /** @type {'calendar' | 'list' | 'map'} */ (urlFilters.view)
-      : 'calendar';
+      : 'list';
 
   let period =
     urlFilters?.period && typeof urlFilters.period === 'string' ? urlFilters.period : 'month';
