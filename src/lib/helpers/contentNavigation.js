@@ -50,7 +50,6 @@ export function getContentEventRoute(event, options = {}) {
     if (!naddr) return undefined;
 
     if (isCalendar) return `/calendar/event/${naddr}`;
-    if (event.kind === 30142) return `/discover?resource=${naddr}`;
     if (event.kind === 30168) return `/forms/${naddr}`;
     return `/${naddr}`;
   }
