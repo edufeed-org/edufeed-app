@@ -94,6 +94,12 @@
   // Current wizard step (1..totalSteps)
   let currentStep = $state(1);
 
+  // "No URL" escape hatch — allows advancing past step 2 without a URL/naddr.
+  // When true: the URL input is replaced with a state card, step 3 hides the
+  // read-only URL field, step 5 requires ≥1 attachment, and handleSubmit sends
+  // an empty slug (which formDataToAmb.js auto-generates a random id for).
+  let hasNoUrl = $state(false);
+
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
 
@@ -534,7 +540,7 @@
         }
         break;
       case 2:
-        if (!formData.identifier?.trim()) {
+        if (!hasNoUrl && !formData.identifier?.trim()) {
           validationErrors.push(
             m.amb_form_validation_url_required?.() ??
               'Please enter a URL or naddr before continuing.'
@@ -893,13 +899,50 @@
     <!-- Step 2: URL / naddr -->
     {#if currentStep === 2}
       <div class="space-y-3">
-        <MetadataFetchStep
-          bind:value={formData.urlInput}
-          activeUserPubkey={activeUser?.pubkey ?? null}
-          readOnly={isEditMode}
-          onresult={handleMetadataResult}
-        />
-        {#if isEditMode}
+        {#if hasNoUrl}
+          <div
+            class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
+            data-testid="no-url-state-card"
+          >
+            <p>{m.amb_form_no_url_state_card()}</p>
+            {#if !isEditMode}
+              <button
+                type="button"
+                class="btn mt-2 btn-ghost btn-sm"
+                onclick={() => {
+                  hasNoUrl = false;
+                  formData.urlInput = '';
+                  formData.identifier = '';
+                }}
+              >
+                {m.amb_form_no_url_cancel()}
+              </button>
+            {/if}
+          </div>
+        {:else}
+          <MetadataFetchStep
+            bind:value={formData.urlInput}
+            activeUserPubkey={activeUser?.pubkey ?? null}
+            readOnly={isEditMode}
+            onresult={handleMetadataResult}
+          />
+          {#if !isEditMode}
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              data-testid="no-url-button"
+              onclick={() => {
+                hasNoUrl = true;
+                formData.urlInput = '';
+                formData.identifier = '';
+                validationErrors = [];
+              }}
+            >
+              {m.amb_form_no_url_button()}
+            </button>
+          {/if}
+        {/if}
+        {#if isEditMode && !hasNoUrl}
           <p class="text-xs text-base-content/60">
             {m.amb_form_help_url_no_edit?.() ??
               'The resource URL cannot be changed after publishing.'}
