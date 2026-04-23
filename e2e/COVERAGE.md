@@ -18,6 +18,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata      |
 | `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                      |
 | `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                    |
 | `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                    |
 | `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                        |
 | `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                            |
@@ -405,6 +406,21 @@ unchanged. These tests cover the routing shape only.
 
 - Multi-variant picker modal shown from `GlobalFAB` when `RESOURCE_FORM_VARIANTS=amb,ekw`. Would require a second webServer project in `playwright.config.js` or a test-only config override. Covered instead by the component test `src/lib/components/__tests__/ResourceVariantPickerModal.test.js` + the FAB unit test `src/lib/components/__tests__/GlobalFAB.test.js`.
 - Edit-flow variant resolution (`?edit=<naddr>` → NIP-32 `metadata-form` label lookup → variant route). Covered by the unit test for `resolveVariantIdFromEvent()` in `src/lib/__tests__/resource-form-variants.test.js`.
+
+---
+
+### resource-form-no-url.test.js (2 tests — 1 active, 1 skipped)
+
+- **Happy path (active):** Verifies no-URL flow through step 3 — clicks the
+  "No external link?" card on step 2 (which auto-advances to step 3),
+  confirms step 3 hides `#amb-identifier`, fills title/description, advances
+  to step 4, and asserts the Classification step heading is visible. Does
+  NOT interact with SKOS/FormConceptPicker (concept events, kind 39737, are
+  not seeded on E2E relays — see line 237 above).
+- **Edit round-trip (skipped):** Requires publishing a no-URL resource first,
+  which requires completing step 4 SKOS selection. Blocked by the same
+  ConceptScheme seeding gap. Re-enable once concept events are seeded on
+  `amb-relay`.
 
 ---
 

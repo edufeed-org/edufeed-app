@@ -12,6 +12,7 @@
 
 <script>
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
   import { resolve as _resolve } from '$app/paths';
   import { fetchEventById } from '$lib/helpers/nostrUtils.js';
@@ -30,14 +31,19 @@
 
   onMount(async () => {
     // Variant registry reads from runtime config; wait for it before deciding.
-    await new Promise((done) => {
-      const unsub = configReady.subscribe((ready) => {
-        if (ready) {
-          unsub();
-          done(undefined);
-        }
+    // Skip the subscription entirely when config is already ready — otherwise
+    // subscribe()'s callback fires synchronously and references `unsub`
+    // before assignment (TDZ).
+    if (!get(configReady)) {
+      await new Promise((done) => {
+        const unsub = configReady.subscribe((ready) => {
+          if (ready) {
+            unsub();
+            done(undefined);
+          }
+        });
       });
-    });
+    }
 
     try {
       let variantId = getDefaultVariantId();

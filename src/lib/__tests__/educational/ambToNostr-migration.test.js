@@ -179,3 +179,44 @@ describe('AMB serialization migration: flatten vs ambToNostr', () => {
     );
   });
 });
+
+describe('empty slug → auto-generated id (no-URL feature contract)', () => {
+  it('produces a non-empty id when slug is empty', () => {
+    const amb = convertFormDataToAMB(
+      /** @type {any} */ ({
+        ...REPRESENTATIVE_FORM_DATA,
+        slug: ''
+      })
+    );
+    expect(typeof amb.id).toBe('string');
+    expect(amb.id.length).toBeGreaterThan(0);
+  });
+
+  it('produces a non-empty id when slug is whitespace-only', () => {
+    const amb = convertFormDataToAMB(
+      /** @type {any} */ ({
+        ...REPRESENTATIVE_FORM_DATA,
+        slug: '   '
+      })
+    );
+    expect(typeof amb.id).toBe('string');
+    expect(amb.id.trim().length).toBeGreaterThan(0);
+  });
+
+  it('flows through ambToNostr as a non-empty d-tag', () => {
+    const amb = convertFormDataToAMB(
+      /** @type {any} */ ({
+        ...REPRESENTATIVE_FORM_DATA,
+        slug: ''
+      })
+    );
+    const result = ambToNostr(/** @type {any} */ (amb), {
+      pubkey: '00'.repeat(32),
+      timestamp: 1700000000
+    });
+    expect(result.success).toBe(true);
+    const dTag = result.data?.tags.find((t) => t[0] === 'd');
+    expect(dTag).toBeDefined();
+    expect(dTag?.[1]).toBeTruthy();
+  });
+});

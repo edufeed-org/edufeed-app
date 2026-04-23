@@ -94,6 +94,12 @@
   // Current wizard step (1..totalSteps)
   let currentStep = $state(1);
 
+  // "No URL" escape hatch — allows advancing past step 2 without a URL/naddr.
+  // When true: the URL input is replaced with a state card, step 3 hides the
+  // read-only URL field, step 5 requires ≥1 attachment, and handleSubmit sends
+  // an empty slug (which formDataToAmb.js auto-generates a random id for).
+  let hasNoUrl = $state(false);
+
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
 
@@ -380,16 +386,18 @@
 
     const inferred = inferBildungsbereichFromEducationalLevels(eduLevels.map((l) => l.id));
     const identifier = getAMBIdentifier(editEvent) || '';
+    const isUrlIdentifier = /^https?:\/\//i.test(identifier);
+    hasNoUrl = !isUrlIdentifier;
 
     formData = {
       ...formData,
       bildungsbereich: inferred ?? '',
-      urlInput: identifier,
+      urlInput: isUrlIdentifier ? identifier : '',
       name: getAMBName(editEvent),
       description: getAMBDescription(editEvent),
       inLanguage: getAMBLanguages(editEvent)[0] || 'de',
       image: getAMBImage(editEvent) || '',
-      identifier,
+      identifier: isUrlIdentifier ? identifier : '',
       learningResourceType: lrtTypes.map((t) => ({ id: t.id, label: t.label })),
       educationalLevels: eduLevels.map((t) => ({ id: t.id, label: t.label })),
       keywords: getAMBKeywords(editEvent),
@@ -534,7 +542,7 @@
         }
         break;
       case 2:
-        if (!formData.identifier?.trim()) {
+        if (!hasNoUrl && !formData.identifier?.trim()) {
           validationErrors.push(
             m.amb_form_validation_url_required?.() ??
               'Please enter a URL or naddr before continuing.'
@@ -567,6 +575,12 @@
         break;
       }
       case 5:
+        if (hasNoUrl && formData.encodings.length === 0 && formData.externalUrls.length === 0) {
+          validationErrors.push(
+            m.amb_form_validation_no_url_needs_attachment?.() ??
+              'Pure Nostr resources must have at least one file or external reference.'
+          );
+        }
         break;
       case 6:
         // Relations step — hasPart / isPartOf are optional.
@@ -638,7 +652,7 @@
       const resourceData = {
         name: formData.name,
         description: formData.description,
-        slug: formData.identifier?.trim() || '',
+        slug: hasNoUrl ? '' : formData.identifier?.trim() || '',
         learningResourceType: formData.learningResourceType[0]?.id || '',
         learningResourceTypeLabel: formData.learningResourceType[0]?.label || '',
         about: about.map((s) => s.id),
@@ -893,13 +907,62 @@
     <!-- Step 2: URL / naddr -->
     {#if currentStep === 2}
       <div class="space-y-3">
-        <MetadataFetchStep
-          bind:value={formData.urlInput}
-          activeUserPubkey={activeUser?.pubkey ?? null}
-          readOnly={isEditMode}
-          onresult={handleMetadataResult}
-        />
-        {#if isEditMode}
+        {#if hasNoUrl}
+          <div
+            class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
+            data-testid="no-url-state-card"
+          >
+            <p>{m.amb_form_no_url_state_card()}</p>
+            {#if !isEditMode}
+              <button
+                type="button"
+                class="btn mt-2 btn-ghost btn-sm"
+                onclick={() => {
+                  hasNoUrl = false;
+                  formData.urlInput = '';
+                  formData.identifier = '';
+                }}
+              >
+                {m.amb_form_no_url_cancel()}
+              </button>
+            {/if}
+          </div>
+        {:else}
+          <MetadataFetchStep
+            bind:value={formData.urlInput}
+            activeUserPubkey={activeUser?.pubkey ?? null}
+            readOnly={isEditMode}
+            onresult={handleMetadataResult}
+          />
+          {#if !isEditMode}
+            <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
+              <span class="h-px flex-1 bg-base-300"></span>
+              <span>{m.amb_form_no_url_or_divider()}</span>
+              <span class="h-px flex-1 bg-base-300"></span>
+            </div>
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
+              data-testid="no-url-button"
+              onclick={() => {
+                hasNoUrl = true;
+                formData.urlInput = '';
+                formData.identifier = '';
+                validationErrors = [];
+                setTimeout(() => nextStep(), 200);
+              }}
+            >
+              <span class="flex-1">
+                <span class="block font-medium">{m.amb_form_no_url_button()}</span>
+                <span class="mt-1 block text-sm text-base-content/70">
+                  {m.amb_form_no_url_button_description()}
+                </span>
+              </span>
+              <span aria-hidden="true" class="text-base-content/40">→</span>
+            </button>
+          {/if}
+        {/if}
+        {#if isEditMode && !hasNoUrl}
           <p class="text-xs text-base-content/60">
             {m.amb_form_help_url_no_edit?.() ??
               'The resource URL cannot be changed after publishing.'}
@@ -926,24 +989,26 @@
         {/if}
 
         <!-- Resource URL (Identifier) — derived from step 2, read-only here -->
-        <div class="form-control">
-          <label class="label" for="amb-identifier">
-            <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
-          </label>
-          <input
-            id="amb-identifier"
-            type="url"
-            class="input-bordered input w-full"
-            value={formData.identifier}
-            readonly
-            disabled
-          />
-          <div class="label">
-            <span class="label-text-alt text-base-content/60">
-              {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
-            </span>
+        {#if !hasNoUrl}
+          <div class="form-control">
+            <label class="label" for="amb-identifier">
+              <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
+            </label>
+            <input
+              id="amb-identifier"
+              type="url"
+              class="input-bordered input w-full"
+              value={formData.identifier}
+              readonly
+              disabled
+            />
+            <div class="label">
+              <span class="label-text-alt text-base-content/60">
+                {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
+              </span>
+            </div>
           </div>
-        </div>
+        {/if}
 
         <!-- Title -->
         <div class="form-control">
@@ -1115,6 +1180,11 @@
     <!-- Step 5: Content & Creators -->
     {#if currentStep === 5}
       <div class="space-y-4">
+        {#if hasNoUrl}
+          <div class="alert text-sm alert-info">
+            {m.amb_form_help_step_5_no_url()}
+          </div>
+        {/if}
         <CreatorInput
           bind:creators={formData.creators}
           label={m.amb_form_label_creators()}
