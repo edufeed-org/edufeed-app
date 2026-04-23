@@ -1,6 +1,7 @@
 <script>
   import { nip19 } from 'nostr-tools';
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
   import { resolve as _resolve } from '$app/paths';
   import { ChevronLeftIcon } from '$lib/components/icons';
@@ -30,14 +31,19 @@
   const isEditMode = $derived(!!data.editNaddr);
 
   onMount(async () => {
-    await new Promise((done) => {
-      const unsub = configReady.subscribe((ready) => {
-        if (ready) {
-          unsub();
-          done(undefined);
-        }
+    // Wait for runtime config to load. Skip the subscription entirely when
+    // it's already ready — otherwise subscribe()'s callback fires
+    // synchronously and references `unsub` before assignment (TDZ).
+    if (!get(configReady)) {
+      await new Promise((done) => {
+        const unsub = configReady.subscribe((ready) => {
+          if (ready) {
+            unsub();
+            done(undefined);
+          }
+        });
       });
-    });
+    }
 
     const enabled = getEnabledVariants();
     if (!enabled.some((v) => v.id === data.variantId)) {
