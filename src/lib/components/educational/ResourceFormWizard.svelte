@@ -386,16 +386,18 @@
 
     const inferred = inferBildungsbereichFromEducationalLevels(eduLevels.map((l) => l.id));
     const identifier = getAMBIdentifier(editEvent) || '';
+    const isUrlIdentifier = /^https?:\/\//i.test(identifier);
+    hasNoUrl = !isUrlIdentifier;
 
     formData = {
       ...formData,
       bildungsbereich: inferred ?? '',
-      urlInput: identifier,
+      urlInput: isUrlIdentifier ? identifier : '',
       name: getAMBName(editEvent),
       description: getAMBDescription(editEvent),
       inLanguage: getAMBLanguages(editEvent)[0] || 'de',
       image: getAMBImage(editEvent) || '',
-      identifier,
+      identifier: isUrlIdentifier ? identifier : '',
       learningResourceType: lrtTypes.map((t) => ({ id: t.id, label: t.label })),
       educationalLevels: eduLevels.map((t) => ({ id: t.id, label: t.label })),
       keywords: getAMBKeywords(editEvent),
