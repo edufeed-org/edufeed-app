@@ -969,24 +969,26 @@
         {/if}
 
         <!-- Resource URL (Identifier) — derived from step 2, read-only here -->
-        <div class="form-control">
-          <label class="label" for="amb-identifier">
-            <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
-          </label>
-          <input
-            id="amb-identifier"
-            type="url"
-            class="input-bordered input w-full"
-            value={formData.identifier}
-            readonly
-            disabled
-          />
-          <div class="label">
-            <span class="label-text-alt text-base-content/60">
-              {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
-            </span>
+        {#if !hasNoUrl}
+          <div class="form-control">
+            <label class="label" for="amb-identifier">
+              <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
+            </label>
+            <input
+              id="amb-identifier"
+              type="url"
+              class="input-bordered input w-full"
+              value={formData.identifier}
+              readonly
+              disabled
+            />
+            <div class="label">
+              <span class="label-text-alt text-base-content/60">
+                {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
+              </span>
+            </div>
           </div>
-        </div>
+        {/if}
 
         <!-- Title -->
         <div class="form-control">
