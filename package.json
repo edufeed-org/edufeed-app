@@ -64,7 +64,7 @@
     "livekit-client": "^2.18.5",
     "maplibre-gl": "^4.7.1",
     "marked": "^16.4.0",
-    "prettier": "^3.8.3",
+    "prettier": "^3.3.3",
     "prettier-plugin-svelte": "^3.5.1",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "qrcode": "^1.5.4",
