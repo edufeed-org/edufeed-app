@@ -573,6 +573,12 @@
         break;
       }
       case 5:
+        if (hasNoUrl && formData.encodings.length === 0 && formData.externalUrls.length === 0) {
+          validationErrors.push(
+            m.amb_form_validation_no_url_needs_attachment?.() ??
+              'Pure Nostr resources must have at least one file or external reference.'
+          );
+        }
         break;
       case 6:
         // Relations step — hasPart / isPartOf are optional.
@@ -1160,6 +1166,11 @@
     <!-- Step 5: Content & Creators -->
     {#if currentStep === 5}
       <div class="space-y-4">
+        {#if hasNoUrl}
+          <div class="alert text-sm alert-info">
+            {m.amb_form_help_step_5_no_url()}
+          </div>
+        {/if}
         <CreatorInput
           bind:creators={formData.creators}
           label={m.amb_form_label_creators()}
