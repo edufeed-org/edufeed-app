@@ -18,6 +18,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata      |
 | `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                      |
 | `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                    |
 | `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                    |
 | `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                        |
 | `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                            |
@@ -405,6 +406,22 @@ unchanged. These tests cover the routing shape only.
 
 - Multi-variant picker modal shown from `GlobalFAB` when `RESOURCE_FORM_VARIANTS=amb,ekw`. Would require a second webServer project in `playwright.config.js` or a test-only config override. Covered instead by the component test `src/lib/components/__tests__/ResourceVariantPickerModal.test.js` + the FAB unit test `src/lib/components/__tests__/GlobalFAB.test.js`.
 - Edit-flow variant resolution (`?edit=<naddr>` → NIP-32 `metadata-form` label lookup → variant route). Covered by the unit test for `resolveVariantIdFromEvent()` in `src/lib/__tests__/resource-form-variants.test.js`.
+
+---
+
+### resource-form-no-url.test.js (2 tests)
+
+- **Happy path:** Index a resource without entering a URL — click the
+  "Index a new Nostr-only resource" button on step 2, verify the state card,
+  confirm step 3 hides the URL field, confirm step 5 blocks submit until an
+  attachment is present, publish, land on the `/naddr1…` detail page.
+- **Edit round-trip:** After publishing a no-URL resource, reopen it via
+  `/create/resource/amb?edit=<naddr>` and verify the wizard restores the
+  state card on step 2 and hides the URL field on step 3.
+
+Covers: `ResourceFormWizard.svelte` no-URL branches, `prefillEditData`
+detection, step-5 attachment validation, `formDataToAmb.js:29` empty-slug
+auto-gen path.
 
 ---
 
