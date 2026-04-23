@@ -123,16 +123,12 @@
    * @param {PresentationViewMode} mode
    */
   function handlePresentationViewModeClick(mode) {
-    console.log('🔄 handlePresentationViewModeClick called with mode:', mode);
-
-    // Update URL with new view mode - let useCalendarUrlSync handle state updates
-    updateQueryParams($page.url.searchParams, {
-      view: mode === 'calendar' ? null : mode // Don't include 'calendar' as it's the default
-    });
-
-    // NOTE: Don't call _onPresentationViewModeChange here - let URL sync effect handle it
-    // This prevents race conditions between async URL updates and sync callbacks
-    console.log('✅ URL updated, waiting for sync effect');
+    // Always include `view` in the URL. The loader's URL-sync handler defaults
+    // to 'list' when absent, so we must set it explicitly for every mode —
+    // otherwise 'calendar' (grid) clicks would be swallowed as the default.
+    // NOTE: Don't call _onPresentationViewModeChange here — let the URL sync
+    // effect handle it to avoid races between async URL updates and sync callbacks.
+    updateQueryParams($page.url.searchParams, { view: mode });
   }
 </script>
 

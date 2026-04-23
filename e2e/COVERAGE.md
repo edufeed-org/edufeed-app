@@ -3,14 +3,14 @@
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
 **Last updated:** 2026-04-23
-**Total tests:** 292
+**Total tests:** 293
 
 ## Quick Summary
 
 | File                                 | Tests | Auth | Coverage                                                          |
 | ------------------------------------ | ----- | ---- | ----------------------------------------------------------------- |
 | `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                     |
-| `calendar.test.js`                   | 4     | No   | Calendar page, events, modal                                      |
+| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                         |
 | `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                         |
 | `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                      |
 | `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                 |
@@ -424,19 +424,22 @@ unchanged. These tests cover the routing shape only.
 
 ---
 
-### calendar.test.js (4 tests)
+### calendar.test.js (5 tests)
 
 **Route:** `/calendar`
 **Auth required:** No
 
-| Test                                        | What it verifies                        |
-| ------------------------------------------- | --------------------------------------- |
-| loads and displays calendar events          | Page loads, events render from relay    |
-| calendar events contain expected metadata   | Event titles (Workshop/Lecture) visible |
-| clicking calendar event opens details modal | Modal opens, shows title, can close     |
-| no critical JavaScript errors               | No JS errors during interaction         |
+| Test                                                    | What it verifies                                      |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| loads and displays calendar events                      | Page loads, events render from relay                  |
+| calendar events contain expected metadata               | Event titles (Workshop/Lecture) visible               |
+| clicking calendar event opens details modal             | Modal opens, shows title, can close                   |
+| no critical JavaScript errors                           | No JS errors during interaction                       |
+| view toggle buttons switch URL and render matching view | Grid/List/Map buttons update `?view=` and render view |
 
-**Components exercised:** CalendarView, CalendarGrid, CalendarEventBar, CalendarEventDetailsModal
+**Components exercised:** CalendarView, CalendarGrid, CalendarEventBar, CalendarNavigation, CalendarEventDetailsModal
+
+**Known gap:** Map pin persistence (pins appearing incrementally as geocoding resolves) is not exercised here — the mock-relay test fixtures have no location/geohash data, so the map always renders its empty-state card. Verified manually against dev-server data via Playwright probe.
 
 ---
 
