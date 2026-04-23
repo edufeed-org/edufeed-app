@@ -136,15 +136,25 @@
     }
   }
 
-  // Parse related resources from 'a' tags (includes relay hints when available)
+  // Parse related resources from marker 'a' tags (hasPart / isPartOf / …).
+  // Only a-tags with a relation marker in slot 3 are treated as related
+  // resources — bare `a`-tags are ignored so we don't pick up unrelated refs.
   const relatedResources = $derived.by(() => {
     return (
       event.tags
-        ?.filter((/** @type {any} */ t) => t[0] === 'a')
+        ?.filter((/** @type {any} */ t) => t[0] === 'a' && t[3])
         .map((/** @type {any} */ t) => {
           try {
-            const [kind, pubkey, identifier] = t[1].split(':');
-            const relayHint = t[2]; // a-tag format: ['a', 'kind:pubkey:d-tag', 'relay-hint']
+            const coord = t[1] ?? '';
+            // Bounded split so URL d-tags (containing ':') survive intact.
+            const i = coord.indexOf(':');
+            const j = i >= 0 ? coord.indexOf(':', i + 1) : -1;
+            if (i < 0 || j < 0) return null;
+            const kind = coord.slice(0, i);
+            const pubkey = coord.slice(i + 1, j);
+            const identifier = coord.slice(j + 1);
+            if (!kind || !pubkey) return null;
+            const relayHint = t[2]; // a-tag format: ['a', 'kind:pubkey:d-tag', 'relay-hint', marker]
             return {
               naddr: nip19.naddrEncode({
                 kind: parseInt(kind),
@@ -152,8 +162,8 @@
                 identifier,
                 relays: relayHint ? [relayHint] : undefined
               }),
-              raw: t[1],
-              label: identifier || t[1]
+              raw: coord,
+              label: identifier || coord
             };
           } catch {
             return null;

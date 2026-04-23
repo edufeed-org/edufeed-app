@@ -1,9 +1,12 @@
 /**
  * Bildungsbereich (educational area) configuration.
  *
- * Drives the AMB resource wizard's smart defaults:
+ * Drives the AMB resource wizard:
  *   - which subject vocabulary picker(s) to show (`subjectVocabKeys`)
- *   - which `educationalLevel` concepts to preselect on the form (`educationalLevelDefaults`)
+ *   - reverse-maps `educationalLevel` concepts back to a Bildungsbereich in
+ *     edit-mode prefill (`educationalLevelMapping`, via
+ *     `inferBildungsbereichFromEducationalLevels`). The form never uses this
+ *     list as a preselect default.
  *
  * The KIM educationalLevel vocabulary (https://w3id.org/kim/educationalLevel/) is flat,
  * so "Schule" maps to multiple concepts (Primarbereich, Sek I, Sek II) rather than a
@@ -17,7 +20,7 @@
  * @typedef {Object} BildungsbereichConfig
  * @property {{ de: string, en: string }} label
  * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`)
- * @property {string[]} educationalLevelDefaults  - concept URIs from the KIM educationalLevel vocab
+ * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only)
  */
 
 /** @type {Record<'schule' | 'hochschule' | 'extra', BildungsbereichConfig>} */
@@ -25,7 +28,7 @@ export const BILDUNGSBEREICHE = {
   schule: {
     label: { de: 'Schule', en: 'School' },
     subjectVocabKeys: ['schulfaecher'],
-    educationalLevelDefaults: [
+    educationalLevelMapping: [
       'https://w3id.org/kim/educationalLevel/level_1', // Primarbereich
       'https://w3id.org/kim/educationalLevel/level_2', // Sekundarbereich I
       'https://w3id.org/kim/educationalLevel/level_3' // Sekundarbereich II
@@ -34,14 +37,14 @@ export const BILDUNGSBEREICHE = {
   hochschule: {
     label: { de: 'Hochschule', en: 'Higher Education' },
     subjectVocabKeys: ['hochschulfaecher'],
-    educationalLevelDefaults: [
+    educationalLevelMapping: [
       'https://w3id.org/kim/educationalLevel/level_A' // Hochschule
     ]
   },
   extra: {
     label: { de: 'Extra-Institutionell', en: 'Informal / Continuing Education' },
     subjectVocabKeys: ['schulfaecher', 'hochschulfaecher'],
-    educationalLevelDefaults: [
+    educationalLevelMapping: [
       'https://w3id.org/kim/educationalLevel/level_C' // Fortbildung
     ]
   }
@@ -94,7 +97,7 @@ export function getBildungsbereich(key) {
  * Map an event's `educationalLevel` URIs back to a Bildungsbereich key.
  * Used in edit mode to infer step 1 from an existing kind 30142.
  *
- * Walks Bildungsbereiche in declaration order; the first one whose `educationalLevelDefaults`
+ * Walks Bildungsbereiche in declaration order; the first one whose `educationalLevelMapping`
  * intersects with `levels` wins. Returns undefined if nothing matches.
  *
  * @param {string[]} levels - educational level concept URIs from the existing event
@@ -104,8 +107,8 @@ export function inferBildungsbereichFromEducationalLevels(levels) {
   if (!levels?.length) return undefined;
   const set = new Set(levels);
   for (const key of BILDUNGSBEREICH_KEYS) {
-    const defaults = BILDUNGSBEREICHE[key].educationalLevelDefaults;
-    if (defaults.some((uri) => set.has(uri))) return key;
+    const mapping = BILDUNGSBEREICHE[key].educationalLevelMapping;
+    if (mapping.some((uri) => set.has(uri))) return key;
   }
   return undefined;
 }

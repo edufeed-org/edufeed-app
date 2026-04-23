@@ -87,8 +87,8 @@ importers:
         specifier: ^5.3.1
         version: 5.3.1(svelte@5.49.2)(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.30.2)(yaml@2.8.2))(vitest@4.0.18(@types/node@25.2.1)(jiti@2.6.1)(jsdom@27.4.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(yaml@2.8.2))
       amb-nostr-converter:
-        specifier: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz
-        version: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz(typescript@5.9.3)(web-streams-polyfill@3.3.3)
+        specifier: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz
+        version: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz(typescript@5.9.3)(web-streams-polyfill@3.3.3)
       applesauce-accounts:
         specifier: ^5.1.0
         version: 5.1.0(typescript@5.9.3)
@@ -1539,9 +1539,9 @@ packages:
   ajv@6.12.6:
     resolution: {integrity: sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==}
 
-  amb-nostr-converter@https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz:
-    resolution: {integrity: sha512-WK8nq1iHp+ZBAYDaYLbba9DuA+97vZQISX1SE7yhTHUwfD5H9kE1T+0e8AByv2nCWy/Dsn89MsmkG+rG0zyVKA==, tarball: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz}
-    version: 0.0.1
+  amb-nostr-converter@https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz:
+    resolution: {integrity: sha512-YEqhBMV8NteWm6rQUvIeKq0kZkwUX6NlO8pME2KItf4E/NQp65XPRoMclfPc1F/QyfD4RzP4Rksr0kALd7945Q==, tarball: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz}
+    version: 0.0.0-d216541
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -5203,7 +5203,7 @@ snapshots:
       json-schema-traverse: 0.4.1
       uri-js: 4.4.1
 
-  amb-nostr-converter@https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.1/amb-nostr-converter-0.0.1.tgz(typescript@5.9.3)(web-streams-polyfill@3.3.3):
+  amb-nostr-converter@https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz(typescript@5.9.3)(web-streams-polyfill@3.3.3):
     dependencies:
       chalk: 5.6.2
       commander: 14.0.3

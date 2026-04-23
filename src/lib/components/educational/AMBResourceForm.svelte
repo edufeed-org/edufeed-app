@@ -8,12 +8,13 @@
     3. Basic                 (identifier is read-only, derives from step 2)
     4. Classification        (adds educationalLevel + multi-vocab `about`)
     5. Content & Creators    (unchanged)
-    6. Rights                (unchanged)
-    7. Share to communities  (new, create-only — uses NIP-18 reposts)
+    6. Relations             (hasPart / isPartOf links to other AMB resources)
+    7. Rights                (unchanged)
+    8. Share to communities  (new, create-only — uses NIP-18 reposts)
 
   Edit mode: steps 1 + 2 are still shown (for transparency / re-selection) but
   the URL field is read-only (d-tag is immutable on a replaceable event) and
-  step 7 is skipped (post-hoc sharing is done from the resource page via
+  step 8 is skipped (post-hoc sharing is done from the resource page via
   CommunityShare.svelte).
 -->
 
@@ -31,6 +32,7 @@
   import CreatorInput from './CreatorInput.svelte';
   import ExternalUrlInput from './ExternalUrlInput.svelte';
   import MetadataFetchStep from './MetadataFetchStep.svelte';
+  import AMBResourceSearchInput from './AMBResourceSearchInput.svelte';
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
@@ -56,6 +58,13 @@
    * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
    * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string }} Creator
    * @typedef {keyof typeof BILDUNGSBEREICHE} BildungsbereichKey
+   * @typedef {{
+   *   coordinate: string,
+   *   pubkey: string,
+   *   dTag: string,
+   *   relayHint?: string | undefined,
+   *   event?: import('nostr-tools').NostrEvent
+   * }} AMBRelationRef
    */
 
   /**
@@ -74,7 +83,7 @@
   const isEditMode = $derived(editEvent !== null && editResource !== null);
 
   // Total step count — share step is skipped in edit mode.
-  const totalSteps = $derived(isEditMode ? 6 : 7);
+  const totalSteps = $derived(isEditMode ? 7 : 8);
 
   // Current wizard step (1..totalSteps)
   let currentStep = $state(1);
@@ -107,7 +116,11 @@
     encodings: /** @type {UploadedFile[]} */ ([]),
     externalUrls: /** @type {string[]} */ ([]),
 
-    // Step 6: Rights
+    // Step 6: Relations (links to other AMB resources)
+    hasPart: /** @type {AMBRelationRef[]} */ ([]),
+    isPartOf: /** @type {AMBRelationRef[]} */ ([]),
+
+    // Step 7: Rights
     license: 'https://creativecommons.org/licenses/by/4.0/',
     isAccessibleForFree: true
   });
@@ -237,6 +250,7 @@
     m.amb_form_step_basic(),
     m.amb_form_step_classification(),
     m.amb_form_step_content(),
+    m.amb_form_step_relations?.() ?? 'Relations',
     m.amb_form_step_license(),
     m.amb_form_step_share?.() ?? 'Share'
   ]);
@@ -256,8 +270,17 @@
     isAMBFree,
     getAMBEncodings,
     getAMBCreatorNames,
-    getAMBExternalUrls
+    getAMBExternalUrls,
+    getAMBHasPart,
+    getAMBIsPartOf
   } from '$lib/helpers/educational/ambHelpers.js';
+
+  // Self-coordinate: in edit mode the resource cannot reference itself.
+  const editCoordinate = $derived(
+    editEvent && editEvent.pubkey
+      ? `30142:${editEvent.pubkey}:${editEvent.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] ?? ''}`
+      : undefined
+  );
 
   // Prefill form with edit data when in edit mode
   $effect(() => {
@@ -383,6 +406,8 @@
         }))
       ),
       externalUrls: getAMBExternalUrls(editEvent),
+      hasPart: /** @type {AMBRelationRef[]} */ (getAMBHasPart(editEvent)),
+      isPartOf: /** @type {AMBRelationRef[]} */ (getAMBIsPartOf(editEvent)),
       license: getAMBLicense(editEvent)?.id || 'https://creativecommons.org/licenses/by/4.0/',
       isAccessibleForFree: isAMBFree(editEvent)
     };
@@ -469,16 +494,6 @@
     if (license) formData.license = license.id;
   }
 
-  // Preselect educational levels when Bildungsbereich changes (create mode only,
-  // and only if the user hasn't already picked any).
-  $effect(() => {
-    if (isEditMode) return;
-    if (!formData.bildungsbereich) return;
-    if (formData.educationalLevels.length > 0) return;
-    const defaults = BILDUNGSBEREICHE[formData.bildungsbereich].educationalLevelDefaults;
-    formData.educationalLevels = defaults.map((id) => ({ id, label: '' }));
-  });
-
   /**
    * Validate URL format
    * @param {string} url
@@ -541,11 +556,14 @@
       case 5:
         break;
       case 6:
+        // Relations step — hasPart / isPartOf are optional.
+        break;
+      case 7:
         if (!formData.license) {
           validationErrors.push(m.amb_form_validation_license());
         }
         break;
-      case 7:
+      case 8:
         // Share step — zero communities is fine (user may want to publish only
         // to their outbox for now and share later).
         break;
@@ -623,7 +641,9 @@
         keywords: formData.keywords,
         files: formData.encodings,
         isAccessibleForFree: formData.isAccessibleForFree,
-        externalUrls: formData.externalUrls
+        externalUrls: formData.externalUrls,
+        hasPart: formData.hasPart,
+        isPartOf: formData.isPartOf
       };
 
       let result;
@@ -1098,8 +1118,120 @@
       </div>
     {/if}
 
-    <!-- Step 6: License & (in edit mode) Publish -->
+    <!-- Step 6: Relations (hasPart / isPartOf) -->
     {#if currentStep === 6}
+      <div class="space-y-6">
+        <p class="text-sm text-base-content/70">
+          {m.amb_form_relations_description?.() ??
+            'Optionally link this resource to other AMB resources that contain it, or that are contained within it.'}
+        </p>
+
+        <!-- isPartOf -->
+        <div class="form-control">
+          <div class="label">
+            <span class="label-text font-medium">
+              {m.amb_form_label_is_part_of?.() ?? 'Is part of'}
+            </span>
+          </div>
+          <p class="mb-2 text-xs text-base-content/60">
+            {m.amb_form_help_is_part_of?.() ??
+              'Resources this one belongs to — e.g. the course or series it is part of.'}
+          </p>
+          <AMBResourceSearchInput
+            exclude={formData.isPartOf.map((r) => r.coordinate)}
+            excludeSelf={editCoordinate}
+            placeholder={m.amb_picker_search_placeholder?.() ?? 'Search AMB resources…'}
+            onselect={(ref) => {
+              formData.isPartOf = [...formData.isPartOf, ref];
+            }}
+          />
+          {#if formData.isPartOf.length > 0}
+            <ul class="mt-3 space-y-2">
+              {#each formData.isPartOf as ref, i (ref.coordinate)}
+                <li
+                  class="flex items-start gap-2 rounded-lg border border-base-300 bg-base-100 p-2"
+                >
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate text-sm font-medium">
+                      {ref.event?.tags?.find((t) => t[0] === 'name')?.[1] ??
+                        m.amb_reference_unresolvable?.() ??
+                        'Unresolved reference'}
+                    </div>
+                    <div class="truncate font-mono text-xs text-base-content/60">
+                      {ref.coordinate}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    aria-label="Remove"
+                    onclick={() => {
+                      formData.isPartOf = formData.isPartOf.toSpliced(i, 1);
+                    }}
+                  >
+                    <CloseIcon class_="w-4 h-4" />
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+
+        <!-- hasPart -->
+        <div class="form-control">
+          <div class="label">
+            <span class="label-text font-medium">
+              {m.amb_form_label_has_part?.() ?? 'Has part'}
+            </span>
+          </div>
+          <p class="mb-2 text-xs text-base-content/60">
+            {m.amb_form_help_has_part?.() ??
+              'Resources contained within this one — e.g. the individual videos of this course.'}
+          </p>
+          <AMBResourceSearchInput
+            exclude={formData.hasPart.map((r) => r.coordinate)}
+            excludeSelf={editCoordinate}
+            placeholder={m.amb_picker_search_placeholder?.() ?? 'Search AMB resources…'}
+            onselect={(ref) => {
+              formData.hasPart = [...formData.hasPart, ref];
+            }}
+          />
+          {#if formData.hasPart.length > 0}
+            <ul class="mt-3 space-y-2">
+              {#each formData.hasPart as ref, i (ref.coordinate)}
+                <li
+                  class="flex items-start gap-2 rounded-lg border border-base-300 bg-base-100 p-2"
+                >
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate text-sm font-medium">
+                      {ref.event?.tags?.find((t) => t[0] === 'name')?.[1] ??
+                        m.amb_reference_unresolvable?.() ??
+                        'Unresolved reference'}
+                    </div>
+                    <div class="truncate font-mono text-xs text-base-content/60">
+                      {ref.coordinate}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    aria-label="Remove"
+                    onclick={() => {
+                      formData.hasPart = formData.hasPart.toSpliced(i, 1);
+                    }}
+                  >
+                    <CloseIcon class_="w-4 h-4" />
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Step 7: License & (in edit mode) Publish -->
+    {#if currentStep === 7}
       <div class="space-y-4">
         <!-- License -->
         <div class="form-control">
@@ -1148,56 +1280,116 @@
           <h3 class="mb-3 font-medium">{m.amb_form_label_summary()}</h3>
           <dl class="space-y-2 text-sm">
             <div class="flex">
-              <dt class="w-28 text-base-content/60">{m.amb_form_summary_title()}</dt>
+              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_title()}</dt>
               <dd class="flex-1 font-medium">{formData.name || '—'}</dd>
             </div>
+            {#if formData.identifier}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_url?.() ?? 'URL:'}
+                </dt>
+                <dd class="flex-1 truncate font-mono text-xs">{formData.identifier}</dd>
+              </div>
+            {/if}
+            {#if formData.description}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_description?.() ?? 'Description:'}
+                </dt>
+                <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.description}</dd>
+              </div>
+            {/if}
             <div class="flex">
-              <dt class="w-28 text-base-content/60">{m.amb_form_summary_language()}</dt>
+              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_language()}</dt>
               <dd class="flex-1">
                 {languageOptions.find((l) => l.code === formData.inLanguage)?.label}
               </dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">{m.amb_form_summary_type()}</dt>
+              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_type()}</dt>
               <dd class="flex-1">
                 {formData.learningResourceType.map((t) => t.label).join(', ') || '—'}
               </dd>
             </div>
+            {#if formData.educationalLevels.length > 0}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_educational_level?.() ?? 'Level:'}
+                </dt>
+                <dd class="flex-1">
+                  {formData.educationalLevels.map((e) => e.label || e.id).join(', ')}
+                </dd>
+              </div>
+            {/if}
             <div class="flex">
-              <dt class="w-28 text-base-content/60">{m.amb_form_summary_subject()}</dt>
+              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_subject()}</dt>
               <dd class="flex-1">
                 {mergedAbout()
                   .map((s) => s.label || s.id)
                   .join(', ') || '—'}
               </dd>
             </div>
+            {#if formData.keywords.length > 0}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_keywords?.() ?? 'Keywords:'}
+                </dt>
+                <dd class="flex-1">{formData.keywords.join(', ')}</dd>
+              </div>
+            {/if}
             <div class="flex">
-              <dt class="w-28 text-base-content/60">{m.amb_form_summary_creators()}</dt>
+              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_creators()}</dt>
               <dd class="flex-1">{formData.creators.map((c) => c.name).join(', ') || '—'}</dd>
             </div>
             <div class="flex">
-              <dt class="w-28 text-base-content/60">{m.amb_form_summary_files()}</dt>
+              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_files()}</dt>
               <dd class="flex-1">{formData.encodings.length} file(s)</dd>
             </div>
+            {#if formData.externalUrls.length > 0}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_external_urls()}
+                </dt>
+                <dd class="flex-1">{formData.externalUrls.length} link(s)</dd>
+              </div>
+            {/if}
+            {#if formData.isPartOf.length > 0}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_is_part_of?.() ?? 'Part of:'}
+                </dt>
+                <dd class="flex-1">
+                  {formData.isPartOf
+                    .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
+                    .join(', ')}
+                </dd>
+              </div>
+            {/if}
+            {#if formData.hasPart.length > 0}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_has_part?.() ?? 'Contains:'}
+                </dt>
+                <dd class="flex-1">
+                  {formData.hasPart
+                    .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
+                    .join(', ')}
+                </dd>
+              </div>
+            {/if}
             <div class="flex">
-              <dt class="w-28 text-base-content/60">{m.amb_form_summary_license()}</dt>
+              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_license()}</dt>
               <dd class="flex-1">
                 {licenseOptions.find((l) => l.id === formData.license)?.label}
               </dd>
             </div>
-            {#if formData.externalUrls.length > 0}
-              <div class="flex">
-                <dt class="w-28 text-base-content/60">{m.amb_form_summary_external_urls()}</dt>
-                <dd class="flex-1">{formData.externalUrls.length} link(s)</dd>
-              </div>
-            {/if}
           </dl>
         </div>
       </div>
     {/if}
 
-    <!-- Step 7: Share to communities (create mode only) -->
-    {#if currentStep === 7 && !isEditMode}
+    <!-- Step 8: Share to communities (create mode only) -->
+    {#if currentStep === 8 && !isEditMode}
       <div class="space-y-3">
         <p class="text-sm text-base-content/70">
           {m.amb_form_help_share?.() ??

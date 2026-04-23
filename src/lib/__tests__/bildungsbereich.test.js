@@ -19,7 +19,7 @@ describe('BILDUNGSBEREICHE config', () => {
     const schule = BILDUNGSBEREICHE.schule;
     expect(schule.label.de).toBe('Schule');
     expect(schule.subjectVocabKeys).toEqual(['schulfaecher']);
-    expect(schule.educationalLevelDefaults).toEqual([
+    expect(schule.educationalLevelMapping).toEqual([
       'https://w3id.org/kim/educationalLevel/level_1',
       'https://w3id.org/kim/educationalLevel/level_2',
       'https://w3id.org/kim/educationalLevel/level_3'
@@ -30,14 +30,14 @@ describe('BILDUNGSBEREICHE config', () => {
     const hs = BILDUNGSBEREICHE.hochschule;
     expect(hs.label.de).toBe('Hochschule');
     expect(hs.subjectVocabKeys).toEqual(['hochschulfaecher']);
-    expect(hs.educationalLevelDefaults).toEqual(['https://w3id.org/kim/educationalLevel/level_A']);
+    expect(hs.educationalLevelMapping).toEqual(['https://w3id.org/kim/educationalLevel/level_A']);
   });
 
   it('Extra-Institutionell offers BOTH school and university subject vocabs and Fortbildung level', () => {
     const extra = BILDUNGSBEREICHE.extra;
     expect(extra.label.de).toBe('Extra-Institutionell');
     expect(extra.subjectVocabKeys).toEqual(['schulfaecher', 'hochschulfaecher']);
-    expect(extra.educationalLevelDefaults).toEqual([
+    expect(extra.educationalLevelMapping).toEqual([
       'https://w3id.org/kim/educationalLevel/level_C'
     ]);
   });
