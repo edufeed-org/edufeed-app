@@ -411,12 +411,12 @@ unchanged. These tests cover the routing shape only.
 
 ### resource-form-no-url.test.js (2 tests — 1 active, 1 skipped)
 
-- **Happy path (active):** Verifies no-URL flow through step 3 — clicks
-  "Index a new Nostr-only resource" on step 2, confirms state card, confirms
-  step 3 hides `#amb-identifier`, fills title/description, advances to step 4,
-  and asserts the Classification step heading is visible. Does NOT interact
-  with SKOS/FormConceptPicker (concept events, kind 39737, are not seeded on
-  E2E relays — see line 237 above).
+- **Happy path (active):** Verifies no-URL flow through step 3 — clicks the
+  "No external link?" card on step 2 (which auto-advances to step 3),
+  confirms step 3 hides `#amb-identifier`, fills title/description, advances
+  to step 4, and asserts the Classification step heading is visible. Does
+  NOT interact with SKOS/FormConceptPicker (concept events, kind 39737, are
+  not seeded on E2E relays — see line 237 above).
 - **Edit round-trip (skipped):** Requires publishing a no-URL resource first,
   which requires completing step 4 SKOS selection. Blocked by the same
   ConceptScheme seeding gap. Re-enable once concept events are seeded on

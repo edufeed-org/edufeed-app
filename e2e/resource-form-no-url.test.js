@@ -1,8 +1,9 @@
 /**
- * E2E tests for the "Index a new Nostr-only resource" flow.
+ * E2E tests for the "no external link" flow.
  *
- * Covers the escape-hatch that lets users advance past step 2 of the
- * resource wizard without entering a URL or naddr.
+ * Covers the escape-hatch card on step 2 of the resource wizard that lets
+ * users skip URL/naddr entry and create a Nostr-native resource directly.
+ * Clicking the card auto-advances to step 3.
  */
 import { test, expect } from './fixtures.js';
 
@@ -17,10 +18,8 @@ test.describe('Resource form — no-URL option', () => {
     // Auto-advances after 200ms — step 2 shows up.
     await expect(page.getByText('Resource URL or naddr')).toBeVisible({ timeout: 5000 });
 
-    // Step 2: click the no-URL button, verify state card, advance.
-    await page.getByRole('button', { name: /Index a new Nostr-only resource/i }).click();
-    await expect(page.getByText(/Resource without an external URL/i)).toBeVisible();
-    await page.getByRole('button', { name: /Next/i }).click();
+    // Step 2: click the no-URL card — auto-advances to step 3 after 200ms.
+    await page.getByTestId('no-url-button').click();
 
     // Step 3: URL field must be absent; fill required fields and advance.
     await expect(page.locator('#amb-identifier')).toHaveCount(0);
@@ -47,8 +46,8 @@ test.describe('Resource form — no-URL option', () => {
     await page.goto('/create/resource/amb');
     await page.locator('input[name="bildungsbereich"]').first().check();
     await expect(page.getByText('Resource URL or naddr')).toBeVisible({ timeout: 5000 });
-    await page.getByRole('button', { name: /Index a new Nostr-only resource/i }).click();
-    await page.getByRole('button', { name: /Next/i }).click();
+    await page.getByTestId('no-url-button').click();
+    // Auto-advance lands us on step 3 directly.
     await page.locator('#amb-title').fill('Edit Round-Trip Fixture');
     await page.locator('#amb-description').fill('Fixture for edit test.');
     await page.getByRole('button', { name: /Next/i }).click();
@@ -74,7 +73,7 @@ test.describe('Resource form — no-URL option', () => {
     await page.goto(`/create/resource/amb?edit=${naddr}`);
 
     // The state card for no-URL resources must be visible in edit mode.
-    await expect(page.getByText(/Resource without an external URL/i)).toBeVisible({
+    await expect(page.getByText(/will be created directly on Nostr/i)).toBeVisible({
       timeout: 10000
     });
 

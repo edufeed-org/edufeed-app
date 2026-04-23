@@ -935,18 +935,30 @@
             onresult={handleMetadataResult}
           />
           {#if !isEditMode}
+            <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
+              <span class="h-px flex-1 bg-base-300"></span>
+              <span>{m.amb_form_no_url_or_divider()}</span>
+              <span class="h-px flex-1 bg-base-300"></span>
+            </div>
             <button
               type="button"
-              class="btn btn-ghost btn-sm"
+              class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
               data-testid="no-url-button"
               onclick={() => {
                 hasNoUrl = true;
                 formData.urlInput = '';
                 formData.identifier = '';
                 validationErrors = [];
+                setTimeout(() => nextStep(), 200);
               }}
             >
-              {m.amb_form_no_url_button()}
+              <span class="flex-1">
+                <span class="block font-medium">{m.amb_form_no_url_button()}</span>
+                <span class="mt-1 block text-sm text-base-content/70">
+                  {m.amb_form_no_url_button_description()}
+                </span>
+              </span>
+              <span aria-hidden="true" class="text-base-content/40">→</span>
             </button>
           {/if}
         {/if}
