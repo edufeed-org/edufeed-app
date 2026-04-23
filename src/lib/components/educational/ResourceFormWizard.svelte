@@ -650,7 +650,7 @@
       const resourceData = {
         name: formData.name,
         description: formData.description,
-        slug: formData.identifier?.trim() || '',
+        slug: hasNoUrl ? '' : formData.identifier?.trim() || '',
         learningResourceType: formData.learningResourceType[0]?.id || '',
         learningResourceTypeLabel: formData.learningResourceType[0]?.label || '',
         about: about.map((s) => s.id),
