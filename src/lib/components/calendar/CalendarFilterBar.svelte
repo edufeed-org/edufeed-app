@@ -70,7 +70,7 @@
     </button>
     <div
       tabindex="-1"
-      class="dropdown-content z-10 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
+      class="dropdown-content z-30 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
     >
       <TagSelector events={validEvents} {onTagFilterChange} />
     </div>
@@ -90,7 +90,7 @@
       </button>
       <div
         tabindex="-1"
-        class="dropdown-content z-10 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
+        class="dropdown-content z-30 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
       >
         <FeaturedAuthors
           pubkeys={featuredAuthors}
@@ -113,7 +113,7 @@
     </button>
     <div
       tabindex="-1"
-      class="dropdown-content z-10 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
+      class="dropdown-content z-30 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
     >
       <RelaySelector onApplyFilters={onRelayFilterChange} />
     </div>
@@ -132,7 +132,7 @@
     </button>
     <div
       tabindex="-1"
-      class="dropdown-content z-10 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
+      class="dropdown-content z-30 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
     >
       <FollowListSelector onApplyFilters={onFollowListFilterChange} />
     </div>
@@ -140,7 +140,13 @@
 
   <!-- Search -->
   <div class="dropdown">
-    <button type="button" tabindex="0" class="btn gap-1 btn-ghost btn-sm" data-filter-trigger>
+    <button
+      type="button"
+      tabindex="0"
+      class="btn gap-1 btn-ghost btn-sm"
+      aria-label="Suche"
+      data-filter-trigger
+    >
       <SearchIcon class_="w-4 h-4" />
       {#if searchQuery.trim()}
         <span class="badge badge-sm badge-primary" data-filter-count>1</span>
@@ -148,7 +154,7 @@
     </button>
     <div
       tabindex="-1"
-      class="dropdown-content z-10 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
+      class="dropdown-content z-30 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
     >
       <SearchInput {onSearchQueryChange} />
     </div>
