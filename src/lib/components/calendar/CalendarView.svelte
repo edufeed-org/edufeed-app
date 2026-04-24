@@ -571,7 +571,7 @@
   <!-- Filter Sidebar (only if not community mode) -->
   {#if !communityMode}
     <CalendarFilterSidebar
-      bind:isDrawerOpen={drawerOpen}
+      isDrawerOpen={drawerOpen}
       validEvents={events}
       featuredAuthors={[]}
       selectedAuthors={[]}

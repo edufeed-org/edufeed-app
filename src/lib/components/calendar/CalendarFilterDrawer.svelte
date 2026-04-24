@@ -22,7 +22,7 @@
 
   /** @type {Props} */
   let {
-    isDrawerOpen = $bindable(),
+    isDrawerOpen,
     validEvents,
     featuredAuthors,
     selectedAuthors,
@@ -34,6 +34,25 @@
     onAuthorsChange,
     onClose
   } = $props();
+
+  /** @type {HTMLButtonElement | undefined} */
+  let closeBtn = $state();
+
+  $effect(() => {
+    if (!isDrawerOpen) return;
+    /** @param {KeyboardEvent} e */
+    function onKey(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  $effect(() => {
+    if (isDrawerOpen && closeBtn) {
+      closeBtn.focus();
+    }
+  });
 
   function toggleAuthor(/** @type {string} */ pubkey) {
     if (selectedAuthors.includes(pubkey)) {
@@ -47,29 +66,24 @@
 {#if isDrawerOpen}
   <div class="fixed inset-0 z-50 lg:hidden">
     <!-- Backdrop -->
-    <div
-      class="absolute inset-0 bg-base-300/70"
-      onclick={onClose}
-      onkeydown={(e) => {
-        if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClose();
-        }
-      }}
-      role="button"
-      tabindex="0"
-      aria-label="Schließen"
-    ></div>
+    <div class="absolute inset-0 bg-base-300/70" onclick={onClose} aria-hidden="true"></div>
 
-    <aside
+    <div
       class="absolute inset-y-0 left-0 w-80 max-w-[85vw] overflow-y-auto bg-base-100 p-4 shadow-xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="filter-drawer-title"
     >
       <header class="mb-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">
+        <h2 id="filter-drawer-title" class="text-lg font-semibold">
           Filter {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
         </h2>
-        <button type="button" class="btn btn-ghost btn-sm" onclick={onClose} aria-label="Schließen"
-          >✕</button
+        <button
+          type="button"
+          bind:this={closeBtn}
+          class="btn btn-ghost btn-sm"
+          onclick={onClose}
+          aria-label="Schließen">✕</button
         >
       </header>
 
@@ -109,6 +123,6 @@
       <div class="mt-4 border-t border-base-300 pt-4">
         <button class="btn btn-block" onclick={onClose}>Schließen</button>
       </div>
-    </aside>
+    </div>
   </div>
 {/if}
