@@ -58,7 +58,8 @@ const defaultConfig = {
   calendar: {
     weekStartDay: 1,
     locale: 'de-DE',
-    timeFormat: '24h'
+    timeFormat: '24h',
+    featuredAuthors: /** @type {string[]} */ ([])
   },
   signup: {
     suggestedUsers: [

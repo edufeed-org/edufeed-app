@@ -33,8 +33,12 @@
   import CalendarNavigation from '$lib/components/calendar/CalendarNavigation.svelte';
   import CalendarGrid from '$lib/components/calendar/CalendarGrid.svelte';
   import CalendarDropdown from './CalendarDropdown.svelte';
-  import CalendarFilterSidebar from './CalendarFilterDrawer.svelte';
+  import CalendarFilterBar from './CalendarFilterBar.svelte';
+  import CalendarFilterDrawer from './CalendarFilterDrawer.svelte';
+  import FeaturedAuthors from './FeaturedAuthors.svelte';
   import SimpleCalendarEventsList from './CalendarEventsList.svelte';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { parseDirectPubkeys } from '$lib/services/curated-authors-service.svelte.js';
   import AddToCalendarButton from './AddToCalendarButton.svelte';
   import CalendarMapView from './CalendarMapView.svelte';
   import CompactCommunityHeader from '$lib/components/community/layout/CompactCommunityHeader.svelte';
@@ -515,9 +519,39 @@
     handleRefresh();
   }
 
+  /**
+   * Handle featured authors selection change
+   * @param {string[]} pubkeys
+   */
+  function handleFeaturedAuthorsChange(pubkeys) {
+    calendarFilters.setSelectedFeaturedAuthors(pubkeys);
+  }
+
+  function handleClearAllFilters() {
+    calendarFilters.clearSelectedTags();
+    calendarFilters.clearSelectedRelays();
+    calendarFilters.clearSelectedFollowListIds();
+    calendarFilters.clearSelectedFeaturedAuthors();
+    calendarFilters.clearSearchQuery();
+  }
+
   // Create derived state for proper reactivity tracking
   let selectedTags = $derived(calendarFilters.selectedTags);
   let searchQuery = $derived(calendarFilters.searchQuery);
+
+  const featuredAuthorsHex = $derived(
+    parseDirectPubkeys(runtimeConfig.calendar?.featuredAuthors || [])
+  );
+  let selectedFeaturedAuthors = $derived(calendarFilters.selectedFeaturedAuthors);
+  // drawerOpen already exists — reuse, do NOT redeclare
+  const activeFilterCount = $derived(
+    calendarFilters.selectedTags.length +
+      calendarFilters.selectedRelays.length +
+      calendarFilters.selectedFollowListIds.length +
+      calendarFilters.selectedFeaturedAuthors.length +
+      (calendarFilters.searchQuery.trim() ? 1 : 0)
+  );
+  const anyFilterActive = $derived(activeFilterCount > 0);
 
   // Derived state: Apply relay filtering via intersection
   let events = $derived.by(() => {
@@ -562,66 +596,87 @@
       });
     }
 
+    // Step 3: Apply featured-authors filtering (AND logic)
+    if (selectedFeaturedAuthors.length > 0) {
+      filtered = filtered.filter((event) => selectedFeaturedAuthors.includes(event.pubkey));
+    }
+
     return filtered;
   });
 </script>
 
-<!-- Main layout with flex for sidebar + content -->
-<div class="flex w-full max-w-full">
-  <!-- Filter Sidebar (only if not community mode) -->
-  {#if !communityMode}
-    <CalendarFilterSidebar
-      isDrawerOpen={drawerOpen}
-      validEvents={events}
-      featuredAuthors={[]}
-      selectedAuthors={[]}
-      activeFilterCount={0}
-      onRelayFilterChange={handleRelayFilterChange}
-      onFollowListFilterChange={handleFollowListFilterChange}
-      onSearchQueryChange={handleSearchQueryChange}
-      onTagFilterChange={handleTagFilterChange}
-      onAuthorsChange={() => {}}
-      onClose={() => {
-        drawerOpen = false;
-      }}
-    />
+<div class="flex flex-col gap-2 py-4">
+  {#if communityMode && communityProfile && communityPubkey}
+    <div class="container mx-auto px-4">
+      <CompactCommunityHeader {communityProfile} {communityPubkey} />
+    </div>
   {/if}
 
-  <!-- Main content area -->
-  <div
-    class="min-w-0 flex-1 overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-sm"
-  >
-    <!-- Community Context Header (community mode only) -->
-    {#if communityMode && communityProfile && communityPubkey}
-      <CompactCommunityHeader {communityProfile} {communityPubkey} />
+  <!-- Header row: calendar picker + mobile filter trigger -->
+  <div class="container mx-auto flex items-center gap-2 px-4">
+    {#if !communityMode}
+      <span class="text-xs text-base-content/60">Kalender:</span>
+      <CalendarDropdown currentCalendar={calendar} />
+    {:else}
+      <h2 class="text-lg font-semibold text-base-content">
+        {m.calendar_view_community_calendar()}
+      </h2>
+      {#if communityPubkey}
+        <AddToCalendarButton calendarId={communityPubkey} calendarTitle={communityCalendarTitle} />
+      {/if}
     {/if}
+    <span class="ms-auto"></span>
+    {#if !communityMode}
+      <button
+        type="button"
+        class="btn gap-1 btn-ghost btn-sm lg:hidden"
+        onclick={() => (drawerOpen = true)}
+      >
+        Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+      </button>
+    {/if}
+  </div>
 
-    <!-- Calendar Header -->
-    <div class="border-b border-base-300 bg-base-200 px-6 py-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          {#if communityMode}
-            <h2 class="text-lg font-semibold text-base-content">
-              {m.calendar_view_community_calendar()}
-            </h2>
-          {:else}
-            <CalendarDropdown currentCalendar={calendar} />
-          {/if}
-        </div>
-        <div class="flex items-center gap-3">
-          <!-- Add to Calendar Button (community mode only) -->
-          {#if communityMode && communityPubkey}
-            <AddToCalendarButton
-              calendarId={communityPubkey}
-              calendarTitle={communityCalendarTitle}
-            />
-          {/if}
-        </div>
-      </div>
+  <!-- Featured authors rail (only when no filters are active) -->
+  {#if !communityMode && featuredAuthorsHex.length > 0 && !anyFilterActive}
+    <div class="container mx-auto px-4">
+      <FeaturedAuthors
+        pubkeys={featuredAuthorsHex}
+        selected={selectedFeaturedAuthors}
+        onToggle={(pk) =>
+          selectedFeaturedAuthors.includes(pk)
+            ? calendarFilters.removeFeaturedAuthor(pk)
+            : calendarFilters.addFeaturedAuthor(pk)}
+        variant="rail"
+      />
     </div>
+  {/if}
 
-    <!-- Error Display -->
-    {#if error}
+  <!-- Desktop inline filter bar -->
+  {#if !communityMode}
+    <div class="container mx-auto hidden px-4 lg:block">
+      <CalendarFilterBar
+        validEvents={events}
+        featuredAuthors={featuredAuthorsHex}
+        selectedAuthors={selectedFeaturedAuthors}
+        selectedTagsCount={calendarFilters.selectedTags.length}
+        selectedRelaysCount={calendarFilters.selectedRelays.length}
+        selectedFollowListsCount={calendarFilters.selectedFollowListIds.length}
+        searchQuery={calendarFilters.searchQuery}
+        eventCount={displayedEvents.length}
+        onRelayFilterChange={handleRelayFilterChange}
+        onFollowListFilterChange={handleFollowListFilterChange}
+        onSearchQueryChange={handleSearchQueryChange}
+        onTagFilterChange={handleTagFilterChange}
+        onAuthorsChange={handleFeaturedAuthorsChange}
+        onClearAll={handleClearAllFilters}
+      />
+    </div>
+  {/if}
+
+  <!-- Error Display -->
+  {#if error}
+    <div class="container mx-auto px-4">
       <div class="alert rounded-none border-b border-error/20 px-6 py-3 alert-error">
         <div class="flex items-center gap-3">
           <svg class="h-5 w-5 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -649,10 +704,12 @@
           </button>
         </div>
       </div>
-    {/if}
+    </div>
+  {/if}
 
-    <!-- Resolution Errors Display (community mode) -->
-    {#if communityMode && resolutionErrors.length > 0}
+  <!-- Resolution Errors Display (community mode) -->
+  {#if communityMode && resolutionErrors.length > 0}
+    <div class="container mx-auto px-4">
       <div class="alert rounded-none border-b border-warning/20 px-6 py-3 alert-warning">
         <div class="flex items-start gap-3">
           <svg
@@ -704,9 +761,11 @@
           </button>
         </div>
       </div>
-    {/if}
+    </div>
+  {/if}
 
-    <!-- Calendar Navigation -->
+  <!-- Calendar Navigation -->
+  <div class="container mx-auto px-4">
     <CalendarNavigation
       {currentDate}
       {viewMode}
@@ -718,10 +777,11 @@
       onViewModeChange={handleViewModeChange}
       onPresentationViewModeChange={handlePresentationViewModeChange}
     />
+  </div>
 
-    <!-- Content based on presentation view mode -->
+  <!-- Content based on presentation view mode -->
+  <div class="container mx-auto px-4">
     {#if presentationViewMode === 'calendar'}
-      <!-- Calendar Grid -->
       <CalendarGrid
         {currentDate}
         {viewMode}
@@ -730,7 +790,6 @@
         onDateClick={handleDateClick}
       />
     {:else if presentationViewMode === 'list'}
-      <!-- List View -->
       <SimpleCalendarEventsList
         events={displayedEvents}
         {viewMode}
@@ -739,12 +798,13 @@
         {error}
       />
     {:else if presentationViewMode === 'map'}
-      <!-- Map View -->
       <CalendarMapView events={displayedEvents} {viewMode} {currentDate} />
     {/if}
+  </div>
 
-    <!-- Loading indicator -->
-    {#if loading || (events.length === 0 && !minLoadTimeElapsed)}
+  <!-- Loading indicator -->
+  {#if loading || (events.length === 0 && !minLoadTimeElapsed)}
+    <div class="container mx-auto px-4">
       <div class="border-b border-base-300 px-6 py-3 text-center">
         <div class="flex items-center justify-center gap-3">
           <div class="loading loading-sm loading-spinner"></div>
@@ -757,10 +817,12 @@
           </div>
         </div>
       </div>
-    {/if}
+    </div>
+  {/if}
 
-    <!-- Empty State -->
-    {#if events.length === 0 && !loading && minLoadTimeElapsed}
+  <!-- Empty State -->
+  {#if events.length === 0 && !loading && minLoadTimeElapsed}
+    <div class="container mx-auto px-4">
       <div class="flex flex-col items-center justify-center px-6 py-16 text-center">
         <div class="mb-4 text-base-content/30">
           <svg class="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -785,6 +847,23 @@
           {/if}
         </p>
       </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
+
+  <!-- Mobile filter drawer -->
+  {#if !communityMode}
+    <CalendarFilterDrawer
+      isDrawerOpen={drawerOpen}
+      validEvents={events}
+      featuredAuthors={featuredAuthorsHex}
+      selectedAuthors={selectedFeaturedAuthors}
+      {activeFilterCount}
+      onRelayFilterChange={handleRelayFilterChange}
+      onFollowListFilterChange={handleFollowListFilterChange}
+      onSearchQueryChange={handleSearchQueryChange}
+      onTagFilterChange={handleTagFilterChange}
+      onAuthorsChange={handleFeaturedAuthorsChange}
+      onClose={() => (drawerOpen = false)}
+    />
+  {/if}
 </div>
