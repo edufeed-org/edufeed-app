@@ -2,41 +2,42 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-04-23
-**Total tests:** 293
+**Last updated:** 2026-04-24
+**Total tests:** 298
 
 ## Quick Summary
 
-| File                                 | Tests | Auth | Coverage                                                          |
-| ------------------------------------ | ----- | ---- | ----------------------------------------------------------------- |
-| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                     |
-| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                         |
-| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                         |
-| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                      |
-| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                 |
-| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                        |
-| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata      |
-| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                      |
-| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject |
-| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                    |
-| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                    |
-| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                        |
-| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                            |
-| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                      |
-| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                     |
-| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                     |
-| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                           |
-| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                         |
-| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                     |
-| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                |
-| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                |
-| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                   |
-| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                       |
-| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation                              |
-| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                         |
-| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                         |
-| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                          |
-| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances |
+| File                                 | Tests | Auth | Coverage                                                             |
+| ------------------------------------ | ----- | ---- | -------------------------------------------------------------------- |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                        |
+| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                            |
+| `calendar-ui-redesign.test.js`       | 5     | No   | Page chrome, inline filter bar, mobile drawer, featured authors rail |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                            |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                         |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                    |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                           |
+| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata         |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                         |
+| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject    |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                       |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                       |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                           |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                               |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                         |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                        |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                        |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                              |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                            |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                        |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                   |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                   |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                      |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                          |
+| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation                                 |
+| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                            |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                            |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                             |
+| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances    |
 
 ## Detailed Coverage
 
@@ -440,6 +441,37 @@ unchanged. These tests cover the routing shape only.
 **Components exercised:** CalendarView, CalendarGrid, CalendarEventBar, CalendarNavigation, CalendarEventDetailsModal
 
 **Known gap:** Map pin persistence (pins appearing incrementally as geocoding resolves) is not exercised here — the mock-relay test fixtures have no location/geohash data, so the map always renders its empty-state card. Verified manually against dev-server data via Playwright probe.
+
+---
+
+### calendar-ui-redesign.test.js (5 tests)
+
+**Route:** `/calendar`
+**Auth required:** No
+**Note:** Exercises the calendar UI redesign (inline filter bar, mobile drawer, featured-authors rail, page chrome). Reset-link behavior is covered by component-level tests in `CalendarFilterBar.test.js`.
+
+#### Calendar page chrome (3 tests)
+
+| Test                                         | What it verifies                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| footer is visible at the bottom of /calendar | Scrolling to the bottom reveals `<footer>` — page no longer island-wraps  |
+| page uses min-h-screen wrapper (not a card)  | `div.min-h-screen.bg-base-100` visible; old `flex w-full max-w-full` gone |
+| desktop inline filter bar is visible         | `[data-filter-trigger]` count ≥4 at ≥1280px viewport                      |
+
+#### Mobile filter drawer (2 tests)
+
+| Test                                                     | What it verifies                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| small viewport shows Filter button that opens the drawer | 375×800: Filter button visible; click opens `role="dialog"`; Escape closes |
+| no critical JavaScript errors on mobile drawer flow      | Error capture through open/close                                           |
+
+#### Featured Authors rail (1 test)
+
+| Test                                                                | What it verifies                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| rail is present only when `CALENDAR_FEATURED_AUTHORS` is configured | Skips gracefully when env var unset; asserts visibility else |
+
+**Components exercised:** CalendarView (stacked layout), CalendarFilterBar, CalendarFilterDrawer, FeaturedAuthors
 
 ---
 
