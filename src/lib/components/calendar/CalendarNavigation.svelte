@@ -16,8 +16,7 @@
     ChevronRightIcon,
     CalendarIcon,
     MenuIcon,
-    LocationIcon,
-    FilterIcon
+    LocationIcon
   } from '../icons';
 
   /**
@@ -35,8 +34,7 @@
     onNext = /** @type {() => void} */ (() => {}),
     onToday = /** @type {() => void} */ (() => {}),
     onViewModeChange: _onViewModeChange,
-    onPresentationViewModeChange: _onPresentationViewModeChange = () => {},
-    onFilterButtonClick = /** @type {(e?: any) => void} */ (() => {})
+    onPresentationViewModeChange: _onPresentationViewModeChange = () => {}
   } = $props();
 
   // Format current date for display based on view mode
@@ -132,23 +130,11 @@
   }
 </script>
 
-<div class="border-b border-base-300 bg-base-100">
+<div class="border-b border-base-300">
   <!-- Mobile Layout (< lg) -->
   <div class="flex flex-col gap-3 p-3 lg:hidden">
-    <!-- Row 1: Filter button, Date navigation and current date -->
+    <!-- Row 1: Date navigation and current date -->
     <div class="flex items-center gap-2">
-      <!-- Mobile Filter Button (hidden in community mode) -->
-      {#if !communityMode}
-        <button
-          class="btn btn-square"
-          onclick={onFilterButtonClick}
-          title={m.calendar_navigation_open_filters()}
-          aria-label={m.calendar_navigation_open_filters()}
-        >
-          <FilterIcon class_="h-5 w-5" />
-        </button>
-      {/if}
-
       <!-- Date Navigation - Hidden in 'all' mode -->
       {#if viewMode !== 'all'}
         <div class="flex flex-1 items-center justify-between gap-2">
@@ -266,18 +252,6 @@
 
   <!-- Desktop Layout (>= lg) -->
   <div class="hidden items-center justify-between gap-4 p-4 lg:flex">
-    <!-- Mobile Filter Button (visible only on mobile, hidden in community mode) -->
-    {#if !communityMode}
-      <button
-        class="btn btn-square btn-sm lg:hidden"
-        onclick={onFilterButtonClick}
-        title={m.calendar_navigation_open_filters()}
-        aria-label={m.calendar_navigation_open_filters()}
-      >
-        <FilterIcon class_="h-5 w-5" />
-      </button>
-    {/if}
-
     <!-- Date Navigation - Hidden in 'all' mode -->
     {#if viewMode !== 'all'}
       <div class="flex items-center gap-4">

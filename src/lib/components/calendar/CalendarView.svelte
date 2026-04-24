@@ -717,9 +717,6 @@
       onToday={handleToday}
       onViewModeChange={handleViewModeChange}
       onPresentationViewModeChange={handlePresentationViewModeChange}
-      onFilterButtonClick={() => {
-        drawerOpen = true;
-      }}
     />
 
     <!-- Content based on presentation view mode -->
