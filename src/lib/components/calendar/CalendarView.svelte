@@ -33,7 +33,7 @@
   import CalendarNavigation from '$lib/components/calendar/CalendarNavigation.svelte';
   import CalendarGrid from '$lib/components/calendar/CalendarGrid.svelte';
   import CalendarDropdown from './CalendarDropdown.svelte';
-  import CalendarFilterSidebar from './CalendarFilterSidebar.svelte';
+  import CalendarFilterSidebar from './CalendarFilterDrawer.svelte';
   import SimpleCalendarEventsList from './CalendarEventsList.svelte';
   import AddToCalendarButton from './AddToCalendarButton.svelte';
   import CalendarMapView from './CalendarMapView.svelte';
@@ -64,8 +64,7 @@
   let viewMode = $state(/** @type {CalendarViewMode} */ ('month'));
   let presentationViewMode = $state(/** @type {'calendar' | 'list' | 'map'} */ ('list'));
 
-  // Sidebar state
-  let sidebarExpanded = $state(false); // Desktop sidebar collapsed by default
+  // Drawer state
   let drawerOpen = $state(false); // Mobile drawer open state
 
   // Local component state (loader/model pattern)
@@ -572,13 +571,19 @@
   <!-- Filter Sidebar (only if not community mode) -->
   {#if !communityMode}
     <CalendarFilterSidebar
-      bind:isExpanded={sidebarExpanded}
       bind:isDrawerOpen={drawerOpen}
       validEvents={events}
+      featuredAuthors={[]}
+      selectedAuthors={[]}
+      activeFilterCount={0}
       onRelayFilterChange={handleRelayFilterChange}
       onFollowListFilterChange={handleFollowListFilterChange}
       onSearchQueryChange={handleSearchQueryChange}
       onTagFilterChange={handleTagFilterChange}
+      onAuthorsChange={() => {}}
+      onClose={() => {
+        drawerOpen = false;
+      }}
     />
   {/if}
 
