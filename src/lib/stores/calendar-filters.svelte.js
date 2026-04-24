@@ -23,6 +23,7 @@ class CalendarFiltersStore {
     /** @type {Array<{id: string, name: string, type: 'nip02' | 'nip51', description?: string, pubkeys: string[], count: number}>} */ ([])
   );
   selectedFollowListIds = $state(/** @type {string[]} */ ([]));
+  selectedFeaturedAuthors = $state(/** @type {string[]} */ ([]));
 
   // Getter for current observable values (for convenience)
   get selectedCalendar() {
@@ -175,6 +176,39 @@ class CalendarFiltersStore {
   }
 
   /**
+   * Set featured-author pubkey filter (hex).
+   * @param {string[]} pubkeys
+   */
+  setSelectedFeaturedAuthors(pubkeys) {
+    this.selectedFeaturedAuthors = pubkeys;
+  }
+
+  /**
+   * Clear featured-author filter.
+   */
+  clearSelectedFeaturedAuthors() {
+    this.selectedFeaturedAuthors = [];
+  }
+
+  /**
+   * Add one featured author (dedupes).
+   * @param {string} pubkey
+   */
+  addFeaturedAuthor(pubkey) {
+    if (!this.selectedFeaturedAuthors.includes(pubkey)) {
+      this.selectedFeaturedAuthors = [...this.selectedFeaturedAuthors, pubkey];
+    }
+  }
+
+  /**
+   * Remove one featured author.
+   * @param {string} pubkey
+   */
+  removeFeaturedAuthor(pubkey) {
+    this.selectedFeaturedAuthors = this.selectedFeaturedAuthors.filter((p) => p !== pubkey);
+  }
+
+  /**
    * Get unique author pubkeys from selected follow lists
    * @returns {string[]} Array of unique author pubkeys
    */
@@ -212,6 +246,7 @@ class CalendarFiltersStore {
     this.searchQuery = '';
     this.followLists = [];
     this.selectedFollowListIds = [];
+    this.selectedFeaturedAuthors = [];
   }
 }
 
