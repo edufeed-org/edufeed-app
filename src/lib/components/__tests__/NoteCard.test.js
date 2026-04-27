@@ -146,7 +146,9 @@ describe('NoteCard', () => {
       props: { note: mockNote }
     });
 
-    const commentSection = container.querySelector('.border-t.border-base-300');
+    // The actions toolbar also has `.border-t.border-base-300`; the comment wrapper
+    // is distinguished by its top margin (`.mt-3`).
+    const commentSection = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSection).toBeFalsy();
   });
 
@@ -160,7 +162,7 @@ describe('NoteCard', () => {
     expect(button).toBeTruthy();
     await fireEvent.click(/** @type {HTMLElement} */ (button));
 
-    const commentSection = container.querySelector('.border-t.border-base-300');
+    const commentSection = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSection).toBeTruthy();
   });
 
@@ -172,13 +174,13 @@ describe('NoteCard', () => {
     const button = container.querySelector('.btn-ghost');
     await fireEvent.click(/** @type {HTMLElement} */ (button));
 
-    const commentSection = container.querySelector('.border-t.border-base-300');
+    const commentSection = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSection).toBeTruthy();
 
     // Click again to hide
     await fireEvent.click(/** @type {HTMLElement} */ (button));
 
-    const commentSectionAfter = container.querySelector('.border-t.border-base-300');
+    const commentSectionAfter = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSectionAfter).toBeFalsy();
   });
 
