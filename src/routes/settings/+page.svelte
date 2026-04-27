@@ -30,6 +30,7 @@
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
   import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
+  import LocalCachePanel from '$lib/components/settings/LocalCachePanel.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
@@ -588,6 +589,11 @@
         <p class="mb-6 text-base-content/70">{m.settings_appearance_description()}</p>
         <ThemeSwitcher />
       </div>
+    </div>
+
+    <!-- Local Cache Panel (visible to all users) -->
+    <div class="mb-6">
+      <LocalCachePanel />
     </div>
 
     {#if !activeAccount}
