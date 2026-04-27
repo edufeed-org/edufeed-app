@@ -959,6 +959,7 @@
   "settings_cache_confirm_title": "Lokalen Zwischenspeicher leeren?",
   "settings_cache_confirm_message": "Dein Browser lädt zwischengespeicherte Inhalte beim Stöbern erneut herunter. Entfernte Daten sind nicht betroffen.",
   "settings_cache_cancel_button": "Abbrechen",
+  "settings_cache_confirm_button": "Bestätigen",
   "content_relay_label": "Inhaltsspezifische Relays",
   "content_relay_help": "Geschützter Inhalt wird diese Relays anstelle der Community-Relays verwenden",
   "form_config_toggle": "Zugriffskontrolle konfigurieren",

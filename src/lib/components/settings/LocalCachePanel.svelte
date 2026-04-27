@@ -7,6 +7,9 @@
   let showConfirm = $state(false);
   let clearing = $state(false);
 
+  /** @type {HTMLDialogElement | undefined} */
+  let dialog = $state();
+
   async function refreshCount() {
     try {
       eventCount = await cacheCount();
@@ -19,6 +22,18 @@
   $effect(() => {
     refreshCount();
   });
+
+  $effect(() => {
+    if (showConfirm && dialog && !dialog.open) {
+      dialog.showModal();
+    } else if (!showConfirm && dialog?.open) {
+      dialog.close();
+    }
+  });
+
+  function handleDialogClose() {
+    showConfirm = false;
+  }
 
   async function handleConfirm() {
     clearing = true;
@@ -57,29 +72,30 @@
   </div>
 </section>
 
-{#if showConfirm}
-  <div
-    class="modal-open modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="cache-confirm-title"
-  >
-    <div class="modal-box">
-      <h3 id="cache-confirm-title" class="text-lg font-bold">
-        {m.settings_cache_confirm_title()}
-      </h3>
-      <p class="py-4">{m.settings_cache_confirm_message()}</p>
-      <div class="modal-action">
-        <button type="button" class="btn" onclick={() => (showConfirm = false)} disabled={clearing}>
-          {m.settings_cache_cancel_button()}
-        </button>
-        <button type="button" class="btn btn-error" onclick={handleConfirm} disabled={clearing}>
-          {#if clearing}
-            <span class="loading loading-sm loading-spinner"></span>
-          {/if}
-          {m.settings_cache_clear_button()}
-        </button>
-      </div>
+<dialog
+  bind:this={dialog}
+  class="modal"
+  aria-labelledby="cache-confirm-title"
+  onclose={handleDialogClose}
+>
+  <div class="modal-box">
+    <h3 id="cache-confirm-title" class="text-lg font-bold">
+      {m.settings_cache_confirm_title()}
+    </h3>
+    <p class="py-4">{m.settings_cache_confirm_message()}</p>
+    <div class="modal-action">
+      <button type="button" class="btn" onclick={() => dialog?.close()} disabled={clearing}>
+        {m.settings_cache_cancel_button()}
+      </button>
+      <button type="button" class="btn btn-error" onclick={handleConfirm} disabled={clearing}>
+        {#if clearing}
+          <span class="loading loading-sm loading-spinner"></span>
+        {/if}
+        {m.settings_cache_confirm_button()}
+      </button>
     </div>
   </div>
-{/if}
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
