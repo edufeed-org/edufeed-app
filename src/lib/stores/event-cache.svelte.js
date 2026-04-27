@@ -41,19 +41,27 @@ export function isCacheableKind(kind) {
  * Singleton NostrIDB instance (exported for testability).
  * NostrIDB constructor signature is `(db?, opts?)` — we pass `undefined` for the
  * first arg so it opens the default IDB database itself.
+ *
+ * `undefined` in environments without IndexedDB (SSR/Node) so the module is
+ * import-safe during SvelteKit prerender. All exported functions early-return
+ * a graceful fallback when the singleton is unavailable.
  */
-export const nostrIDB = new NostrIDB(undefined, {
-  cacheIndexes: 1000,
-  batchWrite: 100,
-  writeInterval: 200,
-  maxEvents: 20_000
-});
+export const nostrIDB =
+  typeof indexedDB !== 'undefined'
+    ? new NostrIDB(undefined, {
+        cacheIndexes: 1000,
+        batchWrite: 100,
+        writeInterval: 200,
+        maxEvents: 20_000
+      })
+    : undefined;
 
 /**
  * Resolves when the cache is ready to accept reads and writes.
  * If IDB fails to open, resolves anyway — the app continues network-only.
  */
 export const dbReady = (async () => {
+  if (!nostrIDB) return; // SSR / no-IDB environment — silent no-op
   try {
     await nostrIDB.start();
     // Wire write-side: persistEventsToCache batches new events from the
@@ -81,6 +89,7 @@ export const dbReady = (async () => {
  * @returns {Promise<import('nostr-tools').Event[]>}
  */
 export async function cacheRequest(filters) {
+  if (!nostrIDB) return [];
   try {
     await dbReady;
     return await nostrIDB.query(filters);
@@ -100,6 +109,7 @@ export async function cacheRequest(filters) {
  * @returns {Promise<number>}
  */
 export async function count() {
+  if (!nostrIDB) return 0;
   try {
     await dbReady;
     const events = await nostrIDB.query([{ kinds: Array.from(CACHEABLE_KINDS) }]);
@@ -120,6 +130,7 @@ export async function count() {
  * @returns {Promise<void>}
  */
 export async function clear() {
+  if (!nostrIDB) return;
   try {
     await dbReady;
     nostrIDB.writeQueue?.clear?.();
@@ -143,6 +154,7 @@ export async function clear() {
  */
 export async function warmIdentity({ activeUserPubkey }) {
   if (!activeUserPubkey) return;
+  if (!nostrIDB) return;
   try {
     await dbReady;
 
