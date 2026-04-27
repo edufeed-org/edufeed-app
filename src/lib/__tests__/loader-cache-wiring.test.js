@@ -3,10 +3,14 @@ import { describe, it, expect, vi } from 'vitest';
 
 // Spy on the loader factories before importing base.js so we capture the
 // options passed at module init.
-const createAddressLoaderSpy = vi.fn(() => vi.fn());
-const createEventLoaderSpy = vi.fn(() => vi.fn());
-const createUnifiedEventLoaderSpy = vi.fn(() => vi.fn());
-const createTimelineLoaderSpy = vi.fn(() => vi.fn());
+/** @type {import('vitest').Mock<(...args: any[]) => any>} */
+const createAddressLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
+/** @type {import('vitest').Mock<(...args: any[]) => any>} */
+const createEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
+/** @type {import('vitest').Mock<(...args: any[]) => any>} */
+const createUnifiedEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
+/** @type {import('vitest').Mock<(...args: any[]) => any>} */
+const createTimelineLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
 
 vi.mock('applesauce-loaders/loaders', () => ({
   createAddressLoader: createAddressLoaderSpy,

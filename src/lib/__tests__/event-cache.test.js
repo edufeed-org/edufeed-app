@@ -33,6 +33,7 @@ describe('isCacheableKind', () => {
 // We'll initialize the cache store against a shared mock eventStore.
 // Because event-cache.svelte.js imports the real eventStore singleton,
 // we use vi.mock to replace it with a fresh instance per test.
+/** @type {EventStore} */
 let mockEventStore;
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
@@ -52,7 +53,7 @@ describe('event-cache initialization', () => {
     mockEventStore.verifyEvent = () => true;
     // Reset fake-indexeddb between tests
     const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
-    globalThis.indexedDB = new FDBFactory();
+    globalThis.indexedDB = /** @type {IDBFactory} */ (/** @type {unknown} */ (new FDBFactory()));
     // Reset module cache so event-cache.svelte.js re-runs with the fresh
     // mockEventStore. Without this, persistEventsToCache stays wired to
     // the EventStore from a previous test.
@@ -68,7 +69,7 @@ describe('event-cache initialization', () => {
     const { dbReady, nostrIDB } = await import('$lib/stores/event-cache.svelte.js');
     await dbReady;
 
-    const addSpy = vi.spyOn(nostrIDB, 'add');
+    const addSpy = vi.spyOn(/** @type {NonNullable<typeof nostrIDB>} */ (nostrIDB), 'add');
 
     // Push a cacheable event (kind 0) and a non-cacheable (kind 7).
     const profile = {
@@ -88,7 +89,9 @@ describe('event-cache initialization', () => {
     // persistEventsToCache batches; wait for the batch window to flush.
     await new Promise((r) => setTimeout(r, 2500));
 
-    const calledKinds = addSpy.mock.calls.map((c) => c[0].kind);
+    const calledKinds = addSpy.mock.calls.map(
+      (/** @type {[import('nostr-tools').Event]} */ c) => c[0].kind
+    );
     expect(calledKinds).toContain(0);
     expect(calledKinds).not.toContain(7);
   });
@@ -99,12 +102,17 @@ describe('event-cache read / count / clear', () => {
     mockEventStore = new EventStore();
     mockEventStore.verifyEvent = () => true;
     const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
-    globalThis.indexedDB = new FDBFactory();
+    globalThis.indexedDB = /** @type {IDBFactory} */ (/** @type {unknown} */ (new FDBFactory()));
     vi.resetModules();
   });
 
   it('cacheRequest returns previously persisted events matching the filter', async () => {
-    const { dbReady, nostrIDB, cacheRequest } = await import('$lib/stores/event-cache.svelte.js');
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      cacheRequest
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
     await dbReady;
 
     const profile = {
@@ -124,7 +132,8 @@ describe('event-cache read / count / clear', () => {
   });
 
   it('cacheRequest returns [] when IDB throws (graceful degradation)', async () => {
-    const { cacheRequest, nostrIDB } = await import('$lib/stores/event-cache.svelte.js');
+    const { cacheRequest, nostrIDB: _nostrIDB } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
     vi.spyOn(nostrIDB, 'query').mockRejectedValueOnce(new Error('boom'));
 
     const result = await cacheRequest([{ kinds: [0] }]);
@@ -132,7 +141,12 @@ describe('event-cache read / count / clear', () => {
   });
 
   it('count returns the total number of events in IDB', async () => {
-    const { dbReady, nostrIDB, count } = await import('$lib/stores/event-cache.svelte.js');
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      count
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
     await dbReady;
 
     await nostrIDB.add({
@@ -149,7 +163,13 @@ describe('event-cache read / count / clear', () => {
   });
 
   it('clear empties the database', async () => {
-    const { dbReady, nostrIDB, clear, count } = await import('$lib/stores/event-cache.svelte.js');
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      clear,
+      count
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
     await dbReady;
 
     await nostrIDB.add({
@@ -173,7 +193,7 @@ describe('warmIdentity', () => {
     mockEventStore = new EventStore();
     mockEventStore.verifyEvent = () => true;
     const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
-    globalThis.indexedDB = new FDBFactory();
+    globalThis.indexedDB = /** @type {IDBFactory} */ (/** @type {unknown} */ (new FDBFactory()));
     vi.resetModules();
   });
 
@@ -186,12 +206,22 @@ describe('warmIdentity', () => {
   });
 
   it('loads own kind 3 + 10002 + 30002 + 30000 into the event store', async () => {
-    const { dbReady, nostrIDB, warmIdentity } = await import('$lib/stores/event-cache.svelte.js');
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      warmIdentity
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
     await dbReady;
 
     const me = 'm'.repeat(64);
     const friend = 'f'.repeat(64);
-    const makeEvent = (kind, id, pubkey = me, tags = []) => ({
+    const makeEvent = (
+      /** @type {number} */ kind,
+      /** @type {string} */ id,
+      /** @type {string} */ pubkey = me,
+      /** @type {string[][]} */ tags = []
+    ) => ({
       id: id.padEnd(64, '0'),
       kind,
       pubkey,
