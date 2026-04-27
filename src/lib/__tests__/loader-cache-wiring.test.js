@@ -45,3 +45,25 @@ describe('base.js loader cache wiring', () => {
     expect(opts.cacheRequest).toBeTypeOf('function');
   });
 });
+
+describe('createCachedTimelineLoader', () => {
+  it('passes cache: cacheRequest through to createTimelineLoader', async () => {
+    createTimelineLoaderSpy.mockClear();
+    const { createCachedTimelineLoader } = await import('$lib/loaders/base.js');
+    createCachedTimelineLoader(['wss://a'], { kinds: [1] });
+    const callArgs = createTimelineLoaderSpy.mock.calls[0];
+    // Signature: (request, relays, filters, opts)
+    const opts = callArgs[3];
+    expect(opts.cache).toBeTypeOf('function');
+    expect(opts.eventStore).toBeDefined();
+  });
+
+  it('merges caller opts without overwriting cache', async () => {
+    createTimelineLoaderSpy.mockClear();
+    const { createCachedTimelineLoader } = await import('$lib/loaders/base.js');
+    createCachedTimelineLoader(['wss://a'], { kinds: [1] }, { limit: 50 });
+    const opts = createTimelineLoaderSpy.mock.calls[0][3];
+    expect(opts.limit).toBe(50);
+    expect(opts.cache).toBeTypeOf('function');
+  });
+});

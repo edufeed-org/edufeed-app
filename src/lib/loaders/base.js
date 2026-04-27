@@ -60,6 +60,22 @@ const unifiedLoader = createUnifiedEventLoader(pool, {
 eventStore.eventLoader = unifiedLoader;
 
 /**
+ * Wraps createTimelineLoader with the shared pool, eventStore, and IDB cache.
+ * Prefer this over calling createTimelineLoader directly so cache wiring
+ * stays uniform across the codebase.
+ *
+ * @param {string[]} relays
+ * @param {import('nostr-tools').Filter} filter
+ * @param {object} [opts] - extra options (e.g. limit) merged over defaults
+ */
+export const createCachedTimelineLoader = (relays, filter, opts = {}) =>
+  createTimelineLoader(timedPool, relays, filter, {
+    eventStore,
+    cache: cacheRequest,
+    ...opts
+  });
+
+/**
  * Factory: Create a timeline loader for user's deletion events (NIP-09)
  * This is a general-purpose deletion loader that can be used for any deletable content.
  *
