@@ -14,6 +14,7 @@
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
+  import { warmIdentity } from '$lib/stores/event-cache.svelte.js';
   import {
     initializeAllCuratedAuthors,
     initializeAllWotAuthors
@@ -143,9 +144,13 @@
   });
 
   // Initialize inbox + wave toasts on login, cleanup on logout
+  // Also warm the persistent event cache with identity data
   $effect(() => {
     if (!browser) return;
     const account = getActiveUser();
+    // Warm the persistent event cache with own identity events + followed-users' profiles.
+    // Fire-and-forget — internally swallows errors, no-op when account is null.
+    warmIdentity({ activeUserPubkey: account?.pubkey ?? null });
     if (account) {
       import('$lib/services/inbox-service.svelte.js').then(({ initializeInbox }) => {
         initializeInbox(account.pubkey);
