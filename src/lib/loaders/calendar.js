@@ -6,6 +6,7 @@ import { from, merge, EMPTY } from 'rxjs';
 import { mergeMap, filter, tap, switchMap } from 'rxjs/operators';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader, timedPool, createCachedTimelineLoader } from './base.js';
+import { backwardPaginateRelay } from './backward-paginate.js';
 import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import {
@@ -57,17 +58,41 @@ export const createRelayFilteredCalendarLoader = (customRelays = [], additionalF
     // Resolve relays at execution time, not creation time
     const relaysToUse = customRelays.length > 0 ? customRelays : getCalendarRelays();
 
-    // Apply curated authors unless caller already specified authors
-    // Note: [] is truthy, so check .length to avoid bypassing curated authors when UI filter is empty
-    const authors =
-      additionalFilters.authors && additionalFilters.authors.length > 0
-        ? additionalFilters.authors
+    // Strip empty `authors` so the spread below doesn't leak `authors: []`
+    // into the REQ filter (which the relay rejects as "no matches").
+    const { authors: requestedAuthors, ...rest } = additionalFilters;
+    const effectiveAuthors =
+      requestedAuthors && requestedAuthors.length > 0
+        ? requestedAuthors
         : getCuratedAuthors('calendar');
-    /** @type {import('nostr-tools').Filter} */
-    const filter = { kinds: [31922, 31923], limit: 200, ...additionalFilters };
-    if (authors) filter.authors = authors;
 
-    return createCachedTimelineLoader(relaysToUse, filter)();
+    /** @type {any} */
+    const baseFilter = { kinds: [31922, 31923], ...rest };
+    if (effectiveAuthors && effectiveAuthors.length > 0) {
+      baseFilter.authors = effectiveAuthors;
+    }
+
+    // Route relays by NIP-52 capability: NIP-52 relays get a single-shot REQ;
+    // standard relays use backward pagination so older `created_at` events
+    // surface even when a bulk-dump saturates the first page.
+    return from(partitionRelaysByNip52Support(relaysToUse)).pipe(
+      switchMap(({ nip52Relays, standardRelays }) => {
+        /** @type {import('rxjs').Observable<any>[]} */
+        const streams = [];
+
+        if (nip52Relays.length > 0) {
+          streams.push(timedPool(nip52Relays, baseFilter).pipe(tap((e) => eventStore.add(e))));
+        }
+
+        for (const relay of standardRelays) {
+          streams.push(
+            backwardPaginateRelay(relay, baseFilter).pipe(tap((e) => eventStore.add(e)))
+          );
+        }
+
+        return streams.length > 0 ? merge(...streams) : EMPTY;
+      })
+    );
   };
 };
 
@@ -135,16 +160,12 @@ export function createDateRangeCalendarLoader(dateRange, options = {}) {
           streams.push(timedPool(nip52Relays, nip52Filter).pipe(tap((e) => eventStore.add(e))));
         }
 
-        // Standard relays: client-side overlap filtering
-        // These relays don't understand NIP-52 date filters, so we over-fetch and filter client-side
-        if (standardRelays.length > 0) {
-          const standardFilter = {
-            ...baseFilter,
-            limit: 500 // Over-fetch since we filter client-side
-          };
-
+        // Standard relays: backward-paginate per relay so older events surface
+        // even when a newer bulk-dump saturates the first page. Client-side
+        // overlap filter still narrows to the visible window.
+        for (const relay of standardRelays) {
           streams.push(
-            timedPool(standardRelays, standardFilter).pipe(
+            backwardPaginateRelay(relay, baseFilter).pipe(
               filter((event) => {
                 const eventStart = getEventStartTimestamp(event);
                 const eventEnd = getEventEndTimestamp(event) || eventStart;
