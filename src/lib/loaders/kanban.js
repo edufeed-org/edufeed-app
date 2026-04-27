@@ -1,10 +1,8 @@
 /**
  * Kanban board loading utilities for kind 30301 board definitions.
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getKanbanRelays } from '$lib/helpers/relay-helper.js';
-import { timedPool } from './base.js';
+import { createCachedTimelineLoader } from './base.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 
 /**
@@ -14,5 +12,5 @@ import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte
  */
 export function kanbanTimelineLoader(limit = 20) {
   const filter = applyCuratedFilter({ kinds: [30301] });
-  return createTimelineLoader(timedPool, getKanbanRelays(), filter, { eventStore, limit });
+  return createCachedTimelineLoader(getKanbanRelays(), filter, { limit });
 }
