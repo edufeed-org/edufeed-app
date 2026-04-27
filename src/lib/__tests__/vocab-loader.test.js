@@ -5,9 +5,17 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { add: vi.fn(), model: vi.fn() },
   pool: {}
 }));
-vi.mock('$lib/loaders/base.js', () => ({
-  timedPool: vi.fn()
-}));
+vi.mock('$lib/loaders/base.js', async () => {
+  const { createTimelineLoader } = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return {
+    timedPool: vi.fn(),
+    createCachedTimelineLoader: (
+      /** @type {string[]} */ relays,
+      /** @type {any} */ filter,
+      /** @type {any} */ opts = {}
+    ) => createTimelineLoader(vi.fn(), relays, filter, { eventStore: {}, ...opts })
+  };
+});
 vi.mock('applesauce-loaders/loaders', () => ({
   createAddressLoader: vi.fn(() => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })),
   createTimelineLoader: vi.fn(() => () => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
