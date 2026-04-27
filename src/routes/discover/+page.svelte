@@ -396,8 +396,8 @@
     // Use full NIP-52 date filter parameters
     dateRangeLoaderSub?.unsubscribe();
     const loader = createDateRangeCalendarLoader({
-      startAfter: range.start,
-      startBefore: range.end
+      rangeStart: range.start,
+      rangeEnd: range.end
     });
     dateRangeLoaderSub = loader().subscribe({
       error: (/** @type {any} */ err) => console.error('🔍 Discover: Date range loader error:', err)
@@ -493,8 +493,8 @@
   // Uses createDateRangeCalendarLoader with full NIP-52 filter support
   // svelte-ignore state_referenced_locally
   const initialCalendarLoader = createDateRangeCalendarLoader({
-    startAfter: eventsDateRangeStart,
-    startBefore: eventsDateRangeEnd
+    rangeStart: eventsDateRangeStart,
+    rangeEnd: eventsDateRangeEnd
   });
   const initialCalendarSub = initialCalendarLoader().subscribe({
     complete: () => {
@@ -658,7 +658,7 @@
 
     if (contentType === 'events' || contentType === 'all') {
       const loader = createDateRangeCalendarLoader(
-        { startAfter: eventsDateRangeStart, startBefore: eventsDateRangeEnd },
+        { rangeStart: eventsDateRangeStart, rangeEnd: eventsDateRangeEnd },
         { authors }
       );
       subs.push(loader().subscribe());

@@ -11,7 +11,13 @@
   } from '$lib/loaders/calendar.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import { timedPool } from '$lib/loaders/base.js';
-  import { getViewDateRange } from '$lib/helpers/calendar.js';
+  import { calendarSearchLoader, MIN_QUERY_LENGTH } from '$lib/loaders/calendar-search.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import {
+    getViewDateRange,
+    filterEventsByViewMode,
+    filterEventsBySelectedRelays
+  } from '$lib/helpers/calendar.js';
   import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
   import { relayUpdateSignal } from '$lib/services/app-relay-service.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -74,10 +80,12 @@
   // Local component state (loader/model pattern)
   /**
    * @type {import("$lib/types/calendar.js").CalendarEvent[]}
+   * Use $state.raw because events carry Symbol-based seen-relay metadata
+   * that breaks under Svelte 5's deep proxies (see CLAUDE.md).
    */
-  let allCalendarEvents = $state([]);
-  let relayFilteredEventIds = $state(/** @type {string[]} */ ([]));
-  let relayFilterActive = $state(false);
+  let allCalendarEvents = $state.raw(
+    /** @type {import("$lib/types/calendar.js").CalendarEvent[]} */ ([])
+  );
   let loading = $state(true);
   let minLoadTimeElapsed = $state(false);
   let error = $state(/** @type {string | null} */ (null));
@@ -157,8 +165,10 @@
     // Clean up previous date range subscription
     dateRangeLoaderSub?.unsubscribe();
 
-    // Get authors filter - use authorPubkey if set, otherwise use filter state
-    const authors = authorPubkey ? [authorPubkey] : calendarFilters.getSelectedAuthors();
+    // Get authors filter - use authorPubkey if set, otherwise use effective
+    // "people" filter (union of onlyFollowsMode pool, NIP-51 lists, and
+    // individually picked authors).
+    const authors = authorPubkey ? [authorPubkey] : calendarFilters.getEffectiveAuthorPubkeys();
 
     if (viewMode === 'all') {
       // 'all' view mode: No date filtering, use standard loader
@@ -174,12 +184,12 @@
       // Date-filtered view: Use date range loader with NIP-52 filter syntax
       const { start, end } = getViewDateRange(currentDate, viewMode);
 
+      // Read selectedRelays inside the effect so relay filter changes re-trigger it.
+      const relays = calendarFilters.selectedRelays;
+
       const loader = createDateRangeCalendarLoader(
-        {
-          startAfter: start,
-          startBefore: end
-        },
-        { authors }
+        { rangeStart: start, rangeEnd: end },
+        { authors, relays }
       );
       dateRangeLoaderSub = loader().subscribe({
         error: (/** @type {any} */ err) => {
@@ -246,8 +256,9 @@
     // Wait for relays to be configured
     if (!relaysReady) return;
 
-    // Get authors filter
-    const authors = authorPubkey ? [authorPubkey] : calendarFilters.getSelectedAuthors();
+    // Get authors filter (union via getEffectiveAuthorPubkeys to cover the
+    // quick "only follows" toggle + NIP-51 lists + picked authors).
+    const authors = authorPubkey ? [authorPubkey] : calendarFilters.getEffectiveAuthorPubkeys();
 
     // Clean up previous model subscription
     modelSubscription?.unsubscribe();
@@ -272,6 +283,37 @@
     }
 
     return () => modelSubscription?.unsubscribe();
+  });
+
+  // NIP-50 full-text search: subscribe to the search loader whenever the query
+  // meets the minimum length. Results are added to eventStore and surfaced via
+  // the normal model subscriptions; no separate rendering path needed.
+  /** @type {import('rxjs').Subscription | undefined} */
+  let searchLoaderSub;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let searchDebounceTimer = null;
+  $effect(() => {
+    const q = calendarFilters.searchQuery.trim();
+    searchLoaderSub?.unsubscribe();
+    if (searchDebounceTimer !== null) clearTimeout(searchDebounceTimer);
+    if (q.length < MIN_QUERY_LENGTH) return;
+
+    // Debounce to avoid hammering relays while the user is still typing.
+    searchDebounceTimer = setTimeout(() => {
+      searchLoaderSub = calendarSearchLoader(q, {
+        relays:
+          calendarFilters.selectedRelays.length > 0 ? calendarFilters.selectedRelays : undefined
+      }).subscribe({
+        error: (/** @type {any} */ err) => {
+          console.warn('📅 CalendarView: NIP-50 search loader error:', err);
+        }
+      });
+    }, 350);
+
+    return () => {
+      if (searchDebounceTimer !== null) clearTimeout(searchDebounceTimer);
+      searchLoaderSub?.unsubscribe();
+    };
   });
 
   // Sync initial URL state on mount
@@ -411,6 +453,8 @@
       loaderSubscription?.unsubscribe();
       modelSubscription?.unsubscribe();
       dateRangeLoaderSub?.unsubscribe();
+      searchLoaderSub?.unsubscribe();
+      if (searchDebounceTimer !== null) clearTimeout(searchDebounceTimer);
       communityEventLoader.cleanup();
     };
   });
@@ -483,49 +527,16 @@
     modalStore.openModal('eventDetails', { event });
   }
 
-  /**
-   * Handle relay filter changes
-   * @param {string[]} relays
-   */
-  function handleRelayFilterChange(relays) {
-    // Trigger a refresh with the new relay filters, passing them directly
-    handleRefresh(relays);
-  }
-
-  /**
-   * Handle tag filter changes
-   * @param {string[]} _tags
-   */
-  function handleTagFilterChange(_tags) {
-    // Tag filtering is client-side, so no refresh needed
-    // The displayedEvents derived state will automatically update
-  }
-
-  /**
-   * Handle search query changes
-   * @param {string} _query
-   */
-  function handleSearchQueryChange(_query) {
-    // Search filtering is client-side, so no refresh needed
-    // The displayedEvents derived state will automatically update
-  }
-
-  /**
-   * Handle follow list filter changes
-   * @param {string[]} _listIds
-   */
-  function handleFollowListFilterChange(_listIds) {
-    // Trigger a refresh with the new author filters
-    handleRefresh();
-  }
-
-  /**
-   * Handle featured authors selection change
-   * @param {string[]} pubkeys
-   */
-  function handleFeaturedAuthorsChange(pubkeys) {
-    calendarFilters.setSelectedFeaturedAuthors(pubkeys);
-  }
+  // Relay, tag, search, and follow-list filter changes are all driven by
+  // `calendarFilters` store writes from the selector components. The loader
+  // and model $effects above read the store reactively, so they re-run
+  // automatically — no imperative refresh needed.
+  /** @param {string[]} _relays */
+  function handleRelayFilterChange(_relays) {}
+  /** @param {string[]} _tags */
+  function handleTagFilterChange(_tags) {}
+  /** @param {string} _query */
+  function handleSearchQueryChange(_query) {}
 
   function handleClearAllFilters() {
     calendarFilters.clearSelectedTags();
@@ -533,7 +544,12 @@
     calendarFilters.clearSelectedFollowListIds();
     calendarFilters.clearSelectedFeaturedAuthors();
     calendarFilters.clearSearchQuery();
+    calendarFilters.setOnlyFollowsMode('off');
   }
+
+  // No-op handler passed to the new filter bar/drawer — filter state changes
+  // flow through the store, so the loader/model effects pick them up directly.
+  function handlePeopleChange() {}
 
   // Create derived state for proper reactivity tracking
   let selectedTags = $derived(calendarFilters.selectedTags);
@@ -549,20 +565,22 @@
       calendarFilters.selectedRelays.length +
       calendarFilters.selectedFollowListIds.length +
       calendarFilters.selectedFeaturedAuthors.length +
-      (calendarFilters.searchQuery.trim() ? 1 : 0)
+      (calendarFilters.searchQuery.trim() ? 1 : 0) +
+      (calendarFilters.onlyFollowsMode !== 'off' ? 1 : 0)
   );
   const anyFilterActive = $derived(activeFilterCount > 0);
 
-  // Derived state: Apply relay filtering via intersection
-  let events = $derived.by(() => {
-    if (relayFilterActive && relayFilteredEventIds.length > 0) {
-      // Filter: only show events from selected relays
-      const filtered = allCalendarEvents.filter((e) => relayFilteredEventIds.includes(e.id));
-      return filtered;
-    }
-    // No relay filter: show all events
-    return allCalendarEvents;
-  });
+  // Batch-load profiles for the current event set so author-name search can
+  // match display names without per-event hook calls.
+  const searchProfiles = useProfileMap(() => allCalendarEvents.map((e) => e.pubkey));
+
+  // Derived state: Apply relay filtering via seen-relay post-filter.
+  // The loader only queries selected relays, but EventStore may still contain
+  // events fetched earlier from other relays — this keeps the displayed set
+  // consistent with the user's relay selection.
+  let events = $derived(
+    filterEventsBySelectedRelays(allCalendarEvents, calendarFilters.selectedRelays)
+  );
 
   // Client-side filtering with tag buttons (OR logic) + text search (AND logic)
   let displayedEvents = $derived.by(() => {
@@ -581,18 +599,24 @@
       });
     }
 
-    // Step 2: Apply text search (AND logic with tags)
+    // Step 2: Apply text search (AND logic with tags). Matches across title,
+    // description, location, hashtags, and resolved author display name.
     const query = searchQuery.trim();
     if (query) {
       const lowerQuery = query.toLowerCase();
       filtered = filtered.filter((event) => {
-        // Search in title
         const titleMatch = event.title?.toLowerCase().includes(lowerQuery);
-
-        // Search in tags
+        const descMatch = /** @type {any} */ (event).description
+          ?.toLowerCase()
+          .includes(lowerQuery);
+        const locationMatch = /** @type {any} */ (event).location
+          ?.toLowerCase()
+          .includes(lowerQuery);
         const tagMatch = event.hashtags?.some((tag) => tag.toLowerCase().includes(lowerQuery));
-
-        return titleMatch || tagMatch;
+        const profile = searchProfiles().get(event.pubkey);
+        const authorName = (profile?.name || profile?.display_name || '').toLowerCase();
+        const authorMatch = authorName.includes(lowerQuery);
+        return titleMatch || descMatch || locationMatch || tagMatch || authorMatch;
       });
     }
 
@@ -603,6 +627,13 @@
 
     return filtered;
   });
+
+  // Events scoped to the currently rendered time range — used for the header
+  // event count so it matches what the list/grid actually shows. In 'all'
+  // mode this is identical to displayedEvents.
+  let displayedEventsInView = $derived(
+    filterEventsByViewMode(displayedEvents, viewMode, currentDate)
+  );
 </script>
 
 <div class="flex flex-col gap-2 py-4">
@@ -612,171 +643,168 @@
     </div>
   {/if}
 
-  <!-- Header row: calendar picker + mobile filter trigger -->
-  <div class="container mx-auto flex items-center gap-2 px-4">
-    {#if !communityMode}
-      <span class="text-xs text-base-content/60">Kalender:</span>
-      <CalendarDropdown currentCalendar={calendar} />
-    {:else}
-      <h2 class="text-lg font-semibold text-base-content">
-        {m.calendar_view_community_calendar()}
-      </h2>
-      {#if communityPubkey}
-        <AddToCalendarButton calendarId={communityPubkey} calendarTitle={communityCalendarTitle} />
+  <!-- Chrome bar: picker + filters + navigation wrapped in single bordered block -->
+  <div class="border-b border-base-300">
+    <!-- Unified header row: calendar picker + inline filters (lg+) or mobile drawer trigger -->
+    <div
+      data-testid="calendar-chrome-row"
+      class="container mx-auto flex flex-wrap items-center gap-2 px-4 py-2"
+    >
+      {#if !communityMode}
+        <CalendarDropdown currentCalendar={calendar} />
+        <!-- Desktop inline filter bar (takes remaining space) -->
+        <div class="hidden grow lg:block">
+          <CalendarFilterBar
+            validEvents={events}
+            featuredAuthors={featuredAuthorsHex}
+            onRelayFilterChange={handleRelayFilterChange}
+            onSearchQueryChange={handleSearchQueryChange}
+            onTagFilterChange={handleTagFilterChange}
+            onPeopleChange={handlePeopleChange}
+            onClearAll={handleClearAllFilters}
+          />
+        </div>
+        <!-- Mobile filter drawer trigger -->
+        <button
+          type="button"
+          class="btn ms-auto gap-1 btn-ghost btn-sm lg:hidden"
+          onclick={() => (drawerOpen = true)}
+        >
+          Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+        </button>
+      {:else}
+        <h2 class="text-lg font-semibold text-base-content">
+          {m.calendar_view_community_calendar()}
+        </h2>
+        {#if communityPubkey}
+          <AddToCalendarButton
+            calendarId={communityPubkey}
+            calendarTitle={communityCalendarTitle}
+          />
+        {/if}
       {/if}
-    {/if}
-    <span class="ms-auto"></span>
-    {#if !communityMode}
-      <button
-        type="button"
-        class="btn gap-1 btn-ghost btn-sm lg:hidden"
-        onclick={() => (drawerOpen = true)}
-      >
-        Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-      </button>
-    {/if}
-  </div>
-
-  <!-- Featured authors rail (only when no filters are active) -->
-  {#if !communityMode && featuredAuthorsHex.length > 0 && !anyFilterActive}
-    <div class="container mx-auto px-4">
-      <FeaturedAuthors
-        pubkeys={featuredAuthorsHex}
-        selected={selectedFeaturedAuthors}
-        onToggle={(pk) =>
-          selectedFeaturedAuthors.includes(pk)
-            ? calendarFilters.removeFeaturedAuthor(pk)
-            : calendarFilters.addFeaturedAuthor(pk)}
-        variant="rail"
-      />
     </div>
-  {/if}
 
-  <!-- Desktop inline filter bar -->
-  {#if !communityMode}
-    <div class="container mx-auto hidden px-4 lg:block">
-      <CalendarFilterBar
-        validEvents={events}
-        featuredAuthors={featuredAuthorsHex}
-        selectedAuthors={selectedFeaturedAuthors}
-        selectedTagsCount={calendarFilters.selectedTags.length}
-        selectedRelaysCount={calendarFilters.selectedRelays.length}
-        selectedFollowListsCount={calendarFilters.selectedFollowListIds.length}
-        searchQuery={calendarFilters.searchQuery}
-        eventCount={displayedEvents.length}
-        onRelayFilterChange={handleRelayFilterChange}
-        onFollowListFilterChange={handleFollowListFilterChange}
-        onSearchQueryChange={handleSearchQueryChange}
-        onTagFilterChange={handleTagFilterChange}
-        onAuthorsChange={handleFeaturedAuthorsChange}
-        onClearAll={handleClearAllFilters}
-      />
-    </div>
-  {/if}
+    <!-- Featured authors rail (only when no filters are active) -->
+    {#if !communityMode && featuredAuthorsHex.length > 0 && !anyFilterActive}
+      <div class="container mx-auto px-4">
+        <FeaturedAuthors
+          pubkeys={featuredAuthorsHex}
+          selected={selectedFeaturedAuthors}
+          onToggle={(pk) =>
+            selectedFeaturedAuthors.includes(pk)
+              ? calendarFilters.removeFeaturedAuthor(pk)
+              : calendarFilters.addFeaturedAuthor(pk)}
+          variant="rail"
+        />
+      </div>
+    {/if}
 
-  <!-- Error Display -->
-  {#if error}
-    <div class="container mx-auto px-4">
-      <div class="alert rounded-none border-b border-error/20 px-6 py-3 alert-error">
-        <div class="flex items-center gap-3">
-          <svg class="h-5 w-5 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span class="flex-1 text-sm">{error}</span>
-          <button
-            class="btn btn-ghost btn-xs"
-            onclick={() => (error = null)}
-            aria-label={m.calendar_view_dismiss_error()}
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <!-- Error Display -->
+    {#if error}
+      <div class="container mx-auto px-4">
+        <div class="alert rounded-none border-b border-error/20 px-6 py-3 alert-error">
+          <div class="flex items-center gap-3">
+            <svg class="h-5 w-5 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Resolution Errors Display (community mode) -->
-  {#if communityMode && resolutionErrors.length > 0}
-    <div class="container mx-auto px-4">
-      <div class="alert rounded-none border-b border-warning/20 px-6 py-3 alert-warning">
-        <div class="flex items-start gap-3">
-          <svg
-            class="mt-0.5 h-5 w-5 text-warning"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-            />
-          </svg>
-          <div class="flex-1">
-            <h4 class="mb-1 text-sm font-medium">{m.calendar_view_resolution_error_title()}</h4>
-            <p class="mb-2 text-xs text-base-content/70">
-              {m.calendar_view_resolution_error_desc({
-                count: resolutionErrors.length,
-                plural: resolutionErrors.length === 1 ? '' : 's',
-                n: resolutionErrors.length
-              })}
-            </p>
-            <details class="text-xs">
-              <summary class="cursor-pointer hover:text-base-content"
-                >{m.calendar_view_show_details()}</summary
-              >
-              <ul class="mt-2 space-y-1">
-                {#each resolutionErrors as errorMsg, index (index)}
-                  <li class="text-base-content/60">• {errorMsg}</li>
-                {/each}
-              </ul>
-            </details>
+            <span class="flex-1 text-sm">{error}</span>
+            <button
+              class="btn btn-ghost btn-xs"
+              onclick={() => (error = null)}
+              aria-label={m.calendar_view_dismiss_error()}
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
           </div>
-          <button
-            class="btn btn-ghost btn-xs"
-            onclick={() => (resolutionErrors = [])}
-            aria-label={m.calendar_view_dismiss_resolution()}
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        </div>
+      </div>
+    {/if}
+
+    <!-- Resolution Errors Display (community mode) -->
+    {#if communityMode && resolutionErrors.length > 0}
+      <div class="container mx-auto px-4">
+        <div class="alert rounded-none border-b border-warning/20 px-6 py-3 alert-warning">
+          <div class="flex items-start gap-3">
+            <svg
+              class="mt-0.5 h-5 w-5 text-warning"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
               />
             </svg>
-          </button>
+            <div class="flex-1">
+              <h4 class="mb-1 text-sm font-medium">{m.calendar_view_resolution_error_title()}</h4>
+              <p class="mb-2 text-xs text-base-content/70">
+                {m.calendar_view_resolution_error_desc({
+                  count: resolutionErrors.length,
+                  plural: resolutionErrors.length === 1 ? '' : 's',
+                  n: resolutionErrors.length
+                })}
+              </p>
+              <details class="text-xs">
+                <summary class="cursor-pointer hover:text-base-content"
+                  >{m.calendar_view_show_details()}</summary
+                >
+                <ul class="mt-2 space-y-1">
+                  {#each resolutionErrors as errorMsg, index (index)}
+                    <li class="text-base-content/60">• {errorMsg}</li>
+                  {/each}
+                </ul>
+              </details>
+            </div>
+            <button
+              class="btn btn-ghost btn-xs"
+              onclick={() => (resolutionErrors = [])}
+              aria-label={m.calendar_view_dismiss_resolution()}
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  <!-- Calendar Navigation -->
-  <div class="container mx-auto px-4">
-    <CalendarNavigation
-      {currentDate}
-      {viewMode}
-      {presentationViewMode}
-      {communityMode}
-      onPrevious={handlePrevious}
-      onNext={handleNext}
-      onToday={handleToday}
-      onViewModeChange={handleViewModeChange}
-      onPresentationViewModeChange={handlePresentationViewModeChange}
-    />
+    <!-- Calendar Navigation -->
+    <div class="container mx-auto px-4">
+      <CalendarNavigation
+        {currentDate}
+        {viewMode}
+        {presentationViewMode}
+        {communityMode}
+        eventCount={displayedEventsInView.length}
+        onPrevious={handlePrevious}
+        onNext={handleNext}
+        onToday={handleToday}
+        onViewModeChange={handleViewModeChange}
+        onPresentationViewModeChange={handlePresentationViewModeChange}
+      />
+    </div>
   </div>
 
   <!-- Content based on presentation view mode -->
@@ -856,13 +884,11 @@
       isDrawerOpen={drawerOpen}
       validEvents={events}
       featuredAuthors={featuredAuthorsHex}
-      selectedAuthors={selectedFeaturedAuthors}
       {activeFilterCount}
       onRelayFilterChange={handleRelayFilterChange}
-      onFollowListFilterChange={handleFollowListFilterChange}
       onSearchQueryChange={handleSearchQueryChange}
       onTagFilterChange={handleTagFilterChange}
-      onAuthorsChange={handleFeaturedAuthorsChange}
+      onPeopleChange={handlePeopleChange}
       onClose={() => (drawerOpen = false)}
     />
   {/if}

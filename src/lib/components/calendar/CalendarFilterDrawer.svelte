@@ -1,22 +1,22 @@
 <script>
   import RelaySelector from './RelaySelector.svelte';
-  import FollowListSelector from './FollowListSelector.svelte';
   import SearchInput from './SearchInput.svelte';
   import TagSelector from './TagSelector.svelte';
-  import FeaturedAuthors from './FeaturedAuthors.svelte';
+  import PeopleFilter from './PeopleFilter.svelte';
+  import ActiveFilterChips from './ActiveFilterChips.svelte';
+  import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
+  import * as m from '$lib/paraglide/messages';
 
   /**
    * @typedef {Object} Props
    * @property {boolean} isDrawerOpen
    * @property {any[]} validEvents
-   * @property {string[]} featuredAuthors
-   * @property {string[]} selectedAuthors
+   * @property {string[]} [featuredAuthors]
    * @property {number} activeFilterCount
-   * @property {(relays: string[]) => void} onRelayFilterChange
-   * @property {(listIds: string[]) => void} onFollowListFilterChange
-   * @property {(query: string) => void} onSearchQueryChange
-   * @property {(tags: string[]) => void} onTagFilterChange
-   * @property {(pubkeys: string[]) => void} onAuthorsChange
+   * @property {(relays: string[]) => void} [onRelayFilterChange]
+   * @property {(query: string) => void} [onSearchQueryChange]
+   * @property {(tags: string[]) => void} [onTagFilterChange]
+   * @property {() => void} [onPeopleChange]
    * @property {() => void} onClose
    */
 
@@ -24,14 +24,12 @@
   let {
     isDrawerOpen,
     validEvents,
-    featuredAuthors,
-    selectedAuthors,
+    featuredAuthors = [],
     activeFilterCount,
-    onRelayFilterChange,
-    onFollowListFilterChange,
-    onSearchQueryChange,
-    onTagFilterChange,
-    onAuthorsChange,
+    onRelayFilterChange = (/** @type {string[]} */ _r) => {},
+    onSearchQueryChange = (/** @type {string} */ _q) => {},
+    onTagFilterChange = (/** @type {string[]} */ _t) => {},
+    onPeopleChange = () => {},
     onClose
   } = $props();
 
@@ -53,14 +51,6 @@
       closeBtn.focus();
     }
   });
-
-  function toggleAuthor(/** @type {string} */ pubkey) {
-    if (selectedAuthors.includes(pubkey)) {
-      onAuthorsChange(selectedAuthors.filter((p) => p !== pubkey));
-    } else {
-      onAuthorsChange([...selectedAuthors, pubkey]);
-    }
-  }
 </script>
 
 {#if isDrawerOpen}
@@ -87,36 +77,44 @@
         >
       </header>
 
+      <!-- Search (top, matching desktop) -->
+      <section class="mb-4">
+        <SearchInput
+          value={calendarFilters.searchQuery}
+          debounceMs={300}
+          onChange={(/** @type {string} */ v) => {
+            calendarFilters.setSearchQuery(v);
+            onSearchQueryChange(v);
+          }}
+        />
+      </section>
+
       <section class="mb-4">
         <h3 class="mb-2 text-sm font-semibold">Tags</h3>
         <TagSelector events={validEvents} {onTagFilterChange} />
       </section>
 
-      {#if featuredAuthors.length > 0}
-        <section class="mb-4">
-          <h3 class="mb-2 text-sm font-semibold">Autoren</h3>
-          <FeaturedAuthors
-            pubkeys={featuredAuthors}
-            selected={selectedAuthors}
-            onToggle={toggleAuthor}
-            variant="compact"
-          />
-        </section>
-      {/if}
-
       <section class="mb-4">
-        <h3 class="mb-2 text-sm font-semibold">Relays</h3>
-        <RelaySelector onApplyFilters={onRelayFilterChange} />
+        <h3 class="mb-2 text-sm font-semibold">{m.people_filter_title()}</h3>
+        <PeopleFilter {featuredAuthors} onChange={onPeopleChange} />
       </section>
 
-      <section class="mb-4">
-        <h3 class="mb-2 text-sm font-semibold">Follow-Listen</h3>
-        <FollowListSelector onApplyFilters={onFollowListFilterChange} />
-      </section>
+      <!-- Advanced (Relays) - collapsed by default -->
+      <details class="mb-4 rounded-lg border border-base-300">
+        <summary class="cursor-pointer px-3 py-2 text-sm font-semibold select-none">
+          {m.calendar_advanced_title()}
+        </summary>
+        <div class="px-3 pb-3">
+          <h4 class="mb-2 text-xs font-medium text-base-content/60 uppercase">
+            {m.calendar_advanced_relays_heading()}
+          </h4>
+          <RelaySelector onApplyFilters={onRelayFilterChange} />
+        </div>
+      </details>
 
+      <!-- Active filter chips -->
       <section class="mb-4">
-        <h3 class="mb-2 text-sm font-semibold">Suche</h3>
-        <SearchInput {onSearchQueryChange} />
+        <ActiveFilterChips />
       </section>
 
       <!-- Footer close button -->

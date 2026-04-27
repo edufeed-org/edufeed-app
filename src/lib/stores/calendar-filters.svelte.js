@@ -25,6 +25,19 @@ class CalendarFiltersStore {
   selectedFollowListIds = $state(/** @type {string[]} */ ([]));
   selectedFeaturedAuthors = $state(/** @type {string[]} */ ([]));
 
+  // Quick "people" toggle: 'off' (no toggle), 'follows' (use user's NIP-02
+  // follows), 'featured' (use deployment-configured featured authors).
+  /** @type {'off' | 'follows' | 'featured'} */
+  onlyFollowsMode = $state('off');
+
+  // Pool of pubkeys used when onlyFollowsMode === 'follows' (set when the
+  // user's NIP-02 contact list is loaded).
+  userFollowPubkeys = $state(/** @type {string[]} */ ([]));
+
+  // Pool of pubkeys used when onlyFollowsMode === 'featured' (set from
+  // runtimeConfig.calendar.featuredAuthors).
+  featuredAuthorPubkeys = $state(/** @type {string[]} */ ([]));
+
   // Getter for current observable values (for convenience)
   get selectedCalendar() {
     return this.selectedCalendar$.value;
@@ -209,6 +222,52 @@ class CalendarFiltersStore {
   }
 
   /**
+   * Set quick "people" toggle mode.
+   * @param {'off' | 'follows' | 'featured'} mode
+   */
+  setOnlyFollowsMode(mode) {
+    this.onlyFollowsMode = mode;
+  }
+
+  /**
+   * Set the pool of pubkeys representing the active user's NIP-02 follows.
+   * Consumed by `getEffectiveAuthorPubkeys()` when mode === 'follows'.
+   * @param {string[]} pubkeys
+   */
+  setUserFollowPubkeys(pubkeys) {
+    this.userFollowPubkeys = pubkeys;
+  }
+
+  /**
+   * Set the pool of deployment-configured featured author pubkeys.
+   * Consumed by `getEffectiveAuthorPubkeys()` when mode === 'featured'.
+   * @param {string[]} pubkeys
+   */
+  setFeaturedAuthorPubkeys(pubkeys) {
+    this.featuredAuthorPubkeys = pubkeys;
+  }
+
+  /**
+   * Get the deduplicated union of pubkeys across all "people" filter sources:
+   *   - the active mode's pool (follows or featured),
+   *   - selected NIP-51 list authors,
+   *   - individually picked authors (selectedFeaturedAuthors).
+   * Used by loaders/post-filters to scope events to the chosen people.
+   * @returns {string[]} Deduplicated array of pubkeys
+   */
+  getEffectiveAuthorPubkeys() {
+    const out = new SvelteSet();
+    if (this.onlyFollowsMode === 'follows') {
+      this.userFollowPubkeys.forEach((p) => out.add(p));
+    } else if (this.onlyFollowsMode === 'featured') {
+      this.featuredAuthorPubkeys.forEach((p) => out.add(p));
+    }
+    this.getSelectedAuthors().forEach((p) => out.add(p));
+    this.selectedFeaturedAuthors.forEach((p) => out.add(p));
+    return Array.from(out);
+  }
+
+  /**
    * Get unique author pubkeys from selected follow lists
    * @returns {string[]} Array of unique author pubkeys
    */
@@ -247,6 +306,9 @@ class CalendarFiltersStore {
     this.followLists = [];
     this.selectedFollowListIds = [];
     this.selectedFeaturedAuthors = [];
+    this.onlyFollowsMode = 'off';
+    this.userFollowPubkeys = [];
+    this.featuredAuthorPubkeys = [];
   }
 }
 
