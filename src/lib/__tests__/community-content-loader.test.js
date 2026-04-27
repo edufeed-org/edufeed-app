@@ -89,10 +89,18 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
   })
 }));
 
-vi.mock('$lib/loaders/base.js', () => ({
-  timedPool: vi.fn(),
-  addressLoader: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) }))
-}));
+vi.mock('$lib/loaders/base.js', async () => {
+  const { createTimelineLoader } = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return {
+    timedPool: vi.fn(),
+    addressLoader: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) })),
+    createCachedTimelineLoader: (
+      /** @type {string[]} */ relays,
+      /** @type {any} */ filter,
+      /** @type {any} */ opts = {}
+    ) => createTimelineLoader(vi.fn(), relays, filter, { eventStore: {}, ...opts })
+  };
+});
 
 vi.mock('$lib/loaders/targeted-publications.js', () => ({
   communityTargetedPublicationsLoader: vi.fn(() => () => ({

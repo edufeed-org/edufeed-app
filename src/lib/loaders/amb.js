@@ -1,10 +1,8 @@
 /**
  * AMB resource loading utilities for kind 30142 educational resources.
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
-import { timedPool } from './base.js';
+import { createCachedTimelineLoader } from './base.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { createCommunityContentLoader } from './community-content-loader.js';
 
@@ -16,7 +14,7 @@ import { createCommunityContentLoader } from './community-content-loader.js';
  */
 export function ambTimelineLoader(limit = 20) {
   const filter = applyCuratedFilter({ kinds: [30142] });
-  return createTimelineLoader(timedPool, getEducationalRelays(), filter, { eventStore, limit });
+  return createCachedTimelineLoader(getEducationalRelays(), filter, { limit });
 }
 
 /** Hook: Load AMB resources for a specific community */

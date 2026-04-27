@@ -2,9 +2,7 @@
  * RSVP Loader
  * Loads RSVP events (kind 31925) for a specific calendar event
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { timedPool } from '$lib/loaders/base.js';
+import { createCachedTimelineLoader } from '$lib/loaders/base.js';
 import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
 
 /**
@@ -27,14 +25,9 @@ export const calendarEventRsvpLoader = (calendarEvent) => {
   const dTag = calendarEvent.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
   const eventCoordinate = `${calendarEvent.kind}:${calendarEvent.pubkey}:${dTag}`;
 
-  return createTimelineLoader(
-    timedPool,
-    getCalendarRelays(),
-    {
-      kinds: [31925], // NIP-52 Calendar Event RSVP kind
-      '#a': [eventCoordinate], // Filter by calendar event coordinate
-      limit: 200 // Allow for many attendees
-    },
-    { eventStore }
-  );
+  return createCachedTimelineLoader(getCalendarRelays(), {
+    kinds: [31925], // NIP-52 Calendar Event RSVP kind
+    '#a': [eventCoordinate], // Filter by calendar event coordinate
+    limit: 200 // Allow for many attendees
+  });
 };

@@ -1,10 +1,8 @@
 /**
  * Article loading utilities for kind 30023 long-form content.
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getArticleRelays } from '$lib/helpers/relay-helper.js';
-import { timedPool } from './base.js';
+import { createCachedTimelineLoader } from './base.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { createCommunityContentLoader } from './community-content-loader.js';
 
@@ -16,7 +14,7 @@ import { createCommunityContentLoader } from './community-content-loader.js';
  */
 export function articleTimelineLoader(limit = 20) {
   const filter = applyCuratedFilter({ kinds: [30023] });
-  return createTimelineLoader(timedPool, getArticleRelays(), filter, { eventStore, limit });
+  return createCachedTimelineLoader(getArticleRelays(), filter, { limit });
 }
 
 /** Hook: Load articles for a specific community */

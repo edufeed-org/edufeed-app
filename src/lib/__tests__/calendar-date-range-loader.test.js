@@ -114,7 +114,8 @@ describe('createDateRangeCalendarLoader', () => {
     expect(capturedStandardFilters).toHaveLength(1);
     const f = capturedStandardFilters[0];
     expect(f.kinds).toEqual([31922, 31923]);
-    expect(f.limit).toBe(500);
+    // Standard relays now use backward pagination: PAGE_SIZE=100 per round.
+    expect(f.limit).toBe(100);
     expect(f['#start_before']).toBeUndefined();
     expect(f['#end_after']).toBeUndefined();
   });

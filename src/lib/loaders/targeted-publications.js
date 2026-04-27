@@ -7,10 +7,8 @@
  * - 'k' tag: kind of referenced content
  * - 'a' or 'e' tag: reference to the actual content
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-import { timedPool } from './base.js';
+import { createCachedTimelineLoader } from './base.js';
 
 /**
  * Get relays for targeted publications (communikey + fallback)
@@ -28,12 +26,7 @@ function getTargetedPublicationRelays() {
  * @returns {Function} Stateful timeline loader function
  */
 export function allTargetedPublicationsLoader(limit = 200) {
-  return createTimelineLoader(
-    timedPool,
-    getTargetedPublicationRelays(),
-    { kinds: [30222] },
-    { eventStore, limit }
-  );
+  return createCachedTimelineLoader(getTargetedPublicationRelays(), { kinds: [30222] }, { limit });
 }
 
 /**
@@ -42,14 +35,13 @@ export function allTargetedPublicationsLoader(limit = 200) {
  * @returns {Function} Stateful timeline loader function
  */
 export function articleTargetedPublicationsLoader(limit = 100) {
-  return createTimelineLoader(
-    timedPool,
+  return createCachedTimelineLoader(
     getTargetedPublicationRelays(),
     {
       kinds: [30222],
       '#k': ['30023'] // Only article shares
     },
-    { eventStore, limit }
+    { limit }
   );
 }
 
@@ -62,15 +54,14 @@ export function articleTargetedPublicationsLoader(limit = 100) {
  * @returns {Function} Stateful timeline loader function
  */
 export function communityTargetedPublicationsLoader(communityPubkey, contentKinds, limit = 100) {
-  return createTimelineLoader(
-    timedPool,
+  return createCachedTimelineLoader(
     getTargetedPublicationRelays(),
     {
       kinds: [30222],
       '#p': [communityPubkey],
       '#k': contentKinds.map(String)
     },
-    { eventStore, limit }
+    { limit }
   );
 }
 
@@ -81,13 +72,12 @@ export function communityTargetedPublicationsLoader(communityPubkey, contentKind
  * @returns {Function} Stateful timeline loader function
  */
 export function feedTargetedPublicationsLoader(limit = 200) {
-  return createTimelineLoader(
-    timedPool,
+  return createCachedTimelineLoader(
     getTargetedPublicationRelays(),
     {
       kinds: [30222],
       '#k': ['30023', '30142', '31922', '31923', '30301'] // Articles, AMB resources, calendar events, and kanban boards
     },
-    { eventStore, limit }
+    { limit }
   );
 }
