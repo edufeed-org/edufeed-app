@@ -130,7 +130,7 @@
 {/snippet}
 
 {#if effectiveShowHoverCard && pubkey}
-  <HoverCard>
+  <HoverCard fixed>
     {#snippet trigger()}
       <div class="avatar {className}">
         {@render avatarContent()}
