@@ -1,8 +1,8 @@
 <script>
-  let { trigger, content } = $props();
+  let { trigger, content, fixed = false, position = 'bottom' } = $props();
 </script>
 
-<div data-testid="hovercard">
+<div data-testid="hovercard" data-fixed={fixed ? 'true' : 'false'} data-position={position}>
   <div data-testid="hovercard-trigger">
     {@render trigger()}
   </div>
