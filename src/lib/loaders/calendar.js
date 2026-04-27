@@ -2,11 +2,10 @@
  * Calendar domain loaders for NIP-52 calendar events.
  * Includes timeline loaders and factory functions for custom filtering.
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { from, merge, EMPTY } from 'rxjs';
 import { mergeMap, filter, tap, switchMap } from 'rxjs/operators';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { addressLoader, timedPool } from './base.js';
+import { addressLoader, timedPool, createCachedTimelineLoader } from './base.js';
 import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import {
@@ -42,7 +41,7 @@ export function prefetchCalendarData() {
 // Lazy factory to ensure relays are read from runtime config at call time, not module load time
 export const calendarTimelineLoader = () => {
   const filter = applyCuratedFilter({ kinds: [31922, 31923], limit: 40 });
-  return createTimelineLoader(timedPool, getCalendarRelays(), filter, { eventStore });
+  return createCachedTimelineLoader(getCalendarRelays(), filter);
 };
 
 /**
@@ -68,7 +67,7 @@ export const createRelayFilteredCalendarLoader = (customRelays = [], additionalF
     const filter = { kinds: [31922, 31923], limit: 200, ...additionalFilters };
     if (authors) filter.authors = authors;
 
-    return createTimelineLoader(timedPool, relaysToUse, filter, { eventStore })();
+    return createCachedTimelineLoader(relaysToUse, filter)();
   };
 };
 
@@ -230,15 +229,10 @@ export function createPaginatedCalendarLoader(afterStartTimestamp, options = {})
 // NOTE: This loads ALL calendars without filtering - use userCalendarLoader for user-specific calendars
 // Lazy factory to ensure relays are read from runtime config at call time, not module load time
 export const calendarLoader = () =>
-  createTimelineLoader(
-    timedPool,
-    getCalendarRelays(),
-    {
-      kinds: [31924], // Calendar definitions
-      limit: 100
-    },
-    { eventStore }
-  );
+  createCachedTimelineLoader(getCalendarRelays(), {
+    kinds: [31924], // Calendar definitions
+    limit: 100
+  });
 
 /**
  * Factory: Create a timeline loader for user-specific calendar definitions
@@ -247,16 +241,11 @@ export const calendarLoader = () =>
  * @returns {Function} Timeline loader function that returns an Observable
  */
 export const userCalendarLoader = (userPubkey) =>
-  createTimelineLoader(
-    timedPool,
-    getCalendarRelays(),
-    {
-      kinds: [31924], // Calendar definitions
-      authors: [userPubkey], // Filter by user at relay level
-      limit: 100
-    },
-    { eventStore }
-  );
+  createCachedTimelineLoader(getCalendarRelays(), {
+    kinds: [31924], // Calendar definitions
+    authors: [userPubkey], // Filter by user at relay level
+    limit: 100
+  });
 
 /**
  * Factory: Create a timeline loader for community-specific calendar events
@@ -269,7 +258,7 @@ export const communityCalendarTimelineLoader = (communityPubkey) => {
     '#h': [communityPubkey],
     limit: 250
   });
-  return createTimelineLoader(timedPool, getCalendarRelays(), filter, { eventStore });
+  return createCachedTimelineLoader(getCalendarRelays(), filter);
 };
 
 /**
