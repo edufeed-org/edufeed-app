@@ -36,7 +36,8 @@ vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: (/** @type {any} */ date, /** @type {any} */ format) => {
     if (format === 'time') return '14:00';
     return 'Jan 15';
-  }
+  },
+  formatRelativeTime: () => '2h ago'
 }));
 vi.mock('$lib/stores/calendar-event-rsvps.svelte.js', () => ({
   useCalendarEventRsvps: () => ({ rsvps: [], loading: false })
@@ -54,6 +55,7 @@ vi.mock('../calendar/AttendeeIndicator.svelte', () => ({ default: () => ({}) }))
 vi.mock('../shared/LocationLink.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
+vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 
 const mockTimeEvent = {
   id: 'a'.repeat(64),
@@ -99,6 +101,35 @@ describe('CalendarEventCard', () => {
       });
 
       expect(container.textContent).toContain('Test Conference Talk');
+    });
+  });
+
+  describe('author header', () => {
+    it('renders author name when authorProfile is provided (non-compact)', () => {
+      const authorProfile = { name: 'Alice Example' };
+      const { container } = render(CalendarEventCard, {
+        props: { event: mockTimeEvent, authorProfile }
+      });
+
+      expect(container.textContent).toContain('Alice Example');
+    });
+
+    it('does not render author header when authorProfile is null', () => {
+      const { container } = render(CalendarEventCard, {
+        props: { event: mockTimeEvent, authorProfile: null }
+      });
+
+      // Author name shouldn't leak anywhere
+      expect(container.textContent).not.toContain('Alice Example');
+    });
+
+    it('does not render author header in compact mode even with authorProfile', () => {
+      const authorProfile = { name: 'Alice Example' };
+      const { container } = render(CalendarEventCard, {
+        props: { event: mockTimeEvent, authorProfile, compact: true }
+      });
+
+      expect(container.textContent).not.toContain('Alice Example');
     });
   });
 

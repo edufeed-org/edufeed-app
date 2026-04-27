@@ -9,7 +9,7 @@
   import { page } from '$app/stores';
   import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
   import { updateQueryParams } from '$lib/helpers/urlParams.js';
-  import { TagIcon } from '../icons';
+  import { PlusIcon, TagIcon } from '../icons';
   import * as m from '$lib/paraglide/messages';
 
   // Props
@@ -17,6 +17,34 @@
 
   // Sync local state with store (which is synced from URL in CalendarView)
   let selectedTags = $derived(calendarFilters.selectedTags);
+
+  // Custom-tag input state. Lets users add tags that are not in the popular-15
+  // list (mirrors the custom-relay input in RelaySelector.svelte).
+  let customTagInput = $state('');
+  let error = $state(/** @type {string | null} */ (null));
+
+  /**
+   * Add a user-typed tag. Trims, strips a leading `#`, lowercases, dedupes,
+   * then routes through the existing toggleTag() so store + URL stay in sync.
+   * The chip renders automatically because selectedNotPopular prepends any
+   * selected-but-not-popular tag to displayedTags.
+   */
+  function addCustomTag() {
+    error = null;
+    const raw = customTagInput.trim();
+    if (!raw) return;
+
+    const normalized = raw.replace(/^#/, '').trim().toLowerCase();
+    if (!normalized) return;
+
+    if (selectedTags.includes(normalized)) {
+      error = m.tag_selector_already_selected();
+      return;
+    }
+
+    toggleTag(normalized);
+    customTagInput = '';
+  }
 
   /**
    * Get all tag counts from events
@@ -166,4 +194,39 @@
       <p>{m.tag_selector_no_tags()}</p>
     </div>
   {/if}
+
+  <!-- Custom tag input (always visible — surfaces tags not in the popular list) -->
+  <div class="mt-3">
+    <div class="flex gap-1">
+      <input
+        type="text"
+        class="input-bordered input input-sm flex-1"
+        placeholder={m.tag_selector_custom_placeholder()}
+        bind:value={customTagInput}
+        oninput={() => {
+          error = null;
+        }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustomTag();
+          }
+        }}
+        data-testid="tag-custom-input"
+      />
+      <button
+        type="button"
+        class="btn gap-1 btn-sm btn-primary"
+        onclick={addCustomTag}
+        disabled={!customTagInput.trim()}
+        data-testid="tag-custom-add"
+      >
+        <PlusIcon class_="h-3 w-3" />
+        {m.tag_selector_add()}
+      </button>
+    </div>
+    {#if error}
+      <p class="mt-1 text-xs text-warning" data-testid="tag-custom-error">{error}</p>
+    {/if}
+  </div>
 </div>

@@ -210,7 +210,8 @@ export function GET() {
     calendar: {
       weekStartDay: parseInt(env.CALENDAR_WEEK_START_DAY, 1),
       locale: env.CALENDAR_LOCALE || 'de-DE',
-      timeFormat: env.CALENDAR_TIME_FORMAT || '24h'
+      timeFormat: env.CALENDAR_TIME_FORMAT || '24h',
+      featuredAuthors: parseArray(env.CALENDAR_FEATURED_AUTHORS)
     },
 
     // Signup

@@ -74,31 +74,37 @@ export const createRelayFilteredCalendarLoader = (customRelays = [], additionalF
 
 /**
  * @typedef {Object} DateRangeFilters
- * @property {number} [startAfter] - Events starting at or after this timestamp
- * @property {number} [startBefore] - Events starting before this timestamp
- * @property {number} [endAfter] - Events ending at or after this timestamp
- * @property {number} [endBefore] - Events ending before this timestamp
+ * @property {number} rangeStart - Visible window start (Unix seconds)
+ * @property {number} rangeEnd - Visible window end (Unix seconds)
  */
 
 /**
  * Create a date-range aware calendar loader with full NIP-52 filter support.
- * Intelligently routes queries based on relay NIP-52 support:
- * - NIP-52 relays: Use #start_after, #start_before, etc. for server-side filtering
- * - Standard relays: Use standard query + client-side date filtering
+ * Fetches every event that *overlaps* the window — events starting before it and
+ * ending inside it are included, fixing the multi-day blind spot of a start-only query.
  *
- * @param {DateRangeFilters} dateRange - Date range filter parameters
+ * Intelligently routes queries based on relay NIP-52 support:
+ * - NIP-52 relays: server-side overlap via `#start_before` + `#end_after`
+ *   (NIP-01 ANDs across keys, so this matches event.start < rangeEnd AND event.end > rangeStart)
+ * - Standard relays: standard query + client-side overlap filtering
+ *
+ * @param {DateRangeFilters} dateRange - {rangeStart, rangeEnd}
  * @param {Object} [options] - Additional options
  * @param {string[]} [options.authors] - Filter by specific authors
+ * @param {string[]} [options.relays] - Relay URLs to query. Empty/missing falls back to getCalendarRelays().
  * @returns {Function} Loader function that returns an Observable
  */
 export function createDateRangeCalendarLoader(dateRange, options = {}) {
-  const { startAfter, startBefore, endAfter, endBefore } = dateRange;
+  const { rangeStart, rangeEnd } = dateRange;
   // Note: [] is truthy, so check .length to avoid bypassing curated authors when UI filter is empty
   const effectiveAuthors =
     options.authors && options.authors.length > 0 ? options.authors : getCuratedAuthors('calendar');
 
   return () => {
-    const allRelays = getCalendarRelays();
+    // Resolve relays at execution time so user override relays (kind 30002) are included
+    // even if they loaded asynchronously after the loader was created.
+    const allRelays =
+      options.relays && options.relays.length > 0 ? options.relays : getCalendarRelays();
 
     // Build base filter
     /** @type {any} */
@@ -115,19 +121,22 @@ export function createDateRangeCalendarLoader(dateRange, options = {}) {
         /** @type {import('rxjs').Observable<import('nostr-tools').NostrEvent>[]} */
         const streams = [];
 
-        // NIP-52 relays: server-side date filtering via special filter syntax
+        // NIP-52 relays: server-side overlap filter
+        // Events without an `end` tag are treated as point-in-time (end == start);
+        // khatru's calendar index indexes these under both start and end, so `#end_after`
+        // still matches them.
         if (nip52Relays.length > 0) {
           /** @type {any} */
-          const nip52Filter = { ...baseFilter };
-          if (startAfter !== undefined) nip52Filter['#start_after'] = [String(startAfter)];
-          if (startBefore !== undefined) nip52Filter['#start_before'] = [String(startBefore)];
-          if (endAfter !== undefined) nip52Filter['#end_after'] = [String(endAfter)];
-          if (endBefore !== undefined) nip52Filter['#end_before'] = [String(endBefore)];
+          const nip52Filter = {
+            ...baseFilter,
+            '#start_before': [String(rangeEnd)],
+            '#end_after': [String(rangeStart)]
+          };
 
           streams.push(timedPool(nip52Relays, nip52Filter).pipe(tap((e) => eventStore.add(e))));
         }
 
-        // Standard relays: client-side date filtering
+        // Standard relays: client-side overlap filtering
         // These relays don't understand NIP-52 date filters, so we over-fetch and filter client-side
         if (standardRelays.length > 0) {
           const standardFilter = {
@@ -140,11 +149,8 @@ export function createDateRangeCalendarLoader(dateRange, options = {}) {
               filter((event) => {
                 const eventStart = getEventStartTimestamp(event);
                 const eventEnd = getEventEndTimestamp(event) || eventStart;
-                if (startAfter !== undefined && eventStart < startAfter) return false;
-                if (startBefore !== undefined && eventStart >= startBefore) return false;
-                if (endAfter !== undefined && eventEnd < endAfter) return false;
-                if (endBefore !== undefined && eventEnd >= endBefore) return false;
-                return true;
+                // Overlap: event.start <= rangeEnd AND event.end >= rangeStart
+                return eventStart <= rangeEnd && eventEnd >= rangeStart;
               }),
               tap((e) => eventStore.add(e))
             )

@@ -144,7 +144,7 @@
       {#if activeUser}
         <!-- Logged in: Show interactive dropdown using Popover API -->
         <button
-          class="btn gap-1 px-2 py-1 text-sm font-semibold text-base-content btn-ghost btn-sm md:gap-2 md:px-4 md:py-2 md:text-xl md:btn-md"
+          class="btn gap-1 text-sm font-semibold text-base-content btn-ghost btn-sm"
           popovertarget="calendar-popover"
           style="anchor-name:--calendar-anchor"
         >
