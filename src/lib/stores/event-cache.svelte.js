@@ -72,3 +72,59 @@ export const dbReady = (async () => {
     console.warn('[event-cache] IDB open failed; running network-only', err);
   }
 })();
+
+/**
+ * Loader cache-request function. Returns events matching the filters from IDB.
+ * Degrades to [] on any failure.
+ *
+ * @param {import('nostr-tools').Filter[]} filters
+ * @returns {Promise<import('nostr-tools').Event[]>}
+ */
+export async function cacheRequest(filters) {
+  try {
+    await dbReady;
+    return await nostrIDB.query(filters);
+  } catch (err) {
+    console.warn('[event-cache] cacheRequest failed', err);
+    return [];
+  }
+}
+
+/**
+ * Total number of events currently in the cache.
+ *
+ * nostr-idb's getIdsForFilter throws on a fully-empty filter `{}`, so we
+ * enumerate cacheable kinds. Uses query() (not count()) so events still in
+ * nostr-idb's write queue are included.
+ *
+ * @returns {Promise<number>}
+ */
+export async function count() {
+  try {
+    await dbReady;
+    const events = await nostrIDB.query([{ kinds: Array.from(CACHEABLE_KINDS) }]);
+    return events.length;
+  } catch (err) {
+    console.warn('[event-cache] count failed', err);
+    return 0;
+  }
+}
+
+/**
+ * Drop all events from the cache. EventStore memory is untouched.
+ *
+ * deleteAllEvents() empties the IDB store + indexCache + eventMap, but does
+ * NOT drain nostr-idb's pending write queue. We clear the queue too so that
+ * any events added since the last flush don't reappear on the next query.
+ *
+ * @returns {Promise<void>}
+ */
+export async function clear() {
+  try {
+    await dbReady;
+    nostrIDB.writeQueue?.clear?.();
+    await nostrIDB.deleteAllEvents();
+  } catch (err) {
+    console.warn('[event-cache] clear failed', err);
+  }
+}

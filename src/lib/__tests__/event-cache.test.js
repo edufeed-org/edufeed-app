@@ -93,3 +93,77 @@ describe('event-cache initialization', () => {
     expect(calledKinds).not.toContain(7);
   });
 });
+
+describe('event-cache read / count / clear', () => {
+  beforeEach(async () => {
+    mockEventStore = new EventStore();
+    mockEventStore.verifyEvent = () => true;
+    const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
+    globalThis.indexedDB = new FDBFactory();
+    vi.resetModules();
+  });
+
+  it('cacheRequest returns previously persisted events matching the filter', async () => {
+    const { dbReady, nostrIDB, cacheRequest } = await import('$lib/stores/event-cache.svelte.js');
+    await dbReady;
+
+    const profile = {
+      id: 'c'.repeat(64),
+      kind: 0,
+      pubkey: 'p'.repeat(64),
+      created_at: 1000,
+      tags: [],
+      content: '{"name":"Bob"}',
+      sig: 's'.repeat(128)
+    };
+    await nostrIDB.add(profile);
+
+    const result = await cacheRequest([{ kinds: [0], authors: ['p'.repeat(64)] }]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c'.repeat(64));
+  });
+
+  it('cacheRequest returns [] when IDB throws (graceful degradation)', async () => {
+    const { cacheRequest, nostrIDB } = await import('$lib/stores/event-cache.svelte.js');
+    vi.spyOn(nostrIDB, 'query').mockRejectedValueOnce(new Error('boom'));
+
+    const result = await cacheRequest([{ kinds: [0] }]);
+    expect(result).toEqual([]);
+  });
+
+  it('count returns the total number of events in IDB', async () => {
+    const { dbReady, nostrIDB, count } = await import('$lib/stores/event-cache.svelte.js');
+    await dbReady;
+
+    await nostrIDB.add({
+      id: 'd'.repeat(64),
+      kind: 0,
+      pubkey: 'p'.repeat(64),
+      created_at: 1000,
+      tags: [],
+      content: '{}',
+      sig: 's'.repeat(128)
+    });
+
+    expect(await count()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('clear empties the database', async () => {
+    const { dbReady, nostrIDB, clear, count } = await import('$lib/stores/event-cache.svelte.js');
+    await dbReady;
+
+    await nostrIDB.add({
+      id: 'e'.repeat(64),
+      kind: 0,
+      pubkey: 'p'.repeat(64),
+      created_at: 1000,
+      tags: [],
+      content: '{}',
+      sig: 's'.repeat(128)
+    });
+    expect(await count()).toBeGreaterThanOrEqual(1);
+
+    await clear();
+    expect(await count()).toBe(0);
+  });
+});
