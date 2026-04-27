@@ -167,3 +167,53 @@ describe('event-cache read / count / clear', () => {
     expect(await count()).toBe(0);
   });
 });
+
+describe('warmIdentity', () => {
+  beforeEach(async () => {
+    mockEventStore = new EventStore();
+    mockEventStore.verifyEvent = () => true;
+    const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
+    globalThis.indexedDB = new FDBFactory();
+    vi.resetModules();
+  });
+
+  it('is a no-op when no active user is provided', async () => {
+    const { dbReady, warmIdentity } = await import('$lib/stores/event-cache.svelte.js');
+    await dbReady;
+    const addSpy = vi.spyOn(mockEventStore, 'add');
+    await warmIdentity({ activeUserPubkey: null });
+    expect(addSpy).not.toHaveBeenCalled();
+  });
+
+  it('loads own kind 3 + 10002 + 30002 + 30000 into the event store', async () => {
+    const { dbReady, nostrIDB, warmIdentity } = await import('$lib/stores/event-cache.svelte.js');
+    await dbReady;
+
+    const me = 'm'.repeat(64);
+    const friend = 'f'.repeat(64);
+    const makeEvent = (kind, id, pubkey = me, tags = []) => ({
+      id: id.padEnd(64, '0'),
+      kind,
+      pubkey,
+      created_at: 1000,
+      tags,
+      content: kind === 0 ? '{"name":"Me"}' : '',
+      sig: 's'.repeat(128)
+    });
+
+    // Seed own identity events
+    await nostrIDB.add(makeEvent(3, '1', me, [['p', friend]]));
+    await nostrIDB.add(makeEvent(10002, '2'));
+    // Seed friend's profile
+    await nostrIDB.add(makeEvent(0, '3', friend));
+
+    const addSpy = vi.spyOn(mockEventStore, 'add');
+    await warmIdentity({ activeUserPubkey: me });
+
+    const addedKinds = addSpy.mock.calls.map((c) => c[0].kind).sort();
+    expect(addedKinds).toContain(3);
+    expect(addedKinds).toContain(10002);
+    // Friend's profile should be loaded because they're p-tagged in kind 3
+    expect(addSpy.mock.calls.some((c) => c[0].pubkey === friend && c[0].kind === 0)).toBe(true);
+  });
+});

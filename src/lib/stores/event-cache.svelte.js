@@ -128,3 +128,46 @@ export async function clear() {
     console.warn('[event-cache] clear failed', err);
   }
 }
+
+/**
+ * Eagerly hydrate the event store with identity-related events for the
+ * active user on boot. See spec §"Lifecycle / Identity warm-up".
+ *
+ * Reads own kind 3, 10002, 30002, 30000 from IDB, then reads kind 0 for
+ * every pubkey p-tagged in the user's kind 3 contact list.
+ *
+ * No-op when activeUserPubkey is null/undefined (anonymous browsing).
+ *
+ * @param {{ activeUserPubkey: string | null | undefined }} opts
+ * @returns {Promise<void>}
+ */
+export async function warmIdentity({ activeUserPubkey }) {
+  if (!activeUserPubkey) return;
+  try {
+    await dbReady;
+
+    // Step 1: load own identity events
+    const ownEvents = await nostrIDB.query([
+      { kinds: [3, 10002, 30002, 30000], authors: [activeUserPubkey] }
+    ]);
+    for (const event of ownEvents) {
+      eventStore.add(event);
+    }
+
+    // Step 2: extract friend pubkeys from kind 3 contact list
+    const contactList = ownEvents.find((e) => e.kind === 3);
+    if (!contactList) return;
+    const friendPubkeys = contactList.tags
+      .filter((t) => t[0] === 'p' && typeof t[1] === 'string')
+      .map((t) => t[1]);
+    if (friendPubkeys.length === 0) return;
+
+    // Step 3: bulk-load friend profiles (kind 0)
+    const profiles = await nostrIDB.query([{ kinds: [0], authors: friendPubkeys }]);
+    for (const profile of profiles) {
+      eventStore.add(profile);
+    }
+  } catch (err) {
+    console.warn('[event-cache] warmIdentity failed', err);
+  }
+}
