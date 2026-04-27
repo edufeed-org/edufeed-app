@@ -6,12 +6,11 @@
  * 3. Targeted publications (kind 30222 from communikey relays) — legacy, read-only
  * 4. Reference resolution for both reposts and legacy shares
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-import { addressLoader, timedPool } from './base.js';
+import { addressLoader, createCachedTimelineLoader } from './base.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
 import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -69,20 +68,16 @@ export function createCommunityContentLoader(kinds, getRelays, options = {}) {
     // 1. Direct community content (events with h-tag matching community)
     const directFilter = { kinds, '#h': [communityPubkey] };
     const finalDirectFilter = filterFn ? filterFn(directFilter) : directFilter;
-    const directLoader = createTimelineLoader(timedPool, relays, finalDirectFilter, {
-      eventStore,
-      limit: 50
-    });
+    const directLoader = createCachedTimelineLoader(relays, finalDirectFilter, { limit: 50 });
     subscriptions.set('direct', directLoader().subscribe(countingSub('direct')));
 
     // 2. NIP-18 reposts (kind 6/16 with h-tag targeting this community)
     // Reposts are published to the author's write relays (outbox model), not content-type relays.
     // Use broad relay set to discover them.
-    const repostLoader = createTimelineLoader(
-      timedPool,
+    const repostLoader = createCachedTimelineLoader(
       lookupRelays,
       { kinds: [6, 16], '#h': [communityPubkey] },
-      { eventStore, limit: 50 }
+      { limit: 50 }
     );
     subscriptions.set('reposts', repostLoader().subscribe(countingSub('reposts')));
 
