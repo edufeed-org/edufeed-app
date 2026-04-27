@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-04-24
-**Total tests:** 298
+**Last updated:** 2026-04-27
+**Total tests:** 299
 
 ## Quick Summary
 
@@ -38,6 +38,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                             |
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                              |
 | `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                     |
+| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                |
 
 ## Detailed Coverage
 
@@ -1264,6 +1265,25 @@ the E2E cases lock in the user-visible surface + owner gating.
 | owner sees AddProfileRow and remove button on their follow set | Combobox placeholder + `data-testid="remove-profile-{pubkey}"` visible on own kind 30000                 |
 | pasting an already-added npub surfaces "Already added" badge   | Typing TEST_AUTHOR_2 npub renders a dropdown row with the `Already added` badge + `aria-disabled="true"` |
 | unauthenticated visitor does not see add/remove UI             | Without auth, combobox and remove button are absent on same naddr                                        |
+
+### cache-warm-boot.test.js (1 test)
+
+**Route:** `/calendar`
+**Auth required:** No
+**Note:** Locks in Phase 1 of the persistent event cache. The first visit
+populates IndexedDB via the cache write filter; the second load aborts
+all `wss://` / `ws://` upgrades and reloads to prove cached content
+renders without any relay traffic.
+
+| Test                                          | What it verifies                                                                       |
+| --------------------------------------------- | -------------------------------------------------------------------------------------- |
+| calendar page renders from IDB on warm reload | Cards visible after `/calendar` first-load, then still visible after WS-blocked reload |
+
+- **Why E2E:** requires real browser IDB, real WebSocket intercept, and a full page reload — can't be verified at unit level.
+
+**Components exercised:** EventStore + nostr-idb cache pipeline, `cacheRequest` loader integration, CalendarEventsList rendering from cache.
+
+---
 
 ## Maintenance Guidelines
 
