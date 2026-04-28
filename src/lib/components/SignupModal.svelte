@@ -6,6 +6,7 @@
   import { nip19 } from 'nostr-tools';
   import * as nip49 from 'nostr-tools/nip49';
   import { generateSignupKeypair } from '$lib/helpers/signupKeypair.js';
+  import { buildAutoJoinFollowSet } from '$lib/helpers/autoJoinCommunities.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
@@ -236,83 +237,97 @@
       const signer = new SimpleSigner(userData.privateKey);
       const account = new SimpleAccount(userData.publicKey, signer);
 
-      // Create metadata event (Kind 0)
-      const metadata = {
-        name: userData.name,
-        about: userData.about,
-        picture: userData.picture,
-        website: userData.website
-      };
+      // === SIGN PHASE ===
+      // Build and sign all events upfront. Crypto only — no network. Anything
+      // that throws here genuinely failed; we want to surface it to the user
+      // before optimistically activating the account.
 
       const metadataEvent = {
         kind: 0,
         created_at: Math.floor(Date.now() / 1000),
         tags: [],
-        content: JSON.stringify(metadata),
+        content: JSON.stringify({
+          name: userData.name,
+          about: userData.about,
+          picture: userData.picture,
+          website: userData.website
+        }),
         pubkey: userData.publicKey
       };
-
-      // Sign the event
       const signedMetadataEvent = await signer.signEvent(metadataEvent);
 
-      // Create contacts event (Kind 3) if users selected
       let signedContactsEvent = null;
+      let contactsTaggedPubkeys = /** @type {string[]} */ ([]);
       if (userData.selectedFollows.length > 0) {
-        const contactTags = userData.selectedFollows.map((user) => {
-          const decoded = nip19.decode(user.npub);
-          return ['p', String(decoded.data)];
-        });
-
-        const contactsEvent = {
-          kind: 3,
-          created_at: Math.floor(Date.now() / 1000),
-          tags: contactTags,
-          content: '',
-          pubkey: userData.publicKey
-        };
-
-        signedContactsEvent = await signer.signEvent(contactsEvent);
-      }
-
-      // Publish metadata event (kind 0) using outbox model
-      const metadataResult = await publishEvent(signedMetadataEvent);
-      if (metadataResult.success) {
-        eventStore.add(signedMetadataEvent);
-      }
-
-      // Publish contacts event (kind 3) if users selected
-      let contactsSuccess = true;
-      if (signedContactsEvent) {
-        // Extract tagged pubkeys from contacts for outbox model
-        const taggedPubkeys = userData.selectedFollows.map((/** @type {any} */ user) => {
+        contactsTaggedPubkeys = userData.selectedFollows.map((/** @type {any} */ user) => {
           const decoded = nip19.decode(user.npub);
           return String(decoded.data);
         });
-        const contactsResult = await publishEvent(signedContactsEvent, taggedPubkeys);
-        contactsSuccess = contactsResult.success;
-        if (contactsResult.success) {
-          eventStore.add(signedContactsEvent);
-        }
+        const contactsEvent = {
+          kind: 3,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: contactsTaggedPubkeys.map((pk) => ['p', pk]),
+          content: '',
+          pubkey: userData.publicKey
+        };
+        signedContactsEvent = await signer.signEvent(contactsEvent);
       }
 
-      if (metadataResult.success || contactsSuccess) {
-        // Add account to manager after successful publishing
-        if (!manager.getAccountForPubkey(userData.publicKey)) {
-          manager.addAccount(account);
-          manager.setActive(account);
-        }
+      // Auto-join configured communities. We build + sign the kind 30000
+      // ourselves rather than going through actionRunner/joinCommunities so
+      // the event can land in EventStore optimistically (below) without
+      // waiting for relay confirmation.
+      const { signed: signedCommunitiesEvent, targetPubkeys: communityPubkeys } =
+        await buildAutoJoinFollowSet(
+          signer,
+          userData.publicKey,
+          runtimeConfig.signup?.autoJoinCommunities
+        );
 
-        console.log('SignupModal: Successfully published profile events');
+      // === OPTIMISTIC LOCAL APPLY ===
+      // Update EventStore + activate account before any relay round-trip so
+      // the rest of the app (joined-communities list, profile, contacts)
+      // reacts immediately. Background publish below catches network errors
+      // without blocking the modal close.
+      eventStore.add(signedMetadataEvent);
+      if (signedContactsEvent) eventStore.add(signedContactsEvent);
+      if (signedCommunitiesEvent) eventStore.add(signedCommunitiesEvent);
 
-        // Close modal and show success
-        closeModal();
-      } else {
-        throw new Error('Failed to publish profile to any relay');
+      if (!manager.getAccountForPubkey(userData.publicKey)) {
+        manager.addAccount(account);
+        manager.setActive(account);
+      }
+
+      // Clear the publishing flag BEFORE closeModal: closeModal() early-returns
+      // when isPublishing is true (a guard that exists to stop ESC/backdrop
+      // from interrupting the signing phase). Now that signing is done and
+      // local state is applied, it's safe — and necessary — to flip it.
+      isPublishing = false;
+      console.log('SignupModal: applied profile locally, publishing in background');
+      closeModal();
+
+      // === BACKGROUND PUBLISH ===
+      // Fire-and-forget. We've already activated the account; relay failures
+      // here mean the profile didn't propagate, but the user can retry later
+      // (e.g. via "edit profile") rather than us blocking signup on it.
+      publishEvent(signedMetadataEvent).catch((err) =>
+        console.warn('Background publish of profile metadata failed:', err)
+      );
+      if (signedContactsEvent) {
+        publishEvent(signedContactsEvent, contactsTaggedPubkeys).catch((err) =>
+          console.warn('Background publish of contacts list failed:', err)
+        );
+      }
+      if (signedCommunitiesEvent) {
+        // Tag community pubkeys so outbox includes their read relays — the
+        // community needs to see the new member in their notifications.
+        publishEvent(signedCommunitiesEvent, communityPubkeys).catch((err) =>
+          console.warn('Background publish of community follow set failed:', err)
+        );
       }
     } catch (error) {
       console.error('Error publishing profile:', error);
       errors.publishing = 'Failed to create account. Please try again.';
-    } finally {
       isPublishing = false;
     }
   }

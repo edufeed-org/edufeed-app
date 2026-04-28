@@ -122,6 +122,12 @@ vi.mock('$lib/helpers/profile.js', () => ({
   fetchProfileData: vi.fn()
 }));
 
+// Stub the auto-join helper. The real module is leaf-level now, but stubbing
+// keeps this test focused on the signer-wiring invariant.
+vi.mock('$lib/helpers/autoJoinCommunities.js', () => ({
+  buildAutoJoinFollowSet: vi.fn().mockResolvedValue({ signed: null, targetPubkeys: [] })
+}));
+
 // Icon / image stubs — point at an empty real Svelte component so Svelte 5's
 // runtime can instantiate them (an inert object isn't callable as a component).
 vi.mock('../shared/ImageWithFallback.svelte', async () => {

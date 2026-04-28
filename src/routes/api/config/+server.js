@@ -220,7 +220,10 @@ export function GET() {
         'npub1f7jar3qnu269uyx5p0e4v24hqxjnxysxudvujza2ur5ehltvdeqsly2fx9',
         'npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma',
         'npub1tgftg8kptdrxxg0g3sm3hckuglv3j0uu3way4vylc5qyt0f44m0s3gun6e'
-      ])
+      ]),
+      // Communities (npub or hex) that brand-new accounts auto-join after
+      // signup completes. Empty/unset = no auto-join. See SignupModal.
+      autoJoinCommunities: parseArray(env.SIGNUP_AUTO_JOIN_COMMUNITIES)
     },
 
     // Blossom (media uploads)

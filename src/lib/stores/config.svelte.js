@@ -66,7 +66,9 @@ const defaultConfig = {
       'npub1f7jar3qnu269uyx5p0e4v24hqxjnxysxudvujza2ur5ehltvdeqsly2fx9',
       'npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma',
       'npub1tgftg8kptdrxxg0g3sm3hckuglv3j0uu3way4vylc5qyt0f44m0s3gun6e'
-    ]
+    ],
+    /** @type {string[]} */
+    autoJoinCommunities: []
   },
   blossom: {
     maxFileSize: 5 * 1024 * 1024 // 5MB
