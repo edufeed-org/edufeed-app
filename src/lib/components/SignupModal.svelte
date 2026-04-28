@@ -16,6 +16,7 @@
   import CheckIcon from './icons/ui/CheckIcon.svelte';
   import ChevronLeftIcon from './icons/ui/ChevronLeftIcon.svelte';
   import ChevronRightIcon from './icons/ui/ChevronRightIcon.svelte';
+  import AvatarUploader from './shared/AvatarUploader.svelte';
 
   let { modalId } = $props();
 
@@ -386,38 +387,11 @@
             {m.auth_signup_modal_create_profile_title()}
           </h2>
 
-          <!-- Avatar URL Input (centered) -->
+          <!-- Avatar Uploader + URL fallback (mirrors EditProfileModal) -->
           <div class="flex flex-col items-center gap-4">
-            <!-- Circular Avatar Preview -->
-            <div
-              class="h-32 w-32 overflow-hidden rounded-full border-4 border-base-200 bg-base-300 shadow-lg"
-            >
-              {#if userData.picture}
-                <img
-                  src={userData.picture}
-                  alt="Profile Preview"
-                  class="h-full w-full object-cover"
-                  onerror={(e) => {
-                    // @ts-ignore
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              {:else}
-                <!-- User icon placeholder -->
-                <div class="flex h-full w-full items-center justify-center text-base-content/30">
-                  <svg class="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="1.5"
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                </div>
-              {/if}
-            </div>
+            <AvatarUploader bind:userData signer={_signer} bind:errors />
 
-            <!-- URL Input Field -->
+            <!-- URL Input Field (paste-an-existing-URL fallback) -->
             <div class="form-control flex w-full max-w-md flex-col">
               <label class="label" for="profile-picture-url-input">
                 <span class="label-text w-full text-center"
