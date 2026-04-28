@@ -175,7 +175,6 @@
   "auth_signup_modal_keys_p1": "Auf Nostr wird Ihr Schlüsselpaar durch eine eindeutige Zeichenfolge identifiziert, die mit npub beginnt. Dies ist Ihr öffentlicher Profilcode, den Sie mit jedem teilen können.",
   "auth_signup_modal_keys_p2": "Dann gibt es den privaten Schlüssel. Er beginnt mit nsec und wird verwendet, um Ihr Profil zu kontrollieren und Notizen zu veröffentlichen. Dieser muss absolut geheim gehalten werden.",
   "auth_signup_modal_keys_warning": "Bitte laden Sie jetzt Ihren nsec herunter (es ist eine Textdatei) und speichern Sie ihn an einem sicheren Ort, zum Beispiel in Ihrem Passwort-Manager.",
-  "auth_signup_modal_generating_keys": "Schlüssel werden generiert...",
   "auth_signup_modal_public_key_label": "Ihr öffentlicher Schlüssel (npub)",
   "auth_signup_modal_private_key_download_title": "Laden Sie Ihren privaten Schlüssel herunter",
   "auth_signup_modal_downloaded": "Heruntergeladen",

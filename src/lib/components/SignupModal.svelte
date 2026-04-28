@@ -489,98 +489,91 @@
             </p>
           </div>
 
-          {#if isGeneratingKeys}
-            <div class="flex items-center justify-center py-8">
-              <span class="loading loading-lg loading-spinner"></span>
-              <span class="ml-2">{m.auth_signup_modal_generating_keys()}</span>
-            </div>
-          {:else}
-            <!-- Public Key Display -->
-            <div class="card bg-base-200">
-              <div class="card-body">
-                <h3 class="card-title text-sm">{m.auth_signup_modal_public_key_label()}</h3>
-                <div class="flex items-center gap-2">
-                  <code class="flex-1 rounded bg-base-300 p-2 text-xs break-all">
-                    {userData.npub}
-                  </code>
-                  <button
-                    class="btn btn-square btn-sm"
-                    onclick={() => copyToClipboard(userData.npub)}
-                  >
-                    <CopyIcon />
-                  </button>
-                </div>
+          <!-- Public Key Display -->
+          <div class="card bg-base-200">
+            <div class="card-body">
+              <h3 class="card-title text-sm">{m.auth_signup_modal_public_key_label()}</h3>
+              <div class="flex items-center gap-2">
+                <code class="flex-1 rounded bg-base-300 p-2 text-xs break-all">
+                  {userData.npub}
+                </code>
+                <button
+                  class="btn btn-square btn-sm"
+                  onclick={() => copyToClipboard(userData.npub)}
+                >
+                  <CopyIcon />
+                </button>
               </div>
             </div>
+          </div>
 
-            <!-- Private Key Download -->
-            <div class="card bg-base-200">
-              <div class="card-body">
-                <h3 class="card-title text-sm">
-                  {m.auth_signup_modal_private_key_download_title()}
-                </h3>
+          <!-- Private Key Download -->
+          <div class="card bg-base-200">
+            <div class="card-body">
+              <h3 class="card-title text-sm">
+                {m.auth_signup_modal_private_key_download_title()}
+              </h3>
 
-                <div class="space-y-4">
-                  <!-- Plain nsec download -->
-                  <div>
+              <div class="space-y-4">
+                <!-- Plain nsec download -->
+                <div>
+                  <button
+                    class="btn btn-primary"
+                    onclick={downloadNsec}
+                    disabled={userData.downloadConfirmed}
+                  >
+                    {#if userData.downloadConfirmed}
+                      <CheckIcon />
+                      {m.auth_signup_modal_downloaded()}
+                    {:else}
+                      {m.auth_signup_modal_download_nsec()}
+                    {/if}
+                  </button>
+                </div>
+
+                <!-- Encrypted option -->
+                <div class="divider">OR</div>
+
+                <div class="space-y-2">
+                  <label class="label" for="encrypted-password-input">
+                    <span class="label-text">{m.auth_signup_modal_encrypted_backup_label()}</span>
+                  </label>
+                  <div class="flex gap-2">
+                    <input
+                      id="encrypted-password-input"
+                      type="password"
+                      bind:value={userData.ncryptsecPassword}
+                      placeholder={m.auth_signup_modal_password_placeholder()}
+                      class="input-bordered input flex-1"
+                      class:input-error={errors.password}
+                    />
                     <button
-                      class="btn btn-primary"
-                      onclick={downloadNsec}
-                      disabled={userData.downloadConfirmed}
+                      class="btn btn-secondary"
+                      onclick={downloadNcryptsec}
+                      disabled={!userData.ncryptsecPassword || userData.downloadConfirmed}
                     >
                       {#if userData.downloadConfirmed}
                         <CheckIcon />
                         {m.auth_signup_modal_downloaded()}
                       {:else}
-                        {m.auth_signup_modal_download_nsec()}
+                        {m.auth_signup_modal_download_ncryptsec()}
                       {/if}
                     </button>
                   </div>
-
-                  <!-- Encrypted option -->
-                  <div class="divider">OR</div>
-
-                  <div class="space-y-2">
-                    <label class="label" for="encrypted-password-input">
-                      <span class="label-text">{m.auth_signup_modal_encrypted_backup_label()}</span>
-                    </label>
-                    <div class="flex gap-2">
-                      <input
-                        id="encrypted-password-input"
-                        type="password"
-                        bind:value={userData.ncryptsecPassword}
-                        placeholder={m.auth_signup_modal_password_placeholder()}
-                        class="input-bordered input flex-1"
-                        class:input-error={errors.password}
-                      />
-                      <button
-                        class="btn btn-secondary"
-                        onclick={downloadNcryptsec}
-                        disabled={!userData.ncryptsecPassword || userData.downloadConfirmed}
-                      >
-                        {#if userData.downloadConfirmed}
-                          <CheckIcon />
-                          {m.auth_signup_modal_downloaded()}
-                        {:else}
-                          {m.auth_signup_modal_download_ncryptsec()}
-                        {/if}
-                      </button>
+                  {#if errors.password}
+                    <div class="label">
+                      <span class="label-text-alt text-error">{errors.password}</span>
                     </div>
-                    {#if errors.password}
-                      <div class="label">
-                        <span class="label-text-alt text-error">{errors.password}</span>
-                      </div>
-                    {/if}
-                  </div>
+                  {/if}
                 </div>
               </div>
             </div>
+          </div>
 
-            {#if errors.download}
-              <div class="alert alert-error">
-                <span>{errors.download}</span>
-              </div>
-            {/if}
+          {#if errors.download}
+            <div class="alert alert-error">
+              <span>{errors.download}</span>
+            </div>
           {/if}
         </div>
       {:else if currentStep === 4}
