@@ -3,8 +3,9 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { SimpleSigner } from 'applesauce-signers';
   import { SimpleAccount } from 'applesauce-accounts/accounts';
-  import { nip19, generateSecretKey, getPublicKey } from 'nostr-tools';
+  import { nip19 } from 'nostr-tools';
   import * as nip49 from 'nostr-tools/nip49';
+  import { generateSignupKeypair } from '$lib/helpers/signupKeypair.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
@@ -93,9 +94,10 @@
     };
   });
 
-  // Generate keypair when entering step 3
+  // Generate keypair on modal mount so a signer is available for step 2 (avatar upload).
+  // Re-runs after the close-handler resets userData.privateKey to null on modal reopen.
   $effect(() => {
-    if (currentStep === 3 && !userData.privateKey) {
+    if (!userData.privateKey) {
       generateKeypair();
     }
   });
@@ -103,16 +105,13 @@
   function generateKeypair() {
     try {
       isGeneratingKeys = true;
-      const privateKey = generateSecretKey();
-      const publicKey = getPublicKey(privateKey);
+      const { privateKey, publicKey, nsec, npub, signer } = generateSignupKeypair();
 
       userData.privateKey = privateKey;
       userData.publicKey = publicKey;
-      userData.nsec = nip19.nsecEncode(privateKey);
-      userData.npub = nip19.npubEncode(publicKey);
-
-      // Create signer for future operations (like image upload with auth)
-      _signer = /** @type {any} */ (new SimpleSigner(privateKey));
+      userData.nsec = nsec;
+      userData.npub = npub;
+      _signer = /** @type {any} */ (signer);
     } catch (error) {
       console.error('Error generating keypair:', error);
       errors.keyGeneration = 'Failed to generate keys. Please try again.';
