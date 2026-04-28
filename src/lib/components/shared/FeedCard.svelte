@@ -13,7 +13,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
-  import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
+  import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -166,7 +166,7 @@
         {/if}
         {#if communityPubkey}
           <a
-            href={resolve(`/c/${communityPubkey}`)}
+            href={resolve(`/c/${hexToNpub(communityPubkey) || communityPubkey}`)}
             class="truncate text-xs text-base-content/60 hover:text-primary"
             onclick={(e) => e.stopPropagation()}
           >
