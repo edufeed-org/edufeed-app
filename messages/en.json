@@ -175,7 +175,6 @@
   "auth_signup_modal_keys_p1": "On Nostr your keypair is identified by a unique string that starts with npub. This is your public profile code you can share with anyone.",
   "auth_signup_modal_keys_p2": "Then there is the private key. It starts with nsec, and is used to control your profile and to publish notes. This must be kept absolutely secret.",
   "auth_signup_modal_keys_warning": "Now please download your nsec (it's a text file) and save it in a safe place, for example your password manager.",
-  "auth_signup_modal_generating_keys": "Generating your keys...",
   "auth_signup_modal_public_key_label": "Your Public Key (npub)",
   "auth_signup_modal_private_key_download_title": "Download Your Private Key",
   "auth_signup_modal_downloaded": "Downloaded",
