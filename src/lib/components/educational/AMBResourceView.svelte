@@ -15,6 +15,7 @@
   import { resolve } from '$app/paths';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
 
@@ -757,8 +758,9 @@
   {/if}
 
   <!-- REACTIONS (Nostr-first: Primary interaction) -->
-  <div class="mb-8 border-y border-base-300 py-4">
+  <div class="mb-8 flex items-center gap-2 border-y border-base-300 py-4">
     <ReactionBar {event} />
+    <BookmarkButton {event} />
   </div>
 
   <!-- COMMENTS SECTION (Nostr-first: Primary interaction) -->

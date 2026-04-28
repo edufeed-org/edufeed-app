@@ -124,6 +124,7 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 }));
 // Mock heavy sub-components
 vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: () => ({}) }));
 vi.mock('../comments/CommentList.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/CommunityShare.svelte', () => ({ default: () => ({}) }));

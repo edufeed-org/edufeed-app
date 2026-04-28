@@ -11,8 +11,7 @@
 import { isEventInList } from 'applesauce-common/helpers';
 import { createOptimisticState } from '$lib/helpers/optimistic-action.js';
 import { setTitle, setDescription } from 'applesauce-common/operations/list';
-import { addEventBookmarkTag } from 'applesauce-common/operations/tag/bookmarks';
-import { BookmarkEvent, UnbookmarkEvent } from 'applesauce-actions/actions';
+import { addAnyKindBookmarkTag, removeAnyKindBookmarkTag } from '$lib/helpers/bookmark-tag.js';
 import { modifyPublicTags } from 'applesauce-core/operations';
 import { setSingletonTag } from 'applesauce-core/operations/tag/common';
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
@@ -20,7 +19,7 @@ import { TimelineModel } from 'applesauce-core/models';
 import { timedPool } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
-import { actionRunner, factory } from '$lib/stores/action-runner.svelte.js';
+import { factory } from '$lib/stores/action-runner.svelte.js';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { showToast } from '$lib/helpers/toast.js';
@@ -183,7 +182,31 @@ export function isInBookmarkSet(event, setEvent) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve the existing list event for a given identifier.
+ * - undefined → kind 10003 default list
+ * - string    → kind 30003 set with matching d-tag
+ * @param {string} [identifier]
+ * @returns {import('nostr-tools').NostrEvent | null}
+ */
+function findListEvent(identifier) {
+  if (identifier === undefined) return bookmarkListEvent;
+  return bookmarkSets.find((s) => getBookmarkSetIdentifier(s) === identifier) ?? null;
+}
+
+/**
+ * Sign + cache + publish a NIP-51 list event draft.
+ * Uses outbox model via publishEvent.
+ * @param {import('nostr-tools').EventTemplate} draft
+ */
+async function signAndPublish(draft) {
+  const signed = await factory.sign(draft);
+  eventStore.add(signed);
+  publishEvent(signed).catch((err) => console.warn('Bookmark publish failed:', err));
+}
+
+/**
  * Add an event to a bookmark list or set.
+ * Uses kind-agnostic tag helper so any kind (e.g. 30142) is bookmarkable.
  * Sets optimistic override instantly, then signs and publishes in background.
  * @param {import('nostr-tools').NostrEvent} event
  * @param {string} [identifier] - d-tag of a kind 30003 set, or undefined for default list
@@ -194,10 +217,12 @@ export async function bookmark(event, identifier) {
     key,
     true,
     async () => {
-      await actionRunner.exec(BookmarkEvent, event, identifier).forEach((signed) => {
-        eventStore.add(signed);
-        publishEvent(signed).catch((err) => console.warn('Bookmark publish failed:', err));
-      });
+      const existing = findListEvent(identifier);
+      const tagOp = modifyPublicTags(addAnyKindBookmarkTag(event));
+      const draft = existing
+        ? await factory.modify(existing, tagOp)
+        : await factory.build({ kind: 10003 }, tagOp);
+      await signAndPublish(draft);
     },
     signerSlowOpts
   );
@@ -215,10 +240,13 @@ export async function unbookmark(event, identifier) {
     key,
     false,
     async () => {
-      await actionRunner.exec(UnbookmarkEvent, event, identifier).forEach((signed) => {
-        eventStore.add(signed);
-        publishEvent(signed).catch((err) => console.warn('Unbookmark publish failed:', err));
-      });
+      const existing = findListEvent(identifier);
+      if (!existing) return; // nothing to remove
+      const draft = await factory.modify(
+        existing,
+        modifyPublicTags(removeAnyKindBookmarkTag(event))
+      );
+      await signAndPublish(draft);
     },
     signerSlowOpts
   );
@@ -239,7 +267,7 @@ export async function createBookmarkSetAndBookmark(event, title) {
     { kind: 30003 },
     setTitle(title),
     modifyPublicTags(setSingletonTag(['d', dTag])),
-    modifyPublicTags(addEventBookmarkTag(event))
+    modifyPublicTags(addAnyKindBookmarkTag(event))
   );
   const signed = await factory.sign(draft);
   eventStore.add(signed);
