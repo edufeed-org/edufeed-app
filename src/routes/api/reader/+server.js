@@ -2,6 +2,7 @@ import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
 import { extractMetadataFromHtml } from '$lib/server/metadataExtraction.js';
+import { isHedgedocPage, extractHedgedocArticle } from '$lib/helpers/hedgedocExtractor.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
@@ -129,6 +130,20 @@ export async function GET({ url }) {
     }
 
     const { document } = parseHTML(html);
+
+    // HedgeDoc serves raw markdown as text inside #doc.markdown-body and
+    // relies on client-side JS to render it. Detect that and render the
+    // markdown ourselves before falling through to Readability.
+    if (isHedgedocPage(document)) {
+      const hedgedocArticle = extractHedgedocArticle(document, parsedUrl);
+      if (hedgedocArticle) {
+        return Response.json(
+          { success: true, article: hedgedocArticle },
+          { headers: { 'Cache-Control': 'public, max-age=3600' } }
+        );
+      }
+    }
+
     const reader = new Readability(document);
     const article = reader.parse();
 
