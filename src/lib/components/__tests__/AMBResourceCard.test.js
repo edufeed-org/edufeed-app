@@ -5,9 +5,14 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/svelte';
 import AMBResourceCard from '../educational/AMBResourceCard.svelte';
+
+// Hoisted so vi.mock factory can reference it
+const { BookmarkButtonStub } = vi.hoisted(() => ({
+  BookmarkButtonStub: vi.fn(() => ({}))
+}));
 
 // Mock dependencies
 // Mock app-settings before any imports that transitively depend on it
@@ -73,6 +78,14 @@ vi.mock('../shared/EventDebugPanel.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: BookmarkButtonStub }));
+
+const mockResourceTags = [
+  ['d', 'intro-math'],
+  ['learningResourceType', 'text'],
+  ['about', 'mathematics'],
+  ['t', 'math']
+];
 
 const mockResource = {
   id: 'a'.repeat(64),
@@ -87,12 +100,17 @@ const mockResource = {
   isFree: true,
   languages: ['en', 'de'],
   keywords: ['math', 'education'],
-  tags: [
-    ['learningResourceType', 'text'],
-    ['about', 'mathematics'],
-    ['t', 'math']
-  ],
-  sig: 'c'.repeat(128)
+  tags: mockResourceTags,
+  sig: 'c'.repeat(128),
+  rawEvent: {
+    id: 'a'.repeat(64),
+    pubkey: 'b'.repeat(64),
+    kind: 30142,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: mockResourceTags,
+    content: '',
+    sig: 'c'.repeat(128)
+  }
 };
 
 const mockAuthorProfile = {
@@ -101,6 +119,41 @@ const mockAuthorProfile = {
 };
 
 describe('AMBResourceCard', () => {
+  beforeEach(() => {
+    BookmarkButtonStub.mockClear();
+  });
+
+  describe('bookmarking (kind 30142)', () => {
+    it('card variant renders a BookmarkButton', () => {
+      render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+      expect(BookmarkButtonStub).toHaveBeenCalled();
+    });
+
+    it('list variant renders a BookmarkButton', () => {
+      render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile, variant: 'list' }
+      });
+      expect(BookmarkButtonStub).toHaveBeenCalled();
+    });
+
+    it('passes the kind 30142 rawEvent to BookmarkButton', () => {
+      render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+      // Find the props object across all call args (Svelte 5 mount call shape varies)
+      const propsArg = /** @type {any} */ (
+        BookmarkButtonStub.mock.calls
+          .flat()
+          .find(/** @param {any} a */ (a) => a && typeof a === 'object' && 'event' in a)
+      );
+      expect(propsArg).toBeTruthy();
+      expect(propsArg.event?.kind).toBe(30142);
+      expect(propsArg.event?.id).toBe(mockResource.id);
+    });
+  });
+
   describe('default (card) variant', () => {
     it('renders as vertical card layout by default', () => {
       const { container } = render(AMBResourceCard, {
