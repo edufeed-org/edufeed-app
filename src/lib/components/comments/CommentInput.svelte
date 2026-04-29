@@ -3,6 +3,7 @@
   import { CommentBlueprint } from 'applesauce-common/blueprints';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -33,6 +34,22 @@
   let isPosting = $state(false);
   let error = $state('');
   let textareaElement = $state(/** @type {HTMLTextAreaElement|null} */ (null));
+  let activeTab = $state(/** @type {'write' | 'preview'} */ ('write'));
+
+  // Fresh object per derive so applesauce's Symbol-keyed parse cache stays correct.
+  // Only built while the preview tab is active to avoid pointless re-parsing on each keystroke.
+  const previewEvent = $derived.by(() => {
+    if (activeTab !== 'preview') return null;
+    return {
+      kind: 1111,
+      content,
+      tags: [],
+      pubkey: activeUser?.pubkey ?? '',
+      created_at: Math.floor(Date.now() / 1000),
+      id: '',
+      sig: ''
+    };
+  });
 
   // Auto-focus if requested
   $effect(() => {
@@ -88,16 +105,48 @@
 </script>
 
 <form onsubmit={handleSubmit} class="space-y-2">
-  <textarea
-    bind:this={textareaElement}
-    bind:value={content}
-    {placeholder}
-    class="textarea-bordered textarea w-full"
-    rows="3"
-    disabled={isPosting}
-    required
-    data-testid="comment-input"
-  ></textarea>
+  <div class="flex gap-1">
+    <button
+      type="button"
+      class="btn btn-xs"
+      class:btn-active={activeTab === 'write'}
+      onclick={() => (activeTab = 'write')}
+    >
+      {m.article_editor_tab_write()}
+    </button>
+    <button
+      type="button"
+      class="btn btn-xs"
+      class:btn-active={activeTab === 'preview'}
+      onclick={() => (activeTab = 'preview')}
+    >
+      {m.article_editor_tab_preview()}
+    </button>
+  </div>
+
+  {#if activeTab === 'write'}
+    <textarea
+      bind:this={textareaElement}
+      bind:value={content}
+      {placeholder}
+      class="textarea-bordered textarea w-full"
+      rows="3"
+      disabled={isPosting}
+      required
+      data-testid="comment-input"
+    ></textarea>
+  {:else}
+    <div
+      class="textarea-bordered textarea min-h-[5.5rem] w-full cursor-default"
+      data-testid="comment-preview"
+    >
+      {#if content.trim() && previewEvent}
+        <NostrContentRenderer event={previewEvent} />
+      {:else}
+        <p class="text-base-content/50 italic">{placeholder}</p>
+      {/if}
+    </div>
+  {/if}
 
   {#if error}
     <div class="alert alert-error">
