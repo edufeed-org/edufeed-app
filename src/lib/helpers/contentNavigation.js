@@ -1,7 +1,21 @@
 import { nip19 } from 'nostr-tools';
 import { getSeenRelays } from 'applesauce-core/helpers';
+import { getCommentRootPointer, isCommentExternalPointer } from 'applesauce-common/helpers';
 import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
 import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils.js';
+
+/**
+ * A kind 1111 (NIP-22 Comment) acts as a bookmark only when it's a page note —
+ * a URL-rooted comment per NIP-73 (K=web). Event/address-rooted replies fall
+ * through to the generic nevent fallback so they can be rendered as threads.
+ * @param {any} event
+ * @returns {boolean}
+ */
+function is1111PageNote(event) {
+  if (event.kind !== 1111) return false;
+  const root = getCommentRootPointer(event);
+  return isCommentExternalPointer(root) && root.kind === 'web';
+}
 
 /**
  * Resolve the community pubkey for an event.
@@ -36,9 +50,11 @@ export function getContentEventRoute(event, options = {}) {
   const { communityPubkey } = options;
 
   const isCalendar = event.kind === 31922 || event.kind === 31923;
-  const isBookmarkKind = event.kind === 39701 || event.kind === 9802 || event.kind === 1111;
+  // A kind 1111 is bookmark-shaped only when it's a page note (URL-rooted comment).
+  // Reply-shaped 1111s (event/address-rooted) fall through to the nevent fallback below.
+  const isBookmarkKind = event.kind === 39701 || event.kind === 9802 || is1111PageNote(event);
 
-  // Bookmark-related kinds (39701, 9802, 1111)
+  // Bookmark-related kinds (39701, 9802, 1111-page-note)
   if (isBookmarkKind) {
     return getBookmarkRoute(event, communityPubkey);
   }

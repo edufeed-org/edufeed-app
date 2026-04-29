@@ -6,9 +6,23 @@ vi.mock('applesauce-core/helpers', () => ({
   getSeenRelays: vi.fn()
 }));
 
-// Mock applesauce-common/helpers (needed by urlGrouping.js)
+// Mock applesauce-common/helpers (needed by urlGrouping.js + contentNavigation.js)
 vi.mock('applesauce-common/helpers', () => ({
-  getHighlightSourceUrl: vi.fn()
+  getHighlightSourceUrl: vi.fn(),
+  // Minimal NIP-22 root-pointer mock derived from uppercase tags (K/I/E/A).
+  // Real applesauce caches via Symbol; we don't need that here.
+  getCommentRootPointer: vi.fn((/** @type {any} */ event) => {
+    const K = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'K')?.[1];
+    const I = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'I')?.[1];
+    const E = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'E')?.[1];
+    const A = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'A')?.[1];
+    if (!K) return null;
+    if (I) return { type: 'external', kind: K, identifier: I };
+    if (A) return { type: 'address', kind: parseInt(K) };
+    if (E) return { type: 'event', kind: parseInt(K) };
+    return null;
+  }),
+  isCommentExternalPointer: vi.fn((/** @type {any} */ p) => !!p && p.type === 'external')
 }));
 
 // Mock nostrUtils — our module's direct dependency — to avoid its transitive imports
@@ -247,17 +261,37 @@ describe('getContentEventRoute', () => {
       expect(route).toBeUndefined();
     });
 
-    it('returns undefined for non-web page note', () => {
+    it('returns /nevent for kind 1111 reply (event-rooted, not a page note)', () => {
       const communityPubkey = 'aa'.repeat(32);
+      const targetPubkey = 'bb'.repeat(32);
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
       const event = makeEvent({
         kind: 1111,
         tags: [
-          ['K', 'nostr'],
-          ['I', 'some-event-id']
+          ['K', '30142'],
+          ['A', `30142:${targetPubkey}:some-resource`]
         ]
       });
       const route = getContentEventRoute(event, { communityPubkey });
-      expect(route).toBeUndefined();
+      expect(route).toMatch(/^\/nevent1/);
+    });
+
+    it('returns /nevent for kind 1111 community-targeted reply (h-tag)', () => {
+      // The actual user-reported case: a NIP-22 reply with an h-tag landing in the
+      // community feed. The detail page handles the h-tag → /c/{npub}/{nevent} redirect.
+      const communityPubkey = 'aa'.repeat(32);
+      const targetPubkey = 'bb'.repeat(32);
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
+      const event = makeEvent({
+        kind: 1111,
+        tags: [
+          ['h', communityPubkey],
+          ['K', '30142'],
+          ['A', `30142:${targetPubkey}:some-resource`]
+        ]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/nevent1/);
     });
   });
 
