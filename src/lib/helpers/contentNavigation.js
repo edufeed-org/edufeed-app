@@ -65,6 +65,16 @@ export function getContentEventRoute(event, options = {}) {
     const naddr = encodeEventToNaddr(event);
     if (!naddr) return undefined;
 
+    // Community-scoped routes keep the community sidebar visible
+    if (communityPubkey) {
+      const npub = hexToNpub(communityPubkey);
+      if (npub) {
+        if (isCalendar) return `/c/${npub}/event/${naddr}`;
+        if (event.kind === 30142) return `/c/${npub}/r/${naddr}`;
+        if (event.kind === 30301) return `/c/${npub}/board/${naddr}`;
+      }
+    }
+
     if (isCalendar) return `/calendar/event/${naddr}`;
     if (event.kind === 30168) return `/forms/${naddr}`;
     return `/${naddr}`;

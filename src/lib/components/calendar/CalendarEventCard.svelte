@@ -29,13 +29,14 @@
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
    */
 
-  /** @type {{ event: any, compact?: boolean, variant?: 'card' | 'list', authorProfile?: any, onEventClick?: ((event: any) => void) | null }} */
+  /** @type {{ event: any, compact?: boolean, variant?: 'card' | 'list', authorProfile?: any, onEventClick?: ((event: any) => void) | null, communityNpub?: string }} */
   let {
     event,
     compact = false,
     variant = 'card',
     authorProfile = null,
-    onEventClick = null
+    onEventClick = null,
+    communityNpub = undefined
   } = $props();
 
   const isList = $derived(variant === 'list');
@@ -89,15 +90,26 @@
   });
 
   /**
+   * Build the resolved route for this event.
+   * @returns {string | null}
+   */
+  function getEventHref() {
+    if (!eventNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/event/${eventNaddr}`);
+    return resolve(`/calendar/event/${eventNaddr}`);
+  }
+
+  /**
    * @param {Event} e
    */
   function handleClick(e) {
     e.stopPropagation();
     if (onEventClick) {
       onEventClick(event);
-    } else if (eventNaddr) {
-      goto(resolve(`/calendar/event/${eventNaddr}`));
+      return;
     }
+    const href = getEventHref();
+    if (href) goto(href);
   }
 
   /**

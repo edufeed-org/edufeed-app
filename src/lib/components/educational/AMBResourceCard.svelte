@@ -46,10 +46,17 @@
    * @property {any} [authorProfile] - Author's profile
    * @property {boolean} [compact=false] - Compact display mode
    * @property {'card'|'list'} [variant='card'] - Display variant
+   * @property {string} [communityNpub] - Community npub for route construction
    */
 
   /** @type {Props} */
-  let { resource, authorProfile = null, compact = false, variant = 'card' } = $props();
+  let {
+    resource,
+    authorProfile = null,
+    compact = false,
+    variant = 'card',
+    communityNpub = undefined
+  } = $props();
 
   const isList = $derived(variant === 'list');
 
@@ -112,10 +119,21 @@
   const shouldShowOpenContentButton = $derived(hasExternalUrl || isNostrUri(resource.identifier));
 
   /**
+   * Build the resolved route for this resource.
+   * @returns {string | null}
+   */
+  function getResourceHref() {
+    if (!resourceNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/r/${resourceNaddr}`);
+    return resolve(`/${resourceNaddr}`);
+  }
+
+  /**
    * Navigate to resource detail view
    */
   function navigateToDetail() {
-    goto(resolve(`/${resourceNaddr}`));
+    const href = getResourceHref();
+    if (href) goto(href);
   }
 
   /**
