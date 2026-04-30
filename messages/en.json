@@ -1280,6 +1280,8 @@
   "feed_badge_bookmark": "Bookmark",
   "feed_badge_highlight": "Highlight",
   "feed_badge_note": "Note",
+  "feed_badge_page_note": "Page Note",
+  "feed_badge_reply": "Reply",
   "feed_badge_form": "Form",
   "profile_tab_calendar": "Calendar",
   "profile_tab_resources": "Resources",

@@ -265,13 +265,18 @@ describe('getContentEventRoute', () => {
       expect(route).toContain(`#highlight-${event.id}`);
     });
 
-    it('returns undefined without community', () => {
+    it('falls back to /nevent without community', () => {
+      // Without community context the bookmark route can't be built; rather
+      // than producing a silent no-op click, fall through to the generic
+      // nevent route. The detail page will show an "unsupported kind" message
+      // for kind 9802, but that's honest UX vs. dead clicks.
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
       const event = makeEvent({
         kind: 9802,
         tags: [['r', 'https://example.com/article']]
       });
       const route = getContentEventRoute(event);
-      expect(route).toBeUndefined();
+      expect(route).toMatch(/^\/nevent1/);
     });
   });
 
@@ -290,7 +295,11 @@ describe('getContentEventRoute', () => {
       expect(route).toContain('/bookmarks/');
     });
 
-    it('returns undefined without community', () => {
+    it('falls back to /nevent for K=web page-note without community', () => {
+      // Without community context we can't build the /c/{npub}/bookmarks/{url}
+      // route, so the click should still go somewhere — fall through to the
+      // generic nevent detail route, which renders kind 1111 via ThreadDetailView.
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
       const event = makeEvent({
         kind: 1111,
         tags: [
@@ -299,7 +308,7 @@ describe('getContentEventRoute', () => {
         ]
       });
       const route = getContentEventRoute(event);
-      expect(route).toBeUndefined();
+      expect(route).toMatch(/^\/nevent1/);
     });
 
     it('returns /nevent for kind 1111 reply (event-rooted, not a page note)', () => {
