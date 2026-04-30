@@ -188,18 +188,6 @@
 
 {#if event}
   <div class="container mx-auto max-w-4xl px-4 py-8">
-    <!-- Event Header with Image -->
-    {#if event.image}
-      <div class="mb-4">
-        <img
-          src={event.image}
-          alt={event.title}
-          class="h-64 w-full rounded-lg object-cover shadow-lg"
-          loading="lazy"
-        />
-      </div>
-    {/if}
-
     <DetailHeader
       title={event.title || ''}
       subtitle={event.summary || undefined}
@@ -227,6 +215,18 @@
         {/if}
       {/snippet}
     </DetailHeader>
+
+    <!-- Event Header with Image -->
+    {#if event.image}
+      <div class="mb-4">
+        <img
+          src={event.image}
+          alt={event.title}
+          class="h-64 w-full rounded-lg object-cover shadow-lg"
+          loading="lazy"
+        />
+      </div>
+    {/if}
 
     <!-- Date and Time Card -->
     <div class="card mb-8 bg-base-200 shadow-lg">
