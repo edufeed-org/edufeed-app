@@ -9,7 +9,7 @@
   import { reactionsLoader } from '$lib/loaders/reactions.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
-  import { normalizeReactionContent, getCustomEmojiUrl } from '$lib/helpers/reactions.js';
+  import { aggregateReactions } from '$lib/helpers/reactions.js';
   import ReactionButton from './ReactionButton.svelte';
   import AddReactionButton from './AddReactionButton.svelte';
 
@@ -32,35 +32,8 @@
   const getActiveUser = useActiveUser();
 
   // Derive aggregated reactions from reactions array
-  // Use regular Map here - SvelteMap inside $derived can cause reactivity loops
-  let aggregated = $derived.by(() => {
-    const currentUser = getActiveUser();
-    const agg = new Map();
-
-    for (const reaction of reactions) {
-      const emoji = normalizeReactionContent(reaction.content);
-      const existing = agg.get(emoji) || {
-        count: 0,
-        userReacted: false,
-        userReactionEvent: null,
-        emojiUrl: null,
-        reactors: []
-      };
-
-      const isUserReaction = currentUser && reaction.pubkey === currentUser.pubkey;
-
-      existing.reactors.push(reaction.pubkey);
-      agg.set(emoji, {
-        count: existing.count + 1,
-        userReacted: existing.userReacted || isUserReaction,
-        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
-        emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction),
-        reactors: existing.reactors
-      });
-    }
-
-    return agg;
-  });
+  // Use regular Map (via aggregateReactions) — SvelteMap inside $derived can cause reactivity loops
+  let aggregated = $derived(aggregateReactions(reactions, getActiveUser()?.pubkey));
 
   // Cache subscriptions: always start immediately to show cached reactions.
   $effect(() => {

@@ -6,6 +6,7 @@ import { ReactionBlueprint } from 'applesauce-common/blueprints';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
+import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 
 /**
  * Create a NIP-25 reaction event using ReactionBlueprint.
@@ -48,6 +49,58 @@ export async function publishReaction(targetEvent, emoji, options = {}) {
   });
 
   return { success: true, event: reactionEvent };
+}
+
+/**
+ * Publish a NIP-25 kind 17 external reaction targeting a URL (NIP-73).
+ * Mirror of {@link publishReaction} for URL-rooted threads.
+ *
+ * @param {string} url - The page URL being reacted to
+ * @param {string | { shortcode: string, url: string }} [emoji] - Reaction emoji
+ *   (string for unicode, NIP-30 Emoji object for custom). Defaults to '+'.
+ * @param {Object} [options] - Publishing options
+ * @param {string[]} [options.relays] - Custom relay list (defaults to communikey relays)
+ * @param {((status: import('$lib/services/publish-service.js').PublishStatus) => void)} [options.onStatusChange]
+ * @returns {Promise<{success: boolean, event: any}>}
+ */
+export async function publishReactionForUrl(url, emoji, options = {}) {
+  const account = manager.active;
+
+  if (!account?.signer) {
+    throw new Error('No account or signer available');
+  }
+
+  const factory = createAppEventFactory({ signer: account.signer });
+
+  const tags = [
+    ['i', url],
+    ['k', 'web']
+  ];
+
+  let content;
+  if (emoji && typeof emoji === 'object' && 'shortcode' in emoji) {
+    // NIP-30 custom emoji: content is :shortcode:, append emoji tag
+    content = `:${emoji.shortcode}:`;
+    tags.push(['emoji', emoji.shortcode, emoji.url]);
+  } else {
+    content = /** @type {string|undefined} */ (emoji) ?? '+';
+  }
+
+  const draft = {
+    kind: 17,
+    content,
+    tags,
+    created_at: Math.floor(Date.now() / 1000)
+  };
+
+  const signedEvent = await factory.sign(draft);
+
+  publishEventOptimistic(signedEvent, [], {
+    additionalRelays: options.relays || getCommunikeyRelays(),
+    onStatusChange: options.onStatusChange
+  });
+
+  return { success: true, event: signedEvent };
 }
 
 /**
@@ -109,6 +162,51 @@ export function getCustomEmojiUrl(event) {
     (/** @type {string[]} */ t) => t[0] === 'emoji' && t[1] === shortcode
   );
   return emojiTag?.[2] || null;
+}
+
+/**
+ * @typedef {Object} ReactionSummary
+ * @property {number} count - Number of reactions for this emoji
+ * @property {boolean} userReacted - True if currentUserPubkey reacted with this emoji
+ * @property {any} userReactionEvent - The current user's reaction event (or null)
+ * @property {string|null} emojiUrl - Custom emoji URL (NIP-30) or null for unicode
+ * @property {string[]} reactors - Pubkeys of all users who reacted with this emoji
+ */
+
+/**
+ * Aggregate a list of reaction events into emoji-keyed summaries.
+ * Pure function — used by both event-rooted and URL-rooted reaction bars.
+ *
+ * @param {any[]} events - Reaction events (kind 7 or kind 17)
+ * @param {string|undefined} currentUserPubkey - Active user's pubkey (or undefined)
+ * @returns {Map<string, ReactionSummary>} Map keyed by normalized emoji
+ */
+export function aggregateReactions(events, currentUserPubkey) {
+  const agg = new Map();
+
+  for (const reaction of events) {
+    const emoji = normalizeReactionContent(reaction.content);
+    const existing = agg.get(emoji) || {
+      count: 0,
+      userReacted: false,
+      userReactionEvent: null,
+      emojiUrl: null,
+      reactors: []
+    };
+
+    const isUserReaction = !!currentUserPubkey && reaction.pubkey === currentUserPubkey;
+
+    existing.reactors.push(reaction.pubkey);
+    agg.set(emoji, {
+      count: existing.count + 1,
+      userReacted: existing.userReacted || isUserReaction,
+      userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
+      emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction),
+      reactors: existing.reactors
+    });
+  }
+
+  return agg;
 }
 
 /**

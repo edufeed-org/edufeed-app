@@ -74,9 +74,37 @@ vi.mock('$lib/loaders/reactions.js', () => ({
   })
 }));
 
-vi.mock('$lib/helpers/reactions.js', () => ({
-  normalizeReactionContent: (/** @type {string} */ content) => content || '+'
-}));
+vi.mock('$lib/helpers/reactions.js', () => {
+  const normalizeReactionContent = (/** @type {string} */ content) => content || '+';
+  // Minimal aggregateReactions for ReactionBar (used inside NoteCard).
+  const aggregateReactions = (
+    /** @type {any[]} */ events,
+    /** @type {string | undefined} */ currentUserPubkey
+  ) => {
+    const agg = new Map();
+    for (const reaction of events) {
+      const emoji = normalizeReactionContent(reaction.content);
+      const existing = agg.get(emoji) || {
+        count: 0,
+        userReacted: false,
+        userReactionEvent: null,
+        emojiUrl: null,
+        reactors: []
+      };
+      const isUserReaction = !!currentUserPubkey && reaction.pubkey === currentUserPubkey;
+      existing.reactors.push(reaction.pubkey);
+      agg.set(emoji, {
+        count: existing.count + 1,
+        userReacted: existing.userReacted || isUserReaction,
+        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
+        emojiUrl: existing.emojiUrl || null,
+        reactors: existing.reactors
+      });
+    }
+    return agg;
+  };
+  return { normalizeReactionContent, aggregateReactions };
+});
 
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({
   appSettings: { gatedMode: false },

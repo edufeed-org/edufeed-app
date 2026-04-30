@@ -5,6 +5,10 @@ vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: vi.fn(() => ({}))
 }));
 
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getCommunikeyRelays: () => []
+}));
+
 import { isWave, canWave } from '$lib/helpers/waves.js';
 
 describe('isWave', () => {
