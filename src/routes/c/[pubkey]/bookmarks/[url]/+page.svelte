@@ -12,6 +12,7 @@
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
   import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
+  import UrlReactionBar from '$lib/components/reactions/UrlReactionBar.svelte';
   import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
   import { BookOpenIcon, ChatTextIcon } from '$lib/components/icons';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -206,6 +207,11 @@
           </div>
         </section>
       {/if}
+
+      <!-- URL-rooted reactions (NIP-25 kind 17 with external #i tag) -->
+      <section class="mb-6 border-y border-base-300 py-4">
+        <UrlReactionBar url={decodedUrl} />
+      </section>
 
       <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
       <section class="mb-6">

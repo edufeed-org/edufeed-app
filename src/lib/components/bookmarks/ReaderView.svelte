@@ -8,6 +8,7 @@
   import BookmarkChip from './BookmarkChip.svelte';
   import BookmarkItem from './BookmarkItem.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
+  import UrlReactionBar from '$lib/components/reactions/UrlReactionBar.svelte';
   import HighlightOverlay from '$lib/components/shared/HighlightOverlay.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -199,8 +200,13 @@
       class="prose max-w-none"
     />
 
-    <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
+    <!-- URL-rooted reactions (NIP-25 kind 17 with external #i tag) -->
     <section class="mt-8 border-t border-base-300 pt-6">
+      <UrlReactionBar url={articleUrl} />
+    </section>
+
+    <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
+    <section class="mt-6 border-t border-base-300 pt-6">
       <CommentList rootUrl={articleUrl} {activeUser} {communityPubkey} />
     </section>
   {/if}
