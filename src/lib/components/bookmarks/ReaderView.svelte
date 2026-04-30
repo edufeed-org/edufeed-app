@@ -7,7 +7,7 @@
   import DOMPurify from 'dompurify';
   import BookmarkChip from './BookmarkChip.svelte';
   import BookmarkItem from './BookmarkItem.svelte';
-  import PageNoteItem from './PageNoteItem.svelte';
+  import CommentList from '$lib/components/comments/CommentList.svelte';
   import HighlightOverlay from '$lib/components/shared/HighlightOverlay.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -15,7 +15,6 @@
    * @type {{
    *   articleUrl: string,
    *   highlights: any[],
-   *   pageNotes: any[],
    *   bookmarks: any[],
    *   profiles: Map<string, any>,
    *   onerror: () => void,
@@ -27,7 +26,6 @@
   let {
     articleUrl,
     highlights,
-    pageNotes,
     bookmarks,
     profiles,
     onerror,
@@ -201,18 +199,9 @@
       class="prose max-w-none"
     />
 
-    <!-- Page notes -->
-    {#if pageNotes.length > 0}
-      <section class="mt-8 border-t border-base-300 pt-6">
-        <h2 class="mb-3 text-sm font-semibold text-base-content/70">
-          {m.social_bookmarks_page_notes()}
-        </h2>
-        <div class="flex flex-col gap-3">
-          {#each pageNotes as note (note.id)}
-            <PageNoteItem event={note} authorProfile={profiles.get(note.pubkey)} />
-          {/each}
-        </div>
-      </section>
-    {/if}
+    <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
+    <section class="mt-8 border-t border-base-300 pt-6">
+      <CommentList rootUrl={articleUrl} {activeUser} {communityPubkey} />
+    </section>
   {/if}
 </div>
