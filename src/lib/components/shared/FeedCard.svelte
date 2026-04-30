@@ -8,6 +8,7 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkIcon,
+    ReplyIcon,
     FilesIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -64,6 +65,8 @@
     bookmark: { label: () => m.feed_badge_bookmark(), icon: BookmarkIcon },
     highlight: { label: () => m.feed_badge_highlight(), icon: BookmarkIcon },
     note: { label: () => m.feed_badge_note(), icon: BookmarkIcon },
+    'page-note': { label: () => m.feed_badge_page_note(), icon: BookmarkIcon },
+    reply: { label: () => m.feed_badge_reply(), icon: ReplyIcon },
     form: { label: () => m.feed_badge_form(), icon: FilesIcon }
   };
 

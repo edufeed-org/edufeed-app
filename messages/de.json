@@ -1253,6 +1253,8 @@
   "feed_badge_bookmark": "Lesezeichen",
   "feed_badge_highlight": "Markierung",
   "feed_badge_note": "Notiz",
+  "feed_badge_page_note": "Webnotiz",
+  "feed_badge_reply": "Antwort",
   "feed_badge_form": "Formular",
   "profile_tab_calendar": "Kalender",
   "profile_tab_resources": "Ressourcen",

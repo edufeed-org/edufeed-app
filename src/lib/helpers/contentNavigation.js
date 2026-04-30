@@ -56,7 +56,10 @@ export function getContentEventRoute(event, options = {}) {
 
   // Bookmark-related kinds (39701, 9802, 1111-page-note)
   if (isBookmarkKind) {
-    return getBookmarkRoute(event, communityPubkey);
+    const route = getBookmarkRoute(event, communityPubkey);
+    if (route) return route;
+    // Fall through: e.g. a kind 1111 page-note without community context still
+    // deserves a clickable destination — let the nevent fallback handle it.
   }
 
   // Addressable kinds (30000-39999)
