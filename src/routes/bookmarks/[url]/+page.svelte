@@ -10,12 +10,10 @@
   import { extractUrlFromEvent, normalizeUrl } from '$lib/helpers/urlGrouping.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-  import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import BookmarkItem from '$lib/components/bookmarks/BookmarkItem.svelte';
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
-  import PageNoteItem from '$lib/components/bookmarks/PageNoteItem.svelte';
   import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
+  import CommentList from '$lib/components/comments/CommentList.svelte';
   import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
   import { BookOpenIcon, ChatTextIcon } from '$lib/components/icons';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -119,36 +117,6 @@
         sig: ''
       }
   );
-
-  let noteContent = $state('');
-  let isPostingNote = $state(false);
-
-  async function postPageNote() {
-    const user = getActiveUser();
-    if (!user || !noteContent.trim() || isPostingNote) return;
-
-    isPostingNote = true;
-    try {
-      const factory = createAppEventFactory({ signer: user.signer });
-      const draft = await factory.build({
-        kind: 1111,
-        content: noteContent.trim(),
-        tags: [
-          ['K', 'web'],
-          ['I', decodedUrl],
-          ['r', decodedUrl]
-        ]
-      });
-      const signed = await factory.sign(draft);
-      eventStore.add(signed);
-      publishEventOptimistic(signed);
-      noteContent = '';
-    } catch (err) {
-      console.error('Failed to post page note:', err);
-    } finally {
-      isPostingNote = false;
-    }
-  }
 </script>
 
 <div class="flex-1 overflow-auto lg:ml-(--sidebar-nav-w)">
@@ -184,7 +152,6 @@
       <ReaderView
         articleUrl={decodedUrl}
         {highlights}
-        {pageNotes}
         {bookmarks}
         {profiles}
         communityPubkey={undefined}
@@ -231,58 +198,10 @@
         </section>
       {/if}
 
-      {#if pageNotes.length > 0}
-        <section class="mb-6">
-          <h2 class="mb-3 text-sm font-semibold text-base-content/70">
-            {m.social_bookmarks_page_notes()}
-          </h2>
-          <div class="flex flex-col gap-3">
-            {#each pageNotes as note (note.id)}
-              <PageNoteItem
-                event={note}
-                authorProfile={profiles.get(note.pubkey)}
-                expanded={true}
-                activeUser={getActiveUser()}
-              />
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      {#if getActiveUser()}
-        <section class="mb-6">
-          <h2 class="mb-3 text-sm font-semibold text-base-content/70">
-            {m.social_bookmarks_add_page_note()}
-          </h2>
-          <form
-            onsubmit={(e) => {
-              e.preventDefault();
-              postPageNote();
-            }}
-            class="space-y-2"
-          >
-            <textarea
-              bind:value={noteContent}
-              placeholder={m.social_bookmarks_page_note_placeholder()}
-              class="textarea-bordered textarea w-full"
-              rows="3"
-              disabled={isPostingNote}
-            ></textarea>
-            <div class="flex justify-end">
-              <button
-                type="submit"
-                class="btn btn-sm btn-primary"
-                disabled={!noteContent.trim() || isPostingNote}
-              >
-                {#if isPostingNote}
-                  <span class="loading loading-xs loading-spinner"></span>
-                {/if}
-                {m.comments_input_post_button()}
-              </button>
-            </div>
-          </form>
-        </section>
-      {/if}
+      <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
+      <section class="mb-6">
+        <CommentList rootUrl={decodedUrl} activeUser={getActiveUser()} />
+      </section>
 
       {#if bookmarks.length === 0 && highlights.length === 0 && pageNotes.length === 0}
         <div class="py-12 text-center text-base-content/50">

@@ -163,7 +163,6 @@
         articleUrl={displayData.url}
         bookmarks={[displayData.event]}
         highlights={[]}
-        pageNotes={[]}
         profiles={getProfiles()}
         activeUser={getActiveUser()}
         onerror={() => (readerFailed = true)}

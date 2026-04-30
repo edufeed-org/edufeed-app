@@ -67,3 +67,27 @@ export const createCommentLoaderForEvent = (rootEvent, extraRelays) => {
   // Other regular events: NIP-22 only
   return createCachedTimelineLoader(uniqueRelays, nip22Filter);
 };
+
+/**
+ * Create a comment loader for a URL-rooted thread (NIP-22 page notes).
+ * Page notes carry ["I", url] + ["K", "web"] root tags and are discoverable
+ * via the #I tag filter. Used to surface URL-level conversations independent
+ * of any specific event id.
+ *
+ * @param {string} url - The page URL to load comments for
+ * @param {string[]} [extraRelays] - Additional relays to query
+ * @returns {Function} Timeline loader function that returns an Observable
+ */
+export const createCommentLoaderForUrl = (url, extraRelays) => {
+  if (!url) {
+    throw new Error('URL is required to create URL-rooted comment loader');
+  }
+
+  const relays = [...(runtimeConfig.fallbackRelays || []), ...(extraRelays || [])];
+  const uniqueRelays = [...new Set(relays)];
+
+  /** @type {import('nostr-tools').Filter} */
+  const filter = { kinds: [1111], '#I': [url], limit: 100 };
+
+  return createCachedTimelineLoader(uniqueRelays, filter);
+};
