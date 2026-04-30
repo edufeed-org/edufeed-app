@@ -32,8 +32,8 @@
   import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { EditIcon, TrashIcon } from '$lib/components/icons';
-  import EventContextMenu from '../shared/EventContextMenu.svelte';
+  import { EditIcon } from '$lib/components/icons';
+  import DetailHeader from '../shared/DetailHeader.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
@@ -268,124 +268,52 @@
 </svelte:head>
 
 <article class="amb-resource-view mx-auto max-w-4xl">
-  <!-- HEADER SECTION -->
-  <header class="mb-6">
-    <!-- Title -->
-    <h1 class="mb-4 text-4xl font-bold text-base-content md:text-5xl">
-      {resource.name}
-    </h1>
+  <DetailHeader
+    title={resource.name}
+    {event}
+    authorPubkey={event.pubkey}
+    date={publishedAt ? formatCalendarDate(publishedAt, 'short') : undefined}
+    dateLabel={publishedAt ? m.amb_resource_published_label() : undefined}
+    onEdit={isOwner ? handleEditClick : undefined}
+    onDelete={isOwner
+      ? () => {
+          showDeleteConfirmation = true;
+        }
+      : undefined}
+    deleteTitle={m.common_delete() + '?'}
+    deleteItemName={resource.name}
+  >
+    {#snippet metadata()}
+      {#if localizedLearningResourceTypes.length > 0}
+        <div class="flex flex-wrap gap-1">
+          {#each localizedLearningResourceTypes.slice(0, 2) as type (type.id)}
+            <span class="badge badge-sm badge-primary">{type.label}</span>
+          {/each}
+        </div>
+      {/if}
+    {/snippet}
 
-    <!-- Learning Resource Type Badge (prominent) -->
-    {#if localizedLearningResourceTypes.length > 0}
-      <div class="mb-4 flex flex-wrap gap-2">
-        {#each localizedLearningResourceTypes.slice(0, 2) as type (type.id)}
-          <span class="badge badge-lg badge-primary"
-            >{type.label}{#if type.fallbackLang}
-              <span class="ml-1 text-xs opacity-60"
-                >({getLanguageDisplayName(type.fallbackLang, getLocale())})</span
-              >{/if}</span
-          >
-        {/each}
-      </div>
-    {/if}
+    {#snippet actions()}
+      {#if isOwner && formRef}
+        <button
+          class="btn btn-outline btn-sm"
+          onclick={handleEditInFormClick}
+          aria-label={m.amb_resource_edit_in_form()}
+        >
+          <EditIcon class="h-4 w-4" />
+          {m.amb_resource_edit_in_form()}
+        </button>
+      {/if}
+    {/snippet}
+  </DetailHeader>
 
-    <!-- Description -->
-    {#if resource.description}
-      <MarkdownRenderer
-        content={resource.description}
-        class="prose prose-lg mb-6 max-w-none text-base-content/80"
-      />
-    {/if}
-
-    <!-- Metadata bar -->
-    <div class="flex flex-col gap-4 border-y border-base-300 py-4 md:flex-row md:items-center">
-      <!-- Creator Info -->
-      <div class="flex flex-1 items-center gap-3">
-        {#if creators.length > 0}
-          {@const firstCreator = creators[0]}
-          {@const getCreatorProfile = useUserProfile(firstCreator.pubkey)}
-          {@const creatorProfile = getCreatorProfile()}
-          <div class="avatar">
-            <div class="h-12 w-12 rounded-full">
-              <img
-                src={getProfilePicture(creatorProfile) ||
-                  `https://robohash.org/${firstCreator.pubkey}`}
-                alt={m.amb_resource_creator_alt()}
-              />
-            </div>
-          </div>
-          <div>
-            <div class="font-semibold text-base-content">
-              {getDisplayName(creatorProfile, firstCreator.pubkey.slice(0, 8) + '...')}
-            </div>
-            {#if creators.length > 1}
-              <div class="text-sm text-base-content/60">
-                {m.amb_resource_more_creators({ count: creators.length - 1 })}
-              </div>
-            {/if}
-          </div>
-        {:else if resource.creatorNames.length > 0}
-          <!-- Fallback to name-only creators -->
-          <div class="avatar">
-            <div class="h-12 w-12 rounded-full">
-              <img
-                src={`https://robohash.org/${encodeURIComponent(resource.creatorNames[0])}`}
-                alt={m.amb_resource_creator_alt()}
-              />
-            </div>
-          </div>
-          <div>
-            <div class="font-semibold text-base-content">{resource.creatorNames[0]}</div>
-            {#if resource.creatorNames.length > 1}
-              <div class="text-sm text-base-content/60">
-                +{resource.creatorNames.length - 1} more
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <!-- Published date -->
-        {#if publishedAt}
-          <div class="ml-auto text-sm text-base-content/60">
-            {m.amb_resource_published({ date: formatCalendarDate(publishedAt, 'short') })}
-          </div>
-        {/if}
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-2">
-        {#if isOwner}
-          <button
-            class="btn btn-outline btn-sm"
-            onclick={handleEditClick}
-            aria-label={m.common_edit()}
-          >
-            <EditIcon class="h-4 w-4" />
-            {m.common_edit()}
-          </button>
-          {#if formRef}
-            <button
-              class="btn btn-outline btn-sm"
-              onclick={handleEditInFormClick}
-              aria-label={m.amb_resource_edit_in_form()}
-            >
-              <EditIcon class="h-4 w-4" />
-              {m.amb_resource_edit_in_form()}
-            </button>
-          {/if}
-          <button
-            class="btn btn-outline btn-sm btn-error"
-            onclick={() => (showDeleteConfirmation = true)}
-            aria-label={m.common_delete()}
-          >
-            <TrashIcon class="h-4 w-4" />
-            {m.common_delete()}
-          </button>
-        {/if}
-        <EventContextMenu {event} />
-      </div>
-    </div>
-  </header>
+  <!-- Description -->
+  {#if resource.description}
+    <MarkdownRenderer
+      content={resource.description}
+      class="prose prose-lg mb-6 max-w-none text-base-content/80"
+    />
+  {/if}
 
   <!-- FEATURED IMAGE -->
   {#if resource.image}

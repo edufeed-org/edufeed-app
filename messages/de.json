@@ -937,6 +937,7 @@
   "amb_resource_uploaded_files": "Hochgeladene Dateien",
   "amb_resource_discussion": "Diskussion",
   "amb_resource_published": "Veröffentlicht {date}",
+  "amb_resource_published_label": "Veröffentlicht",
   "amb_resource_edit_in_form": "Im Formular bearbeiten",
   "settings_gated_mode_title": "Inhaltsquellen-Kontrolle",
   "settings_gated_mode_description": "Steuern Sie, ob die App Inhalte von öffentlichen Fallback-Relays oder nur von app-konfigurierten Relays abruft.",
