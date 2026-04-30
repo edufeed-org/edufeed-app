@@ -6,6 +6,7 @@
   import { browser } from '$app/environment';
   import DOMPurify from 'dompurify';
   import BookmarkChip from './BookmarkChip.svelte';
+  import BookmarkItem from './BookmarkItem.svelte';
   import PageNoteItem from './PageNoteItem.svelte';
   import HighlightOverlay from '$lib/components/shared/HighlightOverlay.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -36,6 +37,11 @@
   } = $props();
 
   let isLoading = $state(true);
+  /** @type {string | null} */
+  let activeBookmarkId = $state(null);
+  const activeBookmark = $derived(
+    activeBookmarkId ? bookmarks.find((b) => b.id === activeBookmarkId) : null
+  );
   let article = $state(
     /** @type {{ title?: string, content?: string, textContent?: string, byline?: string, siteName?: string } | null} */ (
       null
@@ -159,9 +165,27 @@
         </h2>
         <div class="flex flex-wrap gap-2">
           {#each bookmarks as bookmark (bookmark.id)}
-            <BookmarkChip profile={profiles.get(bookmark.pubkey)} timestamp={bookmark.created_at} />
+            <BookmarkChip
+              profile={profiles.get(bookmark.pubkey)}
+              timestamp={bookmark.created_at}
+              active={activeBookmarkId === bookmark.id}
+              onclick={() => {
+                activeBookmarkId = activeBookmarkId === bookmark.id ? null : bookmark.id;
+              }}
+            />
           {/each}
         </div>
+        {#if activeBookmark}
+          <div class="mt-4" data-testid="bookmark-panel">
+            <BookmarkItem
+              event={activeBookmark}
+              authorProfile={profiles.get(activeBookmark.pubkey)}
+              expanded={true}
+              {activeUser}
+              {communityPubkey}
+            />
+          </div>
+        {/if}
       </section>
     {/if}
 
