@@ -79,6 +79,16 @@ describe('getContentEventRoute', () => {
       const route = getContentEventRoute(event);
       expect(route).toMatch(/^\/calendar\/event\/naddr1/);
     });
+
+    it('returns /c/{npub}/event/{naddr} when communityPubkey is provided', () => {
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({
+        kind: 31923,
+        tags: [['d', 'my-time-event']]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/event\/naddr1/);
+    });
   });
 
   describe('educational content (kind 30142)', () => {
@@ -89,6 +99,37 @@ describe('getContentEventRoute', () => {
       });
       const route = getContentEventRoute(event);
       expect(route).toMatch(/^\/naddr1/);
+    });
+
+    it('returns /c/{npub}/r/{naddr} when communityPubkey is provided', () => {
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({
+        kind: 30142,
+        tags: [['d', 'my-resource']]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/r\/naddr1/);
+    });
+  });
+
+  describe('kanban board (kind 30301)', () => {
+    it('returns /{naddr} without community', () => {
+      const event = makeEvent({
+        kind: 30301,
+        tags: [['d', 'my-board']]
+      });
+      const route = getContentEventRoute(event);
+      expect(route).toMatch(/^\/naddr1/);
+    });
+
+    it('returns /c/{npub}/board/{naddr} when communityPubkey is provided', () => {
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({
+        kind: 30301,
+        tags: [['d', 'my-board']]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/board\/naddr1/);
     });
   });
 

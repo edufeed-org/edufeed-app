@@ -6,7 +6,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
+import { goto } from '$app/navigation';
 import AMBResourceCard from '../educational/AMBResourceCard.svelte';
 
 // Hoisted so vi.mock factory can reference it
@@ -34,6 +35,9 @@ vi.mock('$lib/paraglide/runtime.js', () => ({
 }));
 vi.mock('$app/navigation', () => ({
   goto: vi.fn()
+}));
+vi.mock('$app/paths', () => ({
+  resolve: (/** @type {string} */ path) => path
 }));
 vi.mock('applesauce-core/helpers', () => ({
   getProfilePicture: (/** @type {any} */ profile) => profile?.picture || null,
@@ -265,6 +269,56 @@ describe('AMBResourceCard', () => {
       const listItem = container.querySelector('.amb-card-list');
       expect(listItem?.getAttribute('role')).toBe('button');
       expect(listItem?.getAttribute('tabindex')).toBe('0');
+    });
+  });
+
+  describe('navigation href', () => {
+    beforeEach(() => {
+      /** @type {any} */ (goto).mockClear();
+    });
+
+    it('navigates to global /<naddr> when no communityNpub is set', async () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+
+      const card = /** @type {HTMLElement} */ (container.querySelector('.amb-card'));
+      await fireEvent.click(card);
+
+      expect(goto).toHaveBeenCalledWith('/naddr1test');
+    });
+
+    it('navigates to /c/<npub>/r/<naddr> when communityNpub is set', async () => {
+      const npub = 'npub1communitytest';
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: mockResource,
+          authorProfile: mockAuthorProfile,
+          communityNpub: npub
+        }
+      });
+
+      const card = /** @type {HTMLElement} */ (container.querySelector('.amb-card'));
+      await fireEvent.click(card);
+
+      expect(goto).toHaveBeenCalledWith(`/c/${npub}/r/naddr1test`);
+    });
+
+    it('uses community-aware href in list variant', async () => {
+      const npub = 'npub1communitytest';
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: mockResource,
+          authorProfile: mockAuthorProfile,
+          variant: 'list',
+          communityNpub: npub
+        }
+      });
+
+      const listItem = /** @type {HTMLElement} */ (container.querySelector('.amb-card-list'));
+      await fireEvent.click(listItem);
+
+      expect(goto).toHaveBeenCalledWith(`/c/${npub}/r/naddr1test`);
     });
   });
 });
