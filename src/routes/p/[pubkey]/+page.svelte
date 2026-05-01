@@ -237,7 +237,7 @@
 </script>
 
 {#if loadingState === 'loading'}
-  <div class="flex min-h-screen items-center justify-center bg-base-200">
+  <div class="flex min-h-full items-center justify-center bg-base-200">
     <div class="text-center">
       <span class="loading loading-lg loading-spinner text-primary"></span>
       <p class="mt-4 text-base-content/60">{m.profile_loading()}</p>
@@ -245,7 +245,7 @@
   </div>
 {:else if loadingState === 'notFound' && isOwnProfile}
   <!-- Own profile not found — CTA to create -->
-  <div class="flex min-h-screen items-center justify-center bg-base-200 px-4">
+  <div class="flex min-h-full items-center justify-center bg-base-200 px-4">
     <div class="w-full max-w-md rounded-2xl bg-base-100 p-8 text-center shadow-2xl">
       <div class="mb-6">
         <div
@@ -273,7 +273,7 @@
   </div>
 {:else if loadingState === 'notFound' && !isOwnProfile}
   <!-- Other user's profile not found -->
-  <div class="flex min-h-screen items-center justify-center bg-base-200 px-4">
+  <div class="flex min-h-full items-center justify-center bg-base-200 px-4">
     <div class="max-w-md text-center">
       <div class="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-base-300">
         <UserIcon class_="w-12 h-12 text-base-content/40" />
@@ -288,7 +288,7 @@
     </div>
   </div>
 {:else if profile}
-  <div class="min-h-screen bg-base-200">
+  <div class="min-h-full bg-base-200">
     <!-- Banner -->
     <div class="relative">
       {#if bannerUrl && !bannerError}

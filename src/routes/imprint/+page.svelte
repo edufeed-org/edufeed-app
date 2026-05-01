@@ -9,7 +9,7 @@
   <title>{m.imprint_title()} - {runtimeConfig.appName}</title>
 </svelte:head>
 
-<div class="min-h-screen bg-base-100 px-4 py-8">
+<div class="bg-base-100 px-4 py-8">
   <div class="mx-auto max-w-3xl">
     <div class="card bg-base-200 shadow-xl">
       <div class="card-body">
