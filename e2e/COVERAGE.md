@@ -39,6 +39,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                              |
 | `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                     |
 | `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                |
+| `layout-consistency.test.js`         | 7     | Yes  | Single overflow surface, no footer DOM, body non-scrolling across /discover, /calendar, /c/           |
 
 ## Detailed Coverage
 
@@ -1265,6 +1266,38 @@ the E2E cases lock in the user-visible surface + owner gating.
 | owner sees AddProfileRow and remove button on their follow set | Combobox placeholder + `data-testid="remove-profile-{pubkey}"` visible on own kind 30000                 |
 | pasting an already-added npub surfaces "Already added" badge   | Typing TEST_AUTHOR_2 npub renders a dropdown row with the `Already added` badge + `aria-disabled="true"` |
 | unauthenticated visitor does not see add/remove UI             | Without auth, combobox and remove button are absent on same naddr                                        |
+
+### layout-consistency.test.js (7 tests)
+
+**Routes:** `/discover`, `/calendar`, `/c/`
+**Auth required:** Yes (all tests use `authenticatedPage` fixture)
+**Note:** TDD red-phase tests written before the unified-layout structural refactor. Expected to **fail** until Task 10 of the `feat/unified-content-region` implementation plan completes. Do not delete or skip — these tests are the acceptance criteria for the layout unification work.
+
+#### Single scroll surface (3 tests — one per route)
+
+| Test                               | What it verifies                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| single scroll surface on /discover | At most 1 element has `overflowY: auto\|scroll` AND `scrollHeight > clientHeight` |
+| single scroll surface on /calendar | Same check on /calendar                                                           |
+| single scroll surface on /c/       | Same check on /c/                                                                 |
+
+#### No footer in DOM (3 tests — one per route)
+
+| Test                                | What it verifies                |
+| ----------------------------------- | ------------------------------- |
+| no `<footer>` rendered on /discover | `locator('footer')` count === 0 |
+| no `<footer>` rendered on /calendar | `locator('footer')` count === 0 |
+| no `<footer>` rendered on /c/       | `locator('footer')` count === 0 |
+
+#### Body non-scrolling (1 test)
+
+| Test                                       | What it verifies                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| document body does not scroll on /discover | `body.scrollHeight <= body.clientHeight + 1` (body is not the scroll surface) |
+
+**Components exercised:** Root layout, AppShell/sidebar, Footer (absence after removal), page-level wrappers on discover/calendar/community routes.
+
+---
 
 ### cache-warm-boot.test.js (1 test)
 
