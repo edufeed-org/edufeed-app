@@ -48,7 +48,7 @@
 </script>
 
 <div
-  class="fixed top-16 left-(--sidebar-icon-w) hidden h-[calc(100vh-8rem)] w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
+  class="fixed top-16 left-(--sidebar-icon-w) hidden h-[calc(100dvh-4rem)] w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
 >
   <nav class="menu space-y-1 p-4">
     {#each sections as section (section.id)}
