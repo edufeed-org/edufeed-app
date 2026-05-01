@@ -1,12 +1,14 @@
 import { test, expect } from './fixtures.js';
+import { TEST_AUTHOR } from './test-data.js';
 
-const ROUTES = ['/discover', '/calendar', '/c/'];
+const ROUTES = ['/discover', '/calendar', `/c/${TEST_AUTHOR.npub}`];
 
 test.describe('Unified content region layout', () => {
   for (const route of ROUTES) {
     test(`single scroll surface on ${route}`, async ({ authenticatedPage: page }) => {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
+      await page.locator('nav').first().waitFor({ state: 'visible' });
 
       // Count elements that actually overflow vertically.
       const scrollableCount = await page.evaluate(() => {
@@ -27,14 +29,16 @@ test.describe('Unified content region layout', () => {
 
     test(`no <footer> rendered on ${route}`, async ({ authenticatedPage: page }) => {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
+      await page.locator('nav').first().waitFor({ state: 'visible' });
       await expect(page.locator('footer')).toHaveCount(0);
     });
   }
 
   test('document body does not scroll on /discover', async ({ authenticatedPage: page }) => {
     await page.goto('/discover');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
     const bodyOverflow = await page.evaluate(() => {
       return document.body.scrollHeight > document.body.clientHeight + 1;
     });
