@@ -1842,6 +1842,7 @@
   "tag_selector_no_tags": "Keine Tags in aktuellen Events gefunden",
   "bunker_qr_aria": "QR-Code für Nostr Connect",
   "imprint_title": "Impressum",
+  "imprint_attribution": "Mit 💜 auf dem nostr-Protokoll gebaut",
   "imprint_address": "Adresse",
   "imprint_contact": "Kontakt",
   "imprint_email": "E-Mail:",

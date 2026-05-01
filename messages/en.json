@@ -1833,6 +1833,7 @@
   "tag_selector_no_tags": "No tags found in current events",
   "bunker_qr_aria": "QR code for Nostr Connect",
   "imprint_title": "Imprint",
+  "imprint_attribution": "Built with 💜 on the nostr protocol",
   "imprint_address": "Address",
   "imprint_contact": "Contact",
   "imprint_email": "Email:",
