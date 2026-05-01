@@ -4,7 +4,6 @@
   import '@fontsource-variable/yanone-kaffeesatz';
   import Navbar from '$lib/components/Navbar.svelte';
   import ModalManager from '$lib/components/ModalManager.svelte';
-  import Footer from '$lib/components/Footer.svelte';
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
@@ -186,7 +185,7 @@
   />
 </svelte:head>
 
-<div class="flex min-h-screen flex-col">
+<div class="flex h-dvh flex-col overflow-hidden">
   <Navbar hideMobileNavbar={!!getActiveUser() && isOnCommunityRoutes} />
   {#if $navigating}
     <progress class="progress h-1 w-full progress-primary"></progress>
@@ -206,7 +205,7 @@
     <DashboardNavSidebar />
   {/if}
   <main
-    class="flex flex-1 flex-col"
+    class="flex min-h-0 flex-1 flex-col overflow-y-auto"
     class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
     class:lg:ml-(--sidebar-total-w)={showDashboardNav}
     class:pb-16={showDashboardNav}
@@ -215,7 +214,7 @@
     {#if curatedReady}
       {@render children?.()}
     {/if}
-    <!-- Floating buttons — sticky inside main so they sit above footer.
+    <!-- Floating buttons — sticky inside main so they sit at the bottom of the scroll surface.
          Hidden on views with their own bottom UI (chat input, DM input). -->
     {#if !hasOwnBottomUI}
       <div class="pointer-events-none sticky bottom-0 z-[60] h-0 overflow-visible">
@@ -228,14 +227,6 @@
       </div>
     {/if}
   </main>
-  <div
-    class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
-    class:lg:ml-(--sidebar-total-w)={showDashboardNav}
-    class:hidden={!!getActiveUser() && isOnCommunityRoutes}
-    class:lg:block={!!getActiveUser() && isOnCommunityRoutes}
-  >
-    <Footer />
-  </div>
 </div>
 <PublishStatusToast />
 {#if showDashboardNav}
