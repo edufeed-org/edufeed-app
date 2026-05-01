@@ -209,7 +209,8 @@
     class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
     class:lg:ml-(--sidebar-total-w)={showDashboardNav}
     class:pb-16={showDashboardNav}
-    class:lg:pb-0={showDashboardNav}
+    class:pb-20={isInsideCommunity}
+    class:lg:pb-0={showDashboardNav || isInsideCommunity}
   >
     {#if curatedReady}
       {@render children?.()}
