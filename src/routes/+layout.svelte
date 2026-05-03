@@ -19,7 +19,7 @@
     initializeAllWotAuthors
   } from '$lib/services/curated-authors-service.svelte.js';
   import { browser } from '$app/environment';
-  import { afterNavigate, goto } from '$app/navigation';
+  import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { recordNavigation } from '$lib/helpers/navigationHistory.js';
   import { page, navigating } from '$app/stores';
@@ -32,6 +32,15 @@
   let { children, data } = $props();
 
   const getActiveUser = useActiveUser();
+
+  // Scroll restoration for the root <main> scroll surface.
+  // SvelteKit only restores window scroll — <main> is the only scroll surface
+  // after the unified-layout refactor, so we save/restore its scrollTop manually.
+  /** @type {HTMLElement | undefined} */
+  let mainElement;
+  /** @type {Map<string, number>} */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive state, only used in navigation callbacks
+  const scrollPositions = new Map();
 
   // Random loading quote — picked once per page load
   const loadingQuote = getRandomQuote(getLocale());
@@ -129,8 +138,37 @@
       });
   });
 
-  // Track in-app navigation for back button
-  afterNavigate(({ from }) => recordNavigation(from));
+  // Save <main> scroll position before leaving a route so we can restore it on back/forward.
+  beforeNavigate(({ from }) => {
+    if (!from?.url || !mainElement) return;
+    const key = from.url.pathname + from.url.search;
+    scrollPositions.set(key, mainElement.scrollTop);
+  });
+
+  // Track in-app navigation for back button + restore <main> scroll position.
+  // Content from EventStore loaders renders asynchronously after navigation, so
+  // the target scrollTop may exceed scrollHeight on the first frame and get
+  // clamped to 0. We retry across a few frames until the browser accepts the
+  // requested position or we exhaust a small budget. `saved ?? 0` preserves
+  // SvelteKit's default behavior of landing fresh navigations at the top.
+  afterNavigate(({ from, to }) => {
+    recordNavigation(from);
+    if (!to?.url) return;
+    const key = to.url.pathname + to.url.search;
+    const saved = scrollPositions.get(key) ?? 0;
+    let attempts = 0;
+    const tryRestore = () => {
+      if (!mainElement) return;
+      mainElement.scrollTop = saved;
+      attempts++;
+      // Keep trying while the browser clamps below the target (content not tall
+      // enough yet) — bail after ~30 frames (~500ms at 60fps).
+      if (mainElement.scrollTop < saved - 1 && attempts < 30) {
+        requestAnimationFrame(tryRestore);
+      }
+    };
+    requestAnimationFrame(tryRestore);
+  });
 
   // Check for community membership migration (old kind 30382 → kind 30000)
   $effect(() => {
@@ -205,6 +243,7 @@
     <DashboardNavSidebar />
   {/if}
   <main
+    bind:this={mainElement}
     class="flex min-h-0 flex-1 flex-col overflow-y-auto"
     class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
     class:lg:ml-(--sidebar-total-w)={showDashboardNav}
