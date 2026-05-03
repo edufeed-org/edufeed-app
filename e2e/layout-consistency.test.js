@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js';
-import { TEST_AUTHOR } from './test-data.js';
+import { TEST_AUTHOR, TEST_COMMUNITY } from './test-data.js';
 
 const ROUTES = ['/discover', '/calendar', `/c/${TEST_AUTHOR.npub}`];
 
@@ -43,6 +43,48 @@ test.describe('Unified content region layout', () => {
       return document.body.scrollHeight > document.body.clientHeight + 1;
     });
     expect(bodyOverflow, 'document body must not be the scroll surface').toBe(false);
+  });
+
+  test('MainContentArea wrapper does not nest its own scroll surface', async ({
+    authenticatedPage: page
+  }) => {
+    // Navigate to a real community (TEST_COMMUNITY). MainContentArea previously
+    // wrapped non-chat views in an overflow-auto div, creating a nested scroll
+    // surface inside <main>. That silently broke the sticky ScrollToTopButton
+    // and GlobalFAB which are anchored to <main>. After the fix, <main> is
+    // the only scroller for non-chat views and the wrapper has overflow:visible.
+    await page.goto(`/c/${TEST_COMMUNITY.npub}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
+
+    // Wait for MainContentArea to render its wrapper div. We identify it by
+    // its distinctive class combination: min-h-0 + flex-1 + transition-all.
+    // It lives somewhere inside <main> (descendant, not necessarily direct
+    // child — SvelteKit page wrappers may sit between).
+    await page.waitForFunction(
+      () => {
+        const main = document.querySelector('main');
+        if (!main) return false;
+        return !!main.querySelector('div.min-h-0.flex-1.transition-all');
+      },
+      null,
+      { timeout: 12_000 }
+    );
+
+    // The wrapper's computed overflow-y must NOT be auto/scroll. On the
+    // pre-fix code it was overflow-auto for non-chat views; the fix removes
+    // the toggle entirely, leaving overflow:visible (the default).
+    const wrapperOverflowY = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      if (!main) return null;
+      const wrapper = main.querySelector('div.min-h-0.flex-1.transition-all');
+      if (!wrapper) return null;
+      return window.getComputedStyle(wrapper).overflowY;
+    });
+    expect(
+      wrapperOverflowY,
+      'MainContentArea wrapper must not be its own scroll surface (overflow-y must be visible/clip), so <main> remains the canonical scroller for non-chat views'
+    ).not.toMatch(/^(auto|scroll)$/);
   });
 
   test('restores <main> scroll position on back navigation', async ({
