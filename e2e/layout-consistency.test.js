@@ -83,14 +83,9 @@ test.describe('Unified content region layout', () => {
 
     // Navigate to /calendar via client-side SPA navigation (clicking a link).
     // A hard page.goto would destroy the in-memory scrollPositions Map and skip
-    // the beforeNavigate/afterNavigate hooks entirely.
-    await page.evaluate(() => {
-      const link = /** @type {HTMLAnchorElement | null} */ (
-        document.querySelector('a[href="/calendar"]')
-      );
-      if (!link) throw new Error('No /calendar link found in navbar');
-      link.click();
-    });
+    // the beforeNavigate/afterNavigate hooks entirely. Use a suffix-match on
+    // href so the test survives i18n prefixes / resolve()-prefixed paths.
+    await page.locator('a[href$="/calendar"]').first().click();
     await page.waitForURL('**/calendar', { timeout: 10_000 });
     await page.locator('nav').first().waitFor({ state: 'visible' });
 

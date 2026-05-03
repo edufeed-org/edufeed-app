@@ -156,15 +156,50 @@
     if (!to?.url) return;
     const key = to.url.pathname + to.url.search;
     const saved = scrollPositions.get(key) ?? 0;
+    // Yield to the user: if they scroll/touch/key during the retry window,
+    // abort the restore loop so we don't fight their input.
+    let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+    };
+    // Only treat scroll-intent keys as cancel signals — avoids false cancels
+    // from users typing in autofocused inputs right after navigation.
+    const SCROLL_KEYS = new Set([
+      'ArrowUp',
+      'ArrowDown',
+      'PageUp',
+      'PageDown',
+      'Home',
+      'End',
+      ' ',
+      'Spacebar'
+    ]);
+    const onKey = (/** @type {KeyboardEvent} */ e) => {
+      if (SCROLL_KEYS.has(e.key)) cancelled = true;
+    };
+    const opts = { passive: true, capture: true };
+    const cleanup = () => {
+      window.removeEventListener('wheel', cancel, opts);
+      window.removeEventListener('touchstart', cancel, opts);
+      window.removeEventListener('keydown', onKey, opts);
+    };
+    window.addEventListener('wheel', cancel, opts);
+    window.addEventListener('touchstart', cancel, opts);
+    window.addEventListener('keydown', onKey, opts);
     let attempts = 0;
     const tryRestore = () => {
-      if (!mainElement) return;
+      if (cancelled || !mainElement) {
+        cleanup();
+        return;
+      }
       mainElement.scrollTop = saved;
       attempts++;
       // Keep trying while the browser clamps below the target (content not tall
       // enough yet) — bail after ~30 frames (~500ms at 60fps).
       if (mainElement.scrollTop < saved - 1 && attempts < 30) {
         requestAnimationFrame(tryRestore);
+      } else {
+        cleanup();
       }
     };
     requestAnimationFrame(tryRestore);
