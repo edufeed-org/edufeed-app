@@ -83,6 +83,10 @@ test.describe('Unified content region layout', () => {
     });
     expect(
       wrapperOverflowY,
+      'MainContentArea wrapper selector must resolve so the overflow check is meaningful (a null result would silently pass not.toMatch)'
+    ).not.toBeNull();
+    expect(
+      wrapperOverflowY,
       'MainContentArea wrapper must not be its own scroll surface (overflow-y must be visible/clip), so <main> remains the canonical scroller for non-chat views'
     ).not.toMatch(/^(auto|scroll)$/);
   });
