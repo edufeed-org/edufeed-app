@@ -8,6 +8,7 @@
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
+  import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
   import DashboardBottomTabBar from '$lib/components/dashboard/DashboardBottomTabBar.svelte';
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -74,6 +75,28 @@
 
   // Signal to child layouts that the root layout provides CommunitySidebar
   setContext('workspaceShell', true);
+
+  // ContentNavSidebar is mounted here in the chrome row. Its data
+  // (selectedContentType, communityProfile, restrictedTabs, etc.) is loaded
+  // by c/[pubkey]/+layout.svelte and exposed via this context getter so we
+  // don't lift community-data loading up to the root layout.
+  /**
+   * @typedef {{
+   *   selectedContentType: string,
+   *   onContentTypeSelect: (type: string) => void,
+   *   communitySelected: boolean,
+   *   communityProfile: any,
+   *   communityPubkey: string,
+   *   restrictedTabs: Set<string>,
+   *   accessibleTabs: Set<string>
+   * }} ContentNavData
+   */
+  /** @type {(() => ContentNavData) | undefined} */
+  let getContentNavData = $state();
+  setContext('setContentNavData', (/** @type {(() => ContentNavData) | undefined} */ getter) => {
+    getContentNavData = getter;
+  });
+  let contentNavData = $derived(getContentNavData?.());
 
   // Initialize runtime config synchronously before any child components render.
   // The initialized guard inside initializeConfig() prevents double-initialization.
@@ -276,6 +299,8 @@
   {/if}
   {#if showDashboardNav}
     <DashboardNavSidebar />
+  {:else if isInsideCommunity && contentNavData}
+    <ContentNavSidebar {...contentNavData} />
   {/if}
   <main
     bind:this={mainElement}
