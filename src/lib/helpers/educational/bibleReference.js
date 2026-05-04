@@ -10,105 +10,166 @@
  */
 
 /**
- * OSIS book code → canonical German short form.
+ * Canonical German Bible book table — single source of truth for OSIS↔DE
+ * mappings, short Schreibweisen, and long German names.
  * Source: standard German Bible (Loccumer Richtlinien) abbreviations.
  * Covers all 66 protestant books + a few deutero-canonicals the parser knows.
  *
- * @type {Record<string, string>}
+ * @type {ReadonlyArray<{ osis: string, short: string, long: string }>}
  */
-const OSIS_TO_DE = {
+const BOOKS_TABLE = Object.freeze([
   // Pentateuch
-  Gen: '1 Mo',
-  Exod: '2 Mo',
-  Lev: '3 Mo',
-  Num: '4 Mo',
-  Deut: '5 Mo',
+  { osis: 'Gen', short: '1 Mo', long: '1. Mose' },
+  { osis: 'Exod', short: '2 Mo', long: '2. Mose' },
+  { osis: 'Lev', short: '3 Mo', long: '3. Mose' },
+  { osis: 'Num', short: '4 Mo', long: '4. Mose' },
+  { osis: 'Deut', short: '5 Mo', long: '5. Mose' },
   // Historical books
-  Josh: 'Jos',
-  Judg: 'Ri',
-  Ruth: 'Rut',
-  '1Sam': '1 Sam',
-  '2Sam': '2 Sam',
-  '1Kgs': '1 Kön',
-  '2Kgs': '2 Kön',
-  '1Chr': '1 Chr',
-  '2Chr': '2 Chr',
-  Ezra: 'Esr',
-  Neh: 'Neh',
-  Esth: 'Est',
+  { osis: 'Josh', short: 'Jos', long: 'Josua' },
+  { osis: 'Judg', short: 'Ri', long: 'Richter' },
+  { osis: 'Ruth', short: 'Rut', long: 'Rut' },
+  { osis: '1Sam', short: '1 Sam', long: '1. Samuel' },
+  { osis: '2Sam', short: '2 Sam', long: '2. Samuel' },
+  { osis: '1Kgs', short: '1 Kön', long: '1. Könige' },
+  { osis: '2Kgs', short: '2 Kön', long: '2. Könige' },
+  { osis: '1Chr', short: '1 Chr', long: '1. Chronik' },
+  { osis: '2Chr', short: '2 Chr', long: '2. Chronik' },
+  { osis: 'Ezra', short: 'Esr', long: 'Esra' },
+  { osis: 'Neh', short: 'Neh', long: 'Nehemia' },
+  { osis: 'Esth', short: 'Est', long: 'Ester' },
   // Wisdom & poetry
-  Job: 'Hi',
-  Ps: 'Ps',
-  Prov: 'Spr',
-  Eccl: 'Pred',
-  Song: 'Hld',
+  { osis: 'Job', short: 'Hi', long: 'Hiob' },
+  { osis: 'Ps', short: 'Ps', long: 'Psalm' },
+  { osis: 'Prov', short: 'Spr', long: 'Sprüche' },
+  { osis: 'Eccl', short: 'Pred', long: 'Prediger' },
+  { osis: 'Song', short: 'Hld', long: 'Hohelied' },
   // Major prophets
-  Isa: 'Jes',
-  Jer: 'Jer',
-  Lam: 'Klgl',
-  Ezek: 'Hes',
-  Dan: 'Dan',
+  { osis: 'Isa', short: 'Jes', long: 'Jesaja' },
+  { osis: 'Jer', short: 'Jer', long: 'Jeremia' },
+  { osis: 'Lam', short: 'Klgl', long: 'Klagelieder' },
+  { osis: 'Ezek', short: 'Hes', long: 'Hesekiel' },
+  { osis: 'Dan', short: 'Dan', long: 'Daniel' },
   // Minor prophets
-  Hos: 'Hos',
-  Joel: 'Joel',
-  Amos: 'Am',
-  Obad: 'Obd',
-  Jonah: 'Jona',
-  Mic: 'Mi',
-  Nah: 'Nah',
-  Hab: 'Hab',
-  Zeph: 'Zef',
-  Hag: 'Hag',
-  Zech: 'Sach',
-  Mal: 'Mal',
+  { osis: 'Hos', short: 'Hos', long: 'Hosea' },
+  { osis: 'Joel', short: 'Joel', long: 'Joel' },
+  { osis: 'Amos', short: 'Am', long: 'Amos' },
+  { osis: 'Obad', short: 'Obd', long: 'Obadja' },
+  { osis: 'Jonah', short: 'Jona', long: 'Jona' },
+  { osis: 'Mic', short: 'Mi', long: 'Micha' },
+  { osis: 'Nah', short: 'Nah', long: 'Nahum' },
+  { osis: 'Hab', short: 'Hab', long: 'Habakuk' },
+  { osis: 'Zeph', short: 'Zef', long: 'Zefanja' },
+  { osis: 'Hag', short: 'Hag', long: 'Haggai' },
+  { osis: 'Zech', short: 'Sach', long: 'Sacharja' },
+  { osis: 'Mal', short: 'Mal', long: 'Maleachi' },
   // Gospels & Acts
-  Matt: 'Mt',
-  Mark: 'Mk',
-  Luke: 'Lk',
-  John: 'Joh',
-  Acts: 'Apg',
+  { osis: 'Matt', short: 'Mt', long: 'Matthäus' },
+  { osis: 'Mark', short: 'Mk', long: 'Markus' },
+  { osis: 'Luke', short: 'Lk', long: 'Lukas' },
+  { osis: 'John', short: 'Joh', long: 'Johannes' },
+  { osis: 'Acts', short: 'Apg', long: 'Apostelgeschichte' },
   // Pauline epistles
-  Rom: 'Röm',
-  '1Cor': '1 Kor',
-  '2Cor': '2 Kor',
-  Gal: 'Gal',
-  Eph: 'Eph',
-  Phil: 'Phil',
-  Col: 'Kol',
-  '1Thess': '1 Thess',
-  '2Thess': '2 Thess',
-  '1Tim': '1 Tim',
-  '2Tim': '2 Tim',
-  Titus: 'Tit',
-  Phlm: 'Phlm',
+  { osis: 'Rom', short: 'Röm', long: 'Römer' },
+  { osis: '1Cor', short: '1 Kor', long: '1. Korinther' },
+  { osis: '2Cor', short: '2 Kor', long: '2. Korinther' },
+  { osis: 'Gal', short: 'Gal', long: 'Galater' },
+  { osis: 'Eph', short: 'Eph', long: 'Epheser' },
+  { osis: 'Phil', short: 'Phil', long: 'Philipper' },
+  { osis: 'Col', short: 'Kol', long: 'Kolosser' },
+  { osis: '1Thess', short: '1 Thess', long: '1. Thessalonicher' },
+  { osis: '2Thess', short: '2 Thess', long: '2. Thessalonicher' },
+  { osis: '1Tim', short: '1 Tim', long: '1. Timotheus' },
+  { osis: '2Tim', short: '2 Tim', long: '2. Timotheus' },
+  { osis: 'Titus', short: 'Tit', long: 'Titus' },
+  { osis: 'Phlm', short: 'Phlm', long: 'Philemon' },
   // General epistles
-  Heb: 'Hebr',
-  Jas: 'Jak',
-  '1Pet': '1 Petr',
-  '2Pet': '2 Petr',
-  '1John': '1 Joh',
-  '2John': '2 Joh',
-  '3John': '3 Joh',
-  Jude: 'Jud',
+  { osis: 'Heb', short: 'Hebr', long: 'Hebräer' },
+  { osis: 'Jas', short: 'Jak', long: 'Jakobus' },
+  { osis: '1Pet', short: '1 Petr', long: '1. Petrus' },
+  { osis: '2Pet', short: '2 Petr', long: '2. Petrus' },
+  { osis: '1John', short: '1 Joh', long: '1. Johannes' },
+  { osis: '2John', short: '2 Joh', long: '2. Johannes' },
+  { osis: '3John', short: '3 Joh', long: '3. Johannes' },
+  { osis: 'Jude', short: 'Jud', long: 'Judas' },
   // Apocalypse
-  Rev: 'Offb',
+  { osis: 'Rev', short: 'Offb', long: 'Offenbarung' },
   // Common deutero-canonicals (used in some German bibles)
-  Tob: 'Tob',
-  Jdt: 'Jdt',
-  Wis: 'Weish',
-  Sir: 'Sir',
-  Bar: 'Bar',
-  '1Macc': '1 Makk',
-  '2Macc': '2 Makk'
-};
+  { osis: 'Tob', short: 'Tob', long: 'Tobit' },
+  { osis: 'Jdt', short: 'Jdt', long: 'Judit' },
+  { osis: 'Wis', short: 'Weish', long: 'Weisheit' },
+  { osis: 'Sir', short: 'Sir', long: 'Sirach' },
+  { osis: 'Bar', short: 'Bar', long: 'Baruch' },
+  { osis: '1Macc', short: '1 Makk', long: '1. Makkabäer' },
+  { osis: '2Macc', short: '2 Makk', long: '2. Makkabäer' }
+]);
+
+/** @type {Record<string, string>} */
+const OSIS_TO_DE = Object.fromEntries(BOOKS_TABLE.map((b) => [b.osis, b.short]));
 
 /**
- * German short-form book names in canonical (biblical) order — useful as a
- * `<datalist>` source for free-text Bibelstelle inputs.
+ * German book entries (short + long form) in canonical (biblical) order —
+ * the data source for the Bibelstelle typeahead.
  *
- * @type {readonly string[]}
+ * @type {ReadonlyArray<{ short: string, long: string }>}
  */
-export const BIBLE_BOOKS_DE = Object.freeze(Object.values(OSIS_TO_DE));
+export const BIBLE_BOOKS = Object.freeze(
+  BOOKS_TABLE.map(({ short, long }) => Object.freeze({ short, long }))
+);
+
+/**
+ * Strip diacritics + lowercase so "Matthäus" and "matthaus" match each other.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+function fold(s) {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * Find books whose short or long German name contains `query`
+ * (accent-insensitive). Prefix matches are ranked first.
+ *
+ * @param {string} query
+ * @param {number} [limit]
+ * @returns {Array<{ short: string, long: string }>}
+ */
+export function findBookMatches(query, limit = 8) {
+  const q = fold(query.trim());
+  if (!q) return [];
+  /** @type {Array<{ short: string, long: string }>} */
+  const prefix = [];
+  /** @type {Array<{ short: string, long: string }>} */
+  const contains = [];
+  for (const b of BIBLE_BOOKS) {
+    const s = fold(b.short);
+    const l = fold(b.long);
+    if (s.startsWith(q) || l.startsWith(q)) prefix.push(b);
+    else if (s.includes(q) || l.includes(q)) contains.push(b);
+  }
+  return [...prefix, ...contains].slice(0, limit);
+}
+
+/**
+ * If the input exactly matches a known German book name (short or long form,
+ * accent-insensitive), return that entry — used to give a "Kapitel ergänzen"
+ * hint instead of an "unparseable" warning when the user has just typed a
+ * book name without a chapter yet.
+ *
+ * @param {string} query
+ * @returns {{ short: string, long: string } | null}
+ */
+export function findExactBook(query) {
+  const q = fold(query.trim());
+  if (!q) return null;
+  for (const b of BIBLE_BOOKS) {
+    if (fold(b.short) === q || fold(b.long) === q) return b;
+  }
+  return null;
+}
 
 /**
  * Format a single OSIS entity string ("Matt.5.3-Matt.5.12") to German short.
