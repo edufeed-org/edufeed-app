@@ -111,3 +111,40 @@ export const EKW_KEYWORD_SUGGESTIONS = Object.freeze(
     new Set([...Object.keys(EKW_KEYWORD_TREE), ...Object.values(EKW_KEYWORD_TREE).flat()])
   ).sort((a, b) => a.localeCompare(b, 'de'))
 );
+
+/**
+ * Normalize for accent/case-insensitive substring match.
+ * @param {string} s
+ * @returns {string}
+ */
+function normalize(s) {
+  return s
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * Returns up to `limit` keyword suggestions whose accent/case-insensitive
+ * normalization contains `query`. Anything in `alreadySelected` is excluded.
+ * Results preserve the source order from `EKW_KEYWORD_SUGGESTIONS`.
+ *
+ * @param {string} query
+ * @param {ReadonlyArray<string> | Set<string>} alreadySelected
+ * @param {number} [limit=8]
+ * @returns {string[]}
+ */
+export function matchKeywordSuggestions(query, alreadySelected, limit = 8) {
+  const q = normalize((query ?? '').trim());
+  if (!q) return [];
+  const skip = alreadySelected instanceof Set ? alreadySelected : new Set(alreadySelected);
+  const out = [];
+  for (const candidate of EKW_KEYWORD_SUGGESTIONS) {
+    if (skip.has(candidate)) continue;
+    if (normalize(candidate).includes(q)) {
+      out.push(candidate);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}

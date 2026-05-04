@@ -52,6 +52,7 @@
     ogToFormDataPrefill
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
   import { toSkosConcepts, migrateLrtForEkw } from '$lib/data/ekwLearningResourceTypes.js';
+  import { matchKeywordSuggestions } from '$lib/data/ekwKeywords.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -782,10 +783,12 @@
     const tokens = splitKeywordInput(input.value);
     if (tokens.length === 0) {
       input.value = '';
+      keywordInputValue = '';
       return;
     }
     formData.keywords = mergeKeywords(formData.keywords, tokens);
     input.value = '';
+    keywordInputValue = '';
   }
 
   /**
@@ -830,6 +833,61 @@
       formData.keywords = mergeKeywords(formData.keywords, tokens);
     }
     input.value = '';
+    keywordInputValue = '';
+  }
+
+  // Keyword typeahead state (EKW variant only). `keywordInputValue` is the
+  // single source of truth for the input text — bound via `bind:value` so it
+  // stays in sync with both user typing and programmatic clears in
+  // commitKeywordInput / handleKeywordPaste.
+  let keywordInputValue = $state('');
+  let keywordSuggestionsOpen = $state(false);
+  let keywordSuggestionActiveIndex = $state(-1);
+
+  const keywordSuggestions = $derived.by(() => {
+    if (!isEkw) return [];
+    return matchKeywordSuggestions(keywordInputValue, formData.keywords);
+  });
+
+  /**
+   * @param {string} suggestion
+   */
+  function pickKeywordSuggestion(suggestion) {
+    formData.keywords = mergeKeywords(formData.keywords, [suggestion]);
+    keywordInputValue = '';
+    keywordSuggestionsOpen = false;
+    keywordSuggestionActiveIndex = -1;
+  }
+
+  /**
+   * Keydown handler for the EKW-variant keyword input. Delegates to the
+   * existing free-text handler (`handleAddKeyword`) when the suggestions
+   * dropdown is closed/empty or the key isn't a navigation/selection key.
+   * @param {KeyboardEvent} e
+   */
+  function handleKeywordKeydownEkw(e) {
+    if (!isEkw || !keywordSuggestionsOpen || keywordSuggestions.length === 0) {
+      handleAddKeyword(e);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      keywordSuggestionActiveIndex = (keywordSuggestionActiveIndex + 1) % keywordSuggestions.length;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      keywordSuggestionActiveIndex =
+        keywordSuggestionActiveIndex <= 0
+          ? keywordSuggestions.length - 1
+          : keywordSuggestionActiveIndex - 1;
+    } else if (e.key === 'Escape') {
+      keywordSuggestionsOpen = false;
+      keywordSuggestionActiveIndex = -1;
+    } else if (e.key === 'Enter' && keywordSuggestionActiveIndex >= 0) {
+      e.preventDefault();
+      pickKeywordSuggestion(keywordSuggestions[keywordSuggestionActiveIndex]);
+    } else {
+      handleAddKeyword(e);
+    }
   }
 
   /**
@@ -1249,20 +1307,71 @@
           <label class="label" for="amb-keywords">
             <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
           </label>
-          <input
-            id="amb-keywords"
-            type="text"
-            class="input-bordered input w-full"
-            placeholder={m.amb_form_placeholder_keywords()}
-            onkeydown={handleAddKeyword}
-            onblur={handleKeywordBlur}
-            onpaste={handleKeywordPaste}
-          />
+          <div class="relative">
+            <input
+              id="amb-keywords"
+              type="text"
+              class="input-bordered input w-full"
+              placeholder={m.amb_form_placeholder_keywords()}
+              role={isEkw ? 'combobox' : undefined}
+              aria-expanded={isEkw ? keywordSuggestionsOpen : undefined}
+              aria-controls={isEkw ? 'ekw-keyword-suggestions' : undefined}
+              autocomplete="off"
+              bind:value={keywordInputValue}
+              oninput={() => {
+                if (isEkw) {
+                  keywordSuggestionsOpen = true;
+                  keywordSuggestionActiveIndex = -1;
+                }
+              }}
+              onfocus={() => {
+                if (isEkw) keywordSuggestionsOpen = true;
+              }}
+              onkeydown={isEkw ? handleKeywordKeydownEkw : handleAddKeyword}
+              onblur={(e) => {
+                // Defer close so a click on a suggestion can fire first.
+                setTimeout(() => {
+                  keywordSuggestionsOpen = false;
+                  keywordSuggestionActiveIndex = -1;
+                }, 120);
+                handleKeywordBlur(e);
+              }}
+              onpaste={handleKeywordPaste}
+            />
+            {#if isEkw && keywordSuggestionsOpen && keywordSuggestions.length > 0}
+              <ul
+                id="ekw-keyword-suggestions"
+                role="listbox"
+                data-testid="ekw-keyword-suggestions"
+                class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-base-300 bg-base-100 shadow"
+                aria-label={m.ekw_keywords_suggestions_label()}
+              >
+                {#each keywordSuggestions as suggestion, i (suggestion)}
+                  <li
+                    role="option"
+                    aria-selected={i === keywordSuggestionActiveIndex}
+                    class="cursor-pointer px-3 py-2 hover:bg-base-200"
+                    class:bg-base-200={i === keywordSuggestionActiveIndex}
+                    onmousedown={(e) => e.preventDefault()}
+                    onclick={() => pickKeywordSuggestion(suggestion)}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        pickKeywordSuggestion(suggestion);
+                      }
+                    }}
+                  >
+                    {suggestion}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
           <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
           {#if formData.keywords.length > 0}
             <div class="mt-2 flex flex-wrap gap-2">
               {#each formData.keywords as keyword (keyword)}
-                <span class="badge gap-1 badge-outline">
+                <span class="badge gap-1 badge-outline" data-testid="keyword-chip">
                   {keyword}
                   <button
                     type="button"
