@@ -347,6 +347,7 @@
   "auth_login_private_key_error_decrypt_failed": "Failed to decrypt key. Please check your password and try again.",
   "auth_login_private_key_error_invalid_format": "Invalid key format. Please enter a valid nsec or ncryptsec key.",
   "auth_login_private_key_error_login_failed": "Failed to log in. Please check your key and try again.",
+  "auth_login_bunker_already_logged_in": "This bunker account is already logged in — switching to it.",
   "auth_bunker_title": "Nostr Connect (NIP-46)",
   "auth_bunker_tab_qr": "Scan QR",
   "auth_bunker_tab_url": "Enter URL",

@@ -80,19 +80,28 @@ export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
 }
 
 /**
- * Register a bunker account with the account manager (add-or-activate pattern)
+ * Register a bunker account with the account manager (add-or-activate pattern).
+ *
+ * If an account with the same pubkey already exists, the EXISTING account
+ * reference is activated (applesauce's setActive looks up by `id`, so a
+ * freshly-constructed account with the same pubkey would throw
+ * "Cant find account with that ID"). The caller can use `alreadyExisted`
+ * to surface a friendlier message instead of treating it as an error.
+ *
  * @param {any} manager
  * @param {string} pubkey
  * @param {NostrConnectSigner} signer
- * @returns {NostrConnectAccount}
+ * @returns {{ account: NostrConnectAccount, alreadyExisted: boolean }}
  */
 export function registerBunkerAccount(manager, pubkey, signer) {
-  const account = new NostrConnectAccount(pubkey, signer);
-
-  if (!manager.getAccountForPubkey(pubkey)) {
-    manager.addAccount(account);
+  const existing = manager.getAccountForPubkey(pubkey);
+  if (existing) {
+    manager.setActive(existing);
+    return { account: existing, alreadyExisted: true };
   }
-  manager.setActive(account);
 
-  return account;
+  const account = new NostrConnectAccount(pubkey, signer);
+  manager.addAccount(account);
+  manager.setActive(account);
+  return { account, alreadyExisted: false };
 }
