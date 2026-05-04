@@ -174,3 +174,71 @@ export function toSkosConcepts() {
     }
   }));
 }
+
+/**
+ * Normalize a label for matching: lowercase, accent-strip, collapse internal
+ * whitespace, trim. Used by `migrateLrtForEkw` so legacy data with quirky
+ * casing/spacing still maps cleanly to the EKW vocabulary.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+function normalizeLabel(s) {
+  return s
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Build a label → leaf lookup once at module load. Keys cover both the bare
+// leaf label and the canonical "Parent › Child" picker label, so legacy events
+// that stored either form round-trip cleanly.
+const _leafByNormalizedLabel = new Map();
+for (const leaf of EKW_LEARNING_RESOURCE_TYPES) {
+  _leafByNormalizedLabel.set(normalizeLabel(leaf.label), leaf);
+  if (leaf.parentLabel) {
+    _leafByNormalizedLabel.set(normalizeLabel(`${leaf.parentLabel} › ${leaf.label}`), leaf);
+  }
+}
+
+/**
+ * @typedef {Object} CompactConcept
+ * @property {string} id
+ * @property {string} label
+ */
+
+/**
+ * Best-effort migration of persisted learningResourceType concepts to the EKW
+ * vocabulary. For each input concept:
+ *
+ *   1. If the id already starts with `EKW_LRT_ID_PREFIX`, pass through verbatim.
+ *   2. Else if the (normalized) label matches an EKW leaf, swap to that leaf
+ *      (replacing both id and label with the canonical bare leaf label).
+ *   3. Else drop the entry and warn to console.
+ *
+ * Tolerates `null` / `undefined` input.
+ *
+ * @param {ReadonlyArray<CompactConcept> | null | undefined} concepts
+ * @returns {CompactConcept[]}
+ */
+export function migrateLrtForEkw(concepts) {
+  if (!concepts || concepts.length === 0) return [];
+  /** @type {CompactConcept[]} */
+  const out = [];
+  for (const concept of concepts) {
+    if (!concept || typeof concept.id !== 'string') continue;
+    if (concept.id.startsWith(EKW_LRT_ID_PREFIX)) {
+      out.push({ id: concept.id, label: concept.label ?? '' });
+      continue;
+    }
+    const matched = _leafByNormalizedLabel.get(normalizeLabel(concept.label ?? ''));
+    if (matched) {
+      out.push({ id: matched.id, label: matched.label });
+    } else {
+      console.warn('[ekw] dropping non-EKW LRT concept on edit load:', concept);
+    }
+  }
+  return out;
+}

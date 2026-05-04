@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   EKW_LEARNING_RESOURCE_TYPES,
   EKW_LRT_ID_PREFIX,
-  toSkosConcepts
+  toSkosConcepts,
+  migrateLrtForEkw
 } from '../ekwLearningResourceTypes.js';
 
 describe('EKW_LEARNING_RESOURCE_TYPES', () => {
@@ -82,5 +83,68 @@ describe('toSkosConcepts', () => {
     for (const concept of concepts) {
       expect(leafIds.has(concept.id)).toBe(true);
     }
+  });
+});
+
+describe('migrateLrtForEkw', () => {
+  it('passes through a concept whose id already starts with EKW_LRT_ID_PREFIX', () => {
+    const arbeitsblatt = EKW_LEARNING_RESOURCE_TYPES.find((l) => l.label === 'Arbeitsblatt');
+    expect(arbeitsblatt).toBeDefined();
+    const result = migrateLrtForEkw([{ id: arbeitsblatt.id, label: arbeitsblatt.label }]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(arbeitsblatt.id);
+    expect(result[0].label).toBe(arbeitsblatt.label);
+  });
+
+  it('swaps a legacy HCRT id when the label matches an EKW leaf', () => {
+    const result = migrateLrtForEkw([
+      { id: 'https://w3id.org/kim/hcrt/text', label: 'Sachinformation/Grundlagentext' }
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id.startsWith(EKW_LRT_ID_PREFIX)).toBe(true);
+    expect(result[0].label).toBe('Sachinformation/Grundlagentext');
+  });
+
+  it('matches labels case-insensitively and ignoring extra whitespace', () => {
+    const result = migrateLrtForEkw([
+      { id: 'https://example.org/legacy', label: '  arbeitsblatt  ' }
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].label).toBe('Arbeitsblatt');
+  });
+
+  it('matches the canonical "Parent › Child" picker label', () => {
+    const result = migrateLrtForEkw([
+      { id: 'https://example.org/legacy', label: 'Audio › Erklär-Audio' }
+    ]);
+    expect(result).toHaveLength(1);
+    // NFKD-stripped slug → "erklar-audio" (NOT "erklaer-audio")
+    expect(result[0].id.endsWith('/audio/erklar-audio')).toBe(true);
+  });
+
+  it('drops a concept with no matching label', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = migrateLrtForEkw([
+      { id: 'https://w3id.org/kim/hcrt/foo', label: 'Made-Up Type' }
+    ]);
+    expect(result).toEqual([]);
+    warnSpy.mockRestore();
+  });
+
+  it('returns [] for null, undefined, and [] without throwing', () => {
+    expect(migrateLrtForEkw(null)).toEqual([]);
+    expect(migrateLrtForEkw(undefined)).toEqual([]);
+    expect(migrateLrtForEkw([])).toEqual([]);
+  });
+
+  it('preserves order in a mixed batch', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = migrateLrtForEkw([
+      { id: 'https://w3id.org/kim/hcrt/foo', label: 'Made-Up' }, // dropped
+      { id: 'https://w3id.org/kim/hcrt/text', label: 'Arbeitsblatt' }, // swapped
+      { id: `${EKW_LRT_ID_PREFIX}quelle`, label: 'Quelle' } // passthrough
+    ]);
+    expect(result.map((r) => r.label)).toEqual(['Arbeitsblatt', 'Quelle']);
+    warnSpy.mockRestore();
   });
 });
