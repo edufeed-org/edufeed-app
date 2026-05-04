@@ -178,6 +178,9 @@
           <li>
             <a href={resolve('/settings')} onclick={closeDropdown}>{m.common_settings()}</a>
           </li>
+          <li>
+            <a href={resolve('/imprint')} onclick={closeDropdown}>{m.navbar_imprint()}</a>
+          </li>
           <li><button onclick={handleLogoutCurrent}>{m.navbar_logout_current()}</button></li>
           {#if accountCount > 1}
             <li><button onclick={handleLogoutAll}>{m.navbar_logout_all()}</button></li>

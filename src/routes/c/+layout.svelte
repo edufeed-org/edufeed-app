@@ -1,5 +1,5 @@
 <script>
-  import { goto, beforeNavigate, afterNavigate } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
@@ -21,39 +21,6 @@
   const hasWorkspaceShell = getContext('workspaceShell');
 
   let leftDrawerOpen = $state(false);
-
-  // Scroll restoration for custom scroll containers (SvelteKit only restores window scroll)
-  /** @type {HTMLDivElement | undefined} */
-  let desktopScrollContainer = $state(undefined);
-  /** @type {HTMLDivElement | undefined} */
-  let mobileScrollContainer = $state(undefined);
-  /** @type {Map<string, number>} */
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive state, only used in navigation callbacks
-  const scrollPositions = new Map();
-
-  beforeNavigate(({ from }) => {
-    if (!from?.url) return;
-    const key = from.url.pathname + from.url.search;
-    const container = desktopScrollContainer ?? mobileScrollContainer;
-    if (container) {
-      scrollPositions.set(key, container.scrollTop);
-    }
-  });
-
-  afterNavigate(({ to }) => {
-    if (!to?.url) return;
-    const key = to.url.pathname + to.url.search;
-    const saved = scrollPositions.get(key);
-    if (saved == null) return;
-
-    // Wait for DOM to populate from EventStore cache before restoring
-    requestAnimationFrame(() => {
-      const container = desktopScrollContainer ?? mobileScrollContainer;
-      if (container) {
-        container.scrollTop = saved;
-      }
-    });
-  });
 
   // Mobile header info — child layouts can update this via context
   let mobileHeaderTitle = $state(runtimeConfig.appName);
@@ -105,23 +72,17 @@
 </script>
 
 <!-- Desktop Layout -->
-{#if activeUser()}
-  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex" bind:this={desktopScrollContainer}>
-    {#if !hasWorkspaceShell}
-      <CommunitySidebar
-        currentCommunityId={currentCommunityPubkey}
-        {isDashboardActive}
-        onCommunitySelect={handleCommunitySelect}
-        onHomeSelect={handleHomeSelect}
-      />
-    {/if}
-    {@render children()}
-  </div>
-{:else}
-  <div class="hidden h-[calc(100vh-8rem)] overflow-auto lg:flex" bind:this={desktopScrollContainer}>
-    {@render children()}
-  </div>
-{/if}
+<div class="hidden lg:contents">
+  {#if activeUser() && !hasWorkspaceShell}
+    <CommunitySidebar
+      currentCommunityId={currentCommunityPubkey}
+      {isDashboardActive}
+      onCommunitySelect={handleCommunitySelect}
+      onHomeSelect={handleHomeSelect}
+    />
+  {/if}
+  {@render children()}
+</div>
 
 <!-- Mobile Layout -->
 {#if activeUser()}
@@ -135,7 +96,10 @@
       />
       <div class="drawer-content flex h-dvh flex-col">
         <!-- Unified Mobile Header -->
-        <div class="flex items-center justify-between border-b border-base-300 bg-base-200 p-4">
+        <div
+          data-testid="mobile-community-header"
+          class="sticky top-0 z-30 flex items-center justify-between border-b border-base-300 bg-base-200 p-4"
+        >
           <!-- Left: Community avatar / App logo + chevron → opens drawer -->
           <button onclick={toggleDrawer} class="btn gap-0 rounded-full px-1 btn-ghost">
             {#if isDashboardActive}
@@ -188,7 +152,7 @@
         </div>
 
         <!-- Main Content (child layout renders here) -->
-        <div class="flex-1 overflow-auto" bind:this={mobileScrollContainer}>
+        <div class="flex-1">
           {@render children()}
         </div>
       </div>
@@ -220,7 +184,7 @@
     </div>
   </div>
 {:else}
-  <div class="flex h-[calc(100vh-4rem)] flex-col lg:hidden">
+  <div class="flex flex-col lg:hidden">
     {@render children()}
   </div>
 {/if}
