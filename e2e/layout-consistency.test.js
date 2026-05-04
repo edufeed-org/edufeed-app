@@ -91,6 +91,75 @@ test.describe('Unified content region layout', () => {
     ).not.toMatch(/^(auto|scroll)$/);
   });
 
+  test('mobile community header stays pinned during <main> scroll', async ({
+    authenticatedPage: page
+  }) => {
+    // Use a mobile viewport so the lg:hidden mobile community header branch renders.
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    // Use the /c/ dashboard with the Communities view — it lists all 30 test
+    // communities, which is reliably tall enough to overflow on a 390x844 viewport.
+    // The mobile community header renders on every /c/* route via
+    // src/routes/c/+layout.svelte, so dashboard works the same as a single-community
+    // page for this assertion.
+    await page.goto(`/c/?view=communities`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // The mobile community header is identified by a data-testid added in
+    // src/routes/c/+layout.svelte so the selector is robust against refactors.
+    // Wait for the header itself rather than <nav> because the desktop sidebar
+    // <nav> is lg:hidden on this mobile viewport.
+    const header = page.locator('[data-testid="mobile-community-header"]');
+    await header.waitFor({ state: 'visible', timeout: 15_000 });
+
+    // Capture initial header top — it should be flush with the viewport top
+    // (or with the navbar above it). What matters is that it stays put after scroll.
+    const initialTop = await header.evaluate((el) => el.getBoundingClientRect().top);
+
+    // Wait for <main> to be tall enough to actually scroll. Skip on environments
+    // where the community page hasn't loaded enough content to overflow.
+    // Need enough overflow to scroll a meaningful distance and detect whether
+    // the header pins. The community-mode drawer wraps content in h-dvh, so
+    // overflow on <main> tends to be modest — 50px is enough for our assertion.
+    let isScrollable = false;
+    try {
+      await page.waitForFunction(
+        () => {
+          const main = document.querySelector('main');
+          return !!main && main.scrollHeight > main.clientHeight + 50;
+        },
+        null,
+        { timeout: 15_000 }
+      );
+      isScrollable = true;
+    } catch {
+      // not scrollable enough
+    }
+    test.skip(!isScrollable, '<main> not tall enough to scroll on /c/[npub] in this environment');
+
+    // Programmatically scroll <main> down and confirm it took effect.
+    // Request 500px; the browser clamps to the actual overflow, which on this
+    // route is on the order of tens of pixels (community-mode wraps content in
+    // h-dvh). Even 30+ px is plenty to detect a non-sticky header (which would
+    // move up by exactly that amount).
+    const actualScroll = await page.evaluate(() => {
+      const main = /** @type {HTMLElement | null} */ (document.querySelector('main'));
+      if (!main) return 0;
+      main.scrollTop = 500;
+      return main.scrollTop;
+    });
+    expect(actualScroll, 'main should have accepted some scroll').toBeGreaterThan(20);
+
+    // After scroll, the sticky header's top should still be ~initialTop.
+    // Without sticky positioning the header would scroll up by `actualScroll`,
+    // landing at roughly initialTop - actualScroll (negative).
+    const afterTop = await header.evaluate((el) => el.getBoundingClientRect().top);
+    expect(
+      Math.abs(afterTop - initialTop),
+      `mobile community header should stay pinned during <main> scroll (initialTop=${initialTop}, afterTop=${afterTop}, scrolled=${actualScroll})`
+    ).toBeLessThanOrEqual(2);
+  });
+
   test('restores <main> scroll position on back navigation', async ({
     authenticatedPage: page
   }) => {
