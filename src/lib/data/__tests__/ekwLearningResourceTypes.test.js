@@ -36,11 +36,16 @@ describe('EKW_LEARNING_RESOURCE_TYPES', () => {
     }
   });
 
-  it('produces parent-scoped slugs for children to avoid collisions', () => {
-    // "Beispiel" is a child of both "Audio" and "Textbaustein zum Wiederverwenden".
-    const beispielChildren = EKW_LEARNING_RESOURCE_TYPES.filter((l) => l.label === 'Beispiel');
-    expect(beispielChildren.length).toBeGreaterThanOrEqual(2);
-    const ids = new Set(beispielChildren.map((l) => l.id));
-    expect(ids.size).toBe(beispielChildren.length);
+  it('parent-scopes every child id under <parent-slug>/<child-slug>', () => {
+    // Childless parents have ids like ".../arbeitsblatt".
+    // Children under a parent have ids like ".../audio/erklaer-audio".
+    // The parent-scoped form prevents two children of different parents
+    // from colliding if they happen to share a label (e.g. "Beispiel").
+    const children = EKW_LEARNING_RESOURCE_TYPES.filter((l) => l.parentLabel !== null);
+    expect(children.length).toBeGreaterThan(0);
+    for (const leaf of children) {
+      const tail = leaf.id.slice(EKW_LRT_ID_PREFIX.length);
+      expect(tail.includes('/')).toBe(true);
+    }
   });
 });

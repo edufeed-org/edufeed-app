@@ -60,8 +60,7 @@ const EKW_LRT_TREE = {
     'Klang und Tonaufnahme',
     'Musik',
     'Vortrag (Audio-Aufzeichnung / Lesung)',
-    'Hörverstehen',
-    'Beispiel'
+    'Hörverstehen'
   ],
   Bild: [
     'Veranschaulichung, Schaubild, Tafelbild',
