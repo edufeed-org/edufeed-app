@@ -287,46 +287,49 @@
     <progress class="progress h-1 w-full progress-primary"></progress>
   {/if}
   <ModalManager />
-  {#if getActiveUser()}
-    <div class="hidden lg:contents">
-      <CommunitySidebar
-        currentCommunityId={currentCommunityPubkey}
-        {isDashboardActive}
-        onCommunitySelect={handleCommunitySelect}
-        onHomeSelect={handleHomeSelect}
-      />
-    </div>
-  {/if}
-  {#if showDashboardNav}
-    <DashboardNavSidebar />
-  {:else if isInsideCommunity && contentNavData}
-    <ContentNavSidebar {...contentNavData} />
-  {/if}
-  <main
-    bind:this={mainElement}
-    class="flex min-h-0 flex-1 flex-col overflow-y-auto"
-    class:lg:ml-(--sidebar-icon-w)={!!getActiveUser() && !showDashboardNav}
-    class:lg:ml-(--sidebar-total-w)={showDashboardNav}
-    class:pb-16={showDashboardNav}
-    class:pb-20={isInsideCommunity}
-    class:lg:pb-0={showDashboardNav || isInsideCommunity}
-  >
-    {#if curatedReady}
-      {@render children?.()}
-    {/if}
-    <!-- Floating buttons — sticky inside main so they sit at the bottom of the scroll surface.
-         Hidden on views with their own bottom UI (chat input, DM input). -->
-    {#if !hasOwnBottomUI}
-      <div class="pointer-events-none sticky bottom-0 z-[60] h-0 overflow-visible">
-        <div class="pointer-events-auto">
-          <ScrollToTopButton />
-          {#if getActiveUser()}
-            <GlobalFAB />
-          {/if}
-        </div>
+  <!-- Chrome row: sidebars + main as flex siblings. -->
+  <div class="flex min-h-0 flex-1 overflow-hidden">
+    {#if getActiveUser()}
+      <!-- lg:contents wrapper keeps the lg:hidden mobile drawer-content branch
+           inside CommunitySidebar from rendering as a flex child on mobile. -->
+      <div class="hidden lg:contents">
+        <CommunitySidebar
+          currentCommunityId={currentCommunityPubkey}
+          {isDashboardActive}
+          onCommunitySelect={handleCommunitySelect}
+          onHomeSelect={handleHomeSelect}
+        />
       </div>
     {/if}
-  </main>
+    {#if showDashboardNav}
+      <DashboardNavSidebar />
+    {:else if isInsideCommunity && contentNavData}
+      <ContentNavSidebar {...contentNavData} />
+    {/if}
+    <main
+      bind:this={mainElement}
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto"
+      class:pb-16={showDashboardNav}
+      class:pb-20={isInsideCommunity}
+      class:lg:pb-0={showDashboardNav || isInsideCommunity}
+    >
+      {#if curatedReady}
+        {@render children?.()}
+      {/if}
+      <!-- Floating buttons — sticky inside main so they sit at the bottom of the scroll surface.
+           Hidden on views with their own bottom UI (chat input, DM input). -->
+      {#if !hasOwnBottomUI}
+        <div class="pointer-events-none sticky bottom-0 z-[60] h-0 overflow-visible">
+          <div class="pointer-events-auto">
+            <ScrollToTopButton />
+            {#if getActiveUser()}
+              <GlobalFAB />
+            {/if}
+          </div>
+        </div>
+      {/if}
+    </main>
+  </div>
 </div>
 <PublishStatusToast />
 {#if showDashboardNav}

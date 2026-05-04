@@ -5,6 +5,6 @@
   let { data } = $props();
 </script>
 
-<div class="mx-auto max-w-4xl p-4 lg:ml-(--sidebar-nav-w)">
+<div class="mx-auto max-w-4xl p-4">
   <CalendarEventDetailView event={data.event} rawEvent={data.rawEvent} />
 </div>

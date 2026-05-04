@@ -8,7 +8,7 @@
   const resource = $derived(data.event ? formatAMBResource(data.event) : null);
 </script>
 
-<div class="mx-auto max-w-4xl p-4 lg:ml-(--sidebar-nav-w)">
+<div class="mx-auto max-w-4xl p-4">
   {#if data.event && resource}
     <AMBResourceView event={data.event} {resource} />
   {/if}

@@ -123,7 +123,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl p-4 lg:ml-(--sidebar-nav-w)">
+<div class="mx-auto max-w-3xl p-4">
   <DetailHeader {title} subtitle={domain} event={representativeEvent} authorPubkey="">
     {#snippet actions()}
       {#if showReaderToggle && !isLoading}

@@ -227,4 +227,20 @@ test.describe('Unified content region layout', () => {
     });
     expect(Math.abs(restoredScroll - targetScroll)).toBeLessThanOrEqual(20);
   });
+
+  test('main has no sidebar margin offset on desktop community route', async ({
+    authenticatedPage: page
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/c/${TEST_AUTHOR.npub}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
+
+    const mainMarginLeft = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? getComputedStyle(main).marginLeft : null;
+    });
+
+    expect(mainMarginLeft).toBe('0px');
+  });
 });

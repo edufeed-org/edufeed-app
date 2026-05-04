@@ -25,9 +25,9 @@
   }
 </script>
 
-<!-- Desktop: Fixed left sidebar -->
+<!-- Desktop: Flex sibling in chrome row -->
 <div
-  class="fixed top-16 left-0 hidden h-[calc(100dvh-4rem)] w-(--sidebar-icon-w) flex-col overflow-x-hidden overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
+  class="hidden w-(--sidebar-icon-w) flex-col overflow-x-hidden overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
 >
   <div class="flex flex-col items-center space-y-3 py-4">
     <!-- Home button -->
