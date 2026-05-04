@@ -39,6 +39,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
+    "amb-mcp": "file:../amb-mcp",
     "amb-nostr-converter": "https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz",
     "applesauce-accounts": "^5.2.0",
     "applesauce-actions": "5.1.1",
