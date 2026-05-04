@@ -843,6 +843,8 @@
   let keywordInputValue = $state('');
   let keywordSuggestionsOpen = $state(false);
   let keywordSuggestionActiveIndex = $state(-1);
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let keywordBlurTimer = null;
 
   const keywordSuggestions = $derived.by(() => {
     if (!isEkw) return [];
@@ -1316,6 +1318,10 @@
               role={isEkw ? 'combobox' : undefined}
               aria-expanded={isEkw ? keywordSuggestionsOpen : undefined}
               aria-controls={isEkw ? 'ekw-keyword-suggestions' : undefined}
+              aria-autocomplete={isEkw ? 'list' : undefined}
+              aria-activedescendant={isEkw && keywordSuggestionActiveIndex >= 0
+                ? `ekw-keyword-suggestion-${keywordSuggestionActiveIndex}`
+                : undefined}
               autocomplete="off"
               bind:value={keywordInputValue}
               oninput={() => {
@@ -1325,14 +1331,20 @@
                 }
               }}
               onfocus={() => {
+                if (keywordBlurTimer) {
+                  clearTimeout(keywordBlurTimer);
+                  keywordBlurTimer = null;
+                }
                 if (isEkw) keywordSuggestionsOpen = true;
               }}
               onkeydown={isEkw ? handleKeywordKeydownEkw : handleAddKeyword}
               onblur={(e) => {
                 // Defer close so a click on a suggestion can fire first.
-                setTimeout(() => {
+                if (keywordBlurTimer) clearTimeout(keywordBlurTimer);
+                keywordBlurTimer = setTimeout(() => {
                   keywordSuggestionsOpen = false;
                   keywordSuggestionActiveIndex = -1;
+                  keywordBlurTimer = null;
                 }, 120);
                 handleKeywordBlur(e);
               }}
@@ -1347,19 +1359,16 @@
                 aria-label={m.ekw_keywords_suggestions_label()}
               >
                 {#each keywordSuggestions as suggestion, i (suggestion)}
+                  <!-- Keyboard interaction lives on the input via aria-activedescendant; the option click is reachable through Enter on the focused input. -->
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <li
+                    id="ekw-keyword-suggestion-{i}"
                     role="option"
                     aria-selected={i === keywordSuggestionActiveIndex}
                     class="cursor-pointer px-3 py-2 hover:bg-base-200"
                     class:bg-base-200={i === keywordSuggestionActiveIndex}
                     onmousedown={(e) => e.preventDefault()}
                     onclick={() => pickKeywordSuggestion(suggestion)}
-                    onkeydown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        pickKeywordSuggestion(suggestion);
-                      }
-                    }}
                   >
                     {suggestion}
                   </li>
