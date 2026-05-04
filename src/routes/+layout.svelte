@@ -80,17 +80,7 @@
   // (selectedContentType, communityProfile, restrictedTabs, etc.) is loaded
   // by c/[pubkey]/+layout.svelte and exposed via this context getter so we
   // don't lift community-data loading up to the root layout.
-  /**
-   * @typedef {{
-   *   selectedContentType: string,
-   *   onContentTypeSelect: (type: string) => void,
-   *   communitySelected: boolean,
-   *   communityProfile: any,
-   *   communityPubkey: string,
-   *   restrictedTabs: Set<string>,
-   *   accessibleTabs: Set<string>
-   * }} ContentNavData
-   */
+  /** @typedef {import('$lib/types/layout.js').ContentNavData} ContentNavData */
   /** @type {(() => ContentNavData) | undefined} */
   let getContentNavData = $state();
   setContext('setContentNavData', (/** @type {(() => ContentNavData) | undefined} */ getter) => {

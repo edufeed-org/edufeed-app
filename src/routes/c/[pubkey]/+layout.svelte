@@ -22,17 +22,7 @@
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
 
-  /**
-   * @typedef {{
-   *   selectedContentType: string,
-   *   onContentTypeSelect: (type: string) => void,
-   *   communitySelected: boolean,
-   *   communityProfile: any,
-   *   communityPubkey: string,
-   *   restrictedTabs: Set<string>,
-   *   accessibleTabs: Set<string>
-   * }} ContentNavData
-   */
+  /** @typedef {import('$lib/types/layout.js').ContentNavData} ContentNavData */
 
   // State management for content type navigation
   // Single source of truth is the URL via the $effect below — do not assign
