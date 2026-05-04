@@ -111,6 +111,12 @@
   // Current wizard step (1..totalSteps)
   let currentStep = $state(1);
 
+  // Highest step the user has reached via successful `nextStep()`. Lets the
+  // step-indicator buttons act as fast-jump shortcuts both backward AND
+  // forward into already-validated steps after going back. Monotonically
+  // grows; never decreases on prev/jump.
+  let maxVisitedStep = $state(1);
+
   // "No URL" escape hatch — allows advancing past step 2 without a URL/naddr.
   // When true: the URL input is replaced with a state card, step 3 hides the
   // read-only URL field, step 5 requires ≥1 attachment, and handleSubmit sends
@@ -912,9 +918,14 @@
   function nextStep() {
     if (validateCurrentStep() && currentStep < totalSteps) {
       currentStep++;
+      if (currentStep > maxVisitedStep) maxVisitedStep = currentStep;
       // Each step starts silent: hide the summary alert until the user
       // tries to advance again. Inline blur errors persist via touchedFields.
       advanceAttempted = false;
+      // First successful advance counts as implicit "accept" of the
+      // restored draft — clear the banner without wiping the saved draft
+      // (autosave keeps running so a refresh still recovers).
+      if (draftRestoredAt !== null) draftRestoredAt = null;
     }
   }
 
@@ -1189,18 +1200,18 @@
         {@const stepNum = i + 1}
         {@const isCompleted = stepNum < currentStep}
         {@const isCurrent = stepNum === currentStep}
-        {@const canJump = isCompleted}
+        {@const wasVisited = stepNum <= maxVisitedStep}
+        {@const canJump = wasVisited && !isCurrent}
         <button
           type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors {stepNum <=
-          currentStep
+          class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors {wasVisited
             ? 'bg-primary text-primary-content'
             : 'bg-base-200 text-base-content/50'} {canJump
             ? 'cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-2 hover:ring-offset-base-100'
             : 'cursor-default'}"
           aria-current={isCurrent ? 'step' : undefined}
-          aria-label={isCompleted
-            ? `${stepTitles[i]} (Schritt ${stepNum}, abgeschlossen) — zurück springen`
+          aria-label={canJump
+            ? `${stepTitles[i]} (Schritt ${stepNum}) — springen`
             : `${stepTitles[i]} (Schritt ${stepNum})`}
           disabled={!canJump}
           onclick={canJump ? () => (currentStep = stepNum) : undefined}
@@ -1214,8 +1225,8 @@
         {#if i < totalSteps - 1}
           <div
             class="h-1 w-6 rounded transition-colors"
-            class:bg-primary={i + 1 < currentStep}
-            class:bg-base-300={i + 1 >= currentStep}
+            class:bg-primary={i + 1 < maxVisitedStep}
+            class:bg-base-300={i + 1 >= maxVisitedStep}
           ></div>
         {/if}
       {/each}
@@ -1256,9 +1267,12 @@
         </div>
       {/if}
 
-      <!-- AI metadata helper status banner — visible on Steps 3+ where the
-         enrichment results land. Step 2 has its own mode toggle inline. -->
-      {#if currentStep > 2 && enrichmentStatus !== 'idle'}
+      <!-- AI metadata helper status banner — only the error case is shown
+         on Steps 3+. The pending/success/skipped-amb states are redundant
+         now that Step 2 blocks Next while enrichment is in flight: by the
+         time the user reaches Step 3, success is implicit and the inline
+         "Smart fill ✨" badges already mark each filled field. -->
+      {#if currentStep > 2 && enrichmentStatus === 'error'}
         <EnrichmentStatusBanner
           status={enrichmentStatus}
           ondismiss={() => (enrichmentStatus = 'idle')}

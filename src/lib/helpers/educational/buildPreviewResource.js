@@ -59,17 +59,45 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
   let content = '';
 
   try {
-    // Wizard stores learningResourceType as CompactConcept[] (array of {id,label}),
-    // but convertFormDataToAMB expects a plain string id (matching the publish flow,
-    // which unwraps via formData.learningResourceType[0]?.id). Normalize before
-    // converting so the preview tag emits a clean URI instead of "[object Object]".
+    // Wizard stores SKOS-picked fields as CompactConcept[] (array of {id,label}),
+    // but convertFormDataToAMB expects either a plain string id (for
+    // `learningResourceType`) or a string-id array with a separate
+    // `*Labels` sidecar (for `about` and `educationalLevels`). Normalize all
+    // three so the preview tags emit clean URIs/labels instead of
+    // "[object Object]".
     const lrt = formData?.learningResourceType;
+    const eduLevels = formData?.educationalLevels;
+    const about = formData?.about;
+    const isCompact = (/** @type {any} */ v) =>
+      Array.isArray(v) && v.length > 0 && v.every((e) => e && typeof e === 'object' && 'id' in e);
+
     /** @type {any} */
-    const normalised = {
-      ...formData,
-      learningResourceType: Array.isArray(lrt) ? (lrt[0]?.id ?? '') : (lrt ?? ''),
-      learningResourceTypeLabel: Array.isArray(lrt) ? (lrt[0]?.label ?? '') : ''
-    };
+    const normalised = { ...formData };
+
+    // learningResourceType: object[] → string id + sidecar label
+    if (Array.isArray(lrt)) {
+      normalised.learningResourceType = lrt[0]?.id ?? '';
+      normalised.learningResourceTypeLabel = lrt[0]?.label ?? '';
+    }
+
+    // educationalLevels: CompactConcept[] → string[] + label sidecar
+    if (isCompact(eduLevels)) {
+      normalised.educationalLevels = eduLevels.map((/** @type {any} */ c) => c.id);
+      normalised.educationalLevelLabels = eduLevels.map((/** @type {any} */ c) => ({
+        id: c.id,
+        label: c.label
+      }));
+    }
+
+    // about: CompactConcept[] → string[] + label sidecar
+    if (isCompact(about)) {
+      normalised.about = about.map((/** @type {any} */ c) => c.id);
+      normalised.aboutLabels = about.map((/** @type {any} */ c) => ({
+        id: c.id,
+        label: c.label
+      }));
+    }
+
     const ambData = convertFormDataToAMB(/** @type {any} */ (normalised));
     const result = ambToNostr(/** @type {any} */ (ambData), {
       pubkey: previewPubkey,

@@ -122,4 +122,47 @@ describe('buildPreviewResource', () => {
     const types = resource.learningResourceTypes ?? [];
     expect(types[0]?.label).toBe('Softwareanwendung');
   });
+
+  it('normalizes CompactConcept[] educationalLevels to clean string tags, not "[object Object]"', () => {
+    // Wizard stores educationalLevels as CompactConcept[] (array of {id,label})
+    // but convertFormDataToAMB iterates them as URI strings — without
+    // normalisation each tag becomes "[object Object]".
+    const formData = {
+      ...emptyFormData(),
+      name: 'Test',
+      educationalLevels: [
+        { id: 'https://w3id.org/kim/educationalLevel/primary', label: 'Primarstufe' },
+        { id: 'https://w3id.org/kim/educationalLevel/secondary_i', label: 'Sekundarstufe I' }
+      ]
+    };
+    const resource = buildPreviewResource(formData, PUBKEY);
+    const idTags = resource.tags.filter((t) => t[0] === 'educationalLevel:id');
+    expect(idTags).toHaveLength(2);
+    expect(idTags[0][1]).toBe('https://w3id.org/kim/educationalLevel/primary');
+    expect(idTags[1][1]).toBe('https://w3id.org/kim/educationalLevel/secondary_i');
+    for (const t of idTags) expect(t[1]).not.toContain('[object Object]');
+    const labelTags = resource.tags.filter((t) => t[0].startsWith('educationalLevel:prefLabel:'));
+    expect(labelTags.map((t) => t[1])).toEqual(
+      expect.arrayContaining(['Primarstufe', 'Sekundarstufe I'])
+    );
+    for (const t of labelTags) expect(t[1]).not.toContain('[object Object]');
+  });
+
+  it('normalizes CompactConcept[] about to clean string tags, not "[object Object]"', () => {
+    // Some callers may pass `about` as CompactConcept[]. Same risk as the
+    // learningResourceType + educationalLevels case.
+    const formData = {
+      ...emptyFormData(),
+      name: 'Test',
+      about: [{ id: 'https://w3id.org/kim/schulfaecher/s1010', label: 'Mathematik' }]
+    };
+    const resource = buildPreviewResource(formData, PUBKEY);
+    const idTags = resource.tags.filter((t) => t[0] === 'about:id');
+    expect(idTags).toHaveLength(1);
+    expect(idTags[0][1]).toBe('https://w3id.org/kim/schulfaecher/s1010');
+    expect(idTags[0][1]).not.toContain('[object Object]');
+    const labelTag = resource.tags.find((t) => t[0].startsWith('about:prefLabel:'));
+    expect(labelTag?.[1]).toBe('Mathematik');
+    expect(labelTag?.[1]).not.toContain('[object Object]');
+  });
 });
