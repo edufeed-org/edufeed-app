@@ -61,6 +61,7 @@
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
   import { buildPreviewResource } from '$lib/helpers/educational/buildPreviewResource.js';
+  import { loadDraft, saveDraft, clearDraft } from '$lib/helpers/educational/draftStore.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -269,6 +270,52 @@
       selectedCommunityPubkeys = [...selectedCommunityPubkeys, communityPubkey];
     }
   });
+
+  // ---- Draft persistence (create flow only) -----------------------------
+  // Load any previously-saved draft once on mount; subsequently autosave
+  // formData (debounced) and clear the draft after a successful publish.
+  // Edit mode opts out — drafts are only meaningful when authoring fresh
+  // content.
+  let draftRestoredAt = $state(/** @type {number | null} */ (null));
+  let draftRestoreDone = false;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let draftSaveTimer;
+
+  $effect(() => {
+    if (draftRestoreDone) return;
+    if (isEditMode) {
+      draftRestoreDone = true;
+      return;
+    }
+    const draft = loadDraft(variantId);
+    if (draft && draft.formData) {
+      formData = { ...formData, ...draft.formData };
+      draftRestoredAt = draft.savedAt || Date.now();
+    }
+    draftRestoreDone = true;
+  });
+
+  $effect(() => {
+    // $state.snapshot reads every property → effect re-runs on any change.
+    const snapshot = $state.snapshot(formData);
+    if (isEditMode || !draftRestoreDone) return;
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(() => {
+      saveDraft(variantId, snapshot);
+    }, 500);
+    return () => clearTimeout(draftSaveTimer);
+  });
+
+  /**
+   * Discard the restored draft and clear the banner.
+   * Resets only the wizard-managed formData; child components keep their
+   * own component state (intentionally — discarding shouldn't blow away
+   * unrelated state like upload progress).
+   */
+  function discardDraft() {
+    clearDraft(variantId);
+    draftRestoredAt = null;
+  }
 
   // Bildungsbereich options available in step 1 depend on the variant.
   const bildungsbereichKeys = $derived(getBildungsbereichKeysForVariant(variantId));
@@ -947,6 +994,9 @@
       }
 
       if (result.naddr) {
+        // Successful publish — drop any saved draft so the next visit
+        // starts clean. Skip in edit mode (no draft was ever saved).
+        if (!isEditMode) clearDraft(variantId);
         await goto(resolve(`/${result.naddr}`));
       }
     } catch (error) {
@@ -1168,6 +1218,21 @@
 
     <!-- Form Content -->
     <div class="min-h-[40vh]">
+      <!-- Restored-draft banner: shown when localStorage held a draft for
+         this variant on mount and the user has not yet dismissed it. -->
+      {#if draftRestoredAt !== null && !isEditMode}
+        <div class="mb-3 alert text-sm alert-info" role="status">
+          <span class="flex-1">
+            {m.amb_form_draft_restored({
+              time: new Date(draftRestoredAt).toLocaleString(getLocale())
+            })}
+          </span>
+          <button type="button" class="btn btn-ghost btn-sm" onclick={discardDraft}>
+            {m.amb_form_draft_discard()}
+          </button>
+        </div>
+      {/if}
+
       <!-- AI metadata helper status banner — visible on Steps 3+ where the
          enrichment results land. Step 2 has its own mode toggle inline. -->
       {#if currentStep > 2 && enrichmentStatus !== 'idle'}

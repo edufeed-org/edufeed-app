@@ -1566,6 +1566,8 @@
   "amb_form_summary_ekw_method": "Methode:",
   "amb_form_summary_ekw_method_free": "Methode (frei):",
   "amb_form_summary_ekw_bible_reference": "Bibelstelle:",
+  "amb_form_draft_restored": "Entwurf von {time} wiederhergestellt.",
+  "amb_form_draft_discard": "Entwurf verwerfen",
   "amb_picker_search_placeholder": "Nach Ressource suchen oder naddr einfügen…",
   "amb_picker_paste_row_label": "Eingefügte Adresse verwenden",
   "amb_picker_no_results": "Keine Treffer",
