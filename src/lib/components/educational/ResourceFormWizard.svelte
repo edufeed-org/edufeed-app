@@ -88,6 +88,9 @@
   // Determine if we're in edit mode
   const isEditMode = $derived(editEvent !== null && editResource !== null);
 
+  // EKW variant exposes additional metadata fields in steps 4 and 5.
+  const isEkw = $derived(variantId === 'ekw');
+
   // Total step count — share step is skipped in edit mode.
   const totalSteps = $derived(isEditMode ? 7 : 8);
 
@@ -191,6 +194,12 @@
   });
 
   const educationalLevelField = $derived(resolveVocabField('educationalLevel'));
+
+  // EKW vocab field resolvers (null when the matching SCHEME_NADDR_* env var
+  // is unset, e.g. before the EKW vocabs have been published).
+  const ekwFachField = $derived(resolveVocabField('ekwFach'));
+  const klassenstufenField = $derived(resolveVocabField('klassenstufen'));
+  const schulartField = $derived(resolveVocabField('schulart'));
 
   // Validation and submission state
   let validationErrors = $state(/** @type {string[]} */ ([]));
@@ -838,6 +847,30 @@
       aboutByVocab = { ...aboutByVocab, [vocabKey]: rich.map(toCompactConcept) };
     };
   }
+
+  /**
+   * Build a paired-state EKW handler that updates two formData fields:
+   *   - the `ids` field with concept URIs
+   *   - the `labels` field with `{id, label}[]` pairs
+   *
+   * @param {'gradeLevels'|'schoolTypes'|'didacticConcepts'|'methods'} idsKey
+   * @param {'gradeLevelLabels'|'schoolTypeLabels'|'didacticConceptLabels'|'methodLabels'} labelsKey
+   */
+  function makeEkwPairHandler(idsKey, labelsKey) {
+    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+      const compact = rich.map(toCompactConcept);
+      formData[idsKey] = compact.map((c) => c.id);
+      formData[labelsKey] = compact;
+    };
+  }
+
+  /**
+   * EKW Fachrichtung handler (single `{id, label}[]` array).
+   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
+   */
+  function handleEkwFachrichtungChange(rich) {
+    formData.ekwFachrichtung = rich.map(toCompactConcept);
+  }
 </script>
 
 <div class="mx-auto w-full max-w-2xl px-4 py-6">
@@ -1187,6 +1220,60 @@
             </div>
           {/if}
         </div>
+
+        <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
+        {#if isEkw}
+          {#if ekwFachField}
+            <div class="space-y-1">
+              <span class="label-text font-medium">Fachrichtung</span>
+              <FormConceptPicker
+                field={ekwFachField}
+                multiple={true}
+                value={formData.ekwFachrichtung.map((c) =>
+                  toRichConcept(c, ekwFachField.vocab.relay)
+                )}
+                onchange={handleEkwFachrichtungChange}
+              />
+            </div>
+          {/if}
+
+          {#if klassenstufenField}
+            <div class="space-y-1">
+              <span class="label-text font-medium">Klassenstufe</span>
+              <FormConceptPicker
+                field={klassenstufenField}
+                multiple={true}
+                value={formData.gradeLevelLabels.map((c) =>
+                  toRichConcept(c, klassenstufenField.vocab.relay)
+                )}
+                onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
+              />
+            </div>
+          {/if}
+
+          {#if schulartField}
+            <div class="space-y-1">
+              <span class="label-text font-medium">Schulart</span>
+              <FormConceptPicker
+                field={schulartField}
+                multiple={true}
+                value={formData.schoolTypeLabels.map((c) =>
+                  toRichConcept(c, schulartField.vocab.relay)
+                )}
+                onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
+              />
+            </div>
+          {/if}
+
+          {#if !ekwFachField && !klassenstufenField && !schulartField}
+            <p class="text-sm text-base-content/60">
+              EKW-Vokabulare sind in dieser Umgebung noch nicht konfiguriert (<code
+                >SCHEME_NADDR_EKW_FACH</code
+              >, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
+              <code>SCHEME_NADDR_SCHULART</code>).
+            </p>
+          {/if}
+        {/if}
       </div>
     {/if}
 
