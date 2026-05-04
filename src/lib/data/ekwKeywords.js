@@ -11,6 +11,9 @@
  *   - Decision Q4(a): the published value is exactly what the user picked
  *     (or typed). No SKOS concept-ID expansion, no parent inference.
  *
+ * Note: unlike `ekwLearningResourceTypes.js`, keywords are stored as raw
+ * strings (per Q4a), so this file ships no migration helper or namespace IRI.
+ *
  * The tree below mirrors the CEO's `keywordGroups` from Editor_4.html
  * exactly. The flattened, deduplicated, German-sorted suggestion list is
  * the only thing exported — filtering happens in the wizard.
@@ -101,6 +104,8 @@ const EKW_KEYWORD_TREE = {
  *
  * @type {ReadonlyArray<string>}
  */
+// Sort is for display ordering only; case/diacritic-insensitive matching
+// for the typeahead is the wizard's responsibility (Task 8).
 export const EKW_KEYWORD_SUGGESTIONS = Object.freeze(
   Array.from(
     new Set([...Object.keys(EKW_KEYWORD_TREE), ...Object.values(EKW_KEYWORD_TREE).flat()])

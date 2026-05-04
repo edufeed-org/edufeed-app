@@ -28,4 +28,19 @@ describe('EKW_KEYWORD_SUGGESTIONS', () => {
       expect(typeof k).toBe('string');
     }
   });
+
+  it('collapses duplicates that appear under multiple parents', () => {
+    const abendmahl = EKW_KEYWORD_SUGGESTIONS.filter((k) => k === 'Abendmahl');
+    const gottesdienst = EKW_KEYWORD_SUGGESTIONS.filter((k) => k === 'Gottesdienst');
+    expect(abendmahl).toHaveLength(1);
+    expect(gottesdienst).toHaveLength(1);
+  });
+
+  it('includes childless parents (e.g. Schöpfung)', () => {
+    expect(EKW_KEYWORD_SUGGESTIONS).toContain('Schöpfung');
+  });
+
+  it('is frozen', () => {
+    expect(Object.isFrozen(EKW_KEYWORD_SUGGESTIONS)).toBe(true);
+  });
 });
