@@ -13,6 +13,10 @@
   let inputNSEC = $state('');
   let password = $state('');
   let errorMessage = $state('');
+  let infoMessage = $state('');
+
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let closeTimer;
 
   // Detect if input is ncryptsec format
   let isNcryptsec = $derived(inputNSEC.trim().startsWith('ncryptsec1'));
@@ -37,12 +41,17 @@
     dialog.addEventListener('close', handleDialogClose);
     return () => {
       dialog.removeEventListener('close', handleDialogClose);
+      if (closeTimer) {
+        clearTimeout(closeTimer);
+        closeTimer = undefined;
+      }
     };
   });
 
   async function handleLoginWithPrivateKey() {
     let privateKey;
     errorMessage = '';
+    infoMessage = '';
 
     try {
       const trimmedInput = inputNSEC.trim();
@@ -73,19 +82,27 @@
         privateKey = decoded.data;
       }
 
-      // Create signer and account with the private key
+      // Create signer and derive the public key
       const simpleSigner = new SimpleSigner(privateKey);
       const pk = await simpleSigner.getPublicKey();
       console.log('Public Key:', pk);
-      const account = new SimpleAccount(pk, simpleSigner);
 
-      if (!manager.getAccountForPubkey(pk)) {
+      // If this account is already in the manager, switch to the EXISTING object.
+      // Building a fresh SimpleAccount and passing it to setActive throws
+      // "Cant find account with that ID" because applesauce looks up by id
+      // (a fresh nanoid) — that crash was previously surfaced as a misleading
+      // "Failed to log in" error.
+      const existing = manager.getAccountForPubkey(pk);
+
+      if (existing) {
+        manager.setActive(existing);
+        infoMessage = m.auth_login_private_key_already_logged_in();
+        console.log('LoginWithPrivateKey: Existing account set active:', existing);
+      } else {
+        const account = new SimpleAccount(pk, simpleSigner);
         manager.addAccount(account);
         manager.setActive(account);
         console.log('LoginWithPrivateKey: New account created and set active:', account);
-      } else {
-        manager.setActive(account);
-        console.log('LoginWithPrivateKey: Existing account set active:', account);
       }
 
       console.log('LoginWithPrivateKey: Current active account:', manager.active);
@@ -97,7 +114,14 @@
       }
 
       const modal = /** @type {HTMLDialogElement} */ (document.getElementById(modalId));
-      if (modal) modal.close();
+      if (modal) {
+        if (existing) {
+          // Give the user a moment to read the info message before closing.
+          closeTimer = setTimeout(() => modal.close?.(), 1200);
+        } else {
+          modal.close?.();
+        }
+      }
     } catch (error) {
       console.error('Error logging in with private key:', error);
       errorMessage = m.auth_login_private_key_error_login_failed();
@@ -143,6 +167,13 @@
           <div class="label">
             <span class="label-text-alt">{m.auth_login_private_key_password_help()}</span>
           </div>
+        </div>
+      {/if}
+
+      <!-- Info Message (e.g. account already logged in) -->
+      {#if infoMessage}
+        <div class="alert alert-info">
+          <span>{infoMessage}</span>
         </div>
       {/if}
 

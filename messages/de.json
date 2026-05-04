@@ -305,6 +305,7 @@
   "auth_login_private_key_error_invalid_format": "Ungültiges Schlüsselformat. Bitte geben Sie einen gültigen nsec- oder ncryptsec-Schlüssel ein.",
   "auth_login_private_key_error_login_failed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihren Schlüssel und versuchen Sie es erneut.",
   "auth_login_bunker_already_logged_in": "Dieses Bunker-Konto ist bereits angemeldet — es wird gewechselt.",
+  "auth_login_private_key_already_logged_in": "Dieses Konto ist bereits angemeldet — es wird gewechselt.",
   "auth_bunker_title": "Nostr Connect (NIP-46)",
   "auth_bunker_tab_qr": "QR scannen",
   "auth_bunker_tab_url": "URL eingeben",
