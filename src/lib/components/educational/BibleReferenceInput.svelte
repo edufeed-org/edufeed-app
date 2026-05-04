@@ -1,5 +1,9 @@
 <script>
-  import { parseAndCanonicalize } from '$lib/helpers/educational/bibleReference.js';
+  import { BIBLE_BOOKS_DE, parseAndCanonicalize } from '$lib/helpers/educational/bibleReference.js';
+
+  // Unique datalist id per instance so the browser typeahead always finds
+  // its own options even when several inputs are rendered side-by-side.
+  const listId = `bible-books-${crypto.randomUUID()}`;
 
   /**
    * @type {{
@@ -65,9 +69,15 @@
       type="text"
       class="input-bordered input flex-1"
       class:input-success={status === 'ok' && canonical === value.trim()}
+      list={listId}
       {placeholder}
       bind:value
     />
+    <datalist id={listId}>
+      {#each BIBLE_BOOKS_DE as book (book)}
+        <option value={book}></option>
+      {/each}
+    </datalist>
     {#if onremove}
       <button type="button" class="btn btn-ghost btn-sm" aria-label="Entfernen" onclick={onremove}
         >×</button

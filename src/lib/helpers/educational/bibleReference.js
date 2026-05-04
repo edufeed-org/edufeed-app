@@ -103,6 +103,14 @@ const OSIS_TO_DE = {
 };
 
 /**
+ * German short-form book names in canonical (biblical) order — useful as a
+ * `<datalist>` source for free-text Bibelstelle inputs.
+ *
+ * @type {readonly string[]}
+ */
+export const BIBLE_BOOKS_DE = Object.freeze(Object.values(OSIS_TO_DE));
+
+/**
  * Format a single OSIS entity string ("Matt.5.3-Matt.5.12") to German short.
  * Falls back to the OSIS book code if no German mapping is registered.
  *
