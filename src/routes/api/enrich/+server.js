@@ -36,9 +36,10 @@ function buildSkosSchemes() {
   return schemes;
 }
 
+/** @type {import('amb-mcp/lib').AnthropicLike | null | undefined} */
 let cachedLlmClient;
 function getLlmClient() {
-  if (cachedLlmClient !== undefined) return cachedLlmClient;
+  if (cachedLlmClient !== undefined) return cachedLlmClient ?? undefined;
   cachedLlmClient = createAnthropicClient(env.ANTHROPIC_API_KEY) ?? null;
   return cachedLlmClient ?? undefined;
 }
@@ -68,10 +69,11 @@ export async function POST({ request }) {
     return json({ error: 'URL must be http or https' }, { status: 400 });
   }
 
-  const variant = body.variant ?? 'amb';
-  if (!VARIANTS.has(variant)) {
-    return json({ error: `Invalid variant '${variant}'` }, { status: 400 });
+  const variantRaw = body.variant ?? 'amb';
+  if (!VARIANTS.has(variantRaw)) {
+    return json({ error: `Invalid variant '${variantRaw}'` }, { status: 400 });
   }
+  const variant = /** @type {'amb' | 'ekw'} */ (variantRaw);
 
   try {
     const result = await extractMetadata({

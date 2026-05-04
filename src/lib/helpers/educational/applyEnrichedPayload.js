@@ -23,6 +23,22 @@ const FORM_DEFAULT_LANGUAGE = 'de';
  */
 
 /**
+ * Subset of the wizard's reactive `formData` that this helper reads/writes.
+ * Wider shapes (with extra wizard-only fields) are accepted via spread.
+ *
+ * @typedef {Object} EnrichableFormData
+ * @property {string} [name]
+ * @property {string} [description]
+ * @property {string} [image]
+ * @property {string} [inLanguage]
+ * @property {string} [license]
+ * @property {Array<{id: string, label: string}>} [learningResourceType]
+ * @property {Array<{id: string, label: string}>} [educationalLevels]
+ * @property {string[]} [keywords]
+ * @property {Array<Record<string, unknown>>} [creators]
+ */
+
+/**
  * @param {Array<{id: string, prefLabel?: string}>} arr
  * @returns {Array<{id: string, label: string}>}
  */
@@ -31,14 +47,15 @@ function toFormConcepts(arr) {
 }
 
 /**
- * @template T
+ * @template {EnrichableFormData} T
  * @param {T} formData - the wizard's reactive formData object
  * @param {ExtractMetadataResult | null | undefined} result
  * @returns {T} a new formData object with enriched values applied
  */
 export function applyEnrichedPayload(formData, result) {
+  /** @type {EnrichableFormData & Record<string, any>} */
   const next = { ...formData };
-  if (!result || result.source === 'amb-jsonld') return next;
+  if (!result || result.source === 'amb-jsonld') return /** @type {T} */ (next);
   const payload = /** @type {Record<string, any>} */ (result.payload ?? {});
 
   if (typeof payload.name === 'string' && !next.name) next.name = payload.name;
@@ -72,5 +89,5 @@ export function applyEnrichedPayload(formData, result) {
     next.license = payload.license;
   }
 
-  return next;
+  return /** @type {T} */ (next);
 }

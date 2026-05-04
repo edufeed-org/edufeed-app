@@ -35,7 +35,7 @@ describe('applyEnrichedPayload', () => {
   it('fills empty scalar fields from the payload', () => {
     const formData = makeFormData();
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: {
         name: 'Photosynthesis',
         description: 'Lesson about photosynthesis',
@@ -55,7 +55,7 @@ describe('applyEnrichedPayload', () => {
   it('does NOT overwrite scalar fields that already have user-entered values', () => {
     const formData = makeFormData({ name: 'My Title', description: 'My desc' });
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: { name: 'LLM Title', description: 'LLM desc' },
       evidence: {},
       baseline: {}
@@ -68,7 +68,7 @@ describe('applyEnrichedPayload', () => {
   it('maps SKOS concept arrays from {id, prefLabel} → {id, label}', () => {
     const formData = makeFormData();
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: {
         learningResourceType: [{ id: 'https://w3id.org/kim/hcrt/text', prefLabel: 'Text' }],
         educationalLevels: [
@@ -92,7 +92,7 @@ describe('applyEnrichedPayload', () => {
       learningResourceType: [{ id: 'existing', label: 'Existing' }]
     });
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: {
         learningResourceType: [{ id: 'new', prefLabel: 'New' }]
       },
@@ -106,7 +106,7 @@ describe('applyEnrichedPayload', () => {
   it('fills keywords array when empty', () => {
     const formData = makeFormData();
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: { keywords: ['Biologie', 'Pflanzen'] },
       evidence: {},
       baseline: {}
@@ -118,7 +118,7 @@ describe('applyEnrichedPayload', () => {
   it('fills creators array (passes through {name, type, id}) when empty', () => {
     const formData = makeFormData();
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: {
         creators: [{ name: 'Jane Doe', type: 'Person' }]
       },
@@ -132,7 +132,7 @@ describe('applyEnrichedPayload', () => {
   it('applies license string when current value still equals the form default', () => {
     const formData = makeFormData(); // default = CC-BY 4.0
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: { license: 'https://creativecommons.org/licenses/by-sa/4.0/' },
       evidence: {},
       baseline: {}
@@ -146,7 +146,7 @@ describe('applyEnrichedPayload', () => {
       license: 'https://creativecommons.org/publicdomain/zero/1.0/'
     });
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: { license: 'https://creativecommons.org/licenses/by-sa/4.0/' },
       evidence: {},
       baseline: {}
@@ -158,7 +158,7 @@ describe('applyEnrichedPayload', () => {
   it('returns a NEW object (does not mutate input)', () => {
     const formData = makeFormData();
     const result = {
-      source: 'llm-enriched',
+      source: /** @type {const} */ ('llm-enriched'),
       payload: { name: 'LLM' },
       evidence: {},
       baseline: {}
@@ -171,7 +171,7 @@ describe('applyEnrichedPayload', () => {
   it('returns formData unchanged when source is amb-jsonld (already handled by AMB path)', () => {
     const formData = makeFormData();
     const result = {
-      source: 'amb-jsonld',
+      source: /** @type {const} */ ('amb-jsonld'),
       payload: { name: 'AMB Title' },
       evidence: {},
       baseline: {}

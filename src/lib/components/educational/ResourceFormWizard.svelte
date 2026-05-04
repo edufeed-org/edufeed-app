@@ -51,6 +51,8 @@
     ambJsonLdToPrefillEvent,
     ogToFormDataPrefill
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
+  import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
+  import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -504,13 +506,23 @@
           if (prefillEvent) {
             applyPrefillFromAmbEvent(prefillEvent);
           }
-        } else if (result.metadata.source === 'opengraph' && result.metadata.og) {
+          // AMB JSON-LD already provides everything; no need to call /api/enrich.
+          return;
+        }
+        if (result.metadata.source === 'opengraph' && result.metadata.og) {
           const og = ogToFormDataPrefill(result.metadata.og);
           if (og.name) formData.name = og.name;
           if (og.description) formData.description = og.description;
           if (og.image) formData.image = og.image;
           if (og.inLanguage) formData.inLanguage = og.inLanguage;
         }
+        // Fire-and-forget LLM enrichment on top of the OG / no-metadata fallback.
+        // applyEnrichedPayload only fills fields the user hasn't touched, so
+        // racing against typing is safe.
+        enrichFromUrl(result.url, isEkw ? 'ekw' : 'amb').then((enriched) => {
+          if (!enriched) return;
+          formData = applyEnrichedPayload(formData, enriched);
+        });
       }
     }
   }
