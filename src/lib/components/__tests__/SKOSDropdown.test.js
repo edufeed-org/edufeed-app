@@ -789,6 +789,35 @@ describe('SKOSDropdown', () => {
       expect(options[1].textContent).toContain('Beta');
     });
 
+    it('renders options without spinner when concepts prop is supplied without isLoading', async () => {
+      const externalConcepts = [
+        { id: 'https://example.com/a', prefLabel: { en: 'Alpha' }, level: 0 },
+        { id: 'https://example.com/b', prefLabel: { en: 'Beta' }, level: 0 }
+      ];
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          concepts: /** @type {any} */ (externalConcepts)
+          // no isLoading prop — internal default must resolve to false
+        }
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('[role="combobox"]')).toBeTruthy();
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // Spinner must not appear in trigger or panel
+      expect(container.querySelector('.loading-spinner')).toBeFalsy();
+      expect(container.querySelector('[data-testid="skos-panel-loading"]')).toBeFalsy();
+
+      const options = container.querySelectorAll('[role="option"]');
+      expect(options.length).toBe(2);
+    });
+
     it('shows spinner when external isLoading prop is true', () => {
       const { container } = render(SKOSDropdown, {
         props: {
