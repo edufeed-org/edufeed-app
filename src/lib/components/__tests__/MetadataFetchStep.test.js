@@ -101,4 +101,38 @@ describe('MetadataFetchStep auto-inspect', () => {
     expect(resolveMock).toHaveBeenCalledTimes(1);
     expect(resolveMock.mock.calls[0][0]).toBe('naddr1examplevalue');
   });
+
+  it('emits onbusychange(true) while inspecting and onbusychange(false) when done', async () => {
+    /** @type {(value: any) => void} */
+    let resolveInspect;
+    resolveMock.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveInspect = res;
+        })
+    );
+
+    const onbusychange = vi.fn();
+    const { container } = render(MetadataFetchStep, {
+      props: { value: '', onbusychange }
+    });
+    const input = container.querySelector('#metadata-input');
+
+    await fireEvent.input(input, { target: { value: 'https://example.com/a' } });
+    await vi.advanceTimersByTimeAsync(500);
+
+    // Inspect is in flight — busy must have been signalled true.
+    expect(onbusychange).toHaveBeenCalledWith(true);
+
+    // Resolve the inspection.
+    resolveInspect({ kind: 'empty' });
+    // Flush microtasks + any pending timers.
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Last call must be `false`.
+    const lastCall = onbusychange.mock.calls[onbusychange.mock.calls.length - 1];
+    expect(lastCall[0]).toBe(false);
+  });
 });

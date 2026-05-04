@@ -126,6 +126,10 @@
   /** @type {'idle' | 'pending' | 'success' | 'error' | 'skipped-amb'} */
   let enrichmentStatus = $state('idle');
 
+  // True while MetadataFetchStep is fetching OG data for the current input.
+  // Surfaced from the child via its `onbusychange` callback.
+  let metadataFetchBusy = $state(false);
+
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
 
@@ -854,6 +858,18 @@
   const validationErrors = $derived(Object.values(fieldErrors));
 
   /**
+   * True while async work that may fill required fields is in flight:
+   * - Step 2: OG-data fetch via MetadataFetchStep
+   * - Steps 3+: LLM enrichment (`enrichmentStatus === 'pending'`)
+   *
+   * The Next button is disabled while this is true so users don't see
+   * misleading "field required" errors before the async fill completes.
+   */
+  const isAsyncBusy = $derived(
+    metadataFetchBusy || /** @type {string} */ (enrichmentStatus) === 'pending'
+  );
+
+  /**
    * Should the inline error for `field` be shown right now? True iff there
    * IS an error AND the user has either touched the field or tried to
    * advance the step.
@@ -1319,6 +1335,7 @@
               mode={enrichmentMode}
               onmodechange={(next) => (enrichmentMode = next)}
               onresult={handleMetadataResult}
+              onbusychange={(busy) => (metadataFetchBusy = busy)}
             />
             {#if !isEditMode}
               <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
@@ -2279,10 +2296,22 @@
       {/if}
 
       {#if currentStep < totalSteps}
-        <button type="button" class="btn btn-primary" onclick={nextStep}>
-          {m.common_next()}
-          <ChevronRightIcon class_="w-4 h-4" />
-        </button>
+        <div class="flex items-center gap-3">
+          {#if isAsyncBusy}
+            <span
+              class="flex items-center gap-2 text-sm text-base-content/60"
+              role="status"
+              aria-live="polite"
+            >
+              <span class="loading loading-xs loading-spinner"></span>
+              {metadataFetchBusy ? m.amb_form_busy_metadata_fetch() : m.amb_form_busy_enrichment()}
+            </span>
+          {/if}
+          <button type="button" class="btn btn-primary" onclick={nextStep} disabled={isAsyncBusy}>
+            {m.common_next()}
+            <ChevronRightIcon class_="w-4 h-4" />
+          </button>
+        </div>
       {:else}
         <button
           type="button"

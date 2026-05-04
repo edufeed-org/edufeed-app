@@ -20,7 +20,8 @@
    *   readOnly?: boolean,
    *   mode?: 'smart' | 'manual',
    *   onmodechange?: (mode: 'smart' | 'manual') => void,
-   *   onresult?: (result: import('$lib/helpers/educational/resolveMetadataInput.js').ResolveResult) => void
+   *   onresult?: (result: import('$lib/helpers/educational/resolveMetadataInput.js').ResolveResult) => void,
+   *   onbusychange?: (busy: boolean) => void
    * }}
    */
   let {
@@ -29,11 +30,19 @@
     readOnly = false,
     mode = 'smart',
     onmodechange = () => {},
-    onresult = () => {}
+    onresult = () => {},
+    onbusychange = () => {}
   } = $props();
 
   let isInspecting = $state(false);
   let lastError = $state('');
+
+  // Surface inspection busy state so the parent wizard can disable Next
+  // while OG-data fetching is in flight (avoids confusing "URL required"
+  // errors triggered by an early click on Weiter).
+  $effect(() => {
+    onbusychange(isInspecting);
+  });
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let debounceTimer;
