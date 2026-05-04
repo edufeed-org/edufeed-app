@@ -51,7 +51,7 @@
     ambJsonLdToPrefillEvent,
     ogToFormDataPrefill
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
-  import { toSkosConcepts } from '$lib/data/ekwLearningResourceTypes.js';
+  import { toSkosConcepts, migrateLrtForEkw } from '$lib/data/ekwLearningResourceTypes.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -429,7 +429,9 @@
       inLanguage: getAMBLanguages(editEvent)[0] || 'de',
       image: getAMBImage(editEvent) || '',
       identifier: isUrlIdentifier ? identifier : '',
-      learningResourceType: lrtTypes.map((t) => ({ id: t.id, label: t.label })),
+      learningResourceType: isEkw
+        ? migrateLrtForEkw(lrtTypes.map((t) => ({ id: t.id, label: t.label })))
+        : lrtTypes.map((t) => ({ id: t.id, label: t.label })),
       educationalLevels: eduLevels.map((t) => ({ id: t.id, label: t.label })),
       keywords: getAMBKeywords(editEvent),
       creators:
@@ -538,7 +540,8 @@
     if (lang) formData.inLanguage = lang;
 
     if (lrtTypes.length > 0) {
-      formData.learningResourceType = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
+      const compact = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
+      formData.learningResourceType = isEkw ? migrateLrtForEkw(compact) : compact;
     }
     if (eduLevels.length > 0) {
       formData.educationalLevels = eduLevels.map((t) => ({ id: t.id, label: t.label }));

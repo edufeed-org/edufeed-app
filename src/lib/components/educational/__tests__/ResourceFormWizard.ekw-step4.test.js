@@ -20,7 +20,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import SKOSDropdown from '../SKOSDropdown.svelte';
-import { toSkosConcepts } from '$lib/data/ekwLearningResourceTypes.js';
+import {
+  toSkosConcepts,
+  migrateLrtForEkw,
+  EKW_LRT_ID_PREFIX
+} from '$lib/data/ekwLearningResourceTypes.js';
+import { getAMBLearningResourceTypes } from '$lib/helpers/educational/ambHelpers.js';
 
 // Force German locale so the EKW labels (which only have a `de` variant)
 // render via the preferred-language path in getConceptLabel.
@@ -105,5 +110,83 @@ describe('EKW step 4 — LRT picker contract', () => {
       // Every leaf in the EKW vocab should be represented as an option row.
       expect(options.length).toBe(concepts.length);
     });
+  });
+});
+
+/**
+ * Edit-mode legacy LRT migration contract (Task 7).
+ *
+ * Mounting the full wizard in jsdom is impractical — the wizard pulls in
+ * SvelteKit nav, applesauce account/relay infrastructure, blossom uploaders,
+ * etc., several of which hit module-load issues in jsdom (matchMedia,
+ * effect_update_depth_exceeded under the missing infrastructure). The wizard
+ * also opens at step 1 and the LRT picker is on step 4, so reaching the chip
+ * would require driving the full multi-step navigation in jsdom.
+ *
+ * This focused unit test instead reproduces the exact data path the wizard's
+ * edit-mode prefill executes for the EKW variant:
+ *
+ *   const lrtTypes = getAMBLearningResourceTypes(editEvent, locale);
+ *   formData.learningResourceType = isEkw
+ *     ? migrateLrtForEkw(lrtTypes.map(...))
+ *     : lrtTypes.map(...);
+ *
+ * It then renders SKOSDropdown with that migrated array as `selected` and
+ * asserts the chip in the DOM carries `data-skos-chip-id` starting with
+ * `EKW_LRT_ID_PREFIX`. This pins both:
+ *   - migrateLrtForEkw correctly remaps HCRT id+German label to an EKW leaf
+ *   - the chip exposes `data-skos-chip-id` so the wizard's eventual e2e
+ *     coverage (or manual smoke check) can target the rendered selection
+ */
+describe('EKW step 4 — edit-mode legacy LRT migration', () => {
+  it('migrates HCRT-id learningResourceType from an edit event to an EKW leaf and renders it as a chip', () => {
+    // Synthetic kind-30142 event with a legacy HCRT id whose German prefLabel
+    // matches the EKW leaf "Arbeitsblatt".
+    /** @type {any} */
+    const editEvent = {
+      kind: 30142,
+      pubkey: '0'.repeat(64),
+      created_at: 1700000000,
+      content: '',
+      tags: [
+        ['d', 'test'],
+        ['name', 'Test'],
+        ['identifier', 'https://example.org/test'],
+        ['learningResourceType:id', 'https://w3id.org/kim/hcrt/text'],
+        ['learningResourceType:prefLabel:de', 'Arbeitsblatt']
+      ]
+    };
+
+    // Step 1: extract the same way the wizard does in edit mode.
+    const lrtTypes = getAMBLearningResourceTypes(editEvent, 'de');
+    expect(lrtTypes.length).toBe(1);
+    expect(lrtTypes[0].id).toBe('https://w3id.org/kim/hcrt/text');
+    expect(lrtTypes[0].label).toBe('Arbeitsblatt');
+
+    // Step 2: apply the EKW-variant migration (the exact wiring under test).
+    const compact = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
+    const migrated = migrateLrtForEkw(compact);
+
+    // Sanity: the migration must produce exactly one EKW-prefixed concept.
+    expect(migrated.length).toBe(1);
+    expect(migrated[0].id.startsWith(EKW_LRT_ID_PREFIX)).toBe(true);
+
+    // Step 3: render the dropdown with the migrated list as `selected` —
+    // mirrors the runtime shape the wizard binds into SKOSDropdown.
+    const { container } = render(SKOSDropdown, {
+      props: {
+        concepts: toSkosConcepts(),
+        selected: migrated,
+        label: 'Resource type',
+        placeholder: 'Select',
+        multiple: true
+      }
+    });
+
+    // Assert: the rendered chip carries data-skos-chip-id with the EKW id.
+    const chips = container.querySelectorAll('[data-skos-chip-id]');
+    expect(chips.length).toBe(1);
+    const id = chips[0].getAttribute('data-skos-chip-id') ?? '';
+    expect(id.startsWith(EKW_LRT_ID_PREFIX)).toBe(true);
   });
 });
