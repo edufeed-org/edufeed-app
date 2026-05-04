@@ -33,6 +33,7 @@
   import ExternalUrlInput from './ExternalUrlInput.svelte';
   import MetadataFetchStep from './MetadataFetchStep.svelte';
   import AMBResourceSearchInput from './AMBResourceSearchInput.svelte';
+  import BibleReferenceInput from './BibleReferenceInput.svelte';
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
@@ -44,6 +45,7 @@
   } from '$lib/helpers/educational/bildungsbereich.js';
   import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
   import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
+  import { parseEkwTagsToFormData } from '$lib/helpers/educational/parseEkwTagsToFormData.js';
   import { splitKeywordInput, mergeKeywords } from '$lib/helpers/educational/keywordInput.js';
   import {
     ambJsonLdToPrefillEvent,
@@ -87,6 +89,9 @@
 
   // Determine if we're in edit mode
   const isEditMode = $derived(editEvent !== null && editResource !== null);
+
+  // EKW variant exposes additional metadata fields in steps 4 and 5.
+  const isEkw = $derived(variantId === 'ekw');
 
   // Total step count — share step is skipped in edit mode.
   const totalSteps = $derived(isEditMode ? 7 : 8);
@@ -134,7 +139,20 @@
 
     // Step 7: Rights
     license: 'https://creativecommons.org/licenses/by/4.0/',
-    isAccessibleForFree: true
+    isAccessibleForFree: true,
+
+    // EKW-only (variantId === 'ekw'); ignored for AMB
+    ekwFachrichtung: /** @type {{id: string, label: string}[]} */ ([]),
+    gradeLevels: /** @type {string[]} */ ([]),
+    gradeLevelLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    schoolTypes: /** @type {string[]} */ ([]),
+    schoolTypeLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    didacticConcepts: /** @type {string[]} */ ([]),
+    didacticConceptLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    methods: /** @type {string[]} */ ([]),
+    methodLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    methodOther: '',
+    bibleReferences: /** @type {string[]} */ ([''])
   });
 
   // Per-vocab subject selection (merged into formData.about on submit).
@@ -178,6 +196,14 @@
   });
 
   const educationalLevelField = $derived(resolveVocabField('educationalLevel'));
+
+  // EKW vocab field resolvers (null when the matching SCHEME_NADDR_* env var
+  // is unset, e.g. before the EKW vocabs have been published).
+  const ekwFachField = $derived(resolveVocabField('ekwFach'));
+  const klassenstufenField = $derived(resolveVocabField('klassenstufen'));
+  const schulartField = $derived(resolveVocabField('schulart'));
+  const didaktischesKonzeptField = $derived(resolveVocabField('didaktischesKonzept'));
+  const methodeField = $derived(resolveVocabField('methode'));
 
   // Validation and submission state
   let validationErrors = $state(/** @type {string[]} */ ([]));
@@ -429,6 +455,22 @@
       isAccessibleForFree: isAMBFree(editEvent)
     };
 
+    // Merge EKW fields parsed from ekw:* tags (no-op for non-EKW events).
+    const ekw = parseEkwTagsToFormData(editEvent);
+    formData = {
+      ...formData,
+      gradeLevels: ekw.gradeLevels,
+      gradeLevelLabels: ekw.gradeLevelLabels,
+      schoolTypes: ekw.schoolTypes,
+      schoolTypeLabels: ekw.schoolTypeLabels,
+      didacticConcepts: ekw.didacticConcepts,
+      didacticConceptLabels: ekw.didacticConceptLabels,
+      methods: ekw.methods,
+      methodLabels: ekw.methodLabels,
+      methodOther: ekw.methodOther,
+      bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
+    };
+
     // Bucket pre-existing subjects into a single vocab slot for display.
     // In edit mode we don't know which vocab each subject came from, so we
     // surface them under the first vocab key of the inferred Bildungsbereich.
@@ -565,8 +607,10 @@
           validationErrors.push(m.amb_form_validation_resource_type());
         }
         // Skip the subject-required check when the current Bildungsbereich has no
-        // subject vocab (e.g. Konfi-Arbeit) — there is nothing for the user to pick.
-        if (subjectVocabFields.length > 0) {
+        // subject vocab (e.g. Konfi-Arbeit), or when the EKKW variant is active —
+        // EKKW uses its own Fachrichtung field and does not render the AMB
+        // Fach/Thema picker.
+        if (!isEkw && subjectVocabFields.length > 0) {
           const totalSubjects = Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0);
           if (totalSubjects === 0) {
             validationErrors.push(m.amb_form_validation_subject());
@@ -824,6 +868,30 @@
     return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
       aboutByVocab = { ...aboutByVocab, [vocabKey]: rich.map(toCompactConcept) };
     };
+  }
+
+  /**
+   * Build a paired-state EKW handler that updates two formData fields:
+   *   - the `ids` field with concept URIs
+   *   - the `labels` field with `{id, label}[]` pairs
+   *
+   * @param {'gradeLevels'|'schoolTypes'|'didacticConcepts'|'methods'} idsKey
+   * @param {'gradeLevelLabels'|'schoolTypeLabels'|'didacticConceptLabels'|'methodLabels'} labelsKey
+   */
+  function makeEkwPairHandler(idsKey, labelsKey) {
+    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+      const compact = rich.map(toCompactConcept);
+      formData[idsKey] = compact.map((c) => c.id);
+      formData[labelsKey] = compact;
+    };
+  }
+
+  /**
+   * EKW Fachrichtung handler (single `{id, label}[]` array).
+   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
+   */
+  function handleEkwFachrichtungChange(rich) {
+    formData.ekwFachrichtung = rich.map(toCompactConcept);
   }
 </script>
 
@@ -1096,51 +1164,63 @@
           helpText={m.amb_form_help_resource_type()}
         />
 
-        <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
-        {#if educationalLevelField}
-          <div class="space-y-1">
-            <span class="label-text font-medium">
-              {m.amb_form_label_educational_level?.() ?? 'Educational level'}
-            </span>
-            <FormConceptPicker
-              field={educationalLevelField}
-              multiple={true}
-              value={formData.educationalLevels.map((c) =>
-                toRichConcept(c, educationalLevelField.vocab.relay)
-              )}
-              onchange={handleEduLevelChange}
-            />
-          </div>
-        {/if}
+        <!--
+          Bildungsstufe + Fach/Thema are AMB-shared classification fields.
+          For the EKKW variant they're hidden because the EKKW-specific
+          Klassenstufe / Schulart / Fachrichtung pickers below cover the
+          same ground (and are the canonical source for that path).
+        -->
+        {#if !isEkw}
+          <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
+          {#if educationalLevelField}
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">
+                  {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+                </span>
+              </div>
+              <FormConceptPicker
+                field={educationalLevelField}
+                multiple={true}
+                value={formData.educationalLevels.map((c) =>
+                  toRichConcept(c, educationalLevelField.vocab.relay)
+                )}
+                onchange={handleEduLevelChange}
+              />
+            </div>
+          {/if}
 
-        <!-- Subject pickers — one per Bildungsbereich vocab -->
-        {#if subjectVocabFields.length === 0}
-          <p class="text-sm text-base-content/60">
-            {m.amb_form_help_subject_pick_bildungsbereich?.() ??
-              'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
-          </p>
+          <!-- Subject pickers — one per Bildungsbereich vocab -->
+          {#if subjectVocabFields.length === 0}
+            <p class="text-sm text-base-content/60">
+              {m.amb_form_help_subject_pick_bildungsbereich?.() ??
+                'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
+            </p>
+          {/if}
+          {#each subjectVocabFields as entry (entry.key)}
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">
+                  {m.amb_form_label_subject()}
+                  <span class="text-error">*</span>
+                </span>
+              </div>
+              {#if subjectVocabFields.length > 1}
+                <p class="-mt-1 mb-1 text-xs text-base-content/60">
+                  {getSubjectVocabLabel(entry.key, getLocale())}
+                </p>
+              {/if}
+              <FormConceptPicker
+                field={entry.field}
+                multiple={true}
+                value={(aboutByVocab[entry.key] ?? []).map((c) =>
+                  toRichConcept(c, entry.field.vocab.relay)
+                )}
+                onchange={makeAboutHandler(entry.key)}
+              />
+            </div>
+          {/each}
         {/if}
-        {#each subjectVocabFields as entry (entry.key)}
-          <div class="space-y-1">
-            <span class="label-text font-medium">
-              {m.amb_form_label_subject()}
-              <span class="text-error">*</span>
-            </span>
-            {#if subjectVocabFields.length > 1}
-              <p class="text-xs text-base-content/60">
-                {getSubjectVocabLabel(entry.key, getLocale())}
-              </p>
-            {/if}
-            <FormConceptPicker
-              field={entry.field}
-              multiple={true}
-              value={(aboutByVocab[entry.key] ?? []).map((c) =>
-                toRichConcept(c, entry.field.vocab.relay)
-              )}
-              onchange={makeAboutHandler(entry.key)}
-            />
-          </div>
-        {/each}
 
         <!-- Keywords -->
         <div class="form-control">
@@ -1174,6 +1254,150 @@
             </div>
           {/if}
         </div>
+
+        <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
+        {#if isEkw}
+          {#if ekwFachField}
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Fachrichtung</span>
+              </div>
+              <FormConceptPicker
+                field={ekwFachField}
+                multiple={true}
+                value={formData.ekwFachrichtung.map((c) =>
+                  toRichConcept(c, ekwFachField.vocab.relay)
+                )}
+                onchange={handleEkwFachrichtungChange}
+              />
+            </div>
+          {/if}
+
+          {#if klassenstufenField}
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Klassenstufe</span>
+              </div>
+              <FormConceptPicker
+                field={klassenstufenField}
+                multiple={true}
+                value={formData.gradeLevelLabels.map((c) =>
+                  toRichConcept(c, klassenstufenField.vocab.relay)
+                )}
+                onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
+              />
+            </div>
+          {/if}
+
+          {#if schulartField}
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Schulart</span>
+              </div>
+              <FormConceptPicker
+                field={schulartField}
+                multiple={true}
+                value={formData.schoolTypeLabels.map((c) =>
+                  toRichConcept(c, schulartField.vocab.relay)
+                )}
+                onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
+              />
+            </div>
+          {/if}
+
+          {#if didaktischesKonzeptField}
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Didaktisches Konzept</span>
+              </div>
+              <FormConceptPicker
+                field={didaktischesKonzeptField}
+                multiple={true}
+                value={formData.didacticConceptLabels.map((c) =>
+                  toRichConcept(c, didaktischesKonzeptField.vocab.relay)
+                )}
+                onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
+              />
+            </div>
+          {/if}
+
+          {#if methodeField}
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Methode</span>
+              </div>
+              <FormConceptPicker
+                field={methodeField}
+                multiple={true}
+                value={formData.methodLabels.map((c) => toRichConcept(c, methodeField.vocab.relay))}
+                onchange={makeEkwPairHandler('methods', 'methodLabels')}
+              />
+            </div>
+          {/if}
+
+          <div class="form-control">
+            <label class="label" for="ekw-method-other">
+              <span class="label-text font-medium">Weitere Methoden (frei – eine pro Zeile)</span>
+            </label>
+            <textarea
+              id="ekw-method-other"
+              class="textarea-bordered textarea w-full"
+              rows="4"
+              bind:value={formData.methodOther}
+            ></textarea>
+          </div>
+
+          <div class="form-control">
+            <div class="label">
+              <span class="label-text font-medium">Bibelstelle</span>
+            </div>
+            <div class="space-y-2">
+              {#each formData.bibleReferences as _ref, i (i)}
+                <BibleReferenceInput
+                  bind:value={formData.bibleReferences[i]}
+                  onremove={formData.bibleReferences.length > 1
+                    ? () => {
+                        formData.bibleReferences = formData.bibleReferences.filter(
+                          (_, j) => j !== i
+                        );
+                      }
+                    : undefined}
+                />
+              {/each}
+              <button
+                type="button"
+                class="btn btn-outline btn-sm"
+                onclick={() => (formData.bibleReferences = [...formData.bibleReferences, ''])}
+                >+ Hinzufügen</button
+              >
+            </div>
+          </div>
+
+          {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
+            <div class="alert text-sm alert-warning">
+              <div>
+                <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
+                <p class="mt-1">
+                  Die EKKW-Vokabulare sind auf diesem Server noch nicht hinterlegt. Bitte wende Dich
+                  an die Administration der Plattform – das Formular lässt sich aktuell nicht
+                  vollständig ausfüllen.
+                </p>
+                <details class="mt-2">
+                  <summary class="cursor-pointer text-xs text-base-content/60">
+                    Technische Details
+                  </summary>
+                  <p class="mt-1 text-xs text-base-content/60">
+                    Fehlende Vokabular-Konfiguration:
+                    <code>SCHEME_NADDR_EKW_FACH</code>, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
+                    <code>SCHEME_NADDR_SCHULART</code>,
+                    <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
+                    <code>SCHEME_NADDR_METHODE</code>.
+                  </p>
+                </details>
+              </div>
+            </div>
+          {/if}
+        {/if}
       </div>
     {/if}
 
@@ -1387,6 +1611,21 @@
                 <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.description}</dd>
               </div>
             {/if}
+            {#if formData.bildungsbereich}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">Bildungsbereich:</dt>
+                <dd class="flex-1">
+                  {BILDUNGSBEREICHE[formData.bildungsbereich]?.label?.de ??
+                    formData.bildungsbereich}
+                </dd>
+              </div>
+            {/if}
+            {#if formData.image}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">Vorschaubild:</dt>
+                <dd class="flex-1 truncate font-mono text-xs">{formData.image}</dd>
+              </div>
+            {/if}
             <div class="flex">
               <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_language()}</dt>
               <dd class="flex-1">
@@ -1424,6 +1663,63 @@
                 </dt>
                 <dd class="flex-1">{formData.keywords.join(', ')}</dd>
               </div>
+            {/if}
+            {#if isEkw}
+              {#if formData.ekwFachrichtung.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Fachrichtung:</dt>
+                  <dd class="flex-1">
+                    {formData.ekwFachrichtung.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.gradeLevelLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Klassenstufe:</dt>
+                  <dd class="flex-1">
+                    {formData.gradeLevelLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.schoolTypeLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Schulart:</dt>
+                  <dd class="flex-1">
+                    {formData.schoolTypeLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.didacticConceptLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Didaktisches Konzept:</dt>
+                  <dd class="flex-1">
+                    {formData.didacticConceptLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.methodLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Methode:</dt>
+                  <dd class="flex-1">
+                    {formData.methodLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.methodOther?.trim()}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Methode (frei):</dt>
+                  <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.methodOther}</dd>
+                </div>
+              {/if}
+              {@const bibleRefs = formData.bibleReferences
+                .map((/** @type {string} */ s) => s.trim())
+                .filter(Boolean)}
+              {#if bibleRefs.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Bibelstelle:</dt>
+                  <dd class="flex-1">{bibleRefs.join(', ')}</dd>
+                </div>
+              {/if}
             {/if}
             <div class="flex">
               <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_creators()}</dt>

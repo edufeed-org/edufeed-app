@@ -122,6 +122,223 @@
           }
         ]
       }
+    },
+    {
+      "d": "klassenstufen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          { "value": "Klassenstufen", "lang": "de" },
+          { "value": "Grade levels", "lang": "en" }
+        ],
+        "concepts": [
+          { "d": "1", "prefLabels": [{ "value": "1", "lang": "de" }] },
+          { "d": "2", "prefLabels": [{ "value": "2", "lang": "de" }] },
+          { "d": "3", "prefLabels": [{ "value": "3", "lang": "de" }] },
+          { "d": "4", "prefLabels": [{ "value": "4", "lang": "de" }] },
+          { "d": "5-6", "prefLabels": [{ "value": "5–6", "lang": "de" }] },
+          { "d": "7-8", "prefLabels": [{ "value": "7–8", "lang": "de" }] },
+          { "d": "9-10", "prefLabels": [{ "value": "9–10", "lang": "de" }] },
+          { "d": "ef", "prefLabels": [{ "value": "EF (11)", "lang": "de" }] },
+          { "d": "q1-q2", "prefLabels": [{ "value": "Q1/Q2", "lang": "de" }] }
+        ]
+      }
+    },
+    {
+      "d": "schulart",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          { "value": "Schulart", "lang": "de" },
+          { "value": "School type", "lang": "en" }
+        ],
+        "concepts": [
+          { "d": "elementar", "prefLabels": [{ "value": "Elementar", "lang": "de" }] },
+          { "d": "krippe", "prefLabels": [{ "value": "Krippe/U3", "lang": "de" }] },
+          { "d": "kita", "prefLabels": [{ "value": "Kita", "lang": "de" }] },
+          { "d": "hort", "prefLabels": [{ "value": "Hort", "lang": "de" }] },
+          { "d": "grundschule", "prefLabels": [{ "value": "Grundschule (1–4)", "lang": "de" }] },
+          { "d": "gesamtschule", "prefLabels": [{ "value": "Gesamtschule", "lang": "de" }] },
+          {
+            "d": "gemeinschaftsschule",
+            "prefLabels": [{ "value": "Gemeinschaftsschule", "lang": "de" }]
+          },
+          {
+            "d": "foerderschule",
+            "prefLabels": [{ "value": "Förderschule/Sonderpädagogische Einrichtung", "lang": "de" }]
+          },
+          {
+            "d": "hauptschule",
+            "prefLabels": [{ "value": "Hauptschule/Mittelschule", "lang": "de" }]
+          },
+          { "d": "realschule", "prefLabels": [{ "value": "Realschule", "lang": "de" }] },
+          { "d": "gymnasium", "prefLabels": [{ "value": "Gymnasium", "lang": "de" }] },
+          {
+            "d": "berufliche-schule",
+            "prefLabels": [{ "value": "Berufliche Schule", "lang": "de" }],
+            "children": [
+              { "d": "berufsschule", "prefLabels": [{ "value": "Berufsschule", "lang": "de" }] },
+              {
+                "d": "berufsfachschule",
+                "prefLabels": [{ "value": "Berufsfachschule", "lang": "de" }]
+              },
+              {
+                "d": "fachoberschule",
+                "prefLabels": [{ "value": "Fachoberschule", "lang": "de" }]
+              },
+              {
+                "d": "berufliches-gymnasium",
+                "prefLabels": [{ "value": "Berufliches Gymnasium", "lang": "de" }]
+              }
+            ]
+          },
+          {
+            "d": "universitaere-lehre",
+            "prefLabels": [{ "value": "Universitäre Lehre", "lang": "de" }]
+          },
+          {
+            "d": "fachhochschule",
+            "prefLabels": [{ "value": "Fachhochschule/Hochschule", "lang": "de" }]
+          }
+        ]
+      }
+    },
+    {
+      "d": "ekw-fach",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Fach (Religion / Ethik / Philosophie)", "lang": "de" }],
+        "concepts": [
+          {
+            "d": "religion",
+            "prefLabels": [{ "value": "Religion", "lang": "de" }],
+            "children": [
+              { "d": "katholisch", "prefLabels": [{ "value": "katholisch", "lang": "de" }] },
+              { "d": "evangelisch", "prefLabels": [{ "value": "evangelisch", "lang": "de" }] },
+              {
+                "d": "konfessionell-kooperativ",
+                "prefLabels": [{ "value": "konfessionell-kooperativ", "lang": "de" }]
+              },
+              {
+                "d": "christlicher-ru",
+                "prefLabels": [{ "value": "christlicher RU", "lang": "de" }]
+              },
+              {
+                "d": "religionskooperativ",
+                "prefLabels": [{ "value": "religionskooperativ (z. B. RUfa)", "lang": "de" }]
+              },
+              { "d": "orthodox", "prefLabels": [{ "value": "orthodox", "lang": "de" }] },
+              { "d": "islamisch", "prefLabels": [{ "value": "islamisch", "lang": "de" }] },
+              { "d": "juedisch", "prefLabels": [{ "value": "jüdisch", "lang": "de" }] },
+              { "d": "alevitisch", "prefLabels": [{ "value": "alevitisch", "lang": "de" }] },
+              { "d": "buddhistisch", "prefLabels": [{ "value": "buddhistisch", "lang": "de" }] },
+              {
+                "d": "religionskundlich",
+                "prefLabels": [{ "value": "religionskundlich (LER/Bremer RU)", "lang": "de" }]
+              }
+            ]
+          },
+          { "d": "ethik", "prefLabels": [{ "value": "Ethik", "lang": "de" }] },
+          { "d": "philosophie", "prefLabels": [{ "value": "Philosophie", "lang": "de" }] }
+        ]
+      }
+    },
+    {
+      "d": "didaktisches-konzept",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Didaktisches Konzept", "lang": "de" }],
+        "concepts": [
+          {
+            "d": "elementarisiertes-lernen",
+            "prefLabels": [{ "value": "Elementarisiertes Lernen", "lang": "de" }]
+          },
+          {
+            "d": "symboldidaktik",
+            "prefLabels": [{ "value": "Symboldidaktik / Symbollernen", "lang": "de" }]
+          },
+          {
+            "d": "mystagogisches-lernen",
+            "prefLabels": [{ "value": "Mystagogisches Lernen", "lang": "de" }]
+          },
+          {
+            "d": "theologisieren",
+            "prefLabels": [{ "value": "Theologisieren (Kinder-/Jugendtheologie)", "lang": "de" }]
+          },
+          {
+            "d": "biblisches-lernen",
+            "prefLabels": [{ "value": "Biblisches Lernen", "lang": "de" }]
+          },
+          {
+            "d": "ethisches-lernen",
+            "prefLabels": [{ "value": "Ethisches Lernen", "lang": "de" }]
+          },
+          {
+            "d": "aesthetisches-lernen",
+            "prefLabels": [{ "value": "Ästhetisches Lernen", "lang": "de" }]
+          },
+          {
+            "d": "biografisches-lernen",
+            "prefLabels": [{ "value": "Biografisches Lernen", "lang": "de" }]
+          },
+          {
+            "d": "dialogisches-lernen",
+            "prefLabels": [{ "value": "Dialogisches Lernen", "lang": "de" }]
+          },
+          {
+            "d": "performatives-lernen",
+            "prefLabels": [{ "value": "Performatives Lernen", "lang": "de" }]
+          },
+          { "d": "globales-lernen", "prefLabels": [{ "value": "Globales Lernen", "lang": "de" }] },
+          {
+            "d": "interreligioeses-lernen",
+            "prefLabels": [{ "value": "interreligiöses Lernen", "lang": "de" }]
+          },
+          {
+            "d": "demokratiebildung",
+            "prefLabels": [{ "value": "Demokratiebildung / Politische Bildung", "lang": "de" }]
+          },
+          {
+            "d": "friedenspaedagogik",
+            "prefLabels": [{ "value": "Friedenspädagogik", "lang": "de" }]
+          }
+        ]
+      }
+    },
+    {
+      "d": "methode",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          { "value": "Methode", "lang": "de" },
+          { "value": "Method", "lang": "en" }
+        ],
+        "concepts": [
+          { "d": "rollenspiel", "prefLabels": [{ "value": "Rollenspiel", "lang": "de" }] },
+          {
+            "d": "biblische-erzaehlung",
+            "prefLabels": [
+              { "value": "Biblische Erzählung / Geschichte / Fantasiegeschichte", "lang": "de" }
+            ]
+          },
+          {
+            "d": "meditation",
+            "prefLabels": [{ "value": "Meditation / Spiritueller Zugang", "lang": "de" }]
+          },
+          { "d": "vortrag", "prefLabels": [{ "value": "Vortrag", "lang": "de" }] },
+          { "d": "dialog", "prefLabels": [{ "value": "Dialog", "lang": "de" }] },
+          {
+            "d": "liederschliessung",
+            "prefLabels": [{ "value": "Liederschließung / Singen / Musik", "lang": "de" }]
+          },
+          { "d": "leporello", "prefLabels": [{ "value": "Leporello", "lang": "de" }] },
+          {
+            "d": "lernstationen",
+            "prefLabels": [{ "value": "Lernstationen / Stationenarbeit", "lang": "de" }]
+          },
+          { "d": "bildbetrachtung", "prefLabels": [{ "value": "Bildbetrachtung", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }

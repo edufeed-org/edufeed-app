@@ -83,6 +83,7 @@
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "applesauce-common": "^5.2.0",
+    "bible-passage-reference-parser": "^3.2.0",
     "linkedom": "^0.18.12",
     "nostr-idb": "^5.0.0",
     "nostr-tools": "^2.23.3",

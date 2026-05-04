@@ -312,7 +312,13 @@ export function GET() {
         newLrt: env.SCHEME_NADDR_NEW_LRT || '',
         lrmiAudience: env.SCHEME_NADDR_LRMI_AUDIENCE || '',
         interactivityType: env.SCHEME_NADDR_INTERACTIVITY_TYPE || '',
-        conditionsOfAccess: env.SCHEME_NADDR_CONDITIONS_OF_ACCESS || ''
+        conditionsOfAccess: env.SCHEME_NADDR_CONDITIONS_OF_ACCESS || '',
+        // EKW vocabularies (kind 39737) — surfaced for the EKW resource form variant.
+        klassenstufen: env.SCHEME_NADDR_KLASSENSTUFEN || '',
+        schulart: env.SCHEME_NADDR_SCHULART || '',
+        ekwFach: env.SCHEME_NADDR_EKW_FACH || '',
+        didaktischesKonzept: env.SCHEME_NADDR_DIDAKTISCHES_KONZEPT || '',
+        methode: env.SCHEME_NADDR_METHODE || ''
       }
     },
 
