@@ -154,3 +154,23 @@ export const EKW_LEARNING_RESOURCE_TYPES = Object.freeze(
     );
   })
 );
+
+/**
+ * Adapter: convert EKW_LEARNING_RESOURCE_TYPES into the SKOSConcept shape
+ * consumed by SKOSDropdown's `concepts` prop. The display label hugs the
+ * picker's "Parent › Child" convention (Q5 decision) so users see hierarchy
+ * context without a tree UI.
+ *
+ * Returns SKOSConcept-shaped objects (matches `labels: Record<string, string>`
+ * convention used by `SKOSDropdown` and `getConceptLabel` in skosLoader.js).
+ *
+ * @returns {Array<{ id: string, labels: { de: string } }>}
+ */
+export function toSkosConcepts() {
+  return EKW_LEARNING_RESOURCE_TYPES.map((leaf) => ({
+    id: leaf.id,
+    labels: {
+      de: leaf.parentLabel ? `${leaf.parentLabel} › ${leaf.label}` : leaf.label
+    }
+  }));
+}

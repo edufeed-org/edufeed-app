@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { EKW_LEARNING_RESOURCE_TYPES, EKW_LRT_ID_PREFIX } from '../ekwLearningResourceTypes.js';
+import {
+  EKW_LEARNING_RESOURCE_TYPES,
+  EKW_LRT_ID_PREFIX,
+  toSkosConcepts
+} from '../ekwLearningResourceTypes.js';
 
 describe('EKW_LEARNING_RESOURCE_TYPES', () => {
   it('is non-empty', () => {
@@ -46,6 +50,37 @@ describe('EKW_LEARNING_RESOURCE_TYPES', () => {
     for (const leaf of children) {
       const tail = leaf.id.slice(EKW_LRT_ID_PREFIX.length);
       expect(tail.includes('/')).toBe(true);
+    }
+  });
+});
+
+describe('toSkosConcepts', () => {
+  it('returns one concept per leaf in EKW_LEARNING_RESOURCE_TYPES', () => {
+    const concepts = toSkosConcepts();
+    expect(concepts.length).toBe(EKW_LEARNING_RESOURCE_TYPES.length);
+  });
+
+  it('formats children-of-parent leaves as "Parent › Child"', () => {
+    const concepts = toSkosConcepts();
+    // Note: the slug fn strips combining marks via NFKD, so "Erklär-Audio"
+    // becomes "erklar-audio" (NOT "erklaer-audio").
+    const erklarAudio = concepts.find((c) => c.id.endsWith('/audio/erklar-audio'));
+    expect(erklarAudio).toBeDefined();
+    expect(erklarAudio?.labels.de).toBe('Audio › Erklär-Audio');
+  });
+
+  it('uses the bare label for childless parent leaves', () => {
+    const concepts = toSkosConcepts();
+    const arbeitsblatt = concepts.find((c) => c.id.endsWith('/arbeitsblatt'));
+    expect(arbeitsblatt).toBeDefined();
+    expect(arbeitsblatt?.labels.de).toBe('Arbeitsblatt');
+  });
+
+  it('preserves every leaf id verbatim', () => {
+    const concepts = toSkosConcepts();
+    const leafIds = new Set(EKW_LEARNING_RESOURCE_TYPES.map((l) => l.id));
+    for (const concept of concepts) {
+      expect(leafIds.has(concept.id)).toBe(true);
     }
   });
 });
