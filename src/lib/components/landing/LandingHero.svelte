@@ -19,7 +19,8 @@
 </script>
 
 <section
-  class="relative overflow-hidden py-20 text-primary-content {runtimeConfig.ui?.landingHeroImage
+  class="relative shrink-0 overflow-hidden py-20 text-primary-content {runtimeConfig.ui
+    ?.landingHeroImage
     ? ''
     : 'bg-gradient-to-br from-primary to-secondary'}"
 >
