@@ -1503,6 +1503,8 @@
   "amb_form_placeholder_subject": "Select subject(s)",
   "amb_form_placeholder_keywords": "Press Enter, Tab, or comma to add",
   "amb_form_help_keywords": "Separate keywords with Enter, Tab, or comma. You can also paste a comma- or newline-separated list.",
+  "ekw_keywords_suggestions_label": "Suggestions",
+  "ekw_keywords_no_suggestions": "No suggestions",
   "amb_form_help_resource_type": "What type of educational content is this?",
   "amb_form_help_subject": "What subjects does this resource cover?",
   "amb_form_help_creators": "Add the people or organizations who created this content",

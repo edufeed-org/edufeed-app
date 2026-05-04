@@ -1503,6 +1503,8 @@
   "amb_form_placeholder_subject": "Fach/Fächer auswählen",
   "amb_form_placeholder_keywords": "Enter, Tab oder Komma zum Hinzufügen",
   "amb_form_help_keywords": "Schlagwörter mit Enter, Tab oder Komma trennen. Du kannst auch eine komma- oder zeilenbasierte Liste einfügen.",
+  "ekw_keywords_suggestions_label": "Vorschläge",
+  "ekw_keywords_no_suggestions": "Keine Vorschläge",
   "amb_form_help_resource_type": "Um welche Art von Bildungsinhalt handelt es sich?",
   "amb_form_help_subject": "Welche Fächer behandelt diese Ressource?",
   "amb_form_help_creators": "Personen oder Organisationen hinzufügen, die diesen Inhalt erstellt haben",
