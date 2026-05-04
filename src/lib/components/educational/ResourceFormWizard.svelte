@@ -134,7 +134,20 @@
 
     // Step 7: Rights
     license: 'https://creativecommons.org/licenses/by/4.0/',
-    isAccessibleForFree: true
+    isAccessibleForFree: true,
+
+    // EKW-only (variantId === 'ekw'); ignored for AMB
+    ekwFachrichtung: /** @type {{id: string, label: string}[]} */ ([]),
+    gradeLevels: /** @type {string[]} */ ([]),
+    gradeLevelLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    schoolTypes: /** @type {string[]} */ ([]),
+    schoolTypeLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    didacticConcepts: /** @type {string[]} */ ([]),
+    didacticConceptLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    methods: /** @type {string[]} */ ([]),
+    methodLabels: /** @type {{id: string, label: string}[]} */ ([]),
+    methodOther: '',
+    bibleReferences: /** @type {string[]} */ ([''])
   });
 
   // Per-vocab subject selection (merged into formData.about on submit).
