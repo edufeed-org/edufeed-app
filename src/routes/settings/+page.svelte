@@ -572,7 +572,7 @@
   <title>{m.common_settings()} - {runtimeConfig.appName}</title>
 </svelte:head>
 
-<div class="min-h-screen px-4 py-8">
+<div class="px-4 py-8">
   <div class="mx-auto max-w-2xl">
     <!-- Header -->
     <div class="mb-8 text-center">

@@ -1509,7 +1509,7 @@
   <meta name="description" content={m.discover_content_meta_description()} />
 </svelte:head>
 
-<div class="min-h-screen bg-base-100">
+<div class="bg-base-100">
   <!-- Hero Section -->
   {#if runtimeConfig.ui?.discoverHeroImage}
     <div class="relative overflow-hidden py-12 text-primary-content">

@@ -7,38 +7,39 @@ This document tracks what E2E tests exist, what features they cover, and identif
 
 ## Quick Summary
 
-| File                                 | Tests | Auth | Coverage                                                                                              |
-| ------------------------------------ | ----- | ---- | ----------------------------------------------------------------------------------------------------- |
-| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                         |
-| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                             |
-| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail |
-| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                             |
-| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                          |
-| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                     |
-| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                            |
-| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                          |
-| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                          |
-| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                     |
-| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                        |
-| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                        |
-| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                            |
-| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                |
-| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                          |
-| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                         |
-| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                         |
-| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                               |
-| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                             |
-| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                         |
-| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                    |
-| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                    |
-| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                       |
-| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                           |
-| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation                                                                  |
-| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                                                             |
-| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                             |
-| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                              |
-| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                     |
-| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                |
+| File                                 | Tests | Auth | Coverage                                                                                                                          |
+| ------------------------------------ | ----- | ---- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                                                     |
+| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                                                         |
+| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail                             |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                                                         |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                                                      |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                 |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                                                        |
+| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                      |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                      |
+| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                 |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                    |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                    |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                        |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                            |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                                                      |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                                                     |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                                                     |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                                                           |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                                                         |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                                                     |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                                                |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                   |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
+| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation                                                                                              |
+| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                                                                                         |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
+| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                 |
+| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                            |
+| `layout-consistency.test.js`         | 13    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
 
 ## Detailed Coverage
 
@@ -1265,6 +1266,64 @@ the E2E cases lock in the user-visible surface + owner gating.
 | owner sees AddProfileRow and remove button on their follow set | Combobox placeholder + `data-testid="remove-profile-{pubkey}"` visible on own kind 30000                 |
 | pasting an already-added npub surfaces "Already added" badge   | Typing TEST_AUTHOR_2 npub renders a dropdown row with the `Already added` badge + `aria-disabled="true"` |
 | unauthenticated visitor does not see add/remove UI             | Without auth, combobox and remove button are absent on same naddr                                        |
+
+### layout-consistency.test.js (13 tests)
+
+**Routes:** `/discover`, `/calendar`, `/c/`, `/c/[npub]`
+**Auth required:** Yes (all tests use `authenticatedPage` fixture)
+**Note:** Originally TDD red-phase tests for the unified-layout structural refactor; now passing as acceptance criteria. Subsequent additions guard against regressions in the sticky mobile header, scroll restoration, and the flex-sibling sidebar architecture (no `position: fixed`, context-based ContentNavSidebar mount). Do not delete or skip.
+
+#### Single scroll surface (3 tests — one per route)
+
+| Test                               | What it verifies                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| single scroll surface on /discover | At most 1 element has `overflowY: auto\|scroll` AND `scrollHeight > clientHeight` |
+| single scroll surface on /calendar | Same check on /calendar                                                           |
+| single scroll surface on /c/       | Same check on /c/                                                                 |
+
+#### No footer in DOM (3 tests — one per route)
+
+| Test                                | What it verifies                |
+| ----------------------------------- | ------------------------------- |
+| no `<footer>` rendered on /discover | `locator('footer')` count === 0 |
+| no `<footer>` rendered on /calendar | `locator('footer')` count === 0 |
+| no `<footer>` rendered on /c/       | `locator('footer')` count === 0 |
+
+#### Body non-scrolling (1 test)
+
+| Test                                       | What it verifies                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| document body does not scroll on /discover | `body.scrollHeight <= body.clientHeight + 1` (body is not the scroll surface) |
+
+#### MainContentArea wrapper (1 test)
+
+| Test                                                         | What it verifies                                                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| MainContentArea wrapper does not nest its own scroll surface | `<main>`'s descendant `div.min-h-0.flex-1.transition-all` has `overflow-y: visible` (not auto/scroll) |
+
+#### Sticky mobile community header (1 test)
+
+| Test                                                        | What it verifies                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| mobile community header stays pinned during `<main>` scroll | After scrolling `<main>`, the `[data-testid="mobile-community-header"]` `top` is unchanged (±2px) |
+
+#### Scroll restoration (1 test)
+
+| Test                                                 | What it verifies                                                                                                |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| restores `<main>` scroll position on back navigation | After SPA-navigating away from `/discover` and using browser back, `main.scrollTop` is restored to within ±20px |
+
+#### Flex-sibling sidebar guards (3 tests)
+
+| Test                                                                | What it verifies                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| main has no sidebar margin offset on desktop community route        | `<main>`'s computed `marginLeft === '0px'` — guards against re-introduction of `lg:ml-(--sidebar-*)` margin compensation                                                                                                                                                       |
+| desktop sidebars stay pinned during `<main>` scroll                 | CommunitySidebar + ContentNavSidebar `getBoundingClientRect().top` is unchanged before/after scrolling `<main>` — guards against re-introduction of `position: fixed` (or moving sidebars back inside `<main>`)                                                                |
+| ContentNavSidebar mounts on community routes, unmounts on dashboard | On `/c/`: `[data-testid="dashboard-nav-sidebar"]` visible, `[data-testid="content-nav-sidebar"]` count === 0. On `/c/[npub]`: inverse. Round-trip back to `/c/` restores dashboard sidebar — guards the `setContentNavData` context handoff between root and community layouts |
+
+**Components exercised:** Root layout, AppShell, CommunitySidebar, ContentNavSidebar, DashboardNavSidebar, MainContentArea wrapper, mobile community header, page-level wrappers on discover/calendar/community routes.
+
+---
 
 ### cache-warm-boot.test.js (1 test)
 

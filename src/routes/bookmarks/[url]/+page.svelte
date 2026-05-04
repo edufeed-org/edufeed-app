@@ -119,95 +119,93 @@
   );
 </script>
 
-<div class="flex-1 overflow-auto lg:ml-(--sidebar-nav-w)">
-  <div class="mx-auto max-w-3xl p-4">
-    <DetailHeader {title} subtitle={domain} event={representativeEvent} authorPubkey="">
-      {#snippet actions()}
-        {#if showReaderToggle && !isLoading}
-          <label class="btn swap swap-rotate btn-ghost btn-sm">
-            <input
-              type="checkbox"
-              checked={effectiveView === 'cards'}
-              onchange={() => {
-                if (effectiveView === 'cards') {
-                  viewMode = 'reader';
-                  readerFailed = false;
-                } else {
-                  viewMode = 'cards';
-                }
-              }}
-            />
-            <BookOpenIcon class_="swap-off w-4 h-4" />
-            <ChatTextIcon class_="swap-on w-4 h-4" />
-          </label>
-        {/if}
-      {/snippet}
-    </DetailHeader>
-
-    {#if isLoading}
-      <div class="flex flex-col items-center justify-center py-16">
-        <span class="loading loading-lg loading-spinner text-primary"></span>
-      </div>
-    {:else if effectiveView === 'reader'}
-      <ReaderView
-        articleUrl={decodedUrl}
-        {highlights}
-        {bookmarks}
-        {profiles}
-        communityPubkey={undefined}
-        activeUser={getActiveUser()}
-        targetHighlightId={null}
-        onerror={() => {
-          readerFailed = true;
-        }}
-      />
-    {:else}
-      {#if bookmarks.length > 0}
-        <section class="mb-6">
-          <h2 class="mb-3 text-sm font-semibold text-base-content/70">
-            {m.social_bookmarks_bookmarks()}
-          </h2>
-          <div class="flex flex-col gap-3">
-            {#each bookmarks as bookmark (bookmark.id)}
-              <BookmarkItem
-                event={bookmark}
-                authorProfile={profiles.get(bookmark.pubkey)}
-                expanded={true}
-                activeUser={getActiveUser()}
-              />
-            {/each}
-          </div>
-        </section>
+<div class="mx-auto max-w-3xl p-4">
+  <DetailHeader {title} subtitle={domain} event={representativeEvent} authorPubkey="">
+    {#snippet actions()}
+      {#if showReaderToggle && !isLoading}
+        <label class="btn swap swap-rotate btn-ghost btn-sm">
+          <input
+            type="checkbox"
+            checked={effectiveView === 'cards'}
+            onchange={() => {
+              if (effectiveView === 'cards') {
+                viewMode = 'reader';
+                readerFailed = false;
+              } else {
+                viewMode = 'cards';
+              }
+            }}
+          />
+          <BookOpenIcon class_="swap-off w-4 h-4" />
+          <ChatTextIcon class_="swap-on w-4 h-4" />
+        </label>
       {/if}
+    {/snippet}
+  </DetailHeader>
 
-      {#if highlights.length > 0}
-        <section class="mb-6">
-          <h2 class="mb-3 text-sm font-semibold text-base-content/70">
-            {m.social_bookmarks_highlights()}
-          </h2>
-          <div class="flex flex-col gap-3">
-            {#each highlights as highlight (highlight.id)}
-              <HighlightItem
-                event={highlight}
-                authorProfile={profiles.get(highlight.pubkey)}
-                expanded={true}
-                activeUser={getActiveUser()}
-              />
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
+  {#if isLoading}
+    <div class="flex flex-col items-center justify-center py-16">
+      <span class="loading loading-lg loading-spinner text-primary"></span>
+    </div>
+  {:else if effectiveView === 'reader'}
+    <ReaderView
+      articleUrl={decodedUrl}
+      {highlights}
+      {bookmarks}
+      {profiles}
+      communityPubkey={undefined}
+      activeUser={getActiveUser()}
+      targetHighlightId={null}
+      onerror={() => {
+        readerFailed = true;
+      }}
+    />
+  {:else}
+    {#if bookmarks.length > 0}
       <section class="mb-6">
-        <CommentList rootUrl={decodedUrl} activeUser={getActiveUser()} />
-      </section>
-
-      {#if bookmarks.length === 0 && highlights.length === 0 && pageNotes.length === 0}
-        <div class="py-12 text-center text-base-content/50">
-          <p>{m.community_social_bookmarks_empty_title()}</p>
+        <h2 class="mb-3 text-sm font-semibold text-base-content/70">
+          {m.social_bookmarks_bookmarks()}
+        </h2>
+        <div class="flex flex-col gap-3">
+          {#each bookmarks as bookmark (bookmark.id)}
+            <BookmarkItem
+              event={bookmark}
+              authorProfile={profiles.get(bookmark.pubkey)}
+              expanded={true}
+              activeUser={getActiveUser()}
+            />
+          {/each}
         </div>
-      {/if}
+      </section>
     {/if}
-  </div>
+
+    {#if highlights.length > 0}
+      <section class="mb-6">
+        <h2 class="mb-3 text-sm font-semibold text-base-content/70">
+          {m.social_bookmarks_highlights()}
+        </h2>
+        <div class="flex flex-col gap-3">
+          {#each highlights as highlight (highlight.id)}
+            <HighlightItem
+              event={highlight}
+              authorProfile={profiles.get(highlight.pubkey)}
+              expanded={true}
+              activeUser={getActiveUser()}
+            />
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
+    <section class="mb-6">
+      <CommentList rootUrl={decodedUrl} activeUser={getActiveUser()} />
+    </section>
+
+    {#if bookmarks.length === 0 && highlights.length === 0 && pageNotes.length === 0}
+      <div class="py-12 text-center text-base-content/50">
+        <p>{m.community_social_bookmarks_empty_title()}</p>
+      </div>
+    {/if}
+  {/if}
 </div>

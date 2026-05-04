@@ -140,6 +140,11 @@
     </a>
   </li>
   <li>
+    <a href={resolve('/imprint')} onclick={onClose}>
+      {m.navbar_imprint()}
+    </a>
+  </li>
+  <li>
     <button onclick={handleLogoutCurrent}>
       {m.navbar_logout_current()}
     </button>
@@ -152,6 +157,11 @@
     </li>
   {/if}
 {:else}
+  <li>
+    <a href={resolve('/imprint')} onclick={onClose}>
+      {m.navbar_imprint()}
+    </a>
+  </li>
   <li>
     <button onclick={openLoginModal}>
       {m.common_login()}
