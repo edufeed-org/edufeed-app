@@ -59,7 +59,18 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
   let content = '';
 
   try {
-    const ambData = convertFormDataToAMB(/** @type {any} */ (formData));
+    // Wizard stores learningResourceType as CompactConcept[] (array of {id,label}),
+    // but convertFormDataToAMB expects a plain string id (matching the publish flow,
+    // which unwraps via formData.learningResourceType[0]?.id). Normalize before
+    // converting so the preview tag emits a clean URI instead of "[object Object]".
+    const lrt = formData?.learningResourceType;
+    /** @type {any} */
+    const normalised = {
+      ...formData,
+      learningResourceType: Array.isArray(lrt) ? (lrt[0]?.id ?? '') : (lrt ?? ''),
+      learningResourceTypeLabel: Array.isArray(lrt) ? (lrt[0]?.label ?? '') : ''
+    };
+    const ambData = convertFormDataToAMB(/** @type {any} */ (normalised));
     const result = ambToNostr(/** @type {any} */ (ambData), {
       pubkey: previewPubkey,
       timestamp: created_at

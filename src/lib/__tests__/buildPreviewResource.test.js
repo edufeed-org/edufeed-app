@@ -99,4 +99,27 @@ describe('buildPreviewResource', () => {
     expect(resource.rawEvent.kind).toBe(30142);
     expect(Array.isArray(resource.tags)).toBe(true);
   });
+
+  it('normalizes CompactConcept[] learningResourceType to a string label, not "[object Object]"', () => {
+    // Wizard stores learningResourceType as CompactConcept[] (array of {id,label})
+    // but convertFormDataToAMB expects a plain string id.
+    const formData = {
+      ...emptyFormData(),
+      name: 'Test',
+      learningResourceType: [
+        { id: 'https://w3id.org/kim/hcrt/application', label: 'Softwareanwendung' }
+      ]
+    };
+    const resource = buildPreviewResource(formData, PUBKEY);
+    // The card reads localizedLearningResourceTypes[0].label, derived from tags.
+    // Both the id tag and the prefLabel tag must be clean strings.
+    const idTag = resource.tags.find((t) => t[0] === 'learningResourceType:id');
+    expect(idTag?.[1]).toBe('https://w3id.org/kim/hcrt/application');
+    const labelTag = resource.tags.find((t) => t[0].startsWith('learningResourceType:prefLabel:'));
+    expect(labelTag?.[1]).toBe('Softwareanwendung');
+    expect(labelTag?.[1]).not.toContain('[object Object]');
+    // The pre-resolved learningResourceTypes label field must be the human-readable string.
+    const types = resource.learningResourceTypes ?? [];
+    expect(types[0]?.label).toBe('Softwareanwendung');
+  });
 });
