@@ -59,6 +59,8 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import SmartFillBadge from './SmartFillBadge.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
+  import AMBResourceCard from './AMBResourceCard.svelte';
+  import { buildPreviewResource } from '$lib/helpers/educational/buildPreviewResource.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -243,6 +245,19 @@
   // name + avatar instead of raw hex pubkeys).
   const getJoinedCommunityProfiles = useProfileMap(() => joinedCommunities);
   const joinedCommunityProfiles = $derived(getJoinedCommunityProfiles());
+
+  // Live preview: synthesize a kind-30142 AMB resource from the in-progress
+  // formData and render it via AMBResourceCard. Updates reactively as the
+  // user fills fields; `null` until the form has something displayable.
+  const activePubkey = $derived(manager.active?.pubkey);
+  const getPreviewAuthorProfile = useProfileMap(() => (activePubkey ? [activePubkey] : []));
+  const previewAuthorProfile = $derived(
+    activePubkey ? (getPreviewAuthorProfile()?.get(activePubkey) ?? null) : null
+  );
+  const previewResource = $derived.by(() => {
+    if (currentStep < 3) return null;
+    return buildPreviewResource(formData, activePubkey, getLocale());
+  });
 
   // Preselect the community that was passed via `?community=` if the user is a member.
   $effect(() => {
@@ -1079,1038 +1094,1088 @@
   }
 </script>
 
-<div class="mx-auto w-full max-w-2xl px-4 py-6">
-  <!-- Step indicator — the page's top-bar <h1> provides the stable title;
+<div
+  class="mx-auto w-full max-w-2xl px-4 py-6 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,42rem)_minmax(0,22rem)] lg:items-start lg:gap-8"
+>
+  <div class="w-full">
+    <!-- Step indicator — the page's top-bar <h1> provides the stable title;
        this line tells the user where they are in the wizard. -->
-  <div class="mb-6">
-    <p class="text-base font-medium text-base-content/70">
-      {m.amb_form_step_indicator({
-        currentStep: String(currentStep),
-        totalSteps: String(totalSteps)
-      })}
-      {stepTitles[currentStep - 1]}
-    </p>
-  </div>
+    <div class="mb-6">
+      <p class="text-base font-medium text-base-content/70">
+        {m.amb_form_step_indicator({
+          currentStep: String(currentStep),
+          totalSteps: String(totalSteps)
+        })}
+        {stepTitles[currentStep - 1]}
+      </p>
+    </div>
 
-  <!-- Progress Steps -->
-  <div class="mb-8 flex items-center justify-center gap-2">
-    {#each Array(totalSteps) as _, i (i)}
-      <div
-        class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors {i +
-          1 <=
-        currentStep
-          ? 'bg-primary text-primary-content'
-          : 'bg-base-200 text-base-content/50'}"
-      >
-        {#if i + 1 < currentStep}
-          <CheckIcon class_="w-4 h-4" />
-        {:else}
-          {i + 1}
-        {/if}
-      </div>
-      {#if i < totalSteps - 1}
+    <!-- Progress Steps -->
+    <div class="mb-8 flex items-center justify-center gap-2">
+      {#each Array(totalSteps) as _, i (i)}
         <div
-          class="h-1 w-6 rounded transition-colors"
-          class:bg-primary={i + 1 < currentStep}
-          class:bg-base-300={i + 1 >= currentStep}
-        ></div>
-      {/if}
-    {/each}
-  </div>
-
-  <!-- Form Content -->
-  <div class="min-h-[40vh]">
-    <!-- AI metadata helper status banner — visible on Steps 3+ where the
-         enrichment results land. Step 2 has its own mode toggle inline. -->
-    {#if currentStep > 2 && enrichmentStatus !== 'idle'}
-      <EnrichmentStatusBanner
-        status={enrichmentStatus}
-        ondismiss={() => (enrichmentStatus = 'idle')}
-      />
-    {/if}
-
-    <!-- Step 1: Bildungsbereich -->
-    {#if currentStep === 1}
-      <div class="space-y-3">
-        <p class="text-sm text-base-content/70">
-          {m.amb_form_help_bildungsbereich?.() ??
-            'Pick the educational area. This preselects subject vocabulary and educational level.'}
-        </p>
-        <div class="grid gap-2">
-          {#each bildungsbereichKeys as key (key)}
-            {@const cfg = BILDUNGSBEREICHE[key]}
-            <label
-              class="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3 transition-colors hover:bg-base-200"
-              class:border-primary={formData.bildungsbereich === key}
-              class:bg-base-200={formData.bildungsbereich === key}
-            >
-              <input
-                type="radio"
-                name="bildungsbereich"
-                class="radio mt-1 radio-primary"
-                value={key}
-                bind:group={formData.bildungsbereich}
-                onchange={() => {
-                  // Auto-advance after a brief delay so the selected-card
-                  // styling visibly registers before the transition.
-                  setTimeout(() => nextStep(), 200);
-                }}
-              />
-              <span>
-                <span class="block font-medium">{cfg.label[getLocale()] ?? cfg.label.en}</span>
-              </span>
-            </label>
-          {/each}
+          class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors {i +
+            1 <=
+          currentStep
+            ? 'bg-primary text-primary-content'
+            : 'bg-base-200 text-base-content/50'}"
+        >
+          {#if i + 1 < currentStep}
+            <CheckIcon class_="w-4 h-4" />
+          {:else}
+            {i + 1}
+          {/if}
         </div>
-      </div>
+        {#if i < totalSteps - 1}
+          <div
+            class="h-1 w-6 rounded transition-colors"
+            class:bg-primary={i + 1 < currentStep}
+            class:bg-base-300={i + 1 >= currentStep}
+          ></div>
+        {/if}
+      {/each}
+    </div>
+
+    <!-- Mobile live preview (collapsible). On lg+ the preview lives in the
+       side rail at the bottom of this file; here we cover screens where a
+       sticky rail would steal too much vertical space. -->
+    {#if previewResource}
+      <details class="mb-4 rounded-lg border border-base-300 bg-base-100 p-3 lg:hidden">
+        <summary class="cursor-pointer text-sm font-medium text-base-content/80">
+          👁 {m.forms_preview_tab()}
+        </summary>
+        <div class="mt-3">
+          <AMBResourceCard
+            resource={previewResource}
+            authorProfile={previewAuthorProfile}
+            variant="card"
+          />
+        </div>
+      </details>
     {/if}
 
-    <!-- Step 2: URL / naddr -->
-    {#if currentStep === 2}
-      <div class="space-y-3">
-        {#if hasNoUrl}
-          <div
-            class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
-            data-testid="no-url-state-card"
-          >
-            <p>{m.amb_form_no_url_state_card()}</p>
+    <!-- Form Content -->
+    <div class="min-h-[40vh]">
+      <!-- AI metadata helper status banner — visible on Steps 3+ where the
+         enrichment results land. Step 2 has its own mode toggle inline. -->
+      {#if currentStep > 2 && enrichmentStatus !== 'idle'}
+        <EnrichmentStatusBanner
+          status={enrichmentStatus}
+          ondismiss={() => (enrichmentStatus = 'idle')}
+        />
+      {/if}
+
+      <!-- Step 1: Bildungsbereich -->
+      {#if currentStep === 1}
+        <div class="space-y-3">
+          <p class="text-sm text-base-content/70">
+            {m.amb_form_help_bildungsbereich?.() ??
+              'Pick the educational area. This preselects subject vocabulary and educational level.'}
+          </p>
+          <div class="grid gap-2">
+            {#each bildungsbereichKeys as key (key)}
+              {@const cfg = BILDUNGSBEREICHE[key]}
+              <label
+                class="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3 transition-colors hover:bg-base-200"
+                class:border-primary={formData.bildungsbereich === key}
+                class:bg-base-200={formData.bildungsbereich === key}
+              >
+                <input
+                  type="radio"
+                  name="bildungsbereich"
+                  class="radio mt-1 radio-primary"
+                  value={key}
+                  bind:group={formData.bildungsbereich}
+                  onchange={() => {
+                    // Auto-advance after a brief delay so the selected-card
+                    // styling visibly registers before the transition.
+                    setTimeout(() => nextStep(), 200);
+                  }}
+                />
+                <span>
+                  <span class="block font-medium">{cfg.label[getLocale()] ?? cfg.label.en}</span>
+                </span>
+              </label>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Step 2: URL / naddr -->
+      {#if currentStep === 2}
+        <div class="space-y-3">
+          {#if hasNoUrl}
+            <div
+              class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
+              data-testid="no-url-state-card"
+            >
+              <p>{m.amb_form_no_url_state_card()}</p>
+              {#if !isEditMode}
+                <button
+                  type="button"
+                  class="btn mt-2 btn-ghost btn-sm"
+                  onclick={() => {
+                    hasNoUrl = false;
+                    formData.urlInput = '';
+                    formData.identifier = '';
+                  }}
+                >
+                  {m.amb_form_no_url_cancel()}
+                </button>
+              {/if}
+            </div>
+          {:else}
+            <MetadataFetchStep
+              bind:value={formData.urlInput}
+              activeUserPubkey={activeUser?.pubkey ?? null}
+              readOnly={isEditMode}
+              mode={enrichmentMode}
+              onmodechange={(next) => (enrichmentMode = next)}
+              onresult={handleMetadataResult}
+            />
             {#if !isEditMode}
+              <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
+                <span class="h-px flex-1 bg-base-300"></span>
+                <span>{m.amb_form_no_url_or_divider()}</span>
+                <span class="h-px flex-1 bg-base-300"></span>
+              </div>
               <button
                 type="button"
-                class="btn mt-2 btn-ghost btn-sm"
+                class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
+                data-testid="no-url-button"
                 onclick={() => {
-                  hasNoUrl = false;
+                  hasNoUrl = true;
                   formData.urlInput = '';
                   formData.identifier = '';
+                  validationErrors = [];
+                  setTimeout(() => nextStep(), 200);
                 }}
               >
-                {m.amb_form_no_url_cancel()}
+                <span class="flex-1">
+                  <span class="block font-medium">{m.amb_form_no_url_button()}</span>
+                  <span class="mt-1 block text-sm text-base-content/70">
+                    {m.amb_form_no_url_button_description()}
+                  </span>
+                </span>
+                <span aria-hidden="true" class="text-base-content/40">→</span>
               </button>
             {/if}
-          </div>
-        {:else}
-          <MetadataFetchStep
-            bind:value={formData.urlInput}
-            activeUserPubkey={activeUser?.pubkey ?? null}
-            readOnly={isEditMode}
-            mode={enrichmentMode}
-            onmodechange={(next) => (enrichmentMode = next)}
-            onresult={handleMetadataResult}
-          />
-          {#if !isEditMode}
-            <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
-              <span class="h-px flex-1 bg-base-300"></span>
-              <span>{m.amb_form_no_url_or_divider()}</span>
-              <span class="h-px flex-1 bg-base-300"></span>
-            </div>
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
-              data-testid="no-url-button"
-              onclick={() => {
-                hasNoUrl = true;
-                formData.urlInput = '';
-                formData.identifier = '';
-                validationErrors = [];
-                setTimeout(() => nextStep(), 200);
-              }}
-            >
-              <span class="flex-1">
-                <span class="block font-medium">{m.amb_form_no_url_button()}</span>
-                <span class="mt-1 block text-sm text-base-content/70">
-                  {m.amb_form_no_url_button_description()}
-                </span>
-              </span>
-              <span aria-hidden="true" class="text-base-content/40">→</span>
-            </button>
           {/if}
-        {/if}
-        {#if isEditMode && !hasNoUrl}
-          <p class="text-xs text-base-content/60">
-            {m.amb_form_help_url_no_edit?.() ??
-              'The resource URL cannot be changed after publishing.'}
-          </p>
-        {/if}
-      </div>
-    {/if}
+          {#if isEditMode && !hasNoUrl}
+            <p class="text-xs text-base-content/60">
+              {m.amb_form_help_url_no_edit?.() ??
+                'The resource URL cannot be changed after publishing.'}
+            </p>
+          {/if}
+        </div>
+      {/if}
 
-    <!-- Step 3: Basic Info -->
-    {#if currentStep === 3}
-      <div class="space-y-4">
-        <!-- Image preview — surfaced at the top so the resource has a visual anchor.
+      <!-- Step 3: Basic Info -->
+      {#if currentStep === 3}
+        <div class="space-y-4">
+          <!-- Image preview — surfaced at the top so the resource has a visual anchor.
              The Image URL input itself stays below with the other optional fields. -->
-        {#if formData.image && !imagePreviewError}
-          <img
-            src={formData.image}
-            alt=""
-            data-testid="amb-image-preview"
-            class="mx-auto block max-h-64 max-w-full rounded border border-base-300"
-            onerror={() => {
-              imagePreviewError = true;
-            }}
-          />
-        {/if}
+          {#if formData.image && !imagePreviewError}
+            <img
+              src={formData.image}
+              alt=""
+              data-testid="amb-image-preview"
+              class="mx-auto block max-h-64 max-w-full rounded border border-base-300"
+              onerror={() => {
+                imagePreviewError = true;
+              }}
+            />
+          {/if}
 
-        <!-- Resource URL (Identifier) — derived from step 2, read-only here -->
-        {#if !hasNoUrl}
+          <!-- Resource URL (Identifier) — derived from step 2, read-only here -->
+          {#if !hasNoUrl}
+            <div class="form-control">
+              <label class="label" for="amb-identifier">
+                <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
+              </label>
+              <input
+                id="amb-identifier"
+                type="url"
+                class="input-bordered input w-full"
+                value={formData.identifier}
+                readonly
+                disabled
+              />
+              <div class="label">
+                <span class="label-text-alt text-base-content/60">
+                  {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
+                </span>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Title -->
           <div class="form-control">
-            <label class="label" for="amb-identifier">
-              <span class="label-text font-medium">{m.amb_form_label_identifier()}</span>
+            <label class="label flex items-center gap-2" for="amb-title">
+              <span class="label-text font-medium"
+                >{m.amb_form_label_title()} <span class="text-error">*</span></span
+              >
+              <SmartFillBadge provenance={provenance.name} onclear={() => clearField('name')} />
             </label>
             <input
-              id="amb-identifier"
+              id="amb-title"
+              type="text"
+              class="input-bordered input w-full"
+              bind:value={formData.name}
+              placeholder={m.amb_form_placeholder_title()}
+            />
+          </div>
+
+          <!-- Description -->
+          <div class="form-control">
+            <label class="label flex items-center gap-2" for="amb-description">
+              <span class="label-text font-medium"
+                >{m.amb_form_label_description()} <span class="text-error">*</span></span
+              >
+              <SmartFillBadge
+                provenance={provenance.description}
+                onclear={() => clearField('description')}
+              />
+            </label>
+            <textarea
+              id="amb-description"
+              class="textarea-bordered resize-vertical textarea w-full"
+              bind:value={formData.description}
+              placeholder={m.amb_form_placeholder_description()}
+              rows="4"
+            ></textarea>
+          </div>
+
+          <!-- Language -->
+          <div class="form-control">
+            <label class="label flex items-center gap-2" for="amb-language">
+              <span class="label-text font-medium"
+                >{m.amb_form_label_language()} <span class="text-error">*</span></span
+              >
+              <SmartFillBadge
+                provenance={provenance.inLanguage}
+                onclear={() => clearField('inLanguage')}
+              />
+            </label>
+            <select
+              id="amb-language"
+              class="select-bordered select w-full"
+              bind:value={formData.inLanguage}
+            >
+              {#each languageOptions as lang (lang.code)}
+                <option value={lang.code}>{lang.label}</option>
+              {/each}
+            </select>
+          </div>
+
+          <!-- Image URL -->
+          <div class="form-control">
+            <label class="label flex items-center gap-2" for="amb-image">
+              <span class="label-text font-medium">{m.amb_form_label_image()}</span>
+              <SmartFillBadge provenance={provenance.image} onclear={() => clearField('image')} />
+            </label>
+            <input
+              id="amb-image"
               type="url"
               class="input-bordered input w-full"
-              value={formData.identifier}
-              readonly
-              disabled
+              bind:value={formData.image}
+              placeholder={m.amb_form_placeholder_image()}
+              oninput={() => {
+                imagePreviewError = false;
+              }}
             />
-            <div class="label">
-              <span class="label-text-alt text-base-content/60">
-                {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
-              </span>
-            </div>
+            {#if formData.image && imagePreviewError}
+              <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
+            {/if}
           </div>
-        {/if}
-
-        <!-- Title -->
-        <div class="form-control">
-          <label class="label flex items-center gap-2" for="amb-title">
-            <span class="label-text font-medium"
-              >{m.amb_form_label_title()} <span class="text-error">*</span></span
-            >
-            <SmartFillBadge provenance={provenance.name} onclear={() => clearField('name')} />
-          </label>
-          <input
-            id="amb-title"
-            type="text"
-            class="input-bordered input w-full"
-            bind:value={formData.name}
-            placeholder={m.amb_form_placeholder_title()}
-          />
         </div>
+      {/if}
 
-        <!-- Description -->
-        <div class="form-control">
-          <label class="label flex items-center gap-2" for="amb-description">
-            <span class="label-text font-medium"
-              >{m.amb_form_label_description()} <span class="text-error">*</span></span
-            >
-            <SmartFillBadge
-              provenance={provenance.description}
-              onclear={() => clearField('description')}
+      <!-- Step 4: Classification -->
+      {#if currentStep === 4}
+        <div class="space-y-4">
+          <!-- Resource Type (still static SKOSDropdown — HCRT vocabulary) -->
+          <div>
+            <SKOSDropdown
+              vocabularyKey="learningResourceType"
+              bind:selected={formData.learningResourceType}
+              label={m.amb_form_label_resource_type()}
+              placeholder={m.amb_form_placeholder_resource_type()}
+              required={true}
+              multiple={true}
+              helpText={m.amb_form_help_resource_type()}
             />
-          </label>
-          <textarea
-            id="amb-description"
-            class="textarea-bordered resize-vertical textarea w-full"
-            bind:value={formData.description}
-            placeholder={m.amb_form_placeholder_description()}
-            rows="4"
-          ></textarea>
-        </div>
+            {#if provenance.learningResourceType}
+              <div class="mt-1">
+                <SmartFillBadge
+                  provenance={provenance.learningResourceType}
+                  onclear={() => clearField('learningResourceType')}
+                />
+              </div>
+            {/if}
+          </div>
 
-        <!-- Language -->
-        <div class="form-control">
-          <label class="label flex items-center gap-2" for="amb-language">
-            <span class="label-text font-medium"
-              >{m.amb_form_label_language()} <span class="text-error">*</span></span
-            >
-            <SmartFillBadge
-              provenance={provenance.inLanguage}
-              onclear={() => clearField('inLanguage')}
-            />
-          </label>
-          <select
-            id="amb-language"
-            class="select-bordered select w-full"
-            bind:value={formData.inLanguage}
-          >
-            {#each languageOptions as lang (lang.code)}
-              <option value={lang.code}>{lang.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <!-- Image URL -->
-        <div class="form-control">
-          <label class="label flex items-center gap-2" for="amb-image">
-            <span class="label-text font-medium">{m.amb_form_label_image()}</span>
-            <SmartFillBadge provenance={provenance.image} onclear={() => clearField('image')} />
-          </label>
-          <input
-            id="amb-image"
-            type="url"
-            class="input-bordered input w-full"
-            bind:value={formData.image}
-            placeholder={m.amb_form_placeholder_image()}
-            oninput={() => {
-              imagePreviewError = false;
-            }}
-          />
-          {#if formData.image && imagePreviewError}
-            <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
-          {/if}
-        </div>
-      </div>
-    {/if}
-
-    <!-- Step 4: Classification -->
-    {#if currentStep === 4}
-      <div class="space-y-4">
-        <!-- Resource Type (still static SKOSDropdown — HCRT vocabulary) -->
-        <div>
-          <SKOSDropdown
-            vocabularyKey="learningResourceType"
-            bind:selected={formData.learningResourceType}
-            label={m.amb_form_label_resource_type()}
-            placeholder={m.amb_form_placeholder_resource_type()}
-            required={true}
-            multiple={true}
-            helpText={m.amb_form_help_resource_type()}
-          />
-          {#if provenance.learningResourceType}
-            <div class="mt-1">
-              <SmartFillBadge
-                provenance={provenance.learningResourceType}
-                onclear={() => clearField('learningResourceType')}
-              />
-            </div>
-          {/if}
-        </div>
-
-        <!--
+          <!--
           Bildungsstufe + Fach/Thema are AMB-shared classification fields.
           For the EKKW variant they're hidden because the EKKW-specific
           Klassenstufe / Schulart / Fachrichtung pickers below cover the
           same ground (and are the canonical source for that path).
         -->
-        {#if !isEkw}
-          <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
-          {#if educationalLevelField}
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
+          {#if !isEkw}
+            <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
+            {#if educationalLevelField}
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="label-text font-medium">
+                    {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+                  </span>
+                  <SmartFillBadge
+                    provenance={provenance.educationalLevels}
+                    onclear={() => clearField('educationalLevels')}
+                  />
+                </div>
+                <FormConceptPicker
+                  field={educationalLevelField}
+                  multiple={true}
+                  value={formData.educationalLevels.map((c) =>
+                    toRichConcept(c, educationalLevelField.vocab.relay)
+                  )}
+                  onchange={handleEduLevelChange}
+                />
+              </div>
+            {/if}
+
+            <!-- Subject pickers — one per Bildungsbereich vocab -->
+            {#if subjectVocabFields.length === 0}
+              <p class="text-sm text-base-content/60">
+                {m.amb_form_help_subject_pick_bildungsbereich?.() ??
+                  'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
+              </p>
+            {/if}
+            {#each subjectVocabFields as entry (entry.key)}
+              <div class="space-y-1">
                 <span class="label-text font-medium">
-                  {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+                  {m.amb_form_label_subject()}
+                  <span class="text-error">*</span>
                 </span>
-                <SmartFillBadge
-                  provenance={provenance.educationalLevels}
-                  onclear={() => clearField('educationalLevels')}
+                {#if subjectVocabFields.length > 1}
+                  <p class="text-xs text-base-content/60">
+                    {getSubjectVocabLabel(entry.key, getLocale())}
+                  </p>
+                {/if}
+                <FormConceptPicker
+                  field={entry.field}
+                  multiple={true}
+                  value={(aboutByVocab[entry.key] ?? []).map((c) =>
+                    toRichConcept(c, entry.field.vocab.relay)
+                  )}
+                  onchange={makeAboutHandler(entry.key)}
                 />
               </div>
-              <FormConceptPicker
-                field={educationalLevelField}
-                multiple={true}
-                value={formData.educationalLevels.map((c) =>
-                  toRichConcept(c, educationalLevelField.vocab.relay)
-                )}
-                onchange={handleEduLevelChange}
-              />
-            </div>
+            {/each}
           {/if}
 
-          <!-- Subject pickers — one per Bildungsbereich vocab -->
-          {#if subjectVocabFields.length === 0}
-            <p class="text-sm text-base-content/60">
-              {m.amb_form_help_subject_pick_bildungsbereich?.() ??
-                'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
-            </p>
-          {/if}
-          {#each subjectVocabFields as entry (entry.key)}
-            <div class="space-y-1">
-              <span class="label-text font-medium">
-                {m.amb_form_label_subject()}
-                <span class="text-error">*</span>
-              </span>
-              {#if subjectVocabFields.length > 1}
-                <p class="text-xs text-base-content/60">
-                  {getSubjectVocabLabel(entry.key, getLocale())}
-                </p>
-              {/if}
-              <FormConceptPicker
-                field={entry.field}
-                multiple={true}
-                value={(aboutByVocab[entry.key] ?? []).map((c) =>
-                  toRichConcept(c, entry.field.vocab.relay)
-                )}
-                onchange={makeAboutHandler(entry.key)}
-              />
-            </div>
-          {/each}
-        {/if}
-
-        <!-- Keywords -->
-        <div class="form-control">
-          <label class="label flex items-center gap-2" for="amb-keywords">
-            <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
-            <SmartFillBadge
-              provenance={provenance.keywords}
-              onclear={() => clearField('keywords')}
-            />
-          </label>
-          <input
-            id="amb-keywords"
-            type="text"
-            class="input-bordered input w-full"
-            placeholder={m.amb_form_placeholder_keywords()}
-            onkeydown={handleAddKeyword}
-            onblur={handleKeywordBlur}
-            onpaste={handleKeywordPaste}
-          />
-          <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
-          {#if formData.keywords.length > 0}
-            <div class="mt-2 flex flex-wrap gap-2">
-              {#each formData.keywords as keyword (keyword)}
-                <span class="badge gap-1 badge-outline">
-                  {keyword}
-                  <button
-                    type="button"
-                    class="hover:text-error"
-                    onclick={handleRemoveKeyword(keyword)}
-                  >
-                    <CloseIcon class_="w-3 h-3" />
-                  </button>
-                </span>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
-        {#if isEkw}
-          {#if ekwFachField}
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="label-text font-medium">Fachrichtung</span>
-                <SmartFillBadge
-                  provenance={provenance.ekwFachrichtung}
-                  onclear={() => clearField('ekwFachrichtung')}
-                />
-              </div>
-              <FormConceptPicker
-                field={ekwFachField}
-                multiple={true}
-                value={formData.ekwFachrichtung.map((c) =>
-                  toRichConcept(c, ekwFachField.vocab.relay)
-                )}
-                onchange={handleEkwFachrichtungChange}
-              />
-            </div>
-          {/if}
-
-          {#if klassenstufenField}
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="label-text font-medium">Klassenstufe</span>
-                <SmartFillBadge
-                  provenance={provenance.gradeLevels}
-                  onclear={() => clearField('gradeLevels')}
-                />
-              </div>
-              <FormConceptPicker
-                field={klassenstufenField}
-                multiple={true}
-                value={formData.gradeLevelLabels.map((c) =>
-                  toRichConcept(c, klassenstufenField.vocab.relay)
-                )}
-                onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
-              />
-            </div>
-          {/if}
-
-          {#if schulartField}
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="label-text font-medium">Schulart</span>
-                <SmartFillBadge
-                  provenance={provenance.schoolTypes}
-                  onclear={() => clearField('schoolTypes')}
-                />
-              </div>
-              <FormConceptPicker
-                field={schulartField}
-                multiple={true}
-                value={formData.schoolTypeLabels.map((c) =>
-                  toRichConcept(c, schulartField.vocab.relay)
-                )}
-                onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
-              />
-            </div>
-          {/if}
-
-          {#if didaktischesKonzeptField}
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="label-text font-medium">Didaktisches Konzept</span>
-                <SmartFillBadge
-                  provenance={provenance.didacticConcepts}
-                  onclear={() => clearField('didacticConcepts')}
-                />
-              </div>
-              <FormConceptPicker
-                field={didaktischesKonzeptField}
-                multiple={true}
-                value={formData.didacticConceptLabels.map((c) =>
-                  toRichConcept(c, didaktischesKonzeptField.vocab.relay)
-                )}
-                onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
-              />
-            </div>
-          {/if}
-
-          {#if methodeField}
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="label-text font-medium">Methode</span>
-                <SmartFillBadge
-                  provenance={provenance.methods}
-                  onclear={() => clearField('methods')}
-                />
-              </div>
-              <FormConceptPicker
-                field={methodeField}
-                multiple={true}
-                value={formData.methodLabels.map((c) => toRichConcept(c, methodeField.vocab.relay))}
-                onchange={makeEkwPairHandler('methods', 'methodLabels')}
-              />
-            </div>
-          {/if}
-
+          <!-- Keywords -->
           <div class="form-control">
-            <label class="label flex items-center gap-2" for="ekw-method-other">
-              <span class="label-text font-medium">Methode (frei – eine pro Zeile)</span>
+            <label class="label flex items-center gap-2" for="amb-keywords">
+              <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
               <SmartFillBadge
-                provenance={provenance.methodOther}
-                onclear={() => clearField('methodOther')}
+                provenance={provenance.keywords}
+                onclear={() => clearField('keywords')}
               />
             </label>
-            <textarea
-              id="ekw-method-other"
-              class="textarea-bordered textarea w-full"
-              rows="4"
-              bind:value={formData.methodOther}
-            ></textarea>
-          </div>
-
-          <div class="form-control">
-            <div class="flex items-center gap-2">
-              <span class="label-text font-medium">Bibelstelle</span>
-              <SmartFillBadge
-                provenance={provenance.bibleReferences}
-                onclear={() => clearField('bibleReferences')}
-              />
-            </div>
-            <div class="mt-2 space-y-2">
-              {#each formData.bibleReferences as _ref, i (i)}
-                <BibleReferenceInput
-                  bind:value={formData.bibleReferences[i]}
-                  onremove={() => {
-                    formData.bibleReferences = formData.bibleReferences.filter((_, j) => j !== i);
-                    if (formData.bibleReferences.length === 0) formData.bibleReferences = [''];
-                  }}
-                />
-              {/each}
-              <button
-                type="button"
-                class="btn btn-outline btn-sm"
-                onclick={() => (formData.bibleReferences = [...formData.bibleReferences, ''])}
-                >+ Hinzufügen</button
-              >
-            </div>
-          </div>
-
-          {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
-            <p class="text-sm text-base-content/60">
-              EKW-Vokabulare sind in dieser Umgebung noch nicht konfiguriert (<code
-                >SCHEME_NADDR_EKW_FACH</code
-              >, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
-              <code>SCHEME_NADDR_SCHULART</code>, <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
-              <code>SCHEME_NADDR_METHODE</code>).
-            </p>
-          {/if}
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Step 5: Content & Creators -->
-    {#if currentStep === 5}
-      <div class="space-y-4">
-        {#if hasNoUrl}
-          <div class="alert text-sm alert-info">
-            {m.amb_form_help_step_5_no_url()}
-          </div>
-        {/if}
-        <CreatorInput
-          bind:creators={formData.creators}
-          label={m.amb_form_label_creators()}
-          helpText={m.amb_form_help_creators()}
-        />
-
-        <BlossomUploader
-          bind:files={formData.encodings}
-          label={m.amb_form_label_content_files()}
-          helpText={m.amb_form_help_content_files()}
-          multiple={true}
-        />
-
-        <ExternalUrlInput
-          bind:urls={formData.externalUrls}
-          label={m.amb_form_label_external_refs()}
-          helpText={m.amb_form_help_external_refs()}
-        />
-      </div>
-    {/if}
-
-    <!-- Step 6: Relations (hasPart / isPartOf) -->
-    {#if currentStep === 6}
-      <div class="space-y-6">
-        <p class="text-sm text-base-content/70">
-          {m.amb_form_relations_description?.() ??
-            'Optionally link this resource to other AMB resources that contain it, or that are contained within it.'}
-        </p>
-
-        <!-- isPartOf -->
-        <div class="form-control">
-          <div class="label">
-            <span class="label-text font-medium">
-              {m.amb_form_label_is_part_of?.() ?? 'Is part of'}
-            </span>
-          </div>
-          <p class="mb-2 text-xs text-base-content/60">
-            {m.amb_form_help_is_part_of?.() ??
-              'Resources this one belongs to — e.g. the course or series it is part of.'}
-          </p>
-          <AMBResourceSearchInput
-            exclude={formData.isPartOf.map((r) => r.coordinate)}
-            excludeSelf={editCoordinate}
-            placeholder={m.amb_picker_search_placeholder?.() ?? 'Search AMB resources…'}
-            onselect={(ref) => {
-              formData.isPartOf = [...formData.isPartOf, ref];
-            }}
-          />
-          {#if formData.isPartOf.length > 0}
-            <ul class="mt-3 space-y-2">
-              {#each formData.isPartOf as ref, i (ref.coordinate)}
-                <li
-                  class="flex items-start gap-2 rounded-lg border border-base-300 bg-base-100 p-2"
-                >
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-sm font-medium">
-                      {ref.event?.tags?.find((t) => t[0] === 'name')?.[1] ??
-                        m.amb_reference_unresolvable?.() ??
-                        'Unresolved reference'}
-                    </div>
-                    <div class="truncate font-mono text-xs text-base-content/60">
-                      {ref.coordinate}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-sm"
-                    aria-label="Remove"
-                    onclick={() => {
-                      formData.isPartOf = formData.isPartOf.toSpliced(i, 1);
-                    }}
-                  >
-                    <CloseIcon class_="w-4 h-4" />
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
-
-        <!-- hasPart -->
-        <div class="form-control">
-          <div class="label">
-            <span class="label-text font-medium">
-              {m.amb_form_label_has_part?.() ?? 'Has part'}
-            </span>
-          </div>
-          <p class="mb-2 text-xs text-base-content/60">
-            {m.amb_form_help_has_part?.() ??
-              'Resources contained within this one — e.g. the individual videos of this course.'}
-          </p>
-          <AMBResourceSearchInput
-            exclude={formData.hasPart.map((r) => r.coordinate)}
-            excludeSelf={editCoordinate}
-            placeholder={m.amb_picker_search_placeholder?.() ?? 'Search AMB resources…'}
-            onselect={(ref) => {
-              formData.hasPart = [...formData.hasPart, ref];
-            }}
-          />
-          {#if formData.hasPart.length > 0}
-            <ul class="mt-3 space-y-2">
-              {#each formData.hasPart as ref, i (ref.coordinate)}
-                <li
-                  class="flex items-start gap-2 rounded-lg border border-base-300 bg-base-100 p-2"
-                >
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-sm font-medium">
-                      {ref.event?.tags?.find((t) => t[0] === 'name')?.[1] ??
-                        m.amb_reference_unresolvable?.() ??
-                        'Unresolved reference'}
-                    </div>
-                    <div class="truncate font-mono text-xs text-base-content/60">
-                      {ref.coordinate}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-sm"
-                    aria-label="Remove"
-                    onclick={() => {
-                      formData.hasPart = formData.hasPart.toSpliced(i, 1);
-                    }}
-                  >
-                    <CloseIcon class_="w-4 h-4" />
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
-      </div>
-    {/if}
-
-    <!-- Step 7: License & (in edit mode) Publish -->
-    {#if currentStep === 7}
-      <div class="space-y-4">
-        <!-- License -->
-        <div class="form-control">
-          <label class="label" for="amb-license">
-            <span class="label-text font-medium"
-              >{m.amb_form_label_license()} <span class="text-error">*</span></span
-            >
-          </label>
-          <select
-            id="amb-license"
-            class="select-bordered select w-full"
-            bind:value={formData.license}
-          >
-            {#each licenseOptions as license (license.id)}
-              <option value={license.id}>{license.label}</option>
-            {/each}
-          </select>
-          <div class="label">
-            <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
-            <a
-              href={formData.license}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="label-text-alt link link-primary"
-            >
-              {m.amb_form_link_license_details()}
-            </a>
-            <!-- eslint-enable svelte/no-navigation-without-resolve -->
-          </div>
-        </div>
-
-        <!-- Free Access -->
-        <div class="form-control">
-          <label class="label cursor-pointer justify-start gap-3">
             <input
-              type="checkbox"
-              class="checkbox checkbox-primary"
-              bind:checked={formData.isAccessibleForFree}
+              id="amb-keywords"
+              type="text"
+              class="input-bordered input w-full"
+              placeholder={m.amb_form_placeholder_keywords()}
+              onkeydown={handleAddKeyword}
+              onblur={handleKeywordBlur}
+              onpaste={handleKeywordPaste}
             />
-            <span class="label-text">{m.amb_form_checkbox_free_access()}</span>
-          </label>
-        </div>
-
-        <!-- Preview Summary -->
-        <div class="rounded-lg bg-base-200 p-4">
-          <h3 class="mb-3 font-medium">{m.amb_form_label_summary()}</h3>
-          <dl class="space-y-2 text-sm">
-            <div class="flex">
-              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_title()}</dt>
-              <dd class="flex-1 font-medium">{formData.name || '—'}</dd>
-            </div>
-            {#if formData.identifier}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_url?.() ?? 'URL:'}
-                </dt>
-                <dd class="flex-1 truncate font-mono text-xs">{formData.identifier}</dd>
-              </div>
-            {/if}
-            {#if formData.description}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_description?.() ?? 'Description:'}
-                </dt>
-                <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.description}</dd>
-              </div>
-            {/if}
-            {#if formData.bildungsbereich}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">Bildungsbereich:</dt>
-                <dd class="flex-1">
-                  {BILDUNGSBEREICHE[formData.bildungsbereich]?.label?.de ??
-                    formData.bildungsbereich}
-                </dd>
-              </div>
-            {/if}
-            {#if formData.image}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">Vorschaubild:</dt>
-                <dd class="flex-1 truncate font-mono text-xs">{formData.image}</dd>
-              </div>
-            {/if}
-            <div class="flex">
-              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_language()}</dt>
-              <dd class="flex-1">
-                {languageOptions.find((l) => l.code === formData.inLanguage)?.label}
-              </dd>
-            </div>
-            <div class="flex">
-              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_type()}</dt>
-              <dd class="flex-1">
-                {formData.learningResourceType.map((t) => t.label).join(', ') || '—'}
-              </dd>
-            </div>
-            {#if formData.educationalLevels.length > 0}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_educational_level?.() ?? 'Level:'}
-                </dt>
-                <dd class="flex-1">
-                  {formData.educationalLevels.map((e) => e.label || e.id).join(', ')}
-                </dd>
-              </div>
-            {/if}
-            {#if mergedAbout().length > 0}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_subject()}</dt>
-                <dd class="flex-1">
-                  {mergedAbout()
-                    .map((s) => s.label || s.id)
-                    .join(', ')}
-                </dd>
-              </div>
-            {/if}
+            <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
             {#if formData.keywords.length > 0}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_keywords?.() ?? 'Keywords:'}
-                </dt>
-                <dd class="flex-1">{formData.keywords.join(', ')}</dd>
+              <div class="mt-2 flex flex-wrap gap-2">
+                {#each formData.keywords as keyword (keyword)}
+                  <span class="badge gap-1 badge-outline">
+                    {keyword}
+                    <button
+                      type="button"
+                      class="hover:text-error"
+                      onclick={handleRemoveKeyword(keyword)}
+                    >
+                      <CloseIcon class_="w-3 h-3" />
+                    </button>
+                  </span>
+                {/each}
               </div>
             {/if}
-            {#if isEkw}
-              {#if formData.ekwFachrichtung.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Fachrichtung:</dt>
-                  <dd class="flex-1">
-                    {formData.ekwFachrichtung.map((c) => c.label || c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.gradeLevelLabels.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Klassenstufe:</dt>
-                  <dd class="flex-1">
-                    {formData.gradeLevelLabels.map((c) => c.label || c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.schoolTypeLabels.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Schulart:</dt>
-                  <dd class="flex-1">
-                    {formData.schoolTypeLabels.map((c) => c.label || c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.didacticConceptLabels.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Didaktisches Konzept:</dt>
-                  <dd class="flex-1">
-                    {formData.didacticConceptLabels.map((c) => c.label || c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.methodLabels.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Methode:</dt>
-                  <dd class="flex-1">
-                    {formData.methodLabels.map((c) => c.label || c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.methodOther?.trim()}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Methode (frei):</dt>
-                  <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.methodOther}</dd>
-                </div>
-              {/if}
-              {@const bibleRefs = formData.bibleReferences
-                .map((/** @type {string} */ s) => s.trim())
-                .filter(Boolean)}
-              {#if bibleRefs.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Bibelstelle:</dt>
-                  <dd class="flex-1">{bibleRefs.join(', ')}</dd>
-                </div>
-              {/if}
-            {/if}
-            {#if formData.creators.some((c) => c.name)}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_creators()}
-                </dt>
-                <dd class="flex-1">
-                  {formData.creators
-                    .map((c) => c.name)
-                    .filter(Boolean)
-                    .join(', ')}
-                </dd>
-              </div>
-            {/if}
-            {#if formData.encodings.length > 0}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_files()}</dt>
-                <dd class="flex-1">{formData.encodings.length} file(s)</dd>
-              </div>
-            {/if}
-            {#if formData.externalUrls.length > 0}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_external_urls()}
-                </dt>
-                <dd class="flex-1">{formData.externalUrls.length} link(s)</dd>
-              </div>
-            {/if}
-            {#if formData.isPartOf.length > 0}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_is_part_of?.() ?? 'Part of:'}
-                </dt>
-                <dd class="flex-1">
-                  {formData.isPartOf
-                    .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
-                    .join(', ')}
-                </dd>
-              </div>
-            {/if}
-            {#if formData.hasPart.length > 0}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">
-                  {m.amb_form_summary_has_part?.() ?? 'Contains:'}
-                </dt>
-                <dd class="flex-1">
-                  {formData.hasPart
-                    .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
-                    .join(', ')}
-                </dd>
-              </div>
-            {/if}
-            <div class="flex">
-              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_license()}</dt>
-              <dd class="flex-1">
-                {licenseOptions.find((l) => l.id === formData.license)?.label}
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </div>
-    {/if}
-
-    <!-- Step 8: Share to communities (create mode only) -->
-    {#if currentStep === 8 && !isEditMode}
-      <div class="space-y-3">
-        <p class="text-sm text-base-content/70">
-          {m.amb_form_help_share?.() ??
-            'Share this resource into communities you belong to. Each share is a NIP-18 repost you can remove later.'}
-        </p>
-        {#if joinedCommunities.length === 0}
-          <div class="alert text-sm alert-info">
-            {m.amb_form_share_no_communities?.() ??
-              'You are not a member of any community yet. You can still publish the resource and share it later.'}
           </div>
-        {:else}
-          <ul class="space-y-2">
-            {#each joinedCommunities as pubkey (pubkey)}
-              {@const profile = joinedCommunityProfiles.get(pubkey)}
-              {@const displayName =
-                getDisplayName(profile) || `${pubkey.slice(0, 12)}…${pubkey.slice(-8)}`}
-              {@const picture = profile ? getProfilePicture(profile) : undefined}
-              <li>
-                <label
-                  class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
-                >
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-primary"
-                    checked={selectedCommunityPubkeys.includes(pubkey)}
-                    onchange={() => toggleCommunity(pubkey)}
+
+          <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
+          {#if isEkw}
+            {#if ekwFachField}
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="label-text font-medium">Fachrichtung</span>
+                  <SmartFillBadge
+                    provenance={provenance.ekwFachrichtung}
+                    onclear={() => clearField('ekwFachrichtung')}
                   />
-                  {#if picture}
-                    <img
-                      src={picture}
-                      alt=""
-                      class="h-8 w-8 rounded-full border border-base-300 object-cover"
+                </div>
+                <FormConceptPicker
+                  field={ekwFachField}
+                  multiple={true}
+                  value={formData.ekwFachrichtung.map((c) =>
+                    toRichConcept(c, ekwFachField.vocab.relay)
+                  )}
+                  onchange={handleEkwFachrichtungChange}
+                />
+              </div>
+            {/if}
+
+            {#if klassenstufenField}
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="label-text font-medium">Klassenstufe</span>
+                  <SmartFillBadge
+                    provenance={provenance.gradeLevels}
+                    onclear={() => clearField('gradeLevels')}
+                  />
+                </div>
+                <FormConceptPicker
+                  field={klassenstufenField}
+                  multiple={true}
+                  value={formData.gradeLevelLabels.map((c) =>
+                    toRichConcept(c, klassenstufenField.vocab.relay)
+                  )}
+                  onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
+                />
+              </div>
+            {/if}
+
+            {#if schulartField}
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="label-text font-medium">Schulart</span>
+                  <SmartFillBadge
+                    provenance={provenance.schoolTypes}
+                    onclear={() => clearField('schoolTypes')}
+                  />
+                </div>
+                <FormConceptPicker
+                  field={schulartField}
+                  multiple={true}
+                  value={formData.schoolTypeLabels.map((c) =>
+                    toRichConcept(c, schulartField.vocab.relay)
+                  )}
+                  onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
+                />
+              </div>
+            {/if}
+
+            {#if didaktischesKonzeptField}
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="label-text font-medium">Didaktisches Konzept</span>
+                  <SmartFillBadge
+                    provenance={provenance.didacticConcepts}
+                    onclear={() => clearField('didacticConcepts')}
+                  />
+                </div>
+                <FormConceptPicker
+                  field={didaktischesKonzeptField}
+                  multiple={true}
+                  value={formData.didacticConceptLabels.map((c) =>
+                    toRichConcept(c, didaktischesKonzeptField.vocab.relay)
+                  )}
+                  onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
+                />
+              </div>
+            {/if}
+
+            {#if methodeField}
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="label-text font-medium">Methode</span>
+                  <SmartFillBadge
+                    provenance={provenance.methods}
+                    onclear={() => clearField('methods')}
+                  />
+                </div>
+                <FormConceptPicker
+                  field={methodeField}
+                  multiple={true}
+                  value={formData.methodLabels.map((c) =>
+                    toRichConcept(c, methodeField.vocab.relay)
+                  )}
+                  onchange={makeEkwPairHandler('methods', 'methodLabels')}
+                />
+              </div>
+            {/if}
+
+            <div class="form-control">
+              <label class="label flex items-center gap-2" for="ekw-method-other">
+                <span class="label-text font-medium">Methode (frei – eine pro Zeile)</span>
+                <SmartFillBadge
+                  provenance={provenance.methodOther}
+                  onclear={() => clearField('methodOther')}
+                />
+              </label>
+              <textarea
+                id="ekw-method-other"
+                class="textarea-bordered textarea w-full"
+                rows="4"
+                bind:value={formData.methodOther}
+              ></textarea>
+            </div>
+
+            <div class="form-control">
+              <div class="flex items-center gap-2">
+                <span class="label-text font-medium">Bibelstelle</span>
+                <SmartFillBadge
+                  provenance={provenance.bibleReferences}
+                  onclear={() => clearField('bibleReferences')}
+                />
+              </div>
+              <div class="mt-2 space-y-2">
+                {#each formData.bibleReferences as _ref, i (i)}
+                  <BibleReferenceInput
+                    bind:value={formData.bibleReferences[i]}
+                    onremove={() => {
+                      formData.bibleReferences = formData.bibleReferences.filter((_, j) => j !== i);
+                      if (formData.bibleReferences.length === 0) formData.bibleReferences = [''];
+                    }}
+                  />
+                {/each}
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  onclick={() => (formData.bibleReferences = [...formData.bibleReferences, ''])}
+                  >+ Hinzufügen</button
+                >
+              </div>
+            </div>
+
+            {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
+              <p class="text-sm text-base-content/60">
+                EKW-Vokabulare sind in dieser Umgebung noch nicht konfiguriert (<code
+                  >SCHEME_NADDR_EKW_FACH</code
+                >, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
+                <code>SCHEME_NADDR_SCHULART</code>, <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
+                <code>SCHEME_NADDR_METHODE</code>).
+              </p>
+            {/if}
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Step 5: Content & Creators -->
+      {#if currentStep === 5}
+        <div class="space-y-4">
+          {#if hasNoUrl}
+            <div class="alert text-sm alert-info">
+              {m.amb_form_help_step_5_no_url()}
+            </div>
+          {/if}
+          <CreatorInput
+            bind:creators={formData.creators}
+            label={m.amb_form_label_creators()}
+            helpText={m.amb_form_help_creators()}
+          />
+
+          <BlossomUploader
+            bind:files={formData.encodings}
+            label={m.amb_form_label_content_files()}
+            helpText={m.amb_form_help_content_files()}
+            multiple={true}
+          />
+
+          <ExternalUrlInput
+            bind:urls={formData.externalUrls}
+            label={m.amb_form_label_external_refs()}
+            helpText={m.amb_form_help_external_refs()}
+          />
+        </div>
+      {/if}
+
+      <!-- Step 6: Relations (hasPart / isPartOf) -->
+      {#if currentStep === 6}
+        <div class="space-y-6">
+          <p class="text-sm text-base-content/70">
+            {m.amb_form_relations_description?.() ??
+              'Optionally link this resource to other AMB resources that contain it, or that are contained within it.'}
+          </p>
+
+          <!-- isPartOf -->
+          <div class="form-control">
+            <div class="label">
+              <span class="label-text font-medium">
+                {m.amb_form_label_is_part_of?.() ?? 'Is part of'}
+              </span>
+            </div>
+            <p class="mb-2 text-xs text-base-content/60">
+              {m.amb_form_help_is_part_of?.() ??
+                'Resources this one belongs to — e.g. the course or series it is part of.'}
+            </p>
+            <AMBResourceSearchInput
+              exclude={formData.isPartOf.map((r) => r.coordinate)}
+              excludeSelf={editCoordinate}
+              placeholder={m.amb_picker_search_placeholder?.() ?? 'Search AMB resources…'}
+              onselect={(ref) => {
+                formData.isPartOf = [...formData.isPartOf, ref];
+              }}
+            />
+            {#if formData.isPartOf.length > 0}
+              <ul class="mt-3 space-y-2">
+                {#each formData.isPartOf as ref, i (ref.coordinate)}
+                  <li
+                    class="flex items-start gap-2 rounded-lg border border-base-300 bg-base-100 p-2"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="truncate text-sm font-medium">
+                        {ref.event?.tags?.find((t) => t[0] === 'name')?.[1] ??
+                          m.amb_reference_unresolvable?.() ??
+                          'Unresolved reference'}
+                      </div>
+                      <div class="truncate font-mono text-xs text-base-content/60">
+                        {ref.coordinate}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      aria-label="Remove"
+                      onclick={() => {
+                        formData.isPartOf = formData.isPartOf.toSpliced(i, 1);
+                      }}
+                    >
+                      <CloseIcon class_="w-4 h-4" />
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+
+          <!-- hasPart -->
+          <div class="form-control">
+            <div class="label">
+              <span class="label-text font-medium">
+                {m.amb_form_label_has_part?.() ?? 'Has part'}
+              </span>
+            </div>
+            <p class="mb-2 text-xs text-base-content/60">
+              {m.amb_form_help_has_part?.() ??
+                'Resources contained within this one — e.g. the individual videos of this course.'}
+            </p>
+            <AMBResourceSearchInput
+              exclude={formData.hasPart.map((r) => r.coordinate)}
+              excludeSelf={editCoordinate}
+              placeholder={m.amb_picker_search_placeholder?.() ?? 'Search AMB resources…'}
+              onselect={(ref) => {
+                formData.hasPart = [...formData.hasPart, ref];
+              }}
+            />
+            {#if formData.hasPart.length > 0}
+              <ul class="mt-3 space-y-2">
+                {#each formData.hasPart as ref, i (ref.coordinate)}
+                  <li
+                    class="flex items-start gap-2 rounded-lg border border-base-300 bg-base-100 p-2"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="truncate text-sm font-medium">
+                        {ref.event?.tags?.find((t) => t[0] === 'name')?.[1] ??
+                          m.amb_reference_unresolvable?.() ??
+                          'Unresolved reference'}
+                      </div>
+                      <div class="truncate font-mono text-xs text-base-content/60">
+                        {ref.coordinate}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      aria-label="Remove"
+                      onclick={() => {
+                        formData.hasPart = formData.hasPart.toSpliced(i, 1);
+                      }}
+                    >
+                      <CloseIcon class_="w-4 h-4" />
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Step 7: License & (in edit mode) Publish -->
+      {#if currentStep === 7}
+        <div class="space-y-4">
+          <!-- License -->
+          <div class="form-control">
+            <label class="label" for="amb-license">
+              <span class="label-text font-medium"
+                >{m.amb_form_label_license()} <span class="text-error">*</span></span
+              >
+            </label>
+            <select
+              id="amb-license"
+              class="select-bordered select w-full"
+              bind:value={formData.license}
+            >
+              {#each licenseOptions as license (license.id)}
+                <option value={license.id}>{license.label}</option>
+              {/each}
+            </select>
+            <div class="label">
+              <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
+              <a
+                href={formData.license}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="label-text-alt link link-primary"
+              >
+                {m.amb_form_link_license_details()}
+              </a>
+              <!-- eslint-enable svelte/no-navigation-without-resolve -->
+            </div>
+          </div>
+
+          <!-- Free Access -->
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-primary"
+                bind:checked={formData.isAccessibleForFree}
+              />
+              <span class="label-text">{m.amb_form_checkbox_free_access()}</span>
+            </label>
+          </div>
+
+          <!-- Preview Summary -->
+          <div class="rounded-lg bg-base-200 p-4">
+            <h3 class="mb-3 font-medium">{m.amb_form_label_summary()}</h3>
+            <dl class="space-y-2 text-sm">
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_title()}</dt>
+                <dd class="flex-1 font-medium">{formData.name || '—'}</dd>
+              </div>
+              {#if formData.identifier}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_url?.() ?? 'URL:'}
+                  </dt>
+                  <dd class="flex-1 truncate font-mono text-xs">{formData.identifier}</dd>
+                </div>
+              {/if}
+              {#if formData.description}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_description?.() ?? 'Description:'}
+                  </dt>
+                  <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.description}</dd>
+                </div>
+              {/if}
+              {#if formData.bildungsbereich}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Bildungsbereich:</dt>
+                  <dd class="flex-1">
+                    {BILDUNGSBEREICHE[formData.bildungsbereich]?.label?.de ??
+                      formData.bildungsbereich}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.image}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Vorschaubild:</dt>
+                  <dd class="flex-1 truncate font-mono text-xs">{formData.image}</dd>
+                </div>
+              {/if}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_language()}</dt>
+                <dd class="flex-1">
+                  {languageOptions.find((l) => l.code === formData.inLanguage)?.label}
+                </dd>
+              </div>
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_type()}</dt>
+                <dd class="flex-1">
+                  {formData.learningResourceType.map((t) => t.label).join(', ') || '—'}
+                </dd>
+              </div>
+              {#if formData.educationalLevels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_educational_level?.() ?? 'Level:'}
+                  </dt>
+                  <dd class="flex-1">
+                    {formData.educationalLevels.map((e) => e.label || e.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if mergedAbout().length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_subject()}</dt>
+                  <dd class="flex-1">
+                    {mergedAbout()
+                      .map((s) => s.label || s.id)
+                      .join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.keywords.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_keywords?.() ?? 'Keywords:'}
+                  </dt>
+                  <dd class="flex-1">{formData.keywords.join(', ')}</dd>
+                </div>
+              {/if}
+              {#if isEkw}
+                {#if formData.ekwFachrichtung.length > 0}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">Fachrichtung:</dt>
+                    <dd class="flex-1">
+                      {formData.ekwFachrichtung.map((c) => c.label || c.id).join(', ')}
+                    </dd>
+                  </div>
+                {/if}
+                {#if formData.gradeLevelLabels.length > 0}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">Klassenstufe:</dt>
+                    <dd class="flex-1">
+                      {formData.gradeLevelLabels.map((c) => c.label || c.id).join(', ')}
+                    </dd>
+                  </div>
+                {/if}
+                {#if formData.schoolTypeLabels.length > 0}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">Schulart:</dt>
+                    <dd class="flex-1">
+                      {formData.schoolTypeLabels.map((c) => c.label || c.id).join(', ')}
+                    </dd>
+                  </div>
+                {/if}
+                {#if formData.didacticConceptLabels.length > 0}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">Didaktisches Konzept:</dt>
+                    <dd class="flex-1">
+                      {formData.didacticConceptLabels.map((c) => c.label || c.id).join(', ')}
+                    </dd>
+                  </div>
+                {/if}
+                {#if formData.methodLabels.length > 0}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">Methode:</dt>
+                    <dd class="flex-1">
+                      {formData.methodLabels.map((c) => c.label || c.id).join(', ')}
+                    </dd>
+                  </div>
+                {/if}
+                {#if formData.methodOther?.trim()}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">Methode (frei):</dt>
+                    <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.methodOther}</dd>
+                  </div>
+                {/if}
+                {@const bibleRefs = formData.bibleReferences
+                  .map((/** @type {string} */ s) => s.trim())
+                  .filter(Boolean)}
+                {#if bibleRefs.length > 0}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">Bibelstelle:</dt>
+                    <dd class="flex-1">{bibleRefs.join(', ')}</dd>
+                  </div>
+                {/if}
+              {/if}
+              {#if formData.creators.some((c) => c.name)}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_creators()}
+                  </dt>
+                  <dd class="flex-1">
+                    {formData.creators
+                      .map((c) => c.name)
+                      .filter(Boolean)
+                      .join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.encodings.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_files()}</dt>
+                  <dd class="flex-1">{formData.encodings.length} file(s)</dd>
+                </div>
+              {/if}
+              {#if formData.externalUrls.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_external_urls()}
+                  </dt>
+                  <dd class="flex-1">{formData.externalUrls.length} link(s)</dd>
+                </div>
+              {/if}
+              {#if formData.isPartOf.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_is_part_of?.() ?? 'Part of:'}
+                  </dt>
+                  <dd class="flex-1">
+                    {formData.isPartOf
+                      .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
+                      .join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.hasPart.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.amb_form_summary_has_part?.() ?? 'Contains:'}
+                  </dt>
+                  <dd class="flex-1">
+                    {formData.hasPart
+                      .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
+                      .join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_license()}</dt>
+                <dd class="flex-1">
+                  {licenseOptions.find((l) => l.id === formData.license)?.label}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Step 8: Share to communities (create mode only) -->
+      {#if currentStep === 8 && !isEditMode}
+        <div class="space-y-3">
+          <p class="text-sm text-base-content/70">
+            {m.amb_form_help_share?.() ??
+              'Share this resource into communities you belong to. Each share is a NIP-18 repost you can remove later.'}
+          </p>
+          {#if joinedCommunities.length === 0}
+            <div class="alert text-sm alert-info">
+              {m.amb_form_share_no_communities?.() ??
+                'You are not a member of any community yet. You can still publish the resource and share it later.'}
+            </div>
+          {:else}
+            <ul class="space-y-2">
+              {#each joinedCommunities as pubkey (pubkey)}
+                {@const profile = joinedCommunityProfiles.get(pubkey)}
+                {@const displayName =
+                  getDisplayName(profile) || `${pubkey.slice(0, 12)}…${pubkey.slice(-8)}`}
+                {@const picture = profile ? getProfilePicture(profile) : undefined}
+                <li>
+                  <label
+                    class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
+                  >
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-primary"
+                      checked={selectedCommunityPubkeys.includes(pubkey)}
+                      onchange={() => toggleCommunity(pubkey)}
                     />
-                  {:else}
-                    <div
-                      class="h-8 w-8 shrink-0 rounded-full border border-base-300 bg-base-200"
-                    ></div>
-                  {/if}
-                  <span class="truncate text-sm" data-testid="community-name">{displayName}</span>
-                </label>
-              </li>
-            {/each}
-          </ul>
-        {/if}
+                    {#if picture}
+                      <img
+                        src={picture}
+                        alt=""
+                        class="h-8 w-8 rounded-full border border-base-300 object-cover"
+                      />
+                    {:else}
+                      <div
+                        class="h-8 w-8 shrink-0 rounded-full border border-base-300 bg-base-200"
+                      ></div>
+                    {/if}
+                    <span class="truncate text-sm" data-testid="community-name">{displayName}</span>
+                  </label>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Validation Errors -->
+    {#if validationErrors.length > 0}
+      <div class="mt-4 alert alert-error">
+        <ul class="list-inside list-disc text-sm">
+          {#each validationErrors as error, index (index)}
+            <li>{error}</li>
+          {/each}
+        </ul>
       </div>
     {/if}
-  </div>
 
-  <!-- Validation Errors -->
-  {#if validationErrors.length > 0}
-    <div class="mt-4 alert alert-error">
-      <ul class="list-inside list-disc text-sm">
-        {#each validationErrors as error, index (index)}
-          <li>{error}</li>
-        {/each}
-      </ul>
-    </div>
-  {/if}
-
-  <!-- Submit Error -->
-  {#if submitError}
-    <div class="mt-4 alert alert-error">
-      <span>{submitError}</span>
-    </div>
-  {/if}
-
-  <!-- Footer / Navigation -->
-  <div class="mt-6 flex items-center justify-between border-t border-base-300 pt-4">
-    {#if currentStep === 1}
-      <button type="button" class="btn btn-outline" onclick={handleCancel} disabled={isSubmitting}>
-        {m.common_cancel()}
-      </button>
-    {:else}
-      <button type="button" class="btn btn-outline" onclick={prevStep} disabled={isSubmitting}>
-        <ChevronLeftIcon class_="w-4 h-4" />
-        {m.common_back()}
-      </button>
+    <!-- Submit Error -->
+    {#if submitError}
+      <div class="mt-4 alert alert-error">
+        <span>{submitError}</span>
+      </div>
     {/if}
 
-    {#if currentStep < totalSteps}
-      <button type="button" class="btn btn-primary" onclick={nextStep}>
-        {m.common_next()}
-        <ChevronRightIcon class_="w-4 h-4" />
-      </button>
-    {:else}
-      <button type="button" class="btn btn-primary" onclick={handleSubmit} disabled={isSubmitting}>
-        {#if isSubmitting}
-          <span class="loading loading-sm loading-spinner"></span>
-          {isEditMode ? m.amb_form_button_updating() : m.amb_form_button_publishing()}
-        {:else}
-          {isEditMode ? m.amb_form_button_update() : m.amb_form_button_publish()}
-        {/if}
-      </button>
-    {/if}
+    <!-- Footer / Navigation -->
+    <div class="mt-6 flex items-center justify-between border-t border-base-300 pt-4">
+      {#if currentStep === 1}
+        <button
+          type="button"
+          class="btn btn-outline"
+          onclick={handleCancel}
+          disabled={isSubmitting}
+        >
+          {m.common_cancel()}
+        </button>
+      {:else}
+        <button type="button" class="btn btn-outline" onclick={prevStep} disabled={isSubmitting}>
+          <ChevronLeftIcon class_="w-4 h-4" />
+          {m.common_back()}
+        </button>
+      {/if}
+
+      {#if currentStep < totalSteps}
+        <button type="button" class="btn btn-primary" onclick={nextStep}>
+          {m.common_next()}
+          <ChevronRightIcon class_="w-4 h-4" />
+        </button>
+      {:else}
+        <button
+          type="button"
+          class="btn btn-primary"
+          onclick={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {#if isSubmitting}
+            <span class="loading loading-sm loading-spinner"></span>
+            {isEditMode ? m.amb_form_button_updating() : m.amb_form_button_publishing()}
+          {:else}
+            {isEditMode ? m.amb_form_button_update() : m.amb_form_button_publish()}
+          {/if}
+        </button>
+      {/if}
+    </div>
   </div>
+
+  <!-- Live preview side rail (lg+). Mirrors the published kind-30142
+       resource as the user fills fields. Hidden on mobile to save vertical
+       space — the mobile <details> below the progress dots covers that case. -->
+  {#if previewResource}
+    <aside class="hidden lg:sticky lg:top-6 lg:block">
+      <p class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+        👁 {m.forms_preview_tab()}
+      </p>
+      <AMBResourceCard
+        resource={previewResource}
+        authorProfile={previewAuthorProfile}
+        variant="card"
+      />
+    </aside>
+  {/if}
 </div>
