@@ -318,7 +318,8 @@ export function GET() {
         schulart: env.SCHEME_NADDR_SCHULART || '',
         ekwFach: env.SCHEME_NADDR_EKW_FACH || '',
         didaktischesKonzept: env.SCHEME_NADDR_DIDAKTISCHES_KONZEPT || '',
-        methode: env.SCHEME_NADDR_METHODE || ''
+        methode: env.SCHEME_NADDR_METHODE || '',
+        ekwLrt: env.SCHEME_NADDR_EKW_LRT || ''
       }
     },
 

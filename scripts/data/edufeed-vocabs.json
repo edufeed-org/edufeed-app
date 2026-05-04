@@ -339,6 +339,399 @@
           { "d": "bildbetrachtung", "prefLabels": [{ "value": "Bildbetrachtung", "lang": "de" }] }
         ]
       }
+    },
+    {
+      "d": "ekw-lrt",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          { "value": "Lerninhaltstyp (EKKW)", "lang": "de" },
+          { "value": "Learning resource type (EKKW)", "lang": "en" }
+        ],
+        "descriptions": [
+          {
+            "value": "EKKW-spezifische Taxonomie für learningResourceType auf kind 30142. Mirror of EKW_LRT_TREE in src/lib/data/ekwLearningResourceTypes.js. Compound d-tags (parent/child) align concept addresses with the JS-side IRI suffix; externalUri carries the canonical https://edufeed.org/ns/ekw#lrt/... IRI used by published kind-30142 events.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "unterrichtsplanung",
+            "prefLabels": [{ "value": "Unterrichtsplanung", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung",
+            "children": [
+              {
+                "d": "unterrichtsplanung/stundenentwurf",
+                "prefLabels": [{ "value": "Stundenentwurf", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/stundenentwurf"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtsbaustein",
+                "prefLabels": [{ "value": "Unterrichtsbaustein", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtsbaustein"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtsidee",
+                "prefLabels": [{ "value": "Unterrichtsidee", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtsidee"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtsreihe",
+                "prefLabels": [{ "value": "Unterrichtsreihe", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtsreihe"
+              },
+              {
+                "d": "unterrichtsplanung/go-teach",
+                "prefLabels": [{ "value": "Go & Teach", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/go-teach"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtseinheit-und-sequenz",
+                "prefLabels": [{ "value": "Unterrichtseinheit und -sequenz", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtseinheit-und-sequenz"
+              },
+              {
+                "d": "unterrichtsplanung/projekt",
+                "prefLabels": [{ "value": "Projekt", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/projekt"
+              }
+            ]
+          },
+          {
+            "d": "arbeitsblatt",
+            "prefLabels": [{ "value": "Arbeitsblatt", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/arbeitsblatt"
+          },
+          {
+            "d": "textbaustein-zum-wiederverwenden",
+            "prefLabels": [{ "value": "Textbaustein zum Wiederverwenden", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden",
+            "children": [
+              {
+                "d": "textbaustein-zum-wiederverwenden/anforderungssituation",
+                "prefLabels": [{ "value": "Anforderungssituation", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/anforderungssituation"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/arbeits-rechercheauftrag",
+                "prefLabels": [{ "value": "Arbeits-/Rechercheauftrag", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/arbeits-rechercheauftrag"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/darstellung-sachverhalt",
+                "prefLabels": [{ "value": "Darstellung Sachverhalt", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/darstellung-sachverhalt"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/definition",
+                "prefLabels": [{ "value": "Definition", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/definition"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/merksatz",
+                "prefLabels": [{ "value": "Merksatz", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/merksatz"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/fakt",
+                "prefLabels": [{ "value": "Fakt", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/fakt"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/beispiel",
+                "prefLabels": [{ "value": "Beispiel", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/beispiel"
+              }
+            ]
+          },
+          {
+            "d": "biblische-geschichte",
+            "prefLabels": [{ "value": "Biblische Geschichte", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/biblische-geschichte"
+          },
+          {
+            "d": "quelle",
+            "prefLabels": [{ "value": "Quelle", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/quelle"
+          },
+          {
+            "d": "erzahlung-geschichte",
+            "prefLabels": [{ "value": "Erzählung / Geschichte", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/erzahlung-geschichte"
+          },
+          {
+            "d": "bebilderte-geschichte",
+            "prefLabels": [{ "value": "bebilderte Geschichte", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/bebilderte-geschichte"
+          },
+          {
+            "d": "liedtext-musiknoten",
+            "prefLabels": [{ "value": "Liedtext/Musiknoten", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/liedtext-musiknoten"
+          },
+          {
+            "d": "audio",
+            "prefLabels": [{ "value": "Audio", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/audio",
+            "children": [
+              {
+                "d": "audio/erklar-audio",
+                "prefLabels": [{ "value": "Erklär-Audio", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/erklar-audio"
+              },
+              {
+                "d": "audio/sprach-und-lernaudio",
+                "prefLabels": [{ "value": "Sprach- und Lernaudio", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/sprach-und-lernaudio"
+              },
+              {
+                "d": "audio/radio-podcastfolge-und-interview",
+                "prefLabels": [{ "value": "Radio, Podcastfolge und Interview", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/radio-podcastfolge-und-interview"
+              },
+              {
+                "d": "audio/klang-und-tonaufnahme",
+                "prefLabels": [{ "value": "Klang und Tonaufnahme", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/klang-und-tonaufnahme"
+              },
+              {
+                "d": "audio/musik",
+                "prefLabels": [{ "value": "Musik", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/musik"
+              },
+              {
+                "d": "audio/vortrag-audio-aufzeichnung-lesung",
+                "prefLabels": [{ "value": "Vortrag (Audio-Aufzeichnung / Lesung)", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/vortrag-audio-aufzeichnung-lesung"
+              },
+              {
+                "d": "audio/horverstehen",
+                "prefLabels": [{ "value": "Hörverstehen", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/horverstehen"
+              }
+            ]
+          },
+          {
+            "d": "bild",
+            "prefLabels": [{ "value": "Bild", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/bild",
+            "children": [
+              {
+                "d": "bild/veranschaulichung-schaubild-tafelbild",
+                "prefLabels": [
+                  { "value": "Veranschaulichung, Schaubild, Tafelbild", "lang": "de" }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/veranschaulichung-schaubild-tafelbild"
+              },
+              {
+                "d": "bild/mal-und-bastelvorlage",
+                "prefLabels": [{ "value": "Mal- und Bastelvorlage", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/mal-und-bastelvorlage"
+              },
+              {
+                "d": "bild/foto",
+                "prefLabels": [{ "value": "Foto", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/foto"
+              },
+              {
+                "d": "bild/clipart-pictogramm-icon",
+                "prefLabels": [{ "value": "Clipart, Pictogramm, Icon", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/clipart-pictogramm-icon"
+              },
+              {
+                "d": "bild/cartoon-comic",
+                "prefLabels": [{ "value": "Cartoon, Comic", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/cartoon-comic"
+              },
+              {
+                "d": "bild/karte",
+                "prefLabels": [{ "value": "Karte", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/karte"
+              },
+              {
+                "d": "bild/poster-und-plakat",
+                "prefLabels": [{ "value": "Poster und Plakat", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/poster-und-plakat"
+              },
+              {
+                "d": "bild/gemalde-kunstwerke-und-zeichnungen",
+                "prefLabels": [{ "value": "Gemälde, Kunstwerke und Zeichnungen", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/gemalde-kunstwerke-und-zeichnungen"
+              },
+              {
+                "d": "bild/graph-diagramm-und-charts",
+                "prefLabels": [{ "value": "Graph, Diagramm und Charts", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/graph-diagramm-und-charts"
+              }
+            ]
+          },
+          {
+            "d": "video",
+            "prefLabels": [{ "value": "Video", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/video",
+            "children": [
+              {
+                "d": "video/kurzfilm",
+                "prefLabels": [{ "value": "Kurzfilm", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/kurzfilm"
+              },
+              {
+                "d": "video/film",
+                "prefLabels": [{ "value": "Film", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/film"
+              },
+              {
+                "d": "video/lern-und-ubungsvideo",
+                "prefLabels": [{ "value": "Lern- und Übungsvideo", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/lern-und-ubungsvideo"
+              },
+              {
+                "d": "video/erklarvideo-und-gefilmtes-experiment",
+                "prefLabels": [{ "value": "Erklärvideo und gefilmtes Experiment", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/erklarvideo-und-gefilmtes-experiment"
+              },
+              {
+                "d": "video/vortrags-und-unterrichtsaufzeichnung",
+                "prefLabels": [{ "value": "Vortrags- und Unterrichtsaufzeichnung", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/vortrags-und-unterrichtsaufzeichnung"
+              }
+            ]
+          },
+          {
+            "d": "interaktives-medium",
+            "prefLabels": [{ "value": "Interaktives Medium", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium",
+            "children": [
+              {
+                "d": "interaktives-medium/lernpfad",
+                "prefLabels": [{ "value": "Lernpfad", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/lernpfad"
+              },
+              {
+                "d": "interaktives-medium/adaptives-lernangebot",
+                "prefLabels": [{ "value": "Adaptives Lernangebot", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/adaptives-lernangebot"
+              },
+              {
+                "d": "interaktives-medium/simulation",
+                "prefLabels": [{ "value": "Simulation", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/simulation"
+              },
+              {
+                "d": "interaktives-medium/virtual-reality",
+                "prefLabels": [{ "value": "Virtual Reality", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/virtual-reality"
+              },
+              {
+                "d": "interaktives-medium/augmented-reality",
+                "prefLabels": [{ "value": "Augmented Reality", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/augmented-reality"
+              },
+              {
+                "d": "interaktives-medium/webseite",
+                "prefLabels": [{ "value": "Webseite", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/webseite"
+              },
+              {
+                "d": "interaktives-medium/wiki",
+                "prefLabels": [{ "value": "Wiki", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/wiki"
+              },
+              {
+                "d": "interaktives-medium/game",
+                "prefLabels": [{ "value": "Game", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/game"
+              }
+            ]
+          },
+          {
+            "d": "spiel",
+            "prefLabels": [{ "value": "Spiel", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel",
+            "children": [
+              {
+                "d": "spiel/aufwarm-kennenlernspiel",
+                "prefLabels": [{ "value": "Aufwärm-/Kennenlernspiel", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel/aufwarm-kennenlernspiel"
+              },
+              {
+                "d": "spiel/lernspiel-spielanleitung",
+                "prefLabels": [{ "value": "Lernspiel / Spielanleitung", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel/lernspiel-spielanleitung"
+              },
+              {
+                "d": "spiel/rollenspiel",
+                "prefLabels": [{ "value": "Rollenspiel", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel/rollenspiel"
+              }
+            ]
+          },
+          {
+            "d": "stationenlernen",
+            "prefLabels": [{ "value": "Stationenlernen", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/stationenlernen"
+          },
+          {
+            "d": "ubung-lernkontrolle",
+            "prefLabels": [{ "value": "Übung, Lernkontrolle", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle",
+            "children": [
+              {
+                "d": "ubung-lernkontrolle/losungs-beispiel-und-erwartungshorizont",
+                "prefLabels": [
+                  { "value": "Lösungs(beispiel) und Erwartungshorizont", "lang": "de" }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/losungs-beispiel-und-erwartungshorizont"
+              },
+              {
+                "d": "ubung-lernkontrolle/selbsttest-aufgabe",
+                "prefLabels": [{ "value": "Selbsttest-Aufgabe", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/selbsttest-aufgabe"
+              },
+              {
+                "d": "ubung-lernkontrolle/klausur-klassenarbeit-test",
+                "prefLabels": [{ "value": "Klausur, Klassenarbeit, Test", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/klausur-klassenarbeit-test"
+              },
+              {
+                "d": "ubung-lernkontrolle/checkliste",
+                "prefLabels": [{ "value": "Checkliste", "lang": "de" }],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/checkliste"
+              }
+            ]
+          },
+          {
+            "d": "evaluationsbogen",
+            "prefLabels": [{ "value": "Evaluationsbogen", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/evaluationsbogen"
+          },
+          {
+            "d": "fragebogen-und-umfrage",
+            "prefLabels": [{ "value": "Fragebogen und Umfrage", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/fragebogen-und-umfrage"
+          },
+          {
+            "d": "nachschlagewerk-lexikon-lexikonartikel",
+            "prefLabels": [{ "value": "Nachschlagewerk, Lexikon, Lexikonartikel", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/nachschlagewerk-lexikon-lexikonartikel"
+          },
+          {
+            "d": "prasentation",
+            "prefLabels": [{ "value": "Präsentation", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/prasentation"
+          },
+          {
+            "d": "lehrbuch",
+            "prefLabels": [{ "value": "Lehrbuch", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/lehrbuch"
+          },
+          {
+            "d": "sachinformation-grundlagentext",
+            "prefLabels": [{ "value": "Sachinformation/Grundlagentext", "lang": "de" }],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/sachinformation-grundlagentext"
+          }
+        ]
+      }
     }
   ]
 }
