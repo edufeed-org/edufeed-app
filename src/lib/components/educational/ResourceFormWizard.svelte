@@ -62,6 +62,7 @@
   import AMBResourceCard from './AMBResourceCard.svelte';
   import { buildPreviewResource } from '$lib/helpers/educational/buildPreviewResource.js';
   import { loadDraft, saveDraft, clearDraft } from '$lib/helpers/educational/draftStore.js';
+  import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -340,8 +341,14 @@
   const didaktischesKonzeptField = $derived(resolveVocabField('didaktischesKonzept'));
   const methodeField = $derived(resolveVocabField('methode'));
 
-  // Validation and submission state
-  let validationErrors = $state(/** @type {string[]} */ ([]));
+  // Validation and submission state. `fieldErrors` is the canonical map
+  // (field key → localized error message) computed for the current step.
+  // Inline error rendering is gated on `touchedFields[field]` so the form
+  // is silent until the user interacts with that field; the bottom summary
+  // alert is gated on `advanceAttempted` so it appears only when the user
+  // tries to advance and is blocked.
+  let touchedFields = $state(/** @type {Record<string, boolean>} */ ({}));
+  let advanceAttempted = $state(false);
   let isSubmitting = $state(false);
   let submitError = $state('');
 
@@ -814,91 +821,91 @@
     }
   }
 
+  // Pure-helper validation context: derived from form state + step ctx so
+  // `fieldErrors` updates live as the user types (which is what powers the
+  // "error vanishes once you fix it" behaviour for inline messages).
+  const validationContext = $derived({
+    isEkw,
+    hasNoUrl,
+    hasSubjectVocab: subjectVocabFields.length > 0,
+    subjectsCount: Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0),
+    isValidUrl,
+    messages: {
+      bildungsbereich: () =>
+        m.amb_form_validation_bildungsbereich?.() ?? 'Please choose a Bildungsbereich.',
+      urlRequired: () =>
+        m.amb_form_validation_url_required?.() ?? 'Please enter a URL or naddr before continuing.',
+      identifier: m.amb_form_validation_identifier,
+      title: m.amb_form_validation_title,
+      description: m.amb_form_validation_description,
+      resourceType: m.amb_form_validation_resource_type,
+      subject: m.amb_form_validation_subject,
+      noUrlNeedsAttachment: () =>
+        m.amb_form_validation_no_url_needs_attachment?.() ??
+        'Pure Nostr resources must have at least one file or external reference.',
+      license: m.amb_form_validation_license
+    }
+  });
+
+  /** Map of fieldKey → error message for the current step. */
+  const fieldErrors = $derived(validateWizardStep(currentStep, formData, validationContext));
+
+  /** Flat list used by the bottom-of-step summary alert. */
+  const validationErrors = $derived(Object.values(fieldErrors));
+
   /**
-   * Validate current step
+   * Should the inline error for `field` be shown right now? True iff there
+   * IS an error AND the user has either touched the field or tried to
+   * advance the step.
+   * @param {string} field
+   * @returns {boolean}
+   */
+  function showError(field) {
+    return Boolean(fieldErrors[field]) && (touchedFields[field] || advanceAttempted);
+  }
+
+  /**
+   * Mark a field as "touched" so its inline error becomes visible. Called
+   * from input `onblur`. Idempotent.
+   * @param {string} field
+   */
+  function markTouched(field) {
+    if (touchedFields[field]) return;
+    touchedFields = { ...touchedFields, [field]: true };
+  }
+
+  /**
+   * Run the current-step validation and set up the visual state for
+   * blocked-advance: every erroring field is marked touched and the
+   * summary banner is unhidden.
    * @returns {boolean}
    */
   function validateCurrentStep() {
-    validationErrors = [];
-
-    switch (currentStep) {
-      case 1:
-        if (!formData.bildungsbereich) {
-          validationErrors.push(
-            m.amb_form_validation_bildungsbereich?.() ?? 'Please choose a Bildungsbereich.'
-          );
-        }
-        break;
-      case 2:
-        if (!hasNoUrl && !formData.identifier?.trim()) {
-          validationErrors.push(
-            m.amb_form_validation_url_required?.() ??
-              'Please enter a URL or naddr before continuing.'
-          );
-        }
-        break;
-      case 3:
-        if (formData.identifier?.trim() && !isValidUrl(formData.identifier)) {
-          validationErrors.push(m.amb_form_validation_identifier());
-        }
-        if (!formData.name.trim()) {
-          validationErrors.push(m.amb_form_validation_title());
-        }
-        if (!formData.description.trim()) {
-          validationErrors.push(m.amb_form_validation_description());
-        }
-        break;
-      case 4: {
-        if (formData.learningResourceType.length === 0) {
-          validationErrors.push(m.amb_form_validation_resource_type());
-        }
-        // Skip the subject-required check when the current Bildungsbereich has no
-        // subject vocab (e.g. Konfi-Arbeit), or when the EKKW variant is active —
-        // EKKW uses its own Fachrichtung field and does not render the AMB
-        // Fach/Thema picker.
-        if (!isEkw && subjectVocabFields.length > 0) {
-          const totalSubjects = Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0);
-          if (totalSubjects === 0) {
-            validationErrors.push(m.amb_form_validation_subject());
-          }
-        }
-        break;
-      }
-      case 5:
-        if (hasNoUrl && formData.encodings.length === 0 && formData.externalUrls.length === 0) {
-          validationErrors.push(
-            m.amb_form_validation_no_url_needs_attachment?.() ??
-              'Pure Nostr resources must have at least one file or external reference.'
-          );
-        }
-        break;
-      case 6:
-        // Relations step — hasPart / isPartOf are optional.
-        break;
-      case 7:
-        if (!formData.license) {
-          validationErrors.push(m.amb_form_validation_license());
-        }
-        break;
-      case 8:
-        // Share step — zero communities is fine (user may want to publish only
-        // to their outbox for now and share later).
-        break;
+    const errs = fieldErrors;
+    const errorKeys = Object.keys(errs);
+    if (errorKeys.length > 0) {
+      const next = { ...touchedFields };
+      for (const k of errorKeys) next[k] = true;
+      touchedFields = next;
+      advanceAttempted = true;
+      return false;
     }
-
-    return validationErrors.length === 0;
+    return true;
   }
 
   function nextStep() {
     if (validateCurrentStep() && currentStep < totalSteps) {
       currentStep++;
+      // Each step starts silent: hide the summary alert until the user
+      // tries to advance again. Inline blur errors persist via touchedFields.
+      advanceAttempted = false;
     }
   }
 
   function prevStep() {
     if (currentStep > 1) {
       currentStep--;
-      validationErrors = [];
+      advanceAttempted = false;
     }
   }
 
@@ -1275,6 +1282,9 @@
               </label>
             {/each}
           </div>
+          {#if showError('bildungsbereich')}
+            <p class="text-xs text-error">{fieldErrors.bildungsbereich}</p>
+          {/if}
         </div>
       {/if}
 
@@ -1324,7 +1334,9 @@
                   hasNoUrl = true;
                   formData.urlInput = '';
                   formData.identifier = '';
-                  validationErrors = [];
+                  // Hide any prior step-2 advance error; the user just
+                  // resolved the "URL required" branch by opting out.
+                  advanceAttempted = false;
                   setTimeout(() => nextStep(), 200);
                 }}
               >
@@ -1398,9 +1410,16 @@
               id="amb-title"
               type="text"
               class="input-bordered input w-full"
+              class:input-error={showError('name')}
+              aria-invalid={showError('name')}
+              aria-describedby={showError('name') ? 'amb-title-error' : undefined}
               bind:value={formData.name}
               placeholder={m.amb_form_placeholder_title()}
+              onblur={() => markTouched('name')}
             />
+            {#if showError('name')}
+              <p id="amb-title-error" class="mt-1 text-xs text-error">{fieldErrors.name}</p>
+            {/if}
           </div>
 
           <!-- Description -->
@@ -1417,10 +1436,19 @@
             <textarea
               id="amb-description"
               class="textarea-bordered resize-vertical textarea w-full"
+              class:textarea-error={showError('description')}
+              aria-invalid={showError('description')}
+              aria-describedby={showError('description') ? 'amb-description-error' : undefined}
               bind:value={formData.description}
               placeholder={m.amb_form_placeholder_description()}
               rows="4"
+              onblur={() => markTouched('description')}
             ></textarea>
+            {#if showError('description')}
+              <p id="amb-description-error" class="mt-1 text-xs text-error">
+                {fieldErrors.description}
+              </p>
+            {/if}
           </div>
 
           <!-- Language -->
@@ -1490,6 +1518,9 @@
                 />
               </div>
             {/if}
+            {#if showError('learningResourceType')}
+              <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
+            {/if}
           </div>
 
           <!--
@@ -1550,6 +1581,9 @@
                 />
               </div>
             {/each}
+            {#if showError('about')}
+              <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
+            {/if}
           {/if}
 
           <!-- Keywords -->
@@ -1757,6 +1791,9 @@
               {m.amb_form_help_step_5_no_url()}
             </div>
           {/if}
+          {#if showError('attachments')}
+            <p class="text-xs text-error">{fieldErrors.attachments}</p>
+          {/if}
           <CreatorInput
             bind:creators={formData.creators}
             label={m.amb_form_label_creators()}
@@ -1903,12 +1940,19 @@
             <select
               id="amb-license"
               class="select-bordered select w-full"
+              class:select-error={showError('license')}
+              aria-invalid={showError('license')}
+              aria-describedby={showError('license') ? 'amb-license-error' : undefined}
               bind:value={formData.license}
+              onblur={() => markTouched('license')}
             >
               {#each licenseOptions as license (license.id)}
                 <option value={license.id}>{license.label}</option>
               {/each}
             </select>
+            {#if showError('license')}
+              <p id="amb-license-error" class="mt-1 text-xs text-error">{fieldErrors.license}</p>
+            {/if}
             <div class="label">
               <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
               <a
@@ -2197,9 +2241,10 @@
       {/if}
     </div>
 
-    <!-- Validation Errors -->
-    {#if validationErrors.length > 0}
-      <div class="mt-4 alert alert-error">
+    <!-- Validation summary — appears once the user tries to advance and is
+       blocked. Each error is also shown inline next to the offending field. -->
+    {#if advanceAttempted && validationErrors.length > 0}
+      <div class="mt-4 alert alert-error" role="alert" aria-live="polite">
         <ul class="list-inside list-disc text-sm">
           {#each validationErrors as error, index (index)}
             <li>{error}</li>
