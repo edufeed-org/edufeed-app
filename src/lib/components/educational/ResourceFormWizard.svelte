@@ -44,6 +44,7 @@
   } from '$lib/helpers/educational/bildungsbereich.js';
   import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
   import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
+  import { parseEkwTagsToFormData } from '$lib/helpers/educational/parseEkwTagsToFormData.js';
   import { splitKeywordInput, mergeKeywords } from '$lib/helpers/educational/keywordInput.js';
   import {
     ambJsonLdToPrefillEvent,
@@ -451,6 +452,22 @@
       isPartOf: /** @type {AMBRelationRef[]} */ (getAMBIsPartOf(editEvent)),
       license: getAMBLicense(editEvent)?.id || 'https://creativecommons.org/licenses/by/4.0/',
       isAccessibleForFree: isAMBFree(editEvent)
+    };
+
+    // Merge EKW fields parsed from ekw:* tags (no-op for non-EKW events).
+    const ekw = parseEkwTagsToFormData(editEvent);
+    formData = {
+      ...formData,
+      gradeLevels: ekw.gradeLevels,
+      gradeLevelLabels: ekw.gradeLevelLabels,
+      schoolTypes: ekw.schoolTypes,
+      schoolTypeLabels: ekw.schoolTypeLabels,
+      didacticConcepts: ekw.didacticConcepts,
+      didacticConceptLabels: ekw.didacticConceptLabels,
+      methods: ekw.methods,
+      methodLabels: ekw.methodLabels,
+      methodOther: ekw.methodOther,
+      bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
     };
 
     // Bucket pre-existing subjects into a single vocab slot for display.
