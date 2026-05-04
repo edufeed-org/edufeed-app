@@ -53,6 +53,9 @@
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
   import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
   import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
+  import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
+  import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import SmartFillBadge from './SmartFillBadge.svelte';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -161,6 +164,62 @@
   // Keys are vocab slugs (e.g. 'schulfaecher', 'hochschulfaecher').
   let aboutByVocab = $state(/** @type {Record<string, CompactConcept[]>} */ ({}));
 
+  // Per-field provenance for the Smart-fill / AMB badges. Populated by the
+  // metadata-fetch step (AMB JSON-LD → 'amb-jsonld'; LLM enrichment →
+  // 'llm-enriched' with optional evidence quote). Cleared on user-initiated
+  // edit or when the user clicks ✗ on a badge.
+  /**
+   * @typedef {{ source: 'llm-enriched' | 'amb-jsonld', evidence?: string }} FieldProvenance
+   */
+  let provenance = $state(/** @type {Record<string, FieldProvenance>} */ ({}));
+
+  /**
+   * Reset a single field to its empty/default and drop its provenance entry,
+   * so the Smart-fill badge disappears from the UI. Field-name-driven so we
+   * don't have to repeat the cleanup at every badge render site.
+   * @param {string} field
+   */
+  function clearField(field) {
+    switch (field) {
+      case 'name':
+      case 'description':
+      case 'image':
+      case 'methodOther':
+        formData[field] = '';
+        break;
+      case 'inLanguage':
+        formData.inLanguage = 'de';
+        break;
+      case 'license':
+        formData.license = 'https://creativecommons.org/licenses/by/4.0/';
+        break;
+      case 'learningResourceType':
+      case 'educationalLevels':
+      case 'ekwFachrichtung':
+      case 'keywords':
+      case 'creators':
+        // @ts-ignore - dynamic key
+        formData[field] = [];
+        break;
+      case 'gradeLevels':
+      case 'schoolTypes':
+      case 'didacticConcepts':
+      case 'methods': {
+        // @ts-ignore - dynamic key
+        formData[field] = [];
+        // @ts-ignore - dynamic key
+        formData[`${field}Labels`] = [];
+        break;
+      }
+      case 'bibleReferences':
+        formData.bibleReferences = [''];
+        break;
+    }
+    const next = { ...provenance };
+    delete next[field];
+    provenance = next;
+  }
+
   // Step 7: which communities to share into (hex pubkeys).
   let selectedCommunityPubkeys = $state(/** @type {string[]} */ ([]));
 
@@ -267,8 +326,11 @@
     return () => subscription.unsubscribe();
   });
 
-  // License options
-  const licenseOptions = [
+  // License options. The static list covers the common picks; if the LLM
+  // enrichment (or an edited event) carries a URL outside this list — e.g.
+  // CC 3.0/de — append it dynamically so the bound value matches an
+  // <option> and the select doesn't snap back to the first entry.
+  const STATIC_LICENSE_OPTIONS = [
     { id: 'https://creativecommons.org/licenses/by/4.0/', label: 'CC BY 4.0' },
     { id: 'https://creativecommons.org/licenses/by-sa/4.0/', label: 'CC BY-SA 4.0' },
     { id: 'https://creativecommons.org/licenses/by-nc/4.0/', label: 'CC BY-NC 4.0' },
@@ -276,6 +338,13 @@
     { id: 'https://creativecommons.org/publicdomain/zero/1.0/', label: 'CC0 (Public Domain)' },
     { id: 'https://opensource.org/licenses/MIT', label: 'MIT License' }
   ];
+  const licenseOptions = $derived.by(() => {
+    const url = formData.license;
+    if (!url || STATIC_LICENSE_OPTIONS.some((o) => o.id === url)) {
+      return STATIC_LICENSE_OPTIONS;
+    }
+    return [...STATIC_LICENSE_OPTIONS, { id: url, label: formatLicenseUrl(url) }];
+  });
 
   // Language options
   const languageOptions = [
@@ -519,9 +588,46 @@
         // Fire-and-forget LLM enrichment on top of the OG / no-metadata fallback.
         // applyEnrichedPayload only fills fields the user hasn't touched, so
         // racing against typing is safe.
-        enrichFromUrl(result.url, isEkw ? 'ekw' : 'amb').then((enriched) => {
+        enrichFromUrl(result.url, isEkw ? 'ekw' : 'amb', {
+          bildungsbereich: formData.bildungsbereich
+        }).then((enriched) => {
           if (!enriched) return;
-          formData = applyEnrichedPayload(formData, enriched);
+          const out = applyEnrichedPayload.withProvenance(formData, enriched, {
+            activeUserPubkey: activeUser?.pubkey
+          });
+          formData = out.formData;
+          provenance = { ...provenance, ...out.provenance };
+          // `about` lives in the wizard-internal `aboutByVocab` (not formData),
+          // so the helper can't fill it. Bucket the LLM-emitted concepts into
+          // the current Bildungsbereich's first subject vocab — same heuristic
+          // the AMB-JSON-LD prefill path uses.
+          const aboutPayload =
+            /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
+              /** @type {any} */ (enriched.payload).about
+            );
+          if (
+            aboutPayload &&
+            aboutPayload.length > 0 &&
+            Object.values(aboutByVocab).every((arr) => arr.length === 0)
+          ) {
+            const bucketed = bucketSubjectsForBildungsbereich(
+              aboutPayload,
+              formData.bildungsbereich
+            );
+            if (bucketed) {
+              aboutByVocab = { ...aboutByVocab, ...bucketed };
+              const quote = /** @type {Record<string, string>} */ (enriched.evidence ?? {})[
+                'about'
+              ];
+              provenance = {
+                ...provenance,
+                about:
+                  typeof quote === 'string' && quote.length > 0
+                    ? { source: 'llm-enriched', evidence: quote }
+                    : { source: 'llm-enriched' }
+              };
+            }
+          }
         });
       }
     }
@@ -537,18 +643,41 @@
     const subjects = getAMBSubjects(prefillEvent, getLocale());
     const eduLevels = getAMBEducationalLevels(prefillEvent, getLocale());
 
-    formData.name = getAMBName(prefillEvent) || formData.name;
-    formData.description = getAMBDescription(prefillEvent) || formData.description;
+    /** @type {Record<string, FieldProvenance>} */
+    const ambProv = {};
+    /** @param {string} field */
+    const mark = (field) => {
+      ambProv[field] = { source: 'amb-jsonld' };
+    };
+
+    const ambName = getAMBName(prefillEvent);
+    if (ambName) {
+      formData.name = ambName;
+      mark('name');
+    }
+    const ambDesc = getAMBDescription(prefillEvent);
+    if (ambDesc) {
+      formData.description = ambDesc;
+      mark('description');
+    }
     const img = getAMBImage(prefillEvent);
-    if (img) formData.image = img;
+    if (img) {
+      formData.image = img;
+      mark('image');
+    }
     const lang = getAMBLanguages(prefillEvent)[0];
-    if (lang) formData.inLanguage = lang;
+    if (lang) {
+      formData.inLanguage = lang;
+      mark('inLanguage');
+    }
 
     if (lrtTypes.length > 0) {
       formData.learningResourceType = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
+      mark('learningResourceType');
     }
     if (eduLevels.length > 0) {
       formData.educationalLevels = eduLevels.map((t) => ({ id: t.id, label: t.label }));
+      mark('educationalLevels');
     }
 
     if (subjects.length > 0 && formData.bildungsbereich) {
@@ -560,9 +689,17 @@
     }
 
     const kw = getAMBKeywords(prefillEvent);
-    if (kw.length > 0) formData.keywords = kw;
+    if (kw.length > 0) {
+      formData.keywords = kw;
+      mark('keywords');
+    }
     const license = getAMBLicense(prefillEvent);
-    if (license) formData.license = license.id;
+    if (license) {
+      formData.license = license.id;
+      mark('license');
+    }
+
+    provenance = { ...provenance, ...ambProv };
   }
 
   /**
@@ -1092,10 +1229,11 @@
 
         <!-- Title -->
         <div class="form-control">
-          <label class="label" for="amb-title">
+          <label class="label flex items-center gap-2" for="amb-title">
             <span class="label-text font-medium"
               >{m.amb_form_label_title()} <span class="text-error">*</span></span
             >
+            <SmartFillBadge provenance={provenance.name} onclear={() => clearField('name')} />
           </label>
           <input
             id="amb-title"
@@ -1108,10 +1246,14 @@
 
         <!-- Description -->
         <div class="form-control">
-          <label class="label" for="amb-description">
+          <label class="label flex items-center gap-2" for="amb-description">
             <span class="label-text font-medium"
               >{m.amb_form_label_description()} <span class="text-error">*</span></span
             >
+            <SmartFillBadge
+              provenance={provenance.description}
+              onclear={() => clearField('description')}
+            />
           </label>
           <textarea
             id="amb-description"
@@ -1124,10 +1266,14 @@
 
         <!-- Language -->
         <div class="form-control">
-          <label class="label" for="amb-language">
+          <label class="label flex items-center gap-2" for="amb-language">
             <span class="label-text font-medium"
               >{m.amb_form_label_language()} <span class="text-error">*</span></span
             >
+            <SmartFillBadge
+              provenance={provenance.inLanguage}
+              onclear={() => clearField('inLanguage')}
+            />
           </label>
           <select
             id="amb-language"
@@ -1142,8 +1288,9 @@
 
         <!-- Image URL -->
         <div class="form-control">
-          <label class="label" for="amb-image">
+          <label class="label flex items-center gap-2" for="amb-image">
             <span class="label-text font-medium">{m.amb_form_label_image()}</span>
+            <SmartFillBadge provenance={provenance.image} onclear={() => clearField('image')} />
           </label>
           <input
             id="amb-image"
@@ -1166,15 +1313,25 @@
     {#if currentStep === 4}
       <div class="space-y-4">
         <!-- Resource Type (still static SKOSDropdown — HCRT vocabulary) -->
-        <SKOSDropdown
-          vocabularyKey="learningResourceType"
-          bind:selected={formData.learningResourceType}
-          label={m.amb_form_label_resource_type()}
-          placeholder={m.amb_form_placeholder_resource_type()}
-          required={true}
-          multiple={true}
-          helpText={m.amb_form_help_resource_type()}
-        />
+        <div>
+          <SKOSDropdown
+            vocabularyKey="learningResourceType"
+            bind:selected={formData.learningResourceType}
+            label={m.amb_form_label_resource_type()}
+            placeholder={m.amb_form_placeholder_resource_type()}
+            required={true}
+            multiple={true}
+            helpText={m.amb_form_help_resource_type()}
+          />
+          {#if provenance.learningResourceType}
+            <div class="mt-1">
+              <SmartFillBadge
+                provenance={provenance.learningResourceType}
+                onclear={() => clearField('learningResourceType')}
+              />
+            </div>
+          {/if}
+        </div>
 
         <!--
           Bildungsstufe + Fach/Thema are AMB-shared classification fields.
@@ -1186,9 +1343,15 @@
           <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
           {#if educationalLevelField}
             <div class="space-y-1">
-              <span class="label-text font-medium">
-                {m.amb_form_label_educational_level?.() ?? 'Educational level'}
-              </span>
+              <div class="flex items-center gap-2">
+                <span class="label-text font-medium">
+                  {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+                </span>
+                <SmartFillBadge
+                  provenance={provenance.educationalLevels}
+                  onclear={() => clearField('educationalLevels')}
+                />
+              </div>
               <FormConceptPicker
                 field={educationalLevelField}
                 multiple={true}
@@ -1232,8 +1395,12 @@
 
         <!-- Keywords -->
         <div class="form-control">
-          <label class="label" for="amb-keywords">
+          <label class="label flex items-center gap-2" for="amb-keywords">
             <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
+            <SmartFillBadge
+              provenance={provenance.keywords}
+              onclear={() => clearField('keywords')}
+            />
           </label>
           <input
             id="amb-keywords"
@@ -1267,7 +1434,13 @@
         {#if isEkw}
           {#if ekwFachField}
             <div class="space-y-1">
-              <span class="label-text font-medium">Fachrichtung</span>
+              <div class="flex items-center gap-2">
+                <span class="label-text font-medium">Fachrichtung</span>
+                <SmartFillBadge
+                  provenance={provenance.ekwFachrichtung}
+                  onclear={() => clearField('ekwFachrichtung')}
+                />
+              </div>
               <FormConceptPicker
                 field={ekwFachField}
                 multiple={true}
@@ -1281,7 +1454,13 @@
 
           {#if klassenstufenField}
             <div class="space-y-1">
-              <span class="label-text font-medium">Klassenstufe</span>
+              <div class="flex items-center gap-2">
+                <span class="label-text font-medium">Klassenstufe</span>
+                <SmartFillBadge
+                  provenance={provenance.gradeLevels}
+                  onclear={() => clearField('gradeLevels')}
+                />
+              </div>
               <FormConceptPicker
                 field={klassenstufenField}
                 multiple={true}
@@ -1295,7 +1474,13 @@
 
           {#if schulartField}
             <div class="space-y-1">
-              <span class="label-text font-medium">Schulart</span>
+              <div class="flex items-center gap-2">
+                <span class="label-text font-medium">Schulart</span>
+                <SmartFillBadge
+                  provenance={provenance.schoolTypes}
+                  onclear={() => clearField('schoolTypes')}
+                />
+              </div>
               <FormConceptPicker
                 field={schulartField}
                 multiple={true}
@@ -1309,7 +1494,13 @@
 
           {#if didaktischesKonzeptField}
             <div class="space-y-1">
-              <span class="label-text font-medium">Didaktisches Konzept</span>
+              <div class="flex items-center gap-2">
+                <span class="label-text font-medium">Didaktisches Konzept</span>
+                <SmartFillBadge
+                  provenance={provenance.didacticConcepts}
+                  onclear={() => clearField('didacticConcepts')}
+                />
+              </div>
               <FormConceptPicker
                 field={didaktischesKonzeptField}
                 multiple={true}
@@ -1323,7 +1514,13 @@
 
           {#if methodeField}
             <div class="space-y-1">
-              <span class="label-text font-medium">Methode</span>
+              <div class="flex items-center gap-2">
+                <span class="label-text font-medium">Methode</span>
+                <SmartFillBadge
+                  provenance={provenance.methods}
+                  onclear={() => clearField('methods')}
+                />
+              </div>
               <FormConceptPicker
                 field={methodeField}
                 multiple={true}
@@ -1334,8 +1531,12 @@
           {/if}
 
           <div class="form-control">
-            <label class="label" for="ekw-method-other">
+            <label class="label flex items-center gap-2" for="ekw-method-other">
               <span class="label-text font-medium">Methode (frei – eine pro Zeile)</span>
+              <SmartFillBadge
+                provenance={provenance.methodOther}
+                onclear={() => clearField('methodOther')}
+              />
             </label>
             <textarea
               id="ekw-method-other"
@@ -1346,7 +1547,13 @@
           </div>
 
           <div class="form-control">
-            <span class="label-text font-medium">Bibelstelle</span>
+            <div class="flex items-center gap-2">
+              <span class="label-text font-medium">Bibelstelle</span>
+              <SmartFillBadge
+                provenance={provenance.bibleReferences}
+                onclear={() => clearField('bibleReferences')}
+              />
+            </div>
             <div class="mt-2 space-y-2">
               {#each formData.bibleReferences as _ref, i (i)}
                 <BibleReferenceInput
@@ -1626,14 +1833,16 @@
                 </dd>
               </div>
             {/if}
-            <div class="flex">
-              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_subject()}</dt>
-              <dd class="flex-1">
-                {mergedAbout()
-                  .map((s) => s.label || s.id)
-                  .join(', ') || '—'}
-              </dd>
-            </div>
+            {#if mergedAbout().length > 0}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_subject()}</dt>
+                <dd class="flex-1">
+                  {mergedAbout()
+                    .map((s) => s.label || s.id)
+                    .join(', ')}
+                </dd>
+              </div>
+            {/if}
             {#if formData.keywords.length > 0}
               <div class="flex">
                 <dt class="w-32 shrink-0 text-base-content/60">
@@ -1699,14 +1908,25 @@
                 </div>
               {/if}
             {/if}
-            <div class="flex">
-              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_creators()}</dt>
-              <dd class="flex-1">{formData.creators.map((c) => c.name).join(', ') || '—'}</dd>
-            </div>
-            <div class="flex">
-              <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_files()}</dt>
-              <dd class="flex-1">{formData.encodings.length} file(s)</dd>
-            </div>
+            {#if formData.creators.some((c) => c.name)}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">
+                  {m.amb_form_summary_creators()}
+                </dt>
+                <dd class="flex-1">
+                  {formData.creators
+                    .map((c) => c.name)
+                    .filter(Boolean)
+                    .join(', ')}
+                </dd>
+              </div>
+            {/if}
+            {#if formData.encodings.length > 0}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_files()}</dt>
+                <dd class="flex-1">{formData.encodings.length} file(s)</dd>
+              </div>
+            {/if}
             {#if formData.externalUrls.length > 0}
               <div class="flex">
                 <dt class="w-32 shrink-0 text-base-content/60">
