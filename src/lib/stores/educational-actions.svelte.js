@@ -16,6 +16,7 @@ import {
   appendExternalUrlTags,
   appendVariantLabelTags
 } from '$lib/helpers/educational/eventTags.js';
+import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js';
 
 /**
  * @typedef {Object} Creator
@@ -175,6 +176,9 @@ export function createEducationalActions() {
         appendExternalUrlTags(tags, formData.externalUrls);
         appendVariantLabelTags(tags, variantId);
 
+        const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
+        for (const t of ekwTags) tags.push(t);
+
         // Create the event using EventFactory
         const eventFactory = createAppEventFactory();
 
@@ -246,6 +250,9 @@ export function createEducationalActions() {
         await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
         appendExternalUrlTags(tags, formData.externalUrls);
         appendVariantLabelTags(tags, variantId);
+
+        const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
+        for (const t of ekwTags) tags.push(t);
 
         // Create the updated event
         const eventFactory = createAppEventFactory();
