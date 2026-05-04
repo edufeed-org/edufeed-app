@@ -1284,47 +1284,6 @@
             </div>
           {/if}
 
-          {#if !ekwFachField && !klassenstufenField && !schulartField}
-            <p class="text-sm text-base-content/60">
-              EKW-Vokabulare sind in dieser Umgebung noch nicht konfiguriert (<code
-                >SCHEME_NADDR_EKW_FACH</code
-              >, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
-              <code>SCHEME_NADDR_SCHULART</code>).
-            </p>
-          {/if}
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Step 5: Content & Creators -->
-    {#if currentStep === 5}
-      <div class="space-y-4">
-        {#if hasNoUrl}
-          <div class="alert text-sm alert-info">
-            {m.amb_form_help_step_5_no_url()}
-          </div>
-        {/if}
-        <CreatorInput
-          bind:creators={formData.creators}
-          label={m.amb_form_label_creators()}
-          helpText={m.amb_form_help_creators()}
-        />
-
-        <BlossomUploader
-          bind:files={formData.encodings}
-          label={m.amb_form_label_content_files()}
-          helpText={m.amb_form_help_content_files()}
-          multiple={true}
-        />
-
-        <ExternalUrlInput
-          bind:urls={formData.externalUrls}
-          label={m.amb_form_label_external_refs()}
-          helpText={m.amb_form_help_external_refs()}
-        />
-
-        <!-- EKW-only step 5 fields -->
-        {#if isEkw}
           {#if didaktischesKonzeptField}
             <div class="space-y-1">
               <span class="label-text font-medium">Didaktisches Konzept</span>
@@ -1393,7 +1352,46 @@
               >
             </div>
           </div>
+
+          {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
+            <p class="text-sm text-base-content/60">
+              EKW-Vokabulare sind in dieser Umgebung noch nicht konfiguriert (<code
+                >SCHEME_NADDR_EKW_FACH</code
+              >, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
+              <code>SCHEME_NADDR_SCHULART</code>, <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
+              <code>SCHEME_NADDR_METHODE</code>).
+            </p>
+          {/if}
         {/if}
+      </div>
+    {/if}
+
+    <!-- Step 5: Content & Creators -->
+    {#if currentStep === 5}
+      <div class="space-y-4">
+        {#if hasNoUrl}
+          <div class="alert text-sm alert-info">
+            {m.amb_form_help_step_5_no_url()}
+          </div>
+        {/if}
+        <CreatorInput
+          bind:creators={formData.creators}
+          label={m.amb_form_label_creators()}
+          helpText={m.amb_form_help_creators()}
+        />
+
+        <BlossomUploader
+          bind:files={formData.encodings}
+          label={m.amb_form_label_content_files()}
+          helpText={m.amb_form_help_content_files()}
+          multiple={true}
+        />
+
+        <ExternalUrlInput
+          bind:urls={formData.externalUrls}
+          label={m.amb_form_label_external_refs()}
+          helpText={m.amb_form_help_external_refs()}
+        />
       </div>
     {/if}
 
@@ -1578,6 +1576,21 @@
                 <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.description}</dd>
               </div>
             {/if}
+            {#if formData.bildungsbereich}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">Bildungsbereich:</dt>
+                <dd class="flex-1">
+                  {BILDUNGSBEREICHE[formData.bildungsbereich]?.label?.de ??
+                    formData.bildungsbereich}
+                </dd>
+              </div>
+            {/if}
+            {#if formData.image}
+              <div class="flex">
+                <dt class="w-32 shrink-0 text-base-content/60">Vorschaubild:</dt>
+                <dd class="flex-1 truncate font-mono text-xs">{formData.image}</dd>
+              </div>
+            {/if}
             <div class="flex">
               <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_language()}</dt>
               <dd class="flex-1">
@@ -1615,6 +1628,63 @@
                 </dt>
                 <dd class="flex-1">{formData.keywords.join(', ')}</dd>
               </div>
+            {/if}
+            {#if isEkw}
+              {#if formData.ekwFachrichtung.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Fachrichtung:</dt>
+                  <dd class="flex-1">
+                    {formData.ekwFachrichtung.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.gradeLevelLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Klassenstufe:</dt>
+                  <dd class="flex-1">
+                    {formData.gradeLevelLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.schoolTypeLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Schulart:</dt>
+                  <dd class="flex-1">
+                    {formData.schoolTypeLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.didacticConceptLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Didaktisches Konzept:</dt>
+                  <dd class="flex-1">
+                    {formData.didacticConceptLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.methodLabels.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Methode:</dt>
+                  <dd class="flex-1">
+                    {formData.methodLabels.map((c) => c.label || c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.methodOther?.trim()}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Methode (frei):</dt>
+                  <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.methodOther}</dd>
+                </div>
+              {/if}
+              {@const bibleRefs = formData.bibleReferences
+                .map((/** @type {string} */ s) => s.trim())
+                .filter(Boolean)}
+              {#if bibleRefs.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">Bibelstelle:</dt>
+                  <dd class="flex-1">{bibleRefs.join(', ')}</dd>
+                </div>
+              {/if}
             {/if}
             <div class="flex">
               <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_creators()}</dt>
