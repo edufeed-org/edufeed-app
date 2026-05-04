@@ -51,8 +51,8 @@
     ambJsonLdToPrefillEvent,
     ogToFormDataPrefill
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
-  import { toSkosConcepts, migrateLrtForEkw } from '$lib/data/ekwLearningResourceTypes.js';
   import { matchKeywordSuggestions } from '$lib/data/ekwKeywords.js';
+  import { EKW_NAMESPACE_IRI } from '$lib/helpers/educational/ekwNamespace.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -157,10 +157,6 @@
     bibleReferences: /** @type {string[]} */ ([''])
   });
 
-  // EKW-specific LRT vocabulary, fed into SKOSDropdown via the `concepts` prop.
-  // Pure + stable for the component lifetime — no need for $state/$derived.
-  const ekwLrtConcepts = toSkosConcepts();
-
   // Per-vocab subject selection (merged into formData.about on submit).
   // Keys are vocab slugs (e.g. 'schulfaecher', 'hochschulfaecher').
   let aboutByVocab = $state(/** @type {Record<string, CompactConcept[]>} */ ({}));
@@ -210,6 +206,7 @@
   const schulartField = $derived(resolveVocabField('schulart'));
   const didaktischesKonzeptField = $derived(resolveVocabField('didaktischesKonzept'));
   const methodeField = $derived(resolveVocabField('methode'));
+  const ekwLrtField = $derived(resolveVocabField('ekwLrt'));
 
   // Validation and submission state
   let validationErrors = $state(/** @type {string[]} */ ([]));
@@ -431,7 +428,9 @@
       image: getAMBImage(editEvent) || '',
       identifier: isUrlIdentifier ? identifier : '',
       learningResourceType: isEkw
-        ? migrateLrtForEkw(lrtTypes.map((t) => ({ id: t.id, label: t.label })))
+        ? lrtTypes
+            .map((t) => ({ id: t.id, label: t.label }))
+            .filter((c) => c.id.startsWith(`${EKW_NAMESPACE_IRI}lrt/`))
         : lrtTypes.map((t) => ({ id: t.id, label: t.label })),
       educationalLevels: eduLevels.map((t) => ({ id: t.id, label: t.label })),
       keywords: getAMBKeywords(editEvent),
@@ -542,7 +541,9 @@
 
     if (lrtTypes.length > 0) {
       const compact = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
-      formData.learningResourceType = isEkw ? migrateLrtForEkw(compact) : compact;
+      formData.learningResourceType = isEkw
+        ? compact.filter((c) => c.id.startsWith(`${EKW_NAMESPACE_IRI}lrt/`))
+        : compact;
     }
     if (eduLevels.length > 0) {
       formData.educationalLevels = eduLevels.map((t) => ({ id: t.id, label: t.label }));
@@ -1221,18 +1222,32 @@
     <!-- Step 4: Classification -->
     {#if currentStep === 4}
       <div class="space-y-4">
-        <!-- Resource Type — HCRT for AMB, EKW vocab for EKW variant -->
+        <!-- Resource Type — HCRT for AMB, EKW vocab (relay-fetched) for EKW variant -->
         <div data-skos-vocab="learningResourceType">
           {#if isEkw}
-            <SKOSDropdown
-              concepts={ekwLrtConcepts}
-              bind:selected={formData.learningResourceType}
-              label={m.amb_form_label_resource_type()}
-              placeholder={m.amb_form_placeholder_resource_type()}
-              required={true}
-              multiple={true}
-              helpText={m.amb_form_help_resource_type()}
-            />
+            {#if ekwLrtField}
+              <div class="form-control">
+                <div class="label">
+                  <span class="label-text font-medium">
+                    {m.amb_form_label_resource_type()}
+                    <span class="text-error">*</span>
+                  </span>
+                </div>
+                <FormConceptPicker
+                  field={ekwLrtField}
+                  multiple={true}
+                  value={formData.learningResourceType.map((c) =>
+                    toRichConcept(c, ekwLrtField.vocab.relay)
+                  )}
+                  onchange={(rich) => {
+                    formData.learningResourceType = rich.map(toCompactConcept);
+                  }}
+                />
+                <p class="mt-1 text-xs text-base-content/60">
+                  {m.amb_form_help_resource_type()}
+                </p>
+              </div>
+            {/if}
           {:else}
             <SKOSDropdown
               vocabularyKey="learningResourceType"
