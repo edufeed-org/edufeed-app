@@ -1173,10 +1173,12 @@
         {#if !isEkw}
           <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
           {#if educationalLevelField}
-            <div class="space-y-1">
-              <span class="label-text font-medium">
-                {m.amb_form_label_educational_level?.() ?? 'Educational level'}
-              </span>
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">
+                  {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+                </span>
+              </div>
               <FormConceptPicker
                 field={educationalLevelField}
                 multiple={true}
@@ -1196,13 +1198,15 @@
             </p>
           {/if}
           {#each subjectVocabFields as entry (entry.key)}
-            <div class="space-y-1">
-              <span class="label-text font-medium">
-                {m.amb_form_label_subject()}
-                <span class="text-error">*</span>
-              </span>
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">
+                  {m.amb_form_label_subject()}
+                  <span class="text-error">*</span>
+                </span>
+              </div>
               {#if subjectVocabFields.length > 1}
-                <p class="text-xs text-base-content/60">
+                <p class="-mt-1 mb-1 text-xs text-base-content/60">
                   {getSubjectVocabLabel(entry.key, getLocale())}
                 </p>
               {/if}
@@ -1254,8 +1258,10 @@
         <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
         {#if isEkw}
           {#if ekwFachField}
-            <div class="space-y-1">
-              <span class="label-text font-medium">Fachrichtung</span>
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Fachrichtung</span>
+              </div>
               <FormConceptPicker
                 field={ekwFachField}
                 multiple={true}
@@ -1268,8 +1274,10 @@
           {/if}
 
           {#if klassenstufenField}
-            <div class="space-y-1">
-              <span class="label-text font-medium">Klassenstufe</span>
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Klassenstufe</span>
+              </div>
               <FormConceptPicker
                 field={klassenstufenField}
                 multiple={true}
@@ -1282,8 +1290,10 @@
           {/if}
 
           {#if schulartField}
-            <div class="space-y-1">
-              <span class="label-text font-medium">Schulart</span>
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Schulart</span>
+              </div>
               <FormConceptPicker
                 field={schulartField}
                 multiple={true}
@@ -1296,8 +1306,10 @@
           {/if}
 
           {#if didaktischesKonzeptField}
-            <div class="space-y-1">
-              <span class="label-text font-medium">Didaktisches Konzept</span>
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Didaktisches Konzept</span>
+              </div>
               <FormConceptPicker
                 field={didaktischesKonzeptField}
                 multiple={true}
@@ -1310,8 +1322,10 @@
           {/if}
 
           {#if methodeField}
-            <div class="space-y-1">
-              <span class="label-text font-medium">Methode</span>
+            <div class="form-control">
+              <div class="label">
+                <span class="label-text font-medium">Methode</span>
+              </div>
               <FormConceptPicker
                 field={methodeField}
                 multiple={true}
@@ -1323,7 +1337,7 @@
 
           <div class="form-control">
             <label class="label" for="ekw-method-other">
-              <span class="label-text font-medium">Methode (frei – eine pro Zeile)</span>
+              <span class="label-text font-medium">Weitere Methoden (frei – eine pro Zeile)</span>
             </label>
             <textarea
               id="ekw-method-other"
@@ -1334,15 +1348,20 @@
           </div>
 
           <div class="form-control">
-            <span class="label-text font-medium">Bibelstelle</span>
-            <div class="mt-2 space-y-2">
+            <div class="label">
+              <span class="label-text font-medium">Bibelstelle</span>
+            </div>
+            <div class="space-y-2">
               {#each formData.bibleReferences as _ref, i (i)}
                 <BibleReferenceInput
                   bind:value={formData.bibleReferences[i]}
-                  onremove={() => {
-                    formData.bibleReferences = formData.bibleReferences.filter((_, j) => j !== i);
-                    if (formData.bibleReferences.length === 0) formData.bibleReferences = [''];
-                  }}
+                  onremove={formData.bibleReferences.length > 1
+                    ? () => {
+                        formData.bibleReferences = formData.bibleReferences.filter(
+                          (_, j) => j !== i
+                        );
+                      }
+                    : undefined}
                 />
               {/each}
               <button
