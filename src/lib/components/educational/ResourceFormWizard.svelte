@@ -1374,13 +1374,28 @@
           </div>
 
           {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
-            <p class="text-sm text-base-content/60">
-              EKW-Vokabulare sind in dieser Umgebung noch nicht konfiguriert (<code
-                >SCHEME_NADDR_EKW_FACH</code
-              >, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
-              <code>SCHEME_NADDR_SCHULART</code>, <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
-              <code>SCHEME_NADDR_METHODE</code>).
-            </p>
+            <div class="alert text-sm alert-warning">
+              <div>
+                <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
+                <p class="mt-1">
+                  Die EKKW-Vokabulare sind auf diesem Server noch nicht hinterlegt. Bitte wende Dich
+                  an die Administration der Plattform – das Formular lässt sich aktuell nicht
+                  vollständig ausfüllen.
+                </p>
+                <details class="mt-2">
+                  <summary class="cursor-pointer text-xs text-base-content/60">
+                    Technische Details
+                  </summary>
+                  <p class="mt-1 text-xs text-base-content/60">
+                    Fehlende Vokabular-Konfiguration:
+                    <code>SCHEME_NADDR_EKW_FACH</code>, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
+                    <code>SCHEME_NADDR_SCHULART</code>,
+                    <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
+                    <code>SCHEME_NADDR_METHODE</code>.
+                  </p>
+                </details>
+              </div>
+            </div>
           {/if}
         {/if}
       </div>
