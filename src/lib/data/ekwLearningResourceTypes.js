@@ -135,24 +135,27 @@ function slug(s) {
  * @type {ReadonlyArray<EkwLrtLeaf>}
  */
 export const EKW_LEARNING_RESOURCE_TYPES = Object.freeze(
-  Object.entries(EKW_LRT_TREE).flatMap(([parent, children]) => {
-    if (children.length === 0) {
-      return [
+  Object.entries(EKW_LRT_TREE).flatMap(
+    /** @returns {EkwLrtLeaf[]} */
+    ([parent, children]) => {
+      if (children.length === 0) {
+        return [
+          Object.freeze({
+            id: `${EKW_LRT_ID_PREFIX}${slug(parent)}`,
+            label: parent,
+            parentLabel: null
+          })
+        ];
+      }
+      return children.map((child) =>
         Object.freeze({
-          id: `${EKW_LRT_ID_PREFIX}${slug(parent)}`,
-          label: parent,
-          parentLabel: null
+          id: `${EKW_LRT_ID_PREFIX}${slug(parent)}/${slug(child)}`,
+          label: child,
+          parentLabel: parent
         })
-      ];
+      );
     }
-    return children.map((child) =>
-      Object.freeze({
-        id: `${EKW_LRT_ID_PREFIX}${slug(parent)}/${slug(child)}`,
-        label: child,
-        parentLabel: parent
-      })
-    );
-  })
+  )
 );
 
 /**

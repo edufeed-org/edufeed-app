@@ -89,7 +89,7 @@ describe('toSkosConcepts', () => {
 describe('migrateLrtForEkw', () => {
   it('passes through a concept whose id already starts with EKW_LRT_ID_PREFIX', () => {
     const arbeitsblatt = EKW_LEARNING_RESOURCE_TYPES.find((l) => l.label === 'Arbeitsblatt');
-    expect(arbeitsblatt).toBeDefined();
+    if (!arbeitsblatt) throw new Error('Arbeitsblatt leaf missing from EKW vocab');
     const result = migrateLrtForEkw([{ id: arbeitsblatt.id, label: arbeitsblatt.label }]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe(arbeitsblatt.id);
