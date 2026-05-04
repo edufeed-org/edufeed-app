@@ -1113,19 +1113,31 @@
     <!-- Progress Steps -->
     <div class="mb-8 flex items-center justify-center gap-2">
       {#each Array(totalSteps) as _, i (i)}
-        <div
-          class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors {i +
-            1 <=
+        {@const stepNum = i + 1}
+        {@const isCompleted = stepNum < currentStep}
+        {@const isCurrent = stepNum === currentStep}
+        {@const canJump = isCompleted}
+        <button
+          type="button"
+          class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors {stepNum <=
           currentStep
             ? 'bg-primary text-primary-content'
-            : 'bg-base-200 text-base-content/50'}"
+            : 'bg-base-200 text-base-content/50'} {canJump
+            ? 'cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-2 hover:ring-offset-base-100'
+            : 'cursor-default'}"
+          aria-current={isCurrent ? 'step' : undefined}
+          aria-label={isCompleted
+            ? `${stepTitles[i]} (Schritt ${stepNum}, abgeschlossen) — zurück springen`
+            : `${stepTitles[i]} (Schritt ${stepNum})`}
+          disabled={!canJump}
+          onclick={canJump ? () => (currentStep = stepNum) : undefined}
         >
-          {#if i + 1 < currentStep}
+          {#if isCompleted}
             <CheckIcon class_="w-4 h-4" />
           {:else}
-            {i + 1}
+            {stepNum}
           {/if}
-        </div>
+        </button>
         {#if i < totalSteps - 1}
           <div
             class="h-1 w-6 rounded transition-colors"
