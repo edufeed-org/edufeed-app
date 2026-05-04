@@ -151,6 +151,11 @@ const defaultConfig = {
     /** @type {string[]} */
     enabled: ['amb']
   },
+  // AI metadata helper default mode for the wizard's Step 2 toggle.
+  smartfill: {
+    /** @type {'smart' | 'manual'} */
+    defaultMode: 'smart'
+  },
   ui: {
     defaultLightTheme: 'light',
     defaultDarkTheme: 'dark',
@@ -293,6 +298,12 @@ export function initializeConfig(runtimeConfig) {
       enabled:
         runtimeConfig.resourceFormVariants?.enabled || defaultConfig.resourceFormVariants.enabled
     },
+    smartfill: {
+      defaultMode:
+        runtimeConfig.smartfill?.defaultMode === 'manual'
+          ? 'manual'
+          : defaultConfig.smartfill.defaultMode
+    },
     ui: {
       ...defaultConfig.ui,
       ...runtimeConfig.ui
@@ -387,5 +398,8 @@ export const runtimeConfig = {
   },
   get resourceFormVariants() {
     return config.resourceFormVariants;
+  },
+  get smartfill() {
+    return config.smartfill;
   }
 };

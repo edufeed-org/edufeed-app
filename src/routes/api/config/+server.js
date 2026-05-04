@@ -328,6 +328,13 @@ export function GET() {
       enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb'])
     },
 
+    // AI metadata helper ("smart-fill") — opt-in default for the wizard's
+    // Step 2 mode toggle. 'smart' = call /api/enrich after URL fetch;
+    // 'manual' = skip the LLM, user fills everything by hand.
+    smartfill: {
+      defaultMode: env.SMARTFILL_DEFAULT_MODE === 'manual' ? 'manual' : 'smart'
+    },
+
     // UI settings
     ui: {
       defaultLightTheme: parseTheme(env.THEME_DEFAULT_LIGHT, 'light'),

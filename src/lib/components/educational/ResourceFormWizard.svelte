@@ -54,8 +54,11 @@
   import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
   import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
+  import { decideEnrichment } from '$lib/helpers/educational/decideEnrichment.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import SmartFillBadge from './SmartFillBadge.svelte';
+  import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -109,6 +112,15 @@
   // read-only URL field, step 5 requires ≥1 attachment, and handleSubmit sends
   // an empty slug (which formDataToAmb.js auto-generates a random id for).
   let hasNoUrl = $state(false);
+
+  // AI metadata helper — Step 2 toggle + status banner.
+  // Default mode comes from runtimeConfig (`SMARTFILL_DEFAULT_MODE` env).
+  /** @type {'smart' | 'manual'} */
+  let enrichmentMode = $state(
+    /** @type {'smart' | 'manual'} */ (runtimeConfig.smartfill?.defaultMode ?? 'smart')
+  );
+  /** @type {'idle' | 'pending' | 'success' | 'error' | 'skipped-amb'} */
+  let enrichmentStatus = $state('idle');
 
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
@@ -576,6 +588,7 @@
             applyPrefillFromAmbEvent(prefillEvent);
           }
           // AMB JSON-LD already provides everything; no need to call /api/enrich.
+          enrichmentStatus = 'skipped-amb';
           return;
         }
         if (result.metadata.source === 'opengraph' && result.metadata.og) {
@@ -585,13 +598,34 @@
           if (og.image) formData.image = og.image;
           if (og.inLanguage) formData.inLanguage = og.inLanguage;
         }
+
+        // Decide whether to fire the LLM enrichment based on the user's mode
+        // toggle + what the page yielded.
+        /** @type {'amb' | 'opengraph' | 'none'} */
+        const fetchSource =
+          result.metadata.source === 'amb-jsonld'
+            ? 'amb'
+            : result.metadata.source === 'opengraph'
+              ? 'opengraph'
+              : 'none';
+        const decision = decideEnrichment({ mode: enrichmentMode, fetchSource });
+        if (decision !== 'call-llm') {
+          // 'skip-manual' → leave status idle (no banner); user opted out.
+          // 'skip-amb'    → already handled in the AMB short-circuit above.
+          return;
+        }
+
+        enrichmentStatus = 'pending';
         // Fire-and-forget LLM enrichment on top of the OG / no-metadata fallback.
         // applyEnrichedPayload only fills fields the user hasn't touched, so
-        // racing against typing is safe.
+        // racing against typing is safe — the banner is the visible signal.
         enrichFromUrl(result.url, isEkw ? 'ekw' : 'amb', {
           bildungsbereich: formData.bildungsbereich
         }).then((enriched) => {
-          if (!enriched) return;
+          if (!enriched) {
+            enrichmentStatus = 'error';
+            return;
+          }
           const out = applyEnrichedPayload.withProvenance(formData, enriched, {
             activeUserPubkey: activeUser?.pubkey
           });
@@ -628,6 +662,7 @@
               };
             }
           }
+          enrichmentStatus = 'success';
         });
       }
     }
@@ -1085,6 +1120,15 @@
 
   <!-- Form Content -->
   <div class="min-h-[40vh]">
+    <!-- AI metadata helper status banner — visible on Steps 3+ where the
+         enrichment results land. Step 2 has its own mode toggle inline. -->
+    {#if currentStep > 2 && enrichmentStatus !== 'idle'}
+      <EnrichmentStatusBanner
+        status={enrichmentStatus}
+        ondismiss={() => (enrichmentStatus = 'idle')}
+      />
+    {/if}
+
     <!-- Step 1: Bildungsbereich -->
     {#if currentStep === 1}
       <div class="space-y-3">
@@ -1149,6 +1193,8 @@
             bind:value={formData.urlInput}
             activeUserPubkey={activeUser?.pubkey ?? null}
             readOnly={isEditMode}
+            mode={enrichmentMode}
+            onmodechange={(next) => (enrichmentMode = next)}
             onresult={handleMetadataResult}
           />
           {#if !isEditMode}

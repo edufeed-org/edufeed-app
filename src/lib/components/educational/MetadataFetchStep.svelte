@@ -18,6 +18,8 @@
    *   value?: string,
    *   activeUserPubkey?: string | null,
    *   readOnly?: boolean,
+   *   mode?: 'smart' | 'manual',
+   *   onmodechange?: (mode: 'smart' | 'manual') => void,
    *   onresult?: (result: import('$lib/helpers/educational/resolveMetadataInput.js').ResolveResult) => void
    * }}
    */
@@ -25,6 +27,8 @@
     value = $bindable(''),
     activeUserPubkey = null,
     readOnly = false,
+    mode = 'smart',
+    onmodechange = () => {},
     onresult = () => {}
   } = $props();
 
@@ -115,5 +119,35 @@
     </p>
   {:else if lastError}
     <p class="text-sm text-error">{lastError}</p>
+  {/if}
+
+  {#if !readOnly}
+    <div class="pt-2">
+      <div class="join" role="group" aria-label="Modus für die Metadaten-Übernahme">
+        <button
+          type="button"
+          class="btn join-item {mode === 'smart' ? 'btn-primary' : 'btn-outline'}"
+          aria-pressed={mode === 'smart'}
+          onclick={() => onmodechange('smart')}
+        >
+          ✨ Mit KI ausfüllen
+        </button>
+        <button
+          type="button"
+          class="btn join-item {mode === 'manual' ? 'btn-primary' : 'btn-outline'}"
+          aria-pressed={mode === 'manual'}
+          onclick={() => onmodechange('manual')}
+        >
+          ✍ Manuell ausfüllen
+        </button>
+      </div>
+      <p class="mt-1 text-xs text-base-content/60">
+        {#if mode === 'smart'}
+          Die KI durchsucht die Seite und schlägt Werte für Fach, Klassenstufe, Lizenz usw. vor.
+        {:else}
+          Die KI wird nicht aufgerufen — du füllst alle Felder selbst aus.
+        {/if}
+      </p>
+    </div>
   {/if}
 </div>
