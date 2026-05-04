@@ -1404,7 +1404,7 @@
   "send_form_error": "Fehler beim Senden der Formularanfrage",
   "send_form_invalid_recipient": "Geben Sie eine gültige npub oder nprofile ein",
   "send_form_self_error": "Sie können sich kein Formular an sich selbst senden",
-  "send_form_no_encryption": "Ihr Signer unterstützt keine NIP-44-Verschlüsselung. Die Nachricht wird nicht verschlüsselt.",
+  "send_form_no_encryption": "Dein Signer unterstützt keine NIP-44-Verschlüsselung, die zum Senden dieses Formulars erforderlich ist. Versuche eine andere Anmeldemethode.",
   "contact_search_hint": "{count} Follows durchsuchen oder npub eingeben",
   "contact_search_loading": "Kontakte werden geladen...",
   "contact_search_enter_npub": "npub eingeben zum Suchen",
