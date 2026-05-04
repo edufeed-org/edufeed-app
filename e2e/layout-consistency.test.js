@@ -243,4 +243,96 @@ test.describe('Unified content region layout', () => {
 
     expect(mainMarginLeft).toBe('0px');
   });
+
+  test('desktop sidebars stay pinned during <main> scroll', async ({ authenticatedPage: page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/c/${TEST_AUTHOR.npub}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
+    await page.locator('[data-testid="content-nav-sidebar"]').waitFor({ state: 'visible' });
+
+    // Capture sidebar bounding rects before scroll.
+    const sidebarsBefore = await page.evaluate(() => {
+      const community = document.querySelector('[data-testid="community-sidebar"]');
+      const nav = document.querySelector('[data-testid="content-nav-sidebar"]');
+      return {
+        community: community?.getBoundingClientRect()?.top ?? null,
+        nav: nav?.getBoundingClientRect()?.top ?? null
+      };
+    });
+    expect(sidebarsBefore.community, 'CommunitySidebar must be present').not.toBeNull();
+    expect(sidebarsBefore.nav, 'ContentNavSidebar must be present').not.toBeNull();
+
+    // Structural invariant (always runs, even when <main> can't scroll):
+    // sidebars must NOT be descendants of <main>. If they were, scrolling
+    // <main> would move them — i.e. the regression we're guarding against.
+    const sidebarsAreSiblings = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      const community = document.querySelector('[data-testid="community-sidebar"]');
+      const nav = document.querySelector('[data-testid="content-nav-sidebar"]');
+      return {
+        communityInsideMain: main?.contains(community) ?? false,
+        navInsideMain: main?.contains(nav) ?? false
+      };
+    });
+    expect(
+      sidebarsAreSiblings.communityInsideMain,
+      'CommunitySidebar must NOT be a descendant of <main>'
+    ).toBe(false);
+    expect(
+      sidebarsAreSiblings.navInsideMain,
+      'ContentNavSidebar must NOT be a descendant of <main>'
+    ).toBe(false);
+
+    // Scroll <main>; if the page doesn't have enough content to scroll, skip
+    // (a stationary sidebar at scrollTop=0 would trivially pass and mask
+    // re-introduction of position:fixed on a sidebar inside <main>).
+    const actualScroll = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      if (!main) return 0;
+      main.scrollTop = Math.min(500, main.scrollHeight - main.clientHeight);
+      return main.scrollTop;
+    });
+    test.skip(actualScroll <= 20, '<main> has insufficient overflow on this run');
+
+    const sidebarsAfter = await page.evaluate(() => {
+      const community = document.querySelector('[data-testid="community-sidebar"]');
+      const nav = document.querySelector('[data-testid="content-nav-sidebar"]');
+      return {
+        community: community?.getBoundingClientRect()?.top ?? null,
+        nav: nav?.getBoundingClientRect()?.top ?? null
+      };
+    });
+
+    // Both sidebars must NOT have moved — they're flex siblings outside <main>.
+    expect(sidebarsAfter.community).toBe(sidebarsBefore.community);
+    expect(sidebarsAfter.nav).toBe(sidebarsBefore.nav);
+  });
+
+  test('ContentNavSidebar mounts on community routes, unmounts on dashboard', async ({
+    authenticatedPage: page
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // Dashboard: DashboardNavSidebar visible, ContentNavSidebar absent.
+    await page.goto('/c/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
+    await expect(page.locator('[data-testid="dashboard-nav-sidebar"]')).toBeVisible();
+    await expect(page.locator('[data-testid="content-nav-sidebar"]')).toHaveCount(0);
+
+    // Community route: ContentNavSidebar visible, DashboardNavSidebar absent.
+    await page.goto(`/c/${TEST_AUTHOR.npub}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
+    await expect(page.locator('[data-testid="content-nav-sidebar"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-nav-sidebar"]')).toHaveCount(0);
+
+    // Back to dashboard: ContentNavSidebar gone again.
+    await page.goto('/c/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
+    await expect(page.locator('[data-testid="content-nav-sidebar"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="dashboard-nav-sidebar"]')).toBeVisible();
+  });
 });
