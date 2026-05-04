@@ -607,8 +607,10 @@
           validationErrors.push(m.amb_form_validation_resource_type());
         }
         // Skip the subject-required check when the current Bildungsbereich has no
-        // subject vocab (e.g. Konfi-Arbeit) — there is nothing for the user to pick.
-        if (subjectVocabFields.length > 0) {
+        // subject vocab (e.g. Konfi-Arbeit), or when the EKKW variant is active —
+        // EKKW uses its own Fachrichtung field and does not render the AMB
+        // Fach/Thema picker.
+        if (!isEkw && subjectVocabFields.length > 0) {
           const totalSubjects = Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0);
           if (totalSubjects === 0) {
             validationErrors.push(m.amb_form_validation_subject());
@@ -1162,51 +1164,59 @@
           helpText={m.amb_form_help_resource_type()}
         />
 
-        <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
-        {#if educationalLevelField}
-          <div class="space-y-1">
-            <span class="label-text font-medium">
-              {m.amb_form_label_educational_level?.() ?? 'Educational level'}
-            </span>
-            <FormConceptPicker
-              field={educationalLevelField}
-              multiple={true}
-              value={formData.educationalLevels.map((c) =>
-                toRichConcept(c, educationalLevelField.vocab.relay)
-              )}
-              onchange={handleEduLevelChange}
-            />
-          </div>
-        {/if}
+        <!--
+          Bildungsstufe + Fach/Thema are AMB-shared classification fields.
+          For the EKKW variant they're hidden because the EKKW-specific
+          Klassenstufe / Schulart / Fachrichtung pickers below cover the
+          same ground (and are the canonical source for that path).
+        -->
+        {#if !isEkw}
+          <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
+          {#if educationalLevelField}
+            <div class="space-y-1">
+              <span class="label-text font-medium">
+                {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+              </span>
+              <FormConceptPicker
+                field={educationalLevelField}
+                multiple={true}
+                value={formData.educationalLevels.map((c) =>
+                  toRichConcept(c, educationalLevelField.vocab.relay)
+                )}
+                onchange={handleEduLevelChange}
+              />
+            </div>
+          {/if}
 
-        <!-- Subject pickers — one per Bildungsbereich vocab -->
-        {#if subjectVocabFields.length === 0}
-          <p class="text-sm text-base-content/60">
-            {m.amb_form_help_subject_pick_bildungsbereich?.() ??
-              'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
-          </p>
+          <!-- Subject pickers — one per Bildungsbereich vocab -->
+          {#if subjectVocabFields.length === 0}
+            <p class="text-sm text-base-content/60">
+              {m.amb_form_help_subject_pick_bildungsbereich?.() ??
+                'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
+            </p>
+          {/if}
+          {#each subjectVocabFields as entry (entry.key)}
+            <div class="space-y-1">
+              <span class="label-text font-medium">
+                {m.amb_form_label_subject()}
+                <span class="text-error">*</span>
+              </span>
+              {#if subjectVocabFields.length > 1}
+                <p class="text-xs text-base-content/60">
+                  {getSubjectVocabLabel(entry.key, getLocale())}
+                </p>
+              {/if}
+              <FormConceptPicker
+                field={entry.field}
+                multiple={true}
+                value={(aboutByVocab[entry.key] ?? []).map((c) =>
+                  toRichConcept(c, entry.field.vocab.relay)
+                )}
+                onchange={makeAboutHandler(entry.key)}
+              />
+            </div>
+          {/each}
         {/if}
-        {#each subjectVocabFields as entry (entry.key)}
-          <div class="space-y-1">
-            <span class="label-text font-medium">
-              {m.amb_form_label_subject()}
-              <span class="text-error">*</span>
-            </span>
-            {#if subjectVocabFields.length > 1}
-              <p class="text-xs text-base-content/60">
-                {getSubjectVocabLabel(entry.key, getLocale())}
-              </p>
-            {/if}
-            <FormConceptPicker
-              field={entry.field}
-              multiple={true}
-              value={(aboutByVocab[entry.key] ?? []).map((c) =>
-                toRichConcept(c, entry.field.vocab.relay)
-              )}
-              onchange={makeAboutHandler(entry.key)}
-            />
-          </div>
-        {/each}
 
         <!-- Keywords -->
         <div class="form-control">
