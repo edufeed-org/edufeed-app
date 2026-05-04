@@ -1528,7 +1528,7 @@
             </div>
           </div>
 
-          {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
+          {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField && !ekwLrtField}
             <div class="alert text-sm alert-warning">
               <div>
                 <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
@@ -1546,7 +1546,8 @@
                     <code>SCHEME_NADDR_EKW_FACH</code>, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
                     <code>SCHEME_NADDR_SCHULART</code>,
                     <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
-                    <code>SCHEME_NADDR_METHODE</code>.
+                    <code>SCHEME_NADDR_METHODE</code>,
+                    <code>SCHEME_NADDR_EKW_LRT</code>.
                   </p>
                 </details>
               </div>
