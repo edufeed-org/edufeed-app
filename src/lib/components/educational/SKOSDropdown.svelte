@@ -105,7 +105,12 @@
 
   // Load vocabulary on mount — skipped when data is supplied via props.
   onMount(async () => {
-    if (propConcepts !== undefined) return;
+    if (propConcepts !== undefined) {
+      // Caller supplies the vocabulary — clear the internal loading flag so
+      // the panel renders options instead of staying on the loading spinner.
+      internalIsLoading = false;
+      return;
+    }
     if (!vocabularyKey) {
       internalIsLoading = false;
       return;

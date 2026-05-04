@@ -51,6 +51,7 @@
     ambJsonLdToPrefillEvent,
     ogToFormDataPrefill
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
+  import { toSkosConcepts } from '$lib/data/ekwLearningResourceTypes.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -154,6 +155,10 @@
     methodOther: '',
     bibleReferences: /** @type {string[]} */ ([''])
   });
+
+  // EKW-specific LRT vocabulary, fed into SKOSDropdown via the `concepts` prop.
+  // Pure + stable for the component lifetime — no need for $state/$derived.
+  const ekwLrtConcepts = toSkosConcepts();
 
   // Per-vocab subject selection (merged into formData.about on submit).
   // Keys are vocab slugs (e.g. 'schulfaecher', 'hochschulfaecher').
@@ -1153,16 +1158,30 @@
     <!-- Step 4: Classification -->
     {#if currentStep === 4}
       <div class="space-y-4">
-        <!-- Resource Type (still static SKOSDropdown — HCRT vocabulary) -->
-        <SKOSDropdown
-          vocabularyKey="learningResourceType"
-          bind:selected={formData.learningResourceType}
-          label={m.amb_form_label_resource_type()}
-          placeholder={m.amb_form_placeholder_resource_type()}
-          required={true}
-          multiple={true}
-          helpText={m.amb_form_help_resource_type()}
-        />
+        <!-- Resource Type — HCRT for AMB, EKW vocab for EKW variant -->
+        <div data-skos-vocab="learningResourceType">
+          {#if isEkw}
+            <SKOSDropdown
+              concepts={ekwLrtConcepts}
+              bind:selected={formData.learningResourceType}
+              label={m.amb_form_label_resource_type()}
+              placeholder={m.amb_form_placeholder_resource_type()}
+              required={true}
+              multiple={true}
+              helpText={m.amb_form_help_resource_type()}
+            />
+          {:else}
+            <SKOSDropdown
+              vocabularyKey="learningResourceType"
+              bind:selected={formData.learningResourceType}
+              label={m.amb_form_label_resource_type()}
+              placeholder={m.amb_form_placeholder_resource_type()}
+              required={true}
+              multiple={true}
+              helpText={m.amb_form_help_resource_type()}
+            />
+          {/if}
+        </div>
 
         <!--
           Bildungsstufe + Fach/Thema are AMB-shared classification fields.
