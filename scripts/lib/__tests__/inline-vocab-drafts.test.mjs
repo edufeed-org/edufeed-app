@@ -29,11 +29,14 @@ describe('buildInlineDrafts — flat scheme', () => {
       address: `39737:${PUBKEY}:colors`,
       relay: RELAY
     });
-    // Task 1 is a mechanical extraction: hierarchy fields are introduced
-    // in Task 2 when `children` support lands.
-    expect(drafts.concepts[0].topConceptOf).toBeUndefined();
-    expect(drafts.concepts[0].broader).toBeUndefined();
-    expect(drafts.concepts[0].narrower).toBeUndefined();
+    // Top-level concepts (no `children`) carry topConceptOf and empty
+    // broader/narrower; only nested children omit topConceptOf.
+    expect(drafts.concepts[0].topConceptOf).toEqual({
+      address: `39737:${PUBKEY}:colors`,
+      relay: RELAY
+    });
+    expect(drafts.concepts[0].broader).toEqual([]);
+    expect(drafts.concepts[0].narrower).toEqual([]);
   });
 
   it('falls back to default prefLabel when scheme has none', () => {
@@ -44,5 +47,54 @@ describe('buildInlineDrafts — flat scheme', () => {
     const drafts = buildInlineDrafts(scheme, PUBKEY, RELAY);
     expect(drafts.scheme.prefLabels).toEqual([{ value: 'unlabeled', lang: 'en' }]);
     expect(drafts.concepts).toEqual([]);
+  });
+});
+
+describe('buildInlineDrafts — hierarchical scheme', () => {
+  it('sets broader on children and narrower on parent; only parent has topConceptOf', () => {
+    const scheme = {
+      d: 'animals',
+      source: {
+        type: 'inline',
+        prefLabels: [{ value: 'Animals', lang: 'en' }],
+        concepts: [
+          {
+            d: 'mammal',
+            prefLabels: [{ value: 'Mammal', lang: 'en' }],
+            children: [
+              { d: 'dog', prefLabels: [{ value: 'Dog', lang: 'en' }] },
+              { d: 'cat', prefLabels: [{ value: 'Cat', lang: 'en' }] }
+            ]
+          },
+          { d: 'fish', prefLabels: [{ value: 'Fish', lang: 'en' }] }
+        ]
+      }
+    };
+
+    const drafts = buildInlineDrafts(scheme, PUBKEY, RELAY);
+
+    expect(drafts.concepts).toHaveLength(4);
+
+    const mammal = drafts.concepts.find((c) => c.d === 'mammal');
+    const dog = drafts.concepts.find((c) => c.d === 'dog');
+    const cat = drafts.concepts.find((c) => c.d === 'cat');
+    const fish = drafts.concepts.find((c) => c.d === 'fish');
+
+    expect(mammal.topConceptOf).toEqual({ address: `39737:${PUBKEY}:animals`, relay: RELAY });
+    expect(mammal.broader).toEqual([]);
+    expect(mammal.narrower).toEqual([
+      { address: `39738:${PUBKEY}:dog`, relay: RELAY },
+      { address: `39738:${PUBKEY}:cat`, relay: RELAY }
+    ]);
+
+    expect(dog.topConceptOf).toBeUndefined();
+    expect(dog.broader).toEqual([{ address: `39738:${PUBKEY}:mammal`, relay: RELAY }]);
+    expect(dog.narrower).toEqual([]);
+
+    expect(cat.topConceptOf).toBeUndefined();
+    expect(cat.broader).toEqual([{ address: `39738:${PUBKEY}:mammal`, relay: RELAY }]);
+
+    expect(fish.topConceptOf).toEqual({ address: `39737:${PUBKEY}:animals`, relay: RELAY });
+    expect(fish.broader).toEqual([]);
   });
 });

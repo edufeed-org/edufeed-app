@@ -1,11 +1,12 @@
 /**
  * Build an inline vocab into scheme + concept drafts (no network, no SKOS parse).
  *
- * Mechanical extraction of the helper formerly defined inline in
- * `scripts/publish-edufeed-vocabs.mjs`. Behavior preserved exactly:
- * concepts get `inScheme` only; hierarchy fields (`topConceptOf`,
- * `broader`, `narrower`) are added by Task 2 once `children` support
- * lands.
+ * Supports optional `children` arrays on top-level concepts for
+ * hierarchical schemes:
+ *   - top-level concepts get `topConceptOf` set to the scheme address
+ *   - children get `broader: [<parent concept address>]`
+ *   - parents get `narrower: [<child concept addresses>]`
+ *   - children intentionally omit `topConceptOf`
  *
  * @param {{ d: string, source: { type: string, prefLabels?: any[], descriptions?: any[], concepts?: any[] } }} scheme
  * @param {string} pubkey
@@ -14,14 +15,43 @@
 export function buildInlineDrafts(scheme, pubkey, relayHint) {
   const schemeAddress = `39737:${pubkey}:${scheme.d}`;
   const inScheme = { address: schemeAddress, relay: relayHint };
-  const concepts = (scheme.source.concepts || []).map((c) => ({
-    d: c.d,
-    prefLabels: c.prefLabels || [],
-    altLabels: c.altLabels || [],
-    definitions: c.definitions || [],
-    externalUri: c.externalUri,
-    inScheme
-  }));
+  const topConceptOf = { address: schemeAddress, relay: relayHint };
+
+  /** @type {any[]} */
+  const concepts = [];
+
+  for (const top of scheme.source.concepts || []) {
+    const children = top.children || [];
+    const narrower = children.map((ch) => ({
+      address: `39738:${pubkey}:${ch.d}`,
+      relay: relayHint
+    }));
+    concepts.push({
+      d: top.d,
+      prefLabels: top.prefLabels || [],
+      altLabels: top.altLabels || [],
+      definitions: top.definitions || [],
+      externalUri: top.externalUri,
+      inScheme,
+      topConceptOf,
+      broader: [],
+      narrower
+    });
+    const broader = [{ address: `39738:${pubkey}:${top.d}`, relay: relayHint }];
+    for (const ch of children) {
+      concepts.push({
+        d: ch.d,
+        prefLabels: ch.prefLabels || [],
+        altLabels: ch.altLabels || [],
+        definitions: ch.definitions || [],
+        externalUri: ch.externalUri,
+        inScheme,
+        broader,
+        narrower: []
+      });
+    }
+  }
+
   return {
     scheme: {
       d: scheme.d,
