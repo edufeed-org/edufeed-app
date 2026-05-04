@@ -1,5 +1,4 @@
 <script>
-  import { onMount } from 'svelte';
   import {
     findBookMatches,
     findExactBook,
@@ -15,63 +14,66 @@
    */
   let { value = $bindable(''), placeholder = 'z. B. Mt 5,3-12', onremove } = $props();
 
+  let focused = $state(false);
+  let activeIndex = $state(-1);
+
   /** @type {'idle' | 'parsing' | 'ok' | 'partial-book' | 'unparseable'} */
   let status = $state('idle');
   /** @type {string | null} */
   let canonical = $state(null);
   /** @type {{ short: string, long: string } | null} */
   let partialBook = $state(null);
-  /** @type {Array<{ short: string, long: string }>} */
-  let suggestions = $state([]);
-  let focused = $state(false);
-  let activeIndex = $state(-1);
+
+  // Pure derivations — read state, never write. Cannot loop.
+  const trimmedValue = $derived(value.trim());
+  const exactBook = $derived(findExactBook(trimmedValue));
+  const hasDigit = $derived(/\d/.test(trimmedValue));
+  const suggestions = $derived(
+    focused && trimmedValue && !exactBook ? findBookMatches(trimmedValue) : []
+  );
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let debounce;
   /** @type {HTMLInputElement | undefined} */
   let inputEl;
-  /** @type {HTMLDivElement | undefined} */
-  let containerEl;
 
-  function evaluate() {
+  // Reset highlight when suggestion list changes. Reads `suggestions`,
+  // writes `activeIndex` — disjoint read/write set, no loop possible.
+  $effect(() => {
+    void suggestions;
+    activeIndex = -1;
+  });
+
+  // Status / canonical / partial-book — driven by the trimmed value.
+  // Reads only derived/pure values; writes only status fields.
+  $effect(() => {
     if (debounce) clearTimeout(debounce);
-    const trimmed = value.trim();
 
-    // Typeahead: hide once the user has reached an exact book match — they
-    // got what they want and now need to type a chapter.
-    const exactBook = findExactBook(trimmed);
-    suggestions = focused && trimmed && !exactBook ? findBookMatches(trimmed) : [];
-    if (activeIndex >= suggestions.length) activeIndex = -1;
-
-    if (!trimmed) {
+    if (!trimmedValue) {
       status = 'idle';
       canonical = null;
       partialBook = null;
       return;
     }
 
-    const hasDigit = /\d/.test(trimmed);
-
-    // Just a book name (no chapter yet): show a friendly hint, never warn.
     if (exactBook && !hasDigit) {
-      partialBook = exactBook;
       status = 'partial-book';
+      partialBook = exactBook;
       canonical = null;
       return;
     }
 
-    // Still typing the book — stay quiet, the dropdown is doing the work.
     if (!hasDigit) {
+      // Still typing the book name — stay quiet, dropdown is doing the work.
       status = 'idle';
       canonical = null;
       partialBook = null;
       return;
     }
 
-    // Has a number → ask the parser.
     status = 'parsing';
+    const captured = trimmedValue;
     debounce = setTimeout(async () => {
-      const captured = value.trim();
       const result = await parseAndCanonicalize(captured);
       if (captured !== value.trim()) return;
       if (result.ok) {
@@ -84,7 +86,11 @@
         status = 'unparseable';
       }
     }, 300);
-  }
+
+    return () => {
+      if (debounce) clearTimeout(debounce);
+    };
+  });
 
   function applyCanonical() {
     if (canonical) {
@@ -96,7 +102,6 @@
   /** @param {{ short: string, long: string }} book */
   function pickSuggestion(book) {
     value = `${book.short} `;
-    suggestions = [];
     activeIndex = -1;
     inputEl?.focus();
   }
@@ -114,35 +119,12 @@
       e.preventDefault();
       pickSuggestion(suggestions[activeIndex]);
     } else if (e.key === 'Escape') {
-      suggestions = [];
-      activeIndex = -1;
+      inputEl?.blur();
     }
   }
-
-  /** @param {MouseEvent} e */
-  function handleClickOutside(e) {
-    if (containerEl && !containerEl.contains(/** @type {Node} */ (e.target))) {
-      suggestions = [];
-      focused = false;
-    }
-  }
-
-  onMount(() => {
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  });
-
-  $effect(() => {
-    void value;
-    void focused;
-    evaluate();
-    return () => {
-      if (debounce) clearTimeout(debounce);
-    };
-  });
 </script>
 
-<div class="space-y-1" bind:this={containerEl}>
+<div class="space-y-1">
   <div class="flex gap-2">
     <div class="relative flex-1">
       <input
@@ -154,9 +136,10 @@
         autocomplete="off"
         bind:value
         onfocus={() => (focused = true)}
+        onblur={() => (focused = false)}
         onkeydown={handleKey}
       />
-      {#if focused && suggestions.length > 0}
+      {#if suggestions.length > 0}
         <ul
           class="menu absolute top-full right-0 left-0 z-20 mt-1 max-h-72 flex-nowrap overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
           role="listbox"
