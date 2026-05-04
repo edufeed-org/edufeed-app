@@ -200,6 +200,8 @@
   const ekwFachField = $derived(resolveVocabField('ekwFach'));
   const klassenstufenField = $derived(resolveVocabField('klassenstufen'));
   const schulartField = $derived(resolveVocabField('schulart'));
+  const didaktischesKonzeptField = $derived(resolveVocabField('didaktischesKonzept'));
+  const methodeField = $derived(resolveVocabField('methode'));
 
   // Validation and submission state
   let validationErrors = $state(/** @type {string[]} */ ([]));
@@ -1303,6 +1305,78 @@
           label={m.amb_form_label_external_refs()}
           helpText={m.amb_form_help_external_refs()}
         />
+
+        <!-- EKW-only step 5 fields -->
+        {#if isEkw}
+          {#if didaktischesKonzeptField}
+            <div class="space-y-1">
+              <span class="label-text font-medium">Didaktisches Konzept</span>
+              <FormConceptPicker
+                field={didaktischesKonzeptField}
+                multiple={true}
+                value={formData.didacticConceptLabels.map((c) =>
+                  toRichConcept(c, didaktischesKonzeptField.vocab.relay)
+                )}
+                onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
+              />
+            </div>
+          {/if}
+
+          {#if methodeField}
+            <div class="space-y-1">
+              <span class="label-text font-medium">Methode</span>
+              <FormConceptPicker
+                field={methodeField}
+                multiple={true}
+                value={formData.methodLabels.map((c) => toRichConcept(c, methodeField.vocab.relay))}
+                onchange={makeEkwPairHandler('methods', 'methodLabels')}
+              />
+            </div>
+          {/if}
+
+          <div class="form-control">
+            <label class="label" for="ekw-method-other">
+              <span class="label-text font-medium">Methode (frei – eine pro Zeile)</span>
+            </label>
+            <textarea
+              id="ekw-method-other"
+              class="textarea-bordered textarea w-full"
+              rows="4"
+              bind:value={formData.methodOther}
+            ></textarea>
+          </div>
+
+          <div class="form-control">
+            <span class="label-text font-medium">Bibelstelle</span>
+            <div class="mt-2 space-y-2">
+              {#each formData.bibleReferences as _ref, i (i)}
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    class="input-bordered input flex-1"
+                    placeholder="z. B. Mt 5,3–12"
+                    bind:value={formData.bibleReferences[i]}
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    aria-label="Entfernen"
+                    onclick={() => {
+                      formData.bibleReferences = formData.bibleReferences.filter((_, j) => j !== i);
+                      if (formData.bibleReferences.length === 0) formData.bibleReferences = [''];
+                    }}>×</button
+                  >
+                </div>
+              {/each}
+              <button
+                type="button"
+                class="btn btn-outline btn-sm"
+                onclick={() => (formData.bibleReferences = [...formData.bibleReferences, ''])}
+                >+ Hinzufügen</button
+              >
+            </div>
+          </div>
+        {/if}
       </div>
     {/if}
 
