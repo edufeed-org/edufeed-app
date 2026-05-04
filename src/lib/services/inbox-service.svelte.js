@@ -236,7 +236,7 @@ export function initializeInbox(pubkey) {
       let content = event.content;
       // Try NIP-44 decrypt (read markers may be encrypted to self)
       try {
-        if (hasNip44(manager.active?.signer)) {
+        if (manager.active && hasNip44(manager.active.signer)) {
           content = await manager.active.signer.nip44.decrypt(pubkey, event.content);
         }
       } catch {
