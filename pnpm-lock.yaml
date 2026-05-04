@@ -2517,6 +2517,10 @@ packages:
     resolution: {integrity: sha512-9YcilrF+dLfg9NTEof/mJLMtbdX1RJ8dbWtJgE00cMOIohb1lIyJl710vFiTaiHTl6ZYODJuBd32xFvUhmv3kg==}
     engines: {node: '>=14'}
 
+  jsonrepair@3.14.0:
+    resolution: {integrity: sha512-tWPGKMZf/8UPim+fcW2EfcQ/d/7aKUrP6IECz9G3Tu6Q5dX0orSleqJ9z6sSw7qrQkjF8/Edo4DvsWBZ8H+HNg==}
+    hasBin: true
+
   jstransformer@1.0.0:
     resolution: {integrity: sha512-C9YK3Rf8q6VAPDCCU9fnqo3mAfOH6vUGnMcP4AQAYIEpWtfGLpwOTmZ+igtdK5y+VvI2n3CyYSzy4Qh34eq24A==}
 
@@ -5115,6 +5119,7 @@ snapshots:
       applesauce-core: 5.2.0(typescript@5.9.3)
       applesauce-relay: 5.2.0(typescript@5.9.3)
       applesauce-signers: 5.2.0(@capacitor/core@7.6.2)(typescript@5.9.3)
+      jsonrepair: 3.14.0
       linkedom: 0.18.12
       n3: 2.0.3
       nostr-tools: 2.23.3(typescript@5.9.3)
@@ -6211,6 +6216,8 @@ snapshots:
       rdf-canonize: 3.4.0
     transitivePeerDependencies:
       - web-streams-polyfill
+
+  jsonrepair@3.14.0: {}
 
   jstransformer@1.0.0:
     dependencies:

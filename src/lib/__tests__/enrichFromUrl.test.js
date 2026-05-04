@@ -22,6 +22,25 @@ describe('enrichFromUrl', () => {
     expect(JSON.parse(init.body)).toEqual({ url: 'https://example.org/x', variant: 'ekw' });
   });
 
+  it('forwards bildungsbereich when provided so the API can pick the subject vocab', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ source: 'opengraph-only', payload: {}, evidence: {}, baseline: {} }),
+          { status: 200 }
+        )
+      );
+    await enrichFromUrl('https://example.org/x', 'amb', { fetchFn, bildungsbereich: 'schule' });
+
+    const [, init] = fetchFn.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({
+      url: 'https://example.org/x',
+      variant: 'amb',
+      bildungsbereich: 'schule'
+    });
+  });
+
   it('returns the parsed result on 200', async () => {
     const result = {
       source: 'llm-enriched',
