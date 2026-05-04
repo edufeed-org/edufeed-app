@@ -19,6 +19,9 @@ importers:
       applesauce-common:
         specifier: ^5.2.0
         version: 5.2.0(typescript@5.9.3)
+      bible-passage-reference-parser:
+        specifier: ^3.2.0
+        version: 3.2.0
       linkedom:
         specifier: ^0.18.12
         version: 0.18.12
@@ -1541,6 +1544,9 @@ packages:
 
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
+
+  bible-passage-reference-parser@3.2.0:
+    resolution: {integrity: sha512-hQQCv+yYhYtbMFDY1QGelaSPrRSEx6nlW11GVQu1gh3EWsTXrg5s2nSWenSxWjFNHBtK8EReZO8YwFgPvN/tUQ==}
 
   bidi-js@1.0.3:
     resolution: {integrity: sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==}
@@ -4776,6 +4782,8 @@ snapshots:
   balanced-match@1.0.2: {}
 
   base64-js@1.5.1: {}
+
+  bible-passage-reference-parser@3.2.0: {}
 
   bidi-js@1.0.3:
     dependencies:

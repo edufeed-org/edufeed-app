@@ -33,6 +33,7 @@
   import ExternalUrlInput from './ExternalUrlInput.svelte';
   import MetadataFetchStep from './MetadataFetchStep.svelte';
   import AMBResourceSearchInput from './AMBResourceSearchInput.svelte';
+  import BibleReferenceInput from './BibleReferenceInput.svelte';
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
@@ -1326,23 +1327,13 @@
             <span class="label-text font-medium">Bibelstelle</span>
             <div class="mt-2 space-y-2">
               {#each formData.bibleReferences as _ref, i (i)}
-                <div class="flex gap-2">
-                  <input
-                    type="text"
-                    class="input-bordered input flex-1"
-                    placeholder="z. B. Mt 5,3–12"
-                    bind:value={formData.bibleReferences[i]}
-                  />
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-sm"
-                    aria-label="Entfernen"
-                    onclick={() => {
-                      formData.bibleReferences = formData.bibleReferences.filter((_, j) => j !== i);
-                      if (formData.bibleReferences.length === 0) formData.bibleReferences = [''];
-                    }}>×</button
-                  >
-                </div>
+                <BibleReferenceInput
+                  bind:value={formData.bibleReferences[i]}
+                  onremove={() => {
+                    formData.bibleReferences = formData.bibleReferences.filter((_, j) => j !== i);
+                    if (formData.bibleReferences.length === 0) formData.bibleReferences = [''];
+                  }}
+                />
               {/each}
               <button
                 type="button"
