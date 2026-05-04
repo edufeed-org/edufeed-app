@@ -123,7 +123,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl p-4">
+<div class="mx-auto w-full max-w-3xl p-4">
   <DetailHeader {title} subtitle={domain} event={representativeEvent} authorPubkey="">
     {#snippet actions()}
       {#if showReaderToggle && !isLoading}
