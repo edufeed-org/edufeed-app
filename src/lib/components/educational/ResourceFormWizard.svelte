@@ -1529,7 +1529,7 @@
             {#if ekwFachField}
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="label-text font-medium">Fachrichtung</span>
+                  <span class="label-text font-medium">{m.amb_form_label_ekw_fachrichtung()}</span>
                   <SmartFillBadge
                     provenance={provenance.ekwFachrichtung}
                     onclear={() => clearField('ekwFachrichtung')}
@@ -1549,7 +1549,7 @@
             {#if klassenstufenField}
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="label-text font-medium">Klassenstufe</span>
+                  <span class="label-text font-medium">{m.amb_form_label_ekw_klassenstufe()}</span>
                   <SmartFillBadge
                     provenance={provenance.gradeLevels}
                     onclear={() => clearField('gradeLevels')}
@@ -1569,7 +1569,7 @@
             {#if schulartField}
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="label-text font-medium">Schulart</span>
+                  <span class="label-text font-medium">{m.amb_form_label_ekw_schulart()}</span>
                   <SmartFillBadge
                     provenance={provenance.schoolTypes}
                     onclear={() => clearField('schoolTypes')}
@@ -1589,7 +1589,9 @@
             {#if didaktischesKonzeptField}
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="label-text font-medium">Didaktisches Konzept</span>
+                  <span class="label-text font-medium"
+                    >{m.amb_form_label_ekw_didactic_concept()}</span
+                  >
                   <SmartFillBadge
                     provenance={provenance.didacticConcepts}
                     onclear={() => clearField('didacticConcepts')}
@@ -1609,7 +1611,7 @@
             {#if methodeField}
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="label-text font-medium">Methode</span>
+                  <span class="label-text font-medium">{m.amb_form_label_ekw_method()}</span>
                   <SmartFillBadge
                     provenance={provenance.methods}
                     onclear={() => clearField('methods')}
@@ -1628,7 +1630,7 @@
 
             <div class="form-control">
               <label class="label flex items-center gap-2" for="ekw-method-other">
-                <span class="label-text font-medium">Methode (frei – eine pro Zeile)</span>
+                <span class="label-text font-medium">{m.amb_form_label_ekw_method_free()}</span>
                 <SmartFillBadge
                   provenance={provenance.methodOther}
                   onclear={() => clearField('methodOther')}
@@ -1644,7 +1646,7 @@
 
             <div class="form-control">
               <div class="flex items-center gap-2">
-                <span class="label-text font-medium">Bibelstelle</span>
+                <span class="label-text font-medium">{m.amb_form_label_ekw_bible_reference()}</span>
                 <SmartFillBadge
                   provenance={provenance.bibleReferences}
                   onclear={() => clearField('bibleReferences')}
@@ -1950,7 +1952,9 @@
               {#if isEkw}
                 {#if formData.ekwFachrichtung.length > 0}
                   <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">Fachrichtung:</dt>
+                    <dt class="w-32 shrink-0 text-base-content/60">
+                      {m.amb_form_summary_ekw_fachrichtung()}
+                    </dt>
                     <dd class="flex-1">
                       {formData.ekwFachrichtung.map((c) => c.label || c.id).join(', ')}
                     </dd>
@@ -1958,7 +1962,9 @@
                 {/if}
                 {#if formData.gradeLevelLabels.length > 0}
                   <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">Klassenstufe:</dt>
+                    <dt class="w-32 shrink-0 text-base-content/60">
+                      {m.amb_form_summary_ekw_klassenstufe()}
+                    </dt>
                     <dd class="flex-1">
                       {formData.gradeLevelLabels.map((c) => c.label || c.id).join(', ')}
                     </dd>
@@ -1966,7 +1972,9 @@
                 {/if}
                 {#if formData.schoolTypeLabels.length > 0}
                   <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">Schulart:</dt>
+                    <dt class="w-32 shrink-0 text-base-content/60">
+                      {m.amb_form_summary_ekw_schulart()}
+                    </dt>
                     <dd class="flex-1">
                       {formData.schoolTypeLabels.map((c) => c.label || c.id).join(', ')}
                     </dd>
@@ -1974,7 +1982,9 @@
                 {/if}
                 {#if formData.didacticConceptLabels.length > 0}
                   <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">Didaktisches Konzept:</dt>
+                    <dt class="w-32 shrink-0 text-base-content/60">
+                      {m.amb_form_summary_ekw_didactic_concept()}
+                    </dt>
                     <dd class="flex-1">
                       {formData.didacticConceptLabels.map((c) => c.label || c.id).join(', ')}
                     </dd>
@@ -1982,7 +1992,9 @@
                 {/if}
                 {#if formData.methodLabels.length > 0}
                   <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">Methode:</dt>
+                    <dt class="w-32 shrink-0 text-base-content/60">
+                      {m.amb_form_summary_ekw_method()}
+                    </dt>
                     <dd class="flex-1">
                       {formData.methodLabels.map((c) => c.label || c.id).join(', ')}
                     </dd>
@@ -1990,7 +2002,9 @@
                 {/if}
                 {#if formData.methodOther?.trim()}
                   <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">Methode (frei):</dt>
+                    <dt class="w-32 shrink-0 text-base-content/60">
+                      {m.amb_form_summary_ekw_method_free()}
+                    </dt>
                     <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.methodOther}</dd>
                   </div>
                 {/if}
@@ -1999,7 +2013,9 @@
                   .filter(Boolean)}
                 {#if bibleRefs.length > 0}
                   <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">Bibelstelle:</dt>
+                    <dt class="w-32 shrink-0 text-base-content/60">
+                      {m.amb_form_summary_ekw_bible_reference()}
+                    </dt>
                     <dd class="flex-1">{bibleRefs.join(', ')}</dd>
                   </div>
                 {/if}
