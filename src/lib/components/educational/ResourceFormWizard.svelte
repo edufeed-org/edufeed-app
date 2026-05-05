@@ -51,6 +51,10 @@
     ambJsonLdToPrefillEvent,
     ogToFormDataPrefill
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
+  import { EKW_NAMESPACE_IRI } from '$lib/helpers/educational/ekwNamespace.js';
+  import { useSchemeConcepts } from '$lib/stores/vocab-store.svelte.js';
+  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { ekwKeywordsFromConcepts } from '$lib/helpers/educational/ekwKeywordsFromConcepts.js';
   import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
   import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
@@ -326,11 +330,28 @@
   // EKW vocab field resolvers (null when the matching SCHEME_NADDR_* env var
   // is unset, e.g. before the EKW vocabs have been published).
   const ekwFachField = $derived(resolveVocabField('ekwFach'));
-  const ekwLrtField = $derived(resolveVocabField('ekwLrt'));
   const klassenstufenField = $derived(resolveVocabField('klassenstufen'));
   const schulartField = $derived(resolveVocabField('schulart'));
   const didaktischesKonzeptField = $derived(resolveVocabField('didaktischesKonzept'));
   const methodeField = $derived(resolveVocabField('methode'));
+  const ekwLrtField = $derived(resolveVocabField('ekwLrt'));
+  const ekwKeywordsField = $derived(resolveVocabField('ekwKeywords'));
+
+  // EKW keyword typeahead: pull the published kind-39738 concepts off the
+  // relay and project them to a flat, German-locale-sorted, dedup'd label
+  // list. Replaces the static `EKW_KEYWORD_SUGGESTIONS` data file — the
+  // suggestion list is now sourced from the same NIP-VOCAB scheme published
+  // by `pnpm run publish:vocabs`.
+  const getEkwKeywordsConcepts = useSchemeConcepts(
+    () => ekwKeywordsField?.vocab?.address,
+    () =>
+      /** @type {string[]} */ (
+        [ekwKeywordsField?.vocab?.relay, ...getAllLookupRelays()].filter(Boolean)
+      )
+  );
+  const ekwKeywordSuggestionList = $derived(
+    ekwKeywordsField ? ekwKeywordsFromConcepts(getEkwKeywordsConcepts()) : []
+  );
 
   // Validation and submission state. `fieldErrors` is the canonical map
   // (field key → localized error message) computed for the current step.
@@ -567,7 +588,11 @@
       inLanguage: getAMBLanguages(editEvent)[0] || 'de',
       image: getAMBImage(editEvent) || '',
       identifier: isUrlIdentifier ? identifier : '',
-      learningResourceType: lrtTypes.map((t) => ({ id: t.id, label: t.label })),
+      learningResourceType: isEkw
+        ? lrtTypes
+            .map((t) => ({ id: t.id, label: t.label }))
+            .filter((c) => c.id.startsWith(`${EKW_NAMESPACE_IRI}lrt/`))
+        : lrtTypes.map((t) => ({ id: t.id, label: t.label })),
       educationalLevels: eduLevels.map((t) => ({ id: t.id, label: t.label })),
       keywords: getAMBKeywords(editEvent),
       creators:
@@ -806,7 +831,10 @@
     }
 
     if (lrtTypes.length > 0) {
-      formData.learningResourceType = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
+      const compact = lrtTypes.map((t) => ({ id: t.id, label: t.label }));
+      formData.learningResourceType = isEkw
+        ? compact.filter((c) => c.id.startsWith(`${EKW_NAMESPACE_IRI}lrt/`))
+        : compact;
       mark('learningResourceType');
     }
     if (eduLevels.length > 0) {
@@ -1077,10 +1105,12 @@
     const tokens = splitKeywordInput(input.value);
     if (tokens.length === 0) {
       input.value = '';
+      keywordInputValue = '';
       return;
     }
     formData.keywords = mergeKeywords(formData.keywords, tokens);
     input.value = '';
+    keywordInputValue = '';
   }
 
   /**
@@ -1125,6 +1155,87 @@
       formData.keywords = mergeKeywords(formData.keywords, tokens);
     }
     input.value = '';
+    keywordInputValue = '';
+  }
+
+  // Keyword typeahead state (EKW variant only). `keywordInputValue` is the
+  // single source of truth for the input text — bound via `bind:value` so it
+  // stays in sync with both user typing and programmatic clears in
+  // commitKeywordInput / handleKeywordPaste.
+  let keywordInputValue = $state('');
+  let keywordSuggestionsOpen = $state(false);
+  let keywordSuggestionActiveIndex = $state(-1);
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let keywordBlurTimer = null;
+
+  /**
+   * Accent/case-insensitive normalization for the keyword typeahead match.
+   * @param {string} s
+   * @returns {string}
+   */
+  function normalizeKeyword(s) {
+    return s
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  const keywordSuggestions = $derived.by(() => {
+    if (!isEkw) return /** @type {string[]} */ ([]);
+    const q = normalizeKeyword((keywordInputValue ?? '').trim());
+    if (!q) return /** @type {string[]} */ ([]);
+    const skip = new Set(formData.keywords);
+    /** @type {string[]} */
+    const out = [];
+    for (const candidate of ekwKeywordSuggestionList) {
+      if (skip.has(candidate)) continue;
+      if (normalizeKeyword(candidate).includes(q)) {
+        out.push(candidate);
+        if (out.length >= 8) break;
+      }
+    }
+    return out;
+  });
+
+  /**
+   * @param {string} suggestion
+   */
+  function pickKeywordSuggestion(suggestion) {
+    formData.keywords = mergeKeywords(formData.keywords, [suggestion]);
+    keywordInputValue = '';
+    keywordSuggestionsOpen = false;
+    keywordSuggestionActiveIndex = -1;
+  }
+
+  /**
+   * Keydown handler for the EKW-variant keyword input. Delegates to the
+   * existing free-text handler (`handleAddKeyword`) when the suggestions
+   * dropdown is closed/empty or the key isn't a navigation/selection key.
+   * @param {KeyboardEvent} e
+   */
+  function handleKeywordKeydownEkw(e) {
+    if (!isEkw || !keywordSuggestionsOpen || keywordSuggestions.length === 0) {
+      handleAddKeyword(e);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      keywordSuggestionActiveIndex = (keywordSuggestionActiveIndex + 1) % keywordSuggestions.length;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      keywordSuggestionActiveIndex =
+        keywordSuggestionActiveIndex <= 0
+          ? keywordSuggestions.length - 1
+          : keywordSuggestionActiveIndex - 1;
+    } else if (e.key === 'Escape') {
+      keywordSuggestionsOpen = false;
+      keywordSuggestionActiveIndex = -1;
+    } else if (e.key === 'Enter' && keywordSuggestionActiveIndex >= 0) {
+      e.preventDefault();
+      pickKeywordSuggestion(keywordSuggestions[keywordSuggestionActiveIndex]);
+    } else {
+      handleAddKeyword(e);
+    }
   }
 
   /**
@@ -1161,17 +1272,6 @@
    */
   function handleEduLevelChange(rich) {
     formData.educationalLevels = rich.map(toCompactConcept);
-  }
-
-  /**
-   * FormConceptPicker change handler for the EKW learningResourceType picker.
-   * Mirrors the compact `{id, label}` shape that the static SKOSDropdown
-   * (HCRT) writes for the AMB variant, so downstream tag synthesis and
-   * preview rendering stay variant-agnostic.
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
-   */
-  function handleEkwLrtChange(rich) {
-    formData.learningResourceType = rich.map(toCompactConcept);
   }
 
   /**
@@ -1599,30 +1699,36 @@
       <!-- Step 4: Classification -->
       {#if currentStep === 4}
         <div class="space-y-4">
-          <!--
-            Resource Type. AMB variant uses the static SKOSDropdown
-            (HCRT vocab via skosLoader). EKW variant uses the Nostr-based
-            FormConceptPicker bound to the EKW LRT vocab (kind 39737), so
-            EKKW maintainers can curate their own list. Falls back to the
-            HCRT picker if SCHEME_NADDR_EKW_LRT is unset.
-          -->
-          <div>
-            {#if isEkw && ekwLrtField}
-              <div class="form-control">
-                <div class="label">
-                  <span class="label-text font-medium">
-                    {m.amb_form_label_resource_type()}
-                  </span>
+          <!-- Resource Type — HCRT for AMB, EKW vocab (relay-fetched) for EKW variant -->
+          <div data-skos-vocab="learningResourceType">
+            {#if isEkw}
+              {#if ekwLrtField}
+                <div class="form-control">
+                  <div class="label flex items-center gap-2">
+                    <span class="label-text font-medium">
+                      {m.amb_form_label_resource_type()}
+                      <span class="text-error">*</span>
+                    </span>
+                    <SmartFillBadge
+                      provenance={provenance.learningResourceType}
+                      onclear={() => clearField('learningResourceType')}
+                    />
+                  </div>
+                  <FormConceptPicker
+                    field={ekwLrtField}
+                    multiple={true}
+                    value={formData.learningResourceType.map((c) =>
+                      toRichConcept(c, ekwLrtField.vocab.relay)
+                    )}
+                    onchange={(rich) => {
+                      formData.learningResourceType = rich.map(toCompactConcept);
+                    }}
+                  />
+                  <p class="mt-1 text-xs text-base-content/60">
+                    {m.amb_form_help_resource_type()}
+                  </p>
                 </div>
-                <FormConceptPicker
-                  field={ekwLrtField}
-                  multiple={true}
-                  value={formData.learningResourceType.map((c) =>
-                    toRichConcept(c, ekwLrtField.vocab.relay)
-                  )}
-                  onchange={handleEkwLrtChange}
-                />
-              </div>
+              {/if}
             {:else}
               <SKOSDropdown
                 vocabularyKey="learningResourceType"
@@ -1633,14 +1739,14 @@
                 multiple={true}
                 helpText={m.amb_form_help_resource_type()}
               />
-            {/if}
-            {#if provenance.learningResourceType}
-              <div class="mt-1">
-                <SmartFillBadge
-                  provenance={provenance.learningResourceType}
-                  onclear={() => clearField('learningResourceType')}
-                />
-              </div>
+              {#if provenance.learningResourceType}
+                <div class="mt-1">
+                  <SmartFillBadge
+                    provenance={provenance.learningResourceType}
+                    onclear={() => clearField('learningResourceType')}
+                  />
+                </div>
+              {/if}
             {/if}
             {#if showError('learningResourceType')}
               <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
@@ -1721,20 +1827,77 @@
                 onclear={() => clearField('keywords')}
               />
             </label>
-            <input
-              id="amb-keywords"
-              type="text"
-              class="input-bordered input w-full"
-              placeholder={m.amb_form_placeholder_keywords()}
-              onkeydown={handleAddKeyword}
-              onblur={handleKeywordBlur}
-              onpaste={handleKeywordPaste}
-            />
+            <div class="relative">
+              <input
+                id="amb-keywords"
+                type="text"
+                class="input-bordered input w-full"
+                placeholder={m.amb_form_placeholder_keywords()}
+                role={isEkw ? 'combobox' : undefined}
+                aria-expanded={isEkw ? keywordSuggestionsOpen : undefined}
+                aria-controls={isEkw ? 'ekw-keyword-suggestions' : undefined}
+                aria-autocomplete={isEkw ? 'list' : undefined}
+                aria-activedescendant={isEkw && keywordSuggestionActiveIndex >= 0
+                  ? `ekw-keyword-suggestion-${keywordSuggestionActiveIndex}`
+                  : undefined}
+                autocomplete="off"
+                bind:value={keywordInputValue}
+                oninput={() => {
+                  if (isEkw) {
+                    keywordSuggestionsOpen = true;
+                    keywordSuggestionActiveIndex = -1;
+                  }
+                }}
+                onfocus={() => {
+                  if (keywordBlurTimer) {
+                    clearTimeout(keywordBlurTimer);
+                    keywordBlurTimer = null;
+                  }
+                  if (isEkw) keywordSuggestionsOpen = true;
+                }}
+                onkeydown={isEkw ? handleKeywordKeydownEkw : handleAddKeyword}
+                onblur={(e) => {
+                  if (keywordBlurTimer) clearTimeout(keywordBlurTimer);
+                  keywordBlurTimer = setTimeout(() => {
+                    keywordSuggestionsOpen = false;
+                    keywordSuggestionActiveIndex = -1;
+                    keywordBlurTimer = null;
+                  }, 120);
+                  handleKeywordBlur(e);
+                }}
+                onpaste={handleKeywordPaste}
+              />
+              {#if isEkw && keywordSuggestionsOpen && keywordSuggestions.length > 0}
+                <ul
+                  id="ekw-keyword-suggestions"
+                  role="listbox"
+                  data-testid="ekw-keyword-suggestions"
+                  class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-base-300 bg-base-100 shadow"
+                  aria-label={m.ekw_keywords_suggestions_label()}
+                >
+                  {#each keywordSuggestions as suggestion, i (suggestion)}
+                    <!-- Keyboard interaction lives on the input via aria-activedescendant; the option click is reachable through Enter on the focused input. -->
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <li
+                      id="ekw-keyword-suggestion-{i}"
+                      role="option"
+                      aria-selected={i === keywordSuggestionActiveIndex}
+                      class="cursor-pointer px-3 py-2 hover:bg-base-200"
+                      class:bg-base-200={i === keywordSuggestionActiveIndex}
+                      onmousedown={(e) => e.preventDefault()}
+                      onclick={() => pickKeywordSuggestion(suggestion)}
+                    >
+                      {suggestion}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
             <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
             {#if formData.keywords.length > 0}
               <div class="mt-2 flex flex-wrap gap-2">
                 {#each formData.keywords as keyword (keyword)}
-                  <span class="badge gap-1 badge-outline">
+                  <span class="badge gap-1 badge-outline" data-testid="keyword-chip">
                     {keyword}
                     <button
                       type="button"
@@ -1754,7 +1917,10 @@
             {#if ekwFachField}
               <div class="form-control">
                 <div class="label">
-                  <span class="label-text font-medium">{m.amb_form_label_ekw_fachrichtung()}</span>
+                  <span class="label-text font-medium">
+                    {m.amb_form_label_ekw_fachrichtung()}
+                    {#if subjectVocabFields.length > 0}<span class="text-error">*</span>{/if}
+                  </span>
                   <SmartFillBadge
                     provenance={provenance.ekwFachrichtung}
                     onclear={() => clearField('ekwFachrichtung')}
@@ -1769,6 +1935,9 @@
                   onchange={makeAboutHandler('ekwFachrichtung')}
                 />
               </div>
+              {#if showError('about')}
+                <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
+              {/if}
             {/if}
 
             {#if klassenstufenField}
@@ -1899,7 +2068,7 @@
               </div>
             </div>
 
-            {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
+            {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField && !ekwLrtField}
               <div class="alert text-sm alert-warning">
                 <div>
                   <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
@@ -1917,7 +2086,7 @@
                       <code>SCHEME_NADDR_EKW_FACH</code>, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
                       <code>SCHEME_NADDR_SCHULART</code>,
                       <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
-                      <code>SCHEME_NADDR_METHODE</code>.
+                      <code>SCHEME_NADDR_METHODE</code>, <code>SCHEME_NADDR_EKW_LRT</code>.
                     </p>
                   </details>
                 </div>

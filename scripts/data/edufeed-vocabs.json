@@ -47,8 +47,14 @@
       "source": {
         "type": "inline",
         "prefLabels": [
-          { "value": "Interactivity Type", "lang": "en" },
-          { "value": "Interaktionstyp", "lang": "de" }
+          {
+            "value": "Interactivity Type",
+            "lang": "en"
+          },
+          {
+            "value": "Interaktionstyp",
+            "lang": "de"
+          }
         ],
         "descriptions": [
           {
@@ -60,22 +66,40 @@
           {
             "d": "active",
             "prefLabels": [
-              { "value": "Active", "lang": "en" },
-              { "value": "Aktiv", "lang": "de" }
+              {
+                "value": "Active",
+                "lang": "en"
+              },
+              {
+                "value": "Aktiv",
+                "lang": "de"
+              }
             ]
           },
           {
             "d": "expositive",
             "prefLabels": [
-              { "value": "Expositive", "lang": "en" },
-              { "value": "Expositorisch", "lang": "de" }
+              {
+                "value": "Expositive",
+                "lang": "en"
+              },
+              {
+                "value": "Expositorisch",
+                "lang": "de"
+              }
             ]
           },
           {
             "d": "mixed",
             "prefLabels": [
-              { "value": "Mixed", "lang": "en" },
-              { "value": "Gemischt", "lang": "de" }
+              {
+                "value": "Mixed",
+                "lang": "en"
+              },
+              {
+                "value": "Gemischt",
+                "lang": "de"
+              }
             ]
           }
         ]
@@ -86,8 +110,14 @@
       "source": {
         "type": "inline",
         "prefLabels": [
-          { "value": "Conditions of Access", "lang": "en" },
-          { "value": "Zugangsbedingungen", "lang": "de" }
+          {
+            "value": "Conditions of Access",
+            "lang": "en"
+          },
+          {
+            "value": "Zugangsbedingungen",
+            "lang": "de"
+          }
         ],
         "descriptions": [
           {
@@ -99,24 +129,42 @@
           {
             "d": "no-login",
             "prefLabels": [
-              { "value": "No login required", "lang": "en" },
-              { "value": "Kein Login nötig", "lang": "de" }
+              {
+                "value": "No login required",
+                "lang": "en"
+              },
+              {
+                "value": "Kein Login nötig",
+                "lang": "de"
+              }
             ],
             "externalUri": "https://w3id.org/kim/conditionsOfAccess/no_login"
           },
           {
             "d": "login",
             "prefLabels": [
-              { "value": "Login required", "lang": "en" },
-              { "value": "Login erforderlich", "lang": "de" }
+              {
+                "value": "Login required",
+                "lang": "en"
+              },
+              {
+                "value": "Login erforderlich",
+                "lang": "de"
+              }
             ],
             "externalUri": "https://w3id.org/kim/conditionsOfAccess/login"
           },
           {
             "d": "login-with-fee",
             "prefLabels": [
-              { "value": "Login with fee", "lang": "en" },
-              { "value": "Login mit Gebühr", "lang": "de" }
+              {
+                "value": "Login with fee",
+                "lang": "en"
+              },
+              {
+                "value": "Login mit Gebühr",
+                "lang": "de"
+              }
             ],
             "externalUri": "https://w3id.org/kim/conditionsOfAccess/login_with_fee"
           }
@@ -128,19 +176,97 @@
       "source": {
         "type": "inline",
         "prefLabels": [
-          { "value": "Klassenstufen", "lang": "de" },
-          { "value": "Grade levels", "lang": "en" }
+          {
+            "value": "Klassenstufen",
+            "lang": "de"
+          },
+          {
+            "value": "Grade levels",
+            "lang": "en"
+          }
         ],
         "concepts": [
-          { "d": "1", "prefLabels": [{ "value": "1", "lang": "de" }] },
-          { "d": "2", "prefLabels": [{ "value": "2", "lang": "de" }] },
-          { "d": "3", "prefLabels": [{ "value": "3", "lang": "de" }] },
-          { "d": "4", "prefLabels": [{ "value": "4", "lang": "de" }] },
-          { "d": "5-6", "prefLabels": [{ "value": "5–6", "lang": "de" }] },
-          { "d": "7-8", "prefLabels": [{ "value": "7–8", "lang": "de" }] },
-          { "d": "9-10", "prefLabels": [{ "value": "9–10", "lang": "de" }] },
-          { "d": "ef", "prefLabels": [{ "value": "EF (11)", "lang": "de" }] },
-          { "d": "q1-q2", "prefLabels": [{ "value": "Q1/Q2", "lang": "de" }] }
+          {
+            "d": "1",
+            "prefLabels": [
+              {
+                "value": "1",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "2",
+            "prefLabels": [
+              {
+                "value": "2",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "3",
+            "prefLabels": [
+              {
+                "value": "3",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "4",
+            "prefLabels": [
+              {
+                "value": "4",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "5-6",
+            "prefLabels": [
+              {
+                "value": "5–6",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "7-8",
+            "prefLabels": [
+              {
+                "value": "7–8",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "9-10",
+            "prefLabels": [
+              {
+                "value": "9–10",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "ef",
+            "prefLabels": [
+              {
+                "value": "EF (11)",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "q1-q2",
+            "prefLabels": [
+              {
+                "value": "Q1/Q2",
+                "lang": "de"
+              }
+            ]
+          }
         ]
       }
     },
@@ -149,56 +275,179 @@
       "source": {
         "type": "inline",
         "prefLabels": [
-          { "value": "Schulart", "lang": "de" },
-          { "value": "School type", "lang": "en" }
+          {
+            "value": "Schulart",
+            "lang": "de"
+          },
+          {
+            "value": "School type",
+            "lang": "en"
+          }
         ],
         "concepts": [
-          { "d": "elementar", "prefLabels": [{ "value": "Elementar", "lang": "de" }] },
-          { "d": "krippe", "prefLabels": [{ "value": "Krippe/U3", "lang": "de" }] },
-          { "d": "kita", "prefLabels": [{ "value": "Kita", "lang": "de" }] },
-          { "d": "hort", "prefLabels": [{ "value": "Hort", "lang": "de" }] },
-          { "d": "grundschule", "prefLabels": [{ "value": "Grundschule (1–4)", "lang": "de" }] },
-          { "d": "gesamtschule", "prefLabels": [{ "value": "Gesamtschule", "lang": "de" }] },
+          {
+            "d": "elementar",
+            "prefLabels": [
+              {
+                "value": "Elementar",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "krippe",
+            "prefLabels": [
+              {
+                "value": "Krippe/U3",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "kita",
+            "prefLabels": [
+              {
+                "value": "Kita",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "hort",
+            "prefLabels": [
+              {
+                "value": "Hort",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "grundschule",
+            "prefLabels": [
+              {
+                "value": "Grundschule (1–4)",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "gesamtschule",
+            "prefLabels": [
+              {
+                "value": "Gesamtschule",
+                "lang": "de"
+              }
+            ]
+          },
           {
             "d": "gemeinschaftsschule",
-            "prefLabels": [{ "value": "Gemeinschaftsschule", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Gemeinschaftsschule",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "foerderschule",
-            "prefLabels": [{ "value": "Förderschule/Sonderpädagogische Einrichtung", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Förderschule/Sonderpädagogische Einrichtung",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "hauptschule",
-            "prefLabels": [{ "value": "Hauptschule/Mittelschule", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Hauptschule/Mittelschule",
+                "lang": "de"
+              }
+            ]
           },
-          { "d": "realschule", "prefLabels": [{ "value": "Realschule", "lang": "de" }] },
-          { "d": "gymnasium", "prefLabels": [{ "value": "Gymnasium", "lang": "de" }] },
+          {
+            "d": "realschule",
+            "prefLabels": [
+              {
+                "value": "Realschule",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "gymnasium",
+            "prefLabels": [
+              {
+                "value": "Gymnasium",
+                "lang": "de"
+              }
+            ]
+          },
           {
             "d": "berufliche-schule",
-            "prefLabels": [{ "value": "Berufliche Schule", "lang": "de" }],
+            "prefLabels": [
+              {
+                "value": "Berufliche Schule",
+                "lang": "de"
+              }
+            ],
             "children": [
-              { "d": "berufsschule", "prefLabels": [{ "value": "Berufsschule", "lang": "de" }] },
+              {
+                "d": "berufsschule",
+                "prefLabels": [
+                  {
+                    "value": "Berufsschule",
+                    "lang": "de"
+                  }
+                ]
+              },
               {
                 "d": "berufsfachschule",
-                "prefLabels": [{ "value": "Berufsfachschule", "lang": "de" }]
+                "prefLabels": [
+                  {
+                    "value": "Berufsfachschule",
+                    "lang": "de"
+                  }
+                ]
               },
               {
                 "d": "fachoberschule",
-                "prefLabels": [{ "value": "Fachoberschule", "lang": "de" }]
+                "prefLabels": [
+                  {
+                    "value": "Fachoberschule",
+                    "lang": "de"
+                  }
+                ]
               },
               {
                 "d": "berufliches-gymnasium",
-                "prefLabels": [{ "value": "Berufliches Gymnasium", "lang": "de" }]
+                "prefLabels": [
+                  {
+                    "value": "Berufliches Gymnasium",
+                    "lang": "de"
+                  }
+                ]
               }
             ]
           },
           {
             "d": "universitaere-lehre",
-            "prefLabels": [{ "value": "Universitäre Lehre", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Universitäre Lehre",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "fachhochschule",
-            "prefLabels": [{ "value": "Fachhochschule/Hochschule", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Fachhochschule/Hochschule",
+                "lang": "de"
+              }
+            ]
           }
         ]
       }
@@ -207,39 +456,141 @@
       "d": "ekw-fach",
       "source": {
         "type": "inline",
-        "prefLabels": [{ "value": "Fach (Religion / Ethik / Philosophie)", "lang": "de" }],
+        "prefLabels": [
+          {
+            "value": "Fach (Religion / Ethik / Philosophie)",
+            "lang": "de"
+          }
+        ],
         "concepts": [
           {
             "d": "religion",
-            "prefLabels": [{ "value": "Religion", "lang": "de" }],
+            "prefLabels": [
+              {
+                "value": "Religion",
+                "lang": "de"
+              }
+            ],
             "children": [
-              { "d": "katholisch", "prefLabels": [{ "value": "katholisch", "lang": "de" }] },
-              { "d": "evangelisch", "prefLabels": [{ "value": "evangelisch", "lang": "de" }] },
+              {
+                "d": "katholisch",
+                "prefLabels": [
+                  {
+                    "value": "katholisch",
+                    "lang": "de"
+                  }
+                ]
+              },
+              {
+                "d": "evangelisch",
+                "prefLabels": [
+                  {
+                    "value": "evangelisch",
+                    "lang": "de"
+                  }
+                ]
+              },
               {
                 "d": "konfessionell-kooperativ",
-                "prefLabels": [{ "value": "konfessionell-kooperativ", "lang": "de" }]
+                "prefLabels": [
+                  {
+                    "value": "konfessionell-kooperativ",
+                    "lang": "de"
+                  }
+                ]
               },
               {
                 "d": "christlicher-ru",
-                "prefLabels": [{ "value": "christlicher RU", "lang": "de" }]
+                "prefLabels": [
+                  {
+                    "value": "christlicher RU",
+                    "lang": "de"
+                  }
+                ]
               },
               {
                 "d": "religionskooperativ",
-                "prefLabels": [{ "value": "religionskooperativ (z. B. RUfa)", "lang": "de" }]
+                "prefLabels": [
+                  {
+                    "value": "religionskooperativ (z. B. RUfa)",
+                    "lang": "de"
+                  }
+                ]
               },
-              { "d": "orthodox", "prefLabels": [{ "value": "orthodox", "lang": "de" }] },
-              { "d": "islamisch", "prefLabels": [{ "value": "islamisch", "lang": "de" }] },
-              { "d": "juedisch", "prefLabels": [{ "value": "jüdisch", "lang": "de" }] },
-              { "d": "alevitisch", "prefLabels": [{ "value": "alevitisch", "lang": "de" }] },
-              { "d": "buddhistisch", "prefLabels": [{ "value": "buddhistisch", "lang": "de" }] },
+              {
+                "d": "orthodox",
+                "prefLabels": [
+                  {
+                    "value": "orthodox",
+                    "lang": "de"
+                  }
+                ]
+              },
+              {
+                "d": "islamisch",
+                "prefLabels": [
+                  {
+                    "value": "islamisch",
+                    "lang": "de"
+                  }
+                ]
+              },
+              {
+                "d": "juedisch",
+                "prefLabels": [
+                  {
+                    "value": "jüdisch",
+                    "lang": "de"
+                  }
+                ]
+              },
+              {
+                "d": "alevitisch",
+                "prefLabels": [
+                  {
+                    "value": "alevitisch",
+                    "lang": "de"
+                  }
+                ]
+              },
+              {
+                "d": "buddhistisch",
+                "prefLabels": [
+                  {
+                    "value": "buddhistisch",
+                    "lang": "de"
+                  }
+                ]
+              },
               {
                 "d": "religionskundlich",
-                "prefLabels": [{ "value": "religionskundlich (LER/Bremer RU)", "lang": "de" }]
+                "prefLabels": [
+                  {
+                    "value": "religionskundlich (LER/Bremer RU)",
+                    "lang": "de"
+                  }
+                ]
               }
             ]
           },
-          { "d": "ethik", "prefLabels": [{ "value": "Ethik", "lang": "de" }] },
-          { "d": "philosophie", "prefLabels": [{ "value": "Philosophie", "lang": "de" }] }
+          {
+            "d": "ethik",
+            "prefLabels": [
+              {
+                "value": "Ethik",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "philosophie",
+            "prefLabels": [
+              {
+                "value": "Philosophie",
+                "lang": "de"
+              }
+            ]
+          }
         ]
       }
     },
@@ -247,60 +598,138 @@
       "d": "didaktisches-konzept",
       "source": {
         "type": "inline",
-        "prefLabels": [{ "value": "Didaktisches Konzept", "lang": "de" }],
+        "prefLabels": [
+          {
+            "value": "Didaktisches Konzept",
+            "lang": "de"
+          }
+        ],
         "concepts": [
           {
             "d": "elementarisiertes-lernen",
-            "prefLabels": [{ "value": "Elementarisiertes Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Elementarisiertes Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "symboldidaktik",
-            "prefLabels": [{ "value": "Symboldidaktik / Symbollernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Symboldidaktik / Symbollernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "mystagogisches-lernen",
-            "prefLabels": [{ "value": "Mystagogisches Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Mystagogisches Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "theologisieren",
-            "prefLabels": [{ "value": "Theologisieren (Kinder-/Jugendtheologie)", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Theologisieren (Kinder-/Jugendtheologie)",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "biblisches-lernen",
-            "prefLabels": [{ "value": "Biblisches Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Biblisches Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "ethisches-lernen",
-            "prefLabels": [{ "value": "Ethisches Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Ethisches Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "aesthetisches-lernen",
-            "prefLabels": [{ "value": "Ästhetisches Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Ästhetisches Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "biografisches-lernen",
-            "prefLabels": [{ "value": "Biografisches Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Biografisches Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "dialogisches-lernen",
-            "prefLabels": [{ "value": "Dialogisches Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Dialogisches Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "performatives-lernen",
-            "prefLabels": [{ "value": "Performatives Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Performatives Lernen",
+                "lang": "de"
+              }
+            ]
           },
-          { "d": "globales-lernen", "prefLabels": [{ "value": "Globales Lernen", "lang": "de" }] },
+          {
+            "d": "globales-lernen",
+            "prefLabels": [
+              {
+                "value": "Globales Lernen",
+                "lang": "de"
+              }
+            ]
+          },
           {
             "d": "interreligioeses-lernen",
-            "prefLabels": [{ "value": "interreligiöses Lernen", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "interreligiöses Lernen",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "demokratiebildung",
-            "prefLabels": [{ "value": "Demokratiebildung / Politische Bildung", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Demokratiebildung / Politische Bildung",
+                "lang": "de"
+              }
+            ]
           },
           {
             "d": "friedenspaedagogik",
-            "prefLabels": [{ "value": "Friedenspädagogik", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Friedenspädagogik",
+                "lang": "de"
+              }
+            ]
           }
         ]
       }
@@ -310,33 +739,1547 @@
       "source": {
         "type": "inline",
         "prefLabels": [
-          { "value": "Methode", "lang": "de" },
-          { "value": "Method", "lang": "en" }
+          {
+            "value": "Methode",
+            "lang": "de"
+          },
+          {
+            "value": "Method",
+            "lang": "en"
+          }
         ],
         "concepts": [
-          { "d": "rollenspiel", "prefLabels": [{ "value": "Rollenspiel", "lang": "de" }] },
+          {
+            "d": "rollenspiel",
+            "prefLabels": [
+              {
+                "value": "Rollenspiel",
+                "lang": "de"
+              }
+            ]
+          },
           {
             "d": "biblische-erzaehlung",
             "prefLabels": [
-              { "value": "Biblische Erzählung / Geschichte / Fantasiegeschichte", "lang": "de" }
+              {
+                "value": "Biblische Erzählung / Geschichte / Fantasiegeschichte",
+                "lang": "de"
+              }
             ]
           },
           {
             "d": "meditation",
-            "prefLabels": [{ "value": "Meditation / Spiritueller Zugang", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Meditation / Spiritueller Zugang",
+                "lang": "de"
+              }
+            ]
           },
-          { "d": "vortrag", "prefLabels": [{ "value": "Vortrag", "lang": "de" }] },
-          { "d": "dialog", "prefLabels": [{ "value": "Dialog", "lang": "de" }] },
+          {
+            "d": "vortrag",
+            "prefLabels": [
+              {
+                "value": "Vortrag",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "dialog",
+            "prefLabels": [
+              {
+                "value": "Dialog",
+                "lang": "de"
+              }
+            ]
+          },
           {
             "d": "liederschliessung",
-            "prefLabels": [{ "value": "Liederschließung / Singen / Musik", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Liederschließung / Singen / Musik",
+                "lang": "de"
+              }
+            ]
           },
-          { "d": "leporello", "prefLabels": [{ "value": "Leporello", "lang": "de" }] },
+          {
+            "d": "leporello",
+            "prefLabels": [
+              {
+                "value": "Leporello",
+                "lang": "de"
+              }
+            ]
+          },
           {
             "d": "lernstationen",
-            "prefLabels": [{ "value": "Lernstationen / Stationenarbeit", "lang": "de" }]
+            "prefLabels": [
+              {
+                "value": "Lernstationen / Stationenarbeit",
+                "lang": "de"
+              }
+            ]
           },
-          { "d": "bildbetrachtung", "prefLabels": [{ "value": "Bildbetrachtung", "lang": "de" }] }
+          {
+            "d": "bildbetrachtung",
+            "prefLabels": [
+              {
+                "value": "Bildbetrachtung",
+                "lang": "de"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "d": "ekw-lrt",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          {
+            "value": "Lerninhaltstyp (EKKW)",
+            "lang": "de"
+          },
+          {
+            "value": "Learning resource type (EKKW)",
+            "lang": "en"
+          }
+        ],
+        "descriptions": [
+          {
+            "value": "EKKW-spezifische Taxonomie für learningResourceType auf kind 30142. Mirror of EKW_LRT_TREE in src/lib/data/ekwLearningResourceTypes.js. Compound d-tags (parent/child) align concept addresses with the JS-side IRI suffix; externalUri carries the canonical https://edufeed.org/ns/ekw#lrt/... IRI used by published kind-30142 events.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "unterrichtsplanung",
+            "prefLabels": [
+              {
+                "value": "Unterrichtsplanung",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung",
+            "children": [
+              {
+                "d": "unterrichtsplanung/stundenentwurf",
+                "prefLabels": [
+                  {
+                    "value": "Stundenentwurf",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/stundenentwurf"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtsbaustein",
+                "prefLabels": [
+                  {
+                    "value": "Unterrichtsbaustein",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtsbaustein"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtsidee",
+                "prefLabels": [
+                  {
+                    "value": "Unterrichtsidee",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtsidee"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtsreihe",
+                "prefLabels": [
+                  {
+                    "value": "Unterrichtsreihe",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtsreihe"
+              },
+              {
+                "d": "unterrichtsplanung/go-teach",
+                "prefLabels": [
+                  {
+                    "value": "Go & Teach",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/go-teach"
+              },
+              {
+                "d": "unterrichtsplanung/unterrichtseinheit-und-sequenz",
+                "prefLabels": [
+                  {
+                    "value": "Unterrichtseinheit und -sequenz",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/unterrichtseinheit-und-sequenz"
+              },
+              {
+                "d": "unterrichtsplanung/projekt",
+                "prefLabels": [
+                  {
+                    "value": "Projekt",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/unterrichtsplanung/projekt"
+              }
+            ]
+          },
+          {
+            "d": "arbeitsblatt",
+            "prefLabels": [
+              {
+                "value": "Arbeitsblatt",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/arbeitsblatt"
+          },
+          {
+            "d": "textbaustein-zum-wiederverwenden",
+            "prefLabels": [
+              {
+                "value": "Textbaustein zum Wiederverwenden",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden",
+            "children": [
+              {
+                "d": "textbaustein-zum-wiederverwenden/anforderungssituation",
+                "prefLabels": [
+                  {
+                    "value": "Anforderungssituation",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/anforderungssituation"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/arbeits-rechercheauftrag",
+                "prefLabels": [
+                  {
+                    "value": "Arbeits-/Rechercheauftrag",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/arbeits-rechercheauftrag"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/darstellung-sachverhalt",
+                "prefLabels": [
+                  {
+                    "value": "Darstellung Sachverhalt",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/darstellung-sachverhalt"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/definition",
+                "prefLabels": [
+                  {
+                    "value": "Definition",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/definition"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/merksatz",
+                "prefLabels": [
+                  {
+                    "value": "Merksatz",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/merksatz"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/fakt",
+                "prefLabels": [
+                  {
+                    "value": "Fakt",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/fakt"
+              },
+              {
+                "d": "textbaustein-zum-wiederverwenden/beispiel",
+                "prefLabels": [
+                  {
+                    "value": "Beispiel",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/textbaustein-zum-wiederverwenden/beispiel"
+              }
+            ]
+          },
+          {
+            "d": "biblische-geschichte",
+            "prefLabels": [
+              {
+                "value": "Biblische Geschichte",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/biblische-geschichte"
+          },
+          {
+            "d": "quelle",
+            "prefLabels": [
+              {
+                "value": "Quelle",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/quelle"
+          },
+          {
+            "d": "erzahlung-geschichte",
+            "prefLabels": [
+              {
+                "value": "Erzählung / Geschichte",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/erzahlung-geschichte"
+          },
+          {
+            "d": "bebilderte-geschichte",
+            "prefLabels": [
+              {
+                "value": "bebilderte Geschichte",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/bebilderte-geschichte"
+          },
+          {
+            "d": "liedtext-musiknoten",
+            "prefLabels": [
+              {
+                "value": "Liedtext/Musiknoten",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/liedtext-musiknoten"
+          },
+          {
+            "d": "audio",
+            "prefLabels": [
+              {
+                "value": "Audio",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/audio",
+            "children": [
+              {
+                "d": "audio/erklar-audio",
+                "prefLabels": [
+                  {
+                    "value": "Erklär-Audio",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/erklar-audio"
+              },
+              {
+                "d": "audio/sprach-und-lernaudio",
+                "prefLabels": [
+                  {
+                    "value": "Sprach- und Lernaudio",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/sprach-und-lernaudio"
+              },
+              {
+                "d": "audio/radio-podcastfolge-und-interview",
+                "prefLabels": [
+                  {
+                    "value": "Radio, Podcastfolge und Interview",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/radio-podcastfolge-und-interview"
+              },
+              {
+                "d": "audio/klang-und-tonaufnahme",
+                "prefLabels": [
+                  {
+                    "value": "Klang und Tonaufnahme",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/klang-und-tonaufnahme"
+              },
+              {
+                "d": "audio/musik",
+                "prefLabels": [
+                  {
+                    "value": "Musik",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/musik"
+              },
+              {
+                "d": "audio/vortrag-audio-aufzeichnung-lesung",
+                "prefLabels": [
+                  {
+                    "value": "Vortrag (Audio-Aufzeichnung / Lesung)",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/vortrag-audio-aufzeichnung-lesung"
+              },
+              {
+                "d": "audio/horverstehen",
+                "prefLabels": [
+                  {
+                    "value": "Hörverstehen",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/audio/horverstehen"
+              }
+            ]
+          },
+          {
+            "d": "bild",
+            "prefLabels": [
+              {
+                "value": "Bild",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/bild",
+            "children": [
+              {
+                "d": "bild/veranschaulichung-schaubild-tafelbild",
+                "prefLabels": [
+                  {
+                    "value": "Veranschaulichung, Schaubild, Tafelbild",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/veranschaulichung-schaubild-tafelbild"
+              },
+              {
+                "d": "bild/mal-und-bastelvorlage",
+                "prefLabels": [
+                  {
+                    "value": "Mal- und Bastelvorlage",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/mal-und-bastelvorlage"
+              },
+              {
+                "d": "bild/foto",
+                "prefLabels": [
+                  {
+                    "value": "Foto",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/foto"
+              },
+              {
+                "d": "bild/clipart-pictogramm-icon",
+                "prefLabels": [
+                  {
+                    "value": "Clipart, Pictogramm, Icon",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/clipart-pictogramm-icon"
+              },
+              {
+                "d": "bild/cartoon-comic",
+                "prefLabels": [
+                  {
+                    "value": "Cartoon, Comic",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/cartoon-comic"
+              },
+              {
+                "d": "bild/karte",
+                "prefLabels": [
+                  {
+                    "value": "Karte",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/karte"
+              },
+              {
+                "d": "bild/poster-und-plakat",
+                "prefLabels": [
+                  {
+                    "value": "Poster und Plakat",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/poster-und-plakat"
+              },
+              {
+                "d": "bild/gemalde-kunstwerke-und-zeichnungen",
+                "prefLabels": [
+                  {
+                    "value": "Gemälde, Kunstwerke und Zeichnungen",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/gemalde-kunstwerke-und-zeichnungen"
+              },
+              {
+                "d": "bild/graph-diagramm-und-charts",
+                "prefLabels": [
+                  {
+                    "value": "Graph, Diagramm und Charts",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/bild/graph-diagramm-und-charts"
+              }
+            ]
+          },
+          {
+            "d": "video",
+            "prefLabels": [
+              {
+                "value": "Video",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/video",
+            "children": [
+              {
+                "d": "video/kurzfilm",
+                "prefLabels": [
+                  {
+                    "value": "Kurzfilm",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/kurzfilm"
+              },
+              {
+                "d": "video/film",
+                "prefLabels": [
+                  {
+                    "value": "Film",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/film"
+              },
+              {
+                "d": "video/lern-und-ubungsvideo",
+                "prefLabels": [
+                  {
+                    "value": "Lern- und Übungsvideo",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/lern-und-ubungsvideo"
+              },
+              {
+                "d": "video/erklarvideo-und-gefilmtes-experiment",
+                "prefLabels": [
+                  {
+                    "value": "Erklärvideo und gefilmtes Experiment",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/erklarvideo-und-gefilmtes-experiment"
+              },
+              {
+                "d": "video/vortrags-und-unterrichtsaufzeichnung",
+                "prefLabels": [
+                  {
+                    "value": "Vortrags- und Unterrichtsaufzeichnung",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/video/vortrags-und-unterrichtsaufzeichnung"
+              }
+            ]
+          },
+          {
+            "d": "interaktives-medium",
+            "prefLabels": [
+              {
+                "value": "Interaktives Medium",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium",
+            "children": [
+              {
+                "d": "interaktives-medium/lernpfad",
+                "prefLabels": [
+                  {
+                    "value": "Lernpfad",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/lernpfad"
+              },
+              {
+                "d": "interaktives-medium/adaptives-lernangebot",
+                "prefLabels": [
+                  {
+                    "value": "Adaptives Lernangebot",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/adaptives-lernangebot"
+              },
+              {
+                "d": "interaktives-medium/simulation",
+                "prefLabels": [
+                  {
+                    "value": "Simulation",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/simulation"
+              },
+              {
+                "d": "interaktives-medium/virtual-reality",
+                "prefLabels": [
+                  {
+                    "value": "Virtual Reality",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/virtual-reality"
+              },
+              {
+                "d": "interaktives-medium/augmented-reality",
+                "prefLabels": [
+                  {
+                    "value": "Augmented Reality",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/augmented-reality"
+              },
+              {
+                "d": "interaktives-medium/webseite",
+                "prefLabels": [
+                  {
+                    "value": "Webseite",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/webseite"
+              },
+              {
+                "d": "interaktives-medium/wiki",
+                "prefLabels": [
+                  {
+                    "value": "Wiki",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/wiki"
+              },
+              {
+                "d": "interaktives-medium/game",
+                "prefLabels": [
+                  {
+                    "value": "Game",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/interaktives-medium/game"
+              }
+            ]
+          },
+          {
+            "d": "spiel",
+            "prefLabels": [
+              {
+                "value": "Spiel",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel",
+            "children": [
+              {
+                "d": "spiel/aufwarm-kennenlernspiel",
+                "prefLabels": [
+                  {
+                    "value": "Aufwärm-/Kennenlernspiel",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel/aufwarm-kennenlernspiel"
+              },
+              {
+                "d": "spiel/lernspiel-spielanleitung",
+                "prefLabels": [
+                  {
+                    "value": "Lernspiel / Spielanleitung",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel/lernspiel-spielanleitung"
+              },
+              {
+                "d": "spiel/rollenspiel",
+                "prefLabels": [
+                  {
+                    "value": "Rollenspiel",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/spiel/rollenspiel"
+              }
+            ]
+          },
+          {
+            "d": "stationenlernen",
+            "prefLabels": [
+              {
+                "value": "Stationenlernen",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/stationenlernen"
+          },
+          {
+            "d": "ubung-lernkontrolle",
+            "prefLabels": [
+              {
+                "value": "Übung, Lernkontrolle",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle",
+            "children": [
+              {
+                "d": "ubung-lernkontrolle/losungs-beispiel-und-erwartungshorizont",
+                "prefLabels": [
+                  {
+                    "value": "Lösungs(beispiel) und Erwartungshorizont",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/losungs-beispiel-und-erwartungshorizont"
+              },
+              {
+                "d": "ubung-lernkontrolle/selbsttest-aufgabe",
+                "prefLabels": [
+                  {
+                    "value": "Selbsttest-Aufgabe",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/selbsttest-aufgabe"
+              },
+              {
+                "d": "ubung-lernkontrolle/klausur-klassenarbeit-test",
+                "prefLabels": [
+                  {
+                    "value": "Klausur, Klassenarbeit, Test",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/klausur-klassenarbeit-test"
+              },
+              {
+                "d": "ubung-lernkontrolle/checkliste",
+                "prefLabels": [
+                  {
+                    "value": "Checkliste",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#lrt/ubung-lernkontrolle/checkliste"
+              }
+            ]
+          },
+          {
+            "d": "evaluationsbogen",
+            "prefLabels": [
+              {
+                "value": "Evaluationsbogen",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/evaluationsbogen"
+          },
+          {
+            "d": "fragebogen-und-umfrage",
+            "prefLabels": [
+              {
+                "value": "Fragebogen und Umfrage",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/fragebogen-und-umfrage"
+          },
+          {
+            "d": "nachschlagewerk-lexikon-lexikonartikel",
+            "prefLabels": [
+              {
+                "value": "Nachschlagewerk, Lexikon, Lexikonartikel",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/nachschlagewerk-lexikon-lexikonartikel"
+          },
+          {
+            "d": "prasentation",
+            "prefLabels": [
+              {
+                "value": "Präsentation",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/prasentation"
+          },
+          {
+            "d": "lehrbuch",
+            "prefLabels": [
+              {
+                "value": "Lehrbuch",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/lehrbuch"
+          },
+          {
+            "d": "sachinformation-grundlagentext",
+            "prefLabels": [
+              {
+                "value": "Sachinformation/Grundlagentext",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#lrt/sachinformation-grundlagentext"
+          }
+        ]
+      }
+    },
+    {
+      "d": "ekw-keywords",
+      "source": {
+        "type": "inline",
+        "prefLabels": [
+          {
+            "value": "Schlagworte (EKKW)",
+            "lang": "de"
+          },
+          {
+            "value": "Keywords (EKKW)",
+            "lang": "en"
+          }
+        ],
+        "descriptions": [
+          {
+            "value": "EKKW-spezifische Schlagwortvorschläge für religionspädagogische Lerninhalte. Mirror of EKW_KEYWORD_TREE in src/lib/data/ekwKeywords.js — published as a NIP-VOCAB scheme so external tools can discover the canonical suggestion set. The form input itself remains free-text + JS-typeahead per design Q3a/Q4a.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "gott",
+            "prefLabels": [
+              {
+                "value": "Gott",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/gott",
+            "children": [
+              {
+                "d": "gott/gottesbilder",
+                "prefLabels": [
+                  {
+                    "value": "Gottesbilder",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/gott/gottesbilder"
+              },
+              {
+                "d": "gott/glauben-zweifel",
+                "prefLabels": [
+                  {
+                    "value": "Glauben / Zweifel",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/gott/glauben-zweifel"
+              },
+              {
+                "d": "gott/trinitat",
+                "prefLabels": [
+                  {
+                    "value": "Trinität",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/gott/trinitat"
+              }
+            ]
+          },
+          {
+            "d": "mensch-gemeinschaft-handeln",
+            "prefLabels": [
+              {
+                "value": "Mensch, Gemeinschaft, Handeln",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln",
+            "children": [
+              {
+                "d": "mensch-gemeinschaft-handeln/zehn-gebote",
+                "prefLabels": [
+                  {
+                    "value": "Zehn Gebote",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln/zehn-gebote"
+              },
+              {
+                "d": "mensch-gemeinschaft-handeln/gerechtigkeit",
+                "prefLabels": [
+                  {
+                    "value": "Gerechtigkeit",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln/gerechtigkeit"
+              },
+              {
+                "d": "mensch-gemeinschaft-handeln/frieden",
+                "prefLabels": [
+                  {
+                    "value": "Frieden",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln/frieden"
+              },
+              {
+                "d": "mensch-gemeinschaft-handeln/schopfungsbewahrung",
+                "prefLabels": [
+                  {
+                    "value": "Schöpfungsbewahrung",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln/schopfungsbewahrung"
+              },
+              {
+                "d": "mensch-gemeinschaft-handeln/menschenwurde",
+                "prefLabels": [
+                  {
+                    "value": "Menschenwürde",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln/menschenwurde"
+              },
+              {
+                "d": "mensch-gemeinschaft-handeln/existenzielle-fragen-grundfragen-des-lebens",
+                "prefLabels": [
+                  {
+                    "value": "Existenzielle Fragen / Grundfragen des Lebens",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln/existenzielle-fragen-grundfragen-des-lebens"
+              },
+              {
+                "d": "mensch-gemeinschaft-handeln/diakonie",
+                "prefLabels": [
+                  {
+                    "value": "Diakonie",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/mensch-gemeinschaft-handeln/diakonie"
+              }
+            ]
+          },
+          {
+            "d": "schopfung",
+            "prefLabels": [
+              {
+                "value": "Schöpfung",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/schopfung"
+          },
+          {
+            "d": "jesus-christus",
+            "prefLabels": [
+              {
+                "value": "Jesus Christus",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/jesus-christus",
+            "children": [
+              {
+                "d": "jesus-christus/geschichtlicher-jesus-leben-und-umwelt-jesu",
+                "prefLabels": [
+                  {
+                    "value": "Geschichtlicher Jesus / Leben und Umwelt Jesu",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/jesus-christus/geschichtlicher-jesus-leben-und-umwelt-jesu"
+              },
+              {
+                "d": "jesus-christus/geglaubter-christus-hoheitsbezeichnungen",
+                "prefLabels": [
+                  {
+                    "value": "Geglaubter Christus / Hoheitsbezeichnungen",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/jesus-christus/geglaubter-christus-hoheitsbezeichnungen"
+              },
+              {
+                "d": "jesus-christus/botschaft-und-handeln-jesu",
+                "prefLabels": [
+                  {
+                    "value": "Botschaft und Handeln Jesu",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/jesus-christus/botschaft-und-handeln-jesu"
+              },
+              {
+                "d": "jesus-christus/passion",
+                "prefLabels": [
+                  {
+                    "value": "Passion",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/jesus-christus/passion"
+              },
+              {
+                "d": "jesus-christus/auferstehung",
+                "prefLabels": [
+                  {
+                    "value": "Auferstehung",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/jesus-christus/auferstehung"
+              },
+              {
+                "d": "jesus-christus/nachfolge",
+                "prefLabels": [
+                  {
+                    "value": "Nachfolge",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/jesus-christus/nachfolge"
+              }
+            ]
+          },
+          {
+            "d": "kirche-gemeinde",
+            "prefLabels": [
+              {
+                "value": "Kirche / Gemeinde",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/kirche-gemeinde",
+            "children": [
+              {
+                "d": "kirche-gemeinde/kirchenraume",
+                "prefLabels": [
+                  {
+                    "value": "Kirchenräume",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirche-gemeinde/kirchenraume"
+              },
+              {
+                "d": "kirche-gemeinde/gemeindeleben",
+                "prefLabels": [
+                  {
+                    "value": "Gemeindeleben",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirche-gemeinde/gemeindeleben"
+              },
+              {
+                "d": "kirche-gemeinde/amter",
+                "prefLabels": [
+                  {
+                    "value": "Ämter",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirche-gemeinde/amter"
+              },
+              {
+                "d": "kirche-gemeinde/gottesdienst",
+                "prefLabels": [
+                  {
+                    "value": "Gottesdienst",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirche-gemeinde/gottesdienst"
+              },
+              {
+                "d": "kirche-gemeinde/abendmahl",
+                "prefLabels": [
+                  {
+                    "value": "Abendmahl",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirche-gemeinde/abendmahl"
+              },
+              {
+                "d": "kirche-gemeinde/konfessionen",
+                "prefLabels": [
+                  {
+                    "value": "Konfessionen",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirche-gemeinde/konfessionen"
+              }
+            ]
+          },
+          {
+            "d": "kirchenjahr-feste",
+            "prefLabels": [
+              {
+                "value": "Kirchenjahr / Feste",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste",
+            "children": [
+              {
+                "d": "kirchenjahr-feste/abschied-silvester",
+                "prefLabels": [
+                  {
+                    "value": "Abschied / Silvester",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/abschied-silvester"
+              },
+              {
+                "d": "kirchenjahr-feste/neubeginn-neujahr",
+                "prefLabels": [
+                  {
+                    "value": "Neubeginn / Neujahr",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/neubeginn-neujahr"
+              },
+              {
+                "d": "kirchenjahr-feste/dreikonige",
+                "prefLabels": [
+                  {
+                    "value": "Dreikönige",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/dreikonige"
+              },
+              {
+                "d": "kirchenjahr-feste/palmsonntag",
+                "prefLabels": [
+                  {
+                    "value": "Palmsonntag",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/palmsonntag"
+              },
+              {
+                "d": "kirchenjahr-feste/grundonnerstag",
+                "prefLabels": [
+                  {
+                    "value": "Gründonnerstag",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/grundonnerstag"
+              },
+              {
+                "d": "kirchenjahr-feste/karfreitag",
+                "prefLabels": [
+                  {
+                    "value": "Karfreitag",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/karfreitag"
+              },
+              {
+                "d": "kirchenjahr-feste/ostern",
+                "prefLabels": [
+                  {
+                    "value": "Ostern",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/ostern"
+              },
+              {
+                "d": "kirchenjahr-feste/himmelfahrt",
+                "prefLabels": [
+                  {
+                    "value": "Himmelfahrt",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/himmelfahrt"
+              },
+              {
+                "d": "kirchenjahr-feste/pfingsten",
+                "prefLabels": [
+                  {
+                    "value": "Pfingsten",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/pfingsten"
+              },
+              {
+                "d": "kirchenjahr-feste/fronleichnam",
+                "prefLabels": [
+                  {
+                    "value": "Fronleichnam",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/fronleichnam"
+              },
+              {
+                "d": "kirchenjahr-feste/erntedank",
+                "prefLabels": [
+                  {
+                    "value": "Erntedank",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/erntedank"
+              },
+              {
+                "d": "kirchenjahr-feste/advent",
+                "prefLabels": [
+                  {
+                    "value": "Advent",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/advent"
+              },
+              {
+                "d": "kirchenjahr-feste/weihnachten",
+                "prefLabels": [
+                  {
+                    "value": "Weihnachten",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/weihnachten"
+              },
+              {
+                "d": "kirchenjahr-feste/ewigkeitssonntag-totensonntag",
+                "prefLabels": [
+                  {
+                    "value": "Ewigkeitssonntag / Totensonntag",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/kirchenjahr-feste/ewigkeitssonntag-totensonntag"
+              }
+            ]
+          },
+          {
+            "d": "ausdrucksformen-des-glaubens",
+            "prefLabels": [
+              {
+                "value": "Ausdrucksformen des Glaubens",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens",
+            "children": [
+              {
+                "d": "ausdrucksformen-des-glaubens/gebet",
+                "prefLabels": [
+                  {
+                    "value": "Gebet",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/gebet"
+              },
+              {
+                "d": "ausdrucksformen-des-glaubens/meditation",
+                "prefLabels": [
+                  {
+                    "value": "Meditation",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/meditation"
+              },
+              {
+                "d": "ausdrucksformen-des-glaubens/taufe",
+                "prefLabels": [
+                  {
+                    "value": "Taufe",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/taufe"
+              },
+              {
+                "d": "ausdrucksformen-des-glaubens/abendmahl",
+                "prefLabels": [
+                  {
+                    "value": "Abendmahl",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/abendmahl"
+              },
+              {
+                "d": "ausdrucksformen-des-glaubens/beichte",
+                "prefLabels": [
+                  {
+                    "value": "Beichte",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/beichte"
+              },
+              {
+                "d": "ausdrucksformen-des-glaubens/gottesdienst",
+                "prefLabels": [
+                  {
+                    "value": "Gottesdienst",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/gottesdienst"
+              },
+              {
+                "d": "ausdrucksformen-des-glaubens/kasualgottesdienst",
+                "prefLabels": [
+                  {
+                    "value": "Kasualgottesdienst",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/kasualgottesdienst"
+              },
+              {
+                "d": "ausdrucksformen-des-glaubens/sakramente-allgemein",
+                "prefLabels": [
+                  {
+                    "value": "Sakramente allgemein",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/ausdrucksformen-des-glaubens/sakramente-allgemein"
+              }
+            ]
+          },
+          {
+            "d": "bibel",
+            "prefLabels": [
+              {
+                "value": "Bibel",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/bibel",
+            "children": [
+              {
+                "d": "bibel/bibel-als-text-sammlung",
+                "prefLabels": [
+                  {
+                    "value": "Bibel als Text(sammlung)",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/bibel/bibel-als-text-sammlung"
+              },
+              {
+                "d": "bibel/bibel-als-glaubenszeugnis",
+                "prefLabels": [
+                  {
+                    "value": "Bibel als Glaubenszeugnis",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/bibel/bibel-als-glaubenszeugnis"
+              },
+              {
+                "d": "bibel/konkrete-biblische-geschichten",
+                "prefLabels": [
+                  {
+                    "value": "Konkrete biblische Geschichten",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/bibel/konkrete-biblische-geschichten"
+              },
+              {
+                "d": "bibel/religiose-symbole",
+                "prefLabels": [
+                  {
+                    "value": "Religiöse Symbole",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/bibel/religiose-symbole"
+              }
+            ]
+          },
+          {
+            "d": "religionen-weltanschauungen",
+            "prefLabels": [
+              {
+                "value": "Religionen / Weltanschauungen",
+                "lang": "de"
+              }
+            ],
+            "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen",
+            "children": [
+              {
+                "d": "religionen-weltanschauungen/christentum",
+                "prefLabels": [
+                  {
+                    "value": "Christentum",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/christentum"
+              },
+              {
+                "d": "religionen-weltanschauungen/judentum",
+                "prefLabels": [
+                  {
+                    "value": "Judentum",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/judentum"
+              },
+              {
+                "d": "religionen-weltanschauungen/islam",
+                "prefLabels": [
+                  {
+                    "value": "Islam",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/islam"
+              },
+              {
+                "d": "religionen-weltanschauungen/buddhismus",
+                "prefLabels": [
+                  {
+                    "value": "Buddhismus",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/buddhismus"
+              },
+              {
+                "d": "religionen-weltanschauungen/hinduismus",
+                "prefLabels": [
+                  {
+                    "value": "Hinduismus",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/hinduismus"
+              },
+              {
+                "d": "religionen-weltanschauungen/daoismus",
+                "prefLabels": [
+                  {
+                    "value": "Daoismus",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/daoismus"
+              },
+              {
+                "d": "religionen-weltanschauungen/baha-i",
+                "prefLabels": [
+                  {
+                    "value": "Bahá'í",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/baha-i"
+              },
+              {
+                "d": "religionen-weltanschauungen/indigene-religionen",
+                "prefLabels": [
+                  {
+                    "value": "indigene Religionen",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/indigene-religionen"
+              },
+              {
+                "d": "religionen-weltanschauungen/sakulare-weltanschauungen",
+                "prefLabels": [
+                  {
+                    "value": "säkulare Weltanschauungen",
+                    "lang": "de"
+                  }
+                ],
+                "externalUri": "https://edufeed.org/ns/ekw#keyword/religionen-weltanschauungen/sakulare-weltanschauungen"
+              }
+            ]
+          }
         ]
       }
     }

@@ -105,7 +105,12 @@
 
   // Load vocabulary on mount — skipped when data is supplied via props.
   onMount(async () => {
-    if (propConcepts !== undefined) return;
+    if (propConcepts !== undefined) {
+      // Caller supplies the vocabulary — clear the internal loading flag so
+      // the panel renders options instead of staying on the loading spinner.
+      internalIsLoading = false;
+      return;
+    }
     if (!vocabularyKey) {
       internalIsLoading = false;
       return;
@@ -359,7 +364,7 @@
         <!-- Selected items as badges -->
         <div class="flex flex-wrap gap-1.5">
           {#each selected as item (item.id)}
-            <span class="badge gap-1 py-2 badge-primary">
+            <span class="badge gap-1 py-2 badge-primary" data-skos-chip-id={item.id}>
               {item.label}
               <span
                 role="button"
