@@ -86,7 +86,14 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_view_file: () => 'View',
   amb_resource_download_file: () => 'Download',
   amb_resource_external_references: () => 'External References',
-  amb_resource_external_reference: () => 'External Reference'
+  amb_resource_external_reference: () => 'External Reference',
+  amb_resource_ekw_metadata: () => 'EKKW-Metadaten',
+  amb_resource_ekw_grade_level: () => 'Klassenstufe',
+  amb_resource_ekw_school_type: () => 'Schulart',
+  amb_resource_ekw_didactic_concept: () => 'Didaktisches Konzept',
+  amb_resource_ekw_method: () => 'Methode',
+  amb_resource_ekw_method_other: () => 'Methode (Freitext)',
+  amb_resource_ekw_bible_reference: () => 'Bibelstelle'
 }));
 vi.mock('$lib/paraglide/runtime.js', () => ({
   getLocale: () => 'en'
@@ -279,5 +286,86 @@ describe('AMBResourceView', () => {
       const href = link.getAttribute('href');
       expect(href).toBe('https://example.com/file.pdf');
     }
+  });
+});
+
+describe('EKKW-Metadaten section', () => {
+  /** @type {any} */
+  const minimalAmbResource = {
+    pubkey: '0'.repeat(64),
+    identifier: 'https://example.org/ekw-lesson',
+    name: 'EKKW Lesson',
+    description: 'Beschreibung',
+    image: '',
+    publishedDate: 1_700_000_000,
+    languages: ['de'],
+    isFree: true,
+    license: null,
+    keywords: [],
+    tags: [],
+    rawEvent: null,
+    kind: 30142,
+    creators: [],
+    encodings: [],
+    externalUrls: [],
+    hasPart: [],
+    isPartOf: [],
+    creatorNames: []
+  };
+
+  function fixtureEvent(/** @type {string[][]} */ ekwTags) {
+    return {
+      ...minimalAmbResource,
+      rawEvent: {
+        id: 'eventid',
+        pubkey: '0'.repeat(64),
+        kind: 30142,
+        tags: ekwTags,
+        content: '',
+        sig: 'sig'
+      },
+      event: {
+        id: 'eventid',
+        pubkey: '0'.repeat(64),
+        kind: 30142,
+        tags: ekwTags,
+        content: '',
+        sig: 'sig'
+      }
+    };
+  }
+
+  it('renders the EKKW-Metadaten section when EKW tags are present', () => {
+    const ekwTags = [
+      ['ekw:gradeLevel:id', 'naddr:grade5'],
+      ['ekw:gradeLevel:prefLabel:de', 'Klasse 5'],
+      ['ekw:gradeLevel:type', 'Concept'],
+      ['ekw:schoolType:id', 'naddr:gym'],
+      ['ekw:schoolType:prefLabel:de', 'Gymnasium'],
+      ['ekw:schoolType:type', 'Concept'],
+      ['ekw:method:id', 'naddr:plenum'],
+      ['ekw:method:prefLabel:de', 'Plenum'],
+      ['ekw:method:type', 'Concept'],
+      ['ekw:methodOther', 'Stuhlkreis'],
+      ['ekw:bibleReference', 'Mt 5,1-12']
+    ];
+    const resource = fixtureEvent(ekwTags);
+    const { getByText } = render(AMBResourceView, {
+      props: { event: resource.event, resource }
+    });
+    expect(getByText('EKKW-Metadaten')).toBeTruthy();
+    expect(getByText('Klasse 5')).toBeTruthy();
+    expect(getByText('Gymnasium')).toBeTruthy();
+    expect(getByText('Plenum')).toBeTruthy();
+    expect(getByText('Stuhlkreis')).toBeTruthy();
+    expect(getByText('Mt 5,1-12')).toBeTruthy();
+  });
+
+  it('does not render the EKKW-Metadaten section when no EKW tags are present', () => {
+    const resource = fixtureEvent([]);
+    const { queryByText } = render(AMBResourceView, {
+      props: { event: resource.event, resource }
+    });
+    expect(queryByText('EKKW-Metadaten')).toBeNull();
   });
 });

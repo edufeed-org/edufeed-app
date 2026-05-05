@@ -24,6 +24,7 @@
     getLabelsWithFallback,
     getLanguageDisplayName
   } from '$lib/helpers/educational/ambTransform.js';
+  import { parseEkwTagsToFormData } from '$lib/helpers/educational/parseEkwTagsToFormData.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { buildAMBJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
   import { page } from '$app/stores';
@@ -192,6 +193,18 @@
     localizedLearningResourceTypes.length > 0 ||
       localizedEducationalLevels.length > 0 ||
       localizedSubjects.length > 0
+  );
+
+  // EKW-specific metadata parsed from raw event tags
+  const ekwFields = $derived(resource?.rawEvent ? parseEkwTagsToFormData(resource.rawEvent) : null);
+  const hasEkwMetadata = $derived(
+    !!ekwFields &&
+      (ekwFields.gradeLevels.length > 0 ||
+        ekwFields.schoolTypes.length > 0 ||
+        ekwFields.didacticConcepts.length > 0 ||
+        ekwFields.methods.length > 0 ||
+        ekwFields.methodOther.trim().length > 0 ||
+        ekwFields.bibleReferences.length > 0)
   );
 
   // Published date
@@ -439,6 +452,89 @@
             {resource.isFree ? m.amb_resource_free() : m.amb_resource_paid()}
           </span>
         </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- EKKW METADATA -->
+  {#if hasEkwMetadata && ekwFields}
+    <div class="mb-8">
+      <h2 class="mb-4 text-2xl font-bold text-base-content">
+        {m.amb_resource_ekw_metadata()}
+      </h2>
+
+      <div class="grid gap-6 md:grid-cols-2">
+        {#if ekwFields.gradeLevelLabels.length > 0}
+          <div class="rounded-lg bg-base-200 p-4">
+            <h3 class="mb-2 text-sm font-semibold text-base-content/70">
+              {m.amb_resource_ekw_grade_level()}
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {#each ekwFields.gradeLevelLabels as item (item.id)}
+                <span class="badge badge-secondary">{item.label}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if ekwFields.schoolTypeLabels.length > 0}
+          <div class="rounded-lg bg-base-200 p-4">
+            <h3 class="mb-2 text-sm font-semibold text-base-content/70">
+              {m.amb_resource_ekw_school_type()}
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {#each ekwFields.schoolTypeLabels as item (item.id)}
+                <span class="badge badge-secondary">{item.label}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if ekwFields.didacticConceptLabels.length > 0}
+          <div class="rounded-lg bg-base-200 p-4">
+            <h3 class="mb-2 text-sm font-semibold text-base-content/70">
+              {m.amb_resource_ekw_didactic_concept()}
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {#each ekwFields.didacticConceptLabels as item (item.id)}
+                <span class="badge badge-outline">{item.label}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if ekwFields.methodLabels.length > 0 || ekwFields.methodOther.trim().length > 0}
+          <div class="rounded-lg bg-base-200 p-4">
+            <h3 class="mb-2 text-sm font-semibold text-base-content/70">
+              {m.amb_resource_ekw_method()}
+            </h3>
+            {#if ekwFields.methodLabels.length > 0}
+              <div class="flex flex-wrap gap-2">
+                {#each ekwFields.methodLabels as item (item.id)}
+                  <span class="badge badge-outline">{item.label}</span>
+                {/each}
+              </div>
+            {/if}
+            {#if ekwFields.methodOther.trim().length > 0}
+              <p class="mt-2 text-sm whitespace-pre-line text-base-content/80">
+                {ekwFields.methodOther}
+              </p>
+            {/if}
+          </div>
+        {/if}
+
+        {#if ekwFields.bibleReferences.length > 0}
+          <div class="rounded-lg bg-base-200 p-4">
+            <h3 class="mb-2 text-sm font-semibold text-base-content/70">
+              {m.amb_resource_ekw_bible_reference()}
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              {#each ekwFields.bibleReferences as ref, i (ref + '|' + i)}
+                <span class="badge badge-ghost font-mono">{ref}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
   {/if}
