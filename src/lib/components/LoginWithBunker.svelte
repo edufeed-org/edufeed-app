@@ -20,6 +20,9 @@
 
   // Shared state
   let errorMessage = $state('');
+  let infoMessage = $state('');
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let closeTimer;
   /** @type {'idle' | 'connecting' | 'awaiting_connection' | 'awaiting_approval' | 'connected' | 'error'} */
   let status = $state('idle');
   /** @type {string | null} */
@@ -100,8 +103,13 @@
       }
       qrSigner = null;
     }
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = undefined;
+    }
     status = 'idle';
     errorMessage = '';
+    infoMessage = '';
     authUrl = null;
     nostrConnectUri = '';
     bunkerUrl = '';
@@ -144,12 +152,23 @@
       const pubkey = await qrSigner.getPublicKey();
       status = 'connected';
 
-      registerBunkerAccount(manager, pubkey, qrSigner);
+      const { alreadyExisted } = registerBunkerAccount(manager, pubkey, qrSigner);
       qrSigner = null;
       nostrConnectUri = '';
 
+      if (alreadyExisted) {
+        infoMessage = m.auth_login_bunker_already_logged_in();
+      }
+
       if (onAccountCreated) {
         onAccountCreated();
+      }
+
+      if (alreadyExisted) {
+        closeTimer = setTimeout(() => {
+          const dialog = /** @type {HTMLDialogElement | null} */ (document.getElementById(modalId));
+          dialog?.close();
+        }, 1200);
       }
     } catch (error) {
       if (isAborting || /** @type {Error} */ (error).name === 'AbortError') {
@@ -203,11 +222,22 @@
       });
 
       status = 'connected';
-      registerBunkerAccount(manager, result.pubkey, result.signer);
+      const { alreadyExisted } = registerBunkerAccount(manager, result.pubkey, result.signer);
       bunkerUrl = '';
+
+      if (alreadyExisted) {
+        infoMessage = m.auth_login_bunker_already_logged_in();
+      }
 
       if (onAccountCreated) {
         onAccountCreated();
+      }
+
+      if (alreadyExisted) {
+        closeTimer = setTimeout(() => {
+          const dialog = /** @type {HTMLDialogElement | null} */ (document.getElementById(modalId));
+          dialog?.close();
+        }, 1200);
       }
     } catch (error) {
       console.error('Bunker connection error:', error);
@@ -353,6 +383,12 @@
           </div>
         {/if}
 
+        {#if infoMessage}
+          <div class="alert alert-info">
+            <span>{infoMessage}</span>
+          </div>
+        {/if}
+
         {#if errorMessage}
           <div class="alert alert-error">
             <span>{errorMessage}</span>
@@ -413,6 +449,12 @@
                 {m.auth_bunker_auth_open()}
               </button>
             </div>
+          </div>
+        {/if}
+
+        {#if infoMessage}
+          <div class="alert alert-info">
+            <span>{infoMessage}</span>
           </div>
         {/if}
 
