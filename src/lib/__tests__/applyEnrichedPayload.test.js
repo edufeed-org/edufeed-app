@@ -22,7 +22,6 @@ function makeFormData(overrides = {}) {
     license: 'https://creativecommons.org/licenses/by/4.0/',
     isAccessibleForFree: true,
     // EKW-only paired shape: ID arrays + label arrays
-    ekwFachrichtung: [],
     gradeLevels: [],
     gradeLevelLabels: [],
     schoolTypes: [],
@@ -221,7 +220,7 @@ describe('applyEnrichedPayload', () => {
     expect(formData.name).toBe('');
   });
 
-  it('applies ekwFachrichtung as {id,label}[] when empty', () => {
+  it('does not handle ekwFachrichtung — wizard buckets it into aboutByVocab', () => {
     const formData = makeFormData();
     const result = {
       source: /** @type {const} */ ('llm-enriched'),
@@ -231,8 +230,11 @@ describe('applyEnrichedPayload', () => {
       evidence: {},
       baseline: {}
     };
-    const after = applyEnrichedPayload(formData, result);
-    expect(after.ekwFachrichtung).toEqual([{ id: '39738:abc:evangelisch', label: 'Evangelisch' }]);
+    const after = /** @type {Record<string, any>} */ (applyEnrichedPayload(formData, result));
+    // Fachrichtung is intentionally not on formData after the migration.
+    // The wizard buckets it into its own `aboutByVocab` state, mirroring
+    // the existing about-bucketing pattern.
+    expect(after.ekwFachrichtung).toBeUndefined();
   });
 
   // Wizard pairs IDs (plural) with labels (singular + Labels): the IDs key

@@ -175,7 +175,6 @@
     isAccessibleForFree: true,
 
     // EKW-only (variantId === 'ekw'); ignored for AMB
-    ekwFachrichtung: /** @type {{id: string, label: string}[]} */ ([]),
     gradeLevels: /** @type {string[]} */ ([]),
     gradeLevelLabels: /** @type {{id: string, label: string}[]} */ ([]),
     schoolTypes: /** @type {string[]} */ ([]),
@@ -223,11 +222,13 @@
         break;
       case 'learningResourceType':
       case 'educationalLevels':
-      case 'ekwFachrichtung':
       case 'keywords':
       case 'creators':
         // @ts-ignore - dynamic key
         formData[field] = [];
+        break;
+      case 'ekwFachrichtung':
+        aboutByVocab = { ...aboutByVocab, ekwFachrichtung: [] };
         break;
       case 'gradeLevels':
       case 'schoolTypes':
@@ -270,15 +271,11 @@
   );
   const previewResource = $derived.by(() => {
     if (currentStep < 3) return null;
-    // Merge wizard-internal selections into the formData snapshot so the
-    // preview card sees the full picture:
-    //   • `about` lives in `aboutByVocab` (one bucket per subject vocab),
-    //     not on formData. Flatten so the card can render subject chips.
-    //   • For the EKW variant the equivalent of "Fach" is `ekwFachrichtung`
-    //     — feed that into `about` so the same chip area shows it.
-    const previewAbout = isEkw ? formData.ekwFachrichtung : mergedAbout();
+    // `about` lives in the wizard-internal `aboutByVocab` (one bucket per
+    // subject vocab). Flatten via mergedAbout() so the preview card sees the
+    // full picture; bucket keys include `ekwFachrichtung` for the EKW variant.
     /** @type {any} */
-    const previewFormData = { ...formData, about: previewAbout };
+    const previewFormData = { ...formData, about: mergedAbout() };
     return buildPreviewResource(previewFormData, activePubkey, getLocale());
   });
 
@@ -732,6 +729,38 @@
       });
       formData = out.formData;
       provenance = { ...provenance, ...out.provenance };
+
+      // EKW Fachrichtung lives in aboutByVocab (not formData), so applyEnrichedPayload
+      // can't fill it. Bucket the LLM-emitted Fachrichtung concepts into the
+      // `ekwFachrichtung` slot — they publish as standard AMB `about` tags.
+      const fachPayload =
+        /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
+          /** @type {any} */ (enriched.payload).ekwFachrichtung
+        );
+      if (
+        fachPayload &&
+        fachPayload.length > 0 &&
+        (aboutByVocab.ekwFachrichtung ?? []).length === 0
+      ) {
+        aboutByVocab = {
+          ...aboutByVocab,
+          ekwFachrichtung: fachPayload.map((c) => ({
+            id: c.id,
+            label: c.prefLabel || c.label || c.id
+          }))
+        };
+        const quote = /** @type {Record<string, string>} */ (enriched.evidence ?? {})[
+          'ekwFachrichtung'
+        ];
+        provenance = {
+          ...provenance,
+          ekwFachrichtung:
+            typeof quote === 'string' && quote.length > 0
+              ? { source: 'llm-enriched', evidence: quote }
+              : { source: 'llm-enriched' }
+        };
+      }
+
       // `about` lives in the wizard-internal `aboutByVocab` (not formData),
       // so the helper can't fill it. Bucket the LLM-emitted concepts into
       // the current Bildungsbereich's first subject vocab — same heuristic
@@ -1185,14 +1214,6 @@
       formData[idsKey] = compact.map((c) => c.id);
       formData[labelsKey] = compact;
     };
-  }
-
-  /**
-   * EKW Fachrichtung handler (single `{id, label}[]` array).
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
-   */
-  function handleEkwFachrichtungChange(rich) {
-    formData.ekwFachrichtung = rich.map(toCompactConcept);
   }
 </script>
 
@@ -1732,10 +1753,10 @@
                 <FormConceptPicker
                   field={ekwFachField}
                   multiple={true}
-                  value={formData.ekwFachrichtung.map((c) =>
+                  value={(aboutByVocab.ekwFachrichtung ?? []).map((c) =>
                     toRichConcept(c, ekwFachField.vocab.relay)
                   )}
-                  onchange={handleEkwFachrichtungChange}
+                  onchange={makeAboutHandler('ekwFachrichtung')}
                 />
               </div>
             {/if}
@@ -2154,16 +2175,6 @@
                 </div>
               {/if}
               {#if isEkw}
-                {#if formData.ekwFachrichtung.length > 0}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">
-                      {m.amb_form_summary_ekw_fachrichtung()}
-                    </dt>
-                    <dd class="flex-1">
-                      {formData.ekwFachrichtung.map((c) => c.label || c.id).join(', ')}
-                    </dd>
-                  </div>
-                {/if}
                 {#if formData.gradeLevelLabels.length > 0}
                   <div class="flex">
                     <dt class="w-32 shrink-0 text-base-content/60">

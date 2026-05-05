@@ -141,7 +141,7 @@ describe('validateWizardStep', () => {
       expect(errors).toEqual({ about: 'ERR_SUBJECT' });
     });
 
-    it('does not flag subject for the EKW variant (uses Fachrichtung instead)', () => {
+    it('flags subject for EKW too — Fachrichtung now lives in aboutByVocab and counts', () => {
       const formData = {
         ...emptyFormData(),
         learningResourceType: [{ id: 'x', label: 'X' }]
@@ -150,6 +150,19 @@ describe('validateWizardStep', () => {
         4,
         formData,
         ctx({ isEkw: true, hasSubjectVocab: true, subjectsCount: 0 })
+      );
+      expect(errors).toEqual({ about: 'ERR_SUBJECT' });
+    });
+
+    it('passes EKW step 4 when Fachrichtung is selected (subjectsCount>=1)', () => {
+      const formData = {
+        ...emptyFormData(),
+        learningResourceType: [{ id: 'x', label: 'X' }]
+      };
+      const errors = validateWizardStep(
+        4,
+        formData,
+        ctx({ isEkw: true, hasSubjectVocab: true, subjectsCount: 1 })
       );
       expect(errors).toEqual({});
     });

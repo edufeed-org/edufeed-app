@@ -142,14 +142,11 @@ function applyEnrichedPayloadWithProvenance(formData, result, options = {}) {
     mark('license');
   }
 
-  // EKW-only fields. ekwFachrichtung uses a single {id,label}[] shape; the
-  // paired SKOS arrays (gradeLevels/schoolTypes/didacticConcepts/methods)
-  // store IDs in `<key>` and the full records in `<key>Labels` because the
-  // wizard's EKW UI binds them as a pair (see ResourceFormWizard step 4).
-  if (Array.isArray(payload.ekwFachrichtung) && next.ekwFachrichtung?.length === 0) {
-    next.ekwFachrichtung = toFormConcepts(payload.ekwFachrichtung);
-    mark('ekwFachrichtung');
-  }
+  // Fachrichtung is bucketed into `aboutByVocab` by the wizard's enrichment
+  // handler (see ResourceFormWizard.svelte), not here — it publishes as a
+  // standard AMB `about` tag, identical to subject vocab concepts.
+
+  // EKW-only fields.
   // Wizard naming: IDs key is plural (gradeLevels), labels key drops the
   // trailing 's' (gradeLevelLabels). Map explicitly — `${key}Labels` would
   // produce the wrong key (gradeLevelsLabels) and the wizard would read [].

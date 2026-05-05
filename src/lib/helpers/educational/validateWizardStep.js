@@ -65,7 +65,7 @@ export function validateWizardStep(step, formData, ctx) {
       if (!formData.learningResourceType || formData.learningResourceType.length === 0) {
         errors.learningResourceType = m.resourceType();
       }
-      if (!ctx.isEkw && ctx.hasSubjectVocab && ctx.subjectsCount === 0) {
+      if (ctx.hasSubjectVocab && ctx.subjectsCount === 0) {
         errors.about = m.subject();
       }
       break;
