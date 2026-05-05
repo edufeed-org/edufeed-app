@@ -51,8 +51,10 @@
     ambJsonLdToPrefillEvent,
     ogToFormDataPrefill
   } from '$lib/helpers/educational/ambJsonLdToFormData.js';
-  import { matchKeywordSuggestions } from '$lib/data/ekwKeywords.js';
   import { EKW_NAMESPACE_IRI } from '$lib/helpers/educational/ekwNamespace.js';
+  import { useSchemeConcepts } from '$lib/stores/vocab-store.svelte.js';
+  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { ekwKeywordsFromConcepts } from '$lib/helpers/educational/ekwKeywordsFromConcepts.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -207,6 +209,23 @@
   const didaktischesKonzeptField = $derived(resolveVocabField('didaktischesKonzept'));
   const methodeField = $derived(resolveVocabField('methode'));
   const ekwLrtField = $derived(resolveVocabField('ekwLrt'));
+  const ekwKeywordsField = $derived(resolveVocabField('ekwKeywords'));
+
+  // EKW keyword typeahead: pull the published kind-39738 concepts off the
+  // relay and project them to a flat, German-locale-sorted, dedup'd label
+  // list. Replaces the static `EKW_KEYWORD_SUGGESTIONS` data file — the
+  // suggestion list is now sourced from the same NIP-VOCAB scheme published
+  // by `pnpm run publish:vocabs`.
+  const getEkwKeywordsConcepts = useSchemeConcepts(
+    () => ekwKeywordsField?.vocab?.address,
+    () =>
+      /** @type {string[]} */ (
+        [ekwKeywordsField?.vocab?.relay, ...getAllLookupRelays()].filter(Boolean)
+      )
+  );
+  const ekwKeywordSuggestionList = $derived(
+    ekwKeywordsField ? ekwKeywordsFromConcepts(getEkwKeywordsConcepts()) : []
+  );
 
   // Validation and submission state
   let validationErrors = $state(/** @type {string[]} */ ([]));
@@ -847,9 +866,33 @@
   /** @type {ReturnType<typeof setTimeout> | null} */
   let keywordBlurTimer = null;
 
+  /**
+   * Accent/case-insensitive normalization for the keyword typeahead match.
+   * @param {string} s
+   * @returns {string}
+   */
+  function normalizeKeyword(s) {
+    return s
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
   const keywordSuggestions = $derived.by(() => {
-    if (!isEkw) return [];
-    return matchKeywordSuggestions(keywordInputValue, formData.keywords);
+    if (!isEkw) return /** @type {string[]} */ ([]);
+    const q = normalizeKeyword((keywordInputValue ?? '').trim());
+    if (!q) return /** @type {string[]} */ ([]);
+    const skip = new Set(formData.keywords);
+    /** @type {string[]} */
+    const out = [];
+    for (const candidate of ekwKeywordSuggestionList) {
+      if (skip.has(candidate)) continue;
+      if (normalizeKeyword(candidate).includes(q)) {
+        out.push(candidate);
+        if (out.length >= 8) break;
+      }
+    }
+    return out;
   });
 
   /**
