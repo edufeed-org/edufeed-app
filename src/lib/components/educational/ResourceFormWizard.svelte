@@ -1272,6 +1272,7 @@
             resource={previewResource}
             authorProfile={previewAuthorProfile}
             variant="card"
+            preview={true}
           />
         </div>
       </details>
@@ -2419,6 +2420,7 @@
         resource={previewResource}
         authorProfile={previewAuthorProfile}
         variant="card"
+        preview={true}
       />
     </aside>
   {/if}
