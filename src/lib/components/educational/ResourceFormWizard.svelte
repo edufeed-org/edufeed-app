@@ -54,9 +54,7 @@
   import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
   import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
-  import { decideEnrichment } from '$lib/helpers/educational/decideEnrichment.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import SmartFillBadge from './SmartFillBadge.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
@@ -123,14 +121,17 @@
   // an empty slug (which formDataToAmb.js auto-generates a random id for).
   let hasNoUrl = $state(false);
 
-  // AI metadata helper — Step 2 toggle + status banner.
-  // Default mode comes from runtimeConfig (`SMARTFILL_DEFAULT_MODE` env).
-  /** @type {'smart' | 'manual'} */
-  let enrichmentMode = $state(
-    /** @type {'smart' | 'manual'} */ (runtimeConfig.smartfill?.defaultMode ?? 'smart')
-  );
+  // AI metadata helper — Step 2 button-driven enrichment.
+  // The "✨ Mit KI ergänzen" button on step 2 is the ONLY way to trigger an
+  // LLM call. We dedup against `enrichedForUrl` so navigating back/forth or
+  // re-clicking on the same URL never pays the LLM cost twice.
   /** @type {'idle' | 'pending' | 'success' | 'error' | 'skipped-amb'} */
   let enrichmentStatus = $state('idle');
+  /** Stores the URL we last enriched, so re-clicking the button is a no-op. */
+  let enrichedForUrl = $state('');
+  /** Source of the most recent metadata fetch; gates the enrichment button. */
+  /** @type {'amb-jsonld' | 'opengraph' | 'none' | ''} */
+  let metadataFetchSource = $state('');
 
   // True while MetadataFetchStep is fetching OG data for the current input.
   // Surfaced from the child via its `onbusychange` callback.
@@ -268,7 +269,16 @@
   );
   const previewResource = $derived.by(() => {
     if (currentStep < 3) return null;
-    return buildPreviewResource(formData, activePubkey, getLocale());
+    // Merge wizard-internal selections into the formData snapshot so the
+    // preview card sees the full picture:
+    //   • `about` lives in `aboutByVocab` (one bucket per subject vocab),
+    //     not on formData. Flatten so the card can render subject chips.
+    //   • For the EKW variant the equivalent of "Fach" is `ekwFachrichtung`
+    //     — feed that into `about` so the same chip area shows it.
+    const previewAbout = isEkw ? formData.ekwFachrichtung : mergedAbout();
+    /** @type {any} */
+    const previewFormData = { ...formData, about: previewAbout };
+    return buildPreviewResource(previewFormData, activePubkey, getLocale());
   });
 
   // Preselect the community that was passed via `?community=` if the user is a member.
@@ -646,6 +656,11 @@
 
   /**
    * Accept the result from MetadataFetchStep and act on it.
+   *
+   * Applies the URL/identifier and any cheap-fast prefill (AMB JSON-LD or OG
+   * tags). Does NOT trigger the LLM — enrichment is button-driven via
+   * `runEnrichment()` so the user owns the cost and re-navigation is free.
+   *
    * @param {import('$lib/helpers/educational/resolveMetadataInput.js').ResolveResult} result
    */
   async function handleMetadataResult(result) {
@@ -666,7 +681,8 @@
           if (prefillEvent) {
             applyPrefillFromAmbEvent(prefillEvent);
           }
-          // AMB JSON-LD already provides everything; no need to call /api/enrich.
+          // AMB JSON-LD already provides everything; no need to enrich.
+          metadataFetchSource = 'amb-jsonld';
           enrichmentStatus = 'skipped-amb';
           return;
         }
@@ -676,74 +692,75 @@
           if (og.description) formData.description = og.description;
           if (og.image) formData.image = og.image;
           if (og.inLanguage) formData.inLanguage = og.inLanguage;
+          metadataFetchSource = 'opengraph';
+        } else {
+          metadataFetchSource = 'none';
         }
-
-        // Decide whether to fire the LLM enrichment based on the user's mode
-        // toggle + what the page yielded.
-        /** @type {'amb' | 'opengraph' | 'none'} */
-        const fetchSource =
-          result.metadata.source === 'amb-jsonld'
-            ? 'amb'
-            : result.metadata.source === 'opengraph'
-              ? 'opengraph'
-              : 'none';
-        const decision = decideEnrichment({ mode: enrichmentMode, fetchSource });
-        if (decision !== 'call-llm') {
-          // 'skip-manual' → leave status idle (no banner); user opted out.
-          // 'skip-amb'    → already handled in the AMB short-circuit above.
-          return;
+        // Reset enrichment status when a *new* URL is loaded.
+        if (enrichedForUrl !== result.url) {
+          enrichmentStatus = 'idle';
         }
-
-        enrichmentStatus = 'pending';
-        // Fire-and-forget LLM enrichment on top of the OG / no-metadata fallback.
-        // applyEnrichedPayload only fills fields the user hasn't touched, so
-        // racing against typing is safe — the banner is the visible signal.
-        enrichFromUrl(result.url, isEkw ? 'ekw' : 'amb', {
-          bildungsbereich: formData.bildungsbereich
-        }).then((enriched) => {
-          if (!enriched) {
-            enrichmentStatus = 'error';
-            return;
-          }
-          const out = applyEnrichedPayload.withProvenance(formData, enriched, {
-            activeUserPubkey: activeUser?.pubkey
-          });
-          formData = out.formData;
-          provenance = { ...provenance, ...out.provenance };
-          // `about` lives in the wizard-internal `aboutByVocab` (not formData),
-          // so the helper can't fill it. Bucket the LLM-emitted concepts into
-          // the current Bildungsbereich's first subject vocab — same heuristic
-          // the AMB-JSON-LD prefill path uses.
-          const aboutPayload =
-            /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
-              /** @type {any} */ (enriched.payload).about
-            );
-          if (
-            aboutPayload &&
-            aboutPayload.length > 0 &&
-            Object.values(aboutByVocab).every((arr) => arr.length === 0)
-          ) {
-            const bucketed = bucketSubjectsForBildungsbereich(
-              aboutPayload,
-              formData.bildungsbereich
-            );
-            if (bucketed) {
-              aboutByVocab = { ...aboutByVocab, ...bucketed };
-              const quote = /** @type {Record<string, string>} */ (enriched.evidence ?? {})[
-                'about'
-              ];
-              provenance = {
-                ...provenance,
-                about:
-                  typeof quote === 'string' && quote.length > 0
-                    ? { source: 'llm-enriched', evidence: quote }
-                    : { source: 'llm-enriched' }
-              };
-            }
-          }
-          enrichmentStatus = 'success';
-        });
       }
+    }
+  }
+
+  /**
+   * User-triggered LLM enrichment for the current URL.
+   *
+   * Idempotent: re-clicking against the same URL is a no-op (we already paid
+   * the LLM cost). Only meaningful on step 2 after a URL has been fetched
+   * with non-AMB metadata; the wizard renders the trigger button only then.
+   */
+  async function runEnrichment() {
+    const url = formData.identifier;
+    if (!url) return;
+    if (enrichedForUrl === url && enrichmentStatus === 'success') return;
+    if (enrichmentStatus === 'pending') return;
+
+    enrichmentStatus = 'pending';
+    try {
+      const enriched = await enrichFromUrl(url, isEkw ? 'ekw' : 'amb', {
+        bildungsbereich: formData.bildungsbereich
+      });
+      if (!enriched) {
+        enrichmentStatus = 'error';
+        return;
+      }
+      const out = applyEnrichedPayload.withProvenance(formData, enriched, {
+        activeUserPubkey: activeUser?.pubkey
+      });
+      formData = out.formData;
+      provenance = { ...provenance, ...out.provenance };
+      // `about` lives in the wizard-internal `aboutByVocab` (not formData),
+      // so the helper can't fill it. Bucket the LLM-emitted concepts into
+      // the current Bildungsbereich's first subject vocab — same heuristic
+      // the AMB-JSON-LD prefill path uses.
+      const aboutPayload =
+        /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
+          /** @type {any} */ (enriched.payload).about
+        );
+      if (
+        aboutPayload &&
+        aboutPayload.length > 0 &&
+        Object.values(aboutByVocab).every((arr) => arr.length === 0)
+      ) {
+        const bucketed = bucketSubjectsForBildungsbereich(aboutPayload, formData.bildungsbereich);
+        if (bucketed) {
+          aboutByVocab = { ...aboutByVocab, ...bucketed };
+          const quote = /** @type {Record<string, string>} */ (enriched.evidence ?? {})['about'];
+          provenance = {
+            ...provenance,
+            about:
+              typeof quote === 'string' && quote.length > 0
+                ? { source: 'llm-enriched', evidence: quote }
+                : { source: 'llm-enriched' }
+          };
+        }
+      }
+      enrichedForUrl = url;
+      enrichmentStatus = 'success';
+    } catch {
+      enrichmentStatus = 'error';
     }
   }
 
@@ -1346,11 +1363,42 @@
               bind:value={formData.urlInput}
               activeUserPubkey={activeUser?.pubkey ?? null}
               readOnly={isEditMode}
-              mode={enrichmentMode}
-              onmodechange={(next) => (enrichmentMode = next)}
               onresult={handleMetadataResult}
               onbusychange={(busy) => (metadataFetchBusy = busy)}
             />
+            {#if !isEditMode && metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
+              <div class="mt-3">
+                {#if enrichmentStatus === 'success' && enrichedForUrl === formData.identifier}
+                  <p class="flex items-center gap-2 text-sm text-success">
+                    <span aria-hidden="true">✓</span>
+                    {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
+                  </p>
+                {:else if enrichmentStatus === 'pending'}
+                  <button type="button" class="btn btn-sm btn-primary" disabled>
+                    <span class="loading loading-xs loading-spinner"></span>
+                    {m.amb_form_enrich_running?.() ?? 'KI ergänzt Felder…'}
+                  </button>
+                {:else}
+                  <button type="button" class="btn btn-sm btn-primary" onclick={runEnrichment}>
+                    {#if enrichmentStatus === 'error'}
+                      {m.amb_form_enrich_retry?.() ?? '✨ Erneut mit KI ergänzen'}
+                    {:else}
+                      {m.amb_form_enrich_button?.() ?? '✨ Mit KI ergänzen'}
+                    {/if}
+                  </button>
+                  {#if enrichmentStatus === 'error'}
+                    <p class="mt-1 text-sm text-error">
+                      {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
+                    </p>
+                  {:else}
+                    <p class="mt-1 text-sm text-base-content/60">
+                      {m.amb_form_enrich_hint?.() ??
+                        'Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.'}
+                    </p>
+                  {/if}
+                {/if}
+              </div>
+            {/if}
             {#if !isEditMode}
               <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
                 <span class="h-px flex-1 bg-base-300"></span>

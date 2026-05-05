@@ -34,14 +34,15 @@ afterEach(() => {
 });
 
 describe('MetadataFetchStep auto-inspect', () => {
-  it('renders the URL input (no manual inspect button)', () => {
+  it('renders the URL input only — no inspect, no smart/manual toggle', () => {
     const { container } = render(MetadataFetchStep, { props: { value: '' } });
     expect(container.querySelector('#metadata-input')).toBeTruthy();
-    // No "inspect"/"check" trigger button — auto-inspect is debounce-driven.
-    // (Mode-toggle buttons "Mit KI" / "Manuell" exist, but they don't trigger
-    // the inspect; the toggle test in `educational/__tests__` covers them.)
+    // No inspect trigger — auto-inspect is debounce-driven.
     const buttons = Array.from(container.querySelectorAll('button'));
     expect(buttons.some((b) => /check|inspect|fetch/i.test(b.textContent ?? ''))).toBe(false);
+    // The "Mit KI ausfüllen" / "Manuell ausfüllen" toggle was removed in
+    // favor of an explicit, wizard-owned enrichment button. Verify it's gone.
+    expect(buttons.some((b) => /mit ki|manuell/i.test(b.textContent ?? ''))).toBe(false);
   });
 
   it('auto-inspects after debounce when user types', async () => {
