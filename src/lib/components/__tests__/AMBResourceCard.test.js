@@ -360,6 +360,7 @@ describe('AMBResourceCard', () => {
         props: { resource: minimalResource, preview: true }
       });
       expect(container.querySelector('[role="toolbar"]')).toBeNull();
+      expect(container.querySelector('[data-testid="amb-debug-wrapper"]')).toBeNull();
     });
 
     it('still renders metadata, image area, title, and open-content button when preview=true', () => {
