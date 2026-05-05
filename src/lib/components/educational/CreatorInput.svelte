@@ -91,7 +91,10 @@
    * @param {number} index
    */
   function editCreator(index) {
-    newCreator = { ...creators[index] };
+    // Merge over an empty creator so optional keys removed on save (pubkey,
+    // affiliationName, honorificPrefix) come back as '' — otherwise binding
+    // `undefined` to a child prop with a fallback throws props_invalid_value.
+    newCreator = { ...createEmptyCreator(), ...creators[index] };
     editingIndex = index;
     showAddForm = true;
   }

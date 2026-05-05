@@ -2,11 +2,12 @@
   import * as m from '$lib/paraglide/messages';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { getAddressPointerForEvent, encodePointer, getTagValue } from 'applesauce-core/helpers';
+  import { getTagValue } from 'applesauce-core/helpers';
   import ThreadDetailView from '$lib/components/thread/ThreadDetailView.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
-  import { fetchEventById, hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { fetchEventById } from '$lib/helpers/nostrUtils.js';
+  import { getCanonicalEventRoute } from '$lib/helpers/eventRouteRedirect.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { decodeEventPointer } from 'applesauce-core/helpers';
 
@@ -58,33 +59,46 @@
    * @param {any} event
    * @param {string} nevent
    */
-  function handleEvent(event, nevent) {
-    // Check community h-tag → redirect to community route
-    const hTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'h');
-    if (hTag?.[1]) {
-      const npub = hexToNpub(hTag[1]);
-      if (npub) {
-        goto(resolve(`/c/${npub}/${nevent}`), { replaceState: true });
-        return;
-      }
-    }
+  // Kinds the inline ThreadDetailView can render — anything else needs to
+  // redirect to a dedicated view (calendar event, article, etc.).
+  const THREAD_VIEW_KINDS = new Set([1, 11, 1111]);
 
-    // Check addressable event → redirect to naddr route
-    const addrPointer = getAddressPointerForEvent(event);
-    if (addrPointer) {
-      const naddr = encodePointer(addrPointer);
-      if (naddr) {
-        goto(resolve(`/${naddr}`), { replaceState: true });
-        return;
-      }
+  /**
+   * If the event has a dedicated route different from the current path,
+   * redirect there and return true.
+   * @param {any} event
+   * @param {string} nevent
+   */
+  function maybeRedirectToCanonical(event, nevent) {
+    const canonical = getCanonicalEventRoute(event);
+    const currentPath = `/${nevent}`;
+    if (canonical && canonical !== currentPath) {
+      goto(resolve(/** @type {any} */ (canonical)), { replaceState: true });
+      return true;
     }
+    return false;
+  }
+
+  /**
+   * Process a fetched/cached event: handle redirects, then resolve thread context.
+   * @param {any} event
+   * @param {string} nevent
+   */
+  function handleEvent(event, nevent) {
+    // Addressables and h-tagged content redirect to dedicated views.
+    if (maybeRedirectToCanonical(event, nevent)) return;
 
     // Show the event immediately
     resolvedEvent = event;
     isLoading = false;
 
-    // Resolve thread context in background (may swap to root event for replies)
+    // Resolve thread context in background (may swap to root event for replies).
+    // If the swap surfaces a non-thread root (e.g. a calendar event the
+    // comment was attached to), redirect to that root's dedicated view.
     resolveThreadContext(event, fetchEventById).then((ctx) => {
+      if (ctx.event !== event && !THREAD_VIEW_KINDS.has(ctx.event?.kind)) {
+        if (maybeRedirectToCanonical(ctx.event, nevent)) return;
+      }
       resolvedEvent = ctx.event;
       focusCommentId = ctx.focusCommentId ?? null;
       parentPointer = ctx.parentPointer ?? null;

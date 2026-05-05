@@ -3,7 +3,6 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
-  import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
   import BottomTabBar from '$lib/components/community/layout/BottomTabBar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { ProfileModel } from 'applesauce-core/models';
@@ -23,7 +22,12 @@
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
 
+  /** @typedef {import('$lib/types/layout.js').ContentNavData} ContentNavData */
+
   // State management for content type navigation
+  // Single source of truth is the URL via the $effect below — do not assign
+  // selectedContentType from anywhere else; the effect will overwrite it on
+  // the next $page change.
   let selectedContentType = $state('home');
   let communikeyEvent = $state(/** @type {any} */ (null));
   let communityProfile = $state(/** @type {any} */ (null));
@@ -158,6 +162,23 @@
   setContext('profileAccess', profileAccess);
   setContext('allowedAuthors', () => allowedAuthors);
 
+  // Expose ContentNavSidebar's data so the root layout can mount the sidebar
+  // in the chrome row. Register the getter once; it closes over reactive
+  // reads (selectedContentType, communityProfile, etc.) so root's
+  // $derived(getContentNavData?.()) re-renders when any of them change.
+  /** @type {((getter: (() => ContentNavData) | undefined) => void) | undefined} */
+  const setContentNavData = getContext('setContentNavData');
+  setContentNavData?.(() => ({
+    selectedContentType,
+    onContentTypeSelect: handleContentTypeSelect,
+    communitySelected: true,
+    communityProfile,
+    communityPubkey: data.pubkey,
+    restrictedTabs,
+    accessibleTabs
+  }));
+  $effect(() => () => setContentNavData?.(undefined));
+
   // Update parent layout's mobile header with community info
   const setMobileHeader =
     /** @type {((info: { title: string, avatarUrl?: string | null }) => void) | undefined} */ (
@@ -183,19 +204,7 @@
   }
 </script>
 
-<!-- Desktop: ContentNavSidebar (fixed positioned) + content flow -->
-<ContentNavSidebar
-  bind:selectedContentType
-  onContentTypeSelect={handleContentTypeSelect}
-  communitySelected={true}
-  {communityProfile}
-  communityPubkey={data.pubkey}
-  {restrictedTabs}
-  {accessibleTabs}
-/>
-<div class="flex min-h-0 flex-1 flex-col pb-20 lg:pb-0">
-  {@render children()}
-</div>
+{@render children()}
 
 <!-- Mobile: Bottom Tab Bar (fixed positioned) -->
 <div class="lg:hidden">

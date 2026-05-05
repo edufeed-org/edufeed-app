@@ -157,7 +157,10 @@ export function createEducationalActions() {
       if (!formData.learningResourceType) {
         throw new Error('Learning resource type is required');
       }
-      if (!formData.about || formData.about.length === 0) {
+      // EKKW variant uses its own Fachrichtung field instead of the AMB about/Fach
+      // picker, so subjects may legitimately be empty. Mirrors the wizard skip at
+      // ResourceFormWizard.svelte step 4.
+      if (variantId !== 'ekw' && (!formData.about || formData.about.length === 0)) {
         throw new Error('At least one subject is required');
       }
       if (!formData.inLanguage) {

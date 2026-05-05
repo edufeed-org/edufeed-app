@@ -1648,8 +1648,8 @@
           {#if !isEkw}
             <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
             {#if educationalLevelField}
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
+              <div class="form-control">
+                <div class="label">
                   <span class="label-text font-medium">
                     {m.amb_form_label_educational_level?.() ?? 'Educational level'}
                   </span>
@@ -1677,13 +1677,15 @@
               </p>
             {/if}
             {#each subjectVocabFields as entry (entry.key)}
-              <div class="space-y-1">
-                <span class="label-text font-medium">
-                  {m.amb_form_label_subject()}
-                  <span class="text-error">*</span>
-                </span>
+              <div class="form-control">
+                <div class="label">
+                  <span class="label-text font-medium">
+                    {m.amb_form_label_subject()}
+                    <span class="text-error">*</span>
+                  </span>
+                </div>
                 {#if subjectVocabFields.length > 1}
-                  <p class="text-xs text-base-content/60">
+                  <p class="-mt-1 mb-1 text-xs text-base-content/60">
                     {getSubjectVocabLabel(entry.key, getLocale())}
                   </p>
                 {/if}
@@ -1742,8 +1744,8 @@
           <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
           {#if isEkw}
             {#if ekwFachField}
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
+              <div class="form-control">
+                <div class="label">
                   <span class="label-text font-medium">{m.amb_form_label_ekw_fachrichtung()}</span>
                   <SmartFillBadge
                     provenance={provenance.ekwFachrichtung}
@@ -1762,8 +1764,8 @@
             {/if}
 
             {#if klassenstufenField}
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
+              <div class="form-control">
+                <div class="label">
                   <span class="label-text font-medium">{m.amb_form_label_ekw_klassenstufe()}</span>
                   <SmartFillBadge
                     provenance={provenance.gradeLevels}
@@ -1782,8 +1784,8 @@
             {/if}
 
             {#if schulartField}
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
+              <div class="form-control">
+                <div class="label">
                   <span class="label-text font-medium">{m.amb_form_label_ekw_schulart()}</span>
                   <SmartFillBadge
                     provenance={provenance.schoolTypes}
@@ -1802,8 +1804,8 @@
             {/if}
 
             {#if didaktischesKonzeptField}
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
+              <div class="form-control">
+                <div class="label">
                   <span class="label-text font-medium"
                     >{m.amb_form_label_ekw_didactic_concept()}</span
                   >
@@ -1824,8 +1826,8 @@
             {/if}
 
             {#if methodeField}
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
+              <div class="form-control">
+                <div class="label">
                   <span class="label-text font-medium">{m.amb_form_label_ekw_method()}</span>
                   <SmartFillBadge
                     provenance={provenance.methods}
@@ -1860,21 +1862,24 @@
             </div>
 
             <div class="form-control">
-              <div class="flex items-center gap-2">
+              <div class="label">
                 <span class="label-text font-medium">{m.amb_form_label_ekw_bible_reference()}</span>
                 <SmartFillBadge
                   provenance={provenance.bibleReferences}
                   onclear={() => clearField('bibleReferences')}
                 />
               </div>
-              <div class="mt-2 space-y-2">
+              <div class="space-y-2">
                 {#each formData.bibleReferences as _ref, i (i)}
                   <BibleReferenceInput
                     bind:value={formData.bibleReferences[i]}
-                    onremove={() => {
-                      formData.bibleReferences = formData.bibleReferences.filter((_, j) => j !== i);
-                      if (formData.bibleReferences.length === 0) formData.bibleReferences = [''];
-                    }}
+                    onremove={formData.bibleReferences.length > 1
+                      ? () => {
+                          formData.bibleReferences = formData.bibleReferences.filter(
+                            (_, j) => j !== i
+                          );
+                        }
+                      : undefined}
                   />
                 {/each}
                 <button
@@ -1887,13 +1892,28 @@
             </div>
 
             {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField}
-              <p class="text-sm text-base-content/60">
-                EKW-Vokabulare sind in dieser Umgebung noch nicht konfiguriert (<code
-                  >SCHEME_NADDR_EKW_FACH</code
-                >, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
-                <code>SCHEME_NADDR_SCHULART</code>, <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
-                <code>SCHEME_NADDR_METHODE</code>).
-              </p>
+              <div class="alert text-sm alert-warning">
+                <div>
+                  <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
+                  <p class="mt-1">
+                    Die EKKW-Vokabulare sind auf diesem Server noch nicht hinterlegt. Bitte wende
+                    Dich an die Administration der Plattform – das Formular lässt sich aktuell
+                    nicht vollständig ausfüllen.
+                  </p>
+                  <details class="mt-2">
+                    <summary class="cursor-pointer text-xs text-base-content/60">
+                      Technische Details
+                    </summary>
+                    <p class="mt-1 text-xs text-base-content/60">
+                      Fehlende Vokabular-Konfiguration:
+                      <code>SCHEME_NADDR_EKW_FACH</code>, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
+                      <code>SCHEME_NADDR_SCHULART</code>,
+                      <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
+                      <code>SCHEME_NADDR_METHODE</code>.
+                    </p>
+                  </details>
+                </div>
+              </div>
             {/if}
           {/if}
         </div>

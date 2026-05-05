@@ -43,9 +43,15 @@
       case 'Extension': {
         /** @type {any} */ (signer).signer = new ExtensionSigner();
         const pk = await /** @type {any} */ (signer).signer.getPublicKey();
-        const account = new ExtensionAccount(pk, /** @type {any} */ (signer).signer);
 
-        if (!manager.getAccountForPubkey(pk)) {
+        // applesauce's setActive looks up by account.id (a fresh nanoid per
+        // instance), so on the duplicate path we must activate the EXISTING
+        // account reference rather than the freshly-built one.
+        const existing = manager.getAccountForPubkey(pk);
+        if (existing) {
+          manager.setActive(existing);
+        } else {
+          const account = new ExtensionAccount(pk, /** @type {any} */ (signer).signer);
           manager.addAccount(account);
           manager.setActive(account);
         }

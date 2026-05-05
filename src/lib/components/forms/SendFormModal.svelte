@@ -9,6 +9,7 @@
     buildATagWithHint
   } from '$lib/services/publish-service.js';
   import { FORM_REQUEST_KIND } from '$lib/helpers/forms.js';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { CloseIcon } from '$lib/components/icons';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
@@ -27,6 +28,8 @@
   let message = $state('');
   let isSending = $state(false);
   let error = $state('');
+
+  const canEncrypt = $derived(hasNip44(manager.active?.signer));
 
   /** @type {HTMLDialogElement | undefined} */
   let dialogEl = $state(undefined);
@@ -89,12 +92,14 @@
       /** @type {string[][]} */
       const tags = [...pTags, aTag];
 
-      // Encrypt message content with NIP-44
-      let content = '';
-      const payload = JSON.stringify({ message: message.trim() });
-      if (typeof signer.nip44Encrypt === 'function') {
-        content = await signer.nip44Encrypt(recipient.pubkey, payload);
+      // Encrypt message content with NIP-44 (button is disabled when not supported,
+      // but re-check defensively in case the signer changed mid-flow)
+      if (!hasNip44(signer)) {
+        error = m.send_form_no_encryption();
+        return;
       }
+      const payload = JSON.stringify({ message: message.trim() });
+      const content = await signer.nip44.encrypt(recipient.pubkey, payload);
 
       const factory = createAppEventFactory({ signer });
       const template = await factory.build({ kind: FORM_REQUEST_KIND, tags, content });
@@ -162,7 +167,7 @@
         ></textarea>
       </div>
 
-      {#if !manager.active?.signer?.nip44Encrypt}
+      {#if !canEncrypt}
         <div class="alert text-sm alert-warning">
           {m.send_form_no_encryption()}
         </div>
@@ -179,7 +184,7 @@
         <button
           class="btn btn-primary"
           onclick={handleSend}
-          disabled={isSending || !recipientInput.trim()}
+          disabled={isSending || !recipientInput.trim() || !canEncrypt}
         >
           {#if isSending}
             <span class="loading loading-sm loading-spinner"></span>

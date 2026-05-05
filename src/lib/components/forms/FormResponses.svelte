@@ -246,7 +246,10 @@
     }
 
     try {
-      const plaintext = await manager.active.signer.nip44Decrypt(response.pubkey, response.content);
+      const plaintext = await manager.active.signer.nip44.decrypt(
+        response.pubkey,
+        response.content
+      );
       const tags = JSON.parse(plaintext);
       const values = parseResponseTags(tags);
       decryptedMap = new Map([...decryptedMap, [response.id, values]]);

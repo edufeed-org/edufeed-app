@@ -182,15 +182,22 @@ describe('registerBunkerAccount', () => {
     const mockSigner = { getPublicKey: vi.fn() };
     const pubkey = 'newpubkey123';
 
-    const account = registerBunkerAccount(mockManager, pubkey, mockSigner);
+    const result = registerBunkerAccount(mockManager, pubkey, mockSigner);
 
-    expect(mockManager.addAccount).toHaveBeenCalled();
-    expect(mockManager.setActive).toHaveBeenCalled();
-    expect(account).toBeDefined();
+    expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
+    expect(mockManager.setActive).toHaveBeenCalledTimes(1);
+    // The newly created account is what was added AND what was set active
+    const addedAccount = mockManager.addAccount.mock.calls[0][0];
+    expect(mockManager.setActive.mock.calls[0][0]).toBe(addedAccount);
+    expect(result.account).toBe(addedAccount);
+    expect(result.alreadyExisted).toBe(false);
   });
 
-  it('skips addAccount but sets active when pubkey exists', () => {
-    const existingAccount = { pubkey: 'existingpubkey' };
+  it('skips addAccount and sets the EXISTING account ref active when pubkey exists', () => {
+    // Stub the existing account; importantly, the manager looks up by id internally,
+    // so passing a freshly-built NostrConnectAccount (different nanoid id) would throw.
+    // We assert that the existing reference is what's passed to setActive.
+    const existingAccount = { id: 'existing-id', pubkey: 'existingpubkey' };
     const mockManager = {
       getAccountForPubkey: vi.fn().mockReturnValue(existingAccount),
       addAccount: vi.fn(),
@@ -198,9 +205,13 @@ describe('registerBunkerAccount', () => {
     };
     const mockSigner = { getPublicKey: vi.fn() };
 
-    registerBunkerAccount(mockManager, 'existingpubkey', mockSigner);
+    const result = registerBunkerAccount(mockManager, 'existingpubkey', mockSigner);
 
     expect(mockManager.addAccount).not.toHaveBeenCalled();
-    expect(mockManager.setActive).toHaveBeenCalled();
+    expect(mockManager.setActive).toHaveBeenCalledTimes(1);
+    // CRITICAL: must be the same object reference, not a fresh NostrConnectAccount
+    expect(mockManager.setActive.mock.calls[0][0]).toBe(existingAccount);
+    expect(result.account).toBe(existingAccount);
+    expect(result.alreadyExisted).toBe(true);
   });
 });
