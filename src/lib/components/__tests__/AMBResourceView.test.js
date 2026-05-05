@@ -373,4 +373,16 @@ describe('EKKW-Metadaten section', () => {
     });
     expect(queryByText('EKKW-Metadaten')).toBeNull();
   });
+
+  it('does not render the EKKW-Metadaten section for Fachrichtung-only resources (about tag, no ekw:* tags)', () => {
+    // Fachrichtung publishes as a standard AMB `about` tag. The EKKW section
+    // is only for `ekw:*`-prefixed tags (Klassenstufe etc.) — locks the
+    // boundary enforced by the EKW_TAG_PREFIX filter in parseEkwTagsToFormData.
+    const aboutOnlyTags = [['about', 'naddr1ekw-evangelisch']];
+    const resource = fixtureEvent(aboutOnlyTags);
+    const { queryByText } = render(AMBResourceView, {
+      props: { event: resource.event, resource }
+    });
+    expect(queryByText('EKKW-Metadaten')).toBeNull();
+  });
 });
