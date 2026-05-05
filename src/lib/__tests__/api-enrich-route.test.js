@@ -14,6 +14,7 @@ vi.mock('$env/dynamic/private', () => ({
     AMB_MCP_URL: 'https://mcp.example/mcp',
     AMB_MCP_BEARER_TOKEN: 'test-token',
     SCHEME_NADDR_HCRT: 'naddr1hcrt',
+    SCHEME_NADDR_EKW_LRT: 'naddr1ekwlrt',
     SCHEME_NADDR_KLASSENSTUFEN: 'naddr1klassen'
   }
 }));
@@ -107,9 +108,21 @@ describe('POST /api/enrich', () => {
     expect(call.mcpUrl).toBe('https://mcp.example/mcp');
     expect(call.bearerToken).toBe('test-token');
     expect(call.skosSchemes).toEqual({
-      learningResourceType: 'naddr1hcrt',
+      learningResourceType: 'naddr1ekwlrt',
       gradeLevels: 'naddr1klassen'
     });
+  });
+
+  it('uses HCRT learningResourceType vocab for AMB variant', async () => {
+    callExtractMetadataMock.mockResolvedValueOnce({
+      source: 'llm-enriched',
+      payload: {},
+      evidence: {},
+      baseline: {}
+    });
+    await POST(ev(makeRequest({ url: 'https://example.org', variant: 'amb' })));
+    const call = callExtractMetadataMock.mock.calls[0][0];
+    expect(call.skosSchemes.learningResourceType).toBe('naddr1hcrt');
   });
 });
 

@@ -326,6 +326,7 @@
   // EKW vocab field resolvers (null when the matching SCHEME_NADDR_* env var
   // is unset, e.g. before the EKW vocabs have been published).
   const ekwFachField = $derived(resolveVocabField('ekwFach'));
+  const ekwLrtField = $derived(resolveVocabField('ekwLrt'));
   const klassenstufenField = $derived(resolveVocabField('klassenstufen'));
   const schulartField = $derived(resolveVocabField('schulart'));
   const didaktischesKonzeptField = $derived(resolveVocabField('didaktischesKonzept'));
@@ -1163,6 +1164,17 @@
   }
 
   /**
+   * FormConceptPicker change handler for the EKW learningResourceType picker.
+   * Mirrors the compact `{id, label}` shape that the static SKOSDropdown
+   * (HCRT) writes for the AMB variant, so downstream tag synthesis and
+   * preview rendering stay variant-agnostic.
+   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
+   */
+  function handleEkwLrtChange(rich) {
+    formData.learningResourceType = rich.map(toCompactConcept);
+  }
+
+  /**
    * FormConceptPicker change handler for a specific subject vocab bucket.
    * @param {string} vocabKey
    */
@@ -1587,17 +1599,41 @@
       <!-- Step 4: Classification -->
       {#if currentStep === 4}
         <div class="space-y-4">
-          <!-- Resource Type (still static SKOSDropdown — HCRT vocabulary) -->
+          <!--
+            Resource Type. AMB variant uses the static SKOSDropdown
+            (HCRT vocab via skosLoader). EKW variant uses the Nostr-based
+            FormConceptPicker bound to the EKW LRT vocab (kind 39737), so
+            EKKW maintainers can curate their own list. Falls back to the
+            HCRT picker if SCHEME_NADDR_EKW_LRT is unset.
+          -->
           <div>
-            <SKOSDropdown
-              vocabularyKey="learningResourceType"
-              bind:selected={formData.learningResourceType}
-              label={m.amb_form_label_resource_type()}
-              placeholder={m.amb_form_placeholder_resource_type()}
-              required={true}
-              multiple={true}
-              helpText={m.amb_form_help_resource_type()}
-            />
+            {#if isEkw && ekwLrtField}
+              <div class="form-control">
+                <div class="label">
+                  <span class="label-text font-medium">
+                    {m.amb_form_label_resource_type()}
+                  </span>
+                </div>
+                <FormConceptPicker
+                  field={ekwLrtField}
+                  multiple={true}
+                  value={formData.learningResourceType.map((c) =>
+                    toRichConcept(c, ekwLrtField.vocab.relay)
+                  )}
+                  onchange={handleEkwLrtChange}
+                />
+              </div>
+            {:else}
+              <SKOSDropdown
+                vocabularyKey="learningResourceType"
+                bind:selected={formData.learningResourceType}
+                label={m.amb_form_label_resource_type()}
+                placeholder={m.amb_form_placeholder_resource_type()}
+                required={true}
+                multiple={true}
+                helpText={m.amb_form_help_resource_type()}
+              />
+            {/if}
             {#if provenance.learningResourceType}
               <div class="mt-1">
                 <SmartFillBadge

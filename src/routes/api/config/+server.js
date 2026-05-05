@@ -317,6 +317,7 @@ export function GET() {
         klassenstufen: env.SCHEME_NADDR_KLASSENSTUFEN || '',
         schulart: env.SCHEME_NADDR_SCHULART || '',
         ekwFach: env.SCHEME_NADDR_EKW_FACH || '',
+        ekwLrt: env.SCHEME_NADDR_EKW_LRT || '',
         didaktischesKonzept: env.SCHEME_NADDR_DIDAKTISCHES_KONZEPT || '',
         methode: env.SCHEME_NADDR_METHODE || ''
       }

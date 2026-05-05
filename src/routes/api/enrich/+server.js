@@ -45,13 +45,23 @@ function pickSubjectSchemeNaddr(bildungsbereich) {
  * SKOS scheme map: form-field-name → naddr. The MCP server's vocab loader
  * uses these naddrs to build LLM grounding snapshots.
  *
+ * The EKW variant prefers `SCHEME_NADDR_EKW_LRT` for `learningResourceType`
+ * so the LLM picks from the EKKW-curated list rather than HCRT — must stay
+ * aligned with the wizard's variant-specific picker (see
+ * `ResourceFormWizard.svelte`'s step 4 LRT branch).
+ *
+ * @param {'amb' | 'ekw'} variant
  * @param {string | undefined} bildungsbereich - selects which subject vocab maps to `about`
  * @returns {Record<string, string>}
  */
-function buildSkosSchemes(bildungsbereich) {
+function buildSkosSchemes(variant, bildungsbereich) {
   /** @type {Record<string, string>} */
   const schemes = {};
-  if (env.SCHEME_NADDR_HCRT) schemes.learningResourceType = env.SCHEME_NADDR_HCRT;
+  const lrtNaddr =
+    variant === 'ekw' && env.SCHEME_NADDR_EKW_LRT
+      ? env.SCHEME_NADDR_EKW_LRT
+      : env.SCHEME_NADDR_HCRT;
+  if (lrtNaddr) schemes.learningResourceType = lrtNaddr;
   if (env.SCHEME_NADDR_EDUCATIONAL_LEVEL) {
     schemes.educationalLevels = env.SCHEME_NADDR_EDUCATIONAL_LEVEL;
   }
@@ -115,7 +125,7 @@ export async function POST({ request }) {
       bearerToken: env.AMB_MCP_BEARER_TOKEN,
       url,
       variant,
-      skosSchemes: buildSkosSchemes(bildungsbereich)
+      skosSchemes: buildSkosSchemes(variant, bildungsbereich)
     });
     return json(result);
   } catch (err) {
