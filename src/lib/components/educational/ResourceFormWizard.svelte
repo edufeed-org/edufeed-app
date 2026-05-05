@@ -1699,88 +1699,20 @@
       <!-- Step 4: Classification -->
       {#if currentStep === 4}
         <div class="space-y-4">
-          <!-- Resource Type (still static SKOSDropdown — HCRT vocabulary) -->
-          <div>
-            <SKOSDropdown
-              vocabularyKey="learningResourceType"
-              bind:selected={formData.learningResourceType}
-              label={m.amb_form_label_resource_type()}
-              placeholder={m.amb_form_placeholder_resource_type()}
-              required={true}
-              multiple={true}
-              helpText={m.amb_form_help_resource_type()}
-            />
-            {#if provenance.learningResourceType}
-              <div class="mt-1">
-                <SmartFillBadge
-                  provenance={provenance.learningResourceType}
-                  onclear={() => clearField('learningResourceType')}
-                />
-              </div>
-            {/if}
-            {#if showError('learningResourceType')}
-              <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
-            {/if}
-          </div>
-
-          <!-- Language -->
-          <div class="form-control">
-            <label class="label flex items-center gap-2" for="amb-language">
-              <span class="label-text font-medium"
-                >{m.amb_form_label_language()} <span class="text-error">*</span></span
-              >
-              <SmartFillBadge
-                provenance={provenance.inLanguage}
-                onclear={() => clearField('inLanguage')}
-              />
-            </label>
-            <select
-              id="amb-language"
-              class="select-bordered select w-full"
-              bind:value={formData.inLanguage}
-            >
-              {#each languageOptions as lang (lang.code)}
-                <option value={lang.code}>{lang.label}</option>
-              {/each}
-            </select>
-          </div>
-
-          <!-- Image URL -->
-          <div class="form-control">
-            <label class="label flex items-center gap-2" for="amb-image">
-              <span class="label-text font-medium">{m.amb_form_label_image()}</span>
-              <SmartFillBadge provenance={provenance.image} onclear={() => clearField('image')} />
-            </label>
-            <input
-              id="amb-image"
-              type="url"
-              class="input-bordered input w-full"
-              bind:value={formData.image}
-              placeholder={m.amb_form_placeholder_image()}
-              oninput={() => {
-                imagePreviewError = false;
-              }}
-            />
-            {#if formData.image && imagePreviewError}
-              <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
-            {/if}
-          </div>
-        </div>
-      {/if}
-
-      <!-- Step 4: Classification -->
-      {#if currentStep === 4}
-        <div class="space-y-4">
           <!-- Resource Type — HCRT for AMB, EKW vocab (relay-fetched) for EKW variant -->
           <div data-skos-vocab="learningResourceType">
             {#if isEkw}
               {#if ekwLrtField}
                 <div class="form-control">
-                  <div class="label">
+                  <div class="label flex items-center gap-2">
                     <span class="label-text font-medium">
                       {m.amb_form_label_resource_type()}
                       <span class="text-error">*</span>
                     </span>
+                    <SmartFillBadge
+                      provenance={provenance.learningResourceType}
+                      onclear={() => clearField('learningResourceType')}
+                    />
                   </div>
                   <FormConceptPicker
                     field={ekwLrtField}
@@ -1807,6 +1739,17 @@
                 multiple={true}
                 helpText={m.amb_form_help_resource_type()}
               />
+              {#if provenance.learningResourceType}
+                <div class="mt-1">
+                  <SmartFillBadge
+                    provenance={provenance.learningResourceType}
+                    onclear={() => clearField('learningResourceType')}
+                  />
+                </div>
+              {/if}
+            {/if}
+            {#if showError('learningResourceType')}
+              <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
             {/if}
           </div>
 
