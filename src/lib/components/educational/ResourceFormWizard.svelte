@@ -58,6 +58,7 @@
   import SmartFillBadge from './SmartFillBadge.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
+  import { fly } from 'svelte/transition';
   import { buildPreviewResource } from '$lib/helpers/educational/buildPreviewResource.js';
   import { loadDraft, saveDraft, clearDraft } from '$lib/helpers/educational/draftStore.js';
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
@@ -1195,8 +1196,17 @@
   }
 </script>
 
+<!-- Wizard wrapper: centered (max-w-2xl) on steps 1–2 where there is no
+     preview; on step 3+ widens to max-w-6xl and switches to a 2-col grid so
+     the live preview can slide in from the right. The max-width transition
+     gives the form a gentle leftward slide as the preview fades in. -->
 <div
-  class="mx-auto w-full max-w-2xl px-4 py-6 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,42rem)_minmax(0,22rem)] lg:items-start lg:gap-8"
+  class="mx-auto w-full max-w-2xl px-4 py-6 transition-[max-width] duration-300 ease-out"
+  class:lg:max-w-6xl={previewResource}
+  class:lg:grid={previewResource}
+  class:lg:grid-cols-[minmax(0,42rem)_minmax(0,22rem)]={previewResource}
+  class:lg:items-start={previewResource}
+  class:lg:gap-8={previewResource}
 >
   <div class="w-full">
     <!-- Step indicator — the page's top-bar <h1> provides the stable title;
@@ -1379,23 +1389,28 @@
                     {m.amb_form_enrich_running?.() ?? 'KI ergänzt Felder…'}
                   </button>
                 {:else}
-                  <button type="button" class="btn btn-sm btn-primary" onclick={runEnrichment}>
+                  <!-- Button + hint on a single horizontal row (wraps on
+                     narrow viewports). Keeps the call-to-action visually
+                     paired with its explanation instead of stacking them. -->
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <button type="button" class="btn btn-sm btn-primary" onclick={runEnrichment}>
+                      {#if enrichmentStatus === 'error'}
+                        {m.amb_form_enrich_retry?.() ?? '✨ Erneut mit KI ergänzen'}
+                      {:else}
+                        {m.amb_form_enrich_button?.() ?? '✨ Mit KI ergänzen'}
+                      {/if}
+                    </button>
                     {#if enrichmentStatus === 'error'}
-                      {m.amb_form_enrich_retry?.() ?? '✨ Erneut mit KI ergänzen'}
+                      <p class="text-sm text-error">
+                        {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
+                      </p>
                     {:else}
-                      {m.amb_form_enrich_button?.() ?? '✨ Mit KI ergänzen'}
+                      <p class="text-sm text-base-content/60">
+                        {m.amb_form_enrich_hint?.() ??
+                          'Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.'}
+                      </p>
                     {/if}
-                  </button>
-                  {#if enrichmentStatus === 'error'}
-                    <p class="mt-1 text-sm text-error">
-                      {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
-                    </p>
-                  {:else}
-                    <p class="mt-1 text-sm text-base-content/60">
-                      {m.amb_form_enrich_hint?.() ??
-                        'Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.'}
-                    </p>
-                  {/if}
+                  </div>
                 {/if}
               </div>
             {/if}
@@ -2396,7 +2411,7 @@
        resource as the user fills fields. Hidden on mobile to save vertical
        space — the mobile <details> below the progress dots covers that case. -->
   {#if previewResource}
-    <aside class="hidden lg:sticky lg:top-6 lg:block">
+    <aside class="hidden lg:sticky lg:top-6 lg:block" in:fly={{ x: 24, duration: 280, delay: 80 }}>
       <p class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
         👁 {m.forms_preview_tab()}
       </p>
