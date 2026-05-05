@@ -7,7 +7,7 @@
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
-  import ProfileAvatar from './ProfileAvatar.svelte';
+  import AccountMenuSection from './AccountMenuSection.svelte';
   import {
     PeopleIcon,
     SearchIcon,
@@ -28,7 +28,6 @@
   let currentLocale = $derived(getLocale());
 
   let activeAccount = $state(/** @type {any} */ (null));
-  let accountCount = $state(0);
 
   $effect(() => {
     const subscription = manager.active$.subscribe((account) => {
@@ -37,32 +36,8 @@
     return () => subscription.unsubscribe();
   });
 
-  $effect(() => {
-    const subscription = manager.accounts$.subscribe((accounts) => {
-      accountCount = accounts.length;
-    });
-    return () => subscription.unsubscribe();
-  });
-
   function openLoginModal() {
     modalStore.openModal('login');
-    onClose();
-  }
-
-  function handleLogoutCurrent() {
-    if (activeAccount) {
-      manager.removeAccount(activeAccount.id);
-    }
-    onClose();
-  }
-
-  function handleLogoutAll() {
-    if (confirm(m.navbar_logout_all_confirm())) {
-      const accounts = [...manager.accounts];
-      accounts.forEach((account) => {
-        manager.removeAccount(account.id);
-      });
-    }
     onClose();
   }
 
@@ -123,39 +98,10 @@
       {/if}
     </a>
   </li>
-  <li>
-    <a href={resolve(`/p/${activeAccount.pubkey}`)} onclick={onClose}>
-      <ProfileAvatar pubkey={activeAccount.pubkey} size="xs" fallbackType="robohash" />
-      {m.common_profile()}
-    </a>
-  </li>
-  <li>
-    <button onclick={openLoginModal}>
-      {m.navbar_switch_account()}
-    </button>
-  </li>
-  <li>
-    <a href={resolve('/settings')} onclick={onClose}>
-      {m.common_settings()}
-    </a>
-  </li>
-  <li>
-    <a href={resolve('/imprint')} onclick={onClose}>
-      {m.navbar_imprint()}
-    </a>
-  </li>
-  <li>
-    <button onclick={handleLogoutCurrent}>
-      {m.navbar_logout_current()}
-    </button>
-  </li>
-  {#if accountCount > 1}
-    <li>
-      <button onclick={handleLogoutAll}>
-        {m.navbar_logout_all()}
-      </button>
-    </li>
-  {/if}
+
+  <li class="menu-disabled"><hr class="my-1 border-base-300" /></li>
+
+  <AccountMenuSection {onClose} />
 {:else}
   <li>
     <a href={resolve('/imprint')} onclick={onClose}>
