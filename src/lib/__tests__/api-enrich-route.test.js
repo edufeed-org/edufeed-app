@@ -1,23 +1,18 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock amb-mcp/lib BEFORE importing the route — the route imports it eagerly.
-const extractMetadataMock = vi.fn();
-const createAnthropicClientMock = vi.fn(
-  /** @param {string | undefined} apiKey */
-  (apiKey) => (apiKey ? { __mockClient: true } : undefined)
-);
-vi.mock('amb-mcp/lib', () => ({
+// Mock the MCP client BEFORE importing the route — the route imports it eagerly.
+const callExtractMetadataMock = vi.fn();
+vi.mock('$lib/server/ambMcpClient.js', () => ({
   /** @param {unknown} input */
-  extractMetadata: (input) => extractMetadataMock(input),
-  /** @param {string | undefined} apiKey */
-  createAnthropicClient: (apiKey) => createAnthropicClientMock(apiKey)
+  callExtractMetadata: (input) => callExtractMetadataMock(input)
 }));
 
 // Mock $env/dynamic/private — SvelteKit's env-import path.
 vi.mock('$env/dynamic/private', () => ({
   env: {
-    ANTHROPIC_API_KEY: 'test-key',
+    AMB_MCP_URL: 'https://mcp.example/mcp',
+    AMB_MCP_BEARER_TOKEN: 'test-token',
     SCHEME_NADDR_HCRT: 'naddr1hcrt',
     SCHEME_NADDR_KLASSENSTUFEN: 'naddr1klassen'
   }
@@ -46,29 +41,29 @@ function ev(request) {
 
 describe('POST /api/enrich', () => {
   beforeEach(() => {
-    extractMetadataMock.mockReset();
+    callExtractMetadataMock.mockReset();
   });
 
   it('returns 400 when url is missing', async () => {
     const res = await POST(ev(makeRequest({ variant: 'amb' })));
     expect(res.status).toBe(400);
-    expect(extractMetadataMock).not.toHaveBeenCalled();
+    expect(callExtractMetadataMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 when url is not http/https', async () => {
     const res = await POST(ev(makeRequest({ url: 'file:///etc/passwd', variant: 'amb' })));
     expect(res.status).toBe(400);
-    expect(extractMetadataMock).not.toHaveBeenCalled();
+    expect(callExtractMetadataMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 when variant is invalid', async () => {
     const res = await POST(ev(makeRequest({ url: 'https://example.org', variant: 'bogus' })));
     expect(res.status).toBe(400);
-    expect(extractMetadataMock).not.toHaveBeenCalled();
+    expect(callExtractMetadataMock).not.toHaveBeenCalled();
   });
 
   it('defaults variant to "amb" when omitted', async () => {
-    extractMetadataMock.mockResolvedValueOnce({
+    callExtractMetadataMock.mockResolvedValueOnce({
       source: 'opengraph-only',
       payload: {},
       evidence: {},
@@ -76,38 +71,62 @@ describe('POST /api/enrich', () => {
     });
     const res = await POST(ev(makeRequest({ url: 'https://example.org' })));
     expect(res.status).toBe(200);
-    expect(extractMetadataMock).toHaveBeenCalledWith(expect.objectContaining({ variant: 'amb' }));
+    expect(callExtractMetadataMock).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: 'amb' })
+    );
   });
 
-  it('forwards the result from extractMetadata as JSON', async () => {
+  it('forwards the result from callExtractMetadata as JSON', async () => {
     const result = {
       source: 'llm-enriched',
       payload: { name: 'X', learningResourceType: [{ id: 'urn:lrt:text', prefLabel: 'Text' }] },
       evidence: { learningResourceType: 'shows worksheet' },
       baseline: { og: { title: 'X' } }
     };
-    extractMetadataMock.mockResolvedValueOnce(result);
+    callExtractMetadataMock.mockResolvedValueOnce(result);
     const res = await POST(ev(makeRequest({ url: 'https://example.org/page', variant: 'amb' })));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(result);
   });
 
-  it('returns 500 when extractMetadata throws', async () => {
-    extractMetadataMock.mockRejectedValueOnce(new Error('boom'));
+  it('returns 500 when callExtractMetadata throws', async () => {
+    callExtractMetadataMock.mockRejectedValueOnce(new Error('boom'));
     const res = await POST(ev(makeRequest({ url: 'https://example.org', variant: 'amb' })));
     expect(res.status).toBe(500);
   });
 
-  it('passes ANTHROPIC_API_KEY-backed llmClient to extractMetadata when key is set', async () => {
-    extractMetadataMock.mockResolvedValueOnce({
+  it('passes mcpUrl, bearerToken, and skosSchemes to the client', async () => {
+    callExtractMetadataMock.mockResolvedValueOnce({
       source: 'llm-enriched',
       payload: {},
       evidence: {},
       baseline: {}
     });
     await POST(ev(makeRequest({ url: 'https://example.org', variant: 'ekw' })));
-    const call = extractMetadataMock.mock.calls[0][0];
-    expect(call.llmClient).toBeDefined();
-    expect(call.skosSchemes).toBeDefined();
+    const call = callExtractMetadataMock.mock.calls[0][0];
+    expect(call.mcpUrl).toBe('https://mcp.example/mcp');
+    expect(call.bearerToken).toBe('test-token');
+    expect(call.skosSchemes).toEqual({
+      learningResourceType: 'naddr1hcrt',
+      gradeLevels: 'naddr1klassen'
+    });
+  });
+});
+
+describe('POST /api/enrich without AMB_MCP_URL configured', () => {
+  beforeEach(() => {
+    callExtractMetadataMock.mockReset();
+    vi.resetModules();
+  });
+
+  it('returns 503 when AMB_MCP_URL env is not set', async () => {
+    vi.doMock('$env/dynamic/private', () => ({ env: {} }));
+    vi.doMock('$lib/server/ambMcpClient.js', () => ({
+      callExtractMetadata: callExtractMetadataMock
+    }));
+    const { POST: PostNoEnv } = await import('../../routes/api/enrich/+server.js');
+    const res = await PostNoEnv(ev(makeRequest({ url: 'https://example.org' })));
+    expect(res.status).toBe(503);
+    expect(callExtractMetadataMock).not.toHaveBeenCalled();
   });
 });

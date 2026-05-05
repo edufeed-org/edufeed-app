@@ -1,54 +1,27 @@
 /**
  * URL → Form-prefill metadata enrichment endpoint.
  *
- * Wraps `extractMetadata` from `amb-mcp/lib`. Builds the SKOS-scheme map from
- * the same `SCHEME_NADDR_*` env vars the runtime config uses, and constructs
- * an Anthropic client when `ANTHROPIC_API_KEY` is set. Without the key, the
- * library degrades to OpenGraph-only output — same code path.
+ * Thin proxy over the deployed AMB MCP server's `extract_metadata` tool.
+ * The MCP server owns LLM grounding, PDF extraction, and SKOS vocab loading;
+ * this route's job is request validation + per-request `skosSchemes` mapping
+ * (since which subject vocab applies depends on the wizard's `bildungsbereich`
+ * selection, which is dynamic per-call).
  *
  * Validation: http(s) URL, variant ∈ {amb, ekw}.
  */
 
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { createAnthropicClient, extractMetadata } from 'amb-mcp/lib';
-
-// unpdf bundles a pdf.js build that eagerly calls `Promise.try` at module
-// evaluation. Some Node 22.x runtimes are missing it. Polyfill before the
-// dynamic import resolves so pdf.js's top-level evaluation succeeds.
-if (typeof Promise.try !== 'function') {
-  /** @param {(...args: any[]) => any} fn */
-  Promise.try = function (fn, ...args) {
-    return new Promise((resolve) => resolve(fn(...args)));
-  };
-}
-
-/**
- * Plain-text extractor for the LLM. The wizard's existing
- * `pdfExtractor.js` is HTML-rendering / heuristic and lives in `$lib`;
- * for the LLM grounding all we need is concatenated page text, so
- * call unpdf's `extractText` directly (mergePages: true → single string).
- *
- * @param {ArrayBuffer} buffer
- * @returns {Promise<string>}
- */
-async function pdfExtractText(buffer) {
-  // Dynamic import so the Promise.try polyfill above is in place before
-  // unpdf's bundled pdf.js evaluates at module-load.
-  const { extractText, getDocumentProxy } = await import('unpdf');
-  const pdf = await getDocumentProxy(new Uint8Array(buffer));
-  const { text } = await extractText(pdf, { mergePages: true });
-  // Cap to ~32k chars so absurdly large PDFs don't blow the prompt.
-  return typeof text === 'string' ? text.slice(0, 32_000) : '';
-}
+import { callExtractMetadata } from '$lib/server/ambMcpClient.js';
 
 const VARIANTS = new Set(['amb', 'ekw']);
+const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
 
 /**
  * Map a Bildungsbereich key to the `SCHEME_NADDR_*` env var that holds the
  * corresponding subject vocabulary. Mirrors `BILDUNGSBEREICHE.subjectVocabKeys`
  * in `$lib/helpers/educational/bildungsbereich.js`. We can only feed one
- * subject vocab to the LLM at a time (the lib's `about` schema field accepts a
+ * subject vocab to the LLM at a time (the schema's `about` field accepts a
  * single snapshot), so for `extra` (which renders both schule + hochschule
  * pickers in the wizard) we pick the first key — same heuristic as
  * `bucketSubjectsForBildungsbereich`.
@@ -69,10 +42,11 @@ function pickSubjectSchemeNaddr(bildungsbereich) {
 }
 
 /**
- * SKOS scheme map: form-field-name → naddr. The library passes these naddrs
- * to its vocab loader to build LLM grounding snapshots.
+ * SKOS scheme map: form-field-name → naddr. The MCP server's vocab loader
+ * uses these naddrs to build LLM grounding snapshots.
  *
  * @param {string | undefined} bildungsbereich - selects which subject vocab maps to `about`
+ * @returns {Record<string, string>}
  */
 function buildSkosSchemes(bildungsbereich) {
   /** @type {Record<string, string>} */
@@ -92,16 +66,6 @@ function buildSkosSchemes(bildungsbereich) {
   if (env.SCHEME_NADDR_METHODE) schemes.methods = env.SCHEME_NADDR_METHODE;
   return schemes;
 }
-
-/** @type {import('amb-mcp/lib').AnthropicLike | null | undefined} */
-let cachedLlmClient;
-function getLlmClient() {
-  if (cachedLlmClient !== undefined) return cachedLlmClient ?? undefined;
-  cachedLlmClient = createAnthropicClient(env.ANTHROPIC_API_KEY) ?? null;
-  return cachedLlmClient ?? undefined;
-}
-
-const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request }) {
@@ -139,28 +103,23 @@ export async function POST({ request }) {
       ? body.bildungsbereich
       : undefined;
 
-  // Vocab relays are independent from AMB content relays (which host kind
-  // 30142, not NIP-VOCAB schemes/concepts). The naddrs themselves carry
-  // relay hints; SKOS_FALLBACK_RELAYS only kicks in for naddrs that omit
-  // them (e.g. EDUCATIONAL_LEVEL). Mixing in unrelated content relays
-  // races the slow vocab relay in the loader's pool query.
-  const vocabRelays = (env.SKOS_FALLBACK_RELAYS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const mcpUrl = env.AMB_MCP_URL;
+  if (!mcpUrl) {
+    console.error('[/api/enrich] AMB_MCP_URL is not configured');
+    return json({ error: 'Metadata extraction not configured' }, { status: 503 });
+  }
 
   try {
-    const result = await extractMetadata({
+    const result = await callExtractMetadata({
+      mcpUrl,
+      bearerToken: env.AMB_MCP_BEARER_TOKEN,
       url,
       variant,
-      skosSchemes: buildSkosSchemes(bildungsbereich),
-      vocabRelays,
-      pdfExtract: pdfExtractText,
-      llmClient: getLlmClient()
+      skosSchemes: buildSkosSchemes(bildungsbereich)
     });
     return json(result);
   } catch (err) {
-    console.error('[/api/enrich] extractMetadata failed:', err);
+    console.error('[/api/enrich] extract_metadata failed:', err);
     return json({ error: 'Metadata extraction failed' }, { status: 500 });
   }
 }
