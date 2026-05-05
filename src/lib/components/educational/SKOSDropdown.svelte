@@ -135,6 +135,23 @@
     }
   });
 
+  // When selected concepts live inside collapsed parents (e.g. an AI suggestion
+  // populates the field while the parent is auto-collapsed), expand the chain
+  // up to the root so the marked rows are visible. Only ever DELETES from
+  // collapsedCategories — never re-adds — so it cannot trample the user's
+  // manual collapse of unrelated parents.
+  $effect(() => {
+    if (!concepts.length || !selected.length) return;
+    const byId = new Map(concepts.map((c) => [c.id, c]));
+    for (const s of selected) {
+      let c = byId.get(s.id);
+      while (c?.parentId) {
+        collapsedCategories.delete(c.parentId);
+        c = byId.get(c.parentId);
+      }
+    }
+  });
+
   // Reset active index when search term changes
   $effect(() => {
     void searchTerm;
@@ -272,13 +289,7 @@
       case ' ':
         if (activeIndex >= 0 && activeIndex < visibleConcepts.length) {
           event.preventDefault();
-          const concept = visibleConcepts[activeIndex];
-          // Match the click behaviour: parent rows (outside search) expand/collapse.
-          if (parentIds.has(concept.id) && !searchTerm.trim()) {
-            toggleCategory(concept.id, event);
-          } else {
-            toggleSelection(concept);
-          }
+          toggleSelection(visibleConcepts[activeIndex]);
         }
         break;
 
@@ -448,7 +459,6 @@
                 {@const hasChildren = parentIds.has(concept.id)}
                 {@const isCollapsed = collapsedCategories.has(concept.id)}
                 {@const isActive = index === activeIndex}
-                {@const parentToggles = hasChildren && !searchTerm.trim()}
 
                 <div
                   data-option-index={index}
@@ -481,17 +491,13 @@
                     <span class="w-[1.625rem] flex-shrink-0"></span>
                   {/if}
 
-                  <!-- Label/selection button.
-                       For parent rows (has children, not searching), clicking the
-                       label toggles expand/collapse so the whole row becomes a big
-                       navigation target. Leaves — and all rows during search —
-                       click to select. The chevron button keeps its Expand/Collapse
-                       aria-label for screen readers. -->
+                  <!-- Label/selection button. The whole row label selects (parents
+                       included — broader concepts are independently taggable in SKOS).
+                       The chevron next to it owns expand/collapse. -->
                   <button
                     type="button"
                     class="flex min-w-0 flex-1 items-center gap-2 py-2 text-left"
-                    onclick={(e) =>
-                      parentToggles ? toggleCategory(concept.id, e) : toggleSelection(concept)}
+                    onclick={() => toggleSelection(concept)}
                     tabindex="-1"
                   >
                     {#if multiple}
