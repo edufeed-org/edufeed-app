@@ -321,4 +321,56 @@ describe('AMBResourceCard', () => {
       expect(goto).toHaveBeenCalledWith(`/c/${npub}/r/naddr1test`);
     });
   });
+
+  describe('preview mode', () => {
+    /** @type {any} */
+    const minimalResource = {
+      pubkey: '0'.repeat(64),
+      identifier: 'https://example.org/lesson',
+      name: 'Test Lesson',
+      description: 'A short description',
+      image: '',
+      publishedDate: 1_700_000_000,
+      languages: ['de'],
+      isFree: true,
+      license: null,
+      keywords: [],
+      tags: [],
+      rawEvent: { id: '', pubkey: '0'.repeat(64), kind: 30142, tags: [], content: '', sig: '' },
+      kind: 30142
+    };
+
+    beforeEach(() => {
+      vi.mocked(goto).mockClear();
+    });
+
+    it('renders without click navigation when preview=true', async () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: minimalResource, preview: true }
+      });
+      const card = container.querySelector('.amb-card');
+      expect(card).toBeTruthy();
+      expect(card?.getAttribute('role')).not.toBe('button');
+      if (card) await fireEvent.click(card);
+      expect(goto).not.toHaveBeenCalled();
+    });
+
+    it('hides bookmark/reactions/comments/debug when preview=true', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: minimalResource, preview: true }
+      });
+      expect(container.querySelector('[role="toolbar"]')).toBeNull();
+      expect(container.querySelector('[data-testid="amb-debug-wrapper"]')).toBeNull();
+    });
+
+    it('still renders metadata, image area, title, and open-content button when preview=true', () => {
+      const { getByText, container } = render(AMBResourceCard, {
+        props: { resource: minimalResource, preview: true }
+      });
+      expect(getByText('Test Lesson')).toBeTruthy();
+      expect(getByText('Open Content')).toBeTruthy();
+      // Image placeholder emoji should be present (no image URL provided)
+      expect(container.textContent).toContain('📚');
+    });
+  });
 });

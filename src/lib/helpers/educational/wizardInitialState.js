@@ -1,0 +1,73 @@
+/**
+ * @typedef {import('./bildungsbereich.js').BildungsbereichKey} BildungsbereichKey
+ * @typedef {{ id: string, label: string }} CompactConcept
+ * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
+ * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string }} Creator
+ * @typedef {{
+ *   coordinate: string,
+ *   pubkey: string,
+ *   dTag: string,
+ *   relayHint?: string | undefined,
+ *   event?: import('nostr-tools').NostrEvent
+ * }} AMBRelationRef
+ * @typedef {{ id: string, label: string }} ConceptLabel
+ */
+
+/**
+ * Build a fresh, default form-data object for ResourceFormWizard.
+ *
+ * Used in two places:
+ * 1. Initial `$state(...)` declaration on mount.
+ * 2. `discardDraft()` resets the form back to this shape after the user
+ *    chooses to throw away a restored draft.
+ *
+ * Returns a new object on every call — important because Svelte's `$state`
+ * proxies the reference and `discardDraft` reassigns to it; sharing a
+ * frozen literal would let one wizard instance mutate another's defaults.
+ */
+export function createInitialFormData() {
+  return {
+    // Step 1: Bildungsbereich
+    bildungsbereich: /** @type {'' | BildungsbereichKey} */ (''),
+
+    // Step 2: URL/naddr input (carried into step 3 as identifier)
+    urlInput: '',
+
+    // Step 3: Basic Info
+    name: '',
+    description: '',
+    inLanguage: 'de',
+    image: '',
+    identifier: '',
+
+    // Step 4: Classification
+    learningResourceType: /** @type {CompactConcept[]} */ ([]),
+    educationalLevels: /** @type {CompactConcept[]} */ ([]),
+    keywords: /** @type {string[]} */ ([]),
+
+    // Step 5: Content & Creators
+    creators: /** @type {Creator[]} */ ([]),
+    encodings: /** @type {UploadedFile[]} */ ([]),
+    externalUrls: /** @type {string[]} */ ([]),
+
+    // Step 6: Relations
+    hasPart: /** @type {AMBRelationRef[]} */ ([]),
+    isPartOf: /** @type {AMBRelationRef[]} */ ([]),
+
+    // Step 7: Rights
+    license: 'https://creativecommons.org/licenses/by/4.0/',
+    isAccessibleForFree: true,
+
+    // EKW-only (variantId === 'ekw'); ignored for AMB
+    gradeLevels: /** @type {string[]} */ ([]),
+    gradeLevelLabels: /** @type {ConceptLabel[]} */ ([]),
+    schoolTypes: /** @type {string[]} */ ([]),
+    schoolTypeLabels: /** @type {ConceptLabel[]} */ ([]),
+    didacticConcepts: /** @type {string[]} */ ([]),
+    didacticConceptLabels: /** @type {ConceptLabel[]} */ ([]),
+    methods: /** @type {string[]} */ ([]),
+    methodLabels: /** @type {ConceptLabel[]} */ ([]),
+    methodOther: '',
+    bibleReferences: /** @type {string[]} */ ([''])
+  };
+}

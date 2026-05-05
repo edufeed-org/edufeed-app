@@ -47,6 +47,7 @@
    * @property {boolean} [compact=false] - Compact display mode
    * @property {'card'|'list'} [variant='card'] - Display variant
    * @property {string} [communityNpub] - Community npub for route construction
+   * @property {boolean} [preview=false] - Preview mode: non-interactive, no bookmark/reactions/debug
    */
 
   /** @type {Props} */
@@ -55,7 +56,8 @@
     authorProfile = null,
     compact = false,
     variant = 'card',
-    communityNpub = undefined
+    communityNpub = undefined,
+    preview = false
   } = $props();
 
   const isList = $derived(variant === 'list');
@@ -261,17 +263,17 @@
   </div>
 {:else}
   <div
-    class="amb-card cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md {compact
-      ? 'p-3'
-      : 'p-4'}"
-    class:focus:outline-none={true}
-    class:focus:ring-2={true}
-    class:focus:ring-primary={true}
-    class:focus:ring-opacity-50={true}
-    role="button"
-    tabindex="0"
-    onclick={navigateToDetail}
-    onkeydown={handleKeydown}
+    class="amb-card rounded-lg border border-base-300 bg-base-100 shadow-sm {preview
+      ? ''
+      : 'cursor-pointer transition-shadow hover:shadow-md'} {compact ? 'p-3' : 'p-4'}"
+    class:focus:outline-none={!preview}
+    class:focus:ring-2={!preview}
+    class:focus:ring-primary={!preview}
+    class:focus:ring-opacity-50={!preview}
+    role={preview ? undefined : 'button'}
+    tabindex={preview ? undefined : 0}
+    onclick={preview ? undefined : navigateToDetail}
+    onkeydown={preview ? undefined : handleKeydown}
   >
     <!-- Author Header -->
     <div class="mb-3 flex items-center gap-3">
@@ -458,7 +460,7 @@
       {/if}
 
       <!-- Reactions & Comments -->
-      {#if !compact && resource.rawEvent}
+      {#if !compact && !preview && resource.rawEvent}
         <div
           class="flex items-center gap-2 pt-2"
           role="toolbar"
@@ -478,9 +480,9 @@
       {/if}
 
       <!-- Debug Panel -->
-      {#if !compact}
+      {#if !compact && !preview}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div onclick={(e) => e.stopPropagation()}>
+        <div data-testid="amb-debug-wrapper" onclick={(e) => e.stopPropagation()}>
           <EventDebugPanel event={resource} />
         </div>
       {/if}
