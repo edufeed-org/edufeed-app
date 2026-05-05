@@ -61,6 +61,7 @@
   import { fly } from 'svelte/transition';
   import { buildPreviewResource } from '$lib/helpers/educational/buildPreviewResource.js';
   import { loadDraft, saveDraft, clearDraft } from '$lib/helpers/educational/draftStore.js';
+  import { createInitialFormData } from '$lib/helpers/educational/wizardInitialState.js';
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -142,50 +143,7 @@
   let imagePreviewError = $state(false);
 
   // Form data state
-  let formData = $state({
-    // Step 1: Bildungsbereich
-    bildungsbereich: /** @type {'' | BildungsbereichKey} */ (''),
-
-    // Step 2: URL/naddr input (what the user typed, also carried into step 3 as identifier)
-    urlInput: '',
-
-    // Step 3: Basic Info
-    name: '',
-    description: '',
-    inLanguage: 'de',
-    image: '',
-    identifier: '',
-
-    // Step 4: Classification
-    learningResourceType: /** @type {CompactConcept[]} */ ([]),
-    educationalLevels: /** @type {CompactConcept[]} */ ([]),
-    keywords: /** @type {string[]} */ ([]),
-
-    // Step 5: Content & Creators
-    creators: /** @type {Creator[]} */ ([]),
-    encodings: /** @type {UploadedFile[]} */ ([]),
-    externalUrls: /** @type {string[]} */ ([]),
-
-    // Step 6: Relations (links to other AMB resources)
-    hasPart: /** @type {AMBRelationRef[]} */ ([]),
-    isPartOf: /** @type {AMBRelationRef[]} */ ([]),
-
-    // Step 7: Rights
-    license: 'https://creativecommons.org/licenses/by/4.0/',
-    isAccessibleForFree: true,
-
-    // EKW-only (variantId === 'ekw'); ignored for AMB
-    gradeLevels: /** @type {string[]} */ ([]),
-    gradeLevelLabels: /** @type {{id: string, label: string}[]} */ ([]),
-    schoolTypes: /** @type {string[]} */ ([]),
-    schoolTypeLabels: /** @type {{id: string, label: string}[]} */ ([]),
-    didacticConcepts: /** @type {string[]} */ ([]),
-    didacticConceptLabels: /** @type {{id: string, label: string}[]} */ ([]),
-    methods: /** @type {string[]} */ ([]),
-    methodLabels: /** @type {{id: string, label: string}[]} */ ([]),
-    methodOther: '',
-    bibleReferences: /** @type {string[]} */ ([''])
-  });
+  let formData = $state(createInitialFormData());
 
   // Per-vocab subject selection (merged into formData.about on submit).
   // Keys are vocab slugs (e.g. 'schulfaecher', 'hochschulfaecher').
@@ -326,14 +284,28 @@
   });
 
   /**
-   * Discard the restored draft and clear the banner.
-   * Resets only the wizard-managed formData; child components keep their
-   * own component state (intentionally — discarding shouldn't blow away
-   * unrelated state like upload progress).
+   * Discard the restored draft: clear localStorage, hide the banner, and
+   * actually reset the wizard state so the user starts fresh from step 1.
+   * Without the state reset the URL/name/etc. fields stay populated and
+   * "verwerfen" feels broken.
    */
   function discardDraft() {
     clearDraft(variantId);
     draftRestoredAt = null;
+
+    // Reset all wizard-managed state to a fresh start.
+    formData = createInitialFormData();
+    aboutByVocab = {};
+    provenance = {};
+    touchedFields = {};
+    advanceAttempted = false;
+    currentStep = 1;
+    maxVisitedStep = 1;
+    hasNoUrl = false;
+    enrichmentStatus = 'idle';
+    enrichedForUrl = '';
+    metadataFetchSource = '';
+    imagePreviewError = false;
   }
 
   // Bildungsbereich options available in step 1 depend on the variant.
@@ -1897,8 +1869,8 @@
                   <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
                   <p class="mt-1">
                     Die EKKW-Vokabulare sind auf diesem Server noch nicht hinterlegt. Bitte wende
-                    Dich an die Administration der Plattform – das Formular lässt sich aktuell
-                    nicht vollständig ausfüllen.
+                    Dich an die Administration der Plattform – das Formular lässt sich aktuell nicht
+                    vollständig ausfüllen.
                   </p>
                   <details class="mt-2">
                     <summary class="cursor-pointer text-xs text-base-content/60">
