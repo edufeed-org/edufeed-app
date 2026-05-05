@@ -89,10 +89,58 @@ describe('POST /api/enrich', () => {
     expect(await res.json()).toEqual(result);
   });
 
-  it('returns 500 when callExtractMetadata throws', async () => {
+  // The route streams whitespace heartbeats while the upstream MCP call is in
+  // flight, so headers commit (status 200) before we know if extraction
+  // succeeded. On failure we write `null` JSON — the client already maps any
+  // non-success to `null`, so a `null` body is semantically equivalent.
+  it('returns 200 with null body when callExtractMetadata throws', async () => {
     callExtractMetadataMock.mockRejectedValueOnce(new Error('boom'));
     const res = await POST(ev(makeRequest({ url: 'https://example.org', variant: 'amb' })));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toBeNull();
+  });
+
+  it('emits heartbeat whitespace while upstream is pending, then the JSON result', async () => {
+    vi.useFakeTimers();
+    /** @type {(value: any) => void} */
+    let resolveUpstream = () => {};
+    callExtractMetadataMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveUpstream = resolve;
+        })
+    );
+    const res = await POST(ev(makeRequest({ url: 'https://example.org', variant: 'amb' })));
+    expect(res.status).toBe(200);
+
+    const reader = /** @type {ReadableStream<Uint8Array>} */ (res.body).getReader();
+    const dec = new TextDecoder();
+
+    // Advance past two heartbeat ticks (5s each); each tick should enqueue one space.
+    await vi.advanceTimersByTimeAsync(5_000);
+    let chunk = await reader.read();
+    expect(chunk.done).toBe(false);
+    expect(dec.decode(chunk.value)).toBe(' ');
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    chunk = await reader.read();
+    expect(chunk.done).toBe(false);
+    expect(dec.decode(chunk.value)).toBe(' ');
+
+    // Resolve the upstream call — final chunk should be the JSON payload.
+    const result = { source: 'llm-enriched', payload: { name: 'X' }, evidence: {}, baseline: {} };
+    resolveUpstream(result);
+    // Drain remaining chunks (could be JSON in one or split across reads).
+    let body = '';
+    // Microtask flush so the start() promise can advance to the JSON write.
+    await Promise.resolve();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      body += dec.decode(value);
+    }
+    expect(JSON.parse(body)).toEqual(result);
+    vi.useRealTimers();
   });
 
   it('passes mcpUrl, bearerToken, and skosSchemes to the client', async () => {

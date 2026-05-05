@@ -109,17 +109,50 @@ export async function POST({ request }) {
     return json({ error: 'Metadata extraction not configured' }, { status: 503 });
   }
 
-  try {
-    const result = await callExtractMetadata({
-      mcpUrl,
-      bearerToken: env.AMB_MCP_BEARER_TOKEN,
-      url,
-      variant,
-      skosSchemes: buildSkosSchemes(bildungsbereich)
-    });
-    return json(result);
-  } catch (err) {
-    console.error('[/api/enrich] extract_metadata failed:', err);
-    return json({ error: 'Metadata extraction failed' }, { status: 500 });
-  }
+  // Stream whitespace heartbeats every HEARTBEAT_MS while the upstream MCP
+  // `extract_metadata` is in flight, then write the final JSON result and
+  // close. Without this, browsers/proxies drop the idle long-poll with
+  // `ERR_NETWORK_CHANGED` (observed for ~30s+ PDF extracts). JSON.parse
+  // ignores leading whitespace, so the client (`await res.json()`) sees the
+  // same payload it would have seen from a buffered response — no client
+  // changes required.
+  //
+  // Headers commit before the upstream call resolves, so on error we cannot
+  // switch to status 500. Instead we write `null` as the JSON body; the
+  // client's `enrichFromUrl` already converts non-2xx and any throw to
+  // `null`, so a `null` body is semantically equivalent for callers.
+  const HEARTBEAT_MS = 5_000;
+  const stream = new ReadableStream({
+    async start(controller) {
+      const enc = new TextEncoder();
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(enc.encode(' '));
+        } catch {
+          // controller already closed; ignore
+        }
+      }, HEARTBEAT_MS);
+      try {
+        const result = await callExtractMetadata({
+          mcpUrl,
+          bearerToken: env.AMB_MCP_BEARER_TOKEN,
+          url,
+          variant,
+          skosSchemes: buildSkosSchemes(bildungsbereich)
+        });
+        controller.enqueue(enc.encode(JSON.stringify(result)));
+      } catch (err) {
+        console.error('[/api/enrich] extract_metadata failed:', err);
+        controller.enqueue(enc.encode('null'));
+      } finally {
+        clearInterval(heartbeat);
+        controller.close();
+      }
+    }
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { 'content-type': 'application/json' }
+  });
 }
