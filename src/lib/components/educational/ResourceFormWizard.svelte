@@ -1917,7 +1917,10 @@
             {#if ekwFachField}
               <div class="form-control">
                 <div class="label">
-                  <span class="label-text font-medium">{m.amb_form_label_ekw_fachrichtung()}</span>
+                  <span class="label-text font-medium">
+                    {m.amb_form_label_ekw_fachrichtung()}
+                    {#if subjectVocabFields.length > 0}<span class="text-error">*</span>{/if}
+                  </span>
                   <SmartFillBadge
                     provenance={provenance.ekwFachrichtung}
                     onclear={() => clearField('ekwFachrichtung')}
@@ -1932,6 +1935,9 @@
                   onchange={makeAboutHandler('ekwFachrichtung')}
                 />
               </div>
+              {#if showError('about')}
+                <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
+              {/if}
             {/if}
 
             {#if klassenstufenField}
