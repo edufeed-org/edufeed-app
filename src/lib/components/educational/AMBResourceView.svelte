@@ -516,7 +516,10 @@
               </div>
             {/if}
             {#if ekwFields.methodOther.trim().length > 0}
-              <p class="mt-2 text-sm whitespace-pre-line text-base-content/80">
+              <p class="mt-3 text-xs font-semibold text-base-content/60">
+                {m.amb_resource_ekw_method_other()}
+              </p>
+              <p class="mt-1 text-sm whitespace-pre-line text-base-content/80">
                 {ekwFields.methodOther}
               </p>
             {/if}

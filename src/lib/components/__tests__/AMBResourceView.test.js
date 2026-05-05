@@ -343,6 +343,9 @@ describe('EKKW-Metadaten section', () => {
       ['ekw:schoolType:id', 'naddr:gym'],
       ['ekw:schoolType:prefLabel:de', 'Gymnasium'],
       ['ekw:schoolType:type', 'Concept'],
+      ['ekw:didacticConcept:id', 'naddr:problem'],
+      ['ekw:didacticConcept:prefLabel:de', 'Problemorientiert'],
+      ['ekw:didacticConcept:type', 'Concept'],
       ['ekw:method:id', 'naddr:plenum'],
       ['ekw:method:prefLabel:de', 'Plenum'],
       ['ekw:method:type', 'Concept'],
@@ -356,7 +359,9 @@ describe('EKKW-Metadaten section', () => {
     expect(getByText('EKKW-Metadaten')).toBeTruthy();
     expect(getByText('Klasse 5')).toBeTruthy();
     expect(getByText('Gymnasium')).toBeTruthy();
+    expect(getByText('Problemorientiert')).toBeTruthy();
     expect(getByText('Plenum')).toBeTruthy();
+    expect(getByText('Methode (Freitext)')).toBeTruthy();
     expect(getByText('Stuhlkreis')).toBeTruthy();
     expect(getByText('Mt 5,1-12')).toBeTruthy();
   });
