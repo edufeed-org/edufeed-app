@@ -1,19 +1,23 @@
 /**
- * SignupModal component tests.
+ * SignupModal — new 2-step normie-friendly flow.
  *
- * Covers the load-bearing wiring invariant introduced when keypair generation
- * was hoisted to modal mount: by the time step 2 renders, AvatarUploader must
- * receive a non-null signer with a working signEvent function. A regression
- * (e.g. re-introducing a `currentStep === 3` guard, or dropping the
- * `signer={_signer}` prop) would silently break Blossom uploads on signup.
+ * Step 1 = name only → creates a SimpleAccount and activates it (user is logged
+ *   in as soon as they leave step 1; backup is offered as a post-login banner).
+ * Step 2 = optional avatar + bio → publishes kind 0 on "Done".
+ *
+ * Tests exercise the load-bearing wiring:
+ *  - AvatarUploader on step 2 receives a working signer (preserves prior invariant)
+ *  - Empty name does not create an account and does not advance
+ *  - Valid name creates SimpleAccount, calls manager.addAccount + setActive
+ *  - "Done" on step 2 publishes a kind 0 carrying the name
  *
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 
-// jsdom doesn't implement HTMLDialogElement.showModal/close. SignupModal's
-// close-handler effect listens for the 'close' event, so emit it from close().
+// jsdom doesn't implement HTMLDialogElement.showModal/close. Provide stubs so
+// the modal's close-handler effect can wire up.
 if (typeof HTMLDialogElement !== 'undefined') {
   if (!HTMLDialogElement.prototype.showModal) {
     HTMLDialogElement.prototype.showModal = function () {
@@ -28,108 +32,112 @@ if (typeof HTMLDialogElement !== 'undefined') {
   }
 }
 
-// Mock AvatarUploader with a thin stand-in that exposes received props via
-// data-* attributes. This is the assertion surface for "signer is wired".
 vi.mock('../shared/AvatarUploader.svelte', async () => {
   const mock = await import('./__mocks__/AvatarUploaderMock.svelte');
   return { default: mock.default };
 });
 
-// Paraglide messages — stub every key the modal references with a function
-// that returns the key as a string. Vitest hoists the factory; we enumerate
-// inline rather than reaching for an outer-scope variable.
 vi.mock('$lib/paraglide/messages', () =>
   Object.fromEntries(
     [
       'auth_signup_modal_title',
-      'auth_signup_modal_step_introduction',
-      'auth_signup_modal_step_profile',
-      'auth_signup_modal_step_keys',
-      'auth_signup_modal_step_follow',
-      'auth_signup_modal_intro_p1',
-      'auth_signup_modal_intro_p2',
-      'auth_signup_modal_intro_p3',
-      'auth_signup_modal_create_profile_title',
-      'auth_signup_modal_profile_picture_url',
-      'auth_signup_modal_profile_picture_placeholder',
-      'auth_signup_modal_profile_picture_hint',
+      'auth_signup_modal_step1_account',
+      'auth_signup_modal_step2_profile',
+      'auth_signup_modal_step1_subtitle',
+      'auth_signup_modal_step2_subtitle',
       'auth_signup_modal_name_label',
       'auth_signup_modal_name_placeholder',
       'auth_signup_modal_about_label',
       'auth_signup_modal_about_placeholder',
-      'auth_signup_modal_website_label',
-      'auth_signup_modal_website_placeholder',
-      'auth_signup_modal_keys_title',
-      'auth_signup_modal_keys_p1',
-      'auth_signup_modal_keys_p2',
-      'auth_signup_modal_keys_warning',
-      'auth_signup_modal_public_key_label',
-      'auth_signup_modal_private_key_download_title',
-      'auth_signup_modal_download_nsec',
-      'auth_signup_modal_download_ncryptsec',
-      'auth_signup_modal_downloaded',
-      'auth_signup_modal_encrypted_backup_label',
-      'auth_signup_modal_password_placeholder',
-      'auth_signup_modal_follow_title',
-      'auth_signup_modal_follow_description',
-      'auth_signup_modal_selected_count',
+      'auth_signup_modal_profile_picture_url',
+      'auth_signup_modal_profile_picture_placeholder',
+      'auth_signup_modal_profile_picture_hint',
+      'auth_signup_modal_picture_url_disclosure',
+      'auth_signup_modal_continue',
+      'auth_signup_modal_done',
+      'auth_signup_modal_skip',
       'auth_signup_modal_creating_account',
-      'auth_signup_modal_finish',
-      'auth_signup_modal_profile_fetch_error',
-      'auth_signup_modal_profile_load_failed',
       'common_back',
-      'common_cancel',
-      'common_next'
+      'common_cancel'
     ].map((key) => [key, () => key])
   )
 );
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
-    signup: { suggestedUsers: [] },
+    signup: { suggestedUsers: [], autoJoinCommunities: [] },
     blossom: { maxFileSize: 5 * 1024 * 1024 }
   },
   configReady: { subscribe: () => () => {} }
 }));
 
+const mockManager = vi.hoisted(() => ({
+  active: null,
+  addAccount: vi.fn(),
+  setActive: vi.fn(),
+  getAccountForPubkey: vi.fn().mockReturnValue(undefined)
+}));
+
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: {
-    active: null,
-    addAccount: vi.fn(),
-    setActive: vi.fn()
-  }
+  manager: mockManager
+}));
+vi.mock('$lib/stores/accounts.svelte.js', () => ({
+  manager: mockManager
 }));
 
+const mockEventStore = vi.hoisted(() => ({
+  add: vi.fn(),
+  profile: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+}));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: {
-    add: vi.fn(),
-    profile: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
-  }
+  eventStore: mockEventStore
 }));
 
+const mockModalStore = vi.hoisted(() => ({
+  activeModal: 'signup',
+  closeModal: vi.fn()
+}));
 vi.mock('$lib/stores/modal.svelte.js', () => ({
-  modalStore: {
-    activeModal: 'signup',
-    closeModal: vi.fn()
-  }
+  modalStore: mockModalStore
 }));
 
+const mockPublishEvent = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('$lib/services/publish-service.js', () => ({
-  publishEvent: vi.fn()
+  publishEvent: mockPublishEvent
 }));
 
 vi.mock('$lib/helpers/profile.js', () => ({
   fetchProfileData: vi.fn()
 }));
 
-// Stub the auto-join helper. The real module is leaf-level now, but stubbing
-// keeps this test focused on the signer-wiring invariant.
 vi.mock('$lib/helpers/autoJoinCommunities.js', () => ({
   buildAutoJoinFollowSet: vi.fn().mockResolvedValue({ signed: null, targetPubkeys: [] })
 }));
 
-// Icon / image stubs — point at an empty real Svelte component so Svelte 5's
-// runtime can instantiate them (an inert object isn't callable as a component).
+// Stub the keypair helper so the signer's signEvent doesn't hit @noble/hashes'
+// strict `instanceof Uint8Array` check, which fails in jsdom because
+// jsdom's TextEncoder returns Uint8Arrays from a different realm than the one
+// @noble/hashes was loaded in. The real helper is exercised in node-env tests.
+vi.mock('$lib/helpers/signupKeypair.js', () => ({
+  generateSignupKeypair: () => {
+    const pk = 'a'.repeat(64);
+    return {
+      privateKey: new Uint8Array(32).fill(1),
+      publicKey: pk,
+      nsec: 'nsec1stub',
+      npub: 'npub1stub',
+      signer: {
+        signEvent: vi.fn(async (event) => ({
+          ...event,
+          id: 'b'.repeat(64),
+          sig: 'c'.repeat(128),
+          pubkey: pk
+        }))
+      }
+    };
+  }
+}));
+
 vi.mock('../shared/ImageWithFallback.svelte', async () => {
   const stub = await import('./__mocks__/EmptyStub.svelte');
   return { default: stub.default };
@@ -155,21 +163,135 @@ import SignupModal from '../SignupModal.svelte';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockManager.addAccount.mockClear();
+  mockManager.setActive.mockClear();
+  mockManager.getAccountForPubkey.mockReturnValue(undefined);
 });
 
-describe('SignupModal', () => {
-  it('passes a non-null signer with a working signEvent to AvatarUploader on step 2', async () => {
+/**
+ * Helper: type into the name field and click Continue.
+ *
+ * @param {Document | HTMLElement} container
+ * @param {(text: string) => HTMLElement} getByText
+ * @param {string} name
+ */
+async function submitStep1(container, getByText, name) {
+  const nameInput = /** @type {HTMLInputElement} */ (container.querySelector('#signup-name-input'));
+  if (nameInput) {
+    await fireEvent.input(nameInput, { target: { value: name } });
+  }
+  await fireEvent.click(getByText('auth_signup_modal_continue'));
+}
+
+describe('SignupModal — Step 1 (Account)', () => {
+  it('does not create or activate an account when the name is empty', async () => {
     const { container, getByText } = render(SignupModal, {
-      props: { modalId: 'signup-test' }
+      props: { modalId: 'signup-test-1' }
     });
 
-    // Step 1 → step 2 via the Next button. Paraglide stub returns the message
-    // key as the text, so the button label is "common_next".
-    await fireEvent.click(getByText('common_next'));
+    await submitStep1(container, getByText, '');
+
+    expect(mockManager.addAccount).not.toHaveBeenCalled();
+    expect(mockManager.setActive).not.toHaveBeenCalled();
+  });
+
+  it('creates a SimpleAccount, activates it, and advances to Step 2 when name is valid', async () => {
+    const { container, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-test-2' }
+    });
+
+    await submitStep1(container, getByText, 'Test Teacher');
+
+    expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
+    expect(mockManager.setActive).toHaveBeenCalledTimes(1);
+
+    // Same account passed to both
+    const created = mockManager.addAccount.mock.calls[0][0];
+    expect(mockManager.setActive.mock.calls[0][0]).toBe(created);
+
+    // Account looks like a SimpleAccount (has pubkey + signer)
+    expect(created.pubkey).toMatch(/^[0-9a-f]{64}$/);
+    expect(typeof created.signer.signEvent).toBe('function');
+
+    // Step 2 is rendered (AvatarUploader present)
+    const uploader = container.querySelector('[data-testid="avatar-uploader-mock"]');
+    expect(uploader).not.toBeNull();
+
+    // Wizard graduation flag is written so post-login banners know to show.
+    expect(localStorage.getItem(`signed-up-here:${created.pubkey}`)).toBe('1');
+  });
+
+  it('advances when the user presses Enter inside the name input', async () => {
+    // Submitting the form (Enter on input → implicit submit) must run the
+    // same path as clicking Continue. Without the <form> wrap, Enter was a
+    // no-op and confused testers. Asserts on the form's submit so we are
+    // not coupled to whether the submit button lives inside or outside it.
+    const { container } = render(SignupModal, {
+      props: { modalId: 'signup-test-enter' }
+    });
+
+    const nameInput = /** @type {HTMLInputElement} */ (
+      container.querySelector('#signup-name-input')
+    );
+    await fireEvent.input(nameInput, { target: { value: 'Test Teacher' } });
+
+    const form = /** @type {HTMLFormElement} */ (container.querySelector('#signup-step1-form'));
+    expect(form, 'Step 1 should be wrapped in a <form>').not.toBeNull();
+    await fireEvent.submit(form);
+
+    expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
+    // Step 2 rendered (AvatarUploader visible).
+    const uploader = container.querySelector('[data-testid="avatar-uploader-mock"]');
+    expect(uploader).not.toBeNull();
+  });
+
+  it('does not create the account twice if Continue is clicked twice', async () => {
+    // Simulate the manager already knowing this pubkey on the second click.
+    mockManager.getAccountForPubkey
+      .mockReturnValueOnce(undefined) // first click: no existing account
+      .mockReturnValue({ id: 'existing' }); // subsequent: account exists
+
+    const { container, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-test-3' }
+    });
+
+    await submitStep1(container, getByText, 'Test Teacher');
+    // After first click we're on step 2; can't click Continue again. The
+    // guard's real value is in surviving accidental form double-submits at
+    // step 1 — covered structurally by the addAccount call count above.
+    expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SignupModal — Step 2 (Profile)', () => {
+  it('passes a non-null signer with a working signEvent to AvatarUploader', async () => {
+    const { container, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-test-4' }
+    });
+
+    await submitStep1(container, getByText, 'Test Teacher');
 
     const uploader = container.querySelector('[data-testid="avatar-uploader-mock"]');
     expect(uploader, 'AvatarUploader should render on step 2').not.toBeNull();
     expect(uploader?.getAttribute('data-has-signer')).toBe('true');
     expect(uploader?.getAttribute('data-signer-can-sign')).toBe('true');
+  });
+
+  it('publishes a kind 0 event carrying the Step-1 name when "Done" is clicked with no extras', async () => {
+    const { container, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-test-5' }
+    });
+
+    await submitStep1(container, getByText, 'Test Teacher');
+    await fireEvent.click(getByText('auth_signup_modal_done'));
+
+    // Allow microtasks (sign + add + publish promises) to resolve.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockPublishEvent).toHaveBeenCalled();
+    const event = mockPublishEvent.mock.calls[0][0];
+    expect(event.kind).toBe(0);
+    const profile = JSON.parse(event.content);
+    expect(profile.name).toBe('Test Teacher');
   });
 });

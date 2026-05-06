@@ -30,13 +30,17 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
 
   NostrConnectSigner.pool = pool;
 
+  // fromBunkerURI parses the URI, builds the signer, AND calls .connect(secret,
+  // permissions) internally — see applesauce-signers nostr-connect-signer.js
+  // line 351. The returned signer is already opened and connected. Calling
+  // .open()/.connect() again re-sends a Connect RPC without the bunker's
+  // secret, which strict bunkers (nsec.app, recent Amber) reject — and
+  // connect()'s error path calls close(), destroying the subscription.
   const signer = await NostrConnectSigner.fromBunkerURI(url, {
     signer: clientSigner,
     onAuth
   });
 
-  await signer.open();
-  await signer.connect();
   const pubkey = await signer.getPublicKey();
 
   return { signer, pubkey };
@@ -48,6 +52,29 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
  */
 function generateSecret() {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+}
+
+/**
+ * The NIP-46 rendezvous relay. Most popular bunkers (nsec.app, recent Amber)
+ * publish their Connect-RPC ack ONLY to this relay regardless of what the
+ * client lists in the `nostrconnect://` URI's `relay=` params. If our QR URI
+ * doesn't list this relay, we never see the ack and `waitForSigner` hangs.
+ * The official applesauce example (`signers/bunker`) uses this relay alone
+ * for the same reason.
+ */
+const NIP46_RENDEZVOUS_RELAY = 'wss://relay.nsec.app';
+
+/**
+ * Build the list of relays for a client-initiated nostrconnect:// URI.
+ * Always includes the NIP-46 rendezvous relay, deduplicated against the
+ * caller-supplied fallback list.
+ *
+ * @param {string[] | undefined | null} fallbackRelays
+ * @returns {string[]}
+ */
+export function buildClientConnectRelays(fallbackRelays) {
+  const fallback = Array.isArray(fallbackRelays) ? fallbackRelays.filter(Boolean) : [];
+  return Array.from(new Set([NIP46_RENDEZVOUS_RELAY, ...fallback]));
 }
 
 /**
