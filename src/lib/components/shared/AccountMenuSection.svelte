@@ -69,12 +69,19 @@
 </script>
 
 {#if activeAccount}
-  <!-- Identity header (display only) -->
-  <li class="menu-disabled pointer-events-none">
-    <div class="flex min-w-0 items-center gap-3 py-2">
+  <!-- Identity header (display only).
+       NOTE: `min-w-0 w-full` on the <li> is required because DaisyUI's `.menu > li`
+       defaults to content-sized width and would otherwise overflow the narrow
+       w-56 dropdown when the display name is long. The line-clamp-2 + break-words
+       on the span lets long names wrap onto a second line (with ellipsis after
+       line 2 for the truly enormous ones) — the dropdown is opened on mobile
+       too, where there's no hover tooltip to fall back on. -->
+  <li class="menu-disabled pointer-events-none w-full min-w-0">
+    <div class="flex w-full min-w-0 items-start gap-3 py-2">
       <ProfileAvatar pubkey={activeAccount.pubkey} size="sm" fallbackType="robohash" />
-      <span class="min-w-0 flex-1 truncate font-medium text-base-content" title={displayName}
-        >{displayName}</span
+      <span
+        class="line-clamp-2 min-w-0 flex-1 leading-snug font-medium break-words text-base-content"
+        title={displayName}>{displayName}</span
       >
     </div>
   </li>
