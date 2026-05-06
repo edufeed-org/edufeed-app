@@ -203,18 +203,27 @@ describe('createCommunityContentLoader', () => {
     expect(repostRelays.length).toBeGreaterThan(getRelays().length);
   });
 
-  it('applies filterFn to direct content filter when provided', () => {
-    const filterFn = vi.fn((/** @type {any} */ f) => ({ ...f, authors: ['curated1'] }));
-    const loader = createCommunityContentLoader([30142], getRelays, { filterFn });
+  // Regression: previously the direct h-tag-scoped content filter ran through
+  // `filterFn: applyCuratedFilter`, which injected an `authors:` restriction
+  // derived from curated/WoT pubkey lists. That excluded community members'
+  // content from the community view at the relay layer — even though the
+  // matching model has no author restriction. Visiting the author's profile
+  // (which has no curated filter) brought events into EventStore and the model
+  // would then surface them, masking the loader bug. h-tag scoping IS the
+  // curation; no additional author filtering should be applied here.
+  it('does NOT add an authors filter to the direct h-tag-scoped content query', () => {
+    const loader = createCommunityContentLoader([30023], getRelays);
     loader(COMMUNITY_PK);
 
-    expect(filterFn).toHaveBeenCalledWith({ kinds: [30142], '#h': [COMMUNITY_PK] });
-    expect(createTimelineLoader).toHaveBeenCalledWith(
-      expect.any(Function),
-      expect.any(Array),
-      expect.objectContaining({ authors: ['curated1'] }),
-      expect.any(Object)
+    const directCall = /** @type {any} */ (createTimelineLoader).mock.calls.find(
+      (/** @type {any[]} */ call) =>
+        Array.isArray(call[2]?.kinds) &&
+        call[2].kinds.includes(30023) &&
+        Array.isArray(call[2]['#h'])
     );
+    expect(directCall).toBeDefined();
+    expect(directCall[2]).toEqual({ kinds: [30023], '#h': [COMMUNITY_PK] });
+    expect(directCall[2].authors).toBeUndefined();
   });
 
   it('creates targeted publications loader for the community', () => {
