@@ -7,13 +7,14 @@
   import { articleTimelineLoader } from '$lib/loaders/articles.js';
   import { ambTimelineLoader } from '$lib/loaders/amb.js';
   import { kanbanTimelineLoader } from '$lib/loaders/kanban.js';
-  import { feedTargetedPublicationsLoader } from '$lib/loaders/targeted-publications.js';
+  import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
+  import { CommunityActivityModel } from '$lib/models/community-content.js';
   import {
     createDateRangeCalendarLoader,
     createPaginatedCalendarLoader
   } from '$lib/loaders/calendar.js';
   import { preWarmRelayCapabilitiesCache } from '$lib/services/relay-capabilities.js';
-  import { addressLoader, timedPool } from '$lib/loaders/base.js';
+  import { timedPool } from '$lib/loaders/base.js';
   import { ambSearchLoader } from '$lib/loaders/amb-search.js';
   import {
     hasActiveFilters,
@@ -25,7 +26,6 @@
     getEducationalRelays,
     getArticleRelays,
     getCalendarRelays,
-    getCommunikeyRelays,
     getKanbanRelays
   } from '$lib/helpers/relay-helper.js';
   import { TimelineModel } from 'applesauce-core/models';
@@ -69,8 +69,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import {
-    buildContentToCommunityMap,
-    filterContentByCommunity,
+    mapCommunityItemsToRawItems,
     getCommunityFilterOptions
   } from '$lib/helpers/communityContent.js';
   import { matchesTextSearch } from '$lib/helpers/contentSearch.js';
@@ -87,8 +86,11 @@
   let articles = $state.raw(/** @type {any[]} */ ([]));
   let ambResources = $state.raw(/** @type {any[]} */ ([]));
   let calendarEvents = $state.raw(/** @type {any[]} */ ([]));
-  let targetedPubs = $state.raw(/** @type {any[]} */ ([]));
   let kanbanBoards = $state.raw(/** @type {any[]} */ ([]));
+  // Items sourced from CommunityActivityModel when a community filter is active.
+  // Bypasses curated/WoT author filtering (h-tag membership IS the curation), and
+  // already includes NIP-18 reposts + legacy 30222 references resolved by the model.
+  let communityScopedItems = $state.raw(/** @type {any[]} */ ([]));
 
   // Trigger counter to force profile hook re-evaluation when $state.raw() arrays are updated
   let profileTrigger = $state(0);
@@ -285,9 +287,6 @@
   // Get joined community pubkeys for filtering (already strings from follow set)
   const joinedCommunityPubkeys = $derived(joinedCommunities);
 
-  // Build content-to-community map from targeted publications
-  const contentToCommunityMap = $derived(buildContentToCommunityMap(targetedPubs));
-
   // Get community options for dropdown
   const communityOptions = $derived(
     getCommunityFilterOptions(allCommunities, joinedCommunities, communityProfiles)
@@ -452,7 +451,6 @@
   const ambLoader = ambTimelineLoader(BATCH_SIZE);
   const kanbanLoader = kanbanTimelineLoader(BATCH_SIZE);
   // Calendar events use date range loader (not stateful pagination)
-  const targetedPubsLoader = feedTargetedPublicationsLoader(200);
 
   // Step 2: Initial load (subscriptions captured for cleanup on destroy)
   const initialArticleSub = articleLoader().subscribe({
@@ -506,12 +504,6 @@
     }
   });
 
-  const initialTargetedPubsSub = targetedPubsLoader().subscribe({
-    error: (/** @type {any} */ error) => {
-      console.error('🔍 Discover: Targeted publications loader error:', error);
-    }
-  });
-
   // Supplemental relay loading: when user override relays arrive (kind 30002),
   // the initial loaders above won't include them because they resolved relays
   // at mount time before the async cache populated. This $effect watches for
@@ -519,7 +511,6 @@
   const initialEducationalRelays = new SvelteSet(getEducationalRelays());
   const initialArticleRelays = new SvelteSet(getArticleRelays());
   const initialCalendarRelays = new SvelteSet(getCalendarRelays());
-  const initialCommunikeyRelays = new SvelteSet(getCommunikeyRelays());
   const initialKanbanRelays = new SvelteSet(getKanbanRelays());
 
   $effect(() => {
@@ -556,20 +547,6 @@
       newCalendar.forEach((r) => initialCalendarRelays.add(r));
       const calFilter = applyCuratedFilter({ kinds: [31922, 31923], limit: 40 });
       const loader = createTimelineLoader(timedPool, newCalendar, calFilter, { eventStore });
-      supplementalSubs.push(loader().subscribe());
-    }
-
-    const currentCommunikey = getCommunikeyRelays();
-    const newCommunikey = currentCommunikey.filter((r) => !initialCommunikeyRelays.has(r));
-    if (newCommunikey.length > 0) {
-      newCommunikey.forEach((r) => initialCommunikeyRelays.add(r));
-      // Targeted publications (kind 30222) are social actions — not filtered by curated mode
-      const loader = createTimelineLoader(
-        timedPool,
-        newCommunikey,
-        { kinds: [30222], '#k': ['30023', '30142', '31922', '31923', '30301'] },
-        { eventStore, limit: 200 }
-      );
       supplementalSubs.push(loader().subscribe());
     }
 
@@ -677,14 +654,6 @@
     return () => subs.forEach((s) => s.unsubscribe());
   });
 
-  // Subscribe to targeted publications model (debounced via RxJS)
-  const targetedPubsModelSub = eventStore
-    .model(TimelineModel, { kinds: [30222], '#k': ['30023', '30142', '31922', '31923', '30301'] })
-    .pipe(debounceTime(100))
-    .subscribe((pubs) => {
-      targetedPubs = pubs || [];
-    });
-
   // Subscribe to articles (debounced via RxJS)
   const articleModelSub = eventStore
     .model(TimelineModel, { kinds: [30023] })
@@ -771,103 +740,63 @@
     return () => calendarModelSub?.unsubscribe();
   });
 
-  // Community-specific calendar event loader subscriptions
-  // Note: Plain let (not $state) to avoid infinite loops in $effect
-  /** @type {import('rxjs').Subscription | undefined} */
-  let communityCalendarSub;
-  /** @type {import('rxjs').Subscription | undefined} */
-  let communityTargetedPubsSub;
-  /** @type {import('rxjs').Subscription | undefined} */
-  let communityReferencedEventsSub;
-
-  // Load community-specific calendar events when community filter changes
+  // Community-scoped feed: when communityFilter is set, source items directly
+  // from CommunityActivityModel (per-community) instead of the global
+  // curated-author timelines. h-tag membership IS the curation, so author
+  // filtering is intentionally not applied — same pipeline community pages
+  // already use, which is why this fixes the "empty community feed" bug.
   $effect(() => {
-    // Clean up previous subscriptions
-    communityCalendarSub?.unsubscribe();
-    communityTargetedPubsSub?.unsubscribe();
-    communityReferencedEventsSub?.unsubscribe();
+    if (!communityFilter) {
+      communityScopedItems = [];
+      return;
+    }
 
-    // Only load if a specific community is selected (not 'joined' or null)
-    if (communityFilter && communityFilter !== 'joined') {
-      // 1. Subscribe to direct calendar events with #h tag (uses TimelineModel for deletion filtering)
-      communityCalendarSub = eventStore
-        .model(TimelineModel, {
-          kinds: [31922, 31923],
-          '#h': [communityFilter],
-          limit: 50
-        })
-        .subscribe();
+    /** @type {string[]} */
+    const targets =
+      communityFilter === 'joined'
+        ? /** @type {string[]} */ (joinedCommunityPubkeys)
+        : [communityFilter];
 
-      // 2. Subscribe to targeted publications for this community
-      communityTargetedPubsSub = eventStore
-        .model(TimelineModel, {
-          kinds: [30222],
-          '#p': [communityFilter],
-          '#k': ['31922', '31923'],
-          limit: 100
-        })
-        .subscribe();
+    if (targets.length === 0) {
+      communityScopedItems = [];
+      return;
+    }
 
-      // 3. Watch targeted publications and load referenced calendar events
-      communityReferencedEventsSub = eventStore
-        .model(TimelineModel, {
-          kinds: [30222],
-          '#p': [communityFilter],
-          '#k': ['31922', '31923'],
-          limit: 100
-        })
-        .subscribe((shareEvents) => {
-          const eventIds = /** @type {SvelteSet<string>} */ (new SvelteSet());
-          /** @type {Array<{kind: number, pubkey: string, dTag: string}>} */
-          const addressableRefs = [];
+    /** @type {Array<() => void>} */
+    const cleanups = [];
+    /** @type {import('rxjs').Subscription[]} */
+    const modelSubs = [];
+    /** @type {Map<string, any[]>} */
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
+    const perCommunity = new Map();
 
-          shareEvents.forEach((shareEvent) => {
-            const eTag = getTagValue(shareEvent, 'e');
-            const aTag = getTagValue(shareEvent, 'a');
+    for (const pubkey of targets) {
+      const { cleanup } = useCommunityActivityLoader(pubkey);
+      cleanups.push(cleanup);
 
-            if (eTag) {
-              eventIds.add(eTag);
+      const sub = eventStore
+        .model(CommunityActivityModel, pubkey)
+        .pipe(debounceTime(100))
+        .subscribe((items) => {
+          perCommunity.set(pubkey, items || []);
+          // Merge across all targeted communities, dedupe by id (direct beats reposted).
+          /** @type {Map<string, any>} */
+          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
+          const merged = new Map();
+          for (const arr of perCommunity.values()) {
+            for (const item of arr) {
+              if (!merged.has(item.id)) merged.set(item.id, item);
             }
-            if (aTag) {
-              // Parse addressable reference format: kind:pubkey:d-tag
-              const parts = aTag.split(':');
-              if (parts.length === 3) {
-                const [kind, pubkey, dTag] = parts;
-                addressableRefs.push({
-                  kind: parseInt(kind, 10),
-                  pubkey,
-                  dTag
-                });
-              }
-            }
-          });
-
-          // Load events by ID (TimelineModel filters deletions)
-          if (eventIds.size > 0) {
-            // Subscription is intentionally not tracked - side effect only; cleaned up when
-            // communityReferencedEventsSub is unsubscribed and effect re-runs
-            eventStore
-              .model(TimelineModel, {
-                ids: Array.from(eventIds)
-              })
-              .subscribe();
           }
-
-          // Load addressable events
-          addressableRefs.forEach((ref) => {
-            addressLoader({
-              kind: ref.kind,
-              pubkey: ref.pubkey,
-              identifier: ref.dTag
-            }).subscribe();
-          });
+          communityScopedItems = Array.from(merged.values());
+          profileTrigger++;
         });
+      modelSubs.push(sub);
     }
 
     return () => {
-      communityCalendarSub?.unsubscribe();
-      communityTargetedPubsSub?.unsubscribe();
-      communityReferencedEventsSub?.unsubscribe();
+      for (const c of cleanups) c();
+      for (const s of modelSubs) s.unsubscribe();
     };
   });
 
@@ -1301,7 +1230,6 @@
       initialAmbSub.unsubscribe();
       initialCalendarSub.unsubscribe();
       initialKanbanSub.unsubscribe();
-      initialTargetedPubsSub.unsubscribe();
 
       // Unsubscribe date range loader subscription
       dateRangeLoaderSub?.unsubscribe();
@@ -1311,7 +1239,6 @@
       kanbanModelSub.unsubscribe();
       ambModelSub.unsubscribe();
       calendarModelSub?.unsubscribe();
-      targetedPubsModelSub.unsubscribe();
     };
   });
 
@@ -1369,9 +1296,33 @@
 
   // Combined and filtered content - split into pipeline for better reactivity
   // Step 1: Build raw items (only runs when source arrays change)
+  // When a community filter is active, source items directly from
+  // CommunityActivityModel (no curated/author filter — h-tag scoping IS the
+  // curation, and reposts/legacy shares are already resolved). Otherwise use
+  // the global curated-author per-kind arrays.
   const rawItems = $derived.by(() => {
     // Read curatedCacheVersion to re-derive when curated cache populates asynchronously
     const _cacheVer = getCuratedCacheVersion();
+
+    if (communityFilter) {
+      const items = mapCommunityItemsToRawItems(
+        communityScopedItems,
+        /** @type {'all'|'events'|'learning'|'articles'|'boards'} */ (contentType)
+      );
+      // Apply learning NIP-50 search intersection when active.
+      if (
+        contentType === 'learning' &&
+        isLearningSearchActive &&
+        items.some((i) => i.type === 'amb')
+      ) {
+        const searchResultIds = new Set(learningSearchResults.map((e) => e.id));
+        return items.filter(
+          (i) => i.type !== 'amb' || searchResultIds.has(i.data.event?.id || i.data.id)
+        );
+      }
+      return items;
+    }
+
     /** @type {Array<{type: string, data: any}>} */
     let items = [];
 
@@ -1422,22 +1373,11 @@
     return items;
   });
 
-  // Step 2: Apply community filter (only runs when community filter or rawItems change)
-  const communityFilteredItems = $derived.by(() => {
-    if (!communityFilter) return rawItems;
-    return filterContentByCommunity(
-      rawItems,
-      communityFilter,
-      /** @type {string[]} */ (joinedCommunityPubkeys),
-      contentToCommunityMap
-    );
-  });
-
-  // Step 3: Apply relay filter (only runs when relay filter changes)
+  // Step 2: Apply relay filter
   const relayFilteredItems = $derived.by(() => {
-    if (!relayFilter) return communityFilteredItems;
+    if (!relayFilter) return rawItems;
     const normalizedFilter = normalizeURL(relayFilter);
-    return communityFilteredItems.filter((item) => {
+    return rawItems.filter((item) => {
       const event = item.data?.rawEvent || item.data?.originalEvent || item.data;
       return getSeenRelays(event)?.has(normalizedFilter);
     });

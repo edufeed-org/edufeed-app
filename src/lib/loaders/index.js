@@ -33,8 +33,7 @@ export { ambTimelineLoader } from './amb.js';
 export {
   allTargetedPublicationsLoader,
   articleTargetedPublicationsLoader,
-  communityTargetedPublicationsLoader,
-  feedTargetedPublicationsLoader
+  communityTargetedPublicationsLoader
 } from './targeted-publications.js';
 
 // Calendar event loader composable and URL sync helpers
