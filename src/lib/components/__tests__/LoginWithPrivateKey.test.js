@@ -45,6 +45,15 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({
   }
 }));
 
+// Stub the profile loader: returns a never-emitting Observable so the
+// component's "fetch profile to use as PM username" effect cleans up silently
+// without touching relays or pulling in window.matchMedia from relay-helper.
+vi.mock('$lib/loaders/profile.js', () => ({
+  loadUserProfile: () => ({
+    subscribe: () => ({ unsubscribe: () => {} })
+  })
+}));
+
 vi.mock('$lib/paraglide/messages', () => ({
   auth_login_private_key_title: () => 'Log in with private key',
   auth_login_private_key_description: () => 'Paste your nsec',
