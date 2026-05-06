@@ -17,7 +17,7 @@ export function articleTimelineLoader(limit = 20) {
   return createCachedTimelineLoader(getArticleRelays(), filter, { limit });
 }
 
-/** Hook: Load articles for a specific community */
-export const useArticleCommunityLoader = createCommunityContentLoader([30023], getArticleRelays, {
-  filterFn: applyCuratedFilter
-});
+/** Hook: Load articles for a specific community.
+ *  Curated/WoT author filtering is intentionally NOT applied — content is
+ *  scoped by `#h:[communityPubkey]`, which IS the curation for community views. */
+export const useArticleCommunityLoader = createCommunityContentLoader([30023], getArticleRelays);

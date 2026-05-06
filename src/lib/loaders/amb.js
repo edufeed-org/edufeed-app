@@ -17,7 +17,7 @@ export function ambTimelineLoader(limit = 20) {
   return createCachedTimelineLoader(getEducationalRelays(), filter, { limit });
 }
 
-/** Hook: Load AMB resources for a specific community */
-export const useAMBCommunityLoader = createCommunityContentLoader([30142], getEducationalRelays, {
-  filterFn: applyCuratedFilter
-});
+/** Hook: Load AMB resources for a specific community.
+ *  Curated/WoT author filtering is intentionally NOT applied — content is
+ *  scoped by `#h:[communityPubkey]`, which IS the curation for community views. */
+export const useAMBCommunityLoader = createCommunityContentLoader([30142], getEducationalRelays);
