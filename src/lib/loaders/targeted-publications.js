@@ -64,20 +64,3 @@ export function communityTargetedPublicationsLoader(communityPubkey, contentKind
     { limit }
   );
 }
-
-/**
- * Create a timeline loader for feed content targeted publications
- * Loads shares for articles (30023), AMB resources (30142), and calendar events (31922, 31923)
- * @param {number} limit - Maximum number of events to load per batch
- * @returns {Function} Stateful timeline loader function
- */
-export function feedTargetedPublicationsLoader(limit = 200) {
-  return createCachedTimelineLoader(
-    getTargetedPublicationRelays(),
-    {
-      kinds: [30222],
-      '#k': ['30023', '30142', '31922', '31923', '30301'] // Articles, AMB resources, calendar events, and kanban boards
-    },
-    { limit }
-  );
-}
