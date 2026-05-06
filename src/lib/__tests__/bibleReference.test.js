@@ -4,7 +4,8 @@ import {
   BIBLE_BOOKS,
   findBookMatches,
   findExactBook,
-  parseAndCanonicalize
+  parseAndCanonicalize,
+  toBibleServerUrl
 } from '$lib/helpers/educational/bibleReference.js';
 
 describe('parseAndCanonicalize — German bible references', () => {
@@ -137,5 +138,52 @@ describe('findExactBook', () => {
     expect(findExactBook('Matt')).toBeNull();
     expect(findExactBook('')).toBeNull();
     expect(findExactBook('Foo')).toBeNull();
+  });
+});
+
+describe('toBibleServerUrl', () => {
+  it('builds a bibleserver.com LUT link for canonical short references', () => {
+    expect(toBibleServerUrl('Mt 5,3-12')).toBe(
+      'https://www.bibleserver.com/LUT/' + encodeURIComponent('Mt 5,3-12')
+    );
+    expect(toBibleServerUrl('Joh 3,16')).toBe(
+      'https://www.bibleserver.com/LUT/' + encodeURIComponent('Joh 3,16')
+    );
+  });
+
+  it('handles books with leading number prefixes', () => {
+    expect(toBibleServerUrl('1 Kor 13,1-3')).toBe(
+      'https://www.bibleserver.com/LUT/' + encodeURIComponent('1 Kor 13,1-3')
+    );
+    expect(toBibleServerUrl('1 Mo 1,1')).toBe(
+      'https://www.bibleserver.com/LUT/' + encodeURIComponent('1 Mo 1,1')
+    );
+  });
+
+  it('accepts long German book names', () => {
+    expect(toBibleServerUrl('Matthäus 5,3-12')).toBe(
+      'https://www.bibleserver.com/LUT/' + encodeURIComponent('Matthäus 5,3-12')
+    );
+  });
+
+  it('is accent-insensitive and case-insensitive on the book name', () => {
+    expect(toBibleServerUrl('matthaus 5,3-12')).not.toBeNull();
+    expect(toBibleServerUrl('MATTHÄUS 5,3-12')).not.toBeNull();
+  });
+
+  it('returns null for inputs that do not start with a known book', () => {
+    expect(toBibleServerUrl('Freie Methode A')).toBeNull();
+    expect(toBibleServerUrl('Foo 5,3')).toBeNull();
+    expect(toBibleServerUrl('Lorem ipsum')).toBeNull();
+  });
+
+  it('returns null for empty / whitespace input', () => {
+    expect(toBibleServerUrl('')).toBeNull();
+    expect(toBibleServerUrl('   ')).toBeNull();
+  });
+
+  it('returns null when the input has a known book but no chapter/verse digits', () => {
+    expect(toBibleServerUrl('Mt')).toBeNull();
+    expect(toBibleServerUrl('Matthäus')).toBeNull();
   });
 });

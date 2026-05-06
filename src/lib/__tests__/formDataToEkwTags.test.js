@@ -24,32 +24,41 @@ const sampleFormData = {
 };
 
 describe('formDataToEkwTags', () => {
-  it('emits id + prefLabel + type tags for each vocab field', () => {
+  it('emits id + prefLabel + type tags for each vocab field using the ext:ekw: prefix', () => {
     const tags = formDataToEkwTags(sampleFormData);
 
-    expect(tags).toContainEqual(['ekw:gradeLevel:id', 'https://edufeed.org/v/klassenstufen/5-6']);
-    expect(tags).toContainEqual(['ekw:gradeLevel:prefLabel:de', '5–6']);
-    expect(tags).toContainEqual(['ekw:gradeLevel:type', 'Concept']);
+    expect(tags).toContainEqual([
+      'ext:ekw:gradeLevel:id',
+      'https://edufeed.org/v/klassenstufen/5-6'
+    ]);
+    expect(tags).toContainEqual(['ext:ekw:gradeLevel:prefLabel:de', '5–6']);
+    expect(tags).toContainEqual(['ext:ekw:gradeLevel:type', 'Concept']);
 
     expect(tags).toContainEqual([
-      'ekw:schoolType:id',
+      'ext:ekw:schoolType:id',
       'https://edufeed.org/v/schulart/grundschule'
     ]);
     expect(tags).toContainEqual([
-      'ekw:didacticConcept:id',
+      'ext:ekw:didacticConcept:id',
       'https://edufeed.org/v/didaktisches-konzept/symboldidaktik'
     ]);
-    expect(tags).toContainEqual(['ekw:method:id', 'https://edufeed.org/v/methode/rollenspiel']);
+    expect(tags).toContainEqual(['ext:ekw:method:id', 'https://edufeed.org/v/methode/rollenspiel']);
+  });
+
+  it('does not emit any legacy unprefixed ekw:* tags', () => {
+    const tags = formDataToEkwTags(sampleFormData);
+    const legacy = tags.filter((t) => t[0]?.startsWith('ekw:'));
+    expect(legacy).toEqual([]);
   });
 
   it('emits one tag per non-empty methodOther line and per bibleReference', () => {
     const tags = formDataToEkwTags(sampleFormData);
-    expect(tags).toContainEqual(['ekw:methodOther', 'Freie Methode A']);
-    expect(tags).toContainEqual(['ekw:methodOther', 'Freie Methode B']);
-    expect(tags.filter((t) => t[0] === 'ekw:methodOther')).toHaveLength(2);
+    expect(tags).toContainEqual(['ext:ekw:methodOther', 'Freie Methode A']);
+    expect(tags).toContainEqual(['ext:ekw:methodOther', 'Freie Methode B']);
+    expect(tags.filter((t) => t[0] === 'ext:ekw:methodOther')).toHaveLength(2);
 
-    expect(tags).toContainEqual(['ekw:bibleReference', 'Mt 5,3–12']);
-    expect(tags).toContainEqual(['ekw:bibleReference', 'Joh 3,16']);
+    expect(tags).toContainEqual(['ext:ekw:bibleReference', 'Mt 5,3–12']);
+    expect(tags).toContainEqual(['ext:ekw:bibleReference', 'Joh 3,16']);
   });
 
   it('returns empty array when no EKW data is present', () => {

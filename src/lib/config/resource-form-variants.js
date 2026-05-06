@@ -27,6 +27,11 @@ import { BILDUNGSBEREICH_KEYS } from '$lib/helpers/educational/bildungsbereich.j
  * @property {string} descriptionKey - Paraglide message key for the picker card description
  * @property {BildungsbereichKey[]} bildungsbereichKeys - Ordered subset of
  *   BILDUNGSBEREICH_KEYS this variant exposes on step 1 of the wizard
+ * @property {{ sectionKey?: string, facets?: Record<string, string> }} [extensionLabels]
+ *   Optional rendering hints for `ExtensionMetadataPanel`. `sectionKey` is the
+ *   Paraglide message key used as the section heading; `facets` maps facet
+ *   ids (the segment after `ext:<ns>:`) to Paraglide message keys for their
+ *   per-row labels.
  */
 
 /** @type {ResourceFormVariant[]} */
@@ -41,7 +46,18 @@ export const ALL_VARIANTS = [
     id: 'ekw',
     labelKey: 'resource_form_variant_ekw_label',
     descriptionKey: 'resource_form_variant_ekw_description',
-    bildungsbereichKeys: ['schule', 'konfi']
+    bildungsbereichKeys: ['schule', 'konfi'],
+    extensionLabels: {
+      sectionKey: 'amb_resource_ekw_metadata',
+      facets: {
+        gradeLevel: 'amb_resource_ekw_grade_level',
+        schoolType: 'amb_resource_ekw_school_type',
+        didacticConcept: 'amb_resource_ekw_didactic_concept',
+        method: 'amb_resource_ekw_method',
+        methodOther: 'amb_resource_ekw_method_other',
+        bibleReference: 'amb_resource_ekw_bible_reference'
+      }
+    }
   }
 ];
 

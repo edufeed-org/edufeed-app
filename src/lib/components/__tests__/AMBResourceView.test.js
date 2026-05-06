@@ -163,6 +163,7 @@ vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/EventContextMenu.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/DeleteConfirmModal.svelte', () => ({ default: () => ({}) }));
+vi.mock('../educational/ExtensionMetadataPanel.svelte', () => ({ default: () => ({}) }));
 vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/components/icons', async (importOriginal) => {
   const actual = /** @type {any} */ (await importOriginal());
@@ -289,100 +290,6 @@ describe('AMBResourceView', () => {
   });
 });
 
-describe('EKKW-Metadaten section', () => {
-  /** @type {any} */
-  const minimalAmbResource = {
-    pubkey: '0'.repeat(64),
-    identifier: 'https://example.org/ekw-lesson',
-    name: 'EKKW Lesson',
-    description: 'Beschreibung',
-    image: '',
-    publishedDate: 1_700_000_000,
-    languages: ['de'],
-    isFree: true,
-    license: null,
-    keywords: [],
-    tags: [],
-    rawEvent: null,
-    kind: 30142,
-    creators: [],
-    encodings: [],
-    externalUrls: [],
-    hasPart: [],
-    isPartOf: [],
-    creatorNames: []
-  };
-
-  function fixtureEvent(/** @type {string[][]} */ ekwTags) {
-    return {
-      ...minimalAmbResource,
-      rawEvent: {
-        id: 'eventid',
-        pubkey: '0'.repeat(64),
-        kind: 30142,
-        tags: ekwTags,
-        content: '',
-        sig: 'sig'
-      },
-      event: {
-        id: 'eventid',
-        pubkey: '0'.repeat(64),
-        kind: 30142,
-        tags: ekwTags,
-        content: '',
-        sig: 'sig'
-      }
-    };
-  }
-
-  it('renders the EKKW-Metadaten section when EKW tags are present', () => {
-    const ekwTags = [
-      ['ekw:gradeLevel:id', 'naddr:grade5'],
-      ['ekw:gradeLevel:prefLabel:de', 'Klasse 5'],
-      ['ekw:gradeLevel:type', 'Concept'],
-      ['ekw:schoolType:id', 'naddr:gym'],
-      ['ekw:schoolType:prefLabel:de', 'Gymnasium'],
-      ['ekw:schoolType:type', 'Concept'],
-      ['ekw:didacticConcept:id', 'naddr:problem'],
-      ['ekw:didacticConcept:prefLabel:de', 'Problemorientiert'],
-      ['ekw:didacticConcept:type', 'Concept'],
-      ['ekw:method:id', 'naddr:plenum'],
-      ['ekw:method:prefLabel:de', 'Plenum'],
-      ['ekw:method:type', 'Concept'],
-      ['ekw:methodOther', 'Stuhlkreis'],
-      ['ekw:bibleReference', 'Mt 5,1-12']
-    ];
-    const resource = fixtureEvent(ekwTags);
-    const { getByText } = render(AMBResourceView, {
-      props: { event: resource.event, resource }
-    });
-    expect(getByText('EKKW-Metadaten')).toBeTruthy();
-    expect(getByText('Klasse 5')).toBeTruthy();
-    expect(getByText('Gymnasium')).toBeTruthy();
-    expect(getByText('Problemorientiert')).toBeTruthy();
-    expect(getByText('Plenum')).toBeTruthy();
-    expect(getByText('Methode (Freitext)')).toBeTruthy();
-    expect(getByText('Stuhlkreis')).toBeTruthy();
-    expect(getByText('Mt 5,1-12')).toBeTruthy();
-  });
-
-  it('does not render the EKKW-Metadaten section when no EKW tags are present', () => {
-    const resource = fixtureEvent([]);
-    const { queryByText } = render(AMBResourceView, {
-      props: { event: resource.event, resource }
-    });
-    expect(queryByText('EKKW-Metadaten')).toBeNull();
-  });
-
-  it('does not render the EKKW-Metadaten section for Fachrichtung-only resources (about tag, no ekw:* tags)', () => {
-    // Fachrichtung publishes as a standard AMB `about` tag. The EKKW section
-    // is only for `ekw:*`-prefixed tags (Klassenstufe etc.) — locks the
-    // boundary enforced by the EKW_TAG_PREFIX filter in parseEkwTagsToFormData.
-    const aboutOnlyTags = [['about', 'naddr1ekw-evangelisch']];
-    const resource = fixtureEvent(aboutOnlyTags);
-    const { queryByText } = render(AMBResourceView, {
-      props: { event: resource.event, resource }
-    });
-    expect(queryByText('EKKW-Metadaten')).toBeNull();
-  });
-});
+// EKW/extension metadata rendering moved to ExtensionMetadataPanel.test.js.
+// AMBResourceView mocks ExtensionMetadataPanel out (see vi.mock above) so the
+// child's behavior is tested in isolation rather than through the parent.
