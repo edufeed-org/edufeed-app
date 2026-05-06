@@ -57,7 +57,8 @@ import {
   validateBunkerUrl,
   connectWithBunkerUrl,
   createClientConnection,
-  registerBunkerAccount
+  registerBunkerAccount,
+  buildClientConnectRelays
 } from '../helpers/bunker-connection.js';
 import { NostrConnectSigner } from 'applesauce-signers';
 
@@ -117,13 +118,18 @@ describe('connectWithBunkerUrl', () => {
     );
   });
 
-  it('calls open, connect, and getPublicKey on signer', async () => {
+  it('calls getPublicKey but NOT a redundant open/connect after fromBunkerURI', async () => {
+    // NostrConnectSigner.fromBunkerURI already calls .connect() (which itself
+    // calls .open()) internally with the secret parsed from the bunker URI.
+    // Calling them again here re-sends a Connect RPC WITHOUT the secret,
+    // which strict bunkers (nsec.app, recent Amber) reject — and connect()'s
+    // catch destroys the subscription, leaving the signer unusable.
     const result = await connectWithBunkerUrl('bunker://abc123?relay=wss://relay.example.com', {
       pool: mockPool,
       onAuth: mockOnAuth
     });
-    expect(mockSignerInstance.open).toHaveBeenCalled();
-    expect(mockSignerInstance.connect).toHaveBeenCalled();
+    expect(mockSignerInstance.open).not.toHaveBeenCalled();
+    expect(mockSignerInstance.connect).not.toHaveBeenCalled();
     expect(mockSignerInstance.getPublicKey).toHaveBeenCalled();
     expect(result.pubkey).toBe('abc123pubkey');
     expect(result.signer).toBe(mockSignerInstance);
@@ -213,5 +219,40 @@ describe('registerBunkerAccount', () => {
     expect(mockManager.setActive.mock.calls[0][0]).toBe(existingAccount);
     expect(result.account).toBe(existingAccount);
     expect(result.alreadyExisted).toBe(true);
+  });
+});
+
+describe('buildClientConnectRelays', () => {
+  // The QR-mode `nostrconnect://` URI must list the relays where the bunker app
+  // will publish its Connect-RPC ack. Most bunkers (nsec.app, recent Amber)
+  // publish ONLY to wss://relay.nsec.app — if it's missing from our URI we
+  // listen on different relays and `waitForSigner` hangs forever even after
+  // the user scans. The official applesauce example (`signers/bunker`) uses
+  // wss://relay.nsec.app exactly for this reason — it is the de-facto NIP-46
+  // rendezvous relay. We must always include it.
+  const NIP46_RENDEZVOUS = 'wss://relay.nsec.app';
+
+  it('always includes the NIP-46 rendezvous relay even when fallback list is empty', () => {
+    expect(buildClientConnectRelays([])).toContain(NIP46_RENDEZVOUS);
+    expect(buildClientConnectRelays(undefined)).toContain(NIP46_RENDEZVOUS);
+  });
+
+  it('always includes the NIP-46 rendezvous relay when fallback list does NOT contain it', () => {
+    const fallback = ['wss://relay.damus.io', 'wss://nos.lol'];
+    const result = buildClientConnectRelays(fallback);
+    expect(result).toContain(NIP46_RENDEZVOUS);
+    expect(result).toContain('wss://relay.damus.io');
+    expect(result).toContain('wss://nos.lol');
+  });
+
+  it('does not duplicate the rendezvous relay if already in the fallback list', () => {
+    const fallback = ['wss://relay.nsec.app', 'wss://nos.lol'];
+    const result = buildClientConnectRelays(fallback);
+    const occurrences = result.filter((r) => r === NIP46_RENDEZVOUS).length;
+    expect(occurrences).toBe(1);
+  });
+
+  it('returns an array', () => {
+    expect(Array.isArray(buildClientConnectRelays(['wss://nos.lol']))).toBe(true);
   });
 });

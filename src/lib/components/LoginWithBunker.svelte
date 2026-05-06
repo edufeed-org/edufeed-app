@@ -11,7 +11,8 @@
     validateBunkerUrl,
     connectWithBunkerUrl,
     createClientConnection,
-    registerBunkerAccount
+    registerBunkerAccount,
+    buildClientConnectRelays
   } from '$lib/helpers/bunker-connection.js';
   import { ChevronLeftIcon } from '$lib/components/icons';
   import SignupButton from './shared/SignupButton.svelte';
@@ -116,9 +117,10 @@
   }
 
   function getRelays() {
-    return runtimeConfig.fallbackRelays?.length > 0
-      ? runtimeConfig.fallbackRelays
-      : ['wss://relay.nsec.app'];
+    // Always include wss://relay.nsec.app (the NIP-46 rendezvous relay) —
+    // most bunkers publish their Connect ack only there. See
+    // buildClientConnectRelays for the full rationale.
+    return buildClientConnectRelays(runtimeConfig.fallbackRelays);
   }
 
   async function initQrConnection() {
