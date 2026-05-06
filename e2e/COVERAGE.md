@@ -33,7 +33,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                |
 | `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                   |
 | `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
-| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation                                                                                              |
+| `signup-normie-path.test.js`         | 1     | No   | Normie 2-step signup happy path: primary CTA → name → skip → backup banner                                                        |
 | `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                                                                                         |
 | `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
@@ -950,63 +950,28 @@ unchanged. These tests cover the routing shape only.
 
 ---
 
-### signup.test.js (15 tests)
+### signup-normie-path.test.js (1 test)
 
-**Route:** `/` (homepage, login modal → signup modal)
-**Auth required:** No
+**Route:** `/` (homepage → login modal → signup modal → dashboard)
+**Auth required:** No (creates a new account in-flight)
 
-#### Modal Access (3 tests)
+#### Normie Happy Path (1 test)
 
-| Test                                 | What it verifies             |
-| ------------------------------------ | ---------------------------- |
-| signup button opens modal from login | Signup modal becomes visible |
-| signup modal shows step indicator    | 4 steps displayed            |
-| signup modal starts at step 1        | First step has step-primary  |
+| Test                                                  | What it verifies                                                                                                                                                                                         |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| user can create an account in 2 steps and sees banner | Login modal shows prominent `[data-testid="signup-primary-cta"]` and a collapsed `[data-testid="other-signin-methods"]` `<details>`; primary CTA opens 2-step signup; name + Skip lands on backup banner |
 
-#### Step 1 - Introduction (3 tests)
+Field-level signup behavior (validation, kind 0 publish, account-type
+detection, banner show/hide flags) is covered by Vitest component tests:
 
-| Test                              | What it verifies      |
-| --------------------------------- | --------------------- |
-| step 1 shows introduction text    | Prose content visible |
-| can navigate to step 2 from intro | Next button advances  |
-| back button not visible on step 1 | No back on first step |
+- `src/lib/components/__tests__/SignupModal.test.js`
+- `src/lib/components/__tests__/LoginModal.test.js`
+- `src/lib/components/__tests__/BackupRecoveryBanner.test.js`
+- `src/lib/components/__tests__/SuggestedFollowsBanner.test.js`
+- `src/lib/components/__tests__/RecoveryDownloadModal.test.js`
+- `src/lib/__tests__/recoveryFile.test.js`
 
-#### Step 2 - Profile Creation (5 tests)
-
-| Test                                  | What it verifies            |
-| ------------------------------------- | --------------------------- |
-| step 2 shows name input field         | Name input visible          |
-| step 2 shows about textarea           | About textarea visible      |
-| step 2 shows profile picture URL      | Picture input visible       |
-| step 2 shows website input            | Website input visible       |
-| can fill profile form fields          | All inputs accept values    |
-| cannot proceed to step 3 without name | Validation requires name    |
-| can proceed to step 3 with name       | Navigation to key gen works |
-| back button visible and works         | Returns to step 1           |
-
-#### Step 3 - Key Generation (4 tests)
-
-| Test                                     | What it verifies         |
-| ---------------------------------------- | ------------------------ |
-| step 3 generates and displays public key | npub in code block       |
-| step 3 shows download backup button      | Download button visible  |
-| step 3 shows encrypted backup option     | Password input visible   |
-| cannot proceed without downloading       | Validation blocks step 4 |
-
-#### Step 4 - Follow Suggestions (2 tests)
-
-| Test                       | What it verifies      |
-| -------------------------- | --------------------- |
-| modal shows Cancel button  | Cancel button present |
-| cancel button closes modal | Modal dismissal works |
-
-#### Error Handling (1 test)
-
-| Test                                             | What it verifies              |
-| ------------------------------------------------ | ----------------------------- |
-| no critical JavaScript errors during signup flow | Error capture throughout flow |
-
-**Components exercised:** SignupWizard, KeyGenerator, FollowSuggestions
+**Components exercised:** LoginModal, SignupModal, BackupRecoveryBanner
 
 ---
 
@@ -1214,20 +1179,20 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 
 ### Partially Covered
 
-| Feature              | What's Covered                                                              | What's Missing                                     |
-| -------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
-| Account management   | NSEC login, logout, persistence, switching                                  | NIP-07 extension, NIP-49 encrypted keys            |
-| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides | -                                                  |
-| Calendar events      | View, create, delete, edit (full CRUD)                                      | -                                                  |
-| AMB resources        | Full creation flow (page route), file upload, relay publish                 | Edit mode via naddr URL param                      |
-| Profile page         | View profile, notes, edit modal, save flow                                  | Avatar upload (Blossom integration)                |
-| Comments             | Post, reply, delete                                                         | Edit comment                                       |
-| Reactions            | Add, remove                                                                 | Custom emoji support                               |
-| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                | Full search flow (depends on relay NIP-50 support) |
-| Community membership | Join/leave, chat message posting                                            | -                                                  |
-| Community creation   | Both keypair flows, all steps, settings, publish                            | Badge access control                               |
-| Signup wizard        | All 4 steps, key generation UI                                              | Full completion (requires file download handling)  |
-| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                          | -                                                  |
+| Feature              | What's Covered                                                              | What's Missing                                      |
+| -------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
+| Account management   | NSEC login, logout, persistence, switching                                  | NIP-07 extension, NIP-49 encrypted keys             |
+| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides | -                                                   |
+| Calendar events      | View, create, delete, edit (full CRUD)                                      | -                                                   |
+| AMB resources        | Full creation flow (page route), file upload, relay publish                 | Edit mode via naddr URL param                       |
+| Profile page         | View profile, notes, edit modal, save flow                                  | Avatar upload (Blossom integration)                 |
+| Comments             | Post, reply, delete                                                         | Edit comment                                        |
+| Reactions            | Add, remove                                                                 | Custom emoji support                                |
+| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                | Full search flow (depends on relay NIP-50 support)  |
+| Community membership | Join/leave, chat message posting                                            | -                                                   |
+| Community creation   | Both keypair flows, all steps, settings, publish                            | Badge access control                                |
+| Signup (normie path) | 2-step flow happy path, login modal CTA structure, backup banner appearance | Full backup/follow banner flows (covered by Vitest) |
+| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                          | -                                                   |
 
 ---
 

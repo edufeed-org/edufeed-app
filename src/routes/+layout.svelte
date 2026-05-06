@@ -7,6 +7,8 @@
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
+  import BackupRecoveryBanner from '$lib/components/BackupRecoveryBanner.svelte';
+  import SuggestedFollowsBanner from '$lib/components/SuggestedFollowsBanner.svelte';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
@@ -304,6 +306,12 @@
       class:lg:pb-0={showDashboardNav || isInsideCommunity}
     >
       {#if curatedReady}
+        {#if getActiveUser()}
+          <div class="px-4 pt-2">
+            <BackupRecoveryBanner />
+            <SuggestedFollowsBanner />
+          </div>
+        {/if}
         {@render children?.()}
       {/if}
       <!-- Floating buttons — sticky inside main so they sit at the bottom of the scroll surface.

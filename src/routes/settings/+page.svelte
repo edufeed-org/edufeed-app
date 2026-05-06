@@ -31,6 +31,7 @@
   import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
   import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
   import LocalCachePanel from '$lib/components/settings/LocalCachePanel.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
@@ -1180,6 +1181,30 @@
           <DmRelaySettings />
         </div>
       </div>
+
+      <!-- Recovery File Card (only for nsec accounts — extension/bunker
+           accounts don't have a recoverable secret in this app) -->
+      {#if activeAccount?.type === 'nsec'}
+        <div
+          class="card mt-6 bg-base-200 shadow-xl"
+          data-testid="settings-recovery-card"
+          transition:fade={{ duration: 200 }}
+        >
+          <div class="card-body">
+            <h2 class="mb-2 card-title text-2xl">
+              <span class="text-2xl">{m.settings_recovery_title()}</span>
+            </h2>
+            <p class="mb-6 text-base-content/70">{m.settings_recovery_description()}</p>
+            <button
+              class="btn btn-primary"
+              data-testid="settings-recovery-download"
+              onclick={() => modalStore.openModal('recovery-download')}
+            >
+              {m.settings_recovery_download_cta()}
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <!-- Developer Settings Card -->
       <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
