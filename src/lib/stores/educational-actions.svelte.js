@@ -58,6 +58,16 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {string[]} [externalUrls] - Array of external reference URLs (r-tags)
  * @property {AMBRelationRef[]} [hasPart] - Linked child AMB resources
  * @property {AMBRelationRef[]} [isPartOf] - Linked parent AMB resources
+ * @property {string[]} [gradeLevels] - EKW: SKOS URIs for grade levels (Klassenstufen)
+ * @property {{id: string, label: string}[]} [gradeLevelLabels] - EKW: labels for `gradeLevels`
+ * @property {string[]} [schoolTypes] - EKW: SKOS URIs for school types (Schularten)
+ * @property {{id: string, label: string}[]} [schoolTypeLabels] - EKW: labels for `schoolTypes`
+ * @property {string[]} [didacticConcepts] - EKW: SKOS URIs for didactic concepts
+ * @property {{id: string, label: string}[]} [didacticConceptLabels] - EKW: labels for `didacticConcepts`
+ * @property {string[]} [methods] - EKW: SKOS URIs for methods
+ * @property {{id: string, label: string}[]} [methodLabels] - EKW: labels for `methods`
+ * @property {string} [methodOther] - EKW: free-form method description (newline-separated)
+ * @property {string[]} [bibleReferences] - EKW: free-form Bible references
  */
 
 /**

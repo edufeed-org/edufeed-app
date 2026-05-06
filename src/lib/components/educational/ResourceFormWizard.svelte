@@ -1042,7 +1042,20 @@
         isAccessibleForFree: formData.isAccessibleForFree,
         externalUrls: formData.externalUrls,
         hasPart: formData.hasPart,
-        isPartOf: formData.isPartOf
+        isPartOf: formData.isPartOf,
+        // EKW-variant facets — `formDataToEkwTags` no-ops when these are
+        // empty/undefined, so it's safe to forward unconditionally rather
+        // than gating on `variantId === 'ekw'`.
+        gradeLevels: formData.gradeLevels,
+        gradeLevelLabels: formData.gradeLevelLabels,
+        schoolTypes: formData.schoolTypes,
+        schoolTypeLabels: formData.schoolTypeLabels,
+        didacticConcepts: formData.didacticConcepts,
+        didacticConceptLabels: formData.didacticConceptLabels,
+        methods: formData.methods,
+        methodLabels: formData.methodLabels,
+        methodOther: formData.methodOther,
+        bibleReferences: formData.bibleReferences
       };
 
       let result;

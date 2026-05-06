@@ -251,6 +251,37 @@ function loadParser() {
  */
 
 /**
+ * Build a bibleserver.com deep link for a canonical German short reference
+ * (e.g. `"Mt 5,3-12"`). Defaults to the Lutherbibel 2017 (`LUT`) — the most
+ * ecumenical choice for the EKKW context. Bibleserver accepts the canonical
+ * short form directly in the URL, so no OSIS conversion is required.
+ *
+ * Heuristic guard: the input must start with a known German book name (short
+ * or long form, accent-insensitive) followed by whitespace and at least one
+ * digit. This prevents linkifying free-form text that happens to land in a
+ * Bible-reference slot (e.g. notes the user typed). Multi-references like
+ * `"Mt 5,3-12; Lk 6,20-26"` pass the guard via their leading book and render
+ * as a single link covering the whole expression — bibleserver handles
+ * multi-passage URLs natively.
+ *
+ * @param {string} text
+ * @returns {string | null}
+ */
+export function toBibleServerUrl(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return null;
+  if (!/\d/.test(trimmed)) return null;
+  const folded = fold(trimmed);
+  const startsWithKnownBook = BIBLE_BOOKS.some((b) => {
+    const fs = fold(b.short);
+    const fl = fold(b.long);
+    return folded.startsWith(fs + ' ') || folded.startsWith(fl + ' ');
+  });
+  if (!startsWithKnownBook) return null;
+  return `https://www.bibleserver.com/LUT/${encodeURIComponent(trimmed)}`;
+}
+
+/**
  * Parse a free-text bible reference and return its canonical German short form.
  * Returns `{ ok: false, canonical: null, osis: null }` for unparseable input.
  *
