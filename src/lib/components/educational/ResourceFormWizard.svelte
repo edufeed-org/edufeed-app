@@ -162,6 +162,15 @@
    */
   let provenance = $state(/** @type {Record<string, FieldProvenance>} */ ({}));
 
+  // The full enriched payload from runEnrichment(), retained so the user can
+  // review/apply suggestions for fields that were not auto-filled.
+  /** @type {{source: string, payload: Record<string, any>, evidence?: Record<string, string>} | null} */
+  // eslint-disable-next-line no-unused-vars
+  let aiSuggestions = $state(null);
+  /** @type {Set<string>} */
+  // eslint-disable-next-line no-unused-vars
+  let dismissedSuggestionFields = $state(new Set());
+
   /**
    * Reset a single field to its empty/default and drop its provenance entry,
    * so the Smart-fill badge disappears from the UI. Field-name-driven so we
@@ -722,6 +731,7 @@
         enrichmentStatus = 'error';
         return;
       }
+      aiSuggestions = enriched;
       const out = applyEnrichedPayload.withProvenance(formData, enriched, {
         activeUserPubkey: activeUser?.pubkey
       });
