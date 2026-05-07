@@ -49,7 +49,7 @@ describe('buildCommunityFollowSet', () => {
   });
 
   it('returns {signed: null} and skips signEvent when input is undefined', async () => {
-    // Defensive: the call site reads from runtimeConfig.signup?.autoJoinCommunities
+    // Defensive: the call site reads from runtimeConfig.signup?.suggestedCommunities
     // which could be undefined under timing edge cases.
     const signer = makeSigner();
     const result = await buildCommunityFollowSet(signer, USER_PUBKEY, undefined);

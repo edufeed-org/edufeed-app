@@ -65,7 +65,7 @@ vi.mock('$lib/paraglide/messages', () =>
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
-    signup: { suggestedUsers: [], autoJoinCommunities: [] },
+    signup: { suggestedCommunities: [] },
     blossom: { maxFileSize: 5 * 1024 * 1024 }
   },
   configReady: { subscribe: () => () => {} }

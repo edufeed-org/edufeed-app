@@ -167,7 +167,7 @@
         await buildCommunityFollowSet(
           /** @type {any} */ (_signer),
           userData.publicKey,
-          runtimeConfig.signup?.autoJoinCommunities
+          runtimeConfig.signup?.suggestedCommunities
         );
 
       // Optimistic local apply.
