@@ -22,7 +22,21 @@
     const n = Number(raw);
     return Number.isFinite(n) ? n : null;
   });
-  let isClosed = $derived(endsAt !== null && Math.floor(Date.now() / 1000) > endsAt);
+  // Tick `now` periodically so `isClosed` flips while the card is on screen.
+  let now = $state(Math.floor(Date.now() / 1000));
+  $effect(() => {
+    if (endsAt === null) return;
+    if (now > endsAt) return; // already closed; no need to keep ticking
+    const id = setInterval(() => {
+      now = Math.floor(Date.now() / 1000);
+    }, 30_000);
+    return () => clearInterval(id);
+  });
+  let isClosed = $derived(endsAt !== null && now > endsAt);
+
+  /** @type {string[]} */
+  let selected = $state([]);
+  let revealed = $state(false);
 
   // Subscribe to kind 1018 responses targeting this poll. Plain `let`, not $state —
   // the subscription handle is internal and must not trigger re-renders.
@@ -31,6 +45,12 @@
   /** @type {import('rxjs').Subscription | undefined} */
   let sub;
   $effect(() => {
+    // Track event.id so prop changes re-run this effect.
+    const _id = event.id;
+    // Reset per-poll UI state.
+    selected = [];
+    revealed = false;
+
     sub?.unsubscribe();
     sub = eventStore
       .timeline({ kinds: [1018], '#e': [event.id] })
@@ -42,12 +62,7 @@
 
   let tally = $derived(tallyPollVotes(event, responses, manager.active?.pubkey));
   let hasVoted = $derived(tally.userVote !== null);
-
-  let revealed = $state(false);
   let showResults = $derived(hasVoted || revealed || isClosed);
-
-  /** @type {string[]} */
-  let selected = $state([]);
 
   function toggleSelection(/** @type {string} */ id) {
     if (showResults) return;

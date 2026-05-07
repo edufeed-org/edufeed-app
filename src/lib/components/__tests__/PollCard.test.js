@@ -117,4 +117,39 @@ describe('PollCard — render skeleton + states', () => {
     expect(q).toBeTruthy();
     expect(/** @type {Element} */ (q).classList.contains('line-clamp-3')).toBe(true);
   });
+
+  it('marks selected option with aria-pressed=true', async () => {
+    managerState.active = { pubkey: 'me'.padEnd(64, '0') };
+    const { container } = render(PollCard, { props: { event: makePoll() } });
+    const buttons = /** @type {HTMLButtonElement[]} */ (
+      Array.from(container.querySelectorAll('button[aria-pressed]'))
+    );
+    expect(buttons.length).toBe(2);
+    await fireEvent.click(buttons[0]);
+    const after = /** @type {HTMLButtonElement[]} */ (
+      Array.from(container.querySelectorAll('button[aria-pressed]'))
+    );
+    expect(after[0].getAttribute('aria-pressed')).toBe('true');
+    expect(after[1].getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('resets selection when event prop changes', async () => {
+    managerState.active = { pubkey: 'me'.padEnd(64, '0') };
+    const firstPoll = makePoll();
+    const { container, rerender } = render(PollCard, { props: { event: firstPoll } });
+    const buttons = /** @type {HTMLButtonElement[]} */ (
+      Array.from(container.querySelectorAll('button[aria-pressed]'))
+    );
+    await fireEvent.click(buttons[0]);
+    // Confirm selection took.
+    const pressed = container.querySelectorAll('button[aria-pressed="true"]');
+    expect(pressed.length).toBe(1);
+
+    // Render with a different poll.
+    const secondPoll = { ...makePoll(), id: 'poll-2'.padEnd(64, '0') };
+    await rerender({ event: secondPoll });
+
+    const stillPressed = container.querySelectorAll('button[aria-pressed="true"]');
+    expect(stillPressed.length).toBe(0);
+  });
 });
