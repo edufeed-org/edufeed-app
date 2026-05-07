@@ -61,3 +61,4 @@ export { default as ForumIcon } from './social/ForumIcon.svelte';
 export { default as BookmarkShareIcon } from './social/BookmarkShareIcon.svelte';
 export { default as MeetIcon } from './social/MeetIcon.svelte';
 export { default as MessageSquareIcon } from './social/MessageSquareIcon.svelte';
+export { default as PollIcon } from './social/PollIcon.svelte';
