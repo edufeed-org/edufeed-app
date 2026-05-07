@@ -43,7 +43,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_share_existing_aria: () => 'Share existing content with community',
   article_fab_write: () => 'Write Article',
   wiki_fab_write: () => 'Write Wiki',
-  fab_create_form: () => 'Create Form'
+  fab_create_form: () => 'Create Form',
+  fab_create_poll: () => 'Create Poll',
+  fab_create_poll_aria: () => 'Create new poll'
 }));
 
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
@@ -61,10 +63,10 @@ describe('GlobalFAB', () => {
     expect(mainButton).toBeTruthy();
   });
 
-  it('renders all 8 action buttons', () => {
+  it('renders all 9 action buttons', () => {
     const { container } = render(GlobalFAB);
     const actionButtons = container.querySelectorAll('.fab > button');
-    expect(actionButtons.length).toBe(8);
+    expect(actionButtons.length).toBe(9);
   });
 
   it('has create event button', () => {
@@ -153,6 +155,19 @@ describe('GlobalFAB', () => {
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create Form"]'));
     await fireEvent.click(btn);
     expect(mockGoto).toHaveBeenCalledWith('/forms/new');
+  });
+
+  it('has create poll button', () => {
+    const { container } = render(GlobalFAB);
+    const btn = container.querySelector('[aria-label="Create new poll"]');
+    expect(btn).toBeTruthy();
+  });
+
+  it('opens createPoll modal on poll button click', async () => {
+    const { container } = render(GlobalFAB);
+    const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create new poll"]'));
+    await fireEvent.click(btn);
+    expect(mockOpenModal).toHaveBeenCalledWith('createPoll', expect.any(Object));
   });
 
   it('has add bookmark button', () => {
