@@ -4,6 +4,7 @@
   import { resolve } from '$app/paths';
   import { getAddressPointerForEvent, encodePointer, getTagValue } from 'applesauce-core/helpers';
   import ThreadDetailView from '$lib/components/thread/ThreadDetailView.svelte';
+  import PollCard from '$lib/components/polls/PollCard.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
   import { fetchEventById, hexToNpub } from '$lib/helpers/nostrUtils.js';
@@ -122,6 +123,8 @@
       initialFocusCommentId={focusCommentId}
       {scrollTo}
     />
+  {:else if resolvedEvent?.kind === 1068}
+    <PollCard event={resolvedEvent} truncate={false} />
   {:else if resolvedEvent}
     <div class="alert alert-warning">
       <span>{m.route_unsupported_event_kind({ kind: resolvedEvent.kind })}</span>

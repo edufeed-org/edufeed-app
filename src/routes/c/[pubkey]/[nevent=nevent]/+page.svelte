@@ -1,6 +1,7 @@
 <script>
   import { page } from '$app/stores';
   import ThreadDetailView from '$lib/components/thread/ThreadDetailView.svelte';
+  import PollCard from '$lib/components/polls/PollCard.svelte';
   import { npubToHex, fetchEventById } from '$lib/helpers/nostrUtils';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -77,6 +78,8 @@
       {scrollTo}
       {communityPubkey}
     />
+  {:else if resolvedEvent?.kind === 1068}
+    <PollCard event={resolvedEvent} truncate={false} />
   {:else if resolvedEvent}
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <p class="text-base-content/60">Unsupported content type (kind {resolvedEvent?.kind})</p>
