@@ -13,6 +13,7 @@
   import { ChevronDownIcon } from '$lib/components/icons';
   import ProfileAvatar from '../ProfileAvatar.svelte';
   import NostrContentRenderer from '../NostrContentRenderer.svelte';
+  import PollCard from '$lib/components/polls/PollCard.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   const MAX_DEPTH = 2;
@@ -67,6 +68,10 @@
 {#if isLoading}
   <div class="my-2 h-24 rounded-lg border border-base-300 bg-base-200/30 p-3">
     <span class="loading loading-xs loading-dots"></span>
+  </div>
+{:else if event && event.kind === 1068}
+  <div class="my-2">
+    <PollCard {event} truncate={true} />
   </div>
 {:else if event}
   <div class="my-2">
