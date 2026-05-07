@@ -1626,6 +1626,8 @@
   "fab_add_bookmark": "Add Bookmark",
   "fab_share_existing": "Share Existing Content",
   "fab_share_existing_aria": "Share existing content with community",
+  "fab_create_poll": "Create poll",
+  "fab_create_poll_aria": "Create poll",
   "aria_rsvp_going": "RSVP as Going",
   "aria_rsvp_maybe": "RSVP as Maybe",
   "aria_rsvp_not_going": "RSVP as Not Going",

@@ -9,7 +9,8 @@
     BookIcon,
     BookmarkIcon,
     RepostIcon,
-    ScrollTextIcon
+    ScrollTextIcon,
+    PollIcon
   } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
@@ -50,6 +51,10 @@
 
   function handleCreateForm() {
     goto(resolve('/forms/new'));
+  }
+
+  function handleCreatePoll() {
+    modalStore.openModal('createPoll', communityPubkey ? { communityPubkey } : {});
   }
 
   function handleAddBookmark() {
@@ -147,6 +152,16 @@
       <ScrollTextIcon class_="h-5 w-5" />
     </button>
 
+    <!-- Create Poll -->
+    <button
+      class="tooltip btn tooltip-left btn-circle btn-lg"
+      data-tip={m.fab_create_poll()}
+      onclick={handleCreatePoll}
+      aria-label={m.fab_create_poll_aria()}
+    >
+      <PollIcon class_="h-5 w-5" />
+    </button>
+
     <!-- Add Bookmark -->
     <button
       class="tooltip btn tooltip-left btn-circle btn-lg"
@@ -221,5 +236,9 @@
 
   .fab > button:nth-child(9) {
     transition-delay: 0.4s;
+  }
+
+  .fab > button:nth-child(10) {
+    transition-delay: 0.45s;
   }
 </style>
