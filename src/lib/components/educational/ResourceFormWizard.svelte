@@ -1587,7 +1587,9 @@
                     </p>
                     {#if conflictCount > 0}
                       <span class="text-base-content/70">
-                        — {m.amb_form_enrich_more_suggestions({ count: conflictCount })}
+                        — {conflictCount === 1
+                          ? m.amb_form_enrich_more_suggestions_one()
+                          : m.amb_form_enrich_more_suggestions({ count: conflictCount })}
                       </span>
                       <button
                         type="button"
