@@ -1345,6 +1345,7 @@
   "inbox_action_mention": "mentioned you in {communityName}",
   "inbox_action_wave": "waved at you",
   "inbox_action_rsvp": "responded to {eventTitle}",
+  "inbox_action_poll_vote": "voted on your poll",
   "inbox_filter_all": "All",
   "inbox_filter_forms": "Forms",
   "inbox_filter_reactions": "Reactions",

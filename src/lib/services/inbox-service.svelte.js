@@ -134,6 +134,9 @@ let mainNotifications = $state.raw([]);
 /** @type {import('nostr-tools').NostrEvent[]} */
 let rsvpNotifications = $state.raw([]);
 
+/** @type {import('nostr-tools').NostrEvent[]} */
+let pollResponseNotifications = $state.raw([]);
+
 /** @type {Record<string, number> | null} */
 let readMarkers = $state(null);
 
@@ -147,9 +150,11 @@ let readItemIds = $state.raw(new Set());
 /** @type {import('rxjs').Subscription[]} */
 let subscriptions = [];
 
-// Merge main + RSVPs, sorted by time (newest first)
+// Merge main + RSVPs + poll responses, sorted by time (newest first)
 let notifications = $derived.by(() => {
-  return [...mainNotifications, ...rsvpNotifications].sort((a, b) => b.created_at - a.created_at);
+  return [...mainNotifications, ...rsvpNotifications, ...pollResponseNotifications].sort(
+    (a, b) => b.created_at - a.created_at
+  );
 });
 
 /**
@@ -304,6 +309,35 @@ export function initializeInbox(pubkey) {
     }
   });
   subscriptions.push(calSub);
+
+  // Poll response loading: load user's polls (kind 1068), then responses (kind 1018) on those.
+  const pollLoader = createTimelineLoader(
+    timedPool,
+    getCommunikeyRelays(),
+    /** @type {any} */ ({
+      kinds: [1068],
+      authors: [pubkey],
+      since: Math.floor(Date.now() / 1000) - 15552000
+    }),
+    { eventStore, limit: 100 }
+  );
+
+  const pollSub = pollLoader().subscribe({
+    complete: () => {
+      const pollModel = eventStore.model(TimelineModel, {
+        kinds: [1068],
+        authors: [pubkey]
+      });
+      const idsSub = pollModel.subscribe((events) => {
+        if (!events?.length) return;
+        const ids = events.map((e) => e.id);
+        loadPollResponseNotifications(ids);
+        idsSub.unsubscribe();
+      });
+      subscriptions.push(idsSub);
+    }
+  });
+  subscriptions.push(pollSub);
 }
 
 /**
@@ -337,6 +371,36 @@ export function loadRsvpNotifications(calendarEventCoords) {
 }
 
 /**
+ * Load poll response notifications (kind 1018) for the given poll IDs.
+ * @param {string[]} pollIds
+ */
+export function loadPollResponseNotifications(pollIds) {
+  if (!pollIds.length || !activePubkey) return;
+
+  const since = Math.floor(Date.now() / 1000) - DEFAULT_LOOKBACK;
+
+  const responseLoader = createTimelineLoader(
+    timedPool,
+    getCommunikeyRelays(),
+    /** @type {any} */ ({ kinds: [1018], '#e': pollIds, since }),
+    { eventStore, limit: 100 }
+  );
+
+  const sub = responseLoader().subscribe();
+  subscriptions.push(sub);
+
+  const pubkey = activePubkey;
+  const modelSub = eventStore
+    .model(TimelineModel, { kinds: [1018], '#e': pollIds })
+    .subscribe((events) => {
+      const filtered = filterSelfNotifications(events || [], pubkey);
+      pollResponseNotifications = filtered;
+      prefetchReferencedContent(filtered);
+    });
+  subscriptions.push(modelSub);
+}
+
+/**
  * Mark notifications as read.
  * @param {string} [type] - Specific type, or omit for all
  */
@@ -358,7 +422,8 @@ export async function markAsRead(type) {
       'wave',
       'comment',
       'mention',
-      'rsvp'
+      'rsvp',
+      'pollVote'
     ]) {
       updated[t] = now;
     }
@@ -396,6 +461,7 @@ export function cleanup() {
   subscriptions = [];
   mainNotifications = [];
   rsvpNotifications = [];
+  pollResponseNotifications = [];
   readMarkers = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
   readItemIds = new Set();

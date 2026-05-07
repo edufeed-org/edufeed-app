@@ -1345,6 +1345,7 @@
   "inbox_action_mention": "hat dich in {communityName} erwähnt",
   "inbox_action_wave": "hat dir zugewinkt",
   "inbox_action_rsvp": "hat auf {eventTitle} geantwortet",
+  "inbox_action_poll_vote": "hat in deiner Umfrage abgestimmt",
   "inbox_filter_all": "Alle",
   "inbox_filter_forms": "Formulare",
   "inbox_filter_reactions": "Reaktionen",
