@@ -174,8 +174,7 @@
 
   let aiSuggestions = $state(null);
   /** @type {Set<string>} */
-
-  let dismissedSuggestionFields = $state(new Set());
+  let dismissedSuggestionFields = $state.raw(new Set());
 
   let showStartOverConfirm = $state(false);
   let showReviewDialog = $state(false);
