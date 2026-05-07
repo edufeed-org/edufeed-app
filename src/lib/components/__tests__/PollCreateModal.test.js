@@ -15,6 +15,10 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
 
+vi.mock('applesauce-core/helpers', () => ({
+  getDisplayName: (/** @type {any} */ profile) => profile?.name ?? null
+}));
+
 describe('PollCreateModal — form & validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -72,5 +76,25 @@ describe('PollCreateModal — form & validation', () => {
     render(PollCreateModal, { props: { communityPubkey: 'abc123' } });
     const select = screen.getByLabelText(/community/i);
     expect(/** @type {HTMLSelectElement} */ (select).value).toBe('abc123');
+  });
+
+  it('disables submit when "Custom…" is selected but no datetime entered', async () => {
+    render(PollCreateModal, { props: {} });
+    // Fill in valid question + options
+    await fireEvent.input(screen.getByPlaceholderText(/question/i), {
+      target: { value: 'Pizza topping?' }
+    });
+    const options = screen.getAllByPlaceholderText(/option/i);
+    await fireEvent.input(options[0], { target: { value: 'A' } });
+    await fireEvent.input(options[1], { target: { value: 'B' } });
+
+    const submit = /** @type {HTMLButtonElement} */ (
+      screen.getByRole('button', { name: /publish poll/i })
+    );
+    expect(submit.disabled).toBe(false); // 7d default, valid
+
+    // Switch to Custom; submit should disable
+    await fireEvent.click(screen.getByRole('button', { name: /custom/i }));
+    expect(submit.disabled).toBe(true);
   });
 });

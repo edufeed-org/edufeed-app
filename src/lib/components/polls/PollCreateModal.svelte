@@ -32,7 +32,7 @@
   let communities = $derived(getJoinedCommunities());
   const getProfileMap = useProfileMap(() => communities);
   let profileMap = $derived(getProfileMap());
-  let optionPubkeys = $derived(
+  let communityPubkeys = $derived(
     communityPubkey && !communities.includes(communityPubkey)
       ? [communityPubkey, ...communities]
       : communities
@@ -54,7 +54,13 @@
   });
   let hasEmpty = $derived(trimmedLabels.some((s) => s === ''));
   let questionValid = $derived(question.trim().length > 0 && question.trim().length <= 280);
-  let canSubmit = $derived(questionValid && options.length >= 2 && !hasEmpty && !hasDuplicates);
+  let customEndsAtValid = $derived.by(() => {
+    if (endsAtPreset === 'custom') return customEndsAt !== '';
+    return true;
+  });
+  let canSubmit = $derived(
+    questionValid && options.length >= 2 && !hasEmpty && !hasDuplicates && customEndsAtValid
+  );
 
   async function handleSubmit() {
     // Implemented in Task 4.
@@ -138,7 +144,7 @@
       <span class="label-text">Community (optional)</span>
       <select class="select-bordered select" bind:value={community} aria-label="Community">
         <option value="">— None —</option>
-        {#each optionPubkeys as pubkey (pubkey)}
+        {#each communityPubkeys as pubkey (pubkey)}
           {@const profile = profileMap.get(pubkey)}
           <option value={pubkey}>{getDisplayName(profile) || pubkey.slice(0, 8)}</option>
         {/each}
