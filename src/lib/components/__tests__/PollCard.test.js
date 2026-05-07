@@ -25,6 +25,9 @@ import PollCard from '$lib/components/polls/PollCard.svelte';
 /** @type {{ active: any }} */
 const managerState = vi.hoisted(() => ({ active: null }));
 
+/** @type {{ value: any[] }} */
+const mockResponses = vi.hoisted(() => ({ value: [] }));
+
 vi.mock('$lib/stores/accounts.svelte.js', () => ({
   manager: managerState
 }));
@@ -33,13 +36,26 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     timeline: vi.fn(() => ({
       subscribe: (/** @type {Function} */ cb) => {
-        cb([]);
+        cb(mockResponses.value);
         return { unsubscribe: vi.fn() };
       }
     })),
     add: vi.fn(),
     remove: vi.fn(),
     getReplaceable: vi.fn()
+  }
+}));
+
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: (/** @type {() => Iterable<string>} */ getPubkeys) => {
+    return () => {
+      /** @type {Map<string, any>} */
+      const m = new Map();
+      for (const pubkey of getPubkeys()) {
+        m.set(pubkey, { name: 'Voter ' + pubkey.slice(0, 4), picture: undefined });
+      }
+      return m;
+    };
   }
 }));
 
@@ -73,6 +89,7 @@ function makePoll({ content = 'Fruit?', extraTags = [], endsAt, pollType = 'sing
 describe('PollCard — render skeleton + states', () => {
   beforeEach(() => {
     managerState.active = null;
+    mockResponses.value = [];
     vi.clearAllMocks();
   });
 
@@ -131,6 +148,45 @@ describe('PollCard — render skeleton + states', () => {
     );
     expect(after[0].getAttribute('aria-pressed')).toBe('true');
     expect(after[1].getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('renders voter avatars when results are shown', async () => {
+    managerState.active = { pubkey: 'me'.padEnd(64, '0') };
+    const voter1 = 'voter1'.padEnd(64, '0');
+    const voter2 = 'voter2'.padEnd(64, '0');
+    /**
+     * Build a kind 1018 response event for option `optId`.
+     * @param {string} pubkey
+     * @param {string} optId
+     * @param {string} idSeed
+     */
+    function makeResponse(pubkey, optId, idSeed) {
+      return {
+        id: idSeed.padEnd(64, '0'),
+        kind: 1018,
+        pubkey,
+        created_at: 1700000100,
+        tags: [
+          ['e', 'poll-1'.padEnd(64, '0')],
+          ['response', optId]
+        ],
+        content: ''
+      };
+    }
+    mockResponses.value = [
+      makeResponse(voter1, 'opt-a', 'r1'),
+      makeResponse(voter2, 'opt-a', 'r2')
+    ];
+
+    const { container } = render(PollCard, { props: { event: makePoll() } });
+    const reveal = screen.getByRole('button', { name: /show results without voting/i });
+    await fireEvent.click(reveal);
+
+    const avatars = container.querySelectorAll('[data-testid="voter-avatar"]');
+    expect(avatars.length).toBeGreaterThanOrEqual(2);
+    // Title is built from voter profile name (mocked).
+    const titles = Array.from(avatars).map((a) => a.getAttribute('title'));
+    expect(titles.some((t) => t && t.startsWith('Voter '))).toBe(true);
   });
 
   it('resets selection when event prop changes', async () => {

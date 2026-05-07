@@ -4,6 +4,7 @@
   import { tallyPollVotes } from '$lib/helpers/polls.js';
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
 
   /**
    * @typedef {Object} Props
@@ -64,6 +65,12 @@
   let hasVoted = $derived(tally.userVote !== null);
   let showResults = $derived(hasVoted || revealed || isClosed);
 
+  // Unique voter pubkeys across all options (for batched profile loading).
+  let allVoterPubkeys = $derived(
+    Array.from(new Set(Array.from(tally.byOption.values()).flatMap((s) => s.voters)))
+  );
+  const getProfiles = useProfileMap(() => allVoterPubkeys);
+
   function toggleSelection(/** @type {string} */ id) {
     if (showResults) return;
     if (pollType === 'multiplechoice') {
@@ -116,16 +123,38 @@
       {@const count = slot?.count ?? 0}
       {@const userPicked = tally.userVote?.includes(opt.id) ?? false}
       {#if showResults}
-        <div class="relative overflow-hidden rounded-md border border-base-300">
-          <div
-            class="absolute inset-y-0 left-0 bg-primary/10"
-            style="width: {pct(count)}%"
-            aria-hidden="true"
-          ></div>
-          <div class="relative flex items-center justify-between gap-2 px-3 py-2 text-sm">
-            <span class="truncate">{userPicked ? '✓ ' : ''}{opt.label}</span>
-            <span class="tabular-nums opacity-80">{pct(count)}% · {count}</span>
+        <div>
+          <div class="relative overflow-hidden rounded-md border border-base-300">
+            <div
+              class="absolute inset-y-0 left-0 bg-primary/10"
+              style="width: {pct(count)}%"
+              aria-hidden="true"
+            ></div>
+            <div class="relative flex items-center justify-between gap-2 px-3 py-2 text-sm">
+              <span class="truncate">{userPicked ? '✓ ' : ''}{opt.label}</span>
+              <span class="tabular-nums opacity-80">{pct(count)}% · {count}</span>
+            </div>
           </div>
+          {#if (slot?.voters?.length ?? 0) > 0}
+            {@const profiles = getProfiles()}
+            <div class="mt-1.5 flex items-center -space-x-2">
+              {#each (slot?.voters ?? []).slice(0, 6) as voterPubkey (voterPubkey)}
+                {@const profile = profiles.get(voterPubkey)}
+                <div
+                  data-testid="voter-avatar"
+                  class="h-5 w-5 flex-shrink-0 overflow-hidden rounded-full bg-base-300 ring-2 ring-base-100"
+                  title={profile?.display_name || profile?.name || voterPubkey.slice(0, 8)}
+                >
+                  {#if profile?.picture}
+                    <img src={profile.picture} alt="" class="h-full w-full object-cover" />
+                  {/if}
+                </div>
+              {/each}
+              {#if (slot?.voters?.length ?? 0) > 6}
+                <span class="ml-3 text-xs opacity-60">+{(slot?.voters?.length ?? 0) - 6}</span>
+              {/if}
+            </div>
+          {/if}
         </div>
       {:else}
         <button
