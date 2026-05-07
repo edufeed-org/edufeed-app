@@ -1,10 +1,18 @@
 <script>
+  import 'applesauce-common';
   import { untrack } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { nip19 } from 'nostr-tools';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { generateOptionId } from '$lib/helpers/polls.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { publishEvent } from '$lib/services/publish-service.js';
+  import { manager } from '$lib/stores/accounts.svelte.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
   /**
    * @typedef {Object} Props
@@ -62,8 +70,61 @@
     questionValid && options.length >= 2 && !hasEmpty && !hasDuplicates && customEndsAtValid
   );
 
+  function computeEndsAt() {
+    const now = Math.floor(Date.now() / 1000);
+    if (endsAtPreset === '24h') return now + 24 * 3600;
+    if (endsAtPreset === '7d') return now + 7 * 24 * 3600;
+    if (endsAtPreset === '30d') return now + 30 * 24 * 3600;
+    if (endsAtPreset === 'none') return null;
+    if (endsAtPreset === 'custom' && customEndsAt) {
+      const ts = Math.floor(new Date(customEndsAt).getTime() / 1000);
+      if (ts > now + 5 * 60) return ts;
+    }
+    return null;
+  }
+
   async function handleSubmit() {
-    // Implemented in Task 4.
+    if (!canSubmit) return;
+    const currentAccount = manager.active;
+    if (!currentAccount) {
+      alert('You must be logged in to create a poll.');
+      return;
+    }
+
+    /** @type {any | null} */
+    let communityEvent = null;
+    if (community) {
+      communityEvent = eventStore.getReplaceable(10222, community) || null;
+    }
+
+    const factory = createAppEventFactory();
+    const endsAt = computeEndsAt();
+    const template = await factory.poll(
+      question.trim(),
+      options.map((o) => ({ id: o.id, label: o.label.trim() })),
+      {
+        pollType,
+        ...(endsAt != null ? { endsAt } : {})
+      }
+    );
+
+    // PollBlueprint does not add h-tag; append for community targeting.
+    if (community) template.tags.push(['h', community]);
+
+    const signed = await currentAccount.signEvent(template);
+
+    eventStore.add(signed);
+    await publishEvent(signed, [], { communityEvent });
+
+    modalStore.closeModal();
+
+    const nevent = nip19.neventEncode({ id: signed.id, author: signed.pubkey });
+    if (community) {
+      const npub = nip19.npubEncode(community);
+      goto(resolve(/** @type {any} */ (`/c/${npub}/${nevent}`)));
+    } else {
+      goto(resolve(/** @type {any} */ (`/${nevent}`)));
+    }
   }
 </script>
 
