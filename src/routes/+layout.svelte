@@ -315,9 +315,11 @@
         {@render children?.()}
       {/if}
       <!-- Floating buttons — sticky inside main so they sit at the bottom of the scroll surface.
-           Hidden on views with their own bottom UI (chat input, DM input). -->
+           `mt-auto` pushes the wrapper to the bottom of the flex column on short pages
+           (where sticky degrades to static because there's no overflow); on long pages
+           sticky takes over normally. Hidden on views with their own bottom UI (chat, DM). -->
       {#if !hasOwnBottomUI}
-        <div class="pointer-events-none sticky bottom-0 z-[60] h-0 overflow-visible">
+        <div class="pointer-events-none sticky bottom-0 z-[60] mt-auto h-0 overflow-visible">
           <div class="pointer-events-auto">
             <ScrollToTopButton />
             {#if getActiveUser()}

@@ -26,15 +26,18 @@ export const test = base.extend({
     // Wait for login modal to appear
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
 
-    // Click NSEC login option (the button with "NSEC" text)
-    await page.locator('#global-login-modal button:has-text("NSEC")').click();
+    // Click NSEC login option. Use data-testid because a substring selector on
+    // "NSEC" / "nsec" also matches the bunker option ("Connect a signing app
+    // (Amber, nsec.app)").
+    await page.locator('#global-login-modal [data-testid="login-method-nsec"]').click();
 
     // Wait for NSEC input modal to appear
     await expect(page.locator('#global-private-key-modal')).toBeVisible({ timeout: 5000 });
 
-    // Find and fill the nsec input
-    const nsecInput = page.locator('#global-private-key-modal input').first();
-    await nsecInput.fill(TEST_AUTHOR.nsec);
+    // Fill the nsec input. Target the stable #nsec-input id — the modal also
+    // contains a hidden `<input type="hidden" name="username">` (used for
+    // browser-autocomplete UX) which would otherwise be picked by .first().
+    await page.locator('#nsec-input').fill(TEST_AUTHOR.nsec);
 
     // Click the login button (btn-primary class)
     await page.locator('#global-private-key-modal button.btn-primary').click();
@@ -105,15 +108,16 @@ export async function loginWithNsec(page, nsec) {
   // Wait for login modal to appear
   await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
 
-  // Click NSEC login option
-  await page.locator('#global-login-modal button:has-text("NSEC")').click();
+  // Click NSEC login option (data-testid avoids matching the bunker option, whose
+  // label "Connect a signing app (Amber, nsec.app)" also contains the substring).
+  await page.locator('#global-login-modal [data-testid="login-method-nsec"]').click();
 
   // Wait for NSEC input modal to appear
   await expect(page.locator('#global-private-key-modal')).toBeVisible({ timeout: 5000 });
 
-  // Find and fill the nsec input
-  const nsecInput = page.locator('#global-private-key-modal input').first();
-  await nsecInput.fill(nsec);
+  // Fill the nsec input via the stable #nsec-input id (avoids the hidden
+  // username autocomplete input that .first() would otherwise pick).
+  await page.locator('#nsec-input').fill(nsec);
 
   // Click the login button
   await page.locator('#global-private-key-modal button.btn-primary').click();
