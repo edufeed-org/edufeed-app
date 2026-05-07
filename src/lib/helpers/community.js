@@ -11,27 +11,30 @@ const COMMUNITIES_SET_ID = 'communities';
  * Ensure the kind 30000 follow set with d="communities" exists in EventStore.
  * Works around an applesauce bug where AddUserToFollowSet generates a random
  * d-tag when auto-creating a non-existent follow set.
+ *
+ * Optimistic: when the set is missing, we sign an empty follow set, insert it
+ * into EventStore synchronously, and fire the publish in the background. The
+ * caller (joinCommunity / leaveCommunity) gets control back as soon as the
+ * event is locally visible — we never block on a relay round-trip.
  */
 export async function ensureFollowSetExists() {
   if (!manager.active) return;
   const pubkey = manager.active.pubkey;
 
-  const existing = await new Promise((resolve) => {
-    /** @type {import('rxjs').Subscription | undefined} */
-    let sub;
-    sub = eventStore.replaceable(30000, pubkey, COMMUNITIES_SET_ID).subscribe((event) => {
-      if (sub) sub.unsubscribe();
-      resolve(event);
-    });
-  });
-
-  if (existing) return;
+  // Synchronous lookup — no subscription, no microtask hop.
+  if (eventStore.getReplaceable(30000, pubkey, COMMUNITIES_SET_ID)) return;
 
   const factory = createAppEventFactory({ signer: manager.active.signer });
   const template = await factory.build({ kind: 30000, tags: [['d', COMMUNITIES_SET_ID]] });
   const signed = await factory.sign(template);
-  await publishEvent(signed);
+
+  // Insert locally first so AddUserToFollowSet can read it immediately.
   eventStore.add(signed);
+
+  // Fire-and-forget publish — relay errors are logged, never thrown.
+  publishEvent(signed).catch((err) => {
+    console.error('Failed to publish initial communities follow-set', err);
+  });
 }
 
 /**
