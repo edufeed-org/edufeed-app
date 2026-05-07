@@ -161,5 +161,5 @@ export const CommunityRoomModel = createCommunityContentModel([30312, 30313], {
 
 /** Community activity model — all content kinds for the home feed */
 export const CommunityActivityModel = createCommunityContentModel([
-  30142, 30301, 30023, 30818, 31922, 31923, 11
+  30142, 30301, 30023, 30818, 31922, 31923, 11, 1068
 ]);
