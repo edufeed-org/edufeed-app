@@ -13,7 +13,7 @@ import { kindToFeedCategory, filterFeedItems, FEED_CATEGORIES } from '$lib/helpe
 describe('FEED_CATEGORIES', () => {
   it('contains all expected categories', () => {
     const ids = FEED_CATEGORIES.map((c) => c.id);
-    expect(ids).toEqual(['notes', 'calendar', 'resources', 'articles', 'bookmarks']);
+    expect(ids).toEqual(['notes', 'calendar', 'resources', 'articles', 'bookmarks', 'polls']);
   });
 
   it('each category has required fields', () => {
@@ -56,6 +56,10 @@ describe('kindToFeedCategory', () => {
 
   it('maps kind 1111 to bookmarks', () => {
     expect(kindToFeedCategory(1111)).toBe('bookmarks');
+  });
+
+  it('maps kind 1068 to polls', () => {
+    expect(kindToFeedCategory(1068)).toBe('polls');
   });
 
   it('returns null for unknown kinds', () => {
