@@ -202,6 +202,7 @@
   "auth_signup_modal_step3_communities": "Communities",
   "auth_signup_modal_step3_subtitle": "Pick a few communities to follow.",
   "auth_signup_modal_step3_suggested_heading": "Suggested for you",
+  "auth_signup_modal_step3_browse_heading": "More to explore",
   "auth_signup_modal_step3_search_placeholder": "Find a community…",
   "auth_signup_modal_step3_no_matches": "No matching communities.",
   "auth_signup_modal_step3_done": "Done",

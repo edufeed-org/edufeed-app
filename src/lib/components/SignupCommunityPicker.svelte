@@ -44,6 +44,12 @@
   const suggestedCommunities = $derived(communities.filter((c) => suggestedPubkeys.has(c.pubkey)));
   const otherCommunities = $derived(communities.filter((c) => !suggestedPubkeys.has(c.pubkey)));
 
+  // Browse list: shown when search is empty so users without a known community
+  // name still have something to discover. Newest first, capped at 12.
+  const browseOthers = $derived(
+    otherCommunities.toSorted((a, b) => (b.created_at || 0) - (a.created_at || 0)).slice(0, 12)
+  );
+
   const filteredOthers = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
@@ -118,6 +124,46 @@
       placeholder={m.auth_signup_modal_step3_search_placeholder()}
       class="input-bordered input input-sm w-full"
     />
+
+    {#if searchQuery.trim().length === 0 && browseOthers.length > 0}
+      <h3 class="mt-4 mb-2 text-sm font-semibold opacity-80">
+        {m.auth_signup_modal_step3_browse_heading()}
+      </h3>
+      <ul class="space-y-2">
+        {#each browseOthers as c (c.pubkey)}
+          {@const profile = getProfiles().get(c.pubkey)}
+          {@const name = profile?.display_name || profile?.name}
+          <li data-testid="signup-community-row">
+            <label class="flex cursor-pointer items-center gap-3">
+              <input
+                data-testid="signup-community-checkbox"
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                checked={selected.has(c.pubkey)}
+                onchange={() => toggle(c.pubkey)}
+              />
+              <div class="avatar">
+                <div class="h-8 w-8 rounded-full bg-base-300">
+                  {#if profile?.picture}
+                    <img src={profile.picture} alt="" loading="lazy" />
+                  {/if}
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                {#if name}
+                  <div class="truncate text-sm font-medium">{name}</div>
+                  {#if profile?.about}
+                    <div class="truncate text-xs opacity-70">{profile.about}</div>
+                  {/if}
+                {:else}
+                  <code class="text-xs opacity-70">{c.pubkey.slice(0, 16)}…</code>
+                {/if}
+              </div>
+            </label>
+          </li>
+        {/each}
+      </ul>
+    {/if}
 
     {#if searchQuery.trim().length > 0}
       {#if filteredOthers.length === 0}

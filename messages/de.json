@@ -202,6 +202,7 @@
   "auth_signup_modal_step3_communities": "Communities",
   "auth_signup_modal_step3_subtitle": "Wähle ein paar Communities, denen du folgen möchtest.",
   "auth_signup_modal_step3_suggested_heading": "Für dich vorgeschlagen",
+  "auth_signup_modal_step3_browse_heading": "Mehr entdecken",
   "auth_signup_modal_step3_search_placeholder": "Community suchen…",
   "auth_signup_modal_step3_no_matches": "Keine passenden Communities gefunden.",
   "auth_signup_modal_step3_done": "Fertig",

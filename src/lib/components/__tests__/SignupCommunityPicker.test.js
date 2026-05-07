@@ -3,12 +3,14 @@
  *
  * Tests cover:
  *   - Suggested communities (config-derived) render pre-checked.
- *   - Empty search query shows no "other" rows.
+ *   - Empty search query renders a browse list of non-suggested communities (cap 12, by recency).
+ *   - Browse list excludes suggested communities.
+ *   - Typing in search hides the browse heading and shows search results.
  *   - Search matches by profile name.
  *   - Search matches by profile about.
  *   - Toggling a row updates the bound `selected` SvelteSet.
  *   - Search-discovered rows are unchecked by default.
- *   - "Other" results are capped at 20.
+ *   - "Other" search results are capped at 20.
  *
  * @vitest-environment jsdom
  */
@@ -21,6 +23,7 @@ vi.mock('$lib/paraglide/messages', () =>
     [
       'auth_signup_modal_step3_subtitle',
       'auth_signup_modal_step3_suggested_heading',
+      'auth_signup_modal_step3_browse_heading',
       'auth_signup_modal_step3_search_placeholder',
       'auth_signup_modal_step3_no_matches'
     ].map((k) => [k, () => k])
@@ -58,9 +61,20 @@ const PK_SUGGESTED_2 = 'b'.repeat(64);
 const PK_OTHER_1 = 'c'.repeat(64);
 const PK_OTHER_2 = 'd'.repeat(64);
 
-/** @param {string} pk */
-function communityEvent(pk) {
-  return { id: pk + '-id', kind: 10222, pubkey: pk, tags: [], content: '', created_at: 0, sig: '' };
+/**
+ * @param {string} pk
+ * @param {number} [createdAt]
+ */
+function communityEvent(pk, createdAt = 0) {
+  return {
+    id: pk + '-id',
+    kind: 10222,
+    pubkey: pk,
+    tags: [],
+    content: '',
+    created_at: createdAt,
+    sig: ''
+  };
 }
 
 /** @param {any[]} events */
@@ -100,20 +114,92 @@ describe('SignupCommunityPicker', () => {
     checkboxes.forEach((cb) => expect(/** @type {HTMLInputElement} */ (cb).checked).toBe(true));
   });
 
-  it('renders no "other" rows when search query is empty', async () => {
+  it('renders a browse list of non-suggested communities when search is empty', async () => {
     mockConfig.runtimeConfig.signup.suggestedCommunities = [PK_SUGGESTED_1];
     mockProfileMap.set(PK_SUGGESTED_1, { name: 'Alpha' });
     mockProfileMap.set(PK_OTHER_1, { name: 'Charlie' });
+    mockProfileMap.set(PK_OTHER_2, { name: 'Delta' });
     mockTimeline.mockReturnValue(
-      makeTimelineSubscribe([communityEvent(PK_SUGGESTED_1), communityEvent(PK_OTHER_1)])
+      makeTimelineSubscribe([
+        communityEvent(PK_SUGGESTED_1),
+        communityEvent(PK_OTHER_1),
+        communityEvent(PK_OTHER_2)
+      ])
     );
 
     const selected = new SvelteSet([PK_SUGGESTED_1]);
     const { container } = render(SignupCommunityPicker, { props: { selected } });
 
-    // 1 suggested row + 0 other rows (search empty)
+    // 1 suggested row + 2 browse rows
+    const rows = container.querySelectorAll('[data-testid="signup-community-row"]');
+    expect(rows.length).toBe(3);
+    // Browse heading is shown
+    expect(container.textContent).toContain('auth_signup_modal_step3_browse_heading');
+  });
+
+  it('caps browse list at 12 and orders by created_at desc', async () => {
+    const events = [];
+    for (let i = 0; i < 20; i++) {
+      const pk = i.toString(16).padStart(64, '0');
+      events.push(communityEvent(pk, i)); // newer i ⇒ newer created_at
+      mockProfileMap.set(pk, { name: `community-${i}` });
+    }
+    mockTimeline.mockReturnValue(makeTimelineSubscribe(events));
+
+    const selected = new SvelteSet();
+    const { container } = render(SignupCommunityPicker, { props: { selected } });
+
+    const rows = container.querySelectorAll('[data-testid="signup-community-row"]');
+    expect(rows.length).toBe(12);
+    // First row should be the newest (i=19), last should be i=8 (12 newest)
+    expect(rows[0].textContent).toContain('community-19');
+    expect(rows[11].textContent).toContain('community-8');
+  });
+
+  it('browse list excludes suggested communities', async () => {
+    mockConfig.runtimeConfig.signup.suggestedCommunities = [PK_SUGGESTED_1, PK_SUGGESTED_2];
+    mockProfileMap.set(PK_SUGGESTED_1, { name: 'Alpha' });
+    mockProfileMap.set(PK_SUGGESTED_2, { name: 'Beta' });
+    mockProfileMap.set(PK_OTHER_1, { name: 'Charlie' });
+    mockTimeline.mockReturnValue(
+      makeTimelineSubscribe([
+        communityEvent(PK_SUGGESTED_1),
+        communityEvent(PK_SUGGESTED_2),
+        communityEvent(PK_OTHER_1)
+      ])
+    );
+
+    const selected = new SvelteSet([PK_SUGGESTED_1, PK_SUGGESTED_2]);
+    const { container } = render(SignupCommunityPicker, { props: { selected } });
+
+    // 2 suggested + 1 in browse (Charlie); Alpha/Beta should not duplicate in browse
+    const rows = container.querySelectorAll('[data-testid="signup-community-row"]');
+    expect(rows.length).toBe(3);
+  });
+
+  it('typing in search hides the browse heading', async () => {
+    mockProfileMap.set(PK_OTHER_1, { name: 'Charlie' });
+    mockProfileMap.set(PK_OTHER_2, { name: 'Delta' });
+    mockTimeline.mockReturnValue(
+      makeTimelineSubscribe([communityEvent(PK_OTHER_1), communityEvent(PK_OTHER_2)])
+    );
+
+    const selected = new SvelteSet();
+    const { container } = render(SignupCommunityPicker, { props: { selected } });
+
+    // Initially the browse heading is visible
+    expect(container.textContent).toContain('auth_signup_modal_step3_browse_heading');
+
+    const search = /** @type {HTMLInputElement} */ (
+      container.querySelector('[data-testid="signup-community-search"]')
+    );
+    await fireEvent.input(search, { target: { value: 'char' } });
+
+    // Browse heading should be gone; search results active
+    expect(container.textContent).not.toContain('auth_signup_modal_step3_browse_heading');
     const rows = container.querySelectorAll('[data-testid="signup-community-row"]');
     expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('Charlie');
   });
 
   it('filters other communities by profile name', async () => {
