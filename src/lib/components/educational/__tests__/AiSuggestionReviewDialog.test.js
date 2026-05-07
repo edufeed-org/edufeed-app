@@ -5,7 +5,7 @@
  */
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/svelte';
+import { render, cleanup, fireEvent } from '@testing-library/svelte';
 import AiSuggestionReviewDialog from '../AiSuggestionReviewDialog.svelte';
 
 vi.mock('$lib/paraglide/messages', () => ({
@@ -57,5 +57,55 @@ describe('AiSuggestionReviewDialog — open/closed', () => {
       }
     });
     expect(getByText('No open suggestions.')).toBeInTheDocument();
+  });
+});
+
+describe('AiSuggestionReviewDialog — string conflict row', () => {
+  function setup(overrides = {}) {
+    const onapply = vi.fn();
+    const onclose = vi.fn();
+    const utils = render(AiSuggestionReviewDialog, {
+      props: {
+        open: true,
+        formData: { name: 'Mine' },
+        aboutByVocab: {},
+        aiSuggestions: {
+          source: 'llm-enriched',
+          payload: { name: 'AI value' },
+          evidence: { name: 'evidence quote' },
+          baseline: {}
+        },
+        dismissedFields: new Set(),
+        onapply,
+        onclose,
+        ...overrides
+      }
+    });
+    return { ...utils, onapply, onclose };
+  }
+
+  it('renders user value, AI value, and evidence quote', () => {
+    const { getByText } = setup();
+    expect(getByText('Mine')).toBeInTheDocument();
+    expect(getByText('AI value')).toBeInTheDocument();
+    expect(getByText(/evidence quote/)).toBeInTheDocument();
+  });
+
+  it('renders Keep mine + Use AI buttons for string conflict', () => {
+    const { getByRole } = setup();
+    expect(getByRole('button', { name: 'Keep mine' })).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Use AI' })).toBeInTheDocument();
+  });
+
+  it('clicking Use AI fires onapply(field, "replace")', async () => {
+    const { getByRole, onapply } = setup();
+    await fireEvent.click(getByRole('button', { name: 'Use AI' }));
+    expect(onapply).toHaveBeenCalledWith('name', 'replace');
+  });
+
+  it('clicking Keep mine fires onapply(field, "dismiss")', async () => {
+    const { getByRole, onapply } = setup();
+    await fireEvent.click(getByRole('button', { name: 'Keep mine' }));
+    expect(onapply).toHaveBeenCalledWith('name', 'dismiss');
   });
 });
