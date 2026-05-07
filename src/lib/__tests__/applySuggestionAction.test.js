@@ -67,3 +67,115 @@ describe('applySuggestionAction — string fields', () => {
     expect(result.provenance).not.toBe(provenance);
   });
 });
+
+describe('applySuggestionAction — concept arrays', () => {
+  it("'replace' on learningResourceType writes formConcepts (id+label)", () => {
+    const result = applySuggestionAction(
+      'learningResourceType',
+      'replace',
+      { learningResourceType: [{ id: 'urn:x', label: 'X' }] },
+      {},
+      ai({ learningResourceType: [{ id: 'urn:a', prefLabel: 'A' }] }),
+      {}
+    );
+    expect(result.formData.learningResourceType).toEqual([{ id: 'urn:a', label: 'A' }]);
+  });
+
+  it("'merge' adds AI-only items, preserves user items", () => {
+    const result = applySuggestionAction(
+      'learningResourceType',
+      'merge',
+      { learningResourceType: [{ id: 'urn:x', label: 'X' }] },
+      {},
+      ai({
+        learningResourceType: [
+          { id: 'urn:a', prefLabel: 'A' },
+          { id: 'urn:x', prefLabel: 'X-from-AI' }
+        ]
+      }),
+      {}
+    );
+    const ids = result.formData.learningResourceType.map((c) => c.id);
+    expect(new Set(ids)).toEqual(new Set(['urn:x', 'urn:a']));
+    // user's original entry is kept (not overwritten by AI's prefLabel)
+    expect(result.formData.learningResourceType.find((c) => c.id === 'urn:x').label).toBe('X');
+  });
+});
+
+describe('applySuggestionAction — string arrays (keywords)', () => {
+  it("'merge' unions keywords without duplicates", () => {
+    const result = applySuggestionAction(
+      'keywords',
+      'merge',
+      { keywords: ['math'] },
+      {},
+      ai({ keywords: ['math', 'algebra'] }),
+      {}
+    );
+    expect(new Set(result.formData.keywords)).toEqual(new Set(['math', 'algebra']));
+  });
+
+  it("'replace' overwrites keywords with AI's set", () => {
+    const result = applySuggestionAction(
+      'keywords',
+      'replace',
+      { keywords: ['math'] },
+      {},
+      ai({ keywords: ['biology'] }),
+      {}
+    );
+    expect(result.formData.keywords).toEqual(['biology']);
+  });
+});
+
+describe('applySuggestionAction — paired id/label fields (gradeLevels)', () => {
+  it("'replace' writes both gradeLevels (ids) and gradeLevelLabels (concepts)", () => {
+    const result = applySuggestionAction(
+      'gradeLevels',
+      'replace',
+      { gradeLevels: [], gradeLevelLabels: [] },
+      {},
+      ai({
+        gradeLevels: [
+          { id: 'urn:5', prefLabel: '5' },
+          { id: 'urn:6', prefLabel: '6' }
+        ]
+      }),
+      {}
+    );
+    expect(result.formData.gradeLevels).toEqual(['urn:5', 'urn:6']);
+    expect(result.formData.gradeLevelLabels).toEqual([
+      { id: 'urn:5', label: '5' },
+      { id: 'urn:6', label: '6' }
+    ]);
+  });
+});
+
+describe('applySuggestionAction — ekwFachrichtung writes to aboutByVocab', () => {
+  it("'replace' writes to aboutByVocab.ekwFachrichtung, not formData", () => {
+    const result = applySuggestionAction(
+      'ekwFachrichtung',
+      'replace',
+      {},
+      { ekwFachrichtung: [] },
+      ai({ ekwFachrichtung: [{ id: 'urn:rel', prefLabel: 'Religion' }] }),
+      {}
+    );
+    expect(result.aboutByVocab.ekwFachrichtung).toEqual([{ id: 'urn:rel', label: 'Religion' }]);
+    expect(result.formData).not.toHaveProperty('ekwFachrichtung');
+  });
+});
+
+describe('applySuggestionAction — bibleReferences', () => {
+  it("'replace' overwrites including the [''] sentinel", () => {
+    const result = applySuggestionAction(
+      'bibleReferences',
+      'replace',
+      { bibleReferences: [''] },
+      {},
+      ai({ bibleReferences: ['Joh 3,16'] }),
+      {}
+    );
+    expect(result.formData.bibleReferences).toEqual(['Joh 3,16']);
+  });
+});
