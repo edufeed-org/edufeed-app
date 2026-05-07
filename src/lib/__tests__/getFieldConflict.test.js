@@ -133,6 +133,39 @@ describe('getFieldConflict — bibleReferences with default empty', () => {
   });
 });
 
+describe('getFieldConflict — ekwFachrichtung (aboutByVocab-routed)', () => {
+  it("returns 'auto-applied' when aboutByVocab.ekwFachrichtung is empty and AI has concepts", () => {
+    const a = ai({ ekwFachrichtung: [{ id: 'urn:rel', prefLabel: 'Religion' }] });
+    expect(getFieldConflict('ekwFachrichtung', {}, { ekwFachrichtung: [] }, a)).toBe(
+      'auto-applied'
+    );
+  });
+
+  it("returns 'none' when sets match", () => {
+    const a = ai({ ekwFachrichtung: [{ id: 'urn:rel', prefLabel: 'Religion' }] });
+    expect(
+      getFieldConflict(
+        'ekwFachrichtung',
+        {},
+        { ekwFachrichtung: [{ id: 'urn:rel', label: 'Religion' }] },
+        a
+      )
+    ).toBe('none');
+  });
+
+  it("returns 'conflict' when user picked something else", () => {
+    const a = ai({ ekwFachrichtung: [{ id: 'urn:rel', prefLabel: 'Religion' }] });
+    expect(
+      getFieldConflict(
+        'ekwFachrichtung',
+        {},
+        { ekwFachrichtung: [{ id: 'urn:other', label: 'X' }] },
+        a
+      )
+    ).toBe('conflict');
+  });
+});
+
 describe('ENRICHABLE_FIELDS', () => {
   it('includes the user-facing string and array fields', () => {
     expect(ENRICHABLE_FIELDS).toContain('name');

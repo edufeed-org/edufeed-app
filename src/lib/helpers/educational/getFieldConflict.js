@@ -31,6 +31,7 @@ const CONCEPT_ARRAY_FIELDS = new Set([
   'methods'
 ]);
 const STRING_ARRAY_FIELDS = new Set(['keywords', 'bibleReferences']);
+const ABOUT_BY_VOCAB_FIELDS = new Set(['ekwFachrichtung']);
 
 function conceptIds(arr) {
   if (!Array.isArray(arr)) return new Set();
@@ -91,10 +92,13 @@ export function getFieldConflict(field, formData, aboutByVocab, aiSuggestions) {
     return 'conflict';
   }
 
+  if (ABOUT_BY_VOCAB_FIELDS.has(field)) {
+    return classifyArray(field, aboutByVocab?.[field], aiValue);
+  }
+
   if (CONCEPT_ARRAY_FIELDS.has(field) || STRING_ARRAY_FIELDS.has(field)) {
     return classifyArray(field, formData[field], aiValue);
   }
 
-  // aboutByVocab fields handled in later tasks.
   return 'none';
 }
