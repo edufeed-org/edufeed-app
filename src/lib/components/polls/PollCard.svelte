@@ -8,6 +8,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
+  import { deleteEvent } from '$lib/helpers/eventDeletion.js';
 
   /**
    * @typedef {Object} Props
@@ -99,6 +100,19 @@
     }
   }
 
+  let isAuthor = $derived(manager.active?.pubkey === event.pubkey);
+
+  async function handleDelete() {
+    const account = manager.active;
+    if (!account || !isAuthor) return;
+    if (!window.confirm('Delete this poll? This cannot be undone.')) return;
+    try {
+      await deleteEvent(event, account);
+    } catch (err) {
+      console.warn('Poll delete failed', err);
+    }
+  }
+
   async function castVote() {
     if (submitting) return;
     const account = manager.active;
@@ -140,8 +154,24 @@
   }
 </script>
 
-<div class="rounded-box border border-base-300 bg-base-100 p-4">
-  <p data-testid="poll-question" class="text-lg font-semibold {truncate ? 'line-clamp-3' : ''}">
+<div class="relative rounded-box border border-base-300 bg-base-100 p-4">
+  {#if isAuthor}
+    <details class="dropdown absolute dropdown-end top-3 right-3">
+      <summary class="btn btn-circle btn-ghost btn-sm" aria-label="Poll actions">
+        <span aria-hidden="true">⋯</span>
+      </summary>
+      <ul class="dropdown-content menu z-10 w-44 rounded-box bg-base-100 shadow">
+        <li>
+          <button type="button" class="text-error" onclick={handleDelete}> Delete poll </button>
+        </li>
+      </ul>
+    </details>
+  {/if}
+
+  <p
+    data-testid="poll-question"
+    class="text-lg font-semibold {truncate ? 'line-clamp-3' : ''} {isAuthor ? 'pr-10' : ''}"
+  >
     {event.content}
   </p>
 

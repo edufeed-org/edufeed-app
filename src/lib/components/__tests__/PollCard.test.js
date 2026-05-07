@@ -44,6 +44,14 @@ const publishEventSpy = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ success: true, successCount: 1, relays: [], results: [] })
 );
 
+const { deleteEventSpy } = vi.hoisted(() => ({
+  deleteEventSpy: vi.fn().mockResolvedValue({ success: true })
+}));
+
+vi.mock('$lib/helpers/eventDeletion.js', () => ({
+  deleteEvent: deleteEventSpy
+}));
+
 vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: () => ({ create: factoryCreate })
 }));
@@ -280,6 +288,53 @@ describe('PollCard — render skeleton + states', () => {
         ['response', 'opt-a']
       ]
     });
+  });
+
+  it('shows delete affordance to the poll author', async () => {
+    managerState.active = { pubkey: 'author'.padEnd(64, '0'), signEvent: vi.fn() };
+    render(PollCard, { props: { event: makePoll() } });
+    expect(screen.getByRole('button', { name: /delete poll/i })).toBeTruthy();
+  });
+
+  it('does NOT show delete affordance to non-authors', async () => {
+    managerState.active = { pubkey: 'someone-else'.padEnd(64, '0'), signEvent: vi.fn() };
+    render(PollCard, { props: { event: makePoll() } });
+    expect(screen.queryByRole('button', { name: /delete poll/i })).toBeNull();
+  });
+
+  it('does NOT show delete affordance when logged out', async () => {
+    managerState.active = null;
+    render(PollCard, { props: { event: makePoll() } });
+    expect(screen.queryByRole('button', { name: /delete poll/i })).toBeNull();
+  });
+
+  it('calls deleteEvent helper when delete is confirmed', async () => {
+    managerState.active = { pubkey: 'author'.padEnd(64, '0'), signEvent: vi.fn() };
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+    try {
+      render(PollCard, { props: { event: makePoll() } });
+      await fireEvent.click(screen.getByRole('button', { name: /delete poll/i }));
+      await waitFor(() => expect(deleteEventSpy).toHaveBeenCalled());
+      const [eventArg, accountArg] = deleteEventSpy.mock.calls[0];
+      expect(eventArg.kind).toBe(1068);
+      expect(accountArg).toBe(managerState.active);
+    } finally {
+      window.confirm = originalConfirm;
+    }
+  });
+
+  it('does NOT call deleteEvent when delete is cancelled', async () => {
+    managerState.active = { pubkey: 'author'.padEnd(64, '0'), signEvent: vi.fn() };
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => false);
+    try {
+      render(PollCard, { props: { event: makePoll() } });
+      await fireEvent.click(screen.getByRole('button', { name: /delete poll/i }));
+      expect(deleteEventSpy).not.toHaveBeenCalled();
+    } finally {
+      window.confirm = originalConfirm;
+    }
   });
 
   it('resets selection when event prop changes', async () => {
