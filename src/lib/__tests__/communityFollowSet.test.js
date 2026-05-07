@@ -1,5 +1,5 @@
 /**
- * Unit tests for buildAutoJoinFollowSet — used by the signup flow to build and
+ * Unit tests for buildCommunityFollowSet — used by the signup flow to build and
  * sign a kind 30000 follow set ahead of optimistic EventStore insertion.
  *
  * The helper's job is small and pure-ish:
@@ -12,7 +12,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildAutoJoinFollowSet } from '../helpers/autoJoinCommunities.js';
+import { buildCommunityFollowSet } from '../helpers/communityFollowSet.js';
 
 // Real npub → expected hex (the deployment target community). Using a real
 // pair keeps the test honest about nip19 round-tripping.
@@ -40,26 +40,26 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('buildAutoJoinFollowSet', () => {
+describe('buildCommunityFollowSet', () => {
   it('returns {signed: null} and skips signEvent when input is empty', async () => {
     const signer = makeSigner();
-    const result = await buildAutoJoinFollowSet(signer, USER_PUBKEY, []);
+    const result = await buildCommunityFollowSet(signer, USER_PUBKEY, []);
     expect(result).toEqual({ signed: null, targetPubkeys: [] });
     expect(signer.signEvent).not.toHaveBeenCalled();
   });
 
   it('returns {signed: null} and skips signEvent when input is undefined', async () => {
-    // Defensive: the call site reads from runtimeConfig.signup?.autoJoinCommunities
+    // Defensive: the call site reads from runtimeConfig.signup?.suggestedCommunities
     // which could be undefined under timing edge cases.
     const signer = makeSigner();
-    const result = await buildAutoJoinFollowSet(signer, USER_PUBKEY, undefined);
+    const result = await buildCommunityFollowSet(signer, USER_PUBKEY, undefined);
     expect(result).toEqual({ signed: null, targetPubkeys: [] });
     expect(signer.signEvent).not.toHaveBeenCalled();
   });
 
   it('skips signEvent when every identifier is invalid', async () => {
     const signer = makeSigner();
-    const result = await buildAutoJoinFollowSet(signer, USER_PUBKEY, [
+    const result = await buildCommunityFollowSet(signer, USER_PUBKEY, [
       'not-an-npub',
       '',
       'npub1invalid'
@@ -70,7 +70,7 @@ describe('buildAutoJoinFollowSet', () => {
 
   it('decodes a valid npub to lowercase hex and signs a kind 30000 event', async () => {
     const signer = makeSigner();
-    const { signed, targetPubkeys } = await buildAutoJoinFollowSet(signer, USER_PUBKEY, [
+    const { signed, targetPubkeys } = await buildCommunityFollowSet(signer, USER_PUBKEY, [
       TARGET_NPUB
     ]);
 
@@ -95,7 +95,7 @@ describe('buildAutoJoinFollowSet', () => {
 
   it('passes raw hex pubkeys through (lowercased)', async () => {
     const signer = makeSigner();
-    const { targetPubkeys } = await buildAutoJoinFollowSet(signer, USER_PUBKEY, [
+    const { targetPubkeys } = await buildCommunityFollowSet(signer, USER_PUBKEY, [
       TARGET_HEX.toUpperCase()
     ]);
     expect(targetPubkeys).toEqual([TARGET_HEX]);
@@ -103,7 +103,7 @@ describe('buildAutoJoinFollowSet', () => {
 
   it('filters mixed valid/invalid entries; only valid pubkeys end up as p-tags', async () => {
     const signer = makeSigner();
-    const { signed, targetPubkeys } = await buildAutoJoinFollowSet(signer, USER_PUBKEY, [
+    const { signed, targetPubkeys } = await buildCommunityFollowSet(signer, USER_PUBKEY, [
       'garbage',
       TARGET_NPUB,
       ''
@@ -122,7 +122,7 @@ describe('buildAutoJoinFollowSet', () => {
     // on a stable tag layout.
     const signer = makeSigner();
     const SECOND_NPUB = 'npub1f7jar3qnu269uyx5p0e4v24hqxjnxysxudvujza2ur5ehltvdeqsly2fx9';
-    const { signed, targetPubkeys } = await buildAutoJoinFollowSet(signer, USER_PUBKEY, [
+    const { signed, targetPubkeys } = await buildCommunityFollowSet(signer, USER_PUBKEY, [
       TARGET_NPUB,
       SECOND_NPUB
     ]);
@@ -142,7 +142,7 @@ describe('buildAutoJoinFollowSet', () => {
         throw new Error('signer offline');
       })
     };
-    await expect(buildAutoJoinFollowSet(signer, USER_PUBKEY, [TARGET_NPUB])).rejects.toThrow(
+    await expect(buildCommunityFollowSet(signer, USER_PUBKEY, [TARGET_NPUB])).rejects.toThrow(
       'signer offline'
     );
   });

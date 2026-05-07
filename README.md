@@ -299,7 +299,7 @@ WoT extends curated mode by using anchor pubkeys' follow graphs. Anchor pubkeys'
 
 **Signup**
 
-- `SIGNUP_SUGGESTED_USERS`: Suggested users to follow (comma-separated npubs)
+- `SIGNUP_SUGGESTED_COMMUNITIES`: Communities pre-checked in the signup step-3 picker (comma-separated npubs or hex pubkeys). Leave empty to disable.
 
 **Media Uploads (Blossom)**
 

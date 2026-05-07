@@ -1,15 +1,20 @@
 /**
- * SignupModal — new 2-step normie-friendly flow.
+ * SignupModal — new 3-step normie-friendly flow.
  *
  * Step 1 = name only → creates a SimpleAccount and activates it (user is logged
  *   in as soon as they leave step 1; backup is offered as a post-login banner).
- * Step 2 = optional avatar + bio → publishes kind 0 on "Done".
+ * Step 2 = optional avatar + bio → advances to Step 3.
+ * Step 3 = community picker → publishes kind 0 (and optionally kind 30000).
  *
  * Tests exercise the load-bearing wiring:
  *  - AvatarUploader on step 2 receives a working signer (preserves prior invariant)
  *  - Empty name does not create an account and does not advance
  *  - Valid name creates SimpleAccount, calls manager.addAccount + setActive
- *  - "Done" on step 2 publishes a kind 0 carrying the name
+ *  - Step 1 → Step 2 advances without publishing
+ *  - Step 2 → Step 3 advances without publishing
+ *  - "Skip" on step 3 publishes only kind 0
+ *  - "Done" on step 3 with empty selection publishes only kind 0
+ *  - "Done" on step 3 with seeded selection publishes kind 0 + kind 30000
  *
  * @vitest-environment jsdom
  */
@@ -37,12 +42,24 @@ vi.mock('../shared/AvatarUploader.svelte', async () => {
   return { default: mock.default };
 });
 
+vi.mock('../SignupCommunityPicker.svelte', async () => {
+  const mock = await import('./__mocks__/SignupCommunityPickerMock.svelte');
+  return { default: mock.default };
+});
+
 vi.mock('$lib/paraglide/messages', () =>
   Object.fromEntries(
     [
       'auth_signup_modal_title',
       'auth_signup_modal_step1_account',
       'auth_signup_modal_step2_profile',
+      'auth_signup_modal_step3_communities',
+      'auth_signup_modal_step3_subtitle',
+      'auth_signup_modal_step3_suggested_heading',
+      'auth_signup_modal_step3_search_placeholder',
+      'auth_signup_modal_step3_no_matches',
+      'auth_signup_modal_step3_done',
+      'auth_signup_modal_step3_skip',
       'auth_signup_modal_step1_subtitle',
       'auth_signup_modal_step2_subtitle',
       'auth_signup_modal_name_label',
@@ -65,7 +82,7 @@ vi.mock('$lib/paraglide/messages', () =>
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
-    signup: { suggestedUsers: [], autoJoinCommunities: [] },
+    signup: { suggestedCommunities: [] },
     blossom: { maxFileSize: 5 * 1024 * 1024 }
   },
   configReady: { subscribe: () => () => {} }
@@ -110,8 +127,15 @@ vi.mock('$lib/helpers/profile.js', () => ({
   fetchProfileData: vi.fn()
 }));
 
-vi.mock('$lib/helpers/autoJoinCommunities.js', () => ({
-  buildAutoJoinFollowSet: vi.fn().mockResolvedValue({ signed: null, targetPubkeys: [] })
+vi.mock('$lib/helpers/communityFollowSet.js', () => ({
+  buildCommunityFollowSet: vi.fn().mockResolvedValue({ signed: null, targetPubkeys: [] })
+}));
+
+const mockCommunikeyTimelineLoader = vi.hoisted(() =>
+  vi.fn().mockReturnValue(() => ({ subscribe: () => ({ unsubscribe: vi.fn() }) }))
+);
+vi.mock('$lib/loaders/community.js', () => ({
+  communikeyTimelineLoader: mockCommunikeyTimelineLoader
 }));
 
 // Stub the keypair helper so the signer's signEvent doesn't hit @noble/hashes'
@@ -276,22 +300,106 @@ describe('SignupModal — Step 2 (Profile)', () => {
     expect(uploader?.getAttribute('data-has-signer')).toBe('true');
     expect(uploader?.getAttribute('data-signer-can-sign')).toBe('true');
   });
+});
 
-  it('publishes a kind 0 event carrying the Step-1 name when "Done" is clicked with no extras', async () => {
-    const { container, getByText } = render(SignupModal, {
-      props: { modalId: 'signup-test-5' }
+describe('SignupModal — Step 3 (Communities)', () => {
+  it('Step 1 → Step 2 advances without publishing', async () => {
+    const { getByPlaceholderText, getByText, queryByTestId } = render(SignupModal, {
+      props: { modalId: 'signup-modal' }
     });
+    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
 
-    await submitStep1(container, getByText, 'Test Teacher');
-    await fireEvent.click(getByText('auth_signup_modal_done'));
+    expect(mockPublishEvent).not.toHaveBeenCalled();
+    // Step 2 visible; picker mock not yet (it's step 3)
+    expect(queryByTestId('signup-community-picker-mock')).toBeNull();
+  });
 
-    // Allow microtasks (sign + add + publish promises) to resolve.
+  it('Step 2 → Step 3 advances without publishing', async () => {
+    const { getByPlaceholderText, getByText, getByTestId } = render(SignupModal, {
+      props: { modalId: 'signup-modal' }
+    });
+    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+    await fireEvent.click(getByText('auth_signup_modal_continue')); // → step 2
+    await fireEvent.click(getByText('auth_signup_modal_continue')); // → step 3
+
+    expect(mockPublishEvent).not.toHaveBeenCalled();
+    expect(getByTestId('signup-community-picker-mock')).toBeTruthy();
+  });
+
+  it('Step 3 Skip publishes only kind 0', async () => {
+    const { getByPlaceholderText, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-modal' }
+    });
+    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_step3_skip'));
+
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(mockPublishEvent).toHaveBeenCalled();
-    const event = mockPublishEvent.mock.calls[0][0];
-    expect(event.kind).toBe(0);
-    const profile = JSON.parse(event.content);
-    expect(profile.name).toBe('Test Teacher');
+    expect(mockPublishEvent).toHaveBeenCalledTimes(1);
+    const [signedKind0] = mockPublishEvent.mock.calls[0];
+    expect(signedKind0.kind).toBe(0);
+  });
+
+  it('Step 3 Done with empty selection publishes only kind 0', async () => {
+    const { getByPlaceholderText, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-modal' }
+    });
+    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_step3_done'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockPublishEvent).toHaveBeenCalledTimes(1);
+    expect(mockPublishEvent.mock.calls[0][0].kind).toBe(0);
+  });
+
+  it('Step 3 Done with seeded selection publishes kind 0 + kind 30000', async () => {
+    // Stub buildCommunityFollowSet to return a signed event so the modal calls publishEvent twice.
+    const fakeKind30000 = {
+      kind: 30000,
+      content: '',
+      tags: [['d', 'communities']],
+      pubkey: 'x',
+      sig: '',
+      created_at: 0,
+      id: 'fake'
+    };
+    // mockResolvedValueOnce (not mockResolvedValue) so this test's stub does
+    // not leak into subsequent tests — vi.clearAllMocks() resets call history
+    // but not implementations set via mockResolvedValue.
+    const mod = await import('$lib/helpers/communityFollowSet.js');
+    /** @type {any} */ (mod.buildCommunityFollowSet).mockResolvedValueOnce({
+      signed: fakeKind30000,
+      targetPubkeys: ['a'.repeat(64)]
+    });
+
+    // Tell the modal there's one suggested community (so it seeds the selection).
+    const config = await import('$lib/stores/config.svelte.js');
+    /** @type {any} */ (config).runtimeConfig.signup.suggestedCommunities = ['a'.repeat(64)];
+
+    const { getByPlaceholderText, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-modal' }
+    });
+    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_step3_done'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockPublishEvent).toHaveBeenCalledTimes(2);
+    const kinds = mockPublishEvent.mock.calls.map((c) => c[0].kind).sort();
+    expect(kinds).toEqual([0, 30000]);
+
+    // Reset for other tests.
+    /** @type {any} */ (config).runtimeConfig.signup.suggestedCommunities = [];
   });
 });

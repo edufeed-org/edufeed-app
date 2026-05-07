@@ -29,13 +29,17 @@ function normalizeToHex(identifier) {
  */
 
 /**
- * Build and sign a kind 30000 follow set event listing the configured
- * communities, ready for optimistic insertion into EventStore.
+ * Build and sign a kind 30000 follow set event listing the supplied
+ * community identifiers, ready for optimistic insertion into EventStore.
  *
  * Bypasses ActionRunner / joinCommunities on purpose: this is the brand-new
  * account path, where we know there's no existing follow set to merge into.
  * Shaping the event ourselves lets the caller add it to EventStore *before*
  * publishing, so the UI updates instantly while relays catch up in background.
+ *
+ * Identifiers are caller-supplied — they may originate from deployment config,
+ * a user-driven community picker, or any other source. This helper takes no
+ * stance on selection policy.
  *
  * Filters out invalid identifiers; returns `signed: null` when nothing valid
  * remains. Never throws on bad input — only on signer failure.
@@ -45,7 +49,7 @@ function normalizeToHex(identifier) {
  * @param {string[] | undefined} identifiers - npub or hex pubkeys to follow.
  * @returns {Promise<{signed: import('nostr-tools').NostrEvent | null, targetPubkeys: string[]}>}
  */
-export async function buildAutoJoinFollowSet(signer, pubkey, identifiers) {
+export async function buildCommunityFollowSet(signer, pubkey, identifiers) {
   if (!identifiers?.length) {
     return { signed: null, targetPubkeys: [] };
   }
