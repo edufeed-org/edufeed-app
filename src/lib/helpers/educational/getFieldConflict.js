@@ -1,5 +1,4 @@
-const FORM_DEFAULT_LICENSE = 'https://creativecommons.org/licenses/by/4.0/';
-const FORM_DEFAULT_LANGUAGE = 'de';
+import { FORM_DEFAULT_LICENSE, FORM_DEFAULT_LANGUAGE } from './formDefaults.js';
 
 export const ENRICHABLE_FIELDS = Object.freeze([
   'name',
@@ -20,9 +19,13 @@ export const ENRICHABLE_FIELDS = Object.freeze([
   'ekwFachrichtung'
 ]);
 
-const STRING_FIELDS = new Set(['name', 'description', 'image', 'methodOther']);
+const PLAIN_STRING_FIELDS = new Set(['name', 'description', 'image', 'methodOther']);
 
-/** Treat a string field's value as empty if it's '' or matches the form default. */
+/**
+ * Treat a string field's value as empty if it's '' or matches the form default.
+ * `inLanguage` and `license` are routed in via name because they have
+ * non-empty defaults that count as "empty" for conflict purposes.
+ */
 function isStringEmpty(field, value) {
   if (!value) return true;
   if (field === 'inLanguage' && value === FORM_DEFAULT_LANGUAGE) return true;
@@ -43,7 +46,7 @@ export function getFieldConflict(field, formData, aboutByVocab, aiSuggestions) {
   const aiValue = aiSuggestions.payload?.[field];
   if (aiValue == null) return 'none';
 
-  if (STRING_FIELDS.has(field) || field === 'inLanguage' || field === 'license') {
+  if (PLAIN_STRING_FIELDS.has(field) || field === 'inLanguage' || field === 'license') {
     const userValue = formData[field];
     if (isStringEmpty(field, userValue)) return 'auto-applied';
     if (userValue === aiValue) return 'none';

@@ -1,8 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { getFieldConflict, ENRICHABLE_FIELDS } from '$lib/helpers/educational/getFieldConflict.js';
-
-const FORM_DEFAULT_LICENSE = 'https://creativecommons.org/licenses/by/4.0/';
+import { FORM_DEFAULT_LICENSE } from '$lib/helpers/educational/formDefaults.js';
 
 function ai(payload) {
   return { source: 'llm-enriched', payload, evidence: {}, baseline: {} };
