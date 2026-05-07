@@ -5,7 +5,7 @@
   (string vs additive array vs conflicting array).
 -->
 <script>
-  import { getFieldConflict } from '$lib/helpers/educational/getFieldConflict.js';
+  import { getFieldConflict, STRING_FIELDS } from '$lib/helpers/educational/getFieldConflict.js';
   import { formatAiFieldValue } from '$lib/helpers/educational/formatFieldValue.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -20,15 +20,6 @@
    */
   /** @type {Props} */
   let { field, formData, aboutByVocab, aiSuggestions, dismissedFields, onapply } = $props();
-
-  const STRING_FIELDS = new Set([
-    'name',
-    'description',
-    'image',
-    'inLanguage',
-    'license',
-    'methodOther'
-  ]);
 
   const state = $derived(getFieldConflict(field, formData, aboutByVocab, aiSuggestions));
   const aiValue = $derived(formatAiFieldValue(field, aiSuggestions));

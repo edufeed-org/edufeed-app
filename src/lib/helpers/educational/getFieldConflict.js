@@ -19,6 +19,15 @@ export const ENRICHABLE_FIELDS = Object.freeze([
   'ekwFachrichtung'
 ]);
 
+export const STRING_FIELDS = new Set([
+  'name',
+  'description',
+  'image',
+  'inLanguage',
+  'license',
+  'methodOther'
+]);
+
 const PLAIN_STRING_FIELDS = new Set(['name', 'description', 'image', 'methodOther']);
 
 const CONCEPT_ARRAY_FIELDS = new Set([
