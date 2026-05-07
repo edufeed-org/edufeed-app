@@ -21,6 +21,44 @@ export const ENRICHABLE_FIELDS = Object.freeze([
 
 const PLAIN_STRING_FIELDS = new Set(['name', 'description', 'image', 'methodOther']);
 
+const CONCEPT_ARRAY_FIELDS = new Set([
+  'learningResourceType',
+  'educationalLevels',
+  'creators',
+  'gradeLevels',
+  'schoolTypes',
+  'didacticConcepts',
+  'methods'
+]);
+const STRING_ARRAY_FIELDS = new Set(['keywords', 'bibleReferences']);
+
+function conceptIds(arr) {
+  if (!Array.isArray(arr)) return new Set();
+  return new Set(arr.map((c) => (typeof c === 'string' ? c : c?.id)).filter(Boolean));
+}
+
+function isBibleEmpty(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return true;
+  return arr.length === 1 && arr[0] === '';
+}
+
+function classifyArray(field, userArr, aiArr) {
+  const aiIds = conceptIds(aiArr);
+  const userIds =
+    field === 'bibleReferences'
+      ? new Set(isBibleEmpty(userArr) ? [] : userArr)
+      : conceptIds(userArr);
+
+  if (aiIds.size === 0) return 'none';
+  if (userIds.size === 0) return 'auto-applied';
+
+  const aiSubset = [...aiIds].every((id) => userIds.has(id));
+  const userSubset = [...userIds].every((id) => aiIds.has(id));
+  if (aiSubset && userSubset) return 'none'; // sets equal
+  if (userSubset) return 'additive'; // AI strict superset
+  return 'conflict'; // any other partial/disjoint
+}
+
 /**
  * Treat a string field's value as empty if it's '' or matches the form default.
  * `inLanguage` and `license` are routed in via name because they have
@@ -53,6 +91,10 @@ export function getFieldConflict(field, formData, aboutByVocab, aiSuggestions) {
     return 'conflict';
   }
 
-  // Array & aboutByVocab fields handled in later tasks.
+  if (CONCEPT_ARRAY_FIELDS.has(field) || STRING_ARRAY_FIELDS.has(field)) {
+    return classifyArray(field, formData[field], aiValue);
+  }
+
+  // aboutByVocab fields handled in later tasks.
   return 'none';
 }

@@ -52,6 +52,87 @@ describe('getFieldConflict — string fields', () => {
   });
 });
 
+describe('getFieldConflict — concept arrays (id/prefLabel)', () => {
+  const fdEmpty = { learningResourceType: [] };
+
+  it("returns 'auto-applied' when user array is empty and AI has concepts", () => {
+    const a = ai({ learningResourceType: [{ id: 'urn:a', prefLabel: 'A' }] });
+    expect(getFieldConflict('learningResourceType', fdEmpty, {}, a)).toBe('auto-applied');
+  });
+
+  it("returns 'none' when user has the same set", () => {
+    const fd = { learningResourceType: [{ id: 'urn:a', label: 'A' }] };
+    const a = ai({ learningResourceType: [{ id: 'urn:a', prefLabel: 'A' }] });
+    expect(getFieldConflict('learningResourceType', fd, {}, a)).toBe('none');
+  });
+
+  it("returns 'additive' when AI is a strict superset of user", () => {
+    const fd = { learningResourceType: [{ id: 'urn:a', label: 'A' }] };
+    const a = ai({
+      learningResourceType: [
+        { id: 'urn:a', prefLabel: 'A' },
+        { id: 'urn:b', prefLabel: 'B' }
+      ]
+    });
+    expect(getFieldConflict('learningResourceType', fd, {}, a)).toBe('additive');
+  });
+
+  it("returns 'conflict' when user and AI sets are disjoint", () => {
+    const fd = { learningResourceType: [{ id: 'urn:x', label: 'X' }] };
+    const a = ai({ learningResourceType: [{ id: 'urn:a', prefLabel: 'A' }] });
+    expect(getFieldConflict('learningResourceType', fd, {}, a)).toBe('conflict');
+  });
+
+  it("returns 'conflict' when user has items AI doesn't (partial overlap)", () => {
+    const fd = {
+      learningResourceType: [
+        { id: 'urn:a', label: 'A' },
+        { id: 'urn:x', label: 'X' }
+      ]
+    };
+    const a = ai({
+      learningResourceType: [
+        { id: 'urn:a', prefLabel: 'A' },
+        { id: 'urn:b', prefLabel: 'B' }
+      ]
+    });
+    expect(getFieldConflict('learningResourceType', fd, {}, a)).toBe('conflict');
+  });
+});
+
+describe('getFieldConflict — string arrays (keywords)', () => {
+  it("returns 'auto-applied' when user array empty and AI has keywords", () => {
+    const a = ai({ keywords: ['math', 'algebra'] });
+    expect(getFieldConflict('keywords', { keywords: [] }, {}, a)).toBe('auto-applied');
+  });
+
+  it("returns 'additive' when AI superset", () => {
+    const a = ai({ keywords: ['math', 'algebra'] });
+    expect(getFieldConflict('keywords', { keywords: ['math'] }, {}, a)).toBe('additive');
+  });
+
+  it("returns 'none' when sets match", () => {
+    const a = ai({ keywords: ['math', 'algebra'] });
+    expect(getFieldConflict('keywords', { keywords: ['math', 'algebra'] }, {}, a)).toBe('none');
+  });
+});
+
+describe('getFieldConflict — bibleReferences with default empty', () => {
+  it("treats [''] as empty", () => {
+    const a = ai({ bibleReferences: ['Joh 3,16'] });
+    expect(getFieldConflict('bibleReferences', { bibleReferences: [''] }, {}, a)).toBe(
+      'auto-applied'
+    );
+  });
+
+  it('conflicts when user has different non-empty entries', () => {
+    const a = ai({ bibleReferences: ['Joh 3,16'] });
+    expect(getFieldConflict('bibleReferences', { bibleReferences: ['Mt 5,3'] }, {}, a)).toBe(
+      'conflict'
+    );
+  });
+});
+
 describe('ENRICHABLE_FIELDS', () => {
   it('includes the user-facing string and array fields', () => {
     expect(ENRICHABLE_FIELDS).toContain('name');
