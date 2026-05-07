@@ -114,7 +114,7 @@ describe('ExtensionMetadataPanel', () => {
     expect(getByText('5–6')).toBeTruthy();
   });
 
-  it('linkifies bibleReference scalars to bibleserver.com', () => {
+  it('linkifies bibleReference scalars to die-bibel.de', () => {
     const event = {
       tags: [
         ['ext:ekw:bibleReference', 'Mt 5,3-12'],
@@ -123,14 +123,12 @@ describe('ExtensionMetadataPanel', () => {
     };
     const { getByText, container } = render(ExtensionMetadataPanel, { props: { event } });
 
-    // Canonical reference becomes a link to bibleserver.com (LUT / Lutherbibel 2017).
+    // Canonical reference becomes a link to die-bibel.de (LU17 / Lutherbibel 2017).
     const link = /** @type {HTMLAnchorElement | null} */ (
-      container.querySelector('a[href^="https://www.bibleserver.com/LUT/"]')
+      container.querySelector('a[href^="https://www.die-bibel.de/bibel/LU17/"]')
     );
     expect(link).toBeTruthy();
-    expect(link?.getAttribute('href')).toBe(
-      'https://www.bibleserver.com/LUT/' + encodeURIComponent('Mt 5,3-12')
-    );
+    expect(link?.getAttribute('href')).toBe('https://www.die-bibel.de/bibel/LU17/MAT.5.3-12');
     expect(link?.getAttribute('target')).toBe('_blank');
     expect(link?.textContent?.trim()).toBe('Mt 5,3-12');
 

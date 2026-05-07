@@ -5,8 +5,10 @@ import {
   findBookMatches,
   findExactBook,
   parseAndCanonicalize,
-  toBibleServerUrl
+  toDieBibelUrl
 } from '$lib/helpers/educational/bibleReference.js';
+
+const DIE_BIBEL = 'https://www.die-bibel.de/bibel/LU17';
 
 describe('parseAndCanonicalize — German bible references', () => {
   describe('valid inputs canonicalize to German short form', () => {
@@ -141,49 +143,153 @@ describe('findExactBook', () => {
   });
 });
 
-describe('toBibleServerUrl', () => {
-  it('builds a bibleserver.com LUT link for canonical short references', () => {
-    expect(toBibleServerUrl('Mt 5,3-12')).toBe(
-      'https://www.bibleserver.com/LUT/' + encodeURIComponent('Mt 5,3-12')
-    );
-    expect(toBibleServerUrl('Joh 3,16')).toBe(
-      'https://www.bibleserver.com/LUT/' + encodeURIComponent('Joh 3,16')
-    );
+describe('toDieBibelUrl', () => {
+  it('builds a die-bibel.de LU17 link for chapter-only references', () => {
+    expect(toDieBibelUrl('Ps 23')).toBe(`${DIE_BIBEL}/PSA.23`);
+    expect(toDieBibelUrl('1 Mo 27')).toBe(`${DIE_BIBEL}/GEN.27`);
   });
 
-  it('handles books with leading number prefixes', () => {
-    expect(toBibleServerUrl('1 Kor 13,1-3')).toBe(
-      'https://www.bibleserver.com/LUT/' + encodeURIComponent('1 Kor 13,1-3')
-    );
-    expect(toBibleServerUrl('1 Mo 1,1')).toBe(
-      'https://www.bibleserver.com/LUT/' + encodeURIComponent('1 Mo 1,1')
-    );
+  it('builds verse-specific links for single-verse references', () => {
+    expect(toDieBibelUrl('Joh 3,16')).toBe(`${DIE_BIBEL}/JHN.3.16`);
+    expect(toDieBibelUrl('Mt 5,3')).toBe(`${DIE_BIBEL}/MAT.5.3`);
+  });
+
+  it('builds verse-range links for in-chapter ranges', () => {
+    expect(toDieBibelUrl('Mt 5,3-12')).toBe(`${DIE_BIBEL}/MAT.5.3-12`);
+    expect(toDieBibelUrl('1 Kor 13,1-3')).toBe(`${DIE_BIBEL}/1CO.13.1-3`);
+  });
+
+  it('uses USFM book codes (regression: silent-fallback hazard)', () => {
+    // OSIS codes Matt/Mark/Ps must NOT leak into the URL —
+    // die-bibel.de silently renders Genesis 1 for unknown book codes,
+    // so MATT/MARK/PS would produce wrong-passage links with no error.
+    expect(toDieBibelUrl('Mt 5,3')).toContain('/MAT.');
+    expect(toDieBibelUrl('Mt 5,3')).not.toContain('/MATT.');
+    expect(toDieBibelUrl('Mk 1,1')).toContain('/MRK.');
+    expect(toDieBibelUrl('Mk 1,1')).not.toContain('/MARK.');
+    expect(toDieBibelUrl('Ps 23')).toContain('/PSA.');
+    expect(toDieBibelUrl('Ps 23')).not.toMatch(/\/PS\.23$/);
+  });
+
+  it('maps the full canonical book table to USFM codes', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      // Pentateuch
+      ['1 Mo 1,1', 'GEN.1.1'],
+      ['2 Mo 3,14', 'EXO.3.14'],
+      ['3 Mo 19,18', 'LEV.19.18'],
+      ['4 Mo 6,24', 'NUM.6.24'],
+      ['5 Mo 6,4', 'DEU.6.4'],
+      // Historical
+      ['Jos 1,9', 'JOS.1.9'],
+      ['Ri 6,12', 'JDG.6.12'],
+      ['Rut 1,16', 'RUT.1.16'],
+      ['1 Sam 16,7', '1SA.16.7'],
+      ['2 Sam 7,12', '2SA.7.12'],
+      ['1 Kön 19,12', '1KI.19.12'],
+      ['2 Kön 5,14', '2KI.5.14'],
+      ['1 Chr 16,11', '1CH.16.11'],
+      ['2 Chr 7,14', '2CH.7.14'],
+      ['Esr 7,10', 'EZR.7.10'],
+      ['Neh 8,10', 'NEH.8.10'],
+      ['Est 4,14', 'EST.4.14'],
+      // Wisdom
+      ['Hi 1,21', 'JOB.1.21'],
+      ['Ps 23,1', 'PSA.23.1'],
+      ['Spr 3,5', 'PRO.3.5'],
+      ['Pred 3,1', 'ECC.3.1'],
+      ['Hld 2,4', 'SNG.2.4'],
+      // Major prophets
+      ['Jes 40,31', 'ISA.40.31'],
+      ['Jer 29,11', 'JER.29.11'],
+      ['Klgl 3,22', 'LAM.3.22'],
+      ['Hes 36,26', 'EZK.36.26'],
+      ['Dan 3,17', 'DAN.3.17'],
+      // Minor prophets
+      ['Hos 6,6', 'HOS.6.6'],
+      ['Joel 3,1', 'JOL.3.1'],
+      ['Am 5,24', 'AMO.5.24'],
+      ['Obd 1,15', 'OBA.1.15'],
+      ['Jona 2,3', 'JON.2.3'],
+      ['Mi 6,8', 'MIC.6.8'],
+      ['Nah 1,7', 'NAM.1.7'],
+      ['Hab 2,4', 'HAB.2.4'],
+      ['Zef 3,17', 'ZEP.3.17'],
+      ['Hag 2,9', 'HAG.2.9'],
+      ['Sach 9,9', 'ZEC.9.9'],
+      ['Mal 3,20', 'MAL.3.20'],
+      // Gospels & Acts
+      ['Mt 5,3', 'MAT.5.3'],
+      ['Mk 1,1', 'MRK.1.1'],
+      ['Lk 2,14', 'LUK.2.14'],
+      ['Joh 3,16', 'JHN.3.16'],
+      ['Apg 2,1', 'ACT.2.1'],
+      // Pauline
+      ['Röm 8,28', 'ROM.8.28'],
+      ['1 Kor 13,1', '1CO.13.1'],
+      ['2 Kor 5,17', '2CO.5.17'],
+      ['Gal 5,22', 'GAL.5.22'],
+      ['Eph 2,8', 'EPH.2.8'],
+      ['Phil 4,7', 'PHP.4.7'],
+      ['Kol 3,16', 'COL.3.16'],
+      ['1 Thess 5,16', '1TH.5.16'],
+      ['2 Thess 3,3', '2TH.3.3'],
+      ['1 Tim 6,12', '1TI.6.12'],
+      ['2 Tim 1,7', '2TI.1.7'],
+      ['Tit 3,5', 'TIT.3.5'],
+      ['Phlm 1,6', 'PHM.1.6'],
+      // General epistles
+      ['Hebr 11,1', 'HEB.11.1'],
+      ['Jak 1,17', 'JAS.1.17'],
+      ['1 Petr 5,7', '1PE.5.7'],
+      ['2 Petr 3,9', '2PE.3.9'],
+      ['1 Joh 4,16', '1JN.4.16'],
+      ['2 Joh 1,6', '2JN.1.6'],
+      ['3 Joh 1,4', '3JN.1.4'],
+      ['Jud 1,21', 'JUD.1.21'],
+      // Apocalypse
+      ['Offb 21,4', 'REV.21.4']
+    ];
+    for (const [input, expectedPath] of cases) {
+      expect(toDieBibelUrl(input)).toBe(`${DIE_BIBEL}/${expectedPath}`);
+    }
   });
 
   it('accepts long German book names', () => {
-    expect(toBibleServerUrl('Matthäus 5,3-12')).toBe(
-      'https://www.bibleserver.com/LUT/' + encodeURIComponent('Matthäus 5,3-12')
-    );
+    expect(toDieBibelUrl('Matthäus 5,3-12')).toBe(`${DIE_BIBEL}/MAT.5.3-12`);
+    expect(toDieBibelUrl('1. Korinther 13,1-3')).toBe(`${DIE_BIBEL}/1CO.13.1-3`);
+    expect(toDieBibelUrl('1. Mose 1,1')).toBe(`${DIE_BIBEL}/GEN.1.1`);
   });
 
   it('is accent-insensitive and case-insensitive on the book name', () => {
-    expect(toBibleServerUrl('matthaus 5,3-12')).not.toBeNull();
-    expect(toBibleServerUrl('MATTHÄUS 5,3-12')).not.toBeNull();
+    expect(toDieBibelUrl('matthaus 5,3-12')).toBe(`${DIE_BIBEL}/MAT.5.3-12`);
+    expect(toDieBibelUrl('MATTHÄUS 5,3-12')).toBe(`${DIE_BIBEL}/MAT.5.3-12`);
+  });
+
+  it('collapses cross-chapter ranges to the start verse', () => {
+    // die-bibel.de silently drops cross-chapter ranges in the URL —
+    // collapsing to the start verse keeps the link "roughly right"
+    // instead of letting the silent fallback land on the wrong page.
+    expect(toDieBibelUrl('Hes 1,1-3,15')).toBe(`${DIE_BIBEL}/EZK.1.1`);
+  });
+
+  it('uses only the first reference when the entry contains ;-separated refs', () => {
+    expect(toDieBibelUrl('Mt 5,3-12; Lk 6,20-26')).toBe(`${DIE_BIBEL}/MAT.5.3-12`);
   });
 
   it('returns null for inputs that do not start with a known book', () => {
-    expect(toBibleServerUrl('Freie Methode A')).toBeNull();
-    expect(toBibleServerUrl('Foo 5,3')).toBeNull();
-    expect(toBibleServerUrl('Lorem ipsum')).toBeNull();
+    expect(toDieBibelUrl('Freie Methode A')).toBeNull();
+    expect(toDieBibelUrl('Foo 5,3')).toBeNull();
+    expect(toDieBibelUrl('Lorem ipsum')).toBeNull();
   });
 
   it('returns null for empty / whitespace input', () => {
-    expect(toBibleServerUrl('')).toBeNull();
-    expect(toBibleServerUrl('   ')).toBeNull();
+    expect(toDieBibelUrl('')).toBeNull();
+    expect(toDieBibelUrl('   ')).toBeNull();
   });
 
   it('returns null when the input has a known book but no chapter/verse digits', () => {
-    expect(toBibleServerUrl('Mt')).toBeNull();
-    expect(toBibleServerUrl('Matthäus')).toBeNull();
+    expect(toDieBibelUrl('Mt')).toBeNull();
+    expect(toDieBibelUrl('Matthäus')).toBeNull();
   });
 });
