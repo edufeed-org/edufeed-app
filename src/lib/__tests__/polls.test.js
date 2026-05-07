@@ -1,4 +1,5 @@
 /** @vitest-environment node */
+// @ts-nocheck — test fixtures use loose `any` types intentionally
 import { describe, it, expect } from 'vitest';
 import { tallyPollVotes, generateOptionId } from '$lib/helpers/polls.js';
 
