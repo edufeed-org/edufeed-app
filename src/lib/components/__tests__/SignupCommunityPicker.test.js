@@ -222,6 +222,32 @@ describe('SignupCommunityPicker', () => {
     expect(rows[0].textContent).toContain('Charlie');
   });
 
+  it('matches names across hyphens and other punctuation', async () => {
+    // "e-teaching" should match query "etea" — separators are ignored on both sides.
+    mockProfileMap.set(PK_OTHER_1, { name: 'e-teaching' });
+    mockProfileMap.set(PK_OTHER_2, { name: 'Astronomy.Club' });
+    mockTimeline.mockReturnValue(
+      makeTimelineSubscribe([communityEvent(PK_OTHER_1), communityEvent(PK_OTHER_2)])
+    );
+
+    const selected = new SvelteSet();
+    const { container } = render(SignupCommunityPicker, { props: { selected } });
+
+    const search = /** @type {HTMLInputElement} */ (
+      container.querySelector('[data-testid="signup-community-search"]')
+    );
+
+    await fireEvent.input(search, { target: { value: 'etea' } });
+    let rows = container.querySelectorAll('[data-testid="signup-community-row"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('e-teaching');
+
+    await fireEvent.input(search, { target: { value: 'astronomyclub' } });
+    rows = container.querySelectorAll('[data-testid="signup-community-row"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('Astronomy.Club');
+  });
+
   it('filters other communities by profile about', async () => {
     mockProfileMap.set(PK_OTHER_1, { name: 'Charlie', about: 'Pottery enthusiasts' });
     mockProfileMap.set(PK_OTHER_2, { name: 'Delta', about: 'Astronomy club' });

@@ -50,15 +50,25 @@
     otherCommunities.toSorted((a, b) => (b.created_at || 0) - (a.created_at || 0)).slice(0, 12)
   );
 
+  /**
+   * Normalize text for fuzzy substring search: lowercase + strip everything
+   * that is not a letter or digit (handles hyphens, dots, spaces, etc.) so
+   * e.g. "e-teaching" matches the query "etea".
+   * @param {string} s
+   */
+  function normalizeForSearch(s) {
+    return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  }
+
   const filteredOthers = $derived.by(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = normalizeForSearch(searchQuery.trim());
     if (!q) return [];
     const profiles = getProfiles();
     return otherCommunities
       .filter((c) => {
         const p = profiles.get(c.pubkey);
-        const name = (p?.display_name || p?.name || '').toLowerCase();
-        const about = (p?.about || '').toLowerCase();
+        const name = normalizeForSearch(p?.display_name || p?.name || '');
+        const about = normalizeForSearch(p?.about || '');
         return name.includes(q) || about.includes(q);
       })
       .slice(0, 20);
