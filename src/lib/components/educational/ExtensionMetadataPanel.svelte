@@ -28,7 +28,7 @@
   import { parseFormTemplate } from '$lib/helpers/forms.js';
   import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
   import { ALL_VARIANTS } from '$lib/config/resource-form-variants.js';
-  import { toBibleServerUrl } from '$lib/helpers/educational/bibleReference.js';
+  import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
   import * as m from '$lib/paraglide/messages.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
 
@@ -225,7 +225,7 @@
             {:else}
               <div class="flex flex-wrap gap-2">
                 {#each facet.items as value, i (value + '|' + i)}
-                  {@const bibleUrl = toBibleServerUrl(value)}
+                  {@const bibleUrl = toDieBibelUrl(value)}
                   {#if bibleUrl}
                     <a
                       href={bibleUrl}
