@@ -302,11 +302,7 @@
    * Without the state reset the URL/name/etc. fields stay populated and
    * "verwerfen" feels broken.
    */
-  function discardDraft() {
-    clearDraft(variantId);
-    draftRestoredAt = null;
-
-    // Reset all wizard-managed state to a fresh start.
+  function resetWizardState() {
     formData = createInitialFormData();
     aboutByVocab = {};
     provenance = {};
@@ -319,6 +315,14 @@
     enrichedForUrl = '';
     metadataFetchSource = '';
     imagePreviewError = false;
+    aiSuggestions = null;
+    dismissedSuggestionFields = new Set();
+  }
+
+  function discardDraft() {
+    clearDraft(variantId);
+    draftRestoredAt = null;
+    resetWizardState();
   }
 
   // Bildungsbereich options available in step 1 depend on the variant.
@@ -704,6 +708,8 @@
         // Reset enrichment status when a *new* URL is loaded.
         if (enrichedForUrl !== result.url) {
           enrichmentStatus = 'idle';
+          aiSuggestions = null;
+          dismissedSuggestionFields = new Set();
         }
       }
     }
