@@ -36,6 +36,17 @@
 
   let community = $state(untrack(() => communityPubkey));
 
+  let isSubmitting = $state(false);
+  let submitError = $state('');
+
+  // Minimum lead time for custom end timestamps (5 minutes from now).
+  const CUSTOM_ENDS_AT_MIN_LEAD_SECONDS = 5 * 60;
+  function customEndsAtSeconds() {
+    if (!customEndsAt) return null;
+    const ts = Math.floor(new Date(customEndsAt).getTime() / 1000);
+    return Number.isFinite(ts) ? ts : null;
+  }
+
   const getJoinedCommunities = useJoinedCommunitiesList();
   let communities = $derived(getJoinedCommunities());
   const getProfileMap = useProfileMap(() => communities);
@@ -63,11 +74,19 @@
   let hasEmpty = $derived(trimmedLabels.some((s) => s === ''));
   let questionValid = $derived(question.trim().length > 0 && question.trim().length <= 280);
   let customEndsAtValid = $derived.by(() => {
-    if (endsAtPreset === 'custom') return customEndsAt !== '';
-    return true;
+    if (endsAtPreset !== 'custom') return true;
+    const ts = customEndsAtSeconds();
+    if (ts === null) return false;
+    const now = Math.floor(Date.now() / 1000);
+    return ts > now + CUSTOM_ENDS_AT_MIN_LEAD_SECONDS;
   });
   let canSubmit = $derived(
-    questionValid && options.length >= 2 && !hasEmpty && !hasDuplicates && customEndsAtValid
+    questionValid &&
+      options.length >= 2 &&
+      !hasEmpty &&
+      !hasDuplicates &&
+      customEndsAtValid &&
+      !isSubmitting
   );
 
   function computeEndsAt() {
@@ -76,9 +95,9 @@
     if (endsAtPreset === '7d') return now + 7 * 24 * 3600;
     if (endsAtPreset === '30d') return now + 30 * 24 * 3600;
     if (endsAtPreset === 'none') return null;
-    if (endsAtPreset === 'custom' && customEndsAt) {
-      const ts = Math.floor(new Date(customEndsAt).getTime() / 1000);
-      if (ts > now + 5 * 60) return ts;
+    if (endsAtPreset === 'custom') {
+      const ts = customEndsAtSeconds();
+      if (ts !== null && ts > now + CUSTOM_ENDS_AT_MIN_LEAD_SECONDS) return ts;
     }
     return null;
   }
@@ -87,43 +106,56 @@
     if (!canSubmit) return;
     const currentAccount = manager.active;
     if (!currentAccount) {
-      alert('You must be logged in to create a poll.');
+      submitError = 'You must be logged in to create a poll.';
       return;
     }
 
-    /** @type {any | null} */
-    let communityEvent = null;
-    if (community) {
-      communityEvent = eventStore.getReplaceable(10222, community) || null;
-    }
+    isSubmitting = true;
+    submitError = '';
 
-    const factory = createAppEventFactory();
-    const endsAt = computeEndsAt();
-    const template = await factory.poll(
-      question.trim(),
-      options.map((o) => ({ id: o.id, label: o.label.trim() })),
-      {
-        pollType,
-        ...(endsAt != null ? { endsAt } : {})
+    try {
+      /** @type {any | null} */
+      let communityEvent = null;
+      if (community) {
+        communityEvent = eventStore.getReplaceable(10222, community) || null;
       }
-    );
 
-    // PollBlueprint does not add h-tag; append for community targeting.
-    if (community) template.tags.push(['h', community]);
+      const factory = createAppEventFactory();
+      const endsAt = computeEndsAt();
+      const template = await factory.poll(
+        question.trim(),
+        options.map((o) => ({ id: o.id, label: o.label.trim() })),
+        {
+          pollType,
+          ...(endsAt != null ? { endsAt } : {})
+        }
+      );
 
-    const signed = await currentAccount.signEvent(template);
+      // PollBlueprint does not add h-tag; append for community targeting.
+      if (community) template.tags.push(['h', community]);
 
-    eventStore.add(signed);
-    await publishEvent(signed, [], { communityEvent });
+      const signed = await currentAccount.signEvent(template);
 
-    modalStore.closeModal();
+      eventStore.add(signed);
+      const result = await publishEvent(signed, [], { communityEvent });
 
-    const nevent = nip19.neventEncode({ id: signed.id, author: signed.pubkey });
-    if (community) {
-      const npub = nip19.npubEncode(community);
-      goto(resolve(/** @type {any} */ (`/c/${npub}/${nevent}`)));
-    } else {
-      goto(resolve(/** @type {any} */ (`/${nevent}`)));
+      modalStore.closeModal();
+
+      const nevent = nip19.neventEncode({
+        id: signed.id,
+        author: signed.pubkey,
+        relays: result?.relays?.slice(0, 3) ?? []
+      });
+      if (community) {
+        const npub = nip19.npubEncode(community);
+        goto(resolve(/** @type {any} */ (`/c/${npub}/${nevent}`)));
+      } else {
+        goto(resolve(/** @type {any} */ (`/${nevent}`)));
+      }
+    } catch (err) {
+      submitError = /** @type {any} */ (err)?.message ?? String(err);
+    } finally {
+      isSubmitting = false;
     }
   }
 </script>
@@ -217,11 +249,28 @@
       anyone.
     </p>
 
+    {#if submitError}
+      <div class="mb-3 alert alert-error" role="alert">
+        <span class="text-sm">{submitError}</span>
+      </div>
+    {/if}
+
     <div class="modal-action">
-      <button type="button" class="btn btn-ghost" onclick={() => modalStore.closeModal()}
-        >Cancel</button
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={isSubmitting}
+        onclick={() => modalStore.closeModal()}>Cancel</button
       >
-      <button type="button" class="btn btn-primary" disabled={!canSubmit} onclick={handleSubmit}>
+      <button
+        type="button"
+        class="btn btn-primary"
+        disabled={!canSubmit || isSubmitting}
+        onclick={handleSubmit}
+      >
+        {#if isSubmitting}
+          <span class="loading loading-sm loading-spinner"></span>
+        {/if}
         Publish poll
       </button>
     </div>

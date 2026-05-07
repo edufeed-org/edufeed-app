@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/svelte';
+import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 
 // jsdom does not implement window.matchMedia; app-settings.svelte.js calls it
@@ -64,7 +64,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$app/navigation', () => ({
-  goto: (/** @type {any[]} */ ...args) => submitSpies.gotoSpy?.(...args)
+  goto: (/** @type {any[]} */ ...args) => submitSpies.gotoSpy(...args)
 }));
 
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
@@ -177,8 +177,8 @@ describe('PollCreateModal — submit', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /publish poll/i }));
     await tick();
-    // Allow microtasks for async signEvent + publish to resolve
-    await new Promise((r) => setTimeout(r, 50));
+    await tick();
+    await waitFor(() => expect(submitSpies.publishSpy).toHaveBeenCalled());
 
     expect(submitSpies.signSpy).toHaveBeenCalled();
     const tmpl = submitSpies.signSpy.mock.calls[0][0];
@@ -188,5 +188,32 @@ describe('PollCreateModal — submit', () => {
     expect(tmpl.tags.some((/** @type {string[]} */ t) => t[0] === 'endsAt')).toBe(true);
 
     expect(submitSpies.publishSpy).toHaveBeenCalled();
+  });
+
+  it('surfaces sign error and re-enables submit button when signer rejects', async () => {
+    submitSpies.signSpy = vi.fn().mockRejectedValue(new Error('user rejected'));
+
+    render(PollCreateModal, { props: {} });
+
+    await fireEvent.input(screen.getByPlaceholderText(/question/i), {
+      target: { value: 'Q?' }
+    });
+    const opts = screen.getAllByPlaceholderText(/option/i);
+    await fireEvent.input(opts[0], { target: { value: 'A' } });
+    await fireEvent.input(opts[1], { target: { value: 'B' } });
+
+    const submit = /** @type {HTMLButtonElement} */ (
+      screen.getByRole('button', { name: /publish poll/i })
+    );
+    await fireEvent.click(submit);
+
+    // Wait for the error to surface in the DOM
+    await screen.findByText(/user rejected/i);
+
+    // publishEvent must NOT have been called
+    expect(submitSpies.publishSpy).not.toHaveBeenCalled();
+
+    // Submit button should be enabled again (isSubmitting reset)
+    await waitFor(() => expect(submit.disabled).toBe(false));
   });
 });
