@@ -11,7 +11,7 @@
    * @property {boolean} open
    * @property {Record<string, any>} formData
    * @property {Record<string, Array<{id: string, label?: string}>>} aboutByVocab
-   * @property {{source: string, payload: Record<string, any>, evidence?: Record<string, string>} | null} aiSuggestions
+   * @property {import('$lib/helpers/educational/applyEnrichedPayload.js').ExtractMetadataResult | null} aiSuggestions
    * @property {Set<string>} dismissedFields
    * @property {(field: string, action: 'replace' | 'merge' | 'dismiss') => void} onapply
    * @property {() => void} onclose

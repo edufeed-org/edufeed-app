@@ -164,7 +164,7 @@
 
   // The full enriched payload from runEnrichment(), retained so the user can
   // review/apply suggestions for fields that were not auto-filled.
-  /** @type {{source: string, payload: Record<string, any>, evidence?: Record<string, string>} | null} */
+  /** @type {import('$lib/helpers/educational/applyEnrichedPayload.js').ExtractMetadataResult | null} */
   // eslint-disable-next-line no-unused-vars
   let aiSuggestions = $state(null);
   /** @type {Set<string>} */
