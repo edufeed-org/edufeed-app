@@ -1,10 +1,13 @@
 <script>
   import { getPollOptions, getPollType } from 'applesauce-common/helpers';
+  import { PollResponseBlueprint } from 'applesauce-common/blueprints';
   import { getTagValue } from 'applesauce-core/helpers';
-  import { tallyPollVotes } from '$lib/helpers/polls.js';
+  import { tallyPollVotes, extractPollRelayTags } from '$lib/helpers/polls.js';
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { publishEvent } from '$lib/services/publish-service.js';
 
   /**
    * @typedef {Object} Props
@@ -95,9 +98,39 @@
     }
   }
 
-  // Vote action — implementation deferred to Task 7.
   async function castVote() {
-    // intentionally empty stub
+    const account = manager.active;
+    if (!account || selected.length === 0) return;
+
+    let signed;
+    try {
+      const factory = createAppEventFactory();
+      const template = await factory.create(PollResponseBlueprint, event, selected);
+      signed = await account.signEvent(template);
+    } catch (err) {
+      console.warn('Vote sign failed', err);
+      return;
+    }
+
+    // Resolve community event if poll is community-targeted (h-tag).
+    const communityHex = getTagValue(event, 'h');
+    const communityEvent = communityHex ? eventStore.getReplaceable(10222, communityHex) : null;
+
+    // Optimistic update.
+    eventStore.add(signed);
+
+    try {
+      await publishEvent(signed, [], {
+        communityEvent,
+        additionalRelays: extractPollRelayTags(event)
+      });
+    } catch (err) {
+      console.warn('Vote publish failed', err);
+      eventStore.remove(signed);
+      return;
+    }
+
+    selected = [];
   }
 </script>
 

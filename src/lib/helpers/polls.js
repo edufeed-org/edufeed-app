@@ -85,3 +85,14 @@ export function tallyPollVotes(poll, responses, activeUserPubkey) {
 export function generateOptionId() {
   return Math.random().toString(36).slice(2, 11).padEnd(9, '0');
 }
+
+/**
+ * Extract all `relay` tag values from a NIP-88 poll event.
+ * @param {{ tags?: any[][] }} poll
+ * @returns {string[]}
+ */
+export function extractPollRelayTags(poll) {
+  return (poll.tags || [])
+    .filter((t) => Array.isArray(t) && t[0] === 'relay' && typeof t[1] === 'string')
+    .map((t) => t[1]);
+}

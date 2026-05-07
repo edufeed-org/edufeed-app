@@ -6,7 +6,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/svelte';
+import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 
 // jsdom does not implement window.matchMedia.
 vi.hoisted(() => {
@@ -27,6 +27,30 @@ const managerState = vi.hoisted(() => ({ active: null }));
 
 /** @type {{ value: any[] }} */
 const mockResponses = vi.hoisted(() => ({ value: [] }));
+
+const factoryCreate = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    kind: 1018,
+    content: '',
+    created_at: 1,
+    tags: [
+      ['e', 'pollid'],
+      ['response', 'opt-a']
+    ]
+  })
+);
+
+const publishEventSpy = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ success: true, successCount: 1, relays: [], results: [] })
+);
+
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: () => ({ create: factoryCreate })
+}));
+
+vi.mock('$lib/services/publish-service.js', () => ({
+  publishEvent: (/** @type {any[]} */ ...args) => publishEventSpy(...args)
+}));
 
 vi.mock('$lib/stores/accounts.svelte.js', () => ({
   manager: managerState
@@ -192,6 +216,33 @@ describe('PollCard — render skeleton + states', () => {
     expect(ariaLabels.every((l) => l && l.startsWith('Voter '))).toBe(true);
     // a11y: wrapper announces as image even when no <img> is rendered.
     expect(avatars[0].getAttribute('role')).toBe('img');
+  });
+
+  it('casts a vote: signs PollResponseBlueprint output and publishes', async () => {
+    managerState.active = {
+      pubkey: 'me',
+      signEvent: vi.fn().mockResolvedValue({
+        id: 'voteid'.padEnd(64, '0'),
+        kind: 1018,
+        pubkey: 'me',
+        sig: 's',
+        created_at: 1,
+        content: '',
+        tags: [
+          ['e', 'pollid'],
+          ['response', 'opt-a']
+        ]
+      })
+    };
+
+    render(PollCard, { props: { event: makePoll() } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Apple' }));
+    await fireEvent.click(screen.getByRole('button', { name: /cast vote/i }));
+
+    await waitFor(() => expect(managerState.active.signEvent).toHaveBeenCalled());
+    expect(factoryCreate).toHaveBeenCalled();
+    expect(publishEventSpy).toHaveBeenCalled();
   });
 
   it('resets selection when event prop changes', async () => {
