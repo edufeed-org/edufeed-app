@@ -1852,9 +1852,6 @@
                 </div>
               {/if}
             {/if}
-            {#if showError('learningResourceType')}
-              <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
-            {/if}
             <FieldAiSuggestionBadge
               field="learningResourceType"
               {formData}
@@ -1863,6 +1860,9 @@
               dismissedFields={dismissedSuggestionFields}
               onapply={handleSuggestionAction}
             />
+            {#if showError('learningResourceType')}
+              <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
+            {/if}
           </div>
 
           <!--
@@ -2455,9 +2455,6 @@
                 <option value={license.id}>{license.label}</option>
               {/each}
             </select>
-            {#if showError('license')}
-              <p id="amb-license-error" class="mt-1 text-xs text-error">{fieldErrors.license}</p>
-            {/if}
             <FieldAiSuggestionBadge
               field="license"
               {formData}
@@ -2466,6 +2463,9 @@
               dismissedFields={dismissedSuggestionFields}
               onapply={handleSuggestionAction}
             />
+            {#if showError('license')}
+              <p id="amb-license-error" class="mt-1 text-xs text-error">{fieldErrors.license}</p>
+            {/if}
             <div class="label">
               <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
               <a
