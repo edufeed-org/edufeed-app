@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-04-27
-**Total tests:** 299
+**Last updated:** 2026-05-07
+**Total tests:** 300
 
 ## Quick Summary
 
@@ -39,7 +39,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
 | `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                 |
 | `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                            |
-| `layout-consistency.test.js`         | 13    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
+| `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
 
 ## Detailed Coverage
 
@@ -1231,7 +1231,7 @@ the E2E cases lock in the user-visible surface + owner gating.
 | pasting an already-added npub surfaces "Already added" badge   | Typing TEST_AUTHOR_2 npub renders a dropdown row with the `Already added` badge + `aria-disabled="true"` |
 | unauthenticated visitor does not see add/remove UI             | Without auth, combobox and remove button are absent on same naddr                                        |
 
-### layout-consistency.test.js (13 tests)
+### layout-consistency.test.js (14 tests)
 
 **Routes:** `/discover`, `/calendar`, `/c/`, `/c/[npub]`
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
@@ -1285,7 +1285,13 @@ the E2E cases lock in the user-visible surface + owner gating.
 | desktop sidebars stay pinned during `<main>` scroll                 | CommunitySidebar + ContentNavSidebar `getBoundingClientRect().top` is unchanged before/after scrolling `<main>` — guards against re-introduction of `position: fixed` (or moving sidebars back inside `<main>`)                                                                |
 | ContentNavSidebar mounts on community routes, unmounts on dashboard | On `/c/`: `[data-testid="dashboard-nav-sidebar"]` visible, `[data-testid="content-nav-sidebar"]` count === 0. On `/c/[npub]`: inverse. Round-trip back to `/c/` restores dashboard sidebar — guards the `setContentNavData` context handoff between root and community layouts |
 
-**Components exercised:** Root layout, AppShell, CommunitySidebar, ContentNavSidebar, DashboardNavSidebar, MainContentArea wrapper, mobile community header, page-level wrappers on discover/calendar/community routes.
+#### FAB pinned to bottom on short pages (1 test)
+
+| Test                                                                 | What it verifies                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FAB pins to bottom of `<main>` when content is shorter than viewport | On a 1280×2000 viewport at `/c/?view=communities` (short content, no overflow): the sticky-wrapper computed `margin-top: auto`, the wrapper's top is at `<main>`'s bottom (±2px), and the FAB bottom is within 120px of `<main>`'s bottom. Guards against removal of `mt-auto` from the floating-buttons wrapper, which causes sticky to degrade to static and the FAB to float halfway up the viewport. |
+
+**Components exercised:** Root layout, AppShell, CommunitySidebar, ContentNavSidebar, DashboardNavSidebar, MainContentArea wrapper, mobile community header, GlobalFAB, page-level wrappers on discover/calendar/community routes.
 
 ---
 

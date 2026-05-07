@@ -309,6 +309,84 @@ test.describe('Unified content region layout', () => {
     expect(sidebarsAfter.nav).toBe(sidebarsBefore.nav);
   });
 
+  test('FAB pins to bottom of <main> when content is shorter than viewport', async ({
+    authenticatedPage: page
+  }) => {
+    // Regression: the FAB lives in a `sticky bottom-0 h-0` wrapper inside <main>.
+    // `position: sticky` only activates when natural-flow position would otherwise
+    // scroll past the boundary — on short pages (no overflow) it degrades to
+    // static and the wrapper sits in document flow, halfway up the viewport.
+    // Fix: `mt-auto` on the wrapper pushes it to the bottom of the flex column
+    // even when content is short, so the FAB lands at the bottom of the scroll
+    // port. On long pages `mt-auto` is a no-op (no free space) and sticky takes
+    // over normally.
+    //
+    // Use a tall desktop viewport to guarantee <main> does not overflow on
+    // /c/?view=communities (Communities view with empty/sparse test data).
+    await page.setViewportSize({ width: 1280, height: 2000 });
+    await page.goto('/c/?view=communities');
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('nav').first().waitFor({ state: 'visible' });
+
+    // Wait for the FAB to be in the DOM.
+    await page.locator('main .fab').waitFor({ state: 'visible', timeout: 10_000 });
+
+    const layout = await page.evaluate(() => {
+      const main = /** @type {HTMLElement | null} */ (document.querySelector('main'));
+      const wrap = main?.querySelector(':scope > .sticky');
+      const fab = main?.querySelector('.fab');
+      if (!main || !wrap || !fab) return null;
+      return {
+        overflow: main.scrollHeight > main.clientHeight,
+        mainBottom: main.getBoundingClientRect().bottom,
+        wrapTop: wrap.getBoundingClientRect().top,
+        fabBottom: fab.getBoundingClientRect().bottom,
+        wrapClassList: Array.from(wrap.classList)
+      };
+    });
+    expect(layout, 'main, sticky wrapper, and .fab must all be present').not.toBeNull();
+    if (!layout) return;
+
+    // Precondition for the regression scenario — the test is meaningful only
+    // when <main> does not overflow (otherwise sticky alone would already pin
+    // the wrapper). If the test environment somehow renders enough content to
+    // overflow even on a 2000px-tall viewport, skip rather than report a
+    // misleading pass.
+    test.skip(
+      layout.overflow,
+      '<main> overflows even on 2000px viewport — regression scenario unreachable'
+    );
+
+    // Class-presence check on `mt-auto`. We can't assert the computed
+    // margin-top value because for a flex item with `margin-top: auto`,
+    // `getComputedStyle().marginTop` returns the *used* value (the pixel
+    // amount absorbed), not the keyword "auto". The geometric check below
+    // is the behavioral assertion; this one documents the mechanism.
+    expect(
+      layout.wrapClassList,
+      'sticky wrapper must include `mt-auto` so it pushes to the bottom of <main> on short pages'
+    ).toContain('mt-auto');
+
+    // The wrapper itself (h-0) should land at <main>'s bottom edge. Allow ~2px
+    // for sub-pixel rounding. This is the structural behavior the fix delivers
+    // — without `mt-auto`, the wrapper sits at its natural-flow position right
+    // after the content (halfway up the viewport on short pages).
+    expect(
+      Math.abs(layout.wrapTop - layout.mainBottom),
+      `wrapper top (${layout.wrapTop}) should be at <main> bottom (${layout.mainBottom})`
+    ).toBeLessThanOrEqual(2);
+
+    // The FAB itself should land near <main>'s bottom — within the speed-dial
+    // primary button height + the bottom-6/bottom-20 offset. We don't assert
+    // an exact pixel value because the offset is responsive (lg:bottom-6 vs
+    // bottom-20) and the button size depends on btn-lg sizing. The structural
+    // wrapTop check above is the strict assertion; this is a sanity bound.
+    expect(
+      layout.mainBottom - layout.fabBottom,
+      `FAB bottom (${layout.fabBottom}) should be close to <main> bottom (${layout.mainBottom})`
+    ).toBeLessThan(120);
+  });
+
   test('ContentNavSidebar mounts on community routes, unmounts on dashboard', async ({
     authenticatedPage: page
   }) => {
