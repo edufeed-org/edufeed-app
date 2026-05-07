@@ -8,14 +8,19 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { nip19 } from 'nostr-tools';
+  import { communikeyTimelineLoader } from '$lib/loaders/community.js';
   import ChevronRightIcon from './icons/ui/ChevronRightIcon.svelte';
   import AvatarUploader from './shared/AvatarUploader.svelte';
+  import SignupCommunityPicker from './SignupCommunityPicker.svelte';
 
   let { modalId } = $props();
 
-  // 2-step wizard:
+  // 3-step wizard:
   //   Step 1 = name → creates SimpleAccount and activates it (user is logged in)
-  //   Step 2 = optional profile polish → publishes kind 0
+  //   Step 2 = optional profile polish → advances to Step 3
+  //   Step 3 = community picker → publishes kind 0 (and optionally kind 30000)
   // Backup file + suggested follows are deferred to post-login banners.
   let currentStep = $state(1);
 
@@ -41,6 +46,22 @@
 
   let isPublishing = $state(false);
   let errors = $state(/** @type {Record<string, string>} */ ({}));
+
+  /** Selected community pubkeys (hex). Lives here so finishSignup can read it. */
+  let selected = $state.raw(new SvelteSet());
+
+  /** Network pre-warm subscription (kind 10222). Plain `let` per CLAUDE.md $effect rules. */
+  /** @type {import('rxjs').Subscription | undefined} */
+  let prewarmSub;
+
+  /**
+   * One-shot guard for the step-3 seed effect. If a user lands on step 3 we
+   * pre-check the configured suggested communities, but if they then untick
+   * everything, `selected.size` returns to 0 — without this flag the seed
+   * effect would re-trigger and silently put the suggestions back. Reset in
+   * `resetState()` so re-opening the modal seeds again.
+   */
+  let hasSeededStep3 = false;
 
   /**
    * Sync modal close with store state. Reset state on close so a re-opened
@@ -84,6 +105,38 @@
     }
   });
 
+  // Pre-warm the kind 10222 timeline as soon as the user is on step 2 so the
+  // picker (mounted on step 3) finds events already populated. Normal teardown
+  // happens via `resetState()` on close; the empty-deps effect below handles
+  // the unmount-without-close path (e.g. parent route navigates away).
+  $effect(() => {
+    if (currentStep >= 2 && !prewarmSub) {
+      prewarmSub = communikeyTimelineLoader()().subscribe();
+    }
+  });
+
+  // Component-destroy cleanup. No reactive deps → runs once on mount and the
+  // returned cleanup only fires on unmount, so we don't tear down the pre-warm
+  // sub on every step transition.
+  $effect(() => {
+    return () => {
+      prewarmSub?.unsubscribe();
+      prewarmSub = undefined;
+    };
+  });
+
+  // Pre-check suggested communities for the user. They can untick anything
+  // before submitting; the network discovery in the picker still updates
+  // `selected` via two-way bind. The `hasSeededStep3` guard ensures we seed
+  // only once per modal lifetime — without it, ticking everything off would
+  // re-trigger this effect and silently re-seed.
+  $effect(() => {
+    if (currentStep === 3 && !hasSeededStep3) {
+      for (const pk of suggestedCommunityPubkeys()) selected.add(pk);
+      hasSeededStep3 = true;
+    }
+  });
+
   function resetState() {
     currentStep = 1;
     userData = {
@@ -97,6 +150,10 @@
     errors = {};
     privateKey = null;
     _signer = null;
+    selected = new SvelteSet();
+    hasSeededStep3 = false;
+    prewarmSub?.unsubscribe();
+    prewarmSub = undefined;
   }
 
   /**
@@ -134,16 +191,42 @@
   }
 
   /**
-   * Step 2 "Done": build + sign kind 0 with whatever fields are filled, apply
-   * optimistically to EventStore, fire-and-forget publish. Mirrors the prior
-   * SignupModal pattern so we avoid inventing a new path.
+   * Step 2 → Step 3: advance without publishing.
    */
-  async function finishProfile() {
+  function continueFromStep2() {
+    errors = {};
+    currentStep = 3;
+  }
+
+  /** @param {string} id */
+  function normalizeIdToHex(id) {
+    if (!id || typeof id !== 'string') return null;
+    if (/^[0-9a-f]{64}$/i.test(id)) return id.toLowerCase();
+    if (!id.startsWith('npub1')) return null;
+    try {
+      const decoded = nip19.decode(id);
+      return decoded.type === 'npub' ? /** @type {string} */ (decoded.data) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function suggestedCommunityPubkeys() {
+    const ids = runtimeConfig.signup?.suggestedCommunities || [];
+    return ids.map(normalizeIdToHex).filter(/** @returns {pk is string} */ (pk) => pk !== null);
+  }
+
+  /**
+   * Step 3: build + sign kind 0 (and optionally kind 30000), apply optimistically
+   * to EventStore, fire-and-forget publish. Publish happens here for the first time.
+   *
+   * @param {{ skipCommunities?: boolean }} [opts]
+   */
+  async function finishSignup({ skipCommunities = false } = {}) {
     if (!_signer || !userData.publicKey) {
       errors.publishing = 'Account not ready.';
       return;
     }
-
     try {
       isPublishing = true;
 
@@ -159,35 +242,29 @@
         content: JSON.stringify(profileContent),
         pubkey: userData.publicKey
       };
-      const signedMetadataEvent = await _signer.signEvent(metadataEvent);
+      const signedMetadata = await _signer.signEvent(metadataEvent);
 
-      // Community follow set: identifiers come from deployment config today;
-      // Task 5 swaps in the user's step-3 picker selection.
-      const { signed: signedCommunitiesEvent, targetPubkeys: communityPubkeys } =
-        await buildCommunityFollowSet(
-          /** @type {any} */ (_signer),
-          userData.publicKey,
-          runtimeConfig.signup?.suggestedCommunities
-        );
+      const pubkeys = skipCommunities ? [] : Array.from(selected);
+      const { signed: signedFollowSet, targetPubkeys } = pubkeys.length
+        ? await buildCommunityFollowSet(/** @type {any} */ (_signer), userData.publicKey, pubkeys)
+        : { signed: null, targetPubkeys: [] };
 
       // Optimistic local apply.
-      eventStore.add(signedMetadataEvent);
-      if (signedCommunitiesEvent) eventStore.add(signedCommunitiesEvent);
+      eventStore.add(signedMetadata);
+      if (signedFollowSet) eventStore.add(signedFollowSet);
 
       isPublishing = false;
       closeModal();
 
       // Background publish.
-      publishEvent(signedMetadataEvent).catch((err) =>
-        console.warn('Background publish of profile metadata failed:', err)
-      );
-      if (signedCommunitiesEvent) {
-        publishEvent(signedCommunitiesEvent, communityPubkeys).catch((err) =>
-          console.warn('Background publish of community follow set failed:', err)
+      publishEvent(signedMetadata).catch((err) => console.warn('kind 0 publish failed:', err));
+      if (signedFollowSet) {
+        publishEvent(signedFollowSet, targetPubkeys).catch((err) =>
+          console.warn('kind 30000 publish failed:', err)
         );
       }
-    } catch (error) {
-      console.error('Error publishing profile:', error);
+    } catch (err) {
+      console.error('Signup publish failed:', err);
       errors.publishing = 'Failed to save profile. Please try again.';
       isPublishing = false;
     }
@@ -211,6 +288,9 @@
         </li>
         <li class="step {currentStep >= 2 ? 'step-primary' : ''}">
           {m.auth_signup_modal_step2_profile()}
+        </li>
+        <li class="step {currentStep >= 3 ? 'step-primary' : ''}">
+          {m.auth_signup_modal_step3_communities()}
         </li>
       </ul>
     </div>
@@ -312,6 +392,8 @@
             ></textarea>
           </div>
         </div>
+      {:else if currentStep === 3}
+        <SignupCommunityPicker bind:selected />
       {/if}
     </div>
 
@@ -329,16 +411,25 @@
             {m.auth_signup_modal_continue()}
             <ChevronRightIcon />
           </button>
-        {:else}
-          <button class="btn btn-ghost" onclick={finishProfile} disabled={isPublishing}>
-            {m.auth_signup_modal_skip()}
+        {:else if currentStep === 2}
+          <button class="btn btn-primary" onclick={continueFromStep2}>
+            {m.auth_signup_modal_continue()}
+            <ChevronRightIcon />
           </button>
-          <button class="btn btn-primary" onclick={finishProfile} disabled={isPublishing}>
+        {:else}
+          <button
+            class="btn btn-ghost"
+            onclick={() => finishSignup({ skipCommunities: true })}
+            disabled={isPublishing}
+          >
+            {m.auth_signup_modal_step3_skip()}
+          </button>
+          <button class="btn btn-primary" onclick={() => finishSignup()} disabled={isPublishing}>
             {#if isPublishing}
               <span class="loading loading-sm loading-spinner"></span>
               {m.auth_signup_modal_creating_account()}
             {:else}
-              {m.auth_signup_modal_done()}
+              {m.auth_signup_modal_step3_done()}
             {/if}
           </button>
         {/if}
