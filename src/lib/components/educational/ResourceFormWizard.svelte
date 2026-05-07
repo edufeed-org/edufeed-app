@@ -171,6 +171,18 @@
   // eslint-disable-next-line no-unused-vars
   let dismissedSuggestionFields = $state(new Set());
 
+  let showStartOverConfirm = $state(false);
+
+  const canStartOver = $derived(
+    !isEditMode &&
+      (currentStep > 1 || !!formData.identifier || !!formData.name || !!formData.description)
+  );
+
+  function startOver() {
+    resetWizardState();
+    showStartOverConfirm = false;
+  }
+
   /**
    * Reset a single field to its empty/default and drop its provenance entry,
    * so the Smart-fill badge disappears from the UI. Field-name-driven so we
@@ -1345,7 +1357,7 @@
   <div class="w-full">
     <!-- Step indicator — the page's top-bar <h1> provides the stable title;
        this line tells the user where they are in the wizard. -->
-    <div class="mb-6">
+    <div class="mb-6 flex items-center justify-between">
       <p class="text-base font-medium text-base-content/70">
         {m.amb_form_step_indicator({
           currentStep: String(currentStep),
@@ -1353,6 +1365,15 @@
         })}
         {stepTitles[currentStep - 1]}
       </p>
+      {#if canStartOver}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          onclick={() => (showStartOverConfirm = true)}
+        >
+          {m.amb_form_start_over()}
+        </button>
+      {/if}
     </div>
 
     <!-- Progress Steps -->
@@ -2662,3 +2683,26 @@
     </aside>
   {/if}
 </div>
+
+{#if showStartOverConfirm}
+  <div role="dialog" aria-modal="true" class="modal-open modal">
+    <div class="modal-box">
+      <h3 class="text-lg font-bold">{m.amb_form_start_over_confirm_title()}</h3>
+      <p class="py-3 text-sm">{m.amb_form_start_over_confirm_body()}</p>
+      <div class="modal-action">
+        <button type="button" class="btn btn-sm" onclick={() => (showStartOverConfirm = false)}>
+          {m.amb_form_start_over_confirm_cancel()}
+        </button>
+        <button type="button" class="btn btn-sm btn-error" onclick={startOver}>
+          {m.amb_form_start_over_confirm_ok()}
+        </button>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="modal-backdrop"
+      aria-label={m.amb_form_start_over_confirm_cancel()}
+      onclick={() => (showStartOverConfirm = false)}
+    ></button>
+  </div>
+{/if}
