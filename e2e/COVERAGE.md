@@ -967,7 +967,6 @@ detection, banner show/hide flags) is covered by Vitest component tests:
 - `src/lib/components/__tests__/SignupModal.test.js`
 - `src/lib/components/__tests__/LoginModal.test.js`
 - `src/lib/components/__tests__/BackupRecoveryBanner.test.js`
-- `src/lib/components/__tests__/SuggestedFollowsBanner.test.js`
 - `src/lib/components/__tests__/RecoveryDownloadModal.test.js`
 - `src/lib/__tests__/recoveryFile.test.js`
 
