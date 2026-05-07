@@ -1,5 +1,5 @@
 import { AddUserToFollowSet, RemoveUserFromFollowSet } from 'applesauce-actions/actions';
-import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
@@ -35,7 +35,13 @@ export async function ensureFollowSetExists() {
 }
 
 /**
- * Join a community by adding its pubkey to the user's follow set (kind 30000, d="communities")
+ * Join a community by adding its pubkey to the user's follow set (kind 30000, d="communities").
+ *
+ * Uses the optimistic ActionRunner: the signed event is inserted into EventStore
+ * synchronously (so the UI updates immediately) and the relay publish runs in
+ * the background. Failures during sign still propagate; relay publish failures
+ * are logged but not surfaced to the caller.
+ *
  * @param {string} communityPubkey - The pubkey of the community to join
  * @returns {Promise<{success: boolean, error?: string}>}
  */
@@ -46,7 +52,7 @@ export async function joinCommunity(communityPubkey) {
 
   try {
     await ensureFollowSetExists();
-    await actionRunner.run(AddUserToFollowSet, communityPubkey, COMMUNITIES_SET_ID);
+    await actionRunnerOptimistic.run(AddUserToFollowSet, communityPubkey, COMMUNITIES_SET_ID);
     return { success: true };
   } catch (error) {
     console.error('Failed to join community:', error);
@@ -70,7 +76,7 @@ export async function joinCommunities(communityPubkeys) {
 
   try {
     await ensureFollowSetExists();
-    await actionRunner.run(AddUserToFollowSet, communityPubkeys, COMMUNITIES_SET_ID);
+    await actionRunnerOptimistic.run(AddUserToFollowSet, communityPubkeys, COMMUNITIES_SET_ID);
     return { success: true };
   } catch (error) {
     console.error('Failed to join communities:', error);
@@ -93,7 +99,7 @@ export async function leaveCommunity(communityPubkey) {
 
   try {
     await ensureFollowSetExists();
-    await actionRunner.run(RemoveUserFromFollowSet, communityPubkey, COMMUNITIES_SET_ID);
+    await actionRunnerOptimistic.run(RemoveUserFromFollowSet, communityPubkey, COMMUNITIES_SET_ID);
     return { success: true };
   } catch (error) {
     console.error('Failed to leave community:', error);
