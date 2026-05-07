@@ -23,9 +23,10 @@ vi.mock('$app/paths', () => ({
 vi.mock('$lib/paraglide/messages', () => ({
   dashboard_communities_title: () => 'Your Communities',
   dashboard_communities_discover: () => 'Discover',
+  dashboard_communities_discover_subtitle: () => 'Find more communities',
   dashboard_communities_create: () => 'Create',
-  dashboard_communities_empty: () => "You haven't joined any communities yet.",
-  dashboard_communities_explore: () => 'Explore communities'
+  dashboard_communities_create_subtitle: () => 'Start your own community',
+  dashboard_communities_empty: () => "You haven't joined any communities yet."
 }));
 
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
@@ -56,74 +57,68 @@ describe('DashboardCommunities', () => {
     expect(getByText('Your Communities')).toBeTruthy();
   });
 
-  it('renders Discover link pointing to /discover?type=communities', () => {
-    const { getByText } = render(DashboardCommunities);
-    const discoverLink = getByText('Discover').closest('a');
-    expect(discoverLink).toBeTruthy();
-    expect(discoverLink?.getAttribute('href')).toBe('/discover?type=communities');
-  });
-
-  it('does not render a Create button in the section header', () => {
+  it('does not render Discover or Create buttons in the section header', () => {
+    // Action affordances live as tiles in the grid, not as small buttons in the header.
     const { container } = render(DashboardCommunities);
-    // Header has the title and Discover link only — no Create button alongside them
     const header = /** @type {Element} */ (
       container.querySelector('[data-testid="dashboard-communities"] > div')
     );
     expect(header).toBeTruthy();
-    const headerCreateBtn = Array.from(header.querySelectorAll('button')).find((b) =>
-      (b.textContent || '').trim().includes('Create')
-    );
-    expect(headerCreateBtn).toBeFalsy();
+    expect(header.textContent).not.toContain('Discover');
+    expect(header.textContent).not.toContain('Create');
   });
 
-  it('renders the prominent Create community card', () => {
+  it('renders the Discover community tile pointing to /discover?type=communities', () => {
+    const { getByTestId } = render(DashboardCommunities);
+    const card = getByTestId('dashboard-communities-discover-card');
+    expect(card).toBeTruthy();
+    expect(card.tagName).toBe('A');
+    expect(card.getAttribute('href')).toBe('/discover?type=communities');
+  });
+
+  it('renders the Create community tile as a button', () => {
     const { getByTestId } = render(DashboardCommunities);
     const card = getByTestId('dashboard-communities-create-card');
     expect(card).toBeTruthy();
     expect(card.tagName).toBe('BUTTON');
   });
 
-  it('Create card opens createCommunity modal', async () => {
+  it('Create tile opens the createCommunity modal', async () => {
     const { getByTestId } = render(DashboardCommunities);
     const card = getByTestId('dashboard-communities-create-card');
     await fireEvent.click(card);
     expect(mockOpenModal).toHaveBeenCalledWith('createCommunity');
   });
 
-  it('Create card is the first item in the populated grid', () => {
+  it('renders Discover first and Create second in the grid', () => {
     mockJoinedCommunities.mockReturnValue(['pubkey1', 'pubkey2']);
     const { container } = render(DashboardCommunities);
     const grid = /** @type {Element} */ (
       container.querySelector('[data-testid="dashboard-communities-grid"]')
     );
     expect(grid).toBeTruthy();
-    const firstChild = grid.firstElementChild;
-    expect(firstChild?.getAttribute('data-testid')).toBe('dashboard-communities-create-card');
+    const children = Array.from(grid.children);
+    expect(children[0].getAttribute('data-testid')).toBe('dashboard-communities-discover-card');
+    expect(children[1].getAttribute('data-testid')).toBe('dashboard-communities-create-card');
   });
 
-  it('shows empty state when no communities joined', () => {
-    const { getByText } = render(DashboardCommunities);
+  it('shows the empty hint above the grid when no communities are joined', () => {
+    const { getByText, getByTestId } = render(DashboardCommunities);
     expect(getByText("You haven't joined any communities yet.")).toBeTruthy();
-  });
-
-  it('empty state explore link points to /discover?type=communities', () => {
-    const { getByText } = render(DashboardCommunities);
-    const exploreLink = getByText('Explore communities').closest('a');
-    expect(exploreLink).toBeTruthy();
-    expect(exploreLink?.getAttribute('href')).toBe('/discover?type=communities');
-  });
-
-  it('empty state also renders the Create card alongside Explore', () => {
-    const { getByTestId, getByText } = render(DashboardCommunities);
-    expect(getByText('Explore communities')).toBeTruthy();
-    expect(getByTestId('dashboard-communities-create-card')).toBeTruthy();
-  });
-
-  it('renders the Create card and hides the empty state when communities are joined', () => {
-    mockJoinedCommunities.mockReturnValue(['pubkey1', 'pubkey2']);
-    const { getByTestId, container } = render(DashboardCommunities);
+    // Grid is still rendered (with Discover + Create tiles) — no wrapper card.
     expect(getByTestId('dashboard-communities-grid')).toBeTruthy();
-    expect(getByTestId('dashboard-communities-create-card')).toBeTruthy();
+  });
+
+  it('hides the empty hint when communities are joined', () => {
+    mockJoinedCommunities.mockReturnValue(['pubkey1', 'pubkey2']);
+    const { container, getByTestId } = render(DashboardCommunities);
+    expect(getByTestId('dashboard-communities-grid')).toBeTruthy();
     expect(container.textContent).not.toContain("haven't joined");
+  });
+
+  it('renders both action tiles even when empty', () => {
+    const { getByTestId } = render(DashboardCommunities);
+    expect(getByTestId('dashboard-communities-discover-card')).toBeTruthy();
+    expect(getByTestId('dashboard-communities-create-card')).toBeTruthy();
   });
 });
