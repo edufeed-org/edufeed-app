@@ -70,6 +70,8 @@
     Array.from(new Set(Array.from(tally.byOption.values()).flatMap((s) => s.voters)))
   );
   const getProfiles = useProfileMap(() => allVoterPubkeys);
+  // Resolve profiles once per render rather than per option iteration.
+  let profiles = $derived(getProfiles());
 
   function toggleSelection(/** @type {string} */ id) {
     if (showResults) return;
@@ -136,17 +138,20 @@
             </div>
           </div>
           {#if (slot?.voters?.length ?? 0) > 0}
-            {@const profiles = getProfiles()}
             <div class="mt-1.5 flex items-center -space-x-2">
               {#each (slot?.voters ?? []).slice(0, 6) as voterPubkey (voterPubkey)}
                 {@const profile = profiles.get(voterPubkey)}
+                {@const voterName =
+                  profile?.display_name || profile?.name || voterPubkey.slice(0, 8)}
                 <div
                   data-testid="voter-avatar"
                   class="h-5 w-5 flex-shrink-0 overflow-hidden rounded-full bg-base-300 ring-2 ring-base-100"
-                  title={profile?.display_name || profile?.name || voterPubkey.slice(0, 8)}
+                  title={voterName}
+                  aria-label={voterName}
+                  role="img"
                 >
                   {#if profile?.picture}
-                    <img src={profile.picture} alt="" class="h-full w-full object-cover" />
+                    <img src={profile.picture} alt={voterName} class="h-full w-full object-cover" />
                   {/if}
                 </div>
               {/each}

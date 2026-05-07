@@ -187,6 +187,11 @@ describe('PollCard — render skeleton + states', () => {
     // Title is built from voter profile name (mocked).
     const titles = Array.from(avatars).map((a) => a.getAttribute('title'));
     expect(titles.some((t) => t && t.startsWith('Voter '))).toBe(true);
+    // a11y: aria-label exposes voter name to screen readers.
+    const ariaLabels = Array.from(avatars).map((a) => a.getAttribute('aria-label'));
+    expect(ariaLabels.every((l) => l && l.startsWith('Voter '))).toBe(true);
+    // a11y: wrapper announces as image even when no <img> is rendered.
+    expect(avatars[0].getAttribute('role')).toBe('img');
   });
 
   it('resets selection when event prop changes', async () => {
