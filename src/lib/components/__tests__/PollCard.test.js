@@ -245,6 +245,43 @@ describe('PollCard — render skeleton + states', () => {
     expect(publishEventSpy).toHaveBeenCalled();
   });
 
+  it('disables Cast vote button while submitting (no double-submit)', async () => {
+    // Mock signEvent to delay so we can observe the disabled state mid-flight.
+    /** @type {(value: any) => void} */
+    let resolveSign = () => {};
+    const signEvent = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveSign = resolve;
+        })
+    );
+    managerState.active = { pubkey: 'me', signEvent };
+
+    render(PollCard, { props: { event: makePoll() } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apple' }));
+
+    const castBtn = screen.getByRole('button', { name: /cast vote/i });
+    await fireEvent.click(castBtn);
+
+    // Mid-flight: signEvent has been called but hasn't resolved.
+    await waitFor(() => expect(signEvent).toHaveBeenCalled());
+    expect(/** @type {HTMLButtonElement} */ (castBtn).disabled).toBe(true);
+
+    // Resolve the sign and let the publish path run.
+    resolveSign({
+      id: 'voteid'.padEnd(64, '0'),
+      kind: 1018,
+      pubkey: 'me',
+      sig: 's',
+      created_at: 1,
+      content: '',
+      tags: [
+        ['e', 'pollid'],
+        ['response', 'opt-a']
+      ]
+    });
+  });
+
   it('resets selection when event prop changes', async () => {
     managerState.active = { pubkey: 'me'.padEnd(64, '0') };
     const firstPoll = makePoll();

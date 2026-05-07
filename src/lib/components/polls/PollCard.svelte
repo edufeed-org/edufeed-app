@@ -41,6 +41,7 @@
   /** @type {string[]} */
   let selected = $state([]);
   let revealed = $state(false);
+  let submitting = $state(false);
 
   // Subscribe to kind 1018 responses targeting this poll. Plain `let`, not $state —
   // the subscription handle is internal and must not trigger re-renders.
@@ -99,38 +100,43 @@
   }
 
   async function castVote() {
+    if (submitting) return;
     const account = manager.active;
     if (!account || selected.length === 0) return;
-
-    let signed;
+    submitting = true;
     try {
-      const factory = createAppEventFactory();
-      const template = await factory.create(PollResponseBlueprint, event, selected);
-      signed = await account.signEvent(template);
-    } catch (err) {
-      console.warn('Vote sign failed', err);
-      return;
+      let signed;
+      try {
+        const factory = createAppEventFactory();
+        const template = await factory.create(PollResponseBlueprint, event, selected);
+        signed = await account.signEvent(template);
+      } catch (err) {
+        console.warn('Vote sign failed', err);
+        return;
+      }
+
+      // Resolve community event if poll is community-targeted (h-tag).
+      const communityHex = getTagValue(event, 'h');
+      const communityEvent = communityHex ? eventStore.getReplaceable(10222, communityHex) : null;
+
+      // Optimistic update.
+      eventStore.add(signed);
+
+      try {
+        await publishEvent(signed, [], {
+          communityEvent,
+          additionalRelays: extractPollRelayTags(event)
+        });
+      } catch (err) {
+        console.warn('Vote publish failed', err);
+        eventStore.remove(signed);
+        return;
+      }
+
+      selected = [];
+    } finally {
+      submitting = false;
     }
-
-    // Resolve community event if poll is community-targeted (h-tag).
-    const communityHex = getTagValue(event, 'h');
-    const communityEvent = communityHex ? eventStore.getReplaceable(10222, communityHex) : null;
-
-    // Optimistic update.
-    eventStore.add(signed);
-
-    try {
-      await publishEvent(signed, [], {
-        communityEvent,
-        additionalRelays: extractPollRelayTags(event)
-      });
-    } catch (err) {
-      console.warn('Vote publish failed', err);
-      eventStore.remove(signed);
-      return;
-    }
-
-    selected = [];
   }
 </script>
 
@@ -215,7 +221,7 @@
         <button
           type="button"
           class="btn btn-sm btn-primary"
-          disabled={selected.length === 0}
+          disabled={selected.length === 0 || submitting}
           onclick={castVote}
         >
           Cast vote
