@@ -56,7 +56,10 @@
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { ekwKeywordsFromConcepts } from '$lib/helpers/educational/ekwKeywordsFromConcepts.js';
   import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
-  import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
+  import {
+    applyEnrichedPayload,
+    dropUnlabeled
+  } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import SmartFillBadge from './SmartFillBadge.svelte';
@@ -70,12 +73,8 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
-  import {
-    getFieldConflict,
-    ENRICHABLE_FIELDS
-  } from '$lib/helpers/educational/getFieldConflict.js';
   import { applySuggestionAction } from '$lib/helpers/educational/applySuggestionAction.js';
-  import AiSuggestionReviewDialog from './AiSuggestionReviewDialog.svelte';
+  import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
 
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
@@ -177,18 +176,6 @@
   let dismissedSuggestionFields = $state.raw(new Set());
 
   let showStartOverConfirm = $state(false);
-  let showReviewDialog = $state(false);
-
-  const conflictCount = $derived.by(() => {
-    if (!aiSuggestions) return 0;
-    let n = 0;
-    for (const f of ENRICHABLE_FIELDS) {
-      if (dismissedSuggestionFields.has(f)) continue;
-      const s = getFieldConflict(f, formData, aboutByVocab, aiSuggestions);
-      if (s === 'conflict' || s === 'additive') n++;
-    }
-    return n;
-  });
 
   /**
    * @param {string} field
@@ -211,12 +198,6 @@
     aboutByVocab = result.aboutByVocab;
     provenance = result.provenance;
   }
-
-  $effect(() => {
-    if (showReviewDialog && conflictCount === 0) {
-      showReviewDialog = false;
-    }
-  });
 
   const canStartOver = $derived(
     !isEditMode &&
@@ -804,15 +785,12 @@
       // EKW Fachrichtung lives in aboutByVocab (not formData), so applyEnrichedPayload
       // can't fill it. Bucket the LLM-emitted Fachrichtung concepts into the
       // `ekwFachrichtung` slot — they publish as standard AMB `about` tags.
-      const fachPayload =
-        /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
-          /** @type {any} */ (enriched.payload).ekwFachrichtung
-        );
-      if (
-        fachPayload &&
-        fachPayload.length > 0 &&
-        (aboutByVocab.ekwFachrichtung ?? []).length === 0
-      ) {
+      const fachPayload = dropUnlabeled(
+        /** @type {Array<{id: string, prefLabel?: string, label?: string}>} */ (
+          /** @type {any} */ (enriched.payload).ekwFachrichtung ?? []
+        )
+      );
+      if (fachPayload.length > 0 && (aboutByVocab.ekwFachrichtung ?? []).length === 0) {
         aboutByVocab = {
           ...aboutByVocab,
           ekwFachrichtung: fachPayload.map((c) => ({
@@ -836,15 +814,12 @@
       // so the helper can't fill it. Bucket the LLM-emitted concepts into
       // the current Bildungsbereich's first subject vocab — same heuristic
       // the AMB-JSON-LD prefill path uses.
-      const aboutPayload =
-        /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
-          /** @type {any} */ (enriched.payload).about
-        );
-      if (
-        aboutPayload &&
-        aboutPayload.length > 0 &&
-        Object.values(aboutByVocab).every((arr) => arr.length === 0)
-      ) {
+      const aboutPayload = dropUnlabeled(
+        /** @type {Array<{id: string, prefLabel?: string, label?: string}>} */ (
+          /** @type {any} */ (enriched.payload).about ?? []
+        )
+      );
+      if (aboutPayload.length > 0 && Object.values(aboutByVocab).every((arr) => arr.length === 0)) {
         const bucketed = bucketSubjectsForBildungsbereich(aboutPayload, formData.bildungsbereich);
         if (bucketed) {
           aboutByVocab = { ...aboutByVocab, ...bucketed };
@@ -1585,20 +1560,6 @@
                       <span aria-hidden="true">✓</span>
                       {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
                     </p>
-                    {#if conflictCount > 0}
-                      <span class="text-base-content/70">
-                        — {conflictCount === 1
-                          ? m.amb_form_enrich_more_suggestions_one()
-                          : m.amb_form_enrich_more_suggestions({ count: conflictCount })}
-                      </span>
-                      <button
-                        type="button"
-                        class="btn btn-outline btn-sm"
-                        onclick={() => (showReviewDialog = true)}
-                      >
-                        {m.amb_form_enrich_review_button()}
-                      </button>
-                    {/if}
                   </div>
                 {:else if enrichmentStatus === 'pending'}
                   <button type="button" class="btn btn-sm btn-primary" disabled>
@@ -1728,6 +1689,14 @@
               placeholder={m.amb_form_placeholder_title()}
               onblur={() => markTouched('name')}
             />
+            <FieldAiSuggestionBadge
+              field="name"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
             {#if showError('name')}
               <p id="amb-title-error" class="mt-1 text-xs text-error">{fieldErrors.name}</p>
             {/if}
@@ -1755,6 +1724,14 @@
               rows="4"
               onblur={() => markTouched('description')}
             ></textarea>
+            <FieldAiSuggestionBadge
+              field="description"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
             {#if showError('description')}
               <p id="amb-description-error" class="mt-1 text-xs text-error">
                 {fieldErrors.description}
@@ -1782,6 +1759,14 @@
                 <option value={lang.code}>{lang.label}</option>
               {/each}
             </select>
+            <FieldAiSuggestionBadge
+              field="inLanguage"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
           </div>
 
           <!-- Image URL -->
@@ -1799,6 +1784,14 @@
               oninput={() => {
                 imagePreviewError = false;
               }}
+            />
+            <FieldAiSuggestionBadge
+              field="image"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
             />
             {#if formData.image && imagePreviewError}
               <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
@@ -1862,6 +1855,14 @@
             {#if showError('learningResourceType')}
               <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
             {/if}
+            <FieldAiSuggestionBadge
+              field="learningResourceType"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
           </div>
 
           <!--
@@ -1890,6 +1891,14 @@
                     toRichConcept(c, educationalLevelField.vocab.relay)
                   )}
                   onchange={handleEduLevelChange}
+                />
+                <FieldAiSuggestionBadge
+                  field="educationalLevels"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
                 />
               </div>
             {/if}
@@ -2021,6 +2030,14 @@
                 {/each}
               </div>
             {/if}
+            <FieldAiSuggestionBadge
+              field="keywords"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
           </div>
 
           <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
@@ -2045,6 +2062,14 @@
                   )}
                   onchange={makeAboutHandler('ekwFachrichtung')}
                 />
+                <FieldAiSuggestionBadge
+                  field="ekwFachrichtung"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
               {#if showError('about')}
                 <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
@@ -2068,6 +2093,14 @@
                   )}
                   onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
                 />
+                <FieldAiSuggestionBadge
+                  field="gradeLevels"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
             {/if}
 
@@ -2087,6 +2120,14 @@
                     toRichConcept(c, schulartField.vocab.relay)
                   )}
                   onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
+                />
+                <FieldAiSuggestionBadge
+                  field="schoolTypes"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
                 />
               </div>
             {/if}
@@ -2110,6 +2151,14 @@
                   )}
                   onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
                 />
+                <FieldAiSuggestionBadge
+                  field="didacticConcepts"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
             {/if}
 
@@ -2130,6 +2179,14 @@
                   )}
                   onchange={makeEkwPairHandler('methods', 'methodLabels')}
                 />
+                <FieldAiSuggestionBadge
+                  field="methods"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
             {/if}
 
@@ -2147,6 +2204,14 @@
                 rows="4"
                 bind:value={formData.methodOther}
               ></textarea>
+              <FieldAiSuggestionBadge
+                field="methodOther"
+                {formData}
+                {aboutByVocab}
+                {aiSuggestions}
+                dismissedFields={dismissedSuggestionFields}
+                onapply={handleSuggestionAction}
+              />
             </div>
 
             <div class="form-control">
@@ -2177,6 +2242,14 @@
                   >+ Hinzufügen</button
                 >
               </div>
+              <FieldAiSuggestionBadge
+                field="bibleReferences"
+                {formData}
+                {aboutByVocab}
+                {aiSuggestions}
+                dismissedFields={dismissedSuggestionFields}
+                onapply={handleSuggestionAction}
+              />
             </div>
 
             {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField && !ekwLrtField}
@@ -2222,6 +2295,14 @@
             bind:creators={formData.creators}
             label={m.amb_form_label_creators()}
             helpText={m.amb_form_help_creators()}
+          />
+          <FieldAiSuggestionBadge
+            field="creators"
+            {formData}
+            {aboutByVocab}
+            {aiSuggestions}
+            dismissedFields={dismissedSuggestionFields}
+            onapply={handleSuggestionAction}
           />
 
           <BlossomUploader
@@ -2377,6 +2458,14 @@
             {#if showError('license')}
               <p id="amb-license-error" class="mt-1 text-xs text-error">{fieldErrors.license}</p>
             {/if}
+            <FieldAiSuggestionBadge
+              field="license"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
             <div class="label">
               <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
               <a
@@ -2767,13 +2856,3 @@
     ></button>
   </div>
 {/if}
-
-<AiSuggestionReviewDialog
-  open={showReviewDialog}
-  {formData}
-  {aboutByVocab}
-  {aiSuggestions}
-  dismissedFields={dismissedSuggestionFields}
-  onapply={handleSuggestionAction}
-  onclose={() => (showReviewDialog = false)}
-/>
