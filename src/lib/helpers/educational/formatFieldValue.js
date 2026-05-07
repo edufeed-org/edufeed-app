@@ -6,7 +6,7 @@
  *
  * - Plain string fields: returned verbatim.
  * - Concept arrays ([{id, label}]): joined by label, fallback to id.
- * - Paired-key concept fields: read labels from `${field}Labels` mirror.
+ * - Paired-key concept fields: read labels from `${field}Labels` mirror when present and non-empty; fall back to raw IDs array if the labels mirror is missing or empty.
  * - ekwFachrichtung: read from aboutByVocab (lives outside formData).
  * - String arrays (keywords, bibleReferences): joined by comma.
  */
@@ -39,7 +39,7 @@ export function formatFieldValue(field, formData, aboutByVocab) {
       .filter(Boolean)
       .join(', ');
   }
-  return v ?? '';
+  return v != null ? String(v) : '';
 }
 
 /**
@@ -55,5 +55,5 @@ export function formatAiFieldValue(field, aiSuggestions) {
       .filter(Boolean)
       .join(', ');
   }
-  return v ?? '';
+  return v != null ? String(v) : '';
 }
