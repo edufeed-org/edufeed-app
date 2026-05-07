@@ -70,6 +70,12 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import {
+    getFieldConflict,
+    ENRICHABLE_FIELDS
+  } from '$lib/helpers/educational/getFieldConflict.js';
+  import { applySuggestionAction } from '$lib/helpers/educational/applySuggestionAction.js';
+  import AiSuggestionReviewDialog from './AiSuggestionReviewDialog.svelte';
 
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
@@ -165,13 +171,53 @@
   // The full enriched payload from runEnrichment(), retained so the user can
   // review/apply suggestions for fields that were not auto-filled.
   /** @type {import('$lib/helpers/educational/applyEnrichedPayload.js').ExtractMetadataResult | null} */
-  // eslint-disable-next-line no-unused-vars
+
   let aiSuggestions = $state(null);
   /** @type {Set<string>} */
-  // eslint-disable-next-line no-unused-vars
+
   let dismissedSuggestionFields = $state(new Set());
 
   let showStartOverConfirm = $state(false);
+  let showReviewDialog = $state(false);
+
+  const conflictCount = $derived.by(() => {
+    if (!aiSuggestions) return 0;
+    let n = 0;
+    for (const f of ENRICHABLE_FIELDS) {
+      if (dismissedSuggestionFields.has(f)) continue;
+      const s = getFieldConflict(f, formData, aboutByVocab, aiSuggestions);
+      if (s === 'conflict' || s === 'additive') n++;
+    }
+    return n;
+  });
+
+  /**
+   * @param {string} field
+   * @param {'replace' | 'merge' | 'dismiss'} action
+   */
+  function handleSuggestionAction(field, action) {
+    if (action === 'dismiss') {
+      dismissedSuggestionFields = new Set([...dismissedSuggestionFields, field]);
+      return;
+    }
+    const result = applySuggestionAction(
+      field,
+      action,
+      formData,
+      aboutByVocab,
+      aiSuggestions,
+      provenance
+    );
+    formData = result.formData;
+    aboutByVocab = result.aboutByVocab;
+    provenance = result.provenance;
+  }
+
+  $effect(() => {
+    if (showReviewDialog && conflictCount === 0) {
+      showReviewDialog = false;
+    }
+  });
 
   const canStartOver = $derived(
     !isEditMode &&
@@ -1535,10 +1581,24 @@
             {#if !isEditMode && metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
               <div class="mt-3">
                 {#if enrichmentStatus === 'success' && enrichedForUrl === formData.identifier}
-                  <p class="flex items-center gap-2 text-sm text-success">
-                    <span aria-hidden="true">✓</span>
-                    {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
-                  </p>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <p class="flex items-center gap-2 text-success">
+                      <span aria-hidden="true">✓</span>
+                      {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
+                    </p>
+                    {#if conflictCount > 0}
+                      <span class="text-base-content/70">
+                        — {m.amb_form_enrich_more_suggestions({ count: conflictCount })}
+                      </span>
+                      <button
+                        type="button"
+                        class="btn btn-outline btn-sm"
+                        onclick={() => (showReviewDialog = true)}
+                      >
+                        {m.amb_form_enrich_review_button()}
+                      </button>
+                    {/if}
+                  </div>
                 {:else if enrichmentStatus === 'pending'}
                   <button type="button" class="btn btn-sm btn-primary" disabled>
                     <span class="loading loading-xs loading-spinner"></span>
@@ -2706,3 +2766,13 @@
     ></button>
   </div>
 {/if}
+
+<AiSuggestionReviewDialog
+  open={showReviewDialog}
+  {formData}
+  {aboutByVocab}
+  {aiSuggestions}
+  dismissedFields={dismissedSuggestionFields}
+  onapply={handleSuggestionAction}
+  onclose={() => (showReviewDialog = false)}
+/>
