@@ -109,3 +109,73 @@ describe('AiSuggestionReviewDialog — string conflict row', () => {
     expect(onapply).toHaveBeenCalledWith('name', 'dismiss');
   });
 });
+
+describe('AiSuggestionReviewDialog — array rows', () => {
+  it("array 'conflict' shows Keep/Replace/Merge", () => {
+    const { getByRole } = render(AiSuggestionReviewDialog, {
+      props: {
+        open: true,
+        formData: { keywords: ['math'] },
+        aboutByVocab: {},
+        aiSuggestions: {
+          source: 'llm-enriched',
+          payload: { keywords: ['biology'] },
+          evidence: {},
+          baseline: {}
+        },
+        dismissedFields: new Set(),
+        onapply: () => {},
+        onclose: () => {}
+      }
+    });
+    expect(getByRole('button', { name: 'Keep mine' })).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Replace' })).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Merge' })).toBeInTheDocument();
+  });
+
+  it("array 'additive' shows Keep/Add (no Replace)", () => {
+    const { getByRole, queryByRole } = render(AiSuggestionReviewDialog, {
+      props: {
+        open: true,
+        formData: { keywords: ['math'] },
+        aboutByVocab: {},
+        aiSuggestions: {
+          source: 'llm-enriched',
+          payload: { keywords: ['math', 'algebra'] },
+          evidence: {},
+          baseline: {}
+        },
+        dismissedFields: new Set(),
+        onapply: () => {},
+        onclose: () => {}
+      }
+    });
+    expect(getByRole('button', { name: 'Keep mine' })).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Add' })).toBeInTheDocument();
+    expect(queryByRole('button', { name: 'Replace' })).toBeNull();
+  });
+
+  it("Replace fires onapply(field, 'replace'); Merge fires 'merge'; Add fires 'merge'", async () => {
+    const onapply = vi.fn();
+    const { getByRole } = render(AiSuggestionReviewDialog, {
+      props: {
+        open: true,
+        formData: { keywords: ['math'] },
+        aboutByVocab: {},
+        aiSuggestions: {
+          source: 'llm-enriched',
+          payload: { keywords: ['biology'] },
+          evidence: {},
+          baseline: {}
+        },
+        dismissedFields: new Set(),
+        onapply,
+        onclose: () => {}
+      }
+    });
+    await fireEvent.click(getByRole('button', { name: 'Replace' }));
+    await fireEvent.click(getByRole('button', { name: 'Merge' }));
+    expect(onapply).toHaveBeenNthCalledWith(1, 'keywords', 'replace');
+    expect(onapply).toHaveBeenNthCalledWith(2, 'keywords', 'merge');
+  });
+});

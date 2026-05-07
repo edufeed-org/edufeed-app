@@ -115,6 +115,29 @@
                   >
                     {m.amb_form_review_use_ai()}
                   </button>
+                {:else if row.state === 'additive'}
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={() => onapply(row.field, 'merge')}
+                  >
+                    {m.amb_form_review_add()}
+                  </button>
+                {:else}
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={() => onapply(row.field, 'replace')}
+                  >
+                    {m.amb_form_review_replace()}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm"
+                    onclick={() => onapply(row.field, 'merge')}
+                  >
+                    {m.amb_form_review_merge()}
+                  </button>
                 {/if}
               </div>
             </li>
