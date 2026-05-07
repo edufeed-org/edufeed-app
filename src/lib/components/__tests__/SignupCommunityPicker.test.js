@@ -28,7 +28,7 @@ vi.mock('$lib/paraglide/messages', () =>
 );
 
 const mockConfig = vi.hoisted(() => ({
-  runtimeConfig: { signup: { suggestedCommunities: [] } }
+  runtimeConfig: { signup: { suggestedCommunities: /** @type {string[]} */ ([]) } }
 }));
 vi.mock('$lib/stores/config.svelte.js', () => mockConfig);
 
@@ -36,6 +36,10 @@ const mockTimeline = vi.hoisted(() => vi.fn());
 const mockEventStore = vi.hoisted(() => ({
   // Picker calls eventStore.model(TimelineModel, filter); we don't need to
   // distinguish models here, so route everything through the same fixture fn.
+  /**
+   * @param {any} _model
+   * @param {any[]} args
+   */
   model: (_model, ...args) => mockTimeline(...args)
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ eventStore: mockEventStore }));
@@ -54,12 +58,15 @@ const PK_SUGGESTED_2 = 'b'.repeat(64);
 const PK_OTHER_1 = 'c'.repeat(64);
 const PK_OTHER_2 = 'd'.repeat(64);
 
+/** @param {string} pk */
 function communityEvent(pk) {
   return { id: pk + '-id', kind: 10222, pubkey: pk, tags: [], content: '', created_at: 0, sig: '' };
 }
 
+/** @param {any[]} events */
 function makeTimelineSubscribe(events) {
   return {
+    /** @param {(events: any[]) => void} cb */
     subscribe: (cb) => {
       cb(events);
       return { unsubscribe: vi.fn() };
@@ -90,7 +97,7 @@ describe('SignupCommunityPicker', () => {
     const rows = container.querySelectorAll('[data-testid="signup-community-row"]');
     expect(rows.length).toBe(2);
     const checkboxes = container.querySelectorAll('[data-testid="signup-community-checkbox"]');
-    checkboxes.forEach((cb) => expect(cb.checked).toBe(true));
+    checkboxes.forEach((cb) => expect(/** @type {HTMLInputElement} */ (cb).checked).toBe(true));
   });
 
   it('renders no "other" rows when search query is empty', async () => {
