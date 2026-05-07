@@ -110,8 +110,8 @@ vi.mock('$lib/helpers/profile.js', () => ({
   fetchProfileData: vi.fn()
 }));
 
-vi.mock('$lib/helpers/autoJoinCommunities.js', () => ({
-  buildAutoJoinFollowSet: vi.fn().mockResolvedValue({ signed: null, targetPubkeys: [] })
+vi.mock('$lib/helpers/communityFollowSet.js', () => ({
+  buildCommunityFollowSet: vi.fn().mockResolvedValue({ signed: null, targetPubkeys: [] })
 }));
 
 // Stub the keypair helper so the signer's signEvent doesn't hit @noble/hashes'

@@ -3,7 +3,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { generateSignupKeypair } from '$lib/helpers/signupKeypair.js';
-  import { buildAutoJoinFollowSet } from '$lib/helpers/autoJoinCommunities.js';
+  import { buildCommunityFollowSet } from '$lib/helpers/communityFollowSet.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
@@ -161,10 +161,10 @@
       };
       const signedMetadataEvent = await _signer.signEvent(metadataEvent);
 
-      // Optional auto-join: deployments may pre-configure community follows.
-      // Suggested-user follows have moved to a post-login banner.
+      // Community follow set: identifiers come from deployment config today;
+      // Task 5 swaps in the user's step-3 picker selection.
       const { signed: signedCommunitiesEvent, targetPubkeys: communityPubkeys } =
-        await buildAutoJoinFollowSet(
+        await buildCommunityFollowSet(
           /** @type {any} */ (_signer),
           userData.publicKey,
           runtimeConfig.signup?.autoJoinCommunities
