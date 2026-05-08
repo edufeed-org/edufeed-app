@@ -191,6 +191,68 @@ describe('FormConceptPicker', () => {
     expect(container.querySelector('[role="listbox"]')).toBeFalsy();
   });
 
+  it('heals an incoming value whose id is a label by emitting onchange with the canonical id', async () => {
+    /** @type {any[]} */
+    let healed = [];
+    let calls = 0;
+    render(FormConceptPicker, {
+      props: {
+        field: fieldFixture,
+        multiple: true,
+        // AI MCP returns the prefLabel as id; picker should resolve it.
+        value: [
+          {
+            id: 'Mathematik',
+            nostrCoord: '',
+            relay: '',
+            labels: { de: 'Mathematik' }
+          }
+        ],
+        onchange: (/** @type {any[]} */ v) => {
+          calls++;
+          healed = v;
+        }
+      }
+    });
+
+    await waitFor(() => {
+      if (calls === 0) throw new Error('onchange not called yet');
+    });
+
+    expect(healed.length).toBe(1);
+    expect(healed[0]).toMatchObject({
+      id: 'https://w3id.org/kim/schulfaecher/s1017',
+      nostrCoord: createReplaceableAddress(CONCEPT_KIND, 'pub', 's1017'),
+      relay: 'wss://r.example',
+      labels: { de: 'Mathematik', en: 'Mathematics' }
+    });
+  });
+
+  it('does not re-emit onchange when incoming ids already match concept events', async () => {
+    let calls = 0;
+    render(FormConceptPicker, {
+      props: {
+        field: fieldFixture,
+        multiple: true,
+        value: [
+          {
+            id: 'https://w3id.org/kim/schulfaecher/s1017',
+            nostrCoord: createReplaceableAddress(CONCEPT_KIND, 'pub', 's1017'),
+            relay: 'wss://r.example',
+            labels: { de: 'Mathematik', en: 'Mathematics' }
+          }
+        ],
+        onchange: () => {
+          calls++;
+        }
+      }
+    });
+
+    // Wait long enough for any spurious effect to fire.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toBe(0);
+  });
+
   it('shows incoming value as selected badges via the dropdown trigger', async () => {
     const { container } = render(FormConceptPicker, {
       props: {

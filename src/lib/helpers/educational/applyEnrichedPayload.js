@@ -11,8 +11,7 @@
  * schema). The wizard uses `{id, label}`. This helper performs the rename.
  */
 
-const FORM_DEFAULT_LICENSE = 'https://creativecommons.org/licenses/by/4.0/';
-const FORM_DEFAULT_LANGUAGE = 'de';
+import { FORM_DEFAULT_LICENSE, FORM_DEFAULT_LANGUAGE } from './formDefaults.js';
 
 /**
  * @typedef {Object} ExtractMetadataResult

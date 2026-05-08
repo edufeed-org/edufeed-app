@@ -239,6 +239,8 @@ The form now has **7 steps** in create mode (6 in edit mode — share is skipped
 
 **Known limitation:** Step 4's subject/educationalLevel pickers are now backed by Nostr kind 39737 vocab events. E2E relays are NOT seeded with ConceptScheme/concept events, so FormConceptPicker shows an empty dropdown and subject selection in E2E currently fails validation. Tests that need to exercise the full flow must either seed concept events onto `amb-relay` or skip step 4.
 
+**AI suggestion review (no E2E):** The "review AI suggestions" flow on step 2 (`getFieldConflict`, `applySuggestionAction`, `AiSuggestionReviewDialog`, plus the wizard counter / dialog wiring and Start Over) is covered by 42 Vitest unit + component tests under `src/lib/__tests__/` and `src/lib/components/educational/__tests__/`. No E2E was added: the wizard wiring is glue code over those pure helpers, there is currently no E2E infrastructure for `/api/enrich`, and the project preference is unit/component over Playwright when the logic is verifiable below the page level.
+
 #### FAB and Page Navigation (4 tests)
 
 | Test                                                        | What it verifies                              |
