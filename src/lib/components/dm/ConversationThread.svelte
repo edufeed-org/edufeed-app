@@ -1,5 +1,4 @@
 <script>
-  import { untrack } from 'svelte';
   import { resolve } from '$app/paths';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -8,13 +7,12 @@
   import { WrappedMessagesGroup } from 'applesauce-common/models';
   import { getWrappedMessageParent } from 'applesauce-common/helpers/wrapped-messages';
   import { SendWrappedMessage, ReplyToWrappedMessage } from 'applesauce-actions/actions';
-  import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+  import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import { markConversationAsRead } from '$lib/services/dm-service.svelte.js';
   import {
     formatMessageTimestamp,
     getUserDisplayName as getDisplayName,
-    groupMessagesByDate,
-    reconcilePendingMessages
+    groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { swipeable } from '$lib/helpers/swipe.js';
@@ -43,12 +41,8 @@
   let showEmojiPicker = $state(false);
   /** @type {any} */
   let replyingTo = $state(null);
-  /** @type {HTMLInputElement | undefined} */
+  /** @type {HTMLTextAreaElement | undefined} */
   let messageInput = $state(undefined);
-
-  // Optimistic (pending) messages shown before gift wrap publish completes
-  /** @type {{ id: string, content: string, created_at: number, pubkey: string, status: 'sending' | 'sent' | 'failed' }[]} */
-  let pendingMessages = $state([]);
 
   // Custom emoji state
   const getUserEmojiSets = useUserEmojiSets();
@@ -60,26 +54,30 @@
   // (plain let, not $state, to avoid reactive tracking)
   let lastMarkedTimestamp = 0;
 
-  // Subscribe to conversation messages
+  // Subscribe to conversation messages.
+  // Locally-sent gift wraps are added to EventStore by actionRunnerOptimistic and
+  // expose their rumor synchronously via getGiftWrapRumor() (see applesauce
+  // gift-wrap symbol contract — covered by giftwrap-rumor-contract.test.js),
+  // so we don't need a parallel "pending" optimistic state.
   $effect(() => {
     const user = getActiveUser();
     if (!user || !conversationId) return;
 
     lastMarkedTimestamp = 0; // Reset on conversation switch
-    pendingMessages = []; // Clear pending on conversation switch
 
     const sub = eventStore
       .model(WrappedMessagesGroup, user.pubkey, participants)
       .subscribe((msgs) => {
         // WrappedMessagesGroup returns newest-first, we need oldest-first
-        messages = (msgs || []).toReversed();
-        // Reconcile optimistic messages against real ones.
-        // Use untrack to avoid adding pendingMessages as a dependency of this $effect,
-        // which would cause effect_update_depth_exceeded on rapid emissions.
-        const pending = untrack(() => pendingMessages);
-        if (pending.length > 0) {
-          pendingMessages = reconcilePendingMessages(pending, messages);
-        }
+        const next = (msgs || []).toReversed();
+        // Log the local `next.length` rather than `messages.length` —
+        // reading `messages` here would make it a tracked dep of the
+        // outer $effect, which would loop because the next line writes it.
+        console.debug('[dm] ConversationThread emission', {
+          conversationId,
+          count: next.length
+        });
+        messages = next;
       });
 
     return () => sub.unsubscribe();
@@ -113,7 +111,7 @@
   let chatContainer;
   let prevMessageCount = 0;
   $effect(() => {
-    const totalCount = messages.length + pendingMessages.length;
+    const totalCount = messages.length;
     if (chatContainer && totalCount > 0) {
       const isNewMessage = totalCount > prevMessageCount;
       const isNearBottom =
@@ -138,40 +136,33 @@
     newMessage = '';
     isSending = true;
 
-    // Add optimistic message immediately
-    const optimisticId = crypto.randomUUID();
-    pendingMessages = [
-      ...pendingMessages,
-      {
-        id: optimisticId,
-        content,
-        created_at: Math.floor(Date.now() / 1000),
-        pubkey: user.pubkey,
-        status: /** @type {const} */ ('sending')
-      }
-    ];
-
     try {
+      // actionRunnerOptimistic returns as soon as the gift wrap is signed and
+      // added to EventStore — WrappedMessagesGroup picks it up immediately via
+      // the synchronous rumor symbol, giving the user instant feedback without
+      // a parallel pending state. Relay publish runs in the background.
       if (replyingTo) {
-        await actionRunner.run(ReplyToWrappedMessage, replyingTo, content);
+        await actionRunnerOptimistic.run(ReplyToWrappedMessage, replyingTo, content);
       } else {
-        await actionRunner.run(SendWrappedMessage, participants, content);
+        await actionRunnerOptimistic.run(SendWrappedMessage, participants, content);
       }
-      // Mark as sent — will be reconciled when real event arrives
-      pendingMessages = pendingMessages.map((p) =>
-        p.id === optimisticId ? { ...p, status: /** @type {const} */ ('sent') } : p
-      );
       replyingTo = null;
       usedCustomEmojis = {};
     } catch (err) {
       console.error('Failed to send DM:', err);
-      pendingMessages = pendingMessages.map((p) =>
-        p.id === optimisticId ? { ...p, status: /** @type {const} */ ('failed') } : p
-      );
       newMessage = content;
       showToast(m.dm_send_failed(), 'error');
     } finally {
       isSending = false;
+    }
+  }
+
+  /** @param {KeyboardEvent} event */
+  function handleKeydown(event) {
+    // Enter sends, Shift+Enter inserts a newline
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      sendMessage(event);
     }
   }
 
@@ -308,33 +299,6 @@
         {/if}
       {/each}
     {/if}
-
-    {#each pendingMessages as pending (pending.id)}
-      <div class="chat-end chat">
-        <div
-          class="chat-bubble chat-bubble-primary {pending.status === 'failed'
-            ? 'opacity-50'
-            : 'opacity-70'}"
-        >
-          {pending.content}
-          {#if pending.status === 'sending'}
-            <span class="loading ml-1 loading-xs loading-dots align-middle"></span>
-          {:else if pending.status === 'failed'}
-            <button
-              type="button"
-              class="ml-1 text-xs text-error underline"
-              onclick={() => {
-                pendingMessages = pendingMessages.filter((p) => p.id !== pending.id);
-                newMessage = pending.content;
-                messageInput?.focus();
-              }}
-            >
-              ✕
-            </button>
-          {/if}
-        </div>
-      </div>
-    {/each}
   </div>
 
   <!-- Spacer for fixed input on mobile -->
@@ -366,33 +330,35 @@
 
     <form
       onsubmit={sendMessage}
-      class="flex items-center gap-2 {replyingTo
-        ? 'rounded-t-none rounded-b-full'
-        : 'rounded-full'} bg-base-200 px-2 py-1 shadow-md"
+      class="flex items-end gap-2 {replyingTo
+        ? 'rounded-t-none rounded-b-3xl'
+        : 'rounded-3xl'} bg-base-200 px-2 py-1 shadow-md"
     >
       <button
         type="button"
         onclick={() => (showEmojiPicker = !showEmojiPicker)}
-        class="btn btn-circle btn-ghost btn-sm"
+        class="btn btn-circle shrink-0 btn-ghost btn-sm"
         title="Emoji"
       >
         <SmilePlusIcon class="h-5 w-5" />
       </button>
 
-      <input
+      <textarea
         bind:this={messageInput}
-        type="text"
         bind:value={newMessage}
+        rows="1"
         placeholder={m.dm_input_placeholder()}
-        class="min-w-0 flex-1 border-none bg-transparent focus:outline-none"
+        class="max-h-40 min-h-[2rem] min-w-0 flex-1 resize-none border-none bg-transparent py-1.5 leading-snug focus:outline-none"
+        style="field-sizing: content;"
         disabled={isSending}
         onfocus={() => (showEmojiPicker = false)}
+        onkeydown={handleKeydown}
         required
-      />
+      ></textarea>
 
       <button
         type="submit"
-        class="btn btn-circle btn-sm btn-primary"
+        class="btn btn-circle shrink-0 btn-sm btn-primary"
         disabled={!newMessage.trim() || isSending}
       >
         {#if isSending}

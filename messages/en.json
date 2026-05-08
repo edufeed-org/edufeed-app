@@ -2068,6 +2068,7 @@
   "dm_new_message": "New",
   "dm_new_conversation": "New Message",
   "dm_no_conversations": "No conversations yet",
+  "dm_loading_messages": "Loading messages…",
   "dm_select_conversation": "Select a conversation to start messaging",
   "dm_no_messages": "No messages yet. Say hello!",
   "dm_input_placeholder": "Type a message...",

@@ -4,8 +4,7 @@ import {
   formatMessageTimestamp,
   getUserDisplayName,
   getReplyParentId,
-  groupMessagesByDate,
-  reconcilePendingMessages
+  groupMessagesByDate
 } from '$lib/helpers/message-utils.js';
 
 describe('formatMessageTimestamp', () => {
@@ -123,65 +122,5 @@ describe('groupMessagesByDate', () => {
     const messageItems = result.filter((item) => item.type === 'message');
     expect(messageItems[0].message.id).toBe('1');
     expect(messageItems[1].message.id).toBe('2');
-  });
-});
-
-describe('reconcilePendingMessages', () => {
-  const now = Math.floor(Date.now() / 1000);
-
-  it('removes pending messages whose content matches a real message', () => {
-    const pending = [
-      { id: 'p1', content: 'hello', created_at: now, pubkey: 'abc', status: 'sent' }
-    ];
-    const realMessages = [{ id: 'r1', content: 'hello', created_at: now, pubkey: 'abc' }];
-
-    const result = reconcilePendingMessages(pending, realMessages);
-    expect(result).toEqual([]);
-  });
-
-  it('keeps pending messages still in sending status', () => {
-    const pending = [
-      { id: 'p1', content: 'hello', created_at: now, pubkey: 'abc', status: 'sending' }
-    ];
-    const realMessages = [{ id: 'r1', content: 'hello', created_at: now, pubkey: 'abc' }];
-
-    const result = reconcilePendingMessages(pending, realMessages);
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('p1');
-  });
-
-  it('keeps failed pending messages even if content matches', () => {
-    const pending = [
-      { id: 'p1', content: 'hello', created_at: now, pubkey: 'abc', status: 'failed' }
-    ];
-    const realMessages = [{ id: 'r1', content: 'hello', created_at: now, pubkey: 'abc' }];
-
-    const result = reconcilePendingMessages(pending, realMessages);
-    expect(result).toHaveLength(1);
-    expect(result[0].status).toBe('failed');
-  });
-
-  it('keeps pending messages with no matching real message', () => {
-    const pending = [
-      { id: 'p1', content: 'unique message', created_at: now, pubkey: 'abc', status: 'sent' }
-    ];
-    const realMessages = [{ id: 'r1', content: 'different', created_at: now, pubkey: 'abc' }];
-
-    const result = reconcilePendingMessages(pending, realMessages);
-    expect(result).toHaveLength(1);
-  });
-
-  it('returns empty array when no pending messages', () => {
-    const result = reconcilePendingMessages(/** @type {any[]} */ ([]), [{ content: 'hi' }]);
-    expect(result).toEqual([]);
-  });
-
-  it('handles empty real messages array', () => {
-    const pending = [
-      { id: 'p1', content: 'hello', created_at: now, pubkey: 'abc', status: 'sent' }
-    ];
-
-    const result = reconcilePendingMessages(pending, []);
-    expect(result).toHaveLength(1);
   });
 });
