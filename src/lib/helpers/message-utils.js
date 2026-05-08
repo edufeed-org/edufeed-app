@@ -69,19 +69,3 @@ export function groupMessagesByDate(messages) {
   }
   return items;
 }
-
-/**
- * Reconcile pending (optimistic) messages against real messages from the store.
- * Removes pending entries whose content appears in real messages, unless
- * the pending message is still 'sending' or 'failed'.
- *
- * @template {object & { content: string, status: string }} T
- * @param {T[]} pending
- * @param {{ content: string }[]} realMessages
- * @returns {T[]}
- */
-export function reconcilePendingMessages(pending, realMessages) {
-  if (pending.length === 0) return [];
-  const realContents = new Set(realMessages.map((m) => m.content));
-  return pending.filter((p) => p.status !== 'sent' || !realContents.has(p.content));
-}
