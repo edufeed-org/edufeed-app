@@ -1869,6 +1869,7 @@
   "dm_new_message": "Neu",
   "dm_new_conversation": "Neue Nachricht",
   "dm_no_conversations": "Noch keine Unterhaltungen",
+  "dm_loading_messages": "Nachrichten werden geladen …",
   "dm_select_conversation": "Wähle eine Unterhaltung aus",
   "dm_no_messages": "Noch keine Nachrichten. Sag Hallo!",
   "dm_input_placeholder": "Nachricht eingeben...",
