@@ -161,6 +161,22 @@ export function getCuratedCacheVersion() {
 }
 
 /**
+ * Bump the reactive cache version, deferred to a microtask.
+ *
+ * Used only on the synchronous cache hot-path of `initializeAllCuratedAuthors`
+ * / `initializeAllWotAuthors`, which run inside the root layout's `$effect`.
+ * Without deferral the synchronous `$state` write happens during effect flush
+ * and trips Svelte's `effect_update_depth_exceeded` guard. Other call sites
+ * already happen after an `await` or from rxjs subscriber callbacks, so they
+ * use sync `curatedCacheVersion++` directly.
+ */
+function bumpCuratedCacheVersion() {
+  queueMicrotask(() => {
+    curatedCacheVersion = curatedCacheVersion + 1;
+  });
+}
+
+/**
  * Get the curated mode config for a category from runtime config.
  * @param {string} category
  * @returns {{ sets: string[], direct: string[] }}
@@ -472,7 +488,7 @@ export async function initializeAllCuratedAuthors() {
         followSetsInitialized.add(cat);
       }
     }
-    curatedCacheVersion++;
+    bumpCuratedCacheVersion();
     // Background refresh — don't await, just fire
     _refreshAllCuratedAuthors();
     return;
@@ -568,7 +584,7 @@ export async function initializeAllWotAuthors() {
         wotInitialized.add(cat);
       }
     }
-    curatedCacheVersion++;
+    bumpCuratedCacheVersion();
     // Background refresh
     _refreshAllWotAuthors();
     return;
