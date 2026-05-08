@@ -56,7 +56,10 @@
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { ekwKeywordsFromConcepts } from '$lib/helpers/educational/ekwKeywordsFromConcepts.js';
   import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
-  import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
+  import {
+    applyEnrichedPayload,
+    dropUnlabeled
+  } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import SmartFillBadge from './SmartFillBadge.svelte';
@@ -70,6 +73,8 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { applySuggestionAction } from '$lib/helpers/educational/applySuggestionAction.js';
+  import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
 
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
@@ -161,6 +166,48 @@
    * @typedef {{ source: 'llm-enriched' | 'amb-jsonld', evidence?: string }} FieldProvenance
    */
   let provenance = $state(/** @type {Record<string, FieldProvenance>} */ ({}));
+
+  // The full enriched payload from runEnrichment(), retained so the user can
+  // review/apply suggestions for fields that were not auto-filled.
+  /** @type {import('$lib/helpers/educational/applyEnrichedPayload.js').ExtractMetadataResult | null} */
+
+  let aiSuggestions = $state(null);
+  /** @type {Set<string>} */
+  let dismissedSuggestionFields = $state.raw(new Set());
+
+  let showStartOverConfirm = $state(false);
+
+  /**
+   * @param {string} field
+   * @param {'replace' | 'merge' | 'dismiss'} action
+   */
+  function handleSuggestionAction(field, action) {
+    if (action === 'dismiss') {
+      dismissedSuggestionFields = new Set([...dismissedSuggestionFields, field]);
+      return;
+    }
+    const result = applySuggestionAction(
+      field,
+      action,
+      formData,
+      aboutByVocab,
+      aiSuggestions,
+      provenance
+    );
+    formData = result.formData;
+    aboutByVocab = result.aboutByVocab;
+    provenance = result.provenance;
+  }
+
+  const canStartOver = $derived(
+    !isEditMode &&
+      (currentStep > 1 || !!formData.identifier || !!formData.name || !!formData.description)
+  );
+
+  function startOver() {
+    resetWizardState();
+    showStartOverConfirm = false;
+  }
 
   /**
    * Reset a single field to its empty/default and drop its provenance entry,
@@ -293,11 +340,7 @@
    * Without the state reset the URL/name/etc. fields stay populated and
    * "verwerfen" feels broken.
    */
-  function discardDraft() {
-    clearDraft(variantId);
-    draftRestoredAt = null;
-
-    // Reset all wizard-managed state to a fresh start.
+  function resetWizardState() {
     formData = createInitialFormData();
     aboutByVocab = {};
     provenance = {};
@@ -310,6 +353,14 @@
     enrichedForUrl = '';
     metadataFetchSource = '';
     imagePreviewError = false;
+    aiSuggestions = null;
+    dismissedSuggestionFields = new Set();
+  }
+
+  function discardDraft() {
+    clearDraft(variantId);
+    draftRestoredAt = null;
+    resetWizardState();
   }
 
   // Bildungsbereich options available in step 1 depend on the variant.
@@ -695,6 +746,8 @@
         // Reset enrichment status when a *new* URL is loaded.
         if (enrichedForUrl !== result.url) {
           enrichmentStatus = 'idle';
+          aiSuggestions = null;
+          dismissedSuggestionFields = new Set();
         }
       }
     }
@@ -722,6 +775,7 @@
         enrichmentStatus = 'error';
         return;
       }
+      aiSuggestions = enriched;
       const out = applyEnrichedPayload.withProvenance(formData, enriched, {
         activeUserPubkey: activeUser?.pubkey
       });
@@ -731,15 +785,12 @@
       // EKW Fachrichtung lives in aboutByVocab (not formData), so applyEnrichedPayload
       // can't fill it. Bucket the LLM-emitted Fachrichtung concepts into the
       // `ekwFachrichtung` slot — they publish as standard AMB `about` tags.
-      const fachPayload =
-        /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
-          /** @type {any} */ (enriched.payload).ekwFachrichtung
-        );
-      if (
-        fachPayload &&
-        fachPayload.length > 0 &&
-        (aboutByVocab.ekwFachrichtung ?? []).length === 0
-      ) {
+      const fachPayload = dropUnlabeled(
+        /** @type {Array<{id: string, prefLabel?: string, label?: string}>} */ (
+          /** @type {any} */ (enriched.payload).ekwFachrichtung ?? []
+        )
+      );
+      if (fachPayload.length > 0 && (aboutByVocab.ekwFachrichtung ?? []).length === 0) {
         aboutByVocab = {
           ...aboutByVocab,
           ekwFachrichtung: fachPayload.map((c) => ({
@@ -763,15 +814,12 @@
       // so the helper can't fill it. Bucket the LLM-emitted concepts into
       // the current Bildungsbereich's first subject vocab — same heuristic
       // the AMB-JSON-LD prefill path uses.
-      const aboutPayload =
-        /** @type {Array<{id: string, prefLabel?: string, label?: string}>|undefined} */ (
-          /** @type {any} */ (enriched.payload).about
-        );
-      if (
-        aboutPayload &&
-        aboutPayload.length > 0 &&
-        Object.values(aboutByVocab).every((arr) => arr.length === 0)
-      ) {
+      const aboutPayload = dropUnlabeled(
+        /** @type {Array<{id: string, prefLabel?: string, label?: string}>} */ (
+          /** @type {any} */ (enriched.payload).about ?? []
+        )
+      );
+      if (aboutPayload.length > 0 && Object.values(aboutByVocab).every((arr) => arr.length === 0)) {
         const bucketed = bucketSubjectsForBildungsbereich(aboutPayload, formData.bildungsbereich);
         if (bucketed) {
           aboutByVocab = { ...aboutByVocab, ...bucketed };
@@ -1329,7 +1377,7 @@
   <div class="w-full">
     <!-- Step indicator — the page's top-bar <h1> provides the stable title;
        this line tells the user where they are in the wizard. -->
-    <div class="mb-6">
+    <div class="mb-6 flex items-center justify-between">
       <p class="text-base font-medium text-base-content/70">
         {m.amb_form_step_indicator({
           currentStep: String(currentStep),
@@ -1337,6 +1385,15 @@
         })}
         {stepTitles[currentStep - 1]}
       </p>
+      {#if canStartOver}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          onclick={() => (showStartOverConfirm = true)}
+        >
+          {m.amb_form_start_over()}
+        </button>
+      {/if}
     </div>
 
     <!-- Progress Steps -->
@@ -1498,10 +1555,12 @@
             {#if !isEditMode && metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
               <div class="mt-3">
                 {#if enrichmentStatus === 'success' && enrichedForUrl === formData.identifier}
-                  <p class="flex items-center gap-2 text-sm text-success">
-                    <span aria-hidden="true">✓</span>
-                    {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
-                  </p>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <p class="flex items-center gap-2 text-success">
+                      <span aria-hidden="true">✓</span>
+                      {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
+                    </p>
+                  </div>
                 {:else if enrichmentStatus === 'pending'}
                   <button type="button" class="btn btn-sm btn-primary" disabled>
                     <span class="loading loading-xs loading-spinner"></span>
@@ -1630,6 +1689,14 @@
               placeholder={m.amb_form_placeholder_title()}
               onblur={() => markTouched('name')}
             />
+            <FieldAiSuggestionBadge
+              field="name"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
             {#if showError('name')}
               <p id="amb-title-error" class="mt-1 text-xs text-error">{fieldErrors.name}</p>
             {/if}
@@ -1657,6 +1724,14 @@
               rows="4"
               onblur={() => markTouched('description')}
             ></textarea>
+            <FieldAiSuggestionBadge
+              field="description"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
             {#if showError('description')}
               <p id="amb-description-error" class="mt-1 text-xs text-error">
                 {fieldErrors.description}
@@ -1684,6 +1759,14 @@
                 <option value={lang.code}>{lang.label}</option>
               {/each}
             </select>
+            <FieldAiSuggestionBadge
+              field="inLanguage"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
           </div>
 
           <!-- Image URL -->
@@ -1701,6 +1784,14 @@
               oninput={() => {
                 imagePreviewError = false;
               }}
+            />
+            <FieldAiSuggestionBadge
+              field="image"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
             />
             {#if formData.image && imagePreviewError}
               <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
@@ -1761,6 +1852,14 @@
                 </div>
               {/if}
             {/if}
+            <FieldAiSuggestionBadge
+              field="learningResourceType"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
             {#if showError('learningResourceType')}
               <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
             {/if}
@@ -1792,6 +1891,14 @@
                     toRichConcept(c, educationalLevelField.vocab.relay)
                   )}
                   onchange={handleEduLevelChange}
+                />
+                <FieldAiSuggestionBadge
+                  field="educationalLevels"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
                 />
               </div>
             {/if}
@@ -1923,6 +2030,14 @@
                 {/each}
               </div>
             {/if}
+            <FieldAiSuggestionBadge
+              field="keywords"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
           </div>
 
           <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
@@ -1947,6 +2062,14 @@
                   )}
                   onchange={makeAboutHandler('ekwFachrichtung')}
                 />
+                <FieldAiSuggestionBadge
+                  field="ekwFachrichtung"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
               {#if showError('about')}
                 <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
@@ -1970,6 +2093,14 @@
                   )}
                   onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
                 />
+                <FieldAiSuggestionBadge
+                  field="gradeLevels"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
             {/if}
 
@@ -1989,6 +2120,14 @@
                     toRichConcept(c, schulartField.vocab.relay)
                   )}
                   onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
+                />
+                <FieldAiSuggestionBadge
+                  field="schoolTypes"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
                 />
               </div>
             {/if}
@@ -2012,6 +2151,14 @@
                   )}
                   onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
                 />
+                <FieldAiSuggestionBadge
+                  field="didacticConcepts"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
             {/if}
 
@@ -2032,6 +2179,14 @@
                   )}
                   onchange={makeEkwPairHandler('methods', 'methodLabels')}
                 />
+                <FieldAiSuggestionBadge
+                  field="methods"
+                  {formData}
+                  {aboutByVocab}
+                  {aiSuggestions}
+                  dismissedFields={dismissedSuggestionFields}
+                  onapply={handleSuggestionAction}
+                />
               </div>
             {/if}
 
@@ -2049,6 +2204,14 @@
                 rows="4"
                 bind:value={formData.methodOther}
               ></textarea>
+              <FieldAiSuggestionBadge
+                field="methodOther"
+                {formData}
+                {aboutByVocab}
+                {aiSuggestions}
+                dismissedFields={dismissedSuggestionFields}
+                onapply={handleSuggestionAction}
+              />
             </div>
 
             <div class="form-control">
@@ -2079,6 +2242,14 @@
                   >+ Hinzufügen</button
                 >
               </div>
+              <FieldAiSuggestionBadge
+                field="bibleReferences"
+                {formData}
+                {aboutByVocab}
+                {aiSuggestions}
+                dismissedFields={dismissedSuggestionFields}
+                onapply={handleSuggestionAction}
+              />
             </div>
 
             {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField && !ekwLrtField}
@@ -2124,6 +2295,14 @@
             bind:creators={formData.creators}
             label={m.amb_form_label_creators()}
             helpText={m.amb_form_help_creators()}
+          />
+          <FieldAiSuggestionBadge
+            field="creators"
+            {formData}
+            {aboutByVocab}
+            {aiSuggestions}
+            dismissedFields={dismissedSuggestionFields}
+            onapply={handleSuggestionAction}
           />
 
           <BlossomUploader
@@ -2276,6 +2455,14 @@
                 <option value={license.id}>{license.label}</option>
               {/each}
             </select>
+            <FieldAiSuggestionBadge
+              field="license"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
             {#if showError('license')}
               <p id="amb-license-error" class="mt-1 text-xs text-error">{fieldErrors.license}</p>
             {/if}
@@ -2646,3 +2833,26 @@
     </aside>
   {/if}
 </div>
+
+{#if showStartOverConfirm}
+  <div role="dialog" aria-modal="true" class="modal-open modal">
+    <div class="modal-box">
+      <h3 class="text-lg font-bold">{m.amb_form_start_over_confirm_title()}</h3>
+      <p class="py-3 text-sm">{m.amb_form_start_over_confirm_body()}</p>
+      <div class="modal-action">
+        <button type="button" class="btn btn-sm" onclick={() => (showStartOverConfirm = false)}>
+          {m.amb_form_start_over_confirm_cancel()}
+        </button>
+        <button type="button" class="btn btn-sm btn-error" onclick={startOver}>
+          {m.amb_form_start_over_confirm_ok()}
+        </button>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="modal-backdrop"
+      aria-label={m.amb_form_start_over_confirm_cancel()}
+      onclick={() => (showStartOverConfirm = false)}
+    ></button>
+  </div>
+{/if}
