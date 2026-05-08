@@ -43,15 +43,54 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_share_existing_aria: () => 'Share existing content with community',
   article_fab_write: () => 'Write Article',
   wiki_fab_write: () => 'Write Wiki',
-  fab_create_form: () => 'Create Form'
+  fab_create_form: () => 'Create Form',
+  // Picker modal keys (rendered only when variantPickerOpen becomes true)
+  resource_variant_picker_title: () => 'Welche Art?',
+  resource_variant_picker_description: () => 'Wähle eine Form.',
+  resource_variant_picker_cancel: () => 'Abbrechen',
+  resource_form_variant_amb_label: () => 'AMB-Bildungsmaterial',
+  resource_form_variant_amb_description: () => 'AMB-Metadatenprofil',
+  resource_form_variant_ekw_label: () => 'EKW-Bildungsmaterial',
+  resource_form_variant_ekw_description: () => 'EKW-Metadatenprofil'
 }));
 
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
   npubToHex: (/** @type {string} */ npub) => npub
 }));
 
+// Variant registry mock — default to single-variant (legacy behavior).
+// Individual tests can override via __setVariants().
+vi.mock('$lib/config/resource-form-variants.js', () => {
+  /** @type {Array<{id: string, labelKey: string, descriptionKey: string}>} */
+  let variants = [
+    {
+      id: 'amb',
+      labelKey: 'resource_form_variant_amb_label',
+      descriptionKey: 'resource_form_variant_amb_description'
+    }
+  ];
+  return {
+    getEnabledVariants: () => variants,
+    getDefaultVariantId: () => variants[0]?.id ?? 'amb',
+    __setVariants(/** @type {typeof variants} */ list) {
+      variants = list;
+    }
+  };
+});
+
+// @ts-ignore — test-only helper exported from the mock
+import { __setVariants } from '$lib/config/resource-form-variants.js';
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // Reset to single-variant (legacy) default.
+  __setVariants([
+    {
+      id: 'amb',
+      labelKey: 'resource_form_variant_amb_label',
+      descriptionKey: 'resource_form_variant_amb_description'
+    }
+  ]);
 });
 
 describe('GlobalFAB', () => {
@@ -63,7 +102,9 @@ describe('GlobalFAB', () => {
 
   it('renders all 8 action buttons', () => {
     const { container } = render(GlobalFAB);
-    const actionButtons = container.querySelectorAll('.fab > button');
+    // Action buttons are wrapped in .fab-item containers (for hover-reveal animation);
+    // only the main FAB toggle is a direct child of .fab.
+    const actionButtons = container.querySelectorAll('.fab .fab-item > button');
     expect(actionButtons.length).toBe(8);
   });
 
@@ -119,13 +160,34 @@ describe('GlobalFAB', () => {
     expect(mockOpenModal).toHaveBeenCalledWith('createCalendar');
   });
 
-  it('navigates to /create/resource on learning content click', async () => {
+  it('navigates to /create/resource/<default> on learning content click in single-variant mode', async () => {
     const { container } = render(GlobalFAB);
     const btn = /** @type {Element} */ (
       container.querySelector('[aria-label="Create new learning content"]')
     );
     await fireEvent.click(btn);
-    expect(mockGoto).toHaveBeenCalledWith('/create/resource');
+    expect(mockGoto).toHaveBeenCalledWith('/create/resource/amb');
+  });
+
+  it('does not navigate when multiple variants are enabled (opens picker instead)', async () => {
+    __setVariants([
+      {
+        id: 'amb',
+        labelKey: 'resource_form_variant_amb_label',
+        descriptionKey: 'resource_form_variant_amb_description'
+      },
+      {
+        id: 'ekw',
+        labelKey: 'resource_form_variant_ekw_label',
+        descriptionKey: 'resource_form_variant_ekw_description'
+      }
+    ]);
+    const { container } = render(GlobalFAB);
+    const btn = /** @type {Element} */ (
+      container.querySelector('[aria-label="Create new learning content"]')
+    );
+    await fireEvent.click(btn);
+    expect(mockGoto).not.toHaveBeenCalled();
   });
 
   it('navigates to /create/article on article click', async () => {

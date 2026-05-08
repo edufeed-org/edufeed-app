@@ -8,6 +8,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { CalendarIcon, AlertIcon, ChevronDownIcon } from '$lib/components/icons';
   import { filterEventsByViewMode } from '$lib/helpers/calendar.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   // Import existing UI components
@@ -69,6 +70,15 @@
   let hasMoreUpcoming = $derived(upcomingEvents.length > upcomingDisplayLimit);
   let hasMorePast = $derived(pastEvents.length > pastDisplayLimit);
 
+  // Batch-load author profiles for currently-visible cards (non-compact variants
+  // render an author header; see CalendarEventCard.svelte).
+  const getAuthorProfiles = useProfileMap(() =>
+    [...displayedUpcoming, ...displayedPast]
+      .map((/** @type {CalendarEvent} */ e) => e.originalEvent?.pubkey)
+      .filter(Boolean)
+  );
+  let authorProfiles = $derived(getAuthorProfiles());
+
   /**
    * Handle event click
    * @param {CalendarEvent} event
@@ -95,13 +105,6 @@
 </script>
 
 <div class="space-y-4">
-  <!-- Header -->
-  <div class="flex items-center justify-between">
-    <h2 class="text-lg font-semibold text-base-content">
-      {m.events_list_header({ count: filteredEvents.length })}
-    </h2>
-  </div>
-
   <!-- Error Display -->
   {#if error}
     <div class="alert alert-error">
@@ -116,7 +119,7 @@
   <!-- Upcoming Events Section -->
   <section class="space-y-4">
     <div class="flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-base-content">
+      <h3 class="text-sm font-medium text-base-content">
         {m.events_list_upcoming_header({ count: upcomingEvents.length })}
       </h3>
       {#if pastEvents.length > 0}
@@ -135,7 +138,12 @@
     {#if upcomingEvents.length > 0}
       <div class="flex max-w-full flex-col gap-4 overflow-hidden">
         {#each displayedUpcoming as event (event.id)}
-          <CalendarEventCard {event} compact={false} onEventClick={handleEventClick} />
+          <CalendarEventCard
+            {event}
+            compact={false}
+            authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
+            onEventClick={handleEventClick}
+          />
         {/each}
       </div>
       {#if hasMoreUpcoming}
@@ -168,7 +176,7 @@
   <!-- Past Events Section -->
   <section id="past-events" class="space-y-4">
     <div class="flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-base-content">
+      <h3 class="text-sm font-medium text-base-content">
         {m.events_list_past_header({ count: pastEvents.length })}
       </h3>
       <button
@@ -185,7 +193,12 @@
     {#if pastEvents.length > 0}
       <div class="flex max-w-full flex-col gap-4 overflow-hidden">
         {#each displayedPast as event (event.id)}
-          <CalendarEventCard {event} compact={false} onEventClick={handleEventClick} />
+          <CalendarEventCard
+            {event}
+            compact={false}
+            authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
+            onEventClick={handleEventClick}
+          />
         {/each}
       </div>
       {#if hasMorePast}

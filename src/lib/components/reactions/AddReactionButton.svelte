@@ -8,8 +8,13 @@
   import { manager } from '$lib/stores/accounts.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {any} */
-  let { event } = $props();
+  /**
+   * @type {{
+   *   event?: any,
+   *   onPick?: (emoji: string | { shortcode: string, url: string }) => void
+   * }}
+   */
+  let { event, onPick } = $props();
 
   let showPicker = $state(false);
 
@@ -39,5 +44,5 @@
 </button>
 
 {#if showPicker}
-  <ReactionPicker {event} onClose={() => (showPicker = false)} />
+  <ReactionPicker {event} onClose={() => (showPicker = false)} {onPick} />
 {/if}

@@ -1,7 +1,21 @@
 import { nip19 } from 'nostr-tools';
 import { getSeenRelays } from 'applesauce-core/helpers';
+import { getCommentRootPointer, isCommentExternalPointer } from 'applesauce-common/helpers';
 import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
 import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils.js';
+
+/**
+ * A kind 1111 (NIP-22 Comment) acts as a bookmark only when it's a page note —
+ * a URL-rooted comment per NIP-73 (K=web). Event/address-rooted replies fall
+ * through to the generic nevent fallback so they can be rendered as threads.
+ * @param {any} event
+ * @returns {boolean}
+ */
+function is1111PageNote(event) {
+  if (event.kind !== 1111) return false;
+  const root = getCommentRootPointer(event);
+  return isCommentExternalPointer(root) && root.kind === 'web';
+}
 
 /**
  * Resolve the community pubkey for an event.
@@ -36,11 +50,16 @@ export function getContentEventRoute(event, options = {}) {
   const { communityPubkey } = options;
 
   const isCalendar = event.kind === 31922 || event.kind === 31923;
-  const isBookmarkKind = event.kind === 39701 || event.kind === 9802 || event.kind === 1111;
+  // A kind 1111 is bookmark-shaped only when it's a page note (URL-rooted comment).
+  // Reply-shaped 1111s (event/address-rooted) fall through to the nevent fallback below.
+  const isBookmarkKind = event.kind === 39701 || event.kind === 9802 || is1111PageNote(event);
 
-  // Bookmark-related kinds (39701, 9802, 1111)
+  // Bookmark-related kinds (39701, 9802, 1111-page-note)
   if (isBookmarkKind) {
-    return getBookmarkRoute(event, communityPubkey);
+    const route = getBookmarkRoute(event, communityPubkey);
+    if (route) return route;
+    // Fall through: e.g. a kind 1111 page-note without community context still
+    // deserves a clickable destination — let the nevent fallback handle it.
   }
 
   // Addressable kinds (30000-39999)
@@ -49,8 +68,17 @@ export function getContentEventRoute(event, options = {}) {
     const naddr = encodeEventToNaddr(event);
     if (!naddr) return undefined;
 
+    // Community-scoped routes keep the community sidebar visible
+    if (communityPubkey) {
+      const npub = hexToNpub(communityPubkey);
+      if (npub) {
+        if (isCalendar) return `/c/${npub}/event/${naddr}`;
+        if (event.kind === 30142) return `/c/${npub}/r/${naddr}`;
+        if (event.kind === 30301) return `/c/${npub}/board/${naddr}`;
+      }
+    }
+
     if (isCalendar) return `/calendar/event/${naddr}`;
-    if (event.kind === 30142) return `/discover?resource=${naddr}`;
     if (event.kind === 30168) return `/forms/${naddr}`;
     return `/${naddr}`;
   }

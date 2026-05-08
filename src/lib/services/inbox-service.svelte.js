@@ -20,6 +20,7 @@ import { getNotificationType, isUnread, filterSelfNotifications } from '$lib/hel
 import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
+import { hasNip44 } from '$lib/helpers/nip44.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
 const DEFAULT_LOOKBACK = 604800; // 7 days
@@ -235,7 +236,7 @@ export function initializeInbox(pubkey) {
       let content = event.content;
       // Try NIP-44 decrypt (read markers may be encrypted to self)
       try {
-        if (manager.active?.signer?.nip44?.decrypt) {
+        if (manager.active && hasNip44(manager.active.signer)) {
           content = await manager.active.signer.nip44.decrypt(pubkey, event.content);
         }
       } catch {

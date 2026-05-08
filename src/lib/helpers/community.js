@@ -1,5 +1,5 @@
 import { AddUserToFollowSet, RemoveUserFromFollowSet } from 'applesauce-actions/actions';
-import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
@@ -11,31 +11,40 @@ const COMMUNITIES_SET_ID = 'communities';
  * Ensure the kind 30000 follow set with d="communities" exists in EventStore.
  * Works around an applesauce bug where AddUserToFollowSet generates a random
  * d-tag when auto-creating a non-existent follow set.
+ *
+ * Optimistic: when the set is missing, we sign an empty follow set, insert it
+ * into EventStore synchronously, and fire the publish in the background. The
+ * caller (joinCommunity / leaveCommunity) gets control back as soon as the
+ * event is locally visible — we never block on a relay round-trip.
  */
 export async function ensureFollowSetExists() {
   if (!manager.active) return;
   const pubkey = manager.active.pubkey;
 
-  const existing = await new Promise((resolve) => {
-    /** @type {import('rxjs').Subscription | undefined} */
-    let sub;
-    sub = eventStore.replaceable(30000, pubkey, COMMUNITIES_SET_ID).subscribe((event) => {
-      if (sub) sub.unsubscribe();
-      resolve(event);
-    });
-  });
-
-  if (existing) return;
+  // Synchronous lookup — no subscription, no microtask hop.
+  if (eventStore.getReplaceable(30000, pubkey, COMMUNITIES_SET_ID)) return;
 
   const factory = createAppEventFactory({ signer: manager.active.signer });
   const template = await factory.build({ kind: 30000, tags: [['d', COMMUNITIES_SET_ID]] });
   const signed = await factory.sign(template);
-  await publishEvent(signed);
+
+  // Insert locally first so AddUserToFollowSet can read it immediately.
   eventStore.add(signed);
+
+  // Fire-and-forget publish — relay errors are logged, never thrown.
+  publishEvent(signed).catch((err) => {
+    console.error('Failed to publish initial communities follow-set', err);
+  });
 }
 
 /**
- * Join a community by adding its pubkey to the user's follow set (kind 30000, d="communities")
+ * Join a community by adding its pubkey to the user's follow set (kind 30000, d="communities").
+ *
+ * Uses the optimistic ActionRunner: the signed event is inserted into EventStore
+ * synchronously (so the UI updates immediately) and the relay publish runs in
+ * the background. Failures during sign still propagate; relay publish failures
+ * are logged but not surfaced to the caller.
+ *
  * @param {string} communityPubkey - The pubkey of the community to join
  * @returns {Promise<{success: boolean, error?: string}>}
  */
@@ -46,7 +55,7 @@ export async function joinCommunity(communityPubkey) {
 
   try {
     await ensureFollowSetExists();
-    await actionRunner.run(AddUserToFollowSet, communityPubkey, COMMUNITIES_SET_ID);
+    await actionRunnerOptimistic.run(AddUserToFollowSet, communityPubkey, COMMUNITIES_SET_ID);
     return { success: true };
   } catch (error) {
     console.error('Failed to join community:', error);
@@ -70,7 +79,7 @@ export async function joinCommunities(communityPubkeys) {
 
   try {
     await ensureFollowSetExists();
-    await actionRunner.run(AddUserToFollowSet, communityPubkeys, COMMUNITIES_SET_ID);
+    await actionRunnerOptimistic.run(AddUserToFollowSet, communityPubkeys, COMMUNITIES_SET_ID);
     return { success: true };
   } catch (error) {
     console.error('Failed to join communities:', error);
@@ -93,7 +102,7 @@ export async function leaveCommunity(communityPubkey) {
 
   try {
     await ensureFollowSetExists();
-    await actionRunner.run(RemoveUserFromFollowSet, communityPubkey, COMMUNITIES_SET_ID);
+    await actionRunnerOptimistic.run(RemoveUserFromFollowSet, communityPubkey, COMMUNITIES_SET_ID);
     return { success: true };
   } catch (error) {
     console.error('Failed to leave community:', error);

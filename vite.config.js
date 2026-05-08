@@ -29,7 +29,7 @@ export default defineConfig({
     svelteTesting()
   ],
   test: {
-    include: ['src/**/*.test.js'],
+    include: ['src/**/*.test.js', 'scripts/**/*.test.mjs'],
     environment: 'jsdom',
     globals: true
   }

@@ -85,7 +85,7 @@ export function updateQueryParams(currentParams, updates, options = {}) {
  */
 export function parseCalendarFilters(searchParams) {
   return {
-    view: searchParams.get('view') || 'calendar',
+    view: searchParams.get('view') || 'list',
     period: searchParams.get('period') || 'month',
     tags: searchParams.getAll('tags'),
     relays: searchParams.getAll('relays'),
@@ -120,7 +120,7 @@ export function buildCalendarURL(filters, basePath = '/calendar') {
   const params = new URLSearchParams();
 
   // Add view mode
-  if (filters.view && filters.view !== 'calendar') {
+  if (filters.view && filters.view !== 'list') {
     params.set('view', filters.view);
   }
 
@@ -165,7 +165,7 @@ export function hasActiveFilters(searchParams) {
     searchParams.getAll('relays').length > 0 ||
     searchParams.getAll('authors').length > 0 ||
     (searchParams.get('search') !== null && searchParams.get('search') !== '') ||
-    (searchParams.get('view') !== null && searchParams.get('view') !== 'calendar') ||
+    (searchParams.get('view') !== null && searchParams.get('view') !== 'list') ||
     (searchParams.get('period') !== null && searchParams.get('period') !== 'month')
   );
 }

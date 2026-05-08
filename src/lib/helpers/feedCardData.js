@@ -115,10 +115,11 @@ export function getFeedCardData(event) {
     }
     case 1111: {
       const noteText = truncate(event.content, 120);
+      const isWeb = getTag('K') === 'web';
       return {
-        title: noteText || 'Note',
-        subtitle: getTag('K') === 'web' ? getTag('I') : getTag('r'),
-        typeKey: 'note',
+        title: noteText || (isWeb ? 'Page Note' : 'Reply'),
+        subtitle: isWeb ? getTag('I') : undefined,
+        typeKey: isWeb ? 'page-note' : 'reply',
         tags
       };
     }

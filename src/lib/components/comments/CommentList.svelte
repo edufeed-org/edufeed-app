@@ -2,7 +2,7 @@
   // Use regular Map for internal tracking - SvelteMap inside subscription callbacks
   // can cause effect_update_depth_exceeded errors. UI updates driven by flatComments ($state).
   /* eslint-disable svelte/prefer-svelte-reactivity -- Map used intentionally to avoid infinite loops */
-  import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
+  import { createCommentLoaderForEvent, createCommentLoaderForUrl } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import {
@@ -19,7 +19,8 @@
 
   /**
    * @typedef {Object} CommentListProps
-   * @property {any} rootEvent - The root event being commented on
+   * @property {any} [rootEvent] - The root event being commented on (event-rooted thread)
+   * @property {string} [rootUrl] - The URL being commented on (URL-rooted page-note thread, NIP-22 external pointer). Provide exactly one of rootEvent or rootUrl.
    * @property {any} activeUser - The currently active user (null if not logged in)
    * @property {boolean} [collapsedReplies] - When true, replies start collapsed with expand toggle
    * @property {string|null} [initialFocusCommentId] - Comment ID to auto-focus on mount (deep-linking)
@@ -29,7 +30,8 @@
 
   /** @type {CommentListProps} */
   let {
-    rootEvent,
+    rootEvent = undefined,
+    rootUrl = undefined,
     activeUser,
     collapsedReplies = false,
     initialFocusCommentId = null,
@@ -145,11 +147,14 @@
     modelSubscriptions.set(comment.id, subscription);
   }
 
+  /** @type {import('rxjs').Subscription | undefined} */
+  let urlCacheSubscription;
+
   // Load comments using loader + recursive model subscriptions.
   // Model subscription starts immediately (shows cached comments from EventStore).
   // Relay loader is deferred 300ms to avoid blocking content render on navigation.
   $effect(() => {
-    if (!rootEvent) return;
+    if (!rootEvent && !rootUrl) return;
 
     isLoading = true;
 
@@ -157,9 +162,39 @@
     loadedComments.clear();
     modelSubscriptions.forEach((sub) => sub.unsubscribe());
     modelSubscriptions.clear();
+    urlCacheSubscription?.unsubscribe();
 
-    // Subscribe to the root event's direct comments (may populate from cache)
-    subscribeToCommentReplies(rootEvent);
+    if (rootUrl) {
+      // URL-rooted: a single #I filter retrieves the entire conversation —
+      // NIP-22 replies inherit the root scope, so every reply down the tree
+      // also carries ["I", url]. No per-comment recursion needed.
+      urlCacheSubscription = eventStore
+        .timeline({ kinds: [1111], '#I': [rootUrl] })
+        .subscribe((/** @type {any[]} */ events) => {
+          let hasChanges = false;
+          const incomingIds = new Set();
+          for (const event of events || []) {
+            incomingIds.add(event.id);
+            if (!loadedComments.has(event.id)) {
+              loadedComments.set(event.id, event);
+              hasChanges = true;
+            }
+          }
+          // Detect deletions
+          for (const id of loadedComments.keys()) {
+            if (!incomingIds.has(id)) {
+              loadedComments.delete(id);
+              hasChanges = true;
+            }
+          }
+          if (hasChanges) {
+            flatComments = Array.from(loadedComments.values());
+          }
+        });
+    } else if (rootEvent) {
+      // Event-rooted: subscribe to the root event's direct comments (may populate from cache)
+      subscribeToCommentReplies(rootEvent);
+    }
 
     // If cache already had comments, show them immediately (no spinner)
     if (loadedComments.size > 0) {
@@ -168,7 +203,9 @@
 
     // Defer relay fetching to avoid blocking content render
     const loaderTimer = setTimeout(() => {
-      const commentLoader = createCommentLoaderForEvent(rootEvent, extraRelays);
+      const commentLoader = rootUrl
+        ? createCommentLoaderForUrl(rootUrl, extraRelays)
+        : createCommentLoaderForEvent(rootEvent, extraRelays);
       loaderSubscription = commentLoader().subscribe({
         next: (/** @type {any} */ comment) => {
           // Add to our loaded comments map
@@ -176,8 +213,11 @@
             loadedComments.set(comment.id, comment);
             flatComments = Array.from(loadedComments.values());
 
-            // Subscribe to this comment's replies
-            subscribeToCommentReplies(comment);
+            // For event-rooted threads, recurse via RepliesModel; for URL-rooted
+            // the #I filter already covers the whole tree.
+            if (!rootUrl) {
+              subscribeToCommentReplies(comment);
+            }
           }
           // Set loading to false once we have any data to display
           if (isLoading) {
@@ -206,6 +246,7 @@
       clearTimeout(loaderTimer);
       clearTimeout(loadingTimeout);
       loaderSubscription?.unsubscribe();
+      urlCacheSubscription?.unsubscribe();
       // Unsubscribe from all comment model subscriptions
       modelSubscriptions.forEach((sub) => sub.unsubscribe());
       modelSubscriptions.clear();
@@ -223,8 +264,11 @@
       // Update flatComments array to trigger reactive update
       flatComments = Array.from(loadedComments.values());
 
-      // Subscribe to this comment's replies
-      subscribeToCommentReplies(event);
+      // Subscribe to this comment's replies — only for event-rooted threads.
+      // URL-rooted uses a single #I subscription that covers the whole tree.
+      if (!rootUrl) {
+        subscribeToCommentReplies(event);
+      }
     }
   }
 
@@ -332,6 +376,7 @@
         <div class="mt-4">
           <CommentInput
             {rootEvent}
+            {rootUrl}
             parentItem={null}
             {activeUser}
             placeholder={m.comments_list_placeholder()}

@@ -6,10 +6,12 @@
   /** @type {{ data: any }} */
   let { data } = $props();
 
-  // selectedContentType is driven by the layout via $page.data.contentView or ?view= param
-  let selectedContentType = $derived(
-    $page.data.contentView || $page.url.searchParams.get('view') || 'home'
-  );
+  // selectedContentType is driven by +page.js, which validates ?view= against the
+  // set of community content types. Do NOT fall back to the raw searchParams value —
+  // that bypasses validation and lets foreign params (e.g. ?view=list from /calendar,
+  // preserved by buildCommunityPath on cross-route navigation) through, which makes
+  // MainContentArea render no view at all.
+  let selectedContentType = $derived($page.data.contentView || 'home');
 
   /**
    * Handle navigation from content type kind number or string tab name

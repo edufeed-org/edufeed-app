@@ -2,39 +2,44 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-04-21
-**Total tests:** 278
+**Last updated:** 2026-05-07
+**Total tests:** 300
 
 ## Quick Summary
 
-| File                                 | Tests | Auth | Coverage                                                          |
-| ------------------------------------ | ----- | ---- | ----------------------------------------------------------------- |
-| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                     |
-| `calendar.test.js`                   | 4     | No   | Calendar page, events, modal                                      |
-| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                         |
-| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                      |
-| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                 |
-| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                        |
-| `amb-creation.test.js`               | 18    | Yes  | FAB, creation page, all 4 steps, validation                       |
-| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                      |
-| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                    |
-| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                        |
-| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                            |
-| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                      |
-| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                     |
-| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                     |
-| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                           |
-| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                         |
-| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                     |
-| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                |
-| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                |
-| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                   |
-| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                       |
-| `signup.test.js`                     | 15    | No   | 4-step signup wizard, key generation                              |
-| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                         |
-| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                         |
-| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                          |
-| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances |
+| File                                 | Tests | Auth | Coverage                                                                                                                          |
+| ------------------------------------ | ----- | ---- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                                                     |
+| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                                                         |
+| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail                             |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                                                         |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                                                      |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                 |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                                                        |
+| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                      |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                      |
+| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                 |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                    |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                    |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                        |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                            |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                                                      |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                                                     |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                                                     |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                                                           |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                                                         |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                                                     |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                                                |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                   |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
+| `signup-normie-path.test.js`         | 1     | No   | Normie 2-step signup happy path: primary CTA → name → skip → backup banner                                                        |
+| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                                                                                         |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
+| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                 |
+| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                            |
+| `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
 
 ## Detailed Coverage
 
@@ -213,11 +218,26 @@ This document tracks what E2E tests exist, what features they cover, and identif
 
 ---
 
-### amb-creation.test.js (18 tests)
+### amb-creation.test.js (29 tests)
 
 **Route:** `/create/resource`, `/c/[pubkey]` (community Learning tab for FAB test)
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
 **Note:** Full creation flow testing limited because SKOS dropdowns require external vocabulary data. Form is now a full-page route (`/create/resource`) instead of a modal.
+
+**Wizard structure (as of the guided wizard refactor):**
+The form now has **7 steps** in create mode (6 in edit mode — share is skipped):
+
+1. Bildungsbereich (new — radio select: Schule / Hochschule / Extra-Institutionell)
+2. URL / naddr (new — URL input triggers `/api/reader?mode=metadata` fetch; naddr → edit-mode redirect)
+3. Basic (title, description, language, image; identifier is **read-only**, derived from step 2)
+4. Classification (resource type via SKOSDropdown; educationalLevel + subject via **FormConceptPicker** backed by Nostr kind 39737 ConceptScheme events)
+5. Content & Creators (unchanged)
+6. Rights (license, free access, summary — unchanged)
+7. Share to communities (new — NIP-18 reposts, create mode only)
+
+`navigateToAMBCreation(page, npub, opts?)` now **auto-advances** past steps 1 and 2 using `setupMetadataMock()` (stubs `/api/reader?mode=metadata*`), landing tests on step 3 (Basic). Existing `completeAMBStep1..4` helpers retain their old 1..4 numbering, which now corresponds to steps 3..6 in the new wizard.
+
+**Known limitation:** Step 4's subject/educationalLevel pickers are now backed by Nostr kind 39737 vocab events. E2E relays are NOT seeded with ConceptScheme/concept events, so FormConceptPicker shows an empty dropdown and subject selection in E2E currently fails validation. Tests that need to exercise the full flow must either seed concept events onto `amb-relay` or skip step 4.
 
 #### FAB and Page Navigation (4 tests)
 
@@ -228,7 +248,32 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | creation page loads correctly from direct URL               | Direct URL renders form with title input      |
 | back button navigates to previous page                      | Back button returns to previous history entry |
 
-#### Step 1 Form (5 tests)
+#### Bildungsbereich Step (5 tests — new wizard step 1)
+
+Tests use `navigateToAMBCreation(page, npub, { skipAdvance: true })` to stop on step 1.
+
+| Test                                                         | What it verifies                                                             |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| all three Bildungsbereich radios are visible on initial load | Schule / Hochschule / Extra radios all rendered on step 1                    |
+| cannot advance past Bildungsbereich without selecting one    | Clicking Next with no radio selected keeps user on step 1                    |
+| selecting a Bildungsbereich advances to the URL step on Next | Radio selection + Next transitions to URL/metadata step                      |
+| clicking a Bildungsbereich card auto-advances without Next   | UX polish: radio `onchange` triggers `nextStep()` after a brief delay        |
+| Bildungsbereich step does not show raw vocab-key slugs       | UX polish: `cfg.subjectVocabKeys` no longer rendered — implementation hidden |
+
+#### URL / Metadata Fetch Step (6 tests — new wizard step 2)
+
+Tests use `setupMetadataMock(page, { mode: 'og' | 'amb' | 'none', ... })` to stub `/api/reader?mode=metadata`. When the test installs its own mock, it must call `navigateToAMBCreation` with `skipMockSetup: true` so the default "none" stub doesn't clobber it.
+
+| Test                                                            | What it verifies                                                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Step 2 shows the URL input and inspects automatically           | Input visible, no manual Inspect/Prüfen button, auto-inspect after typing          |
+| "none" metadata response advances to Basic step with empty form | Default mock advances but leaves title/description blank; identifier is URL        |
+| Open Graph metadata prefills Basic step fields                  | OG mock → title / description / image / language (locale normalized) all prefilled |
+| AMB JSON-LD metadata prefills Basic step fields                 | AMB mock routed through `ambJsonLdToPrefillEvent` + `applyPrefillFromAmbEvent`     |
+| image preview renders on Basic step when OG returns an image    | `formData.image` populated → `<img data-testid="amb-image-preview">` visible       |
+| empty URL cannot advance past the URL step                      | Next without URL input stays on the URL step                                       |
+
+#### Step 1 Form (5 tests — now wizard step 3: Basic Info)
 
 | Test                                              | What it verifies                                               |
 | ------------------------------------------------- | -------------------------------------------------------------- |
@@ -267,15 +312,21 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | ----------------------------------------------------- | ----------------------------- |
 | no critical JavaScript errors during page interaction | Error capture throughout flow |
 
-**Components exercised:** EducationalFAB, AMBResourceForm (/create/resource page), SKOSDropdown (partial)
+**Components exercised:** EducationalFAB, ResourceFormWizard (/create/resource page), SKOSDropdown (partial)
 
 ---
 
-### amb-creation-full.test.js (16 tests)
+### amb-creation-full.test.js (16 tests — currently **skipped**)
 
 **Route:** `/create/resource` (full-page creation form)
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
 **Infrastructure:** SKOS mocks via `page.route()`, Blossom server (port 3000), amb-relay (port 7001)
+
+**Status:** All `test.describe` blocks in this file are marked `test.describe.skip` as of the guided-wizard refactor. The full-flow tests relied on `page.route()` mocks of w3id.org/kim/\* SKOS endpoints to satisfy the subject and educational-level dropdowns. Those dropdowns are now `FormConceptPicker` components backed by Nostr kind 39737 ConceptScheme events instead of static JSON — so HTTP mocks can no longer drive them.
+
+**To unskip:** seed `amb-relay` with kind 39737 scheme + kind 30519 concept events for the `educationalLevel`, `schulfaecher`, and `hochschulfaechersystematik` vocabularies referenced by `$lib/helpers/educational/bildungsbereich.js`. Once concepts render in the picker, remove the `.skip` on each describe block and audit each test for the new step numbering (Bildungsbereich/URL are now steps 1-2; old steps 1-4 are now 3-6; new step 7 is the share screen).
+
+Original scope (preserved for the future re-enable):
 
 This file completes the full AMB creation flow that `amb-creation.test.js` cannot cover due to external SKOS dependencies. It uses Playwright route interception to mock SKOS vocabulary APIs. Uses `navigateToAMBCreation()` helper which navigates to `/create/resource?community=<npub>`.
 
@@ -325,7 +376,7 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 | resource visible on community Learning tab | Card appears after publish |
 | back button preserves form state on step 2 | Title preserved after back |
 
-**Components exercised:** AMBResourceForm (all steps, /create/resource page), SKOSDropdown (with mocks), BlossomUploader, CreatorInput, ExternalUrlInput, educational-actions.svelte.js
+**Components exercised:** ResourceFormWizard (all steps, /create/resource page), SKOSDropdown (with mocks), BlossomUploader, CreatorInput, ExternalUrlInput, educational-actions.svelte.js
 
 **New infrastructure files:**
 
@@ -335,19 +386,121 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 
 ---
 
-### calendar.test.js (4 tests)
+### resource-form-variants.test.js (3 tests)
+
+**Route:** `/create/resource`, `/create/resource/[variant]`
+**Auth required:** Yes (all tests use `authenticatedPage` fixture)
+**Note:** Phase 1 plumbing for the multi-variant resource form wizard. The
+default E2E `webServer` config runs single-variant (`RESOURCE_FORM_VARIANTS=amb`)
+so the 29 existing AMB regression tests in `amb-creation.test.js` keep working
+unchanged. These tests cover the routing shape only.
+
+#### Routing (3 tests)
+
+| Test                                                         | What it verifies                                                                |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| direct navigation to /create/resource/amb renders the wizard | Variant-addressed route mounts `ResourceFormWizard` on Bildungsbereich step     |
+| legacy /create/resource redirects to default variant route   | Thin redirector awaits `configReady`, lands on /create/resource/amb?community=… |
+| invalid variant id in URL does not resolve the wizard route  | `[variant=resourceVariant]` matcher rejects unknown ids; wizard not rendered    |
+
+**Components exercised:** `/create/resource/+page.svelte` (redirector), `/create/resource/[variant=resourceVariant]/+page.svelte`, `ResourceFormWizard`, `resourceVariant` param matcher
+
+**Deferred (not covered by E2E):**
+
+- Multi-variant picker modal shown from `GlobalFAB` when `RESOURCE_FORM_VARIANTS=amb,ekw`. Would require a second webServer project in `playwright.config.js` or a test-only config override. Covered instead by the component test `src/lib/components/__tests__/ResourceVariantPickerModal.test.js` + the FAB unit test `src/lib/components/__tests__/GlobalFAB.test.js`.
+- Edit-flow variant resolution (`?edit=<naddr>` → NIP-32 `metadata-form` label lookup → variant route). Covered by the unit test for `resolveVariantIdFromEvent()` in `src/lib/__tests__/resource-form-variants.test.js`.
+
+---
+
+### resource-form-no-url.test.js (2 tests — 1 active, 1 skipped)
+
+- **Happy path (active):** Verifies no-URL flow through step 3 — clicks the
+  "No external link?" card on step 2 (which auto-advances to step 3),
+  confirms step 3 hides `#amb-identifier`, fills title/description, advances
+  to step 4, and asserts the Classification step heading is visible. Does
+  NOT interact with SKOS/FormConceptPicker (concept events, kind 39737, are
+  not seeded on E2E relays — see line 237 above).
+- **Edit round-trip (skipped):** Requires publishing a no-URL resource first,
+  which requires completing step 4 SKOS selection. Blocked by the same
+  ConceptScheme seeding gap. Re-enable once concept events are seeded on
+  `amb-relay`.
+
+---
+
+### calendar.test.js (5 tests)
 
 **Route:** `/calendar`
 **Auth required:** No
 
-| Test                                        | What it verifies                        |
-| ------------------------------------------- | --------------------------------------- |
-| loads and displays calendar events          | Page loads, events render from relay    |
-| calendar events contain expected metadata   | Event titles (Workshop/Lecture) visible |
-| clicking calendar event opens details modal | Modal opens, shows title, can close     |
-| no critical JavaScript errors               | No JS errors during interaction         |
+| Test                                                    | What it verifies                                      |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| loads and displays calendar events                      | Page loads, events render from relay                  |
+| calendar events contain expected metadata               | Event titles (Workshop/Lecture) visible               |
+| clicking calendar event opens details modal             | Modal opens, shows title, can close                   |
+| no critical JavaScript errors                           | No JS errors during interaction                       |
+| view toggle buttons switch URL and render matching view | Grid/List/Map buttons update `?view=` and render view |
 
-**Components exercised:** CalendarView, CalendarGrid, CalendarEventBar, CalendarEventDetailsModal
+**Components exercised:** CalendarView, CalendarGrid, CalendarEventBar, CalendarNavigation, CalendarEventDetailsModal
+
+**Known gap:** Map pin persistence (pins appearing incrementally as geocoding resolves) is not exercised here — the mock-relay test fixtures have no location/geohash data, so the map always renders its empty-state card. Verified manually against dev-server data via Playwright probe.
+
+---
+
+### calendar-ui-redesign.test.js (13 tests)
+
+**Route:** `/calendar`
+**Auth required:** No
+**Note:** Exercises the calendar UI redesign (inline filter bar, mobile drawer, featured-authors rail, page chrome) plus regression coverage for the relay post-filter (wrapper vs raw event) and the header event count scoping to the current view. Reset-link behavior is covered by component-level tests in `CalendarFilterBar.test.js`.
+
+#### Calendar page chrome (4 tests)
+
+| Test                                                       | What it verifies                                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| footer is visible at the bottom of /calendar               | Scrolling to the bottom reveals `<footer>` — page no longer island-wraps  |
+| page uses min-h-screen wrapper (not a card)                | `div.min-h-screen.bg-base-100` visible; old `flex w-full max-w-full` gone |
+| desktop inline filter bar is visible                       | Search input, People trigger, Advanced trigger all visible at ≥1280px     |
+| search input is always visible and typing publishes a chip | Typing in inline search input publishes `[data-testid="chip-search"]`     |
+
+#### Event card author (1 test)
+
+| Test                                        | What it verifies                                                |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| list-view cards show an author profile link | `[data-testid="calendar-event-card"] a[href^="/p/"]` is visible |
+
+#### Active filter chips (2 tests)
+
+| Test                                                            | What it verifies                                                 |
+| --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Clear all removes chips                                         | `[data-testid="chip-clear-all"]` removes published chips         |
+| calendar dropdown and filter triggers share the same row on lg+ | Calendar dropdown trigger and filter triggers share the same row |
+
+#### Advanced (relay) filter behavior (2 tests)
+
+| Test                                                              | What it verifies                                                                               |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| opening Advanced and ticking a relay renders a relay chip         | Ticking a relay checkbox publishes `[data-testid="chip-relay"]` and updates the trigger badge  |
+| ticking a relay keeps events visible (regression: wrapper vs raw) | Regression: before fix, all event cards vanished when any relay was selected — now ≥1 survives |
+
+#### Header event count vs rendered list (1 test)
+
+| Test                                                 | What it verifies                                                                               |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| header count matches rendered card count in day view | `CalendarNavigation`'s "· N Events" equals visible `[data-testid="calendar-event-card"]` count |
+
+#### Mobile filter drawer (2 tests)
+
+| Test                                                     | What it verifies                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| small viewport shows Filter button that opens the drawer | 375×800: Filter button visible; click opens `role="dialog"`; Escape closes |
+| no critical JavaScript errors on mobile drawer flow      | Error capture through open/close                                           |
+
+#### Featured Authors rail (1 test)
+
+| Test                                                                | What it verifies                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| rail is present only when `CALENDAR_FEATURED_AUTHORS` is configured | Skips gracefully when env var unset; asserts visibility else |
+
+**Components exercised:** CalendarView (stacked layout), CalendarFilterBar, CalendarFilterDrawer, FeaturedAuthors
 
 ---
 
@@ -797,63 +950,27 @@ This file completes the full AMB creation flow that `amb-creation.test.js` canno
 
 ---
 
-### signup.test.js (15 tests)
+### signup-normie-path.test.js (1 test)
 
-**Route:** `/` (homepage, login modal → signup modal)
-**Auth required:** No
+**Route:** `/` (homepage → login modal → signup modal → dashboard)
+**Auth required:** No (creates a new account in-flight)
 
-#### Modal Access (3 tests)
+#### Normie Happy Path (1 test)
 
-| Test                                 | What it verifies             |
-| ------------------------------------ | ---------------------------- |
-| signup button opens modal from login | Signup modal becomes visible |
-| signup modal shows step indicator    | 4 steps displayed            |
-| signup modal starts at step 1        | First step has step-primary  |
+| Test                                                  | What it verifies                                                                                                                                                                                         |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| user can create an account in 2 steps and sees banner | Login modal shows prominent `[data-testid="signup-primary-cta"]` and a collapsed `[data-testid="other-signin-methods"]` `<details>`; primary CTA opens 2-step signup; name + Skip lands on backup banner |
 
-#### Step 1 - Introduction (3 tests)
+Field-level signup behavior (validation, kind 0 publish, account-type
+detection, banner show/hide flags) is covered by Vitest component tests:
 
-| Test                              | What it verifies      |
-| --------------------------------- | --------------------- |
-| step 1 shows introduction text    | Prose content visible |
-| can navigate to step 2 from intro | Next button advances  |
-| back button not visible on step 1 | No back on first step |
+- `src/lib/components/__tests__/SignupModal.test.js`
+- `src/lib/components/__tests__/LoginModal.test.js`
+- `src/lib/components/__tests__/BackupRecoveryBanner.test.js`
+- `src/lib/components/__tests__/RecoveryDownloadModal.test.js`
+- `src/lib/__tests__/recoveryFile.test.js`
 
-#### Step 2 - Profile Creation (5 tests)
-
-| Test                                  | What it verifies            |
-| ------------------------------------- | --------------------------- |
-| step 2 shows name input field         | Name input visible          |
-| step 2 shows about textarea           | About textarea visible      |
-| step 2 shows profile picture URL      | Picture input visible       |
-| step 2 shows website input            | Website input visible       |
-| can fill profile form fields          | All inputs accept values    |
-| cannot proceed to step 3 without name | Validation requires name    |
-| can proceed to step 3 with name       | Navigation to key gen works |
-| back button visible and works         | Returns to step 1           |
-
-#### Step 3 - Key Generation (4 tests)
-
-| Test                                     | What it verifies         |
-| ---------------------------------------- | ------------------------ |
-| step 3 generates and displays public key | npub in code block       |
-| step 3 shows download backup button      | Download button visible  |
-| step 3 shows encrypted backup option     | Password input visible   |
-| cannot proceed without downloading       | Validation blocks step 4 |
-
-#### Step 4 - Follow Suggestions (2 tests)
-
-| Test                       | What it verifies      |
-| -------------------------- | --------------------- |
-| modal shows Cancel button  | Cancel button present |
-| cancel button closes modal | Modal dismissal works |
-
-#### Error Handling (1 test)
-
-| Test                                             | What it verifies              |
-| ------------------------------------------------ | ----------------------------- |
-| no critical JavaScript errors during signup flow | Error capture throughout flow |
-
-**Components exercised:** SignupWizard, KeyGenerator, FollowSuggestions
+**Components exercised:** LoginModal, SignupModal, BackupRecoveryBanner
 
 ---
 
@@ -1061,20 +1178,20 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 
 ### Partially Covered
 
-| Feature              | What's Covered                                                              | What's Missing                                     |
-| -------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
-| Account management   | NSEC login, logout, persistence, switching                                  | NIP-07 extension, NIP-49 encrypted keys            |
-| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides | -                                                  |
-| Calendar events      | View, create, delete, edit (full CRUD)                                      | -                                                  |
-| AMB resources        | Full creation flow (page route), file upload, relay publish                 | Edit mode via naddr URL param                      |
-| Profile page         | View profile, notes, edit modal, save flow                                  | Avatar upload (Blossom integration)                |
-| Comments             | Post, reply, delete                                                         | Edit comment                                       |
-| Reactions            | Add, remove                                                                 | Custom emoji support                               |
-| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                | Full search flow (depends on relay NIP-50 support) |
-| Community membership | Join/leave, chat message posting                                            | -                                                  |
-| Community creation   | Both keypair flows, all steps, settings, publish                            | Badge access control                               |
-| Signup wizard        | All 4 steps, key generation UI                                              | Full completion (requires file download handling)  |
-| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                          | -                                                  |
+| Feature              | What's Covered                                                              | What's Missing                                      |
+| -------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
+| Account management   | NSEC login, logout, persistence, switching                                  | NIP-07 extension, NIP-49 encrypted keys             |
+| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides | -                                                   |
+| Calendar events      | View, create, delete, edit (full CRUD)                                      | -                                                   |
+| AMB resources        | Full creation flow (page route), file upload, relay publish                 | Edit mode via naddr URL param                       |
+| Profile page         | View profile, notes, edit modal, save flow                                  | Avatar upload (Blossom integration)                 |
+| Comments             | Post, reply, delete                                                         | Edit comment                                        |
+| Reactions            | Add, remove                                                                 | Custom emoji support                                |
+| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                | Full search flow (depends on relay NIP-50 support)  |
+| Community membership | Join/leave, chat message posting                                            | -                                                   |
+| Community creation   | Both keypair flows, all steps, settings, publish                            | Badge access control                                |
+| Signup (normie path) | 2-step flow happy path, login modal CTA structure, backup banner appearance | Full backup/follow banner flows (covered by Vitest) |
+| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                          | -                                                   |
 
 ---
 
@@ -1113,6 +1230,89 @@ the E2E cases lock in the user-visible surface + owner gating.
 | owner sees AddProfileRow and remove button on their follow set | Combobox placeholder + `data-testid="remove-profile-{pubkey}"` visible on own kind 30000                 |
 | pasting an already-added npub surfaces "Already added" badge   | Typing TEST_AUTHOR_2 npub renders a dropdown row with the `Already added` badge + `aria-disabled="true"` |
 | unauthenticated visitor does not see add/remove UI             | Without auth, combobox and remove button are absent on same naddr                                        |
+
+### layout-consistency.test.js (14 tests)
+
+**Routes:** `/discover`, `/calendar`, `/c/`, `/c/[npub]`
+**Auth required:** Yes (all tests use `authenticatedPage` fixture)
+**Note:** Originally TDD red-phase tests for the unified-layout structural refactor; now passing as acceptance criteria. Subsequent additions guard against regressions in the sticky mobile header, scroll restoration, and the flex-sibling sidebar architecture (no `position: fixed`, context-based ContentNavSidebar mount). Do not delete or skip.
+
+#### Single scroll surface (3 tests — one per route)
+
+| Test                               | What it verifies                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| single scroll surface on /discover | At most 1 element has `overflowY: auto\|scroll` AND `scrollHeight > clientHeight` |
+| single scroll surface on /calendar | Same check on /calendar                                                           |
+| single scroll surface on /c/       | Same check on /c/                                                                 |
+
+#### No footer in DOM (3 tests — one per route)
+
+| Test                                | What it verifies                |
+| ----------------------------------- | ------------------------------- |
+| no `<footer>` rendered on /discover | `locator('footer')` count === 0 |
+| no `<footer>` rendered on /calendar | `locator('footer')` count === 0 |
+| no `<footer>` rendered on /c/       | `locator('footer')` count === 0 |
+
+#### Body non-scrolling (1 test)
+
+| Test                                       | What it verifies                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| document body does not scroll on /discover | `body.scrollHeight <= body.clientHeight + 1` (body is not the scroll surface) |
+
+#### MainContentArea wrapper (1 test)
+
+| Test                                                         | What it verifies                                                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| MainContentArea wrapper does not nest its own scroll surface | `<main>`'s descendant `div.min-h-0.flex-1.transition-all` has `overflow-y: visible` (not auto/scroll) |
+
+#### Sticky mobile community header (1 test)
+
+| Test                                                        | What it verifies                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| mobile community header stays pinned during `<main>` scroll | After scrolling `<main>`, the `[data-testid="mobile-community-header"]` `top` is unchanged (±2px) |
+
+#### Scroll restoration (1 test)
+
+| Test                                                 | What it verifies                                                                                                |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| restores `<main>` scroll position on back navigation | After SPA-navigating away from `/discover` and using browser back, `main.scrollTop` is restored to within ±20px |
+
+#### Flex-sibling sidebar guards (3 tests)
+
+| Test                                                                | What it verifies                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| main has no sidebar margin offset on desktop community route        | `<main>`'s computed `marginLeft === '0px'` — guards against re-introduction of `lg:ml-(--sidebar-*)` margin compensation                                                                                                                                                       |
+| desktop sidebars stay pinned during `<main>` scroll                 | CommunitySidebar + ContentNavSidebar `getBoundingClientRect().top` is unchanged before/after scrolling `<main>` — guards against re-introduction of `position: fixed` (or moving sidebars back inside `<main>`)                                                                |
+| ContentNavSidebar mounts on community routes, unmounts on dashboard | On `/c/`: `[data-testid="dashboard-nav-sidebar"]` visible, `[data-testid="content-nav-sidebar"]` count === 0. On `/c/[npub]`: inverse. Round-trip back to `/c/` restores dashboard sidebar — guards the `setContentNavData` context handoff between root and community layouts |
+
+#### FAB pinned to bottom on short pages (1 test)
+
+| Test                                                                 | What it verifies                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FAB pins to bottom of `<main>` when content is shorter than viewport | On a 1280×2000 viewport at `/c/?view=communities` (short content, no overflow): the sticky-wrapper computed `margin-top: auto`, the wrapper's top is at `<main>`'s bottom (±2px), and the FAB bottom is within 120px of `<main>`'s bottom. Guards against removal of `mt-auto` from the floating-buttons wrapper, which causes sticky to degrade to static and the FAB to float halfway up the viewport. |
+
+**Components exercised:** Root layout, AppShell, CommunitySidebar, ContentNavSidebar, DashboardNavSidebar, MainContentArea wrapper, mobile community header, GlobalFAB, page-level wrappers on discover/calendar/community routes.
+
+---
+
+### cache-warm-boot.test.js (1 test)
+
+**Route:** `/calendar`
+**Auth required:** No
+**Note:** Locks in Phase 1 of the persistent event cache. The first visit
+populates IndexedDB via the cache write filter; the second load aborts
+all `wss://` / `ws://` upgrades and reloads to prove cached content
+renders without any relay traffic.
+
+| Test                                          | What it verifies                                                                       |
+| --------------------------------------------- | -------------------------------------------------------------------------------------- |
+| calendar page renders from IDB on warm reload | Cards visible after `/calendar` first-load, then still visible after WS-blocked reload |
+
+- **Why E2E:** requires real browser IDB, real WebSocket intercept, and a full page reload — can't be verified at unit level.
+
+**Components exercised:** EventStore + nostr-idb cache pipeline, `cacheRequest` loader integration, CalendarEventsList rendering from cache.
+
+---
 
 ## Maintenance Guidelines
 

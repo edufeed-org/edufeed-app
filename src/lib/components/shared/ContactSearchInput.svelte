@@ -10,6 +10,7 @@
 <script>
   import { nip19 } from 'nostr-tools';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
+  import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import * as m from '$lib/paraglide/messages';
   import ImageWithFallback from './ImageWithFallback.svelte';
 
@@ -45,29 +46,6 @@
     excludedLabel = '',
     addPubkeyLabel = ''
   } = $props();
-
-  /**
-   * Accept npub1… or 64-char hex, return lowercase hex.
-   * Inlined (not imported from nostrUtils) because that module transitively
-   * pulls loaders/relay-helper → app-settings which needs window.matchMedia,
-   * which is unavailable in the jsdom test bundle.
-   * @param {string} input
-   * @returns {string | null}
-   */
-  function normalizePubkey(input) {
-    if (!input || typeof input !== 'string') return null;
-    const trimmed = input.trim();
-    if (/^[0-9a-f]{64}$/i.test(trimmed)) return trimmed.toLowerCase();
-    if (trimmed.startsWith('npub1')) {
-      try {
-        const decoded = nip19.decode(trimmed);
-        if (decoded.type === 'npub') return /** @type {string} */ (decoded.data);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
 
   /**
    * @typedef {{ kind: 'contact', contact: import('$lib/stores/contacts.svelte.js').EnrichedContact, pubkey: string, excluded: boolean }} ContactNavItem

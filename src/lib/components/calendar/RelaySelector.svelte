@@ -1,277 +1,185 @@
 <!--
   RelaySelector Component
-  Allows users to filter calendar events by selecting specific Nostr relays
+  Flat panel for selecting Nostr relays to filter calendar events.
+  Auto-applies changes on toggle/add/remove — no explicit Apply button.
+  Designed to be embedded inside AdvancedFiltersDropdown (desktop) or
+  the mobile drawer's "Advanced" section.
 -->
 
 <script>
   import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { FilterIcon, CloseIcon, PlusIcon, RelayIcon } from '../icons';
+  import { CloseIcon, PlusIcon, RelayIcon } from '../icons';
   import * as m from '$lib/paraglide/messages';
 
-  // Props
-  let { onApplyFilters = /** @type {(relays: string[]) => void} */ (() => {}) } = $props();
-
-  // Local state
-  let isExpanded = $state(false);
-  let customRelayInput = $state('');
-  let selectedRelays = $state(/** @type {string[]} */ ([]));
-  let customRelays = $state(/** @type {string[]} */ ([]));
-
-  // Get default relays from config
-  /** @type {string[]} */
-  const defaultRelays = [
-    ...(runtimeConfig.appRelays?.calendar || []),
-    ...(runtimeConfig.fallbackRelays || [])
-  ];
-
-  /**
-   * Toggle relay selection
-   * @param {string} relay
+  /** @typedef {Object} Props
+   *  @property {(relays: string[]) => void} [onApplyFilters]
    */
-  function toggleRelay(relay) {
-    if (selectedRelays.includes(relay)) {
-      selectedRelays = selectedRelays.filter((r) => r !== relay);
-    } else {
-      selectedRelays = [...selectedRelays, relay];
-    }
+
+  /** @type {Props} */
+  let { onApplyFilters = (/** @type {string[]} */ _r) => {} } = $props();
+
+  let customRelayInput = $state('');
+  let customRelays = $state(/** @type {string[]} */ ([]));
+  let error = $state(/** @type {string | null} */ (null));
+
+  /** @type {string[]} */
+  const defaultRelays = Array.from(
+    new Set([...(runtimeConfig.appRelays?.calendar || []), ...(runtimeConfig.fallbackRelays || [])])
+  );
+
+  let selectedRelays = $derived(calendarFilters.selectedRelays);
+
+  function publish(/** @type {string[]} */ next) {
+    calendarFilters.setSelectedRelays(next);
+    onApplyFilters(next);
   }
 
-  /**
-   * Validate relay URL format
-   * @param {string} url
-   * @returns {boolean}
-   */
-  function isValidRelayUrl(url) {
+  function toggleRelay(/** @type {string} */ relay) {
+    const next = selectedRelays.includes(relay)
+      ? selectedRelays.filter((r) => r !== relay)
+      : [...selectedRelays, relay];
+    publish(next);
+  }
+
+  function isValidRelayUrl(/** @type {string} */ url) {
     const trimmed = url.trim();
     return trimmed.startsWith('wss://') || trimmed.startsWith('ws://');
   }
 
-  /**
-   * Add custom relay to the list
-   */
   function addCustomRelay() {
+    error = null;
     const trimmed = customRelayInput.trim();
-
     if (!trimmed) return;
 
     if (!isValidRelayUrl(trimmed)) {
-      alert(m.relay_filter_url_invalid());
+      error = m.relay_filter_url_invalid();
       return;
     }
 
     // Auto-upgrade ws:// to wss://
-    let relayUrl = trimmed;
-    if (trimmed.startsWith('ws://')) {
-      relayUrl = trimmed.replace('ws://', 'wss://');
-      console.log('⚠️ Auto-upgraded ws:// to wss://:', relayUrl);
-    }
+    const relayUrl = trimmed.startsWith('ws://') ? trimmed.replace('ws://', 'wss://') : trimmed;
 
-    // Check if already exists in default or custom relays
     if (defaultRelays.includes(relayUrl) || customRelays.includes(relayUrl)) {
-      alert(m.relay_filter_already_exists());
+      error = m.relay_filter_already_exists();
       return;
     }
 
     customRelays = [...customRelays, relayUrl];
-    selectedRelays = [...selectedRelays, relayUrl];
     customRelayInput = '';
+    publish([...selectedRelays, relayUrl]);
   }
 
-  /**
-   * Remove custom relay
-   * @param {string} relay
-   */
-  function removeCustomRelay(relay) {
+  function removeCustomRelay(/** @type {string} */ relay) {
     customRelays = customRelays.filter((r) => r !== relay);
-    selectedRelays = selectedRelays.filter((r) => r !== relay);
+    publish(selectedRelays.filter((r) => r !== relay));
   }
 
-  /**
-   * Apply relay filters
-   */
-  function applyFilters() {
-    console.log('📡 Applying relay filters:', selectedRelays);
-    calendarFilters.setSelectedRelays(selectedRelays);
-    onApplyFilters(selectedRelays);
-  }
-
-  /**
-   * Reset selection (clear checkboxes but don't apply)
-   */
-  function resetSelection() {
-    console.log('📡 Resetting relay selection');
-    selectedRelays = [];
-    customRelayInput = '';
-  }
-
-  /**
-   * Clear all filters including custom relays
-   */
-  function clearAll() {
-    console.log('📡 Clearing all relay filters');
-    selectedRelays = [];
+  function clearAllRelays() {
     customRelays = [];
     customRelayInput = '';
-    calendarFilters.clearSelectedRelays();
-    onApplyFilters([]);
+    error = null;
+    publish([]);
   }
-
-  /**
-   * Toggle expanded state
-   */
-  function toggleExpanded() {
-    isExpanded = !isExpanded;
-  }
-
-  // Derived state
-  let hasActiveFilters = $derived(selectedRelays.length > 0);
-  let _allRelays = $derived([...defaultRelays, ...customRelays]);
-  let applyButtonText = $derived(
-    selectedRelays.length > 0
-      ? `${m.relay_filter_apply()} (${selectedRelays.length})`
-      : m.relay_filter_show_all()
-  );
 </script>
 
-<div class="border-b border-base-300 bg-base-100">
-  <!-- Header - Always visible -->
-  <button
-    class="flex w-full items-center justify-between px-6 py-3 text-left transition-colors hover:bg-base-200"
-    onclick={toggleExpanded}
-    aria-expanded={isExpanded}
-  >
-    <div class="flex items-center gap-3">
-      <FilterIcon class_="h-5 w-5 text-base-content/70" />
-      <span class="font-medium text-base-content">{m.relay_filter_title()}</span>
-      {#if hasActiveFilters}
-        <span class="badge badge-sm badge-primary">{selectedRelays.length}</span>
-      {/if}
+<div class="space-y-3" data-testid="relay-selector-panel">
+  <!-- Popular Relays -->
+  <div>
+    <h4 class="mb-2 text-xs font-medium text-base-content/60 uppercase">
+      {m.relay_filter_popular()}
+    </h4>
+    <div class="space-y-1">
+      {#each defaultRelays as relay (relay)}
+        <label class="flex cursor-pointer items-center gap-2 rounded p-1.5 hover:bg-base-200">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-xs checkbox-primary"
+            checked={selectedRelays.includes(relay)}
+            onchange={() => toggleRelay(relay)}
+          />
+          <RelayIcon class_="h-3.5 w-3.5 text-base-content/50" />
+          <span class="flex-1 truncate text-sm">{relay.replace('wss://', '')}</span>
+        </label>
+      {/each}
     </div>
-    <svg
-      class="h-5 w-5 text-base-content/50 transition-transform"
-      class:rotate-180={isExpanded}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
+  </div>
 
-  <!-- Expandable content -->
-  {#if isExpanded}
-    <div class="bg-base-50 border-t border-base-300 px-6 py-4">
-      <!-- Popular Relays Section -->
-      <div class="mb-4">
-        <h4 class="mb-2 text-sm font-medium text-base-content/70">{m.relay_filter_popular()}</h4>
-        <div class="space-y-2">
-          {#each defaultRelays as relay (relay)}
-            <label class="flex cursor-pointer items-center gap-3 rounded-lg p-2 hover:bg-base-200">
+  <!-- Custom Relay Input -->
+  <div>
+    <h4 class="mb-2 text-xs font-medium text-base-content/60 uppercase">
+      {m.relay_filter_custom()}
+    </h4>
+    <div class="flex gap-1">
+      <input
+        type="text"
+        class="input-bordered input input-xs flex-1"
+        placeholder={m.relay_filter_custom_placeholder()}
+        bind:value={customRelayInput}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustomRelay();
+          }
+        }}
+      />
+      <button
+        type="button"
+        class="btn gap-1 btn-xs btn-primary"
+        onclick={addCustomRelay}
+        disabled={!customRelayInput.trim()}
+      >
+        <PlusIcon class_="h-3 w-3" />
+        {m.relay_filter_add()}
+      </button>
+    </div>
+    {#if error}
+      <p class="mt-1 text-xs text-warning">{error}</p>
+    {/if}
+  </div>
+
+  <!-- Custom Relays List -->
+  {#if customRelays.length > 0}
+    <div>
+      <h4 class="mb-2 text-xs font-medium text-base-content/60 uppercase">
+        {m.relay_filter_custom_relays()}
+      </h4>
+      <div class="space-y-1">
+        {#each customRelays as relay (relay)}
+          <div class="flex items-center gap-2 rounded bg-base-200 px-2 py-1 text-sm">
+            <label class="flex flex-1 cursor-pointer items-center gap-2 truncate">
               <input
                 type="checkbox"
-                class="checkbox checkbox-sm checkbox-primary"
+                class="checkbox checkbox-xs checkbox-primary"
                 checked={selectedRelays.includes(relay)}
                 onchange={() => toggleRelay(relay)}
               />
-              <div class="flex flex-1 items-center gap-2">
-                <RelayIcon class_="h-4 w-4 text-base-content/50" />
-                <span class="text-sm text-base-content">{relay.replace('wss://', '')}</span>
-              </div>
+              <RelayIcon class_="h-3.5 w-3.5 text-base-content/50" />
+              <span class="truncate">{relay.replace('wss://', '')}</span>
             </label>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Custom Relay Section -->
-      <div class="mb-4">
-        <h4 class="mb-2 text-sm font-medium text-base-content/70">{m.relay_filter_custom()}</h4>
-        <div class="flex gap-2">
-          <input
-            type="text"
-            class="input-bordered input input-sm flex-1"
-            placeholder={m.relay_filter_custom_placeholder()}
-            bind:value={customRelayInput}
-            onkeydown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addCustomRelay();
-              }
-            }}
-          />
-          <button
-            class="btn gap-1 btn-sm btn-primary"
-            onclick={addCustomRelay}
-            disabled={!customRelayInput.trim()}
-          >
-            <PlusIcon class_="h-4 w-4" />
-            {m.relay_filter_add()}
-          </button>
-        </div>
-      </div>
-
-      <!-- Custom Relays List -->
-      {#if customRelays.length > 0}
-        <div class="mb-4">
-          <h4 class="mb-2 text-sm font-medium text-base-content/70">
-            {m.relay_filter_custom_relays()}
-          </h4>
-          <div class="space-y-2">
-            {#each customRelays as relay (relay)}
-              <div
-                class="flex items-center justify-between rounded-lg bg-base-200 px-3 py-2 text-sm"
-              >
-                <div class="flex items-center gap-2">
-                  <RelayIcon class_="h-4 w-4 text-base-content/50" />
-                  <span>{relay.replace('wss://', '')}</span>
-                </div>
-                <button
-                  class="btn btn-ghost btn-xs"
-                  onclick={() => removeCustomRelay(relay)}
-                  title={m.relay_filter_remove()}
-                >
-                  <CloseIcon class_="h-4 w-4" />
-                </button>
-              </div>
-            {/each}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onclick={() => removeCustomRelay(relay)}
+              title={m.relay_filter_remove()}
+              aria-label={m.relay_filter_remove()}
+            >
+              <CloseIcon class_="h-3 w-3" />
+            </button>
           </div>
-        </div>
-      {/if}
-
-      <!-- Action Buttons -->
-      <div class="flex gap-2">
-        <button class="btn flex-1 btn-sm btn-primary" onclick={applyFilters}>
-          {applyButtonText}
-        </button>
-        <button
-          class="btn btn-ghost btn-sm"
-          onclick={resetSelection}
-          disabled={selectedRelays.length === 0}
-          title={m.relay_filter_clear_selection()}
-        >
-          {m.relay_filter_reset()}
-        </button>
-        {#if customRelays.length > 0}
-          <button
-            class="btn btn-ghost btn-sm btn-error"
-            onclick={clearAll}
-            title={m.relay_filter_clear_custom()}
-          >
-            {m.relay_filter_clear_all()}
-          </button>
-        {/if}
+        {/each}
       </div>
-
-      <!-- Info text -->
-      <p class="mt-3 text-xs text-base-content/60">
-        {#if calendarFilters.selectedRelays.length > 0}
-          ✓ {m.relay_filter_showing_selected({ count: calendarFilters.selectedRelays.length })}
-        {:else if selectedRelays.length > 0}
-          {m.relay_filter_selection_ready()}
-        {:else}
-          ✓ {m.relay_filter_showing_all()}
-        {/if}
-      </p>
     </div>
+  {/if}
+
+  {#if selectedRelays.length > 0}
+    <button
+      type="button"
+      class="btn w-full btn-ghost btn-xs"
+      onclick={clearAllRelays}
+      data-testid="relay-selector-clear"
+    >
+      {m.relay_filter_clear_all()} ({selectedRelays.length})
+    </button>
   {/if}
 </div>

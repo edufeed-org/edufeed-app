@@ -12,6 +12,7 @@
     decodeFormNaddr,
     buildUserResponseFilter
   } from '$lib/helpers/forms.js';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -115,7 +116,7 @@
       } else {
         // Encrypt response tags with NIP-44
         const plaintext = JSON.stringify(responseTags);
-        content = await manager.active.signer.nip44Encrypt(creatorPubkey, plaintext);
+        content = await manager.active.signer.nip44.encrypt(creatorPubkey, plaintext);
         tags.push(['encrypted']);
       }
 
@@ -150,7 +151,7 @@
     <div class="alert alert-error">{error}</div>
   {:else if !manager.active}
     <div class="alert alert-warning">{m.forms_submit_login_required()}</div>
-  {:else if formEvent && !formEvent.tags.some((t) => t[0] === 'public') && !manager.active?.signer?.nip44Encrypt}
+  {:else if formEvent && !formEvent.tags.some((t) => t[0] === 'public') && !hasNip44(manager.active?.signer)}
     <div class="alert alert-warning">
       {m.forms_submit_no_encryption()}
     </div>

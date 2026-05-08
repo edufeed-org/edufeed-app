@@ -19,6 +19,7 @@
   const FIELD_TYPES = [
     'text',
     'textarea',
+    'text-array',
     'number',
     'email',
     'url',

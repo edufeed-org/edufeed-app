@@ -1,125 +1,78 @@
 /**
  * Community Content Helper
- * Utilities for filtering content by community associations
+ * Utilities for community-related content shaping on the discover page.
  *
- * Content can be associated with communities through:
- * 1. Direct #h tag on the content event
- * 2. Targeted publications (kind 30222) referencing the content
+ * Note: post-filtering by community has been replaced by sourcing content
+ * directly from CommunityActivityModel when a community filter is active.
+ * `mapCommunityItemsToRawItems` shapes that model's output for the discover
+ * pipeline.
  */
-import { getTagValue } from 'applesauce-core/helpers';
+import { formatAMBResource } from '$lib/helpers/educational/index.js';
+import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
 
 /**
- * Get the addressable reference for an event (pure function, no caching)
- * This replaces applesauce-core's getReplaceableAddress which uses internal caching
- * that causes Svelte 5 state_unsafe_mutation errors when called inside $derived()
- * @param {any} event - Nostr event
- * @returns {string | undefined} Address in format "kind:pubkey:d-tag" or undefined
+ * Reattach repost-provenance fields the per-kind transforms drop.
+ * @param {any} transformed
+ * @param {any} source
+ * @returns {any}
  */
-function getAddressableReference(event) {
-  // Addressable/parameterized replaceable events have kind 30000-39999
-  if (!event || event.kind < 30000 || event.kind >= 40000) return undefined;
-  const dTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
-  return `${event.kind}:${event.pubkey}:${dTag}`;
+function preserveRepostMeta(transformed, source) {
+  if (source._sharedBy !== undefined) transformed._sharedBy = source._sharedBy;
+  if (source._allSharers !== undefined) transformed._allSharers = source._allSharers;
+  return transformed;
 }
 
 /**
- * Build a mapping of content IDs to community pubkeys from targeted publications
- * @param {any[]} targetedPubs - Array of kind 30222 events
- * @returns {Map<string, string[]>} Map of content ID/address → array of community pubkeys
+ * Map an event to a discover rawItems entry, applying per-kind transforms.
+ * @param {any} event
+ * @returns {{type: string, data: any} | null}
  */
-export function buildContentToCommunityMap(targetedPubs) {
-  const contentToCommunities = new Map();
-
-  for (const pub of targetedPubs || []) {
-    const communityPubkey = getTagValue(pub, 'p');
-    const eTag = getTagValue(pub, 'e');
-    const aTag = getTagValue(pub, 'a');
-
-    if (!communityPubkey) continue;
-
-    // Index by event ID - using immutable array operations (Svelte 5 compatible)
-    if (eTag) {
-      const existing = contentToCommunities.get(eTag) || [];
-      if (!existing.includes(communityPubkey)) {
-        contentToCommunities.set(eTag, [...existing, communityPubkey]);
-      }
-    }
-
-    // Index by addressable reference - using immutable array operations
-    if (aTag) {
-      const existing = contentToCommunities.get(aTag) || [];
-      if (!existing.includes(communityPubkey)) {
-        contentToCommunities.set(aTag, [...existing, communityPubkey]);
-      }
-    }
+function mapEventToRawItem(event) {
+  switch (event.kind) {
+    case 30142:
+      return { type: 'amb', data: preserveRepostMeta(formatAMBResource(event), event) };
+    case 31922:
+    case 31923:
+      return { type: 'event', data: preserveRepostMeta(getCalendarEventMetadata(event), event) };
+    case 30023:
+      return { type: 'article', data: event };
+    case 30301:
+      return { type: 'board', data: event };
+    default:
+      return null;
   }
-
-  return contentToCommunities;
 }
 
-/**
- * Get all community pubkeys that a content event is associated with
- * Checks both direct #h tags and targeted publications
- * @param {any} event - The content event (article, AMB resource, calendar event, etc.)
- * @param {Map<string, string[]>} contentToCommunityMap - Map from buildContentToCommunityMap
- * @returns {string[]} Array of community pubkeys
- */
-export function getContentCommunities(event, contentToCommunityMap) {
-  // Handle transformed events (like CalendarEvent) that store raw event in originalEvent
-  const rawEvent = event.originalEvent || event;
-
-  // Get direct #h tag
-  const hTag = getTagValue(rawEvent, 'h');
-
-  // Get from targeted publications by event ID
-  const byId = contentToCommunityMap.get(rawEvent.id);
-
-  // Get from targeted publications by addressable reference (using pure function to avoid Svelte 5 mutation errors)
-  const address = getAddressableReference(rawEvent);
-  const byAddress = address ? contentToCommunityMap.get(address) : undefined;
-
-  // Build array without mutations (Svelte 5 compatible), then dedupe
-  const communities = /** @type {string[]} */ (
-    [hTag, ...(byId || []), ...(byAddress || [])].filter(Boolean)
-  );
-
-  // Return unique values
-  return [...new Set(communities)];
-}
+/** Kinds shown for each discover content type. */
+const KINDS_BY_CONTENT_TYPE = {
+  all: new Set([30142, 31922, 31923, 30023, 30301]),
+  learning: new Set([30142]),
+  events: new Set([31922, 31923]),
+  articles: new Set([30023]),
+  boards: new Set([30301])
+};
 
 /**
- * Filter content items by community
- * @param {Array<{type: string, data: any}>} items - Combined content items
- * @param {string | null} communityFilter - Community pubkey, 'joined', or null for all
- * @param {string[]} joinedCommunityPubkeys - Array of joined community pubkeys
- * @param {Map<string, string[]>} contentToCommunityMap - Map from buildContentToCommunityMap
- * @returns {Array<{type: string, data: any}>} Filtered content items
+ * Convert CommunityActivityModel output into discover-page rawItems
+ * (`{type, data}` entries with per-kind transforms applied), filtered by
+ * the active content type.
+ *
+ * Per-kind transforms must be reapplied here because CommunityActivityModel
+ * is constructed without a transform (it spans multiple kinds).
+ *
+ * @param {any[]} items - Output of CommunityActivityModel for one or more communities
+ * @param {'all'|'events'|'learning'|'articles'|'boards'} contentType
+ * @returns {Array<{type: string, data: any}>}
  */
-export function filterContentByCommunity(
-  items,
-  communityFilter,
-  joinedCommunityPubkeys,
-  contentToCommunityMap
-) {
-  // No filter - show all
-  if (!communityFilter) {
-    return items;
+export function mapCommunityItemsToRawItems(items, contentType) {
+  const allowedKinds = KINDS_BY_CONTENT_TYPE[contentType] || KINDS_BY_CONTENT_TYPE.all;
+  const out = [];
+  for (const event of items || []) {
+    if (!allowedKinds.has(event.kind)) continue;
+    const mapped = mapEventToRawItem(event);
+    if (mapped) out.push(mapped);
   }
-
-  // "joined" filter - show content from any joined community
-  if (communityFilter === 'joined') {
-    const joinedSet = new Set(joinedCommunityPubkeys);
-    return items.filter((item) => {
-      const communities = getContentCommunities(item.data, contentToCommunityMap);
-      return communities.some((pubkey) => joinedSet.has(pubkey));
-    });
-  }
-
-  // Specific community filter
-  return items.filter((item) => {
-    const communities = getContentCommunities(item.data, contentToCommunityMap);
-    return communities.includes(communityFilter);
-  });
+  return out;
 }
 
 /**

@@ -9,8 +9,14 @@
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {any} */
-  let { event, onClose } = $props();
+  /**
+   * @type {{
+   *   event?: any,
+   *   onClose: () => void,
+   *   onPick?: (emoji: string | { shortcode: string, url: string }) => void
+   * }}
+   */
+  let { event, onClose, onPick } = $props();
 
   const getUserEmojiSets = useUserEmojiSets();
   let customEmojiSets = $derived(getUserEmojiSets());
@@ -19,7 +25,11 @@
    * @param {string} emoji
    */
   function selectEmoji(emoji) {
-    reactionsStore.react(event, emoji);
+    if (onPick) {
+      onPick(emoji);
+    } else {
+      reactionsStore.react(event, emoji);
+    }
     onClose();
   }
 
@@ -27,7 +37,11 @@
    * @param {{ shortcode: string, url: string }} emoji
    */
   function selectCustomEmoji(emoji) {
-    reactionsStore.react(event, emoji);
+    if (onPick) {
+      onPick(emoji);
+    } else {
+      reactionsStore.react(event, emoji);
+    }
     onClose();
   }
 

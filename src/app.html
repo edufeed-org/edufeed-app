@@ -34,11 +34,11 @@
 
     <!-- Hide app content until Svelte sets .app-ready, show branded loader instead -->
     <style>
-      body:not(.app-ready) > div[style="display: contents"] {
+      body:not(.app-ready) > div[style='display: contents'] {
         opacity: 0;
         pointer-events: none;
       }
-      body.app-ready > div[style="display: contents"] {
+      body.app-ready > div[style='display: contents'] {
         opacity: 1;
         transition: opacity 100ms ease-in;
       }

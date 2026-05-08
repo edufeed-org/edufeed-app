@@ -152,28 +152,30 @@ let activeUserPubkey = '';
 let curatedCacheVersion = $state(0);
 
 /**
+ * Schedule a version bump via queueMicrotask.
+ *
+ * Why deferred: many bump call sites are reached synchronously from inside Svelte
+ * `$effect` bodies (e.g. the layout's curated-init effect) or `$derived` evaluations
+ * (e.g. discover page). Writing reactive `$state` synchronously inside that scope
+ * causes Svelte to re-run the surrounding effect on the same tick, producing
+ * `effect_update_depth_exceeded` in production builds. Deferring the write to a
+ * microtask breaks that read-then-write chain — the surrounding effect completes,
+ * Svelte flushes, and only then does the version increment notify dependent
+ * deriveds/effects on the next microtask.
+ */
+function bumpVersion() {
+  queueMicrotask(() => {
+    curatedCacheVersion++;
+  });
+}
+
+/**
  * Get the current cache version. Read this inside $derived to establish
  * a reactive dependency on cache mutations.
  * @returns {number}
  */
 export function getCuratedCacheVersion() {
   return curatedCacheVersion;
-}
-
-/**
- * Bump the reactive cache version, deferred to a microtask.
- *
- * Used only on the synchronous cache hot-path of `initializeAllCuratedAuthors`
- * / `initializeAllWotAuthors`, which run inside the root layout's `$effect`.
- * Without deferral the synchronous `$state` write happens during effect flush
- * and trips Svelte's `effect_update_depth_exceeded` guard. Other call sites
- * already happen after an `await` or from rxjs subscriber callbacks, so they
- * use sync `curatedCacheVersion++` directly.
- */
-function bumpCuratedCacheVersion() {
-  queueMicrotask(() => {
-    curatedCacheVersion = curatedCacheVersion + 1;
-  });
 }
 
 /**
@@ -204,7 +206,7 @@ function ensureDirectPubkeysInitialized(category) {
     const parsed = parseDirectPubkeys(direct);
     if (parsed.length > 0 && !curatedAuthorsCache.has(category)) {
       curatedAuthorsCache.set(category, parsed);
-      curatedCacheVersion++;
+      bumpVersion();
     }
   }
 }
@@ -446,7 +448,7 @@ export async function initializeCuratedAuthors(category) {
 
     if (allPubkeys.length > 0) {
       curatedAuthorsCache.set(category, allPubkeys);
-      curatedCacheVersion++;
+      bumpVersion();
     } else {
       console.warn(`Curated authors [${category}]: No pubkeys found, curated mode inactive`);
     }
@@ -488,7 +490,7 @@ export async function initializeAllCuratedAuthors() {
         followSetsInitialized.add(cat);
       }
     }
-    bumpCuratedCacheVersion();
+    bumpVersion();
     // Background refresh — don't await, just fire
     _refreshAllCuratedAuthors();
     return;
@@ -562,7 +564,7 @@ export async function initializeWotAuthors(category) {
 
     if (allPubkeys.length > 0) {
       wotAuthorsCache.set(category, allPubkeys);
-      curatedCacheVersion++;
+      bumpVersion();
     }
   } catch (err) {
     console.error(`WoT authors [${category}]: Initialization failed`, err);
@@ -584,7 +586,7 @@ export async function initializeAllWotAuthors() {
         wotInitialized.add(cat);
       }
     }
-    bumpCuratedCacheVersion();
+    bumpVersion();
     // Background refresh
     _refreshAllWotAuthors();
     return;
@@ -611,7 +613,7 @@ async function _refreshAllWotAuthors() {
  */
 export function setUserFollows(pubkeys) {
   userFollowPubkeys = pubkeys;
-  curatedCacheVersion++;
+  bumpVersion();
 }
 
 /**
@@ -619,7 +621,7 @@ export function setUserFollows(pubkeys) {
  */
 export function clearUserFollows() {
   userFollowPubkeys = [];
-  curatedCacheVersion++;
+  bumpVersion();
 }
 
 /**
@@ -629,7 +631,7 @@ export function clearUserFollows() {
  */
 export function setActiveUserPubkey(pubkey) {
   activeUserPubkey = pubkey;
-  curatedCacheVersion++;
+  bumpVersion();
 }
 
 /**
@@ -637,7 +639,7 @@ export function setActiveUserPubkey(pubkey) {
  */
 export function clearActiveUserPubkey() {
   activeUserPubkey = '';
-  curatedCacheVersion++;
+  bumpVersion();
 }
 
 /**
@@ -651,7 +653,7 @@ export function _resetForTesting(category) {
     followSetsInitialized.delete(category);
     wotAuthorsCache.delete(category);
     wotInitialized.delete(category);
-    curatedCacheVersion++;
+    bumpVersion();
   } else {
     curatedAuthorsCache.clear();
     directPubkeysInitialized.clear();

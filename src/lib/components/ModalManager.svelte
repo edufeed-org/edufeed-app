@@ -15,6 +15,7 @@
   import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
   import ShareByNaddrModal from './shared/ShareByNaddrModal.svelte';
   import CreateRoomModal from './meet/CreateRoomModal.svelte';
+  import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -45,6 +46,7 @@
   const addBookmarkModalId = 'add-bookmark-modal';
   const shareByNaddrModalId = 'share-by-naddr-modal';
   const createRoomModalId = 'create-room-modal';
+  const recoveryDownloadModalId = 'recovery-download-modal';
 
   /**
    * Reactive effect to handle modal opening/closing based on store state
@@ -115,6 +117,12 @@
       );
       if (createRoomModal && createRoomModal.open) {
         createRoomModal.close();
+      }
+      const recoveryDownloadModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(recoveryDownloadModalId)
+      );
+      if (recoveryDownloadModal && recoveryDownloadModal.open) {
+        recoveryDownloadModal.close();
       }
     } else if (currentModal === 'login') {
       // Open login modal
@@ -194,6 +202,13 @@
       if (createRoomModal && !createRoomModal.open) {
         createRoomModal.showModal();
       }
+    } else if (currentModal === 'recovery-download') {
+      const recoveryDownloadModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(recoveryDownloadModalId)
+      );
+      if (recoveryDownloadModal && !recoveryDownloadModal.open) {
+        recoveryDownloadModal.showModal();
+      }
     }
   });
 
@@ -265,4 +280,6 @@
   <ShareByNaddrModal modalId={shareByNaddrModalId} />
 {:else if modal.activeModal === 'createRoom'}
   <CreateRoomModal modalId={createRoomModalId} />
+{:else if modal.activeModal === 'recovery-download'}
+  <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
 {/if}

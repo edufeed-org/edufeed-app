@@ -16,8 +16,7 @@
     ChevronRightIcon,
     CalendarIcon,
     MenuIcon,
-    LocationIcon,
-    FilterIcon
+    LocationIcon
   } from '../icons';
 
   /**
@@ -31,12 +30,12 @@
     viewMode,
     presentationViewMode = 'calendar',
     communityMode = false,
+    eventCount = 0,
     onPrevious = /** @type {() => void} */ (() => {}),
     onNext = /** @type {() => void} */ (() => {}),
     onToday = /** @type {() => void} */ (() => {}),
     onViewModeChange: _onViewModeChange,
-    onPresentationViewModeChange: _onPresentationViewModeChange = () => {},
-    onFilterButtonClick = /** @type {(e?: any) => void} */ (() => {})
+    onPresentationViewModeChange: _onPresentationViewModeChange = () => {}
   } = $props();
 
   // Format current date for display based on view mode
@@ -53,7 +52,7 @@
       case 'all':
         return m.calendar_navigation_all_events();
       case 'month':
-        return formatCalendarDate(date, 'long');
+        return formatCalendarDate(date, 'month');
       case 'week': {
         // Show week range
         const startOfWeek = new SvelteDate(date);
@@ -123,36 +122,20 @@
    * @param {PresentationViewMode} mode
    */
   function handlePresentationViewModeClick(mode) {
-    console.log('🔄 handlePresentationViewModeClick called with mode:', mode);
-
-    // Update URL with new view mode - let useCalendarUrlSync handle state updates
-    updateQueryParams($page.url.searchParams, {
-      view: mode === 'calendar' ? null : mode // Don't include 'calendar' as it's the default
-    });
-
-    // NOTE: Don't call _onPresentationViewModeChange here - let URL sync effect handle it
-    // This prevents race conditions between async URL updates and sync callbacks
-    console.log('✅ URL updated, waiting for sync effect');
+    // Always include `view` in the URL. The loader's URL-sync handler defaults
+    // to 'list' when absent, so we must set it explicitly for every mode —
+    // otherwise 'calendar' (grid) clicks would be swallowed as the default.
+    // NOTE: Don't call _onPresentationViewModeChange here — let the URL sync
+    // effect handle it to avoid races between async URL updates and sync callbacks.
+    updateQueryParams($page.url.searchParams, { view: mode });
   }
 </script>
 
-<div class="border-b border-base-300 bg-base-100">
+<div>
   <!-- Mobile Layout (< lg) -->
   <div class="flex flex-col gap-3 p-3 lg:hidden">
-    <!-- Row 1: Filter button, Date navigation and current date -->
+    <!-- Row 1: Date navigation and current date -->
     <div class="flex items-center gap-2">
-      <!-- Mobile Filter Button (hidden in community mode) -->
-      {#if !communityMode}
-        <button
-          class="btn btn-square"
-          onclick={onFilterButtonClick}
-          title={m.calendar_navigation_open_filters()}
-          aria-label={m.calendar_navigation_open_filters()}
-        >
-          <FilterIcon class_="h-5 w-5" />
-        </button>
-      {/if}
-
       <!-- Date Navigation - Hidden in 'all' mode -->
       {#if viewMode !== 'all'}
         <div class="flex flex-1 items-center justify-between gap-2">
@@ -269,57 +252,44 @@
   </div>
 
   <!-- Desktop Layout (>= lg) -->
-  <div class="hidden items-center justify-between gap-4 p-4 lg:flex">
-    <!-- Mobile Filter Button (visible only on mobile, hidden in community mode) -->
-    {#if !communityMode}
-      <button
-        class="btn btn-square btn-sm lg:hidden"
-        onclick={onFilterButtonClick}
-        title={m.calendar_navigation_open_filters()}
-        aria-label={m.calendar_navigation_open_filters()}
-      >
-        <FilterIcon class_="h-5 w-5" />
-      </button>
-    {/if}
-
+  <div class="hidden flex-wrap items-center gap-2 p-3 lg:flex">
     <!-- Date Navigation - Hidden in 'all' mode -->
     {#if viewMode !== 'all'}
-      <div class="flex items-center gap-4">
-        <button
-          class="btn btn-outline btn-sm"
-          onclick={handlePreviousClick}
-          aria-label={m.calendar_navigation_previous({ viewMode })}
-        >
-          <ChevronLeftIcon class_="w-5 h-5" />
-        </button>
+      <div class="flex items-center gap-2">
+        <div class="join">
+          <button
+            class="btn join-item btn-sm"
+            onclick={handlePreviousClick}
+            aria-label={m.calendar_navigation_previous({ viewMode })}
+          >
+            <ChevronLeftIcon class_="w-4 h-4" />
+          </button>
+          <button class="btn join-item btn-sm btn-primary" onclick={handleTodayClick}
+            >{m.common_today()}</button
+          >
+          <button
+            class="btn join-item btn-sm"
+            onclick={handleNextClick}
+            aria-label={m.calendar_navigation_next({ viewMode })}
+          >
+            <ChevronRightIcon class_="w-4 h-4" />
+          </button>
+        </div>
 
-        <!-- Today Button -->
-        <button class="btn btn-sm btn-primary" onclick={handleTodayClick}>{m.common_today()}</button
-        >
-
-        <button
-          class="btn btn-outline btn-sm"
-          onclick={handleNextClick}
-          aria-label={m.calendar_navigation_next({ viewMode })}
-        >
-          <ChevronRightIcon class_="w-5 h-5" />
-        </button>
-
-        <div class="min-w-0 text-lg font-semibold whitespace-nowrap text-base-content">
-          {displayDate}
+        <div class="min-w-0 text-base font-semibold whitespace-nowrap text-base-content">
+          {displayDate} <span class="font-normal text-base-content/60">· {eventCount} Events</span>
         </div>
       </div>
     {:else}
       <!-- In 'all' mode, show a simple heading instead -->
-      <div class="flex items-center gap-4">
-        <div class="text-lg font-semibold text-base-content">
-          {m.calendar_navigation_all_events()}
-        </div>
+      <div class="text-base font-semibold text-base-content">
+        {m.calendar_navigation_all_events()}
+        <span class="font-normal text-base-content/60">· {eventCount} Events</span>
       </div>
     {/if}
 
-    <!-- Center Controls -->
-    <div class="flex items-center gap-4">
+    <!-- Right-aligned controls -->
+    <div class="ms-auto flex items-center gap-2">
       <!-- Presentation View Selector -->
       <div class="join">
         <button
@@ -350,47 +320,47 @@
           <LocationIcon class_="w-4 h-4" />
         </button>
       </div>
-    </div>
 
-    <!-- Calendar View Mode Selector -->
-    <div class="join">
-      {#if presentationViewMode === 'list'}
+      <!-- Calendar View Mode Selector -->
+      <div class="join">
+        {#if presentationViewMode === 'list'}
+          <button
+            class="btn join-item btn-sm"
+            class:btn-outline={viewMode !== 'all'}
+            class:btn-primary={viewMode === 'all'}
+            onclick={() => handleViewModeClick('all')}
+          >
+            {m.common_all()}
+          </button>
+        {/if}
         <button
           class="btn join-item btn-sm"
-          class:btn-outline={viewMode !== 'all'}
-          class:btn-primary={viewMode === 'all'}
-          onclick={() => handleViewModeClick('all')}
+          class:btn-outline={viewMode !== 'month'}
+          class:btn-primary={viewMode === 'month'}
+          onclick={() => handleViewModeClick('month')}
         >
-          {m.common_all()}
+          {m.common_month()}
         </button>
+        <button
+          class="btn join-item btn-sm"
+          class:btn-outline={viewMode !== 'week'}
+          class:btn-primary={viewMode === 'week'}
+          onclick={() => handleViewModeClick('week')}
+        >
+          {m.common_week()}
+        </button>
+        <button
+          class="btn join-item btn-sm"
+          class:btn-outline={viewMode !== 'day'}
+          class:btn-primary={viewMode === 'day'}
+          onclick={() => handleViewModeClick('day')}
+        >
+          {m.common_day()}
+        </button>
+      </div>
+      {#if !communityMode && !$page.url.pathname.endsWith('/calendar')}
+        <AddToCalendarButton />
       {/if}
-      <button
-        class="btn join-item btn-sm"
-        class:btn-outline={viewMode !== 'month'}
-        class:btn-primary={viewMode === 'month'}
-        onclick={() => handleViewModeClick('month')}
-      >
-        {m.common_month()}
-      </button>
-      <button
-        class="btn join-item btn-sm"
-        class:btn-outline={viewMode !== 'week'}
-        class:btn-primary={viewMode === 'week'}
-        onclick={() => handleViewModeClick('week')}
-      >
-        {m.common_week()}
-      </button>
-      <button
-        class="btn join-item btn-sm"
-        class:btn-outline={viewMode !== 'day'}
-        class:btn-primary={viewMode === 'day'}
-        onclick={() => handleViewModeClick('day')}
-      >
-        {m.common_day()}
-      </button>
     </div>
-    {#if !communityMode && !$page.url.pathname.endsWith('/calendar')}
-      <AddToCalendarButton />
-    {/if}
   </div>
 </div>

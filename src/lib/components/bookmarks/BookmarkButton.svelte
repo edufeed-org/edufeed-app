@@ -19,7 +19,7 @@
     getBookmarkSetIdentifier,
     getIsLoading
   } from '$lib/stores/personal-bookmarks.svelte.js';
-  import { manager } from '$lib/stores/accounts.svelte';
+  import { manager, useActiveUser } from '$lib/stores/accounts.svelte';
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -32,6 +32,9 @@
 
   /** @type {HTMLInputElement | undefined} */
   let inputEl = $state(undefined);
+
+  const getActiveUser = useActiveUser();
+  let loggedIn = $derived(getActiveUser() != null);
 
   let active = $derived(isBookmarkedAnywhere(event));
   let inDefault = $derived(isBookmarked(event));
@@ -121,10 +124,16 @@
 
 <details class="dropdown dropdown-end" bind:open={dropdownOpen}>
   <summary
-    class="btn btn-ghost btn-sm {active ? 'text-primary' : ''} {loading ? 'btn-disabled' : ''}"
-    title={active ? m.bookmark_toast_removed() : m.bookmark_toast_saved()}
+    class="btn btn-ghost btn-sm {active ? 'text-primary' : ''} {loading || !loggedIn
+      ? 'btn-disabled'
+      : ''}"
+    title={!loggedIn
+      ? m.bookmark_toast_login_required()
+      : active
+        ? m.bookmark_toast_removed()
+        : m.bookmark_toast_saved()}
     onclick={(e) => {
-      if (loading) e.preventDefault();
+      if (loading || !loggedIn) e.preventDefault();
     }}
   >
     <BookmarkIcon class_="w-4 h-4" filled={active} />

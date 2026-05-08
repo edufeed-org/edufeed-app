@@ -30,6 +30,14 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {}
 }));
 
+vi.mock('$lib/loaders/base.js', () => ({
+  createCachedTimelineLoader: vi.fn()
+}));
+
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: { fallbackRelays: [] }
+}));
+
 // Mock getReadRelays — resolved value controlled per test
 let mockGetReadRelays = vi.fn();
 vi.mock('$lib/services/relay-service.svelte.js', () => ({

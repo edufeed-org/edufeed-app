@@ -5,8 +5,9 @@
  * - `actionRunnerOptimistic` — fires publish in the background and resolves
  *    as soon as the event is signed and inserted into EventStore. Use this for
  *    interactive operations where blocking the UI on relay round-trips would
- *    feel slow (e.g. DM send). The event is added to the local EventStore by
- *    ActionRunner itself, so subscribers see the new state immediately.
+ *    feel slow (e.g. follow/unfollow, bookmark, reaction, DM send). The event
+ *    is added to the local EventStore by ActionRunner itself, so subscribers
+ *    see the new state immediately.
  *
  * Usage:
  *   import { actionRunner } from '$lib/stores/action-runner.svelte.js';

@@ -33,6 +33,8 @@ export {
   getAMBPrimaryURL,
   getAMBIdentifier,
   getAMBExternalUrl,
+  getAMBHasPart,
+  getAMBIsPartOf,
   formatAMBResource
 } from './ambHelpers.js';
 
