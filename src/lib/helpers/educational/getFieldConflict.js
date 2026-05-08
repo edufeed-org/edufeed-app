@@ -42,6 +42,20 @@ const CONCEPT_ARRAY_FIELDS = new Set([
 const STRING_ARRAY_FIELDS = new Set(['keywords', 'bibleReferences']);
 const ABOUT_BY_VOCAB_FIELDS = new Set(['ekwFachrichtung']);
 
+/**
+ * Paired-key fields store IDs in `${field}` and labels in `${field}Labels`.
+ * FormConceptPicker's label-heal $effect rewrites incoming IDs to canonical
+ * nostr-coords once Concept events load — but `aiSuggestions.payload` keeps
+ * the AI's original IDs. The two ID spaces diverge while labels stay equal,
+ * so we compare by label here instead of by ID.
+ */
+const PAIRED_KEY_LABEL_MIRRORS = Object.freeze({
+  gradeLevels: 'gradeLevelLabels',
+  schoolTypes: 'schoolTypeLabels',
+  didacticConcepts: 'didacticConceptLabels',
+  methods: 'methodLabels'
+});
+
 function conceptIds(arr) {
   if (!Array.isArray(arr)) return new Set();
   return new Set(arr.map((c) => (typeof c === 'string' ? c : c?.id)).filter(Boolean));
@@ -67,6 +81,34 @@ function classifyArray(field, userArr, aiArr) {
   if (aiSubset && userSubset) return 'none'; // sets equal
   if (userSubset) return 'additive'; // AI strict superset
   return 'conflict'; // any other partial/disjoint
+}
+
+/**
+ * Label-based classification for paired-key fields (gradeLevels, etc.).
+ * Reads user labels from the `${field}Labels` mirror in formData and AI labels
+ * from `prefLabel` (fallback `label`) on each entry. Same set-comparison logic
+ * as classifyArray but on labels — robust to ID-space rewrites by FormConceptPicker.
+ */
+function classifyPairedByLabel(formData, field, aiArr) {
+  const labelsKey = PAIRED_KEY_LABEL_MIRRORS[field];
+  const userArr = Array.isArray(formData?.[labelsKey]) ? formData[labelsKey] : [];
+  const userLabels = new Set(
+    userArr.map((c) => (c && typeof c === 'object' ? c.label : undefined)).filter(Boolean)
+  );
+  const aiLabels = new Set(
+    (Array.isArray(aiArr) ? aiArr : [])
+      .map((c) => (c && typeof c === 'object' ? c.prefLabel || c.label : undefined))
+      .filter(Boolean)
+  );
+
+  if (aiLabels.size === 0) return 'none';
+  if (userLabels.size === 0) return 'auto-applied';
+
+  const aiSubset = [...aiLabels].every((l) => userLabels.has(l));
+  const userSubset = [...userLabels].every((l) => aiLabels.has(l));
+  if (aiSubset && userSubset) return 'none';
+  if (userSubset) return 'additive';
+  return 'conflict';
 }
 
 /**
@@ -103,6 +145,10 @@ export function getFieldConflict(field, formData, aboutByVocab, aiSuggestions) {
 
   if (ABOUT_BY_VOCAB_FIELDS.has(field)) {
     return classifyArray(field, aboutByVocab?.[field], aiValue);
+  }
+
+  if (PAIRED_KEY_LABEL_MIRRORS[field]) {
+    return classifyPairedByLabel(formData, field, aiValue);
   }
 
   if (CONCEPT_ARRAY_FIELDS.has(field) || STRING_ARRAY_FIELDS.has(field)) {

@@ -39,7 +39,7 @@
   >
     <span aria-hidden="true">✨</span>
     <span>{m.amb_form_review_ai_suggestion()}:</span>
-    <span class="truncate" title={valueTitle}>{aiValue}</span>
+    <span title={valueTitle}>{aiValue}</span>
 
     {#if isString}
       <button

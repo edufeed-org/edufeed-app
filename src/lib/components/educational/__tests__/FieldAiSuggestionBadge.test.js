@@ -198,6 +198,22 @@ describe('FieldAiSuggestionBadge — evidence', () => {
     );
     expect(screen.getByText(/some quote/)).toBeInTheDocument();
   });
+
+  it('renders long AI values in full (no truncate class clipping)', () => {
+    const longValue =
+      'A'.repeat(50) + ' ' + 'B'.repeat(50) + ' ' + 'C'.repeat(50) + ' ' + 'D'.repeat(50);
+    render(
+      FieldAiSuggestionBadge,
+      baseProps({
+        field: 'description',
+        formData: { description: 'Mine' },
+        aiSuggestions: { payload: { description: longValue }, evidence: {} }
+      })
+    );
+    const wrapper = screen.getByTestId('field-ai-badge-description');
+    expect(wrapper.textContent).toContain(longValue);
+    expect(wrapper.querySelector('.truncate')).toBeNull();
+  });
 });
 
 describe('FieldAiSuggestionBadge — paired-key labels', () => {
