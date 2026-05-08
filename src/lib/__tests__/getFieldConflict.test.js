@@ -5,6 +5,10 @@ import { FORM_DEFAULT_LICENSE } from '$lib/helpers/educational/formDefaults.js';
 import { applyEnrichedPayload } from '$lib/helpers/educational/applyEnrichedPayload.js';
 import { createInitialFormData } from '$lib/helpers/educational/wizardInitialState.js';
 
+/**
+ * @param {Record<string, any>} payload
+ * @returns {import('$lib/helpers/educational/applyEnrichedPayload.js').ExtractMetadataResult}
+ */
 function ai(payload) {
   return { source: 'llm-enriched', payload, evidence: {}, baseline: {} };
 }

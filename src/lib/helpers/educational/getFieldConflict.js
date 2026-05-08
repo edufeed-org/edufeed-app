@@ -49,6 +49,7 @@ const ABOUT_BY_VOCAB_FIELDS = new Set(['ekwFachrichtung']);
  * the AI's original IDs. The two ID spaces diverge while labels stay equal,
  * so we compare by label here instead of by ID.
  */
+/** @type {Record<string, string>} */
 const PAIRED_KEY_LABEL_MIRRORS = Object.freeze({
   gradeLevels: 'gradeLevelLabels',
   schoolTypes: 'schoolTypeLabels',
@@ -56,21 +57,28 @@ const PAIRED_KEY_LABEL_MIRRORS = Object.freeze({
   methods: 'methodLabels'
 });
 
+/** @param {unknown} arr */
 function conceptIds(arr) {
   if (!Array.isArray(arr)) return new Set();
   return new Set(arr.map((c) => (typeof c === 'string' ? c : c?.id)).filter(Boolean));
 }
 
+/** @param {unknown} arr */
 function isBibleEmpty(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return true;
   return arr.length === 1 && arr[0] === '';
 }
 
+/**
+ * @param {string} field
+ * @param {unknown} userArr
+ * @param {unknown} aiArr
+ */
 function classifyArray(field, userArr, aiArr) {
   const aiIds = conceptIds(aiArr);
   const userIds =
     field === 'bibleReferences'
-      ? new Set(isBibleEmpty(userArr) ? [] : userArr)
+      ? new Set(isBibleEmpty(userArr) ? [] : /** @type {any[]} */ (userArr))
       : conceptIds(userArr);
 
   if (aiIds.size === 0) return 'none';
@@ -89,11 +97,18 @@ function classifyArray(field, userArr, aiArr) {
  * from `prefLabel` (fallback `label`) on each entry. Same set-comparison logic
  * as classifyArray but on labels — robust to ID-space rewrites by FormConceptPicker.
  */
+/**
+ * @param {Record<string, any>} formData
+ * @param {string} field
+ * @param {unknown} aiArr
+ */
 function classifyPairedByLabel(formData, field, aiArr) {
   const labelsKey = PAIRED_KEY_LABEL_MIRRORS[field];
   const userArr = Array.isArray(formData?.[labelsKey]) ? formData[labelsKey] : [];
   const userLabels = new Set(
-    userArr.map((c) => (c && typeof c === 'object' ? c.label : undefined)).filter(Boolean)
+    userArr
+      .map((/** @type {any} */ c) => (c && typeof c === 'object' ? c.label : undefined))
+      .filter(Boolean)
   );
   const aiLabels = new Set(
     (Array.isArray(aiArr) ? aiArr : [])
@@ -115,6 +130,8 @@ function classifyPairedByLabel(formData, field, aiArr) {
  * Treat a string field's value as empty if it's '' or matches the form default.
  * `inLanguage` and `license` are routed in via name because they have
  * non-empty defaults that count as "empty" for conflict purposes.
+ * @param {string} field
+ * @param {unknown} value
  */
 function isStringEmpty(field, value) {
   if (!value) return true;
@@ -128,7 +145,7 @@ function isStringEmpty(field, value) {
  * @param {string} field
  * @param {Record<string, any>} formData
  * @param {Record<string, Array<{id: string, label?: string}>>} aboutByVocab
- * @param {{payload: Record<string, any>} | null} aiSuggestions
+ * @param {{payload?: Record<string, any>} | null | undefined} aiSuggestions
  * @returns {'none' | 'auto-applied' | 'conflict' | 'additive'}
  */
 export function getFieldConflict(field, formData, aboutByVocab, aiSuggestions) {

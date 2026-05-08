@@ -11,6 +11,7 @@
  * - String arrays (keywords, bibleReferences): joined by comma.
  */
 
+/** @type {Record<string, string>} */
 const PAIRED_LABEL_KEYS = {
   gradeLevels: 'gradeLevelLabels',
   schoolTypes: 'schoolTypeLabels',
