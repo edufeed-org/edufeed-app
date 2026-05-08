@@ -1616,7 +1616,7 @@
   "amb_form_busy_enrichment": "AI is filling in fields…",
   "amb_form_enrich_button": "✨ Enrich with AI",
   "amb_form_enrich_running": "AI is enriching fields…",
-  "amb_form_enrich_done": "✓ AI filled in matching fields.",
+  "amb_form_enrich_done": "AI filled in matching fields.",
   "amb_form_enrich_retry": "✨ Retry AI enrichment",
   "amb_form_enrich_error": "AI enrichment failed.",
   "amb_form_enrich_hint": "Optional: AI pre-fills classifications — you stay in control.",

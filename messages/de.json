@@ -1616,7 +1616,7 @@
   "amb_form_busy_enrichment": "KI füllt Felder aus …",
   "amb_form_enrich_button": "✨ Mit KI ergänzen",
   "amb_form_enrich_running": "KI ergänzt Felder …",
-  "amb_form_enrich_done": "✓ KI hat passende Felder ergänzt.",
+  "amb_form_enrich_done": "KI hat passende Felder ergänzt.",
   "amb_form_enrich_retry": "✨ Erneut mit KI ergänzen",
   "amb_form_enrich_error": "KI-Ergänzung ist fehlgeschlagen.",
   "amb_form_enrich_hint": "Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.",
