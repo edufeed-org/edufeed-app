@@ -113,6 +113,20 @@ export function convertFormDataToAMB(formData) {
     amb.isAccessibleForFree = formData.isAccessibleForFree;
   }
 
+  // Pedagogical Concept fields. Each is an array of SKOS Concept objects
+  // emitted by the curriculum picker; we round-trip the picker's compact
+  // shape (`id`, `type: 'Concept'`, `prefLabel: { <lang>: label }`) verbatim.
+  for (const key of /** @type {const} */ (['teaches', 'assesses', 'competencyRequired'])) {
+    const concepts = formData[key];
+    if (Array.isArray(concepts) && concepts.length > 0) {
+      amb[key] = concepts.map((c) => ({
+        id: c.id,
+        type: 'Concept',
+        prefLabel: c.prefLabel ?? { [lang]: extractLabelFromUri(c.id) }
+      }));
+    }
+  }
+
   // AMB relation references. formData carries `{coordinate, pubkey, dTag, ...}`
   // entries; `ambToNostr` expects AMB-shape `{id: <coordinate>}` and consults
   // `relatedEvents[coordinate]` for the `["a", coord, relay, marker]` tag.

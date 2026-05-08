@@ -45,6 +45,14 @@ export function createInitialFormData() {
     educationalLevels: /** @type {CompactConcept[]} */ ([]),
     keywords: /** @type {string[]} */ ([]),
 
+    // Step 4 (AMB only): Lehrplan-bezug. The curriculum picker emits one
+    // SKOS Concept into one of these three pedagogical fields (radio,
+    // mutually exclusive in v1). EKW variant ignores them.
+    teaches: /** @type {{ id: string, type: 'Concept', prefLabel: { de: string } }[]} */ ([]),
+    assesses: /** @type {{ id: string, type: 'Concept', prefLabel: { de: string } }[]} */ ([]),
+    competencyRequired:
+      /** @type {{ id: string, type: 'Concept', prefLabel: { de: string } }[]} */ ([]),
+
     // Step 5: Content & Creators
     creators: /** @type {Creator[]} */ ([]),
     encodings: /** @type {UploadedFile[]} */ ([]),
