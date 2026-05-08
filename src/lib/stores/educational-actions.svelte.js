@@ -68,6 +68,9 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {{id: string, label: string}[]} [methodLabels] - EKW: labels for `methods`
  * @property {string} [methodOther] - EKW: free-form method description (newline-separated)
  * @property {string[]} [bibleReferences] - EKW: free-form Bible references
+ * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [teaches] - AMB: SKOS Concepts for pedagogical "teaches" relation
+ * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [assesses] - AMB: SKOS Concepts for pedagogical "assesses" relation
+ * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [competencyRequired] - AMB: SKOS Concepts for required competencies
  */
 
 /**

@@ -2,6 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import { applySuggestionAction } from '$lib/helpers/educational/applySuggestionAction.js';
 
+/**
+ * @param {Record<string, any>} payload
+ * @param {Record<string, string>} [evidence]
+ */
 function ai(payload, evidence = {}) {
   return { source: 'llm-enriched', payload, evidence, baseline: {} };
 }
@@ -9,7 +13,9 @@ function ai(payload, evidence = {}) {
 describe('applySuggestionAction — string fields', () => {
   it("'replace' on a string field overwrites formData and sets provenance with evidence", () => {
     const formData = { name: 'Mine' };
+    /** @type {Record<string, Array<{id: string, label?: string}>>} */
     const aboutByVocab = {};
+    /** @type {Record<string, {source: string, evidence?: string}>} */
     const provenance = {};
     const result = applySuggestionAction(
       'name',
@@ -52,6 +58,7 @@ describe('applySuggestionAction — string fields', () => {
 
   it('returns new objects, does not mutate inputs', () => {
     const formData = { name: 'Mine' };
+    /** @type {Record<string, {source: string, evidence?: string}>} */
     const provenance = {};
     const result = applySuggestionAction(
       'name',
@@ -95,10 +102,13 @@ describe('applySuggestionAction — concept arrays', () => {
       }),
       {}
     );
-    const ids = result.formData.learningResourceType.map((c) => c.id);
+    const ids = result.formData.learningResourceType.map((/** @type {{id: string}} */ c) => c.id);
     expect(new Set(ids)).toEqual(new Set(['urn:x', 'urn:a']));
     // user's original entry is kept (not overwritten by AI's prefLabel)
-    expect(result.formData.learningResourceType.find((c) => c.id === 'urn:x').label).toBe('X');
+    expect(
+      result.formData.learningResourceType.find((/** @type {{id: string}} */ c) => c.id === 'urn:x')
+        .label
+    ).toBe('X');
   });
 });
 

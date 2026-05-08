@@ -200,3 +200,19 @@ export function applyEnrichedPayload(formData, result, options) {
  * The wizard uses this to render Smart-fill badges with hover-evidence.
  */
 applyEnrichedPayload.withProvenance = applyEnrichedPayloadWithProvenance;
+
+/**
+ * Drop concept-shaped entries that have no usable label. The LLM occasionally
+ * emits id-only entries (e.g. when it picked up a URL but couldn't read a
+ * prefLabel from the page); those are useless to render in the form.
+ *
+ * @template {{ id: string, prefLabel?: string, label?: string }} T
+ * @param {T[]} arr
+ * @returns {T[]}
+ */
+export function dropUnlabeled(arr) {
+  return arr.filter((c) => {
+    const lbl = c.prefLabel ?? c.label ?? '';
+    return typeof lbl === 'string' && lbl.trim().length > 0;
+  });
+}

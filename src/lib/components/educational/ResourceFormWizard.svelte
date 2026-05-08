@@ -34,6 +34,7 @@
   import MetadataFetchStep from './MetadataFetchStep.svelte';
   import AMBResourceSearchInput from './AMBResourceSearchInput.svelte';
   import BibleReferenceInput from './BibleReferenceInput.svelte';
+  import CurriculumPicker from './CurriculumPicker.svelte';
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
@@ -2429,6 +2430,45 @@
               </ul>
             {/if}
           </div>
+
+          <!--
+            AMB-only Lehrplanbezug (curriculum reference). Cascading picker
+            (Bundesland → Schulart → Schulfach → Lehrplan) plus a lazy-loaded
+            tree of topic nodes. Each tree action appends a SKOS Concept into
+            one of teaches / assesses / competencyRequired (independent
+            arrays — a resource can teach X, assess Y, require Z at once).
+            Collapsed by default since it's optional.
+          -->
+          {#if variantId === 'amb'}
+            <details class="rounded-md border border-base-300 p-3">
+              <summary class="cursor-pointer text-sm font-medium">
+                {m.amb_form_label_curriculum()}
+              </summary>
+              <p class="mt-2 mb-3 text-xs text-base-content/60">
+                {m.amb_form_help_curriculum()}
+              </p>
+              <CurriculumPicker
+                teaches={formData.teaches ?? []}
+                assesses={formData.assesses ?? []}
+                competencyRequired={formData.competencyRequired ?? []}
+                onadd={(concept, relation) => {
+                  // Toggle: clicking +T/+A/+R on an already-selected node removes
+                  // it instead of being a confusing no-op. Removal via the chip ×
+                  // still flows through onremove below.
+                  const current = formData[relation] ?? [];
+                  if (current.some((c) => c.id === concept.id)) {
+                    formData[relation] = current.filter((c) => c.id !== concept.id);
+                    return;
+                  }
+                  formData[relation] = [...current, concept];
+                }}
+                onremove={(conceptId, relation) => {
+                  const current = formData[relation] ?? [];
+                  formData[relation] = current.filter((c) => c.id !== conceptId);
+                }}
+              />
+            </details>
+          {/if}
         </div>
       {/if}
 
@@ -2680,6 +2720,36 @@
                     {formData.hasPart
                       .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
                       .join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.teaches?.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.curriculum_picker_section_teaches()}:
+                  </dt>
+                  <dd class="flex-1">
+                    {formData.teaches.map((c) => c.prefLabel?.de ?? c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.assesses?.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.curriculum_picker_section_assesses()}:
+                  </dt>
+                  <dd class="flex-1">
+                    {formData.assesses.map((c) => c.prefLabel?.de ?? c.id).join(', ')}
+                  </dd>
+                </div>
+              {/if}
+              {#if formData.competencyRequired?.length > 0}
+                <div class="flex">
+                  <dt class="w-32 shrink-0 text-base-content/60">
+                    {m.curriculum_picker_section_competency_required()}:
+                  </dt>
+                  <dd class="flex-1">
+                    {formData.competencyRequired.map((c) => c.prefLabel?.de ?? c.id).join(', ')}
                   </dd>
                 </div>
               {/if}

@@ -1,4 +1,5 @@
 const CONCEPT_ARRAY_FIELDS = new Set(['learningResourceType', 'educationalLevels', 'creators']);
+/** @type {Record<string, string>} */
 const PAIRED_FIELDS = {
   gradeLevels: 'gradeLevelLabels',
   schoolTypes: 'schoolTypeLabels',
@@ -8,11 +9,20 @@ const PAIRED_FIELDS = {
 const STRING_ARRAY_FIELDS = new Set(['keywords', 'bibleReferences']);
 const ABOUT_BY_VOCAB_FIELDS = new Set(['ekwFachrichtung']);
 
+/**
+ * @param {Array<{id: string, prefLabel?: string, label?: string}>} arr
+ * @returns {Array<{id: string, label: string}>}
+ */
 function toFormConcepts(arr) {
   return arr.map((c) => ({ id: c.id, label: c.prefLabel ?? c.label ?? '' }));
 }
 
-/** Merge concept arrays (id-keyed) preserving the user's existing entries. */
+/**
+ * Merge concept arrays (id-keyed) preserving the user's existing entries.
+ * @param {Array<{id: string, label?: string}>} userArr
+ * @param {Array<{id: string, prefLabel?: string, label?: string}>} aiArr
+ * @returns {Array<{id: string, label?: string}>}
+ */
 function mergeConceptArrays(userArr, aiArr) {
   const out = [...userArr];
   const have = new Set(userArr.map((c) => c.id));
@@ -22,6 +32,11 @@ function mergeConceptArrays(userArr, aiArr) {
   return out;
 }
 
+/**
+ * @param {string[]} userArr
+ * @param {string[]} aiArr
+ * @returns {string[]}
+ */
 function mergeStringArrays(userArr, aiArr) {
   const seen = new Set(userArr);
   const out = [...userArr];
@@ -38,7 +53,7 @@ function mergeStringArrays(userArr, aiArr) {
  * @param {'replace' | 'merge' | 'dismiss'} action
  * @param {Record<string, any>} formData
  * @param {Record<string, Array<{id: string, label?: string}>>} aboutByVocab
- * @param {{payload: Record<string, any>, evidence?: Record<string, string>}} aiSuggestions
+ * @param {{payload?: Record<string, any>, evidence?: Record<string, string>} | null | undefined} aiSuggestions
  * @param {Record<string, {source: string, evidence?: string}>} provenance
  * @returns {{formData: any, aboutByVocab: any, provenance: any}}
  */
@@ -91,7 +106,7 @@ export function applySuggestionAction(
     if (action === 'merge') {
       const userLabels = formData?.[labelsKey] ?? [];
       const merged = mergeConceptArrays(userLabels, aiArr);
-      nextFormData[field] = merged.map((c) => c.id);
+      nextFormData[field] = merged.map((/** @type {{id: string}} */ c) => c.id);
       nextFormData[labelsKey] = merged;
     } else {
       const concepts = toFormConcepts(aiArr);
