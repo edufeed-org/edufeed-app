@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-04-21
-**Total tests:** 278
+**Last updated:** 2026-05-08
+**Total tests:** 280
 
 ## Quick Summary
 
@@ -35,6 +35,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                         |
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                          |
 | `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances |
+| `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally     |
 
 ## Detailed Coverage
 
@@ -1113,6 +1114,33 @@ the E2E cases lock in the user-visible surface + owner gating.
 | owner sees AddProfileRow and remove button on their follow set | Combobox placeholder + `data-testid="remove-profile-{pubkey}"` visible on own kind 30000                 |
 | pasting an already-added npub surfaces "Already added" badge   | Typing TEST_AUTHOR_2 npub renders a dropdown row with the `Already added` badge + `aria-disabled="true"` |
 | unauthenticated visitor does not see add/remove UI             | Without auth, combobox and remove button are absent on same naddr                                        |
+
+### poll-flow.test.js (2 tests)
+
+**Route:** `/calendar` (FAB renders globally; `/calendar` chosen for parity with calendar-creation)
+**Auth required:** Yes (FAB only renders for authenticated users)
+
+E2E coverage for NIP-88 polls. The unit/component layer covers logic
+exhaustively (`polls.test.js`, `poll-publish-relays.test.js`,
+`PollCreateModal.test.js`, `PollCard.test.js`, `GlobalFAB.test.js`); the E2E
+file proves the integration: FAB → modal → publish → relay → render → vote.
+
+The full happy path uses an enlarged viewport (1280×1400) so the 9-button
+FAB stack fits — the Poll button lives ~7th up in a column-reverse stack of
+`btn-lg` buttons that clips the default 720px viewport (separate UX issue,
+needs design rethink).
+
+**Known flakiness:** The UI-driven nsec login flow (`loginWithNsec`) is
+globally flaky in this env — when the splash quote / curatedReady gate
+hangs, `body.app-ready` never fires and both tests fail at the readiness
+wait. Not specific to polls (chat/comments auth tests have the same
+pattern). Re-run after Docker relays settle. The tests are structurally
+correct.
+
+| Test                                     | What it verifies                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create poll button is wired into the FAB | After login + FAB focus, `[data-tip="Create poll"]` is rendered with poll-related `aria-label`                                                                            |
+| publish poll → vote → tally updates      | Full path: open modal, fill question + 2 options, publish kind 1068, navigate to nevent, render PollCard, cast vote (kind 1018), verify "1 voter" + "100%" + "✓ Option A" |
 
 ## Maintenance Guidelines
 
