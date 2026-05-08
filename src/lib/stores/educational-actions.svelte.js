@@ -3,14 +3,20 @@
  * Actions for creating and managing educational resources (AMB) with Nostr integration
  */
 
+import { ambToNostr } from 'amb-nostr-converter';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
-import { flattenAMBToNostrTags } from '$lib/helpers/educational/ambTransform.js';
-import { extractLabelFromUri } from '$lib/helpers/educational/skosLoader.js';
+import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
+import {
+  appendCreatorPTags,
+  appendExternalUrlTags,
+  appendVariantLabelTags
+} from '$lib/helpers/educational/eventTags.js';
+import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js';
 
 /**
  * @typedef {Object} Creator
@@ -45,120 +51,88 @@ import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
  * @property {string[]} keywords - Array of keywords/tags
  * @property {UploadedFile[]} files - Array of uploaded files
  * @property {boolean} [isAccessibleForFree] - Whether the resource is freely accessible
- * @property {string} [educationalLevel] - Optional SKOS URI for educational level
- * @property {string} [educationalLevelLabel] - Human-readable label
+ * @property {string} [educationalLevel] - Optional SKOS URI for educational level (singular, legacy)
+ * @property {string} [educationalLevelLabel] - Human-readable label (singular, legacy)
+ * @property {string[]} [educationalLevels] - Optional SKOS URIs for educational levels (plural, preferred)
+ * @property {{id: string, label: string}[]} [educationalLevelLabels] - Labels for `educationalLevels`
  * @property {string[]} [externalUrls] - Array of external reference URLs (r-tags)
+ * @property {AMBRelationRef[]} [hasPart] - Linked child AMB resources
+ * @property {AMBRelationRef[]} [isPartOf] - Linked parent AMB resources
+ * @property {string[]} [gradeLevels] - EKW: SKOS URIs for grade levels (Klassenstufen)
+ * @property {{id: string, label: string}[]} [gradeLevelLabels] - EKW: labels for `gradeLevels`
+ * @property {string[]} [schoolTypes] - EKW: SKOS URIs for school types (Schularten)
+ * @property {{id: string, label: string}[]} [schoolTypeLabels] - EKW: labels for `schoolTypes`
+ * @property {string[]} [didacticConcepts] - EKW: SKOS URIs for didactic concepts
+ * @property {{id: string, label: string}[]} [didacticConceptLabels] - EKW: labels for `didacticConcepts`
+ * @property {string[]} [methods] - EKW: SKOS URIs for methods
+ * @property {{id: string, label: string}[]} [methodLabels] - EKW: labels for `methods`
+ * @property {string} [methodOther] - EKW: free-form method description (newline-separated)
+ * @property {string[]} [bibleReferences] - EKW: free-form Bible references
+ * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [teaches] - AMB: SKOS Concepts for pedagogical "teaches" relation
+ * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [assesses] - AMB: SKOS Concepts for pedagogical "assesses" relation
+ * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [competencyRequired] - AMB: SKOS Concepts for required competencies
+ */
+
+/**
+ * @typedef {Object} AMBRelationRef
+ * @property {string} coordinate - `kind:pubkey:dTag`
+ * @property {string} pubkey - Author pubkey
+ * @property {string} dTag - d-tag identifier
+ * @property {string} [relayHint] - Relay hint for the referenced event
+ * @property {import('nostr-tools').NostrEvent} [event] - Resolved event (edit-mode prefill)
  */
 
 /**
  * @typedef {Object} EducationalActions
- * @property {(formData: EducationalFormData, communityPubkey: string, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
- * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
+ * @property {(formData: EducationalFormData, variantId?: string) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
+ * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null, variantId?: string) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
  */
 
 /** Kind number for AMB Educational Resource events */
 const AMB_RESOURCE_KIND = 30142;
 
 /**
- * Generate a random 8-character identifier
- * @returns {string} Random alphanumeric ID
+ * Build the `relatedEvents` map for `ambToNostr` so it emits marker `a`-tags
+ * (`["a", coord, relay, "hasPart"|"isPartOf"]`) alongside its generic
+ * `hasPart:id` / `isPartOf:id` tags.
+ *
+ * @param {EducationalFormData} formData
+ * @returns {Record<string, {pubkey: string, dTag: string, relayHint?: string}>}
  */
-function generateRandomId() {
-  return Math.random().toString(36).substring(2, 10);
+function buildRelatedEventsMap(formData) {
+  /** @type {Record<string, {pubkey: string, dTag: string, relayHint?: string}>} */
+  const map = {};
+  const refs = [...(formData.hasPart ?? []), ...(formData.isPartOf ?? [])];
+  for (const r of refs) {
+    map[r.coordinate] = {
+      pubkey: r.pubkey,
+      dTag: r.dTag,
+      relayHint: r.relayHint
+    };
+  }
+  return map;
 }
 
 /**
- * Converts form data to AMB-structured metadata object
- * @param {EducationalFormData} formData - Form data from the upload modal
- * @returns {Object} AMB metadata object ready for flattening
+ * Serialize formData into AMB-spec kind 30142 tags + content via
+ * `amb-nostr-converter`. Throws on conversion failure.
+ *
+ * @param {EducationalFormData} formData
+ * @param {string} pubkey - Author pubkey (used only for `ambToNostr`'s preview; real signing happens later)
+ * @returns {{tags: string[][], content: string}}
  */
-function convertFormDataToAMB(formData) {
-  // Use provided slug/URL or generate random ID
-  const identifier = formData.slug?.trim() || generateRandomId();
-
-  /** @type {Record<string, any>} */
-  const amb = {
-    id: identifier,
-    name: formData.name,
-    description: formData.description,
-    inLanguage: formData.inLanguage,
-    license: { id: formData.license }
-  };
-
-  // Get the language code for prefLabel tags (per edufeed NIP spec)
-  const lang = formData.inLanguage || 'en';
-
-  // Learning resource type with language-tagged prefLabel
-  // NIP spec: ["learningResourceType:prefLabel:lang", <label>]
-  if (formData.learningResourceType) {
-    /** @type {Record<string, any>} */
-    const lrtObj = { id: formData.learningResourceType };
-    lrtObj[`prefLabel:${lang}`] =
-      formData.learningResourceTypeLabel || extractLabelFromUri(formData.learningResourceType);
-    amb.learningResourceType = lrtObj;
+function buildAMBEventTagsFromFormData(formData, pubkey) {
+  const ambData = convertFormDataToAMB(formData);
+  const result = ambToNostr(/** @type {any} */ (ambData), {
+    pubkey,
+    timestamp: Math.floor(Date.now() / 1000),
+    relatedEvents: buildRelatedEventsMap(formData)
+  });
+  if (!result.success || !result.data) {
+    const msg = result.error?.message ?? 'Unknown conversion error';
+    throw new Error(`AMB serialization failed: ${msg}`);
   }
-
-  // About/subjects with language-tagged prefLabel (can have multiple)
-  // NIP spec: ["about:prefLabel:lang", <label>]
-  if (formData.about && formData.about.length > 0) {
-    amb.about = formData.about.map((uri, index) => {
-      /** @type {Record<string, any>} */
-      const aboutObj = { id: uri };
-      aboutObj[`prefLabel:${lang}`] =
-        formData.aboutLabels?.[index]?.label || extractLabelFromUri(uri);
-      return aboutObj;
-    });
-  }
-
-  // Educational level with language-tagged prefLabel
-  // NIP spec: ["educationalLevel:prefLabel:lang", <label>]
-  if (formData.educationalLevel) {
-    /** @type {Record<string, any>} */
-    const eduObj = { id: formData.educationalLevel };
-    eduObj[`prefLabel:${lang}`] =
-      formData.educationalLevelLabel || extractLabelFromUri(formData.educationalLevel);
-    amb.educationalLevel = eduObj;
-  }
-
-  // Keywords
-  if (formData.keywords && formData.keywords.length > 0) {
-    amb.keywords = formData.keywords;
-  }
-
-  // Creators
-  if (formData.creators && formData.creators.length > 0) {
-    amb.creator = formData.creators.map((creator) => {
-      /** @type {Record<string, any>} */
-      const creatorObj = {
-        type: creator.type,
-        name: creator.name
-      };
-      if (creator.honorificPrefix) {
-        creatorObj.honorificPrefix = creator.honorificPrefix;
-      }
-      if (creator.affiliationName) {
-        creatorObj.affiliation = { name: creator.affiliationName };
-      }
-      return creatorObj;
-    });
-  }
-
-  // Files/encoding
-  if (formData.files && formData.files.length > 0) {
-    amb.encoding = formData.files.map((file) => ({
-      contentUrl: file.url,
-      encodingFormat: file.mimeType,
-      contentSize: file.size,
-      sha256: file.sha256
-    }));
-  }
-
-  // isAccessibleForFree (boolean)
-  if (formData.isAccessibleForFree !== undefined) {
-    amb.isAccessibleForFree = formData.isAccessibleForFree;
-  }
-
-  return amb;
+  return { tags: result.data.tags, content: result.data.content ?? '' };
 }
 
 /**
@@ -168,13 +142,17 @@ function convertFormDataToAMB(formData) {
 export function createEducationalActions() {
   return {
     /**
-     * Create a new educational resource (kind:30142)
+     * Create a new educational resource (kind:30142).
+     *
+     * Does not target any community directly. Sharing into communities is
+     * performed by the caller as a separate NIP-18 repost step (see
+     * `createCommunityReposts` in `helpers/communityRepost.js`).
+     *
      * @param {EducationalFormData} formData - Form data from upload modal
-     * @param {string} communityPubkey - Target community public key
-     * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
+     * @param {string} [variantId='amb'] - Metadata-form variant id (NIP-32 label)
      * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
      */
-    async createResource(formData, communityPubkey, communityEvent = null) {
+    async createResource(formData, variantId = 'amb') {
       // Get current account from manager
       const currentAccount = manager.active;
       if (!currentAccount) {
@@ -192,7 +170,10 @@ export function createEducationalActions() {
       if (!formData.learningResourceType) {
         throw new Error('Learning resource type is required');
       }
-      if (!formData.about || formData.about.length === 0) {
+      // EKKW variant uses its own Fachrichtung field instead of the AMB about/Fach
+      // picker, so subjects may legitimately be empty. Mirrors the wizard skip at
+      // ResourceFormWizard.svelte step 4.
+      if (variantId !== 'ekw' && (!formData.about || formData.about.length === 0)) {
         throw new Error('At least one subject is required');
       }
       if (!formData.inLanguage) {
@@ -203,48 +184,29 @@ export function createEducationalActions() {
       }
 
       try {
-        // Convert form data to AMB structure
-        const ambData = convertFormDataToAMB(formData);
+        // Serialize AMB → Nostr via amb-nostr-converter. Emits marker `a`-tags
+        // for hasPart/isPartOf when `relatedEvents` is supplied.
+        const { tags, content } = buildAMBEventTagsFromFormData(formData, currentAccount.pubkey);
 
-        // Flatten AMB to Nostr tags
-        const tags = flattenAMBToNostrTags(ambData);
+        await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
+        appendExternalUrlTags(tags, formData.externalUrls);
+        appendVariantLabelTags(tags, variantId);
 
-        // Add h-tag for community targeting (Communikey spec)
-        if (communityPubkey) {
-          tags.push(['h', communityPubkey]);
-        }
-
-        // Add p-tags for creators with Nostr pubkeys and relay hints
-        if (formData.creators) {
-          for (const creator of formData.creators) {
-            if (creator.pubkey) {
-              const relayHint = await getPrimaryWriteRelay(creator.pubkey);
-              tags.push(['p', creator.pubkey, relayHint, 'creator']);
-            }
-          }
-        }
-
-        // Add r-tags for external reference URLs (NIP-24)
-        if (formData.externalUrls && formData.externalUrls.length > 0) {
-          for (const url of formData.externalUrls) {
-            if (url.trim()) {
-              tags.push(['r', url.trim()]);
-            }
-          }
-        }
+        const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
+        for (const t of ekwTags) tags.push(t);
 
         // Create the event using EventFactory
         const eventFactory = createAppEventFactory();
 
         const eventTemplate = await eventFactory.build({
           kind: AMB_RESOURCE_KIND,
-          content: formData.description,
-          tags: tags
+          content,
+          tags
         });
 
         // Sign and publish optimistically (adds to store immediately)
         const resourceEvent = await currentAccount.signEvent(eventTemplate);
-        publishEventOptimistic(resourceEvent, [], { communityEvent });
+        publishEventOptimistic(resourceEvent, []);
 
         // Generate naddr using educational relays for hint
         const naddr = encodeEventToNaddr(resourceEvent, getAppRelaysForCategory('educational'));
@@ -265,9 +227,10 @@ export function createEducationalActions() {
      * @param {EducationalFormData} formData - Updated form data
      * @param {import('nostr-tools').NostrEvent} existingEvent - Existing event to update
      * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
+     * @param {string} [variantId='amb'] - Metadata-form variant id (NIP-32 label)
      * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
      */
-    async updateResource(formData, existingEvent, communityEvent = null) {
+    async updateResource(formData, existingEvent, communityEvent = null, variantId = 'amb') {
       // Get current account
       const currentAccount = manager.active;
       if (!currentAccount) {
@@ -292,43 +255,28 @@ export function createEducationalActions() {
         // Use the original d-tag to ensure replacement
         formData.slug = dTag;
 
-        // Convert form data to AMB structure
-        const ambData = convertFormDataToAMB(formData);
-
-        // Flatten AMB to Nostr tags
-        const tags = flattenAMBToNostrTags(ambData);
+        // Serialize AMB → Nostr via amb-nostr-converter.
+        const { tags, content } = buildAMBEventTagsFromFormData(formData, currentAccount.pubkey);
 
         // Preserve h-tag if it was present
         if (hTag) {
           tags.push(['h', hTag]);
         }
 
-        // Add p-tags for creators with Nostr pubkeys and relay hints
-        if (formData.creators) {
-          for (const creator of formData.creators) {
-            if (creator.pubkey) {
-              const relayHint = await getPrimaryWriteRelay(creator.pubkey);
-              tags.push(['p', creator.pubkey, relayHint, 'creator']);
-            }
-          }
-        }
+        await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
+        appendExternalUrlTags(tags, formData.externalUrls);
+        appendVariantLabelTags(tags, variantId);
 
-        // Add r-tags for external reference URLs (NIP-24)
-        if (formData.externalUrls && formData.externalUrls.length > 0) {
-          for (const url of formData.externalUrls) {
-            if (url.trim()) {
-              tags.push(['r', url.trim()]);
-            }
-          }
-        }
+        const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
+        for (const t of ekwTags) tags.push(t);
 
         // Create the updated event
         const eventFactory = createAppEventFactory();
 
         const eventTemplate = await eventFactory.build({
           kind: AMB_RESOURCE_KIND,
-          content: formData.description,
-          tags: tags
+          content,
+          tags
         });
 
         // Sign and publish optimistically (adds to store immediately)

@@ -10,6 +10,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import ReactionBar from '../reactions/ReactionBar.svelte';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
   import { getLocale } from '$lib/paraglide/runtime.js';
@@ -45,10 +46,19 @@
    * @property {any} [authorProfile] - Author's profile
    * @property {boolean} [compact=false] - Compact display mode
    * @property {'card'|'list'} [variant='card'] - Display variant
+   * @property {string} [communityNpub] - Community npub for route construction
+   * @property {boolean} [preview=false] - Preview mode: non-interactive, no bookmark/reactions/debug
    */
 
   /** @type {Props} */
-  let { resource, authorProfile = null, compact = false, variant = 'card' } = $props();
+  let {
+    resource,
+    authorProfile = null,
+    compact = false,
+    variant = 'card',
+    communityNpub = undefined,
+    preview = false
+  } = $props();
 
   const isList = $derived(variant === 'list');
 
@@ -111,10 +121,21 @@
   const shouldShowOpenContentButton = $derived(hasExternalUrl || isNostrUri(resource.identifier));
 
   /**
+   * Build the resolved route for this resource.
+   * @returns {string | null}
+   */
+  function getResourceHref() {
+    if (!resourceNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/r/${resourceNaddr}`);
+    return resolve(`/${resourceNaddr}`);
+  }
+
+  /**
    * Navigate to resource detail view
    */
   function navigateToDetail() {
-    goto(resolve(`/${resourceNaddr}`));
+    const href = getResourceHref();
+    if (href) goto(href);
   }
 
   /**
@@ -148,12 +169,23 @@
 {#if isList}
   <!-- List variant: horizontal row -->
   <div
-    class="amb-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
+    class="amb-card-list focus:ring-opacity-50 relative flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
     role="button"
     tabindex="0"
     onclick={navigateToDetail}
     onkeydown={handleKeydown}
   >
+    {#if resource.rawEvent}
+      <div
+        class="absolute top-1 right-1"
+        role="toolbar"
+        tabindex="-1"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
+        <BookmarkButton event={resource.rawEvent} />
+      </div>
+    {/if}
     <div
       class="list-thumbnail h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
     >
@@ -231,17 +263,17 @@
   </div>
 {:else}
   <div
-    class="amb-card cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md {compact
-      ? 'p-3'
-      : 'p-4'}"
-    class:focus:outline-none={true}
-    class:focus:ring-2={true}
-    class:focus:ring-primary={true}
-    class:focus:ring-opacity-50={true}
-    role="button"
-    tabindex="0"
-    onclick={navigateToDetail}
-    onkeydown={handleKeydown}
+    class="amb-card rounded-lg border border-base-300 bg-base-100 shadow-sm {preview
+      ? ''
+      : 'cursor-pointer transition-shadow hover:shadow-md'} {compact ? 'p-3' : 'p-4'}"
+    class:focus:outline-none={!preview}
+    class:focus:ring-2={!preview}
+    class:focus:ring-primary={!preview}
+    class:focus:ring-opacity-50={!preview}
+    role={preview ? undefined : 'button'}
+    tabindex={preview ? undefined : 0}
+    onclick={preview ? undefined : navigateToDetail}
+    onkeydown={preview ? undefined : handleKeydown}
   >
     <!-- Author Header -->
     <div class="mb-3 flex items-center gap-3">
@@ -428,30 +460,29 @@
       {/if}
 
       <!-- Reactions & Comments -->
-      {#if !compact && resource.tags}
-        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div class="flex items-center gap-2 pt-2" onclick={(e) => e.stopPropagation()}>
+      {#if !compact && !preview && resource.rawEvent}
+        <div
+          class="flex items-center gap-2 pt-2"
+          role="toolbar"
+          tabindex="-1"
+          onclick={(e) => e.stopPropagation()}
+          onkeydown={(e) => e.stopPropagation()}
+        >
           {#if commentCount > 0}
             <span class="flex items-center gap-1 text-sm text-base-content/60">
               <ChatIcon class_="w-4 h-4" />
               {commentCount}
             </span>
           {/if}
-          <ReactionBar
-            event={{
-              id: resource.id,
-              kind: resource.kind,
-              pubkey: resource.pubkey,
-              tags: resource.tags
-            }}
-          />
+          <ReactionBar event={resource.rawEvent} />
+          <BookmarkButton event={resource.rawEvent} />
         </div>
       {/if}
 
       <!-- Debug Panel -->
-      {#if !compact}
+      {#if !compact && !preview}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div onclick={(e) => e.stopPropagation()}>
+        <div data-testid="amb-debug-wrapper" onclick={(e) => e.stopPropagation()}>
           <EventDebugPanel event={resource} />
         </div>
       {/if}

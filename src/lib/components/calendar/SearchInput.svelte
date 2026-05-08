@@ -1,100 +1,109 @@
 <!--
   SearchInput Component
-  Provides text search for calendar events by title and tags
+  Generic, controlled search input with optional debounce, clear button, and
+  Enter-to-submit. The component does not own any store state — the parent
+  passes `value`, receives debounced `onChange(value)`, and optionally an
+  `onSubmit(value)` triggered on Enter (with the current debounce flushed).
 -->
 
 <script>
-  import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
-  import { SearchIcon } from '../icons';
+  import { SearchIcon, CloseIcon } from '../icons';
   import * as m from '$lib/paraglide/messages';
 
-  // Props
-  let { onSearchQueryChange = () => {} } = $props();
-
-  // Local state
-  let searchQuery = $state('');
-  let debounceTimer = $state(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
-
-  /**
-   * Handle input changes with debouncing
-   * @param {Event} event
+  /** @typedef {Object} Props
+   *  @property {string} [value]
+   *  @property {string} [placeholder]
+   *  @property {string} [ariaLabel]
+   *  @property {string} [clearAriaLabel]
+   *  @property {number} [debounceMs]   0 = fire onChange synchronously
+   *  @property {(value: string) => void} [onChange]
+   *  @property {(value: string) => void} [onSubmit]   Fired on Enter
    */
-  function handleInput(event) {
-    const target = /** @type {HTMLInputElement} */ (event.target);
-    searchQuery = target.value;
 
-    // Clear existing timer
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer);
-    }
+  /** @type {Props} */
+  let {
+    value = '',
+    placeholder = m.calendar_search_placeholder(),
+    ariaLabel = m.calendar_search_aria(),
+    clearAriaLabel = m.calendar_search_clear_aria(),
+    debounceMs = 0,
+    onChange = (/** @type {string} */ _v) => {},
+    onSubmit
+  } = $props();
 
-    // Debounce the search - wait 300ms after user stops typing
-    debounceTimer = setTimeout(() => {
-      console.log('🔍 SearchInput: Updating search query:', searchQuery);
-      calendarFilters.setSearchQuery(searchQuery);
-      onSearchQueryChange(searchQuery);
-    }, 300);
-  }
+  // Internal mirror so typing stays responsive even when `value` is owned by
+  // the parent. Writable $derived: reassigning during input overrides until
+  // the parent prop changes again.
+  let internalValue = $derived(value);
 
-  /**
-   * Clear search query
-   */
-  function clearSearch() {
-    console.log('🔍 SearchInput: Clearing search');
-    searchQuery = '';
-    calendarFilters.clearSearchQuery();
-    onSearchQueryChange('');
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let debounceTimer = null;
 
-    // Clear debounce timer if active
+  function flushDebounce() {
     if (debounceTimer !== null) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
     }
   }
 
-  // Derived state
-  let hasQuery = $derived(searchQuery.trim().length > 0);
+  function publish(/** @type {string} */ next) {
+    flushDebounce();
+    if (debounceMs > 0) {
+      debounceTimer = setTimeout(() => onChange(next), debounceMs);
+    } else {
+      onChange(next);
+    }
+  }
+
+  function handleInput(/** @type {Event} */ event) {
+    const target = /** @type {HTMLInputElement} */ (event.target);
+    internalValue = target.value;
+    publish(internalValue);
+  }
+
+  function handleKeydown(/** @type {KeyboardEvent} */ event) {
+    if (event.key === 'Enter' && onSubmit) {
+      event.preventDefault();
+      // Flush a pending debounce so onChange has the latest value before the
+      // parent reads it on the back of onSubmit.
+      flushDebounce();
+      onChange(internalValue);
+      onSubmit(internalValue);
+    }
+  }
+
+  function clearSearch() {
+    internalValue = '';
+    flushDebounce();
+    onChange('');
+  }
+
+  let hasQuery = $derived(internalValue.trim().length > 0);
 </script>
 
-<div class="border-b border-base-300 bg-base-100 px-6 py-4">
-  <!-- Header -->
-  <div class="mb-3 flex items-center gap-3">
-    <SearchIcon class_="h-4 w-4 text-base-content/70" />
-    <span class="font-medium text-base-content">{m.calendar_search_title()}</span>
-    {#if hasQuery}
-      <span class="badge badge-sm badge-primary">{m.calendar_search_active()}</span>
-    {/if}
-  </div>
-
-  <!-- Search input with join pattern -->
-  <div class="join w-full">
-    <input
-      type="text"
-      class="input-bordered input join-item w-full"
-      placeholder={m.calendar_search_placeholder()}
-      value={searchQuery}
-      oninput={handleInput}
-      aria-label={m.calendar_search_aria()}
-    />
-    {#if hasQuery}
-      <button
-        type="button"
-        class="btn join-item btn-ghost"
-        onclick={clearSearch}
-        aria-label={m.calendar_search_clear_aria()}
-        title={m.calendar_search_clear_aria()}
-      >
-        {m.calendar_search_clear()}
-      </button>
-    {/if}
-  </div>
-
-  <!-- Helper text -->
-  <p class="mt-2 text-xs text-base-content/60">
-    {#if hasQuery}
-      {m.calendar_search_helper_active()}
-    {:else}
-      {m.calendar_search_helper_inactive()}
-    {/if}
-  </p>
+<div
+  class="input-bordered input join input-sm flex items-center gap-2"
+  data-testid="calendar-search-input"
+>
+  <SearchIcon class_="h-4 w-4 text-base-content/60" />
+  <input
+    type="search"
+    class="grow border-0 bg-transparent p-0 outline-none focus:outline-none"
+    {placeholder}
+    value={internalValue}
+    oninput={handleInput}
+    onkeydown={handleKeydown}
+    aria-label={ariaLabel}
+  />
+  {#if hasQuery}
+    <button
+      type="button"
+      class="btn btn-circle btn-ghost btn-xs"
+      onclick={clearSearch}
+      aria-label={clearAriaLabel}
+      title={clearAriaLabel}
+    >
+      <CloseIcon class_="h-3.5 w-3.5" />
+    </button>
+  {/if}
 </div>

@@ -4,6 +4,7 @@
  */
 
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
 
 /**
  * @typedef {import('../types/calendar.js').CalendarEvent} CalendarEvent
@@ -82,6 +83,11 @@ export function formatCalendarDate(date, format) {
       return date.toLocaleDateString(locale, {
         month: 'short',
         day: 'numeric'
+      });
+    case 'month':
+      return date.toLocaleDateString(locale, {
+        year: 'numeric',
+        month: 'long'
       });
     case 'time':
       return date.toLocaleTimeString(locale, {
@@ -484,6 +490,33 @@ export function filterEventsByViewMode(events, viewMode, currentDate) {
 
   // Sort by start date/time (chronological order) - filtered array is already a new array from .filter()
   return filtered.sort((a, b) => (a.start || 0) - (b.start || 0));
+}
+
+/**
+ * Narrow a list of events to those whose underlying raw NostrEvent was seen
+ * on at least one of the user-selected relays.
+ *
+ * Items may be CalendarEvent wrappers (with `.originalEvent`) or raw events —
+ * applesauce stores seen-relay metadata via a Symbol on the raw event, so we
+ * unwrap before calling getSeenRelays. Both sides are normalized so that
+ * casing / trailing-slash differences between the UI selection and the
+ * applesauce-stored URL don't cause false negatives.
+ *
+ * @template T
+ * @param {T[]} events
+ * @param {string[]} selectedRelays
+ * @returns {T[]}
+ */
+export function filterEventsBySelectedRelays(events, selectedRelays) {
+  if (!selectedRelays || selectedRelays.length === 0) return events;
+  const normSet = new Set(selectedRelays.map((r) => normalizeURL(r)));
+  return events.filter((e) => {
+    const raw = /** @type {any} */ (e)?.originalEvent ?? e;
+    const seen = getSeenRelays(/** @type {any} */ (raw));
+    if (!seen) return false;
+    for (const r of seen) if (normSet.has(normalizeURL(r))) return true;
+    return false;
+  });
 }
 
 /**

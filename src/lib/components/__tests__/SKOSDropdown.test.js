@@ -328,7 +328,7 @@ describe('SKOSDropdown', () => {
       expect(expandBtns.length + collapseBtns.length).toBe(0);
     });
 
-    it('clicking a parent row label toggles expand/collapse without selecting', async () => {
+    it('clicking a parent row label selects the parent without toggling expand/collapse', async () => {
       // >30 so auto-collapse triggers and children start hidden
       /** @type {any[]} */
       const hierarchy = [];
@@ -368,7 +368,7 @@ describe('SKOSDropdown', () => {
       const optionsBefore = container.querySelectorAll('[role="option"]');
       expect(optionsBefore.length).toBe(10);
 
-      // Find the first parent row's inner selection button (the label area)
+      // Find the first parent row's label button (the label area, not the chevron)
       const parentRow = /** @type {HTMLElement} */ (optionsBefore[0]);
       const labelButton = /** @type {HTMLButtonElement} */ (
         parentRow.querySelector('button:not([aria-label="Expand"]):not([aria-label="Collapse"])')
@@ -377,25 +377,128 @@ describe('SKOSDropdown', () => {
 
       await fireEvent.click(labelButton);
 
-      // Children should now be visible (expanded)
-      const optionsAfter = container.querySelectorAll('[role="option"]');
-      expect(optionsAfter.length).toBeGreaterThan(10);
+      // Selection IS triggered with the parent concept
+      expect(onchange).toHaveBeenCalledTimes(1);
+      expect(onchange.mock.calls[0][0]).toHaveLength(1);
+      expect(onchange.mock.calls[0][0][0]).toMatchObject({
+        id: 'https://example.com/cat0',
+        label: 'Cat 0'
+      });
 
-      // Selection must NOT have been triggered
+      // Collapse state unchanged: still only the 10 parents visible
+      expect(container.querySelectorAll('[role="option"]').length).toBe(10);
+    });
+
+    it('clicking the chevron on a parent expands/collapses without selecting', async () => {
+      /** @type {any[]} */
+      const hierarchy = [];
+      for (let i = 0; i < 10; i++) {
+        hierarchy.push({
+          id: `https://example.com/cat${i}`,
+          prefLabel: { en: `Cat ${i}` },
+          level: 0
+        });
+        for (let j = 0; j < 3; j++) {
+          hierarchy.push({
+            id: `https://example.com/cat${i}/sub${j}`,
+            prefLabel: { en: `Sub ${i}-${j}` },
+            level: 1,
+            parentId: `https://example.com/cat${i}`
+          });
+        }
+      }
+      fetchVocabularyMock.mockResolvedValue(hierarchy);
+
+      const onchange = vi.fn();
+      const { container } = render(SKOSDropdown, {
+        props: { vocabularyKey: 'about', multiple: true, onchange }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger).toBeTruthy();
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // Auto-collapsed: only the 10 parents visible
+      expect(container.querySelectorAll('[role="option"]').length).toBe(10);
+
+      // Click the chevron (Expand) on the first parent
+      const parentRow = /** @type {HTMLElement} */ (
+        container.querySelectorAll('[role="option"]')[0]
+      );
+      const chevron = /** @type {HTMLButtonElement} */ (
+        parentRow.querySelector('button[aria-label="Expand"]')
+      );
+      expect(chevron).toBeTruthy();
+      await fireEvent.click(chevron);
+
+      // Children visible
+      expect(container.querySelectorAll('[role="option"]').length).toBeGreaterThan(10);
+      // No selection
       expect(onchange).not.toHaveBeenCalled();
 
-      // Clicking again collapses back
+      // Click again (now Collapse) → collapses back
       const parentRowAgain = /** @type {HTMLElement} */ (
         container.querySelectorAll('[role="option"]')[0]
       );
-      const labelButton2 = /** @type {HTMLButtonElement} */ (
-        parentRowAgain.querySelector(
-          'button:not([aria-label="Expand"]):not([aria-label="Collapse"])'
-        )
+      const collapseBtn = /** @type {HTMLButtonElement} */ (
+        parentRowAgain.querySelector('button[aria-label="Collapse"]')
       );
-      await fireEvent.click(labelButton2);
+      await fireEvent.click(collapseBtn);
       expect(container.querySelectorAll('[role="option"]').length).toBe(10);
       expect(onchange).not.toHaveBeenCalled();
+    });
+
+    it('Enter key on a parent row selects the parent (keyboard parity)', async () => {
+      /** @type {any[]} */
+      const hierarchy = [];
+      for (let i = 0; i < 10; i++) {
+        hierarchy.push({
+          id: `https://example.com/cat${i}`,
+          prefLabel: { en: `Cat ${i}` },
+          level: 0
+        });
+        for (let j = 0; j < 3; j++) {
+          hierarchy.push({
+            id: `https://example.com/cat${i}/sub${j}`,
+            prefLabel: { en: `Sub ${i}-${j}` },
+            level: 1,
+            parentId: `https://example.com/cat${i}`
+          });
+        }
+      }
+      fetchVocabularyMock.mockResolvedValue(hierarchy);
+
+      const onchange = vi.fn();
+      const { container } = render(SKOSDropdown, {
+        props: { vocabularyKey: 'about', multiple: true, onchange }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      const wrapper = /** @type {HTMLElement} */ (container.querySelector('.dropdown'));
+      // ArrowDown to first parent, then Enter
+      await fireEvent.keyDown(wrapper, { key: 'ArrowDown' });
+      await fireEvent.keyDown(wrapper, { key: 'Enter' });
+
+      expect(onchange).toHaveBeenCalledTimes(1);
+      expect(onchange.mock.calls[0][0][0]).toMatchObject({
+        id: 'https://example.com/cat0'
+      });
+      // Collapse state unchanged
+      expect(container.querySelectorAll('[role="option"]').length).toBe(10);
     });
 
     it('clicking a leaf row label still selects', async () => {
@@ -426,14 +529,14 @@ describe('SKOSDropdown', () => {
         /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
       );
 
-      // Expand the parent by clicking its label (auto-collapsed initially)
+      // Expand the parent via the chevron (auto-collapsed initially; label click now selects)
       const parentRow = /** @type {HTMLElement} */ (
         container.querySelectorAll('[role="option"]')[0]
       );
-      const parentLabelBtn = /** @type {HTMLButtonElement} */ (
-        parentRow.querySelector('button:not([aria-label="Expand"]):not([aria-label="Collapse"])')
+      const chevronBtn = /** @type {HTMLButtonElement} */ (
+        parentRow.querySelector('button[aria-label="Expand"]')
       );
-      await fireEvent.click(parentLabelBtn);
+      await fireEvent.click(chevronBtn);
 
       // Pick the first leaf (index 1 after expand)
       const options = container.querySelectorAll('[role="option"]');
@@ -789,6 +892,35 @@ describe('SKOSDropdown', () => {
       expect(options[1].textContent).toContain('Beta');
     });
 
+    it('renders options without spinner when concepts prop is supplied without isLoading', async () => {
+      const externalConcepts = [
+        { id: 'https://example.com/a', prefLabel: { en: 'Alpha' }, level: 0 },
+        { id: 'https://example.com/b', prefLabel: { en: 'Beta' }, level: 0 }
+      ];
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          concepts: /** @type {any} */ (externalConcepts)
+          // no isLoading prop — internal default must resolve to false
+        }
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('[role="combobox"]')).toBeTruthy();
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // Spinner must not appear in trigger or panel
+      expect(container.querySelector('.loading-spinner')).toBeFalsy();
+      expect(container.querySelector('[data-testid="skos-panel-loading"]')).toBeFalsy();
+
+      const options = container.querySelectorAll('[role="option"]');
+      expect(options.length).toBe(2);
+    });
+
     it('shows spinner when external isLoading prop is true', () => {
       const { container } = render(SKOSDropdown, {
         props: {
@@ -917,6 +1049,222 @@ describe('SKOSDropdown', () => {
       );
 
       expect(container.textContent).toContain('1 selected');
+    });
+  });
+
+  describe('Auto-expand on selection (AI suggestion visibility)', () => {
+    /** Build a >30-concept hierarchical fixture. */
+    function buildHierarchy() {
+      /** @type {any[]} */
+      const out = [];
+      for (let i = 0; i < 10; i++) {
+        out.push({
+          id: `https://example.com/cat${i}`,
+          prefLabel: { en: `Cat ${i}` },
+          level: 0
+        });
+        for (let j = 0; j < 3; j++) {
+          out.push({
+            id: `https://example.com/cat${i}/sub${j}`,
+            prefLabel: { en: `Sub ${i}-${j}` },
+            level: 1,
+            parentId: `https://example.com/cat${i}`
+          });
+        }
+      }
+      return out;
+    }
+
+    it('auto-expands parents containing a pre-selected concept', async () => {
+      fetchVocabularyMock.mockResolvedValue(buildHierarchy());
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          vocabularyKey: 'about',
+          multiple: true,
+          selected: [{ id: 'https://example.com/cat3/sub1', label: 'Sub 3-1' }]
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // The selected child must be visible in the panel and marked
+      const selectedRow = /** @type {HTMLElement | null} */ (
+        Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+          o.textContent?.includes('Sub 3-1')
+        ) ?? null
+      );
+      expect(selectedRow).toBeTruthy();
+      expect(selectedRow?.getAttribute('aria-selected')).toBe('true');
+
+      // Other unrelated parents stay collapsed (only one parent expanded)
+      // Total visible = 10 parents + 3 children of cat3 = 13
+      expect(container.querySelectorAll('[role="option"]').length).toBe(13);
+    });
+
+    it('auto-expands when `selected` changes after mount (post-enrichment)', async () => {
+      fetchVocabularyMock.mockResolvedValue(buildHierarchy());
+
+      const { container, rerender } = render(SKOSDropdown, {
+        props: {
+          vocabularyKey: 'about',
+          multiple: true,
+          selected: /** @type {any} */ ([])
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+      // All 10 parents collapsed, no children visible
+      expect(container.querySelectorAll('[role="option"]').length).toBe(10);
+
+      // Simulate AI enrichment populating selected after mount
+      await rerender({
+        vocabularyKey: 'about',
+        multiple: true,
+        selected: /** @type {any} */ ([{ id: 'https://example.com/cat5/sub2', label: 'Sub 5-2' }])
+      });
+
+      await waitFor(() => {
+        const row = Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+          o.textContent?.includes('Sub 5-2')
+        );
+        expect(row).toBeTruthy();
+        expect(row?.getAttribute('aria-selected')).toBe('true');
+      });
+    });
+
+    it('auto-expands grandparents too (multi-level hierarchy)', async () => {
+      // 3 grandparents, each with 5 parents, each with 3 children = 60 concepts (triggers >30 auto-collapse)
+      /** @type {any[]} */
+      const hierarchy = [];
+      for (let g = 0; g < 3; g++) {
+        hierarchy.push({
+          id: `https://example.com/g${g}`,
+          prefLabel: { en: `Grand ${g}` },
+          level: 0
+        });
+        for (let p = 0; p < 5; p++) {
+          hierarchy.push({
+            id: `https://example.com/g${g}/p${p}`,
+            prefLabel: { en: `Parent ${g}-${p}` },
+            level: 1,
+            parentId: `https://example.com/g${g}`
+          });
+          for (let c = 0; c < 3; c++) {
+            hierarchy.push({
+              id: `https://example.com/g${g}/p${p}/c${c}`,
+              prefLabel: { en: `Child ${g}-${p}-${c}` },
+              level: 2,
+              parentId: `https://example.com/g${g}/p${p}`
+            });
+          }
+        }
+      }
+      fetchVocabularyMock.mockResolvedValue(hierarchy);
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          vocabularyKey: 'about',
+          multiple: true,
+          selected: [{ id: 'https://example.com/g1/p2/c1', label: 'Child 1-2-1' }]
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // Grandparent of the selection should be expanded (its parents visible)
+      const parentRow = Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+        o.textContent?.includes('Parent 1-2')
+      );
+      expect(parentRow).toBeTruthy();
+
+      // The selected grandchild itself should be visible and marked
+      const childRow = Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+        o.textContent?.includes('Child 1-2-1')
+      );
+      expect(childRow).toBeTruthy();
+      expect(childRow?.getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('does not re-collapse parents the user manually expanded', async () => {
+      fetchVocabularyMock.mockResolvedValue(buildHierarchy());
+
+      const { container, rerender } = render(SKOSDropdown, {
+        props: {
+          vocabularyKey: 'about',
+          multiple: true,
+          selected: /** @type {any} */ ([])
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // User expands cat7 manually via chevron
+      const cat7Row = /** @type {HTMLElement} */ (
+        Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+          o.textContent?.includes('Cat 7')
+        )
+      );
+      const cat7Chevron = /** @type {HTMLButtonElement} */ (
+        cat7Row.querySelector('button[aria-label="Expand"]')
+      );
+      await fireEvent.click(cat7Chevron);
+      // cat7's children visible
+      expect(
+        Array.from(container.querySelectorAll('[role="option"]')).some((o) =>
+          o.textContent?.includes('Sub 7-0')
+        )
+      ).toBe(true);
+
+      // Now selection changes (simulate AI enrichment in cat3) — effect re-runs
+      await rerender({
+        vocabularyKey: 'about',
+        multiple: true,
+        selected: /** @type {any} */ ([{ id: 'https://example.com/cat3/sub1', label: 'Sub 3-1' }])
+      });
+
+      // cat7 must stay expanded (effect must not have re-collapsed it)
+      await waitFor(() => {
+        expect(
+          Array.from(container.querySelectorAll('[role="option"]')).some((o) =>
+            o.textContent?.includes('Sub 7-0')
+          )
+        ).toBe(true);
+        // cat3 (selection's parent) is also now expanded
+        expect(
+          Array.from(container.querySelectorAll('[role="option"]')).some((o) =>
+            o.textContent?.includes('Sub 3-1')
+          )
+        ).toBe(true);
+      });
     });
   });
 });

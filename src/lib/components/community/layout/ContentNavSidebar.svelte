@@ -82,9 +82,10 @@
   }
 </script>
 
-<!-- Desktop: Fixed right sidebar -->
+<!-- Desktop: Flex sibling in chrome row -->
 <div
-  class="fixed top-16 left-(--sidebar-icon-w) hidden h-[calc(100vh-8rem)] w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
+  data-testid="content-nav-sidebar"
+  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
 >
   {#if !communitySelected}
     <div

@@ -122,10 +122,11 @@
       {/if}
     </div>
   {:else}
-    <label class="label">
+    <label for="ext-facet-{field.id}" class="label">
       <span class="label-text text-sm font-medium">{field.label || field.id}</span>
     </label>
     <input
+      id="ext-facet-{field.id}"
       type="text"
       class="input-bordered input input-sm w-full"
       value={scalarValue}

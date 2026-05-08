@@ -22,7 +22,8 @@
     userReacted = false,
     userReactionEvent = null,
     emojiUrl = null,
-    reactors = []
+    reactors = [],
+    onToggle
   } = $props();
 
   // Track active user with direct subscription for proper reactivity
@@ -46,6 +47,11 @@
   function toggleReaction() {
     if (!isLoggedIn) return;
 
+    if (onToggle) {
+      onToggle();
+      return;
+    }
+
     if (userReacted && userReactionEvent) {
       deleteReaction(userReactionEvent, {
         relays: runtimeConfig.fallbackRelays || []
@@ -61,6 +67,10 @@
   }
 
   function handleDelete() {
+    if (onToggle) {
+      onToggle();
+      return;
+    }
     if (!canDelete) return;
     deleteReaction(userReactionEvent, {
       relays: runtimeConfig.fallbackRelays || []

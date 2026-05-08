@@ -36,8 +36,6 @@
   // Track initialized src to detect prop changes
   let initializedSrc = '';
 
-  let robohashSrc = $derived(`https://robohash.org/${src}`);
-
   function handleError() {
     if (fallbackStage === 0) {
       // Proxy failed → try original URL
@@ -45,8 +43,10 @@
       currentSrc = src;
     } else if (fallbackStage === 1) {
       // Original failed → robohash
+      // Compute robohash URL inline (no $derived) so this handler is safe
+      // to fire after the owning $effect has been destroyed.
       fallbackStage = 2;
-      currentSrc = robohashSrc;
+      currentSrc = `https://robohash.org/${src}`;
     }
     // Stage 2 (robohash) failed → nothing more to try
   }

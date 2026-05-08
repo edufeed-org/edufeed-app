@@ -101,6 +101,34 @@
     return map;
   });
 
+  // Heal incoming values whose `id` is a label rather than a canonical
+  // concept id. AI enrichment (amb-mcp) returns `{id: prefLabel}`, which
+  // chips can render but the option-checked state can't match. When concept
+  // events are loaded, look each unmatched value up by label and emit
+  // `onchange` once with the corrected rich entries — the form data then
+  // carries canonical IDs all the way through to publish.
+  $effect(() => {
+    if (!conceptEvents.length || !value.length) return;
+    /** @type {Record<string, import('nostr-tools').NostrEvent>} */
+    const byLabel = {};
+    for (const evt of conceptEvents) {
+      const labels = labelsFromEvent(evt);
+      for (const label of Object.values(labels)) {
+        if (label && !byLabel[label]) byLabel[label] = evt;
+      }
+    }
+    let changed = false;
+    const healed = value.map((v) => {
+      if (eventById[v.id]) return v;
+      const label = pickLabel(v.labels, locale);
+      const evt = label ? byLabel[label] : undefined;
+      if (!evt) return v;
+      changed = true;
+      return toRichSelected(evt);
+    });
+    if (changed) onchange?.(healed);
+  });
+
   // Concepts adapted to SKOSDropdown's SKOSConcept shape, with hierarchy
   // (level/parentId) extracted from `broader` tags and concepts emitted in
   // DFS order so SKOSDropdown's tree UI renders correctly.

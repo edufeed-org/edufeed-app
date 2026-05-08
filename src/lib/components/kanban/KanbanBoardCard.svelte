@@ -24,10 +24,17 @@
    * @property {any} [authorProfile] - Author's profile
    * @property {boolean} [compact=false] - Compact display mode
    * @property {'card'|'list'} [variant='card'] - Display variant
+   * @property {string} [communityNpub] - Community npub for route construction
    */
 
   /** @type {Props} */
-  let { board, authorProfile = null, compact = false, variant = 'card' } = $props();
+  let {
+    board,
+    authorProfile = null,
+    compact = false,
+    variant = 'card',
+    communityNpub = undefined
+  } = $props();
 
   const isList = $derived(variant === 'list');
 
@@ -65,8 +72,19 @@
   const visibleColumns = $derived(columns.slice(0, MAX_PREVIEW_COLUMNS));
   const extraColumnCount = $derived(Math.max(0, columns.length - MAX_PREVIEW_COLUMNS));
 
+  /**
+   * Build the resolved route for this board.
+   * @returns {string | null}
+   */
+  function getBoardHref() {
+    if (!boardNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/board/${boardNaddr}`);
+    return resolve(`/${boardNaddr}`);
+  }
+
   function navigateToDetail() {
-    if (boardNaddr) goto(resolve('/' + boardNaddr));
+    const href = getBoardHref();
+    if (href) goto(href);
   }
 
   /** @param {KeyboardEvent} e */
@@ -83,7 +101,7 @@
   <button
     type="button"
     class="kanban-card-list focus:ring-opacity-50 flex w-full items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 text-left transition-shadow hover:border-primary hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
-    onclick={() => boardNaddr && goto(resolve('/' + boardNaddr))}
+    onclick={navigateToDetail}
   >
     <div
       class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded bg-base-200 sm:h-20 sm:w-20"

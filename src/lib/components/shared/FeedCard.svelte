@@ -8,12 +8,13 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkIcon,
+    ReplyIcon,
     FilesIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
-  import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
+  import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -64,6 +65,8 @@
     bookmark: { label: () => m.feed_badge_bookmark(), icon: BookmarkIcon },
     highlight: { label: () => m.feed_badge_highlight(), icon: BookmarkIcon },
     note: { label: () => m.feed_badge_note(), icon: BookmarkIcon },
+    'page-note': { label: () => m.feed_badge_page_note(), icon: BookmarkIcon },
+    reply: { label: () => m.feed_badge_reply(), icon: ReplyIcon },
     form: { label: () => m.feed_badge_form(), icon: FilesIcon }
   };
 
@@ -166,7 +169,7 @@
         {/if}
         {#if communityPubkey}
           <a
-            href={resolve(`/c/${communityPubkey}`)}
+            href={resolve(`/c/${hexToNpub(communityPubkey) || communityPubkey}`)}
             class="truncate text-xs text-base-content/60 hover:text-primary"
             onclick={(e) => e.stopPropagation()}
           >

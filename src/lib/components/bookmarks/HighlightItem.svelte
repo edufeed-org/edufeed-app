@@ -11,6 +11,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
+  import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import EventDeleteButton from '$lib/components/shared/EventDeleteButton.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
 
@@ -71,6 +72,9 @@
 </div>
 
 {#if expanded && event}
+  <div class="mt-2 border-t border-base-300 py-2" data-testid="reaction-bar">
+    <ReactionBar {event} />
+  </div>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="mt-2" data-testid="comment-list" onclick={(e) => e.stopPropagation()}>

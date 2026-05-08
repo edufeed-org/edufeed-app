@@ -153,6 +153,130 @@
           "output": "amb:keywords"
         }
       ]
+    },
+    {
+      "d": "ekw-full",
+      "name": "EKW Full (Edufeed default)",
+      "description": "Vollständiges EKW-Formular für religionspädagogische Lernmaterialien — inklusive Klassenstufe, Schulart, Didaktik, Methode und Bibelstellen.",
+      "fields": [
+        { "id": "name", "type": "text", "label": "Titel", "required": true, "output": "amb:name" },
+        {
+          "id": "description",
+          "type": "textarea",
+          "label": "Beschreibung",
+          "required": true,
+          "output": "amb:description"
+        },
+        {
+          "id": "about",
+          "type": "select",
+          "label": "Fach",
+          "multiple": true,
+          "vocabRef": "ekw-fach",
+          "output": "amb:about"
+        },
+        {
+          "id": "learningResourceType",
+          "type": "select",
+          "label": "Ressourcentyp",
+          "required": true,
+          "vocabRef": "hcrt",
+          "output": "amb:learningResourceType"
+        },
+        {
+          "id": "educationalLevel",
+          "type": "select",
+          "label": "Bildungsstufe",
+          "multiple": true,
+          "vocabRef": "educational-level",
+          "output": "amb:educationalLevel"
+        },
+        {
+          "id": "gradeLevel",
+          "type": "select",
+          "label": "Klassenstufe",
+          "multiple": true,
+          "vocabRef": "klassenstufen",
+          "output": "ekw:gradeLevel"
+        },
+        {
+          "id": "schoolType",
+          "type": "select",
+          "label": "Schulart",
+          "multiple": true,
+          "vocabRef": "schulart",
+          "output": "ekw:schoolType"
+        },
+        {
+          "id": "audience",
+          "type": "select",
+          "label": "Zielgruppe",
+          "multiple": true,
+          "vocabRef": "lrmi-audience",
+          "output": "amb:audience"
+        },
+        {
+          "id": "didacticConcept",
+          "type": "select",
+          "label": "Didaktisches Konzept",
+          "multiple": true,
+          "vocabRef": "didaktisches-konzept",
+          "output": "ekw:didacticConcept"
+        },
+        {
+          "id": "method",
+          "type": "select",
+          "label": "Methode",
+          "multiple": true,
+          "vocabRef": "methode",
+          "output": "ekw:method"
+        },
+        {
+          "id": "methodOther",
+          "type": "textarea",
+          "label": "Methode (frei – eine pro Zeile)",
+          "output": "ekw:methodOther"
+        },
+        {
+          "id": "bibleReference",
+          "type": "text-array",
+          "label": "Bibelstellen",
+          "output": "ekw:bibleReference"
+        },
+        {
+          "id": "interactivityType",
+          "type": "select",
+          "label": "Interaktivität",
+          "vocabRef": "interactivity-type",
+          "output": "amb:interactivityType"
+        },
+        {
+          "id": "conditionsOfAccess",
+          "type": "select",
+          "label": "Zugangsbedingungen",
+          "vocabRef": "conditions-of-access",
+          "output": "amb:conditionsOfAccess"
+        },
+        {
+          "id": "inLanguage",
+          "type": "text",
+          "label": "Sprache (BCP47)",
+          "output": "amb:inLanguage"
+        },
+        {
+          "id": "license",
+          "type": "text",
+          "label": "Lizenz-URI",
+          "required": true,
+          "output": "amb:license"
+        },
+        {
+          "id": "keywords",
+          "type": "text",
+          "label": "Schlagworte (kommagetrennt)",
+          "output": "amb:keywords"
+        }
+      ]
     }
   ]
 }

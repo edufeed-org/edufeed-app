@@ -1,6 +1,6 @@
-import { createAddressLoader, createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createAddressLoader } from 'applesauce-loaders/loaders';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-import { timedPool } from '$lib/loaders/base.js';
+import { createCachedTimelineLoader } from '$lib/loaders/base.js';
 import { VOCAB_KIND, CONCEPT_KIND } from 'nostr-vocab-core/constants';
 
 /**
@@ -37,11 +37,10 @@ export function loadConceptScheme(ref, extraRelays = []) {
  * @returns {import('rxjs').Subscription}
  */
 export function loadSchemeConcepts(schemeCoord, relays) {
-  const loader = createTimelineLoader(
-    timedPool,
+  const loader = createCachedTimelineLoader(
     relays,
     { kinds: [CONCEPT_KIND], '#a': [schemeCoord] },
-    { eventStore, limit: 2000 }
+    { limit: 2000 }
   );
   return loader().subscribe();
 }
@@ -56,11 +55,6 @@ export function loadSchemeConcepts(schemeCoord, relays) {
  * @returns {import('rxjs').Subscription}
  */
 export function loadAllSchemes(relays) {
-  const loader = createTimelineLoader(
-    timedPool,
-    relays,
-    { kinds: [VOCAB_KIND] },
-    { eventStore, limit: 500 }
-  );
+  const loader = createCachedTimelineLoader(relays, { kinds: [VOCAB_KIND] }, { limit: 500 });
   return loader().subscribe();
 }

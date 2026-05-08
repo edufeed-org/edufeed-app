@@ -150,8 +150,8 @@ describe('getFeedCardData', () => {
     });
   });
 
-  describe('kind 1111 (page note)', () => {
-    it('returns typeKey "note" with note excerpt as title', () => {
+  describe('kind 1111 (NIP-22 comment)', () => {
+    it('returns typeKey "page-note" for K=web with content excerpt as title', () => {
       const event = {
         kind: 1111,
         content: 'My note about this page',
@@ -161,11 +161,11 @@ describe('getFeedCardData', () => {
         ]
       };
       const result = getFeedCardData(event);
-      expect(result.typeKey).toBe('note');
+      expect(result.typeKey).toBe('page-note');
       expect(result.title).toBe('My note about this page');
     });
 
-    it('extracts URL from I tag when K=web', () => {
+    it('extracts URL from I tag as subtitle when K=web', () => {
       const event = {
         kind: 1111,
         content: 'A note',
@@ -178,21 +178,49 @@ describe('getFeedCardData', () => {
       expect(result.subtitle).toBe('https://example.com/article');
     });
 
-    it('falls back to r tag when K is not web', () => {
+    it('returns typeKey "reply" for event-rooted comments (K is not web)', () => {
+      const event = {
+        kind: 1111,
+        content: 'Eine Antwort',
+        tags: [
+          ['K', '30142'],
+          ['A', '30142:abc:res']
+        ]
+      };
+      const result = getFeedCardData(event);
+      expect(result.typeKey).toBe('reply');
+      expect(result.title).toBe('Eine Antwort');
+    });
+
+    it('omits subtitle for replies (no useful URL to show)', () => {
       const event = {
         kind: 1111,
         content: 'A comment',
         tags: [['r', 'https://example.com/fallback']]
       };
       const result = getFeedCardData(event);
-      expect(result.subtitle).toBe('https://example.com/fallback');
+      expect(result.subtitle).toBeUndefined();
     });
 
-    it('falls back to "Note" when no content', () => {
+    it('falls back to "Page Note" when K=web with no content', () => {
+      const event = {
+        kind: 1111,
+        content: '',
+        tags: [
+          ['K', 'web'],
+          ['I', 'https://example.com']
+        ]
+      };
+      const result = getFeedCardData(event);
+      expect(result.typeKey).toBe('page-note');
+      expect(result.title).toBe('Page Note');
+    });
+
+    it('falls back to "Reply" when no content and not K=web', () => {
       const event = { kind: 1111, content: '', tags: [] };
       const result = getFeedCardData(event);
-      expect(result.typeKey).toBe('note');
-      expect(result.title).toBe('Note');
+      expect(result.typeKey).toBe('reply');
+      expect(result.title).toBe('Reply');
     });
   });
 

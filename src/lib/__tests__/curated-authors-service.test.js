@@ -832,6 +832,7 @@ describe('curated-authors-service', () => {
 
       const versionBefore = service.getCuratedCacheVersion();
       service.getCuratedAuthors('calendar'); // triggers ensureDirectPubkeysInitialized
+      await Promise.resolve(); // bumpVersion() defers via queueMicrotask
       expect(service.getCuratedCacheVersion()).toBe(versionBefore + 1);
     });
 
@@ -941,6 +942,7 @@ describe('curated-authors-service', () => {
 
       const versionBefore = service.getCuratedCacheVersion();
       service.setUserFollows(['a'.repeat(64)]);
+      await Promise.resolve();
       expect(service.getCuratedCacheVersion()).toBe(versionBefore + 1);
     });
 
@@ -960,8 +962,10 @@ describe('curated-authors-service', () => {
       const service = await import('../services/curated-authors-service.svelte.js');
 
       service.setUserFollows(['a'.repeat(64)]);
+      await Promise.resolve();
       const versionBefore = service.getCuratedCacheVersion();
       service.clearUserFollows();
+      await Promise.resolve();
       expect(service.getCuratedCacheVersion()).toBe(versionBefore + 1);
     });
 
@@ -984,6 +988,7 @@ describe('curated-authors-service', () => {
       // Trigger some mutations to bump version
       service.getCuratedAuthors('calendar');
       service.setUserFollows(['b'.repeat(64)]);
+      await Promise.resolve(); // bumpVersion() defers via queueMicrotask
       expect(service.getCuratedCacheVersion()).toBeGreaterThan(0);
 
       // Full reset should set version back to 0
@@ -1008,8 +1013,10 @@ describe('curated-authors-service', () => {
       const service = await import('../services/curated-authors-service.svelte.js');
 
       service.getCuratedAuthors('calendar'); // bumps to 1
+      await Promise.resolve(); // flush the bump from above
       const versionBefore = service.getCuratedCacheVersion();
       service._resetForTesting('calendar');
+      await Promise.resolve();
       expect(service.getCuratedCacheVersion()).toBe(versionBefore + 1);
     });
   });

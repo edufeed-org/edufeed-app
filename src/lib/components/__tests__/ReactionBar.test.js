@@ -65,9 +65,9 @@ vi.mock('$lib/loaders/reactions.js', () => ({
   }))
 }));
 
-vi.mock('$lib/helpers/reactions.js', () => ({
-  normalizeReactionContent: (/** @type {string} */ content) => content || '+',
-  getCustomEmojiUrl: (/** @type {any} */ event) => {
+vi.mock('$lib/helpers/reactions.js', () => {
+  const normalizeReactionContent = (/** @type {string} */ content) => content || '+';
+  const getCustomEmojiUrl = (/** @type {any} */ event) => {
     const content = event.content?.trim();
     if (!content) return null;
     const match = content.match(/^:([^:]+):$/);
@@ -77,8 +77,36 @@ vi.mock('$lib/helpers/reactions.js', () => ({
       (/** @type {string[]} */ t) => t[0] === 'emoji' && t[1] === shortcode
     );
     return emojiTag?.[2] || null;
-  }
-}));
+  };
+  // Mirror of the real aggregateReactions but uses this file's normalize/customEmojiUrl mocks
+  const aggregateReactions = (
+    /** @type {any[]} */ events,
+    /** @type {string | undefined} */ currentUserPubkey
+  ) => {
+    const agg = new Map();
+    for (const reaction of events) {
+      const emoji = normalizeReactionContent(reaction.content);
+      const existing = agg.get(emoji) || {
+        count: 0,
+        userReacted: false,
+        userReactionEvent: null,
+        emojiUrl: null,
+        reactors: []
+      };
+      const isUserReaction = !!currentUserPubkey && reaction.pubkey === currentUserPubkey;
+      existing.reactors.push(reaction.pubkey);
+      agg.set(emoji, {
+        count: existing.count + 1,
+        userReacted: existing.userReacted || isUserReaction,
+        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
+        emojiUrl: existing.emojiUrl || getCustomEmojiUrl(reaction),
+        reactors: existing.reactors
+      });
+    }
+    return agg;
+  };
+  return { normalizeReactionContent, getCustomEmojiUrl, aggregateReactions };
+});
 
 // Stub child components
 function StubComponent() {}

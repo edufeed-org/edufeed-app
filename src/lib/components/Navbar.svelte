@@ -12,6 +12,7 @@
     MessageSquareIcon
   } from './icons';
   import ProfileAvatar from './shared/ProfileAvatar.svelte';
+  import AccountMenuSection from './shared/AccountMenuSection.svelte';
   import MobileNavMenu from './shared/MobileNavMenu.svelte';
   import InboxDropdown from './inbox/InboxDropdown.svelte';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
@@ -28,18 +29,10 @@
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
   let activeAccount = $state(/** @type {any} */ (null));
-  let accountCount = $state(0);
 
   $effect(() => {
     const subscription = manager.active$.subscribe((account) => {
       activeAccount = account;
-    });
-    return () => subscription.unsubscribe();
-  });
-
-  $effect(() => {
-    const subscription = manager.accounts$.subscribe((accounts) => {
-      accountCount = accounts.length;
     });
     return () => subscription.unsubscribe();
   });
@@ -62,35 +55,6 @@
     if (dropdownTrigger && dropdownTrigger.closest('.dropdown')) {
       dropdownTrigger.blur();
     }
-  }
-
-  /**
-   * Logout the current active account only
-   */
-  function handleLogoutCurrent() {
-    console.log('Navbar: Logging out current account');
-
-    if (activeAccount) {
-      manager.removeAccount(activeAccount.id);
-    }
-
-    closeDropdown();
-  }
-
-  /**
-   * Logout all accounts
-   */
-  function handleLogoutAll() {
-    console.log('Navbar: Logging out all accounts');
-
-    if (confirm(m.navbar_logout_all_confirm())) {
-      const accounts = [...manager.accounts];
-      accounts.forEach((account) => {
-        manager.removeAccount(account.id);
-      });
-    }
-
-    closeDropdown();
   }
 </script>
 
@@ -165,23 +129,9 @@
           <ProfileAvatar pubkey={activeAccount.pubkey} size="md" fallbackType="robohash" />
         </div>
         <ul
-          class="dropdown-content menu z-[60] mt-3 w-52 menu-sm rounded-box bg-base-100 p-2 shadow"
+          class="dropdown-content menu z-[60] mt-3 w-56 menu-sm rounded-box bg-base-100 p-2 shadow"
         >
-          <li>
-            <a href={resolve(`/p/${activeAccount.pubkey}`)} class="justify-between">
-              {m.common_profile()}
-            </a>
-          </li>
-          <li>
-            <button onclick={openLoginModal}>{m.navbar_switch_account()}</button>
-          </li>
-          <li>
-            <a href={resolve('/settings')} onclick={closeDropdown}>{m.common_settings()}</a>
-          </li>
-          <li><button onclick={handleLogoutCurrent}>{m.navbar_logout_current()}</button></li>
-          {#if accountCount > 1}
-            <li><button onclick={handleLogoutAll}>{m.navbar_logout_all()}</button></li>
-          {/if}
+          <AccountMenuSection onClose={closeDropdown} />
         </ul>
       </div>
     {:else}

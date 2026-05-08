@@ -6,9 +6,21 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
+
+// Mutable state read by the form-to-amb and accounts mocks below.
+// Tests can set these before render to simulate different scenarios.
+// vi.hoisted makes this available to vi.mock factories despite hoisting.
+const { mockState } = vi.hoisted(() => ({
+  mockState:
+    /** @type {{ formRef: { address: string; relay: string } | null; activeUserPubkey: string | null }} */ ({
+      formRef: null,
+      activeUserPubkey: null
+    })
+}));
+
 import AMBResourceView from '../educational/AMBResourceView.svelte';
 
 // Mock dependencies
@@ -42,6 +54,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_related_resources: () => 'Related',
   amb_resource_uploaded_files: () => 'Uploaded Files',
   amb_resource_discussion: () => 'Discussion',
+  common_back: () => 'Back',
   common_edit: () => 'Edit',
   common_delete: () => 'Delete',
   common_share: () => 'Share',
@@ -66,12 +79,21 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_creator_alt: () => 'Creator',
   amb_resource_more_creators: (/** @type {{ count: number }} */ { count }) => `+${count} more`,
   amb_resource_published: (/** @type {{ date: string }} */ { date }) => `Published ${date}`,
+  amb_resource_published_label: () => 'Published',
+  amb_resource_edit_in_form: () => 'Edit in form',
   amb_resource_nostr_native_description: () =>
     'This content is stored on the Nostr network and available directly without external dependencies.',
   amb_resource_view_file: () => 'View',
   amb_resource_download_file: () => 'Download',
   amb_resource_external_references: () => 'External References',
-  amb_resource_external_reference: () => 'External Reference'
+  amb_resource_external_reference: () => 'External Reference',
+  amb_resource_ekw_metadata: () => 'EKKW-Metadaten',
+  amb_resource_ekw_grade_level: () => 'Klassenstufe',
+  amb_resource_ekw_school_type: () => 'Schulart',
+  amb_resource_ekw_didactic_concept: () => 'Didaktisches Konzept',
+  amb_resource_ekw_method: () => 'Methode',
+  amb_resource_ekw_method_other: () => 'Methode (Freitext)',
+  amb_resource_ekw_bible_reference: () => 'Bibelstelle'
 }));
 vi.mock('$lib/paraglide/runtime.js', () => ({
   getLocale: () => 'en'
@@ -80,6 +102,13 @@ vi.mock('applesauce-core/helpers', () => ({
   getProfilePicture: (/** @type {any} */ profile) => profile?.picture || null,
   getDisplayName: (/** @type {any} */ profile, /** @type {string} */ fallback) =>
     profile?.name || fallback
+}));
+vi.mock('$lib/helpers/navigationHistory.js', () => ({
+  getHasHistory: () => true,
+  getFallbackRoute: () => '/'
+}));
+vi.mock('$lib/helpers/form-to-amb.js', () => ({
+  getFormReferenceFromResource: () => mockState.formRef
 }));
 vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: () => 'Jan 15'
@@ -103,7 +132,8 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => null
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => null
+  useActiveUser: () => () =>
+    mockState.activeUserPubkey ? { pubkey: mockState.activeUserPubkey } : null
 }));
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
@@ -124,11 +154,17 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 }));
 // Mock heavy sub-components
 vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: () => ({}) }));
 vi.mock('../comments/CommentList.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/CommunityShare.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
+vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
+vi.mock('../shared/EventContextMenu.svelte', () => ({ default: () => ({}) }));
+vi.mock('../shared/DeleteConfirmModal.svelte', () => ({ default: () => ({}) }));
+vi.mock('../educational/ExtensionMetadataPanel.svelte', () => ({ default: () => ({}) }));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/components/icons', async (importOriginal) => {
   const actual = /** @type {any} */ (await importOriginal());
   return { ...actual };
@@ -170,6 +206,53 @@ const mockResource = {
 };
 
 describe('AMBResourceView', () => {
+  beforeEach(() => {
+    mockState.formRef = null;
+    mockState.activeUserPubkey = null;
+  });
+
+  it('renders a back button via DetailHeader', () => {
+    const { container } = render(AMBResourceView, {
+      props: { event: mockEvent, resource: mockResource }
+    });
+
+    const backButton = container.querySelector('button[aria-label="Back"]');
+    expect(backButton).toBeTruthy();
+  });
+
+  it('does not render the legacy bespoke 4xl page title', () => {
+    // Anti-regression: the old custom <h1 class="text-4xl"> header should be
+    // replaced by DetailHeader's slim toolbar + smaller title.
+    const { container } = render(AMBResourceView, {
+      props: { event: mockEvent, resource: mockResource }
+    });
+
+    const legacyTitle = container.querySelector('h1.text-4xl');
+    expect(legacyTitle).toBeNull();
+  });
+
+  it('hides the inline "Edit in form" button when no formRef is present', () => {
+    mockState.activeUserPubkey = mockEvent.pubkey; // owner, but no formRef
+    mockState.formRef = null;
+
+    const { queryByText } = render(AMBResourceView, {
+      props: { event: mockEvent, resource: mockResource }
+    });
+
+    expect(queryByText('Edit in form')).toBeNull();
+  });
+
+  it('renders the inline "Edit in form" button when formRef resolves and user owns the resource', () => {
+    mockState.activeUserPubkey = mockEvent.pubkey; // owner
+    mockState.formRef = { address: '30168:abc:def', relay: 'wss://forms.example.com' };
+
+    const { queryByText } = render(AMBResourceView, {
+      props: { event: mockEvent, resource: mockResource }
+    });
+
+    expect(queryByText('Edit in form')).toBeTruthy();
+  });
+
   it('external link hrefs preserve full URLs', () => {
     const { container } = render(AMBResourceView, {
       props: { event: mockEvent, resource: mockResource }
@@ -206,3 +289,7 @@ describe('AMBResourceView', () => {
     }
   });
 });
+
+// EKW/extension metadata rendering moved to ExtensionMetadataPanel.test.js.
+// AMBResourceView mocks ExtensionMetadataPanel out (see vi.mock above) so the
+// child's behavior is tested in isolation rather than through the parent.

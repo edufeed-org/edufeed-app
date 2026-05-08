@@ -5,9 +5,15 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, fireEvent } from '@testing-library/svelte';
+import { goto } from '$app/navigation';
 import AMBResourceCard from '../educational/AMBResourceCard.svelte';
+
+// Hoisted so vi.mock factory can reference it
+const { BookmarkButtonStub } = vi.hoisted(() => ({
+  BookmarkButtonStub: vi.fn(() => ({}))
+}));
 
 // Mock dependencies
 // Mock app-settings before any imports that transitively depend on it
@@ -29,6 +35,9 @@ vi.mock('$lib/paraglide/runtime.js', () => ({
 }));
 vi.mock('$app/navigation', () => ({
   goto: vi.fn()
+}));
+vi.mock('$app/paths', () => ({
+  resolve: (/** @type {string} */ path) => path
 }));
 vi.mock('applesauce-core/helpers', () => ({
   getProfilePicture: (/** @type {any} */ profile) => profile?.picture || null,
@@ -73,6 +82,14 @@ vi.mock('../shared/EventDebugPanel.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: BookmarkButtonStub }));
+
+const mockResourceTags = [
+  ['d', 'intro-math'],
+  ['learningResourceType', 'text'],
+  ['about', 'mathematics'],
+  ['t', 'math']
+];
 
 const mockResource = {
   id: 'a'.repeat(64),
@@ -87,12 +104,17 @@ const mockResource = {
   isFree: true,
   languages: ['en', 'de'],
   keywords: ['math', 'education'],
-  tags: [
-    ['learningResourceType', 'text'],
-    ['about', 'mathematics'],
-    ['t', 'math']
-  ],
-  sig: 'c'.repeat(128)
+  tags: mockResourceTags,
+  sig: 'c'.repeat(128),
+  rawEvent: {
+    id: 'a'.repeat(64),
+    pubkey: 'b'.repeat(64),
+    kind: 30142,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: mockResourceTags,
+    content: '',
+    sig: 'c'.repeat(128)
+  }
 };
 
 const mockAuthorProfile = {
@@ -101,6 +123,41 @@ const mockAuthorProfile = {
 };
 
 describe('AMBResourceCard', () => {
+  beforeEach(() => {
+    BookmarkButtonStub.mockClear();
+  });
+
+  describe('bookmarking (kind 30142)', () => {
+    it('card variant renders a BookmarkButton', () => {
+      render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+      expect(BookmarkButtonStub).toHaveBeenCalled();
+    });
+
+    it('list variant renders a BookmarkButton', () => {
+      render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile, variant: 'list' }
+      });
+      expect(BookmarkButtonStub).toHaveBeenCalled();
+    });
+
+    it('passes the kind 30142 rawEvent to BookmarkButton', () => {
+      render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+      // Find the props object across all call args (Svelte 5 mount call shape varies)
+      const propsArg = /** @type {any} */ (
+        BookmarkButtonStub.mock.calls
+          .flat()
+          .find(/** @param {any} a */ (a) => a && typeof a === 'object' && 'event' in a)
+      );
+      expect(propsArg).toBeTruthy();
+      expect(propsArg.event?.kind).toBe(30142);
+      expect(propsArg.event?.id).toBe(mockResource.id);
+    });
+  });
+
   describe('default (card) variant', () => {
     it('renders as vertical card layout by default', () => {
       const { container } = render(AMBResourceCard, {
@@ -212,6 +269,108 @@ describe('AMBResourceCard', () => {
       const listItem = container.querySelector('.amb-card-list');
       expect(listItem?.getAttribute('role')).toBe('button');
       expect(listItem?.getAttribute('tabindex')).toBe('0');
+    });
+  });
+
+  describe('navigation href', () => {
+    beforeEach(() => {
+      /** @type {any} */ (goto).mockClear();
+    });
+
+    it('navigates to global /<naddr> when no communityNpub is set', async () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+
+      const card = /** @type {HTMLElement} */ (container.querySelector('.amb-card'));
+      await fireEvent.click(card);
+
+      expect(goto).toHaveBeenCalledWith('/naddr1test');
+    });
+
+    it('navigates to /c/<npub>/r/<naddr> when communityNpub is set', async () => {
+      const npub = 'npub1communitytest';
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: mockResource,
+          authorProfile: mockAuthorProfile,
+          communityNpub: npub
+        }
+      });
+
+      const card = /** @type {HTMLElement} */ (container.querySelector('.amb-card'));
+      await fireEvent.click(card);
+
+      expect(goto).toHaveBeenCalledWith(`/c/${npub}/r/naddr1test`);
+    });
+
+    it('uses community-aware href in list variant', async () => {
+      const npub = 'npub1communitytest';
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: mockResource,
+          authorProfile: mockAuthorProfile,
+          variant: 'list',
+          communityNpub: npub
+        }
+      });
+
+      const listItem = /** @type {HTMLElement} */ (container.querySelector('.amb-card-list'));
+      await fireEvent.click(listItem);
+
+      expect(goto).toHaveBeenCalledWith(`/c/${npub}/r/naddr1test`);
+    });
+  });
+
+  describe('preview mode', () => {
+    /** @type {any} */
+    const minimalResource = {
+      pubkey: '0'.repeat(64),
+      identifier: 'https://example.org/lesson',
+      name: 'Test Lesson',
+      description: 'A short description',
+      image: '',
+      publishedDate: 1_700_000_000,
+      languages: ['de'],
+      isFree: true,
+      license: null,
+      keywords: [],
+      tags: [],
+      rawEvent: { id: '', pubkey: '0'.repeat(64), kind: 30142, tags: [], content: '', sig: '' },
+      kind: 30142
+    };
+
+    beforeEach(() => {
+      vi.mocked(goto).mockClear();
+    });
+
+    it('renders without click navigation when preview=true', async () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: minimalResource, preview: true }
+      });
+      const card = container.querySelector('.amb-card');
+      expect(card).toBeTruthy();
+      expect(card?.getAttribute('role')).not.toBe('button');
+      if (card) await fireEvent.click(card);
+      expect(goto).not.toHaveBeenCalled();
+    });
+
+    it('hides bookmark/reactions/comments/debug when preview=true', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: minimalResource, preview: true }
+      });
+      expect(container.querySelector('[role="toolbar"]')).toBeNull();
+      expect(container.querySelector('[data-testid="amb-debug-wrapper"]')).toBeNull();
+    });
+
+    it('still renders metadata, image area, title, and open-content button when preview=true', () => {
+      const { getByText, container } = render(AMBResourceCard, {
+        props: { resource: minimalResource, preview: true }
+      });
+      expect(getByText('Test Lesson')).toBeTruthy();
+      expect(getByText('Open Content')).toBeTruthy();
+      // Image placeholder emoji should be present (no image URL provided)
+      expect(container.textContent).toContain('📚');
     });
   });
 });

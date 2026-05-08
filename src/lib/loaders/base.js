@@ -13,6 +13,7 @@ import {
 } from 'applesauce-loaders/loaders';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays, getEventLoaderLookupRelays } from '$lib/helpers/relay-helper.js';
+import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
 
 /**
  * Pool wrapper for use with createTimelineLoader.
@@ -34,24 +35,45 @@ export const timedPool = (relays, filters) => pool.request(relays, filters);
 // author's profile isn't on the app content relays.
 export const addressLoader = createAddressLoader(pool, {
   eventStore,
+  cacheRequest,
   get lookupRelays() {
     return getEventLoaderLookupRelays();
   }
 });
 
 // Standalone event-by-ID loader for direct use
-export const eventLoader = createEventLoader(pool, { eventStore });
+export const eventLoader = createEventLoader(pool, {
+  eventStore,
+  cacheRequest
+});
 
 // Unified loader for EventStore - handles both EventPointer and AddressPointer.
 // Drives eventStore.profile() / eventStore.replaceable() auto-loading, so
 // lookupRelays must include profile indexer relays (see addressLoader above).
 const unifiedLoader = createUnifiedEventLoader(pool, {
   eventStore,
+  cacheRequest,
   get lookupRelays() {
     return getEventLoaderLookupRelays();
   }
 });
 eventStore.eventLoader = unifiedLoader;
+
+/**
+ * Wraps createTimelineLoader with the shared pool, eventStore, and IDB cache.
+ * Prefer this over calling createTimelineLoader directly so cache wiring
+ * stays uniform across the codebase.
+ *
+ * @param {string[]} relays
+ * @param {import('nostr-tools').Filter} filter
+ * @param {object} [opts] - extra options (e.g. limit) merged over defaults
+ */
+export const createCachedTimelineLoader = (relays, filter, opts = {}) =>
+  createTimelineLoader(timedPool, relays, filter, {
+    eventStore,
+    cache: cacheRequest,
+    ...opts
+  });
 
 /**
  * Factory: Create a timeline loader for user's deletion events (NIP-09)

@@ -6,7 +6,9 @@
   import { browser } from '$app/environment';
   import DOMPurify from 'dompurify';
   import BookmarkChip from './BookmarkChip.svelte';
-  import PageNoteItem from './PageNoteItem.svelte';
+  import BookmarkItem from './BookmarkItem.svelte';
+  import CommentList from '$lib/components/comments/CommentList.svelte';
+  import UrlReactionBar from '$lib/components/reactions/UrlReactionBar.svelte';
   import HighlightOverlay from '$lib/components/shared/HighlightOverlay.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -14,7 +16,6 @@
    * @type {{
    *   articleUrl: string,
    *   highlights: any[],
-   *   pageNotes: any[],
    *   bookmarks: any[],
    *   profiles: Map<string, any>,
    *   onerror: () => void,
@@ -26,7 +27,6 @@
   let {
     articleUrl,
     highlights,
-    pageNotes,
     bookmarks,
     profiles,
     onerror,
@@ -36,6 +36,11 @@
   } = $props();
 
   let isLoading = $state(true);
+  /** @type {string | null} */
+  let activeBookmarkId = $state(null);
+  const activeBookmark = $derived(
+    activeBookmarkId ? bookmarks.find((b) => b.id === activeBookmarkId) : null
+  );
   let article = $state(
     /** @type {{ title?: string, content?: string, textContent?: string, byline?: string, siteName?: string } | null} */ (
       null
@@ -159,9 +164,27 @@
         </h2>
         <div class="flex flex-wrap gap-2">
           {#each bookmarks as bookmark (bookmark.id)}
-            <BookmarkChip profile={profiles.get(bookmark.pubkey)} timestamp={bookmark.created_at} />
+            <BookmarkChip
+              profile={profiles.get(bookmark.pubkey)}
+              timestamp={bookmark.created_at}
+              active={activeBookmarkId === bookmark.id}
+              onclick={() => {
+                activeBookmarkId = activeBookmarkId === bookmark.id ? null : bookmark.id;
+              }}
+            />
           {/each}
         </div>
+        {#if activeBookmark}
+          <div class="mt-4" data-testid="bookmark-panel">
+            <BookmarkItem
+              event={activeBookmark}
+              authorProfile={profiles.get(activeBookmark.pubkey)}
+              expanded={true}
+              {activeUser}
+              {communityPubkey}
+            />
+          </div>
+        {/if}
       </section>
     {/if}
 
@@ -177,18 +200,14 @@
       class="prose max-w-none"
     />
 
-    <!-- Page notes -->
-    {#if pageNotes.length > 0}
-      <section class="mt-8 border-t border-base-300 pt-6">
-        <h2 class="mb-3 text-sm font-semibold text-base-content/70">
-          {m.social_bookmarks_page_notes()}
-        </h2>
-        <div class="flex flex-col gap-3">
-          {#each pageNotes as note (note.id)}
-            <PageNoteItem event={note} authorProfile={profiles.get(note.pubkey)} />
-          {/each}
-        </div>
-      </section>
-    {/if}
+    <!-- URL-rooted reactions (NIP-25 kind 17 with external #i tag) -->
+    <section class="mt-8 border-t border-base-300 pt-6">
+      <UrlReactionBar url={articleUrl} />
+    </section>
+
+    <!-- URL-rooted page-note conversation (NIP-22 with external root) -->
+    <section class="mt-6 border-t border-base-300 pt-6">
+      <CommentList rootUrl={articleUrl} {activeUser} {communityPubkey} />
+    </section>
   {/if}
 </div>

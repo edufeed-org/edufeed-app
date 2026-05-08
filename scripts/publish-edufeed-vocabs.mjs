@@ -34,6 +34,8 @@ import { RelayPool } from 'applesauce-relay';
 import { fetchSkohubVocab, parseSkos, convertToDrafts } from 'nostr-vocab-skos-import';
 import { buildConceptScheme, buildConcept } from 'nostr-vocab-core';
 
+import { buildInlineDrafts } from './lib/inline-vocab-drafts.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VOCAB_DATA_PATH = resolve(__dirname, 'data/edufeed-vocabs.json');
 
@@ -98,30 +100,6 @@ async function buildSkohubDrafts(scheme, pubkey, relayHint) {
     topConceptOf: rewriteRef(c.topConceptOf)
   }));
   return applyRelayHint(draftsRaw, relayHint);
-}
-
-/**
- * Build an inline vocab into scheme + concept drafts (no network, no SKOS parse).
- */
-function buildInlineDrafts(scheme, pubkey, relayHint) {
-  const schemeAddress = `39737:${pubkey}:${scheme.d}`;
-  const inScheme = { address: schemeAddress, relay: relayHint };
-  const concepts = (scheme.source.concepts || []).map((c) => ({
-    d: c.d,
-    prefLabels: c.prefLabels || [],
-    altLabels: c.altLabels || [],
-    definitions: c.definitions || [],
-    externalUri: c.externalUri,
-    inScheme
-  }));
-  return {
-    scheme: {
-      d: scheme.d,
-      prefLabels: scheme.source.prefLabels || [{ value: scheme.d, lang: 'en' }],
-      descriptions: scheme.source.descriptions || []
-    },
-    concepts
-  };
 }
 
 async function main() {

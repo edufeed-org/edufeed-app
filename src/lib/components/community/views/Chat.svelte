@@ -82,13 +82,22 @@
     ...(runtimeConfig.fallbackRelays || [])
   ]);
 
-  // Subscribe to chat messages using storeEvents + TimelineModel pattern
+  // Subscribe to chat messages using storeEvents + TimelineModel pattern.
+  // isLoading clears on whichever happens first: model emits events, EOSE
+  // arrives, error, or a fallback timeout. The fallback is required because
+  // pool.group(...).subscription(...) does not reliably deliver EOSE on a
+  // tab-switch resubscribe (cold reload works because connection state is
+  // fresh). The pool's eoseTimeout is 3s; we add a small grace period.
   $effect(() => {
     if (!derivedCommunityPubkey) return;
 
     isLoading = true;
     hasMore = true;
     const filter = { kinds: [9], '#h': [derivedCommunityPubkey] };
+
+    const fallbackTimer = setTimeout(() => {
+      isLoading = false;
+    }, 4000);
 
     const subSub = pool
       .group(chatRelays)
@@ -98,17 +107,20 @@
         next: (response) => {
           if (response === 'EOSE') isLoading = false;
         },
-        error: (err) => {
-          console.error('Chat subscription error:', err);
+        error: () => {
           isLoading = false;
         }
       });
 
     const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
       messages = events;
+      // First batch of events means we have something to render — drop the
+      // spinner immediately so users see content even if EOSE never arrives.
+      if (events.length > 0) isLoading = false;
     });
 
     return () => {
+      clearTimeout(fallbackTimer);
       subSub.unsubscribe();
       modelSub.unsubscribe();
     };

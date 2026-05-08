@@ -29,7 +29,15 @@
       const initial = {};
       for (const field of form.fields) {
         const provided = initialValues?.[field.id];
-        if (provided !== undefined) {
+        if (field.type === 'text-array') {
+          if (Array.isArray(provided) && provided.length > 0) {
+            initial[field.id] = provided;
+          } else if (provided !== undefined && provided !== null && provided !== '') {
+            initial[field.id] = [String(provided)];
+          } else {
+            initial[field.id] = [''];
+          }
+        } else if (provided !== undefined) {
           initial[field.id] = provided;
         } else {
           initial[field.id] = field.vocab ? [] : field.defaultValue || '';
@@ -45,7 +53,16 @@
     let hasError = false;
 
     for (const field of form.fields) {
-      const err = validateField(field, values[field.id] || '');
+      const raw = values[field.id];
+      let toCheck = raw;
+      if (field.type === 'text-array') {
+        const arr = Array.isArray(raw)
+          ? raw.map((/** @type {string} */ s) => s.trim()).filter(Boolean)
+          : [];
+        values[field.id] = arr;
+        toCheck = arr;
+      }
+      const err = validateField(field, toCheck || '');
       newErrors[field.id] = err;
       if (err) hasError = true;
     }
@@ -116,6 +133,35 @@
             >
           </div>
         {/if}
+      {:else if field.type === 'text-array'}
+        <div class="space-y-2">
+          {#each values[field.id] as _ref, i (i)}
+            <div class="flex gap-2">
+              <input
+                type="text"
+                class="input-bordered input flex-1"
+                placeholder={field.options?.placeholder || ''}
+                bind:value={values[field.id][i]}
+              />
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                aria-label="Entfernen"
+                onclick={() => {
+                  const arr = values[field.id].filter(
+                    (/** @type {string} */ _v, /** @type {number} */ j) => j !== i
+                  );
+                  values[field.id] = arr.length > 0 ? arr : [''];
+                }}>×</button
+              >
+            </div>
+          {/each}
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            onclick={() => (values[field.id] = [...values[field.id], ''])}>+ Hinzufügen</button
+          >
+        </div>
       {:else if field.type === 'select' && field.options?.multiple}
         <div class="mt-1 flex flex-col gap-2">
           {#each field.options?.options || [] as opt (opt)}

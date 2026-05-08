@@ -36,12 +36,13 @@ vi.mock('../shared/ImageWithFallback.svelte', () => ({
   default: {}
 }));
 
-vi.mock('../shared/HoverCard.svelte', () => ({
-  default: {}
-}));
+vi.mock('../shared/HoverCard.svelte', async () => {
+  const mock = await import('./__mocks__/HoverCardMock.svelte');
+  return { default: mock.default };
+});
 
 vi.mock('../shared/ProfileHoverCardContent.svelte', () => ({
-  default: {}
+  default: function StubProfileHoverCardContent() {}
 }));
 
 beforeEach(() => {
@@ -81,6 +82,17 @@ describe('ProfileAvatar', () => {
       });
       const link = container.querySelector('a');
       expect(link).toBeNull();
+    });
+  });
+
+  describe('hover card', () => {
+    it('passes fixed=true to HoverCard so the popover escapes overflow:hidden ancestors', () => {
+      const { container } = render(ProfileAvatar, {
+        props: { pubkey: TEST_PUBKEY, linkToProfile: true }
+      });
+      const hovercard = container.querySelector('[data-testid="hovercard"]');
+      expect(hovercard).not.toBeNull();
+      expect(hovercard?.getAttribute('data-fixed')).toBe('true');
     });
   });
 });

@@ -1,178 +1,265 @@
-import { fetchCalendarEvents, fetchEventById, encodeEventToNaddr } from '$lib/helpers/nostrUtils';
-import { getCalendarEventMetadata } from '$lib/helpers/eventUtils';
-import {
-  detectCalendarIdentifierType,
-  fetchCommunityCalendarEvents,
-  getCommunityCalendarMetadata
-} from '$lib/helpers/calendar';
 import { nip19 } from 'nostr-tools';
-import { env } from '$env/dynamic/private';
+import {
+  getCalendarRelaysServer,
+  decodeIdentifier,
+  fetchEventFromRelays,
+  fetchEventsFromRelays
+} from '$lib/server/nostr-fetch.js';
 
 /**
- * Safely encode filename for Content-Disposition header
- * Uses RFC 5987 encoding to support Unicode characters
- * @param {string} filename - Original filename
- * @returns {string} - Encoded Content-Disposition value
+ * Server-side ICS feed for both NIP-52 calendars (`naddr`) and community
+ * calendars (hex pubkey / npub). Fetches events from relays directly via
+ * `$lib/server/nostr-fetch.js` so this endpoint does not depend on the
+ * browser-only EventStore + runtimeConfig stack.
+ */
+
+const HEX_PUBKEY_RE = /^[0-9a-f]{64}$/i;
+
+/**
+ * Detect identifier type without pulling in client-only helpers.
+ * @param {string} identifier
+ * @returns {'naddr' | 'pubkey' | 'unknown'}
+ */
+function detectIdentifierType(identifier) {
+  if (!identifier || typeof identifier !== 'string') return 'unknown';
+  if (identifier.startsWith('naddr1')) return 'naddr';
+  if (identifier.startsWith('npub1') || HEX_PUBKEY_RE.test(identifier)) return 'pubkey';
+  return 'unknown';
+}
+
+/**
+ * Pure tag accessor — first value of a single-occurrence tag.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string} name
+ * @returns {string | undefined}
+ */
+function tagValue(event, name) {
+  const t = event.tags.find((tag) => tag[0] === name);
+  return t ? t[1] : undefined;
+}
+
+/**
+ * Encode a parameterized replaceable event as an naddr for ICS URL building.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {string}
+ */
+function eventToNaddr(event) {
+  return nip19.naddrEncode({
+    kind: event.kind,
+    pubkey: event.pubkey,
+    identifier: tagValue(event, 'd') || ''
+  });
+}
+
+/**
+ * Safely encode filename for Content-Disposition header (RFC 5987).
+ * @param {string} filename
+ * @returns {string}
  */
 function encodeFilename(filename) {
-  // Remove file extension for processing
   const name = filename.replace(/\.ics$/, '');
-
-  // Create ASCII-safe fallback (remove non-ASCII chars)
   const asciiFallback = name.replace(/[^\x20-\x7E]/g, '').trim() || 'calendar';
-
-  // Encode for RFC 5987 (UTF-8 percent encoding)
   const encoded = encodeURIComponent(name).replace(/['()]/g, escape);
-
   return `attachment; filename="${asciiFallback}.ics"; filename*=UTF-8''${encoded}.ics`;
 }
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url, params }) {
-  const { id: calendarIdentifier } = params ?? null;
+  const calendarIdentifier = params?.id;
 
   if (!calendarIdentifier) {
-    return new Response(JSON.stringify({ error: 'Calendar ID is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return jsonError('Calendar ID is required', 400);
   }
 
-  // Detect identifier type
-  const identifierType = detectCalendarIdentifierType(calendarIdentifier);
+  const identifierType = detectIdentifierType(calendarIdentifier);
 
   if (identifierType === 'naddr') {
-    // Handle NIP-52 calendar (existing flow)
-    return await handleNIP52Calendar(calendarIdentifier, url);
-  } else if (identifierType === 'pubkey') {
-    // Handle community calendar (new flow)
-    return await handleCommunityCalendar(calendarIdentifier, url);
-  } else {
-    return new Response(JSON.stringify({ error: 'Invalid calendar identifier format' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return handleNaddrCalendar(calendarIdentifier, url);
   }
+  if (identifierType === 'pubkey') {
+    return handleCommunityCalendar(calendarIdentifier, url);
+  }
+  return jsonError('Invalid calendar identifier format', 400);
 }
 
 /**
- * Handle NIP-52 calendar ICS generation
- * @param {string} naddr - Calendar naddr identifier
- * @param {URL} url - Request URL
+ * Handle a NIP-52 (kind 31924) calendar referenced by naddr.
+ * @param {string} naddr
+ * @param {URL} url
  * @returns {Promise<Response>}
  */
-async function handleNIP52Calendar(naddr, url) {
-  const calendarEvent = await fetchEventById(naddr);
-  const calendarMetadata = getCalendarEventMetadata(calendarEvent);
-
-  if (!calendarEvent || calendarEvent.kind !== 31924) {
-    return new Response(JSON.stringify({ error: 'Invalid calendar ID or event not found' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' }
-    });
+async function handleNaddrCalendar(naddr, url) {
+  const decoded = decodeIdentifier(naddr);
+  if (!decoded || decoded.type !== 'naddr' || decoded.kind !== 31924) {
+    return jsonError('Invalid calendar naddr', 400);
   }
 
-  const { upcoming, past } = await fetchCalendarEvents(calendarEvent);
-  const allEvents = [...upcoming, ...past];
+  const relays = getCalendarRelaysServer(decoded.relays);
 
-  const icsContent = generateICSContent(
-    { title: calendarMetadata.title || '', summary: calendarMetadata.summary || '' },
-    allEvents,
+  const calendar = await fetchEventFromRelays(
+    {
+      kinds: [31924],
+      authors: [decoded.pubkey],
+      '#d': [decoded.identifier],
+      limit: 1
+    },
+    relays
+  );
+
+  if (!calendar) {
+    return jsonError('Calendar not found', 404);
+  }
+
+  // Resolve referenced events from `a` tags. Each entry is `kind:pubkey:dtag`
+  // optionally followed by a relay hint.
+  const aTags = calendar.tags.filter((t) => t[0] === 'a');
+  const referenced = await Promise.all(
+    aTags.map(async (tag) => {
+      const value = tag[1];
+      const hint = tag[2];
+      if (!value) return null;
+      const parts = value.split(':');
+      if (parts.length < 3) return null;
+      const [kindStr, pubkey, ...dParts] = parts;
+      const dTag = dParts.join(':');
+      const kind = Number.parseInt(kindStr, 10);
+      if (!Number.isFinite(kind) || (kind !== 31922 && kind !== 31923)) return null;
+
+      const eventRelays = getCalendarRelaysServer(hint ? [hint] : []);
+      return fetchEventFromRelays(
+        {
+          kinds: [kind],
+          authors: [pubkey],
+          '#d': [dTag],
+          limit: 1
+        },
+        eventRelays
+      );
+    })
+  );
+
+  const events = /** @type {import('nostr-tools').NostrEvent[]} */ (referenced.filter(Boolean));
+
+  const ics = generateICSContent(
+    {
+      title: tagValue(calendar, 'title') || '',
+      summary: tagValue(calendar, 'summary') || ''
+    },
+    events,
     url
   );
 
-  return new Response(icsContent, {
+  return icsResponse(ics, tagValue(calendar, 'title') || 'edufeed-calendar');
+}
+
+/**
+ * Handle a community calendar referenced by hex pubkey or npub.
+ * @param {string} pubkeyOrNpub
+ * @param {URL} url
+ * @returns {Promise<Response>}
+ */
+async function handleCommunityCalendar(pubkeyOrNpub, url) {
+  let communityPubkey = pubkeyOrNpub;
+  if (pubkeyOrNpub.startsWith('npub1')) {
+    try {
+      const decoded = nip19.decode(pubkeyOrNpub);
+      if (decoded.type === 'npub') {
+        communityPubkey = /** @type {string} */ (decoded.data);
+      } else {
+        return jsonError('Invalid npub format', 400);
+      }
+    } catch {
+      return jsonError('Invalid npub format', 400);
+    }
+  }
+
+  const baseRelays = getCalendarRelaysServer();
+
+  // Profile (kind 0) and community def (kind 10222) in parallel.
+  const [profileEvent, communityDefEvent] = await Promise.all([
+    fetchEventFromRelays({ kinds: [0], authors: [communityPubkey], limit: 1 }, baseRelays),
+    fetchEventFromRelays({ kinds: [10222], authors: [communityPubkey], limit: 1 }, baseRelays)
+  ]);
+
+  let title = 'Community Calendar';
+  let summary = '';
+  if (profileEvent) {
+    try {
+      const meta = JSON.parse(profileEvent.content || '{}');
+      const displayName = meta.name || meta.display_name || '';
+      if (displayName) title = `${displayName} Calendar`;
+      if (meta.about) summary = meta.about;
+    } catch {
+      // ignore malformed profile JSON
+    }
+  }
+  if (communityDefEvent) {
+    const descriptionTag = tagValue(communityDefEvent, 'description');
+    if (descriptionTag) summary = descriptionTag;
+  }
+
+  const communityRelays = communityDefEvent
+    ? communityDefEvent.tags.filter((t) => t[0] === 'r' && t[1]).map((t) => t[1])
+    : [];
+  const allRelays = [...new Set([...baseRelays, ...communityRelays])];
+
+  const events = await fetchEventsFromRelays(
+    {
+      kinds: [31922, 31923],
+      '#h': [communityPubkey],
+      limit: 500
+    },
+    allRelays
+  );
+
+  const ics = generateICSContent({ title, summary }, events, url);
+  return icsResponse(ics, title || 'community-calendar');
+}
+
+/**
+ * @param {string} body
+ * @param {string} filenameStem
+ * @returns {Response}
+ */
+function icsResponse(body, filenameStem) {
+  return new Response(body, {
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
-      'Content-Disposition': encodeFilename(calendarMetadata.title || 'edufeed-calendar'),
+      'Content-Disposition': encodeFilename(filenameStem),
       'Cache-Control': 'no-cache, must-revalidate',
-      'X-Published-TTL': 'PT1H' // Refresh every hour
+      'X-Published-TTL': 'PT1H'
     }
   });
 }
 
 /**
- * Handle community calendar ICS generation
- * @param {string} pubkeyOrNpub - Community pubkey (hex or npub)
- * @param {URL} url - Request URL
- * @returns {Promise<Response>}
+ * @param {string} message
+ * @param {number} status
+ * @returns {Response}
  */
-async function handleCommunityCalendar(pubkeyOrNpub, url) {
-  try {
-    // Decode npub to hex if needed
-    let communityPubkey = pubkeyOrNpub;
-    if (pubkeyOrNpub.startsWith('npub1')) {
-      const decoded = nip19.decode(pubkeyOrNpub);
-      if (decoded.type === 'npub') {
-        communityPubkey = decoded.data;
-      } else {
-        return new Response(JSON.stringify({ error: 'Invalid npub format' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-    }
-
-    // Fetch community calendar metadata
-    const metadata = await getCommunityCalendarMetadata(communityPubkey);
-
-    // Get default relays from environment and combine with community relays
-    const defaultRelays = env.RELAYS
-      ? env.RELAYS.split(',')
-          .map((r) => r.trim())
-          .filter(Boolean)
-      : [];
-    const allRelays = [...new Set([...defaultRelays, ...metadata.relays])];
-
-    // Fetch community calendar events with combined relays
-    const events = await fetchCommunityCalendarEvents(communityPubkey, allRelays);
-
-    if (events.length === 0) {
-      console.warn(`No events found for community calendar: ${communityPubkey}`);
-    }
-
-    // Generate ICS content
-    const icsContent = generateICSContent(
-      { title: metadata.title, summary: metadata.summary },
-      events,
-      url
-    );
-
-    return new Response(icsContent, {
-      headers: {
-        'Content-Type': 'text/calendar; charset=utf-8',
-        'Content-Disposition': encodeFilename(metadata.title || 'community-calendar'),
-        'Cache-Control': 'no-cache, must-revalidate',
-        'X-Published-TTL': 'PT1H' // Refresh every hour
-      }
-    });
-  } catch (error) {
-    console.error('Error generating community calendar ICS:', error);
-    return new Response(JSON.stringify({ error: 'Failed to generate community calendar' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+function jsonError(message, status) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
 
 /**
+ * Build the ICS body. Pure — operates on plain Nostr events.
  *
  * @param {{title: string, summary: string}} calendarMetadata
  * @param {import('nostr-tools').NostrEvent[]} events
- * @param {URL} url - Request URL object for generating event URLs
+ * @param {URL} url
  * @returns {string}
  */
 function generateICSContent(calendarMetadata, events, url) {
-  /** @type {Date} */
   const now = new Date();
 
   /**
-   * Format a UNIX timestamp (seconds) into an ICS-compatible UTC date-time string.
-   * Returns empty string for invalid input.
    * @param {string|number|undefined|null} timestamp
    * @returns {string}
    */
-  const formatDate = (timestamp) => {
+  const formatDateTime = (timestamp) => {
     if (timestamp === undefined || timestamp === null || isNaN(Number(timestamp))) return '';
     const num = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
     if (!isFinite(num)) return '';
@@ -182,9 +269,6 @@ function generateICSContent(calendarMetadata, events, url) {
   };
 
   /**
-   * Format a UNIX timestamp (seconds) into an ICS-compatible DATE-only string (YYYYMMDD).
-   * Used for all-day events (kind 31922).
-   * Returns empty string for invalid input.
    * @param {string|number|undefined|null} timestamp
    * @returns {string}
    */
@@ -194,7 +278,6 @@ function generateICSContent(calendarMetadata, events, url) {
     if (!isFinite(num)) return '';
     const date = new Date(num * 1000);
     if (isNaN(date.getTime())) return '';
-    // Format as YYYYMMDD
     const year = date.getUTCFullYear();
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');
@@ -202,20 +285,14 @@ function generateICSContent(calendarMetadata, events, url) {
   };
 
   /**
-   * Escape text for ICS fields.
    * @param {string} text
    * @returns {string}
    */
-  const escapeText = (text) => {
-    return text
-      .replace(/\\/g, '\\\\')
-      .replace(/;/g, '\\;')
-      .replace(/,/g, '\\,')
-      .replace(/\n/g, '\\n');
-  };
+  const escapeText = (text) =>
+    text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 
   /** @type {string[]} */
-  let ics = [
+  const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//Edufeed//Calendar//EN',
@@ -224,76 +301,75 @@ function generateICSContent(calendarMetadata, events, url) {
     `X-WR-CALNAME:${escapeText(calendarMetadata.title || 'Edufeed Calendar')}`,
     `X-WR-CALDESC:${escapeText(calendarMetadata.summary || '')}`,
     'X-WR-TIMEZONE:UTC',
-    `LAST-MODIFIED:${formatDate(now.getTime() / 1000)}`
+    `LAST-MODIFIED:${formatDateTime(now.getTime() / 1000)}`
   ];
 
-  events.forEach((event) => {
-    const metadata = getCalendarEventMetadata(event);
-    // Ensure start is a valid UNIX timestamp (seconds)
-    const startTimestamp = Number(metadata.start);
-    if (!startTimestamp || !isFinite(startTimestamp)) return;
+  for (const event of events) {
+    const startRaw = tagValue(event, 'start');
+    const startTimestamp = parseStartTimestamp(startRaw, event.kind);
+    if (!startTimestamp) continue;
 
-    // Check if this is an all-day event (kind 31922)
-    const isAllDayEvent = event.kind === 31922;
+    const endRaw = tagValue(event, 'end');
+    const isAllDay = event.kind === 31922;
 
-    let startDate, endDate, dtStartProperty, dtEndProperty;
-
-    if (isAllDayEvent) {
-      // Format as DATE-only for all-day events (kind 31922)
-      startDate = formatDateOnly(startTimestamp);
-
-      // For all-day events, end date should be the day AFTER the last day
-      // per ICS standard (exclusive end date)
-      let endTimestamp;
-      if (metadata.end && isFinite(Number(metadata.end))) {
-        // End timestamp exists, add 1 day (86400 seconds)
-        endTimestamp = Number(metadata.end) + 86400;
-      } else {
-        // No end date, assume single-day event: end is start + 1 day
-        endTimestamp = startTimestamp + 86400;
-      }
-      endDate = formatDateOnly(endTimestamp);
-
-      // Use VALUE=DATE for all-day events
+    let dtStartProperty;
+    let dtEndProperty;
+    if (isAllDay) {
+      const startDate = formatDateOnly(startTimestamp);
+      const endTimestamp =
+        endRaw && isFinite(Number(endRaw)) ? Number(endRaw) + 86400 : startTimestamp + 86400;
+      const endDate = formatDateOnly(endTimestamp);
       dtStartProperty = `DTSTART;VALUE=DATE:${startDate}`;
       dtEndProperty = `DTEND;VALUE=DATE:${endDate}`;
     } else {
-      // Format as datetime for time-based events (kind 31923)
-      startDate = formatDate(startTimestamp);
-
-      // If end is present and valid, use it; otherwise, default to 1 hour after start
-      let endTimestamp;
-      if (metadata.end && isFinite(Number(metadata.end))) {
-        endTimestamp = Number(metadata.end);
-      } else {
-        endTimestamp = startTimestamp + 3600; // Default 1 hour duration
-      }
-      endDate = formatDate(endTimestamp);
-
-      // Standard datetime format for time-based events
+      const startDate = formatDateTime(startTimestamp);
+      const endTimestamp =
+        endRaw && isFinite(Number(endRaw)) ? Number(endRaw) : startTimestamp + 3600;
+      const endDate = formatDateTime(endTimestamp);
       dtStartProperty = `DTSTART:${startDate}`;
       dtEndProperty = `DTEND:${endDate}`;
     }
 
+    const eventNaddr = eventToNaddr(event);
     const baseUrl = url.origin;
-    const eventNaddr = encodeEventToNaddr(event, []);
+    const title = tagValue(event, 'title') || 'Untitled Event';
+    const summary = tagValue(event, 'summary') || '';
+    const location = tagValue(event, 'location');
 
     ics.push(
       'BEGIN:VEVENT',
       `UID:${event.id}@edufeed.com`,
       dtStartProperty,
       dtEndProperty,
-      `SUMMARY:${escapeText(metadata.title || 'Untitled Event')}`,
-      `DESCRIPTION:${escapeText(metadata.summary || '')}`,
-      metadata.location ? `LOCATION:${escapeText(metadata.location)}` : '',
+      `SUMMARY:${escapeText(title)}`,
+      `DESCRIPTION:${escapeText(summary)}`,
+      location ? `LOCATION:${escapeText(location)}` : '',
       `URL:${baseUrl}/calendar/event/${eventNaddr}`,
-      `CREATED:${formatDate(event.created_at)}`,
-      `LAST-MODIFIED:${formatDate(event.created_at)}`,
+      `CREATED:${formatDateTime(event.created_at)}`,
+      `LAST-MODIFIED:${formatDateTime(event.created_at)}`,
       'END:VEVENT'
     );
-  });
+  }
 
   ics.push('END:VCALENDAR');
-
   return ics.filter((line) => line !== '').join('\r\n');
+}
+
+/**
+ * Parse the `start` tag into a Unix timestamp (seconds). Per NIP-52, kind
+ * 31922 uses an ISO date string (YYYY-MM-DD); kind 31923 uses a Unix
+ * timestamp string. Returns 0 on failure.
+ *
+ * @param {string | undefined} value
+ * @param {number} kind
+ * @returns {number}
+ */
+function parseStartTimestamp(value, kind) {
+  if (!value) return 0;
+  if (kind === 31922 && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const ms = Date.parse(`${value}T00:00:00Z`);
+    return isNaN(ms) ? 0 : Math.floor(ms / 1000);
+  }
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : 0;
 }

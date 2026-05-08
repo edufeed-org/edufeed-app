@@ -210,16 +210,15 @@ export function GET() {
     calendar: {
       weekStartDay: parseInt(env.CALENDAR_WEEK_START_DAY, 1),
       locale: env.CALENDAR_LOCALE || 'de-DE',
-      timeFormat: env.CALENDAR_TIME_FORMAT || '24h'
+      timeFormat: env.CALENDAR_TIME_FORMAT || '24h',
+      featuredAuthors: parseArray(env.CALENDAR_FEATURED_AUTHORS)
     },
 
     // Signup
     signup: {
-      suggestedUsers: parseArray(env.SIGNUP_SUGGESTED_USERS, [
-        'npub1f7jar3qnu269uyx5p0e4v24hqxjnxysxudvujza2ur5ehltvdeqsly2fx9',
-        'npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma',
-        'npub1tgftg8kptdrxxg0g3sm3hckuglv3j0uu3way4vylc5qyt0f44m0s3gun6e'
-      ])
+      // Communities (npub or hex) pre-checked in the signup step-3 community picker.
+      // Users can untick or skip; empty = no defaults. See SignupModal.
+      suggestedCommunities: parseArray(env.SIGNUP_SUGGESTED_COMMUNITIES)
     },
 
     // Blossom (media uploads)
@@ -296,7 +295,34 @@ export function GET() {
         learningResourceType: env.EDUCATIONAL_VOCAB_LEARNING_RESOURCE_TYPE || 'hcrt',
         about: env.EDUCATIONAL_VOCAB_ABOUT || 'hochschulfaechersystematik',
         audience: env.EDUCATIONAL_VOCAB_AUDIENCE || 'intendedEndUserRole'
+      },
+      // naddr references to kind 39737 ConceptScheme events. Keys match the
+      // `SCHEME_NADDR_<UPPER_SNAKE>` env var slugs and are consumed by the
+      // AMB wizard's vocab resolver (see `helpers/educational/vocabResolver.js`).
+      schemeNaddrs: {
+        schulfaecher: env.SCHEME_NADDR_SCHULFAECHER || '',
+        hochschulfaecher: env.SCHEME_NADDR_HOCHSCHULFAECHER || '',
+        educationalLevel: env.SCHEME_NADDR_EDUCATIONAL_LEVEL || '',
+        hcrt: env.SCHEME_NADDR_HCRT || '',
+        newLrt: env.SCHEME_NADDR_NEW_LRT || '',
+        lrmiAudience: env.SCHEME_NADDR_LRMI_AUDIENCE || '',
+        interactivityType: env.SCHEME_NADDR_INTERACTIVITY_TYPE || '',
+        conditionsOfAccess: env.SCHEME_NADDR_CONDITIONS_OF_ACCESS || '',
+        // EKW vocabularies (kind 39737) — surfaced for the EKW resource form variant.
+        klassenstufen: env.SCHEME_NADDR_KLASSENSTUFEN || '',
+        schulart: env.SCHEME_NADDR_SCHULART || '',
+        ekwFach: env.SCHEME_NADDR_EKW_FACH || '',
+        ekwLrt: env.SCHEME_NADDR_EKW_LRT || '',
+        didaktischesKonzept: env.SCHEME_NADDR_DIDAKTISCHES_KONZEPT || '',
+        methode: env.SCHEME_NADDR_METHODE || '',
+        ekwKeywords: env.SCHEME_NADDR_EKW_KEYWORDS || ''
       }
+    },
+
+    // Resource form variants (AMB vs EKW, etc.)
+    // Order in the env var determines picker display order + default variant.
+    resourceFormVariants: {
+      enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb'])
     },
 
     // UI settings

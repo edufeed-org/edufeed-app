@@ -74,9 +74,37 @@ vi.mock('$lib/loaders/reactions.js', () => ({
   })
 }));
 
-vi.mock('$lib/helpers/reactions.js', () => ({
-  normalizeReactionContent: (/** @type {string} */ content) => content || '+'
-}));
+vi.mock('$lib/helpers/reactions.js', () => {
+  const normalizeReactionContent = (/** @type {string} */ content) => content || '+';
+  // Minimal aggregateReactions for ReactionBar (used inside NoteCard).
+  const aggregateReactions = (
+    /** @type {any[]} */ events,
+    /** @type {string | undefined} */ currentUserPubkey
+  ) => {
+    const agg = new Map();
+    for (const reaction of events) {
+      const emoji = normalizeReactionContent(reaction.content);
+      const existing = agg.get(emoji) || {
+        count: 0,
+        userReacted: false,
+        userReactionEvent: null,
+        emojiUrl: null,
+        reactors: []
+      };
+      const isUserReaction = !!currentUserPubkey && reaction.pubkey === currentUserPubkey;
+      existing.reactors.push(reaction.pubkey);
+      agg.set(emoji, {
+        count: existing.count + 1,
+        userReacted: existing.userReacted || isUserReaction,
+        userReactionEvent: isUserReaction ? reaction : existing.userReactionEvent,
+        emojiUrl: existing.emojiUrl || null,
+        reactors: existing.reactors
+      });
+    }
+    return agg;
+  };
+  return { normalizeReactionContent, aggregateReactions };
+});
 
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({
   appSettings: { gatedMode: false },
@@ -146,7 +174,9 @@ describe('NoteCard', () => {
       props: { note: mockNote }
     });
 
-    const commentSection = container.querySelector('.border-t.border-base-300');
+    // The actions toolbar also has `.border-t.border-base-300`; the comment wrapper
+    // is distinguished by its top margin (`.mt-3`).
+    const commentSection = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSection).toBeFalsy();
   });
 
@@ -160,7 +190,7 @@ describe('NoteCard', () => {
     expect(button).toBeTruthy();
     await fireEvent.click(/** @type {HTMLElement} */ (button));
 
-    const commentSection = container.querySelector('.border-t.border-base-300');
+    const commentSection = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSection).toBeTruthy();
   });
 
@@ -172,13 +202,13 @@ describe('NoteCard', () => {
     const button = container.querySelector('.btn-ghost');
     await fireEvent.click(/** @type {HTMLElement} */ (button));
 
-    const commentSection = container.querySelector('.border-t.border-base-300');
+    const commentSection = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSection).toBeTruthy();
 
     // Click again to hide
     await fireEvent.click(/** @type {HTMLElement} */ (button));
 
-    const commentSectionAfter = container.querySelector('.border-t.border-base-300');
+    const commentSectionAfter = container.querySelector('.mt-3.border-t.border-base-300');
     expect(commentSectionAfter).toBeFalsy();
   });
 

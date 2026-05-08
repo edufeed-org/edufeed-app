@@ -8,7 +8,8 @@
   import { updateBookmarkContent } from '$lib/helpers/bookmark.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
-  import { ChatIcon, EditIcon } from '$lib/components/icons';
+  import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
+  import { EditIcon } from '$lib/components/icons';
   import EventDeleteButton from '$lib/components/shared/EventDeleteButton.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -30,7 +31,6 @@
     communityPubkey = undefined
   } = $props();
 
-  let showComments = $state(false);
   let isEditing = $state(false);
   let editContent = $state('');
   let isSaving = $state(false);
@@ -100,20 +100,14 @@
         {m.common_edit()}
       </button>
     {/if}
-    {#if expanded}
-      <button
-        class="btn ml-auto gap-1 text-base-content/50 btn-ghost btn-xs"
-        onclick={() => (showComments = !showComments)}
-      >
-        <ChatIcon class_="w-3.5 h-3.5" />
-        {showComments ? m.comments_cancel() : m.comments_add()}
-      </button>
-    {/if}
   </div>
 </div>
 
-{#if expanded && showComments && event}
-  <div class="mt-2">
+{#if expanded && event}
+  <div class="mt-2 border-t border-base-300 py-2" data-testid="reaction-bar">
+    <ReactionBar {event} />
+  </div>
+  <div class="mt-2" data-testid="comment-list">
     <CommentList rootEvent={event} {activeUser} {communityPubkey} />
   </div>
 {/if}

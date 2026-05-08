@@ -179,6 +179,24 @@ export function isWikiIdentifier(decoded) {
 }
 
 /**
+ * Check if identifier points to a long-form article (NIP-23)
+ * @param {ReturnType<typeof decodeNostrIdentifier>} decoded - Decoded identifier
+ * @returns {boolean}
+ */
+export function isArticleIdentifier(decoded) {
+  return decoded.success && decoded.type === 'naddr' && decoded.data.kind === 30023;
+}
+
+/**
+ * Check if identifier points to an AMB educational resource
+ * @param {ReturnType<typeof decodeNostrIdentifier>} decoded - Decoded identifier
+ * @returns {boolean}
+ */
+export function isAMBResourceIdentifier(decoded) {
+  return decoded.success && decoded.type === 'naddr' && decoded.data.kind === 30142;
+}
+
+/**
  * Fetches a Nostr event using various identifier types
  *
  * @param identifier {string} - Can be an event ID, naddr, or other identifier

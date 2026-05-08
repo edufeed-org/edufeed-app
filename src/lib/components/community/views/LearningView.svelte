@@ -8,6 +8,7 @@
 
 <script>
   import { getContext } from 'svelte';
+  import { page } from '$app/stores';
   import { useAMBCommunityLoader } from '$lib/loaders/amb.js';
   import { CommunityAMBResourceModel } from '$lib/models/community-content.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -34,6 +35,8 @@
     communityProfile: _communityProfile = null,
     communikeyEvent = null
   } = $props();
+
+  const communityNpub = $derived($page.data.npub);
 
   // Phase C: derive a "New resource (form)" CTA from the community's preferred form.
   let preferredForm = $derived(getPreferredFormForKind(communikeyEvent, 30142));
@@ -391,6 +394,7 @@
             {resource}
             authorProfile={authorProfiles.get(resource.pubkey) || null}
             compact={false}
+            {communityNpub}
           />
         </div>
       {/each}

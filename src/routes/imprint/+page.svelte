@@ -9,11 +9,24 @@
   <title>{m.imprint_title()} - {runtimeConfig.appName}</title>
 </svelte:head>
 
-<div class="min-h-screen bg-base-100 px-4 py-8">
+<div class="bg-base-100 px-4 py-8">
   <div class="mx-auto max-w-3xl">
     <div class="card bg-base-200 shadow-xl">
       <div class="card-body">
         <h1 class="mb-6 card-title text-3xl">{m.imprint_title()}</h1>
+
+        <p class="mb-6 text-base-content/70">
+          <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: git repo link -->
+          <a
+            href={runtimeConfig.gitRepo}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="link font-medium link-primary"
+          >
+            {runtimeConfig.appName}
+          </a>
+          — {m.imprint_attribution()}, <span>{runtimeConfig.footer.fundingText}</span>
+        </p>
 
         {#if imprint.enabled}
           <!-- Organization -->
