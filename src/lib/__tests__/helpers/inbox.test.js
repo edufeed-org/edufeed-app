@@ -49,6 +49,9 @@ describe('getNotificationType', () => {
   it('returns "formResponse" for kind 1069', () => {
     expect(getNotificationType({ kind: 1069 })).toBe('formResponse');
   });
+  it('returns "pollVote" for kind 1018', () => {
+    expect(getNotificationType({ kind: 1018 })).toBe('pollVote');
+  });
   it('returns null for unknown kind', () => {
     expect(getNotificationType({ kind: 1 })).toBe(null);
   });
@@ -184,6 +187,21 @@ describe('getNotificationUrl', () => {
   });
   it('returns null for RSVP without a-tag', () => {
     expect(getNotificationUrl({ kind: 31925, tags: [] })).toBe(null);
+  });
+  it('returns nevent URL for pollVote with e-tag', () => {
+    const pollId = 'a'.repeat(64);
+    const event = {
+      kind: 1018,
+      tags: [
+        ['e', pollId, 'wss://relay.example.com'],
+        ['response', 'option-id']
+      ]
+    };
+    const url = getNotificationUrl(event);
+    expect(url).toMatch(/^\/nevent1/);
+  });
+  it('returns null for pollVote without e-tag', () => {
+    expect(getNotificationUrl({ kind: 1018, tags: [['response', 'opt']] })).toBe(null);
   });
 });
 

@@ -10,7 +10,8 @@
     ChatIcon,
     CalendarIcon,
     BellIcon,
-    ScrollTextIcon
+    ScrollTextIcon,
+    PollIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
@@ -42,7 +43,8 @@
     reaction: HeartIcon,
     comment: ChatIcon,
     mention: BellIcon,
-    rsvp: CalendarIcon
+    rsvp: CalendarIcon,
+    pollVote: PollIcon
   };
 
   const TypeIcon = $derived(type ? iconMap[type] || BellIcon : BellIcon);
@@ -132,6 +134,8 @@
         &nbsp;{m.inbox_action_mention({ communityName: contentTitle })}
       {:else if type === 'rsvp'}
         &nbsp;{m.inbox_action_rsvp({ eventTitle: contentTitle })}
+      {:else if type === 'pollVote'}
+        &nbsp;{m.inbox_action_poll_vote()}
       {/if}
     </div>
     <div class="mt-0.5 flex items-center gap-2">

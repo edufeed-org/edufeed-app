@@ -13,6 +13,7 @@ export async function load({ url }) {
     'boards',
     'articles',
     'forum',
+    'polls',
     'social-bookmarks',
     'meet',
     'settings'

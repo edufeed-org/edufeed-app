@@ -24,6 +24,6 @@ function getAllContentRelays() {
 }
 
 export const useCommunityActivityLoader = createCommunityContentLoader(
-  [30142, 30301, 30023, 30818, 31922, 31923, 11],
+  [30142, 30301, 30023, 30818, 31922, 31923, 11, 1068],
   getAllContentRelays
 );

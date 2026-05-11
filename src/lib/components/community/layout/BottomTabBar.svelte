@@ -11,6 +11,7 @@
     ForumIcon,
     BookmarkShareIcon,
     MeetIcon,
+    PollIcon,
     LockIcon,
     LockOpenIcon
   } from '$lib/components/icons';
@@ -43,6 +44,7 @@
     wikis: BookIcon,
     'social-bookmarks': BookmarkShareIcon,
     meet: MeetIcon,
+    polls: PollIcon,
     settings: SettingsIcon
   };
 
@@ -57,6 +59,7 @@
     wikis: () => m.community_wikis_title(),
     'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
     meet: () => m.community_layout_bottom_tab_bar_meet(),
+    polls: () => m.community_layout_bottom_tab_bar_polls(),
     settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 

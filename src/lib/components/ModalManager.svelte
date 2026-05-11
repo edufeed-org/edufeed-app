@@ -15,6 +15,7 @@
   import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
   import ShareByNaddrModal from './shared/ShareByNaddrModal.svelte';
   import CreateRoomModal from './meet/CreateRoomModal.svelte';
+  import PollCreateModal from './polls/PollCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
 
   /**
@@ -239,6 +240,10 @@
   function handleBunkerAccountCreated() {
     modal.transitionModal('bunker', 'login');
   }
+
+  let pollCommunityPubkey = $derived(
+    /** @type {string} */ (/** @type {any} */ (modal.modalProps)?.communityPubkey) || ''
+  );
 </script>
 
 <!-- Render modals based on active modal state -->
@@ -280,6 +285,8 @@
   <ShareByNaddrModal modalId={shareByNaddrModalId} />
 {:else if modal.activeModal === 'createRoom'}
   <CreateRoomModal modalId={createRoomModalId} />
+{:else if modal.activeModal === 'createPoll'}
+  <PollCreateModal communityPubkey={pollCommunityPubkey} />
 {:else if modal.activeModal === 'recovery-download'}
   <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
 {/if}

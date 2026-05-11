@@ -24,7 +24,8 @@
     getCalendarRelays,
     getEducationalRelays,
     getArticleRelays,
-    getAllLookupRelays
+    getAllLookupRelays,
+    getCommunikeyRelays
   } from '$lib/helpers/relay-helper.js';
   import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
   import { formatAMBResource } from '$lib/helpers/educational/index.js';
@@ -43,13 +44,15 @@
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
   import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
+  import PollCard from '$lib/components/polls/PollCard.svelte';
   import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import {
     ChatIcon,
     CalendarIcon,
     GraduationCapIcon,
     BookIcon,
-    BookmarkIcon
+    BookmarkIcon,
+    PollIcon
   } from '$lib/components/icons';
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import * as m from '$lib/paraglide/messages';
@@ -69,7 +72,8 @@
     { kinds: [31922, 31923], getRelays: getCalendarRelays },
     { kinds: [30142], getRelays: getEducationalRelays },
     { kinds: [30023], getRelays: getArticleRelays },
-    { kinds: [39701, 9802, 1111], getRelays: getAllLookupRelays }
+    { kinds: [39701, 9802, 1111], getRelays: getAllLookupRelays },
+    { kinds: [1068], getRelays: getCommunikeyRelays }
   ];
 
   /** Supplemental relay sources for the outbox path.
@@ -79,7 +83,8 @@
     { kinds: [31922, 31923], getRelays: getCalendarRelays },
     { kinds: [30142], getRelays: getEducationalRelays },
     { kinds: [30023], getRelays: getArticleRelays },
-    { kinds: [39701, 9802, 1111], getRelays: getAllLookupRelays }
+    { kinds: [39701, 9802, 1111], getRelays: getAllLookupRelays },
+    { kinds: [1068], getRelays: getCommunikeyRelays }
   ];
 
   /** Filter chip config */
@@ -88,7 +93,8 @@
     { id: 'calendar', label: () => m.profile_tab_calendar(), icon: CalendarIcon },
     { id: 'resources', label: () => m.profile_tab_resources(), icon: GraduationCapIcon },
     { id: 'articles', label: () => m.profile_tab_articles(), icon: BookIcon },
-    { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon }
+    { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon },
+    { id: 'polls', label: () => m.profile_tab_polls(), icon: PollIcon }
   ];
 
   const feedCacheKey = $derived('profile-feed-' + (userPubkey || 'default'));
@@ -512,6 +518,8 @@
             <UrlCard group={entry.data} {authorProfiles} />
           {:else if entry.type === 'bookmark-ref'}
             <EventHighlightCard group={entry.data} {authorProfiles} />
+          {:else if entry.type === 'polls'}
+            <PollCard event={entry.data} truncate={true} />
           {/if}
         </div>
       {/each}

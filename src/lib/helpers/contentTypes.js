@@ -120,6 +120,14 @@ export const CONTENT_TYPE_CONFIG = {
     component: 'SocialBookmarksView',
     description: 'Web highlights'
   },
+  1068: {
+    kind: 1068,
+    name: 'Polls',
+    icon: 'M9 17v-2a4 4 0 014-4h.01M15 17v-6a4 4 0 014-4M3 12h.01M3 6h.01M3 18h.01',
+    supported: true,
+    component: 'PollsView',
+    description: 'NIP-88 polls and voting'
+  },
   11: {
     kind: 11,
     name: 'Forum',
@@ -289,7 +297,8 @@ export const CONTENT_TYPE_TO_SECTION = {
   learning: 'Learning',
   boards: 'Boards',
   'social-bookmarks': 'Social Bookmarks',
-  meet: 'Meet'
+  meet: 'Meet',
+  polls: 'Polls'
 };
 
 /**
@@ -352,6 +361,7 @@ export function kindToContentType(kind) {
   const mapping = {
     9: 'chat',
     11: 'forum',
+    1068: 'polls',
     9802: 'social-bookmarks',
     30023: 'articles',
     30142: 'learning',

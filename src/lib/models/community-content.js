@@ -148,6 +148,9 @@ export const CommunityArticleModel = createCommunityContentModel([30023]);
 /** Community thread model for kind 11 forum threads */
 export const CommunityThreadModel = createCommunityContentModel([11]);
 
+/** Community poll model for kind 1068 NIP-88 polls */
+export const CommunityPollModel = createCommunityContentModel([1068]);
+
 /** Community wiki model for kind 30818 wiki articles (NIP-54) */
 export const CommunityWikiModel = createCommunityContentModel([30818]);
 
@@ -161,5 +164,5 @@ export const CommunityRoomModel = createCommunityContentModel([30312, 30313], {
 
 /** Community activity model — all content kinds for the home feed */
 export const CommunityActivityModel = createCommunityContentModel([
-  30142, 30301, 30023, 30818, 31922, 31923, 11
+  30142, 30301, 30023, 30818, 31922, 31923, 11, 1068
 ]);

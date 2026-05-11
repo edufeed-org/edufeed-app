@@ -44,6 +44,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   article_fab_write: () => 'Write Article',
   wiki_fab_write: () => 'Write Wiki',
   fab_create_form: () => 'Create Form',
+  fab_create_poll: () => 'Create Poll',
+  fab_create_poll_aria: () => 'Create new poll',
   // Picker modal keys (rendered only when variantPickerOpen becomes true)
   resource_variant_picker_title: () => 'Welche Art?',
   resource_variant_picker_description: () => 'Wähle eine Form.',
@@ -100,12 +102,12 @@ describe('GlobalFAB', () => {
     expect(mainButton).toBeTruthy();
   });
 
-  it('renders all 8 action buttons', () => {
+  it('renders all 9 action buttons', () => {
     const { container } = render(GlobalFAB);
     // Action buttons are wrapped in .fab-item containers (for hover-reveal animation);
     // only the main FAB toggle is a direct child of .fab.
     const actionButtons = container.querySelectorAll('.fab .fab-item > button');
-    expect(actionButtons.length).toBe(8);
+    expect(actionButtons.length).toBe(9);
   });
 
   it('has create event button', () => {
@@ -215,6 +217,19 @@ describe('GlobalFAB', () => {
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create Form"]'));
     await fireEvent.click(btn);
     expect(mockGoto).toHaveBeenCalledWith('/forms/new');
+  });
+
+  it('has create poll button', () => {
+    const { container } = render(GlobalFAB);
+    const btn = container.querySelector('[aria-label="Create new poll"]');
+    expect(btn).toBeTruthy();
+  });
+
+  it('opens createPoll modal on poll button click', async () => {
+    const { container } = render(GlobalFAB);
+    const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create new poll"]'));
+    await fireEvent.click(btn);
+    expect(mockOpenModal).toHaveBeenCalledWith('createPoll', expect.any(Object));
   });
 
   it('has add bookmark button', () => {
