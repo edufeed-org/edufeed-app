@@ -52,6 +52,15 @@ describe('getProxiedImageUrl', () => {
     expect(getProxiedImageUrl(blob, 'card')).toBe(blob);
   });
 
+  it('skips proxy for emoji preset (preserves animation in GIF/APNG/animated WebP)', () => {
+    const gif = 'https://example.com/party-parrot.gif';
+    expect(getProxiedImageUrl(gif, 'emoji')).toBe(gif);
+    const apng = 'https://example.com/anim.png';
+    expect(getProxiedImageUrl(apng, 'emoji')).toBe(apng);
+    const webp = 'https://example.com/anim.webp';
+    expect(getProxiedImageUrl(webp, 'emoji')).toBe(webp);
+  });
+
   it('returns original src for unknown preset name', () => {
     const url = 'https://example.com/photo.jpg';
     expect(getProxiedImageUrl(url, 'nonexistent')).toBe(url);
