@@ -31,6 +31,9 @@ export function getProxiedImageUrl(src, size, quality = 80) {
     return src;
   }
 
+  // Emojis are already small; bypass proxy so animated formats (GIF, APNG, animated WebP) render
+  if (size === 'emoji') return src;
+
   if (!size) return src;
 
   const dims = typeof size === 'string' ? SIZE_PRESETS[size] : size;
