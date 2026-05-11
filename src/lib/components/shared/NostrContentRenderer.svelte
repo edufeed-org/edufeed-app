@@ -94,3 +94,15 @@
     {/each}
   {/if}
 </div>
+
+<style>
+  /*
+   * Inside a primary chat bubble the background is `--color-primary`, so
+   * `.link-primary` / `.text-primary` (also primary) become invisible. Flip
+   * them to `primary-content` (the on-primary foreground) for contrast.
+   */
+  :global(.chat-bubble-primary .link-primary),
+  :global(.chat-bubble-primary .text-primary) {
+    color: var(--color-primary-content);
+  }
+</style>
