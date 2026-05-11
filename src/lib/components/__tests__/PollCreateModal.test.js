@@ -17,6 +17,7 @@ vi.hoisted(() => {
 });
 
 import PollCreateModal from '$lib/components/polls/PollCreateModal.svelte';
+import { resetPollDraft } from '$lib/stores/poll-draft.js';
 
 vi.mock('$lib/stores/modal.svelte.js', () => ({
   modalStore: { closeModal: vi.fn() }
@@ -72,6 +73,7 @@ vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 describe('PollCreateModal — form & validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPollDraft();
   });
 
   it('starts with two empty option rows', () => {
@@ -152,6 +154,7 @@ describe('PollCreateModal — form & validation', () => {
 describe('PollCreateModal — submit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPollDraft();
     submitSpies.publishSpy = vi
       .fn()
       .mockResolvedValue({ success: true, successCount: 1, relays: [], results: [] });

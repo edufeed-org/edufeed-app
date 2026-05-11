@@ -42,6 +42,7 @@
     'boards',
     'articles',
     'forum',
+    'polls',
     'wikis',
     'social-bookmarks',
     'meet',

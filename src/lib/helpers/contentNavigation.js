@@ -83,13 +83,20 @@ export function getContentEventRoute(event, options = {}) {
     return `/${naddr}`;
   }
 
-  // Non-addressable events: encode as nevent (kind 11, kind 1, etc.)
+  // Non-addressable events: encode as nevent (kind 11, kind 1, kind 1068, etc.)
   if (event.id) {
     const relays = getSeenRelays(event);
     const nevent = nip19.neventEncode({
       id: event.id,
       relays: relays ? Array.from(relays).slice(0, 3) : []
     });
+    // Polls (kind 1068) need a community-scoped detail route so the community
+    // sidebar stays visible. Other non-addressable kinds (1, 11, 1111, …) use
+    // the global /nevent route — the global detail page handles h-tag redirects.
+    if (event.kind === 1068 && communityPubkey) {
+      const npub = hexToNpub(communityPubkey);
+      if (npub) return `/c/${npub}/${nevent}`;
+    }
     return `/${nevent}`;
   }
 

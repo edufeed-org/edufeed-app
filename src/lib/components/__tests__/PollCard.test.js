@@ -60,6 +60,14 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: (/** @type {any[]} */ ...args) => publishEventSpy(...args)
 }));
 
+// Mock loader to avoid transitive `pool` import from nostr-infrastructure.
+// The test populates responses via the eventStore.timeline mock below; the
+// loader itself only matters for relay-fetch behavior, which is covered
+// elsewhere.
+vi.mock('$lib/loaders/polls.js', () => ({
+  pollResponsesLoader: () => () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+}));
+
 vi.mock('$lib/stores/accounts.svelte.js', () => ({
   manager: managerState
 }));
@@ -90,6 +98,13 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
     };
   }
 }));
+
+// Stub ProfileAvatar to avoid transitive loader imports + expose the pubkey
+// via a data attribute so the voter-avatar test can assert on it.
+vi.mock('$lib/components/shared/ProfileAvatar.svelte', async () => {
+  const Stub = (await import('./PollCardProfileAvatarStub.svelte')).default;
+  return { default: Stub };
+});
 
 /**
  * Build a minimal kind 1068 poll event.
@@ -216,14 +231,13 @@ describe('PollCard — render skeleton + states', () => {
 
     const avatars = container.querySelectorAll('[data-testid="voter-avatar"]');
     expect(avatars.length).toBeGreaterThanOrEqual(2);
-    // Title is built from voter profile name (mocked).
-    const titles = Array.from(avatars).map((a) => a.getAttribute('title'));
-    expect(titles.some((t) => t && t.startsWith('Voter '))).toBe(true);
-    // a11y: aria-label exposes voter name to screen readers.
-    const ariaLabels = Array.from(avatars).map((a) => a.getAttribute('aria-label'));
+    // Inner ProfileAvatar stub carries the voter name (a11y + hover tooltip).
+    const inner = Array.from(avatars).map((a) => a.querySelector('[data-pubkey]'));
+    const titles = inner.map((el) => el?.getAttribute('title'));
+    expect(titles.every((t) => t && t.startsWith('Voter '))).toBe(true);
+    const ariaLabels = inner.map((el) => el?.getAttribute('aria-label'));
     expect(ariaLabels.every((l) => l && l.startsWith('Voter '))).toBe(true);
-    // a11y: wrapper announces as image even when no <img> is rendered.
-    expect(avatars[0].getAttribute('role')).toBe('img');
+    expect(inner[0]?.getAttribute('role')).toBe('img');
   });
 
   it('casts a vote: signs PollResponseBlueprint output and publishes', async () => {
@@ -335,6 +349,103 @@ describe('PollCard — render skeleton + states', () => {
     } finally {
       window.confirm = originalConfirm;
     }
+  });
+
+  it('shows "You voted" badge when user has cast a vote', async () => {
+    const me = 'me'.padEnd(64, '0');
+    managerState.active = { pubkey: me };
+    mockResponses.value = [
+      {
+        id: 'r1'.padEnd(64, '0'),
+        kind: 1018,
+        pubkey: me,
+        created_at: 1700000100,
+        tags: [
+          ['e', 'poll-1'.padEnd(64, '0')],
+          ['response', 'opt-a']
+        ],
+        content: ''
+      }
+    ];
+    render(PollCard, { props: { event: makePoll() } });
+    expect(screen.getByTestId('poll-you-voted')).toBeTruthy();
+  });
+
+  it('does NOT show "You voted" badge when user has not voted', () => {
+    managerState.active = { pubkey: 'me'.padEnd(64, '0') };
+    render(PollCard, { props: { event: makePoll() } });
+    expect(screen.queryByTestId('poll-you-voted')).toBeNull();
+  });
+
+  it('does NOT show "You voted" badge when logged out', () => {
+    managerState.active = null;
+    render(PollCard, { props: { event: makePoll() } });
+    expect(screen.queryByTestId('poll-you-voted')).toBeNull();
+  });
+
+  it('calls onclick when card body is clicked', async () => {
+    const onclick = vi.fn();
+    const { container } = render(PollCard, { props: { event: makePoll(), onclick } });
+    const card = /** @type {HTMLElement} */ (container.querySelector('[role="button"]'));
+    expect(card).toBeTruthy();
+    await fireEvent.click(card);
+    expect(onclick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT call onclick when an option button is clicked (stopPropagation)', async () => {
+    managerState.active = { pubkey: 'me'.padEnd(64, '0') };
+    const onclick = vi.fn();
+    render(PollCard, { props: { event: makePoll(), onclick } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apple' }));
+    expect(onclick).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call onclick when Cast vote button is clicked', async () => {
+    managerState.active = {
+      pubkey: 'me',
+      signEvent: vi.fn().mockResolvedValue({
+        id: 'voteid'.padEnd(64, '0'),
+        kind: 1018,
+        pubkey: 'me',
+        sig: 's',
+        created_at: 1,
+        content: '',
+        tags: [
+          ['e', 'pollid'],
+          ['response', 'opt-a']
+        ]
+      })
+    };
+    const onclick = vi.fn();
+    const { container } = render(PollCard, { props: { event: makePoll(), onclick } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apple' }));
+    // The clickable card also has role="button" and its accessible name
+    // includes "Cast vote" from descendant text. Grab the actual <button> by tag.
+    const castBtn = /** @type {HTMLButtonElement | null} */ (
+      Array.from(container.querySelectorAll('button')).find((b) =>
+        /cast vote/i.test(b.textContent ?? '')
+      ) ?? null
+    );
+    expect(castBtn).toBeTruthy();
+    await fireEvent.click(/** @type {HTMLButtonElement} */ (castBtn));
+    expect(onclick).not.toHaveBeenCalled();
+  });
+
+  it('does NOT render as clickable when onclick is not provided', () => {
+    const { container } = render(PollCard, { props: { event: makePoll() } });
+    expect(container.querySelector('[role="button"]')).toBeNull();
+  });
+
+  it('renders the poll author header with profile + name', () => {
+    const poll = makePoll();
+    const { container } = render(PollCard, { props: { event: poll } });
+    const authorHeader = container.querySelector('[data-testid="poll-author"]');
+    expect(authorHeader).toBeTruthy();
+    // Stub ProfileAvatar exposes pubkey via data-pubkey
+    const avatar = authorHeader?.querySelector('[data-pubkey]');
+    expect(avatar?.getAttribute('data-pubkey')).toBe(poll.pubkey);
+    // Display name from the mocked useProfileMap returns "Voter <prefix>"
+    expect(authorHeader?.textContent).toContain('Voter ' + poll.pubkey.slice(0, 4));
   });
 
   it('resets selection when event prop changes', async () => {

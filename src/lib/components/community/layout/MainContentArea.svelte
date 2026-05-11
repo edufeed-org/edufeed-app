@@ -7,6 +7,7 @@
   import BoardsView from '../views/BoardsView.svelte';
   import ArticlesView from '../views/ArticlesView.svelte';
   import ForumView from '../views/ForumView.svelte';
+  import PollsView from '../views/PollsView.svelte';
   import WikisView from '../views/WikisView.svelte';
   import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
   import MeetView from '$lib/components/meet/MeetView.svelte';
@@ -91,6 +92,8 @@
         <ArticlesView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'forum'}
         <ForumView communityPubkey={selectedCommunityId} {communityProfile} {canPublish} />
+      {:else if selectedContentType === 'polls'}
+        <PollsView communityPubkey={selectedCommunityId} {communityProfile} {canPublish} />
       {:else if selectedContentType === 'wikis'}
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'social-bookmarks'}

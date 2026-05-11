@@ -4,10 +4,13 @@
   import { resolve } from '$app/paths';
   import ThreadDetailView from '$lib/components/thread/ThreadDetailView.svelte';
   import PollCard from '$lib/components/polls/PollCard.svelte';
+  import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
+  import CommentList from '$lib/components/comments/CommentList.svelte';
   import { npubToHex, fetchEventById } from '$lib/helpers/nostrUtils';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
   import { getCanonicalEventRoute } from '$lib/helpers/eventRouteRedirect.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { manager } from '$lib/stores/accounts.svelte';
   import { decodeEventPointer } from 'applesauce-core/helpers';
 
   /** @type {{ data: any }} */
@@ -114,6 +117,12 @@
     />
   {:else if resolvedEvent?.kind === 1068}
     <PollCard event={resolvedEvent} truncate={false} />
+    <div class="mt-6 border-y border-base-300 py-4">
+      <ReactionBar event={resolvedEvent} />
+    </div>
+    <div class="mt-6">
+      <CommentList rootEvent={resolvedEvent} activeUser={manager.active} {communityPubkey} />
+    </div>
   {:else if resolvedEvent}
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <p class="text-base-content/60">Unsupported content type (kind {resolvedEvent?.kind})</p>

@@ -27,18 +27,20 @@ beforeEach(() => {
 });
 
 describe('CONTENT_CREATION', () => {
-  it('has entries for calendar, learning, article, wiki, form', () => {
+  it('has entries for calendar, learning, article, wiki, form, poll', () => {
     expect(Object.keys(CONTENT_CREATION)).toEqual([
       'calendar',
       'learning',
       'article',
       'wiki',
-      'form'
+      'form',
+      'poll'
     ]);
   });
 
-  it('calendar is a modal target', () => {
+  it('calendar and poll are modal targets', () => {
     expect(CONTENT_CREATION.calendar.type).toBe('modal');
+    expect(CONTENT_CREATION.poll.type).toBe('modal');
   });
 
   it('learning, article, wiki, form are route targets', () => {

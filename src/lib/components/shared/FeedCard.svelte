@@ -9,7 +9,8 @@
     ForumIcon,
     BookmarkIcon,
     ReplyIcon,
-    FilesIcon
+    FilesIcon,
+    PollIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
@@ -67,7 +68,8 @@
     note: { label: () => m.feed_badge_note(), icon: BookmarkIcon },
     'page-note': { label: () => m.feed_badge_page_note(), icon: BookmarkIcon },
     reply: { label: () => m.feed_badge_reply(), icon: ReplyIcon },
-    form: { label: () => m.feed_badge_form(), icon: FilesIcon }
+    form: { label: () => m.feed_badge_form(), icon: FilesIcon },
+    poll: { label: () => m.feed_badge_poll(), icon: PollIcon }
   };
 
   let meta = $derived(typeMeta[typeKey]);

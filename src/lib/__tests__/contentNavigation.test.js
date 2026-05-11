@@ -366,6 +366,21 @@ describe('getContentEventRoute', () => {
       const route = getContentEventRoute(event);
       expect(route).toMatch(/^\/nevent1/);
     });
+
+    it('returns /{nevent} for kind 1068 (poll) without community', () => {
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
+      const event = makeEvent({ kind: 1068 });
+      const route = getContentEventRoute(event);
+      expect(route).toMatch(/^\/nevent1/);
+    });
+
+    it('returns /c/{npub}/{nevent} for kind 1068 (poll) when communityPubkey is provided', () => {
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({ kind: 1068 });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/nevent1/);
+    });
   });
 });
 

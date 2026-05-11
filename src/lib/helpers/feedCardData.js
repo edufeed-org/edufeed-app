@@ -73,6 +73,10 @@ export function getFeedCardData(event) {
       const text = truncate(event.content, 120);
       return { title: text || 'Note', typeKey: 'note', tags };
     }
+    case 1068: {
+      const question = truncate(event.content, 120);
+      return { title: question || 'Untitled Poll', typeKey: 'poll', tags };
+    }
     case 11: {
       const excerpt = truncate(event.content, 120);
       return {

@@ -6,6 +6,7 @@
   import { nip19 } from 'nostr-tools';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { generateOptionId } from '$lib/helpers/polls.js';
+  import { pollDraftHolder, freshPollDraft } from '$lib/stores/poll-draft.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
@@ -21,20 +22,43 @@
   /** @type {Props} */
   let { communityPubkey = '' } = $props();
 
-  let question = $state('');
+  let question = $state(pollDraftHolder.value.question);
   /** @type {{ id: string; label: string }[]} */
-  let options = $state([
-    { id: generateOptionId(), label: '' },
-    { id: generateOptionId(), label: '' }
-  ]);
+  let options = $state(pollDraftHolder.value.options.map((o) => ({ ...o })));
   /** @type {'singlechoice' | 'multiplechoice'} */
-  let pollType = $state('singlechoice');
+  let pollType = $state(pollDraftHolder.value.pollType);
 
   /** @type {'24h' | '7d' | '30d' | 'none' | 'custom'} */
-  let endsAtPreset = $state('7d');
-  let customEndsAt = $state('');
+  let endsAtPreset = $state(pollDraftHolder.value.endsAtPreset);
+  let customEndsAt = $state(pollDraftHolder.value.customEndsAt);
 
-  let community = $state(untrack(() => communityPubkey));
+  // If the modal was opened with an explicit communityPubkey prop, prefer that
+  // over any saved draft community — a fresh "create poll in this community"
+  // intent should win over the previous selection.
+  let community = $state(untrack(() => communityPubkey || pollDraftHolder.value.community));
+
+  // Persist on every change so the draft survives modal close.
+  $effect(() => {
+    pollDraftHolder.value = {
+      question,
+      options: options.map((o) => ({ ...o })),
+      pollType,
+      endsAtPreset,
+      customEndsAt,
+      community
+    };
+  });
+
+  function startOver() {
+    const fresh = freshPollDraft();
+    question = fresh.question;
+    options = fresh.options;
+    pollType = fresh.pollType;
+    endsAtPreset = fresh.endsAtPreset;
+    customEndsAt = fresh.customEndsAt;
+    community = communityPubkey || fresh.community;
+    submitError = '';
+  }
 
   let isSubmitting = $state(false);
   let submitError = $state('');
@@ -139,6 +163,8 @@
       eventStore.add(signed);
       const result = await publishEvent(signed, [], { communityEvent });
 
+      // Successful publish — clear the draft so reopening starts fresh.
+      pollDraftHolder.value = freshPollDraft();
       modalStore.closeModal();
 
       const nevent = nip19.neventEncode({
@@ -256,6 +282,9 @@
     {/if}
 
     <div class="modal-action">
+      <button type="button" class="btn btn-ghost" disabled={isSubmitting} onclick={startOver}
+        >Start over</button
+      >
       <button
         type="button"
         class="btn btn-ghost"
