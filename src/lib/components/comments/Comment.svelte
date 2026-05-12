@@ -6,6 +6,9 @@
   import CommentInput from './CommentInput.svelte';
   import { ChatIcon, TrashIcon, CopyIcon } from '$lib/components/icons';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
+  import { parseEventContent } from '$lib/helpers/nostrContent.js';
+  import { extractPreviewableUrls } from '$lib/helpers/linkPreview.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { getPlainTextExcerpt } from '$lib/helpers/commentThreading.js';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -172,6 +175,10 @@
           event={comment}
           class="prose-sm mt-2 max-w-none text-base-content/80"
         />
+
+        {#each extractPreviewableUrls(parseEventContent(comment)) as previewUrl (previewUrl)}
+          <LinkPreview url={previewUrl} />
+        {/each}
 
         <!-- Actions -->
         <div class="mt-3 flex flex-wrap items-center gap-1">
