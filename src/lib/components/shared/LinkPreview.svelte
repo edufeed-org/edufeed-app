@@ -15,7 +15,7 @@
   let { url } = $props();
 
   /** @type {'loading' | 'ok' | 'error'} */
-  let state = $state('loading');
+  let phase = $state('loading');
 
   /** @type {{ title?: string, description?: string, image?: string, siteName?: string, favicon?: string } | null} */
   let metadata = $state(null);
@@ -33,15 +33,15 @@
 
   $effect(() => {
     if (!appSettings.linkPreviewsEnabled) {
-      state = 'error';
+      phase = 'error';
       return;
     }
     if (!isSafeHttpUrl(url)) {
-      state = 'error';
+      phase = 'error';
       return;
     }
     let cancelled = false;
-    state = 'loading';
+    phase = 'loading';
     metadata = null;
     fetch(`/api/reader?mode=metadata&url=${encodeURIComponent(url)}`)
       .then((r) => r.json())
@@ -49,13 +49,13 @@
         if (cancelled) return;
         if (body && body.success && body.metadata) {
           metadata = body.metadata;
-          state = 'ok';
+          phase = 'ok';
         } else {
-          state = 'error';
+          phase = 'error';
         }
       })
       .catch(() => {
-        if (!cancelled) state = 'error';
+        if (!cancelled) phase = 'error';
       });
     return () => {
       cancelled = true;
@@ -73,12 +73,12 @@
 </script>
 
 {#if appSettings.linkPreviewsEnabled}
-  {#if state === 'loading'}
+  {#if phase === 'loading'}
     <div
       data-testid="link-preview-skeleton"
       class="my-2 h-[88px] w-full animate-pulse rounded-lg border border-base-300 bg-base-200"
     ></div>
-  {:else if state === 'ok' && metadata}
+  {:else if phase === 'ok' && metadata}
     {@const hasImage = isSafeHttpUrl(metadata.image)}
     {@const title = metadata.title}
     {@const description = metadata.description}
