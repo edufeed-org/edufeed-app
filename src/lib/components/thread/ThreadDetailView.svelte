@@ -124,10 +124,10 @@
     {:else}
       <!-- kind 1 and kind 1111 both use inline content rendering -->
       <NostrContentRenderer {event} />
-      {#each extractPreviewableUrls(parseEventContent(event)) as previewUrl (previewUrl)}
-        <LinkPreview url={previewUrl} />
-      {/each}
     {/if}
+    {#each extractPreviewableUrls(parseEventContent(event)) as previewUrl (previewUrl)}
+      <LinkPreview url={previewUrl} />
+    {/each}
   </div>
 
   <!-- Reactions -->
