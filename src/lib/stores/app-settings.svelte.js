@@ -18,6 +18,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {boolean} gatedMode
  * @property {boolean} includeClientTag
  * @property {'communities' | 'following'} dashboardFeedSource
+ * @property {boolean} linkPreviewsEnabled
  */
 
 /**
@@ -95,7 +96,8 @@ function getDefaultSettings() {
     colorMode,
     gatedMode: runtimeConfig.gatedMode?.default ?? false,
     includeClientTag: true,
-    dashboardFeedSource: 'communities'
+    dashboardFeedSource: 'communities',
+    linkPreviewsEnabled: true
   };
 }
 
@@ -115,7 +117,8 @@ function migrateSettings(stored) {
       colorMode: stored.colorMode ?? defaults.colorMode,
       gatedMode: stored.gatedMode ?? defaults.gatedMode,
       includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
-      dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
+      dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource,
+      linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
     };
   }
 
@@ -153,7 +156,8 @@ function migrateSettings(stored) {
     colorMode,
     gatedMode: stored.gatedMode ?? defaults.gatedMode,
     includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
-    dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
+    dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource,
+    linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
   };
 }
 
@@ -421,6 +425,23 @@ export const appSettings = {
    */
   set dashboardFeedSource(value) {
     settings.dashboardFeedSource = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get link previews enabled
+   * @returns {boolean}
+   */
+  get linkPreviewsEnabled() {
+    return settings.linkPreviewsEnabled;
+  },
+
+  /**
+   * Set link previews enabled
+   * @param {boolean} value
+   */
+  set linkPreviewsEnabled(value) {
+    settings.linkPreviewsEnabled = value;
     saveSettings(settings);
   },
 
