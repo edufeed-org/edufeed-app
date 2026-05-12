@@ -13,6 +13,9 @@
   import { resolve } from '$app/paths';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import NostrContentRenderer from '../shared/NostrContentRenderer.svelte';
+  import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
+  import { parseEventContent } from '$lib/helpers/nostrContent.js';
+  import { extractPreviewableUrls } from '$lib/helpers/linkPreview.js';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
@@ -121,6 +124,9 @@
     {:else}
       <!-- kind 1 and kind 1111 both use inline content rendering -->
       <NostrContentRenderer {event} />
+      {#each extractPreviewableUrls(parseEventContent(event)) as previewUrl (previewUrl)}
+        <LinkPreview url={previewUrl} />
+      {/each}
     {/if}
   </div>
 
