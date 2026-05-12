@@ -61,6 +61,19 @@ describe('extractPreviewableUrls', () => {
     expect(extractPreviewableUrls(tree)).toEqual(['https://x.test/page?id=1']);
   });
 
+  it('does not exclude article URLs that contain an image filename only in the query string', () => {
+    const tree = root([
+      link('https://example.com/article?file=report.jpg'),
+      link('https://example.com/page?attachment=photo.png'),
+      link('https://example.com/?path=video.mp4')
+    ]);
+    expect(extractPreviewableUrls(tree)).toEqual([
+      'https://example.com/article?file=report.jpg',
+      'https://example.com/page?attachment=photo.png',
+      'https://example.com/?path=video.mp4'
+    ]);
+  });
+
   it('excludes nostr: and web+nostr: URIs', () => {
     const tree = root([
       link('nostr:nevent1abc'),

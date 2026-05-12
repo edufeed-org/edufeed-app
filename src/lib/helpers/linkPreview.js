@@ -8,8 +8,8 @@
  */
 
 const MAX_URLS = 3;
-const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|svg|avif|bmp)(\?.*)?$/i;
-const VIDEO_EXT_RE = /\.(mp4|webm|mov|ogg)(\?.*)?$/i;
+const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|svg|avif|bmp)$/i;
+const VIDEO_EXT_RE = /\.(mp4|webm|mov|ogg)$/i;
 
 /**
  * @param {string} href
@@ -18,8 +18,14 @@ const VIDEO_EXT_RE = /\.(mp4|webm|mov|ogg)(\?.*)?$/i;
 function isPreviewable(href) {
   if (typeof href !== 'string' || href.length === 0) return false;
   if (!/^https?:\/\//i.test(href)) return false;
-  if (IMAGE_EXT_RE.test(href)) return false;
-  if (VIDEO_EXT_RE.test(href)) return false;
+  let pathname;
+  try {
+    pathname = new URL(href).pathname;
+  } catch {
+    return false;
+  }
+  if (IMAGE_EXT_RE.test(pathname)) return false;
+  if (VIDEO_EXT_RE.test(pathname)) return false;
   return true;
 }
 
