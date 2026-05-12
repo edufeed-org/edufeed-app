@@ -20,8 +20,23 @@
   /** @type {{ title?: string, description?: string, image?: string, siteName?: string, favicon?: string } | null} */
   let metadata = $state(null);
 
+  /** @param {unknown} value */
+  function isSafeHttpUrl(value) {
+    if (typeof value !== 'string' || value.length === 0) return false;
+    try {
+      const u = new URL(value);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
   $effect(() => {
     if (!appSettings.linkPreviewsEnabled) {
+      state = 'error';
+      return;
+    }
+    if (!isSafeHttpUrl(url)) {
       state = 'error';
       return;
     }
@@ -64,11 +79,13 @@
       class="my-2 h-[88px] w-full animate-pulse rounded-lg border border-base-300 bg-base-200"
     ></div>
   {:else if state === 'ok' && metadata}
-    {@const hasImage = !!(metadata.image && metadata.image.length > 0)}
+    {@const hasImage = isSafeHttpUrl(metadata.image)}
     {@const title = metadata.title}
     {@const description = metadata.description}
-    {@const siteName = metadata.siteName || hostname()}
     {@const favicon = metadata.favicon}
+    {@const displayTitle = metadata.title?.trim() || hostname()}
+    {@const displaySiteName = metadata.siteName?.trim() || null}
+    {@const cardSiteName = displaySiteName || hostname()}
 
     {#if hasImage}
       <a
@@ -95,10 +112,10 @@
             <div class="line-clamp-2 text-xs text-base-content/70">{description}</div>
           {/if}
           <div class="mt-1 flex items-center gap-1 text-xs text-base-content/50">
-            {#if favicon}
+            {#if isSafeHttpUrl(favicon)}
               <img src={favicon} alt="" loading="lazy" class="h-3 w-3" />
             {/if}
-            <span class="truncate">{siteName}</span>
+            <span class="truncate">{cardSiteName}</span>
           </div>
         </div>
       </a>
@@ -110,11 +127,13 @@
         rel="noopener noreferrer"
         class="my-1 flex items-center gap-1.5 text-xs text-base-content/70 no-underline hover:text-base-content"
       >
-        {#if favicon}
+        {#if isSafeHttpUrl(favicon)}
           <img src={favicon} alt="" loading="lazy" class="h-3.5 w-3.5 shrink-0" />
         {/if}
-        <span class="truncate">{title || hostname()}</span>
-        <span class="shrink-0 text-base-content/40">— {siteName}</span>
+        <span class="truncate">{displayTitle}</span>
+        {#if displaySiteName && displaySiteName !== displayTitle}
+          <span class="shrink-0 text-base-content/40">— {displaySiteName}</span>
+        {/if}
       </a>
     {/if}
   {/if}

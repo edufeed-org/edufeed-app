@@ -108,6 +108,9 @@ describe('LinkPreview', () => {
       expect(container.querySelector('[data-testid="link-preview-compact"]')).not.toBeNull();
     });
     expect(container.textContent).toContain('example.test');
+    // Hostname must appear exactly once — no duplicate from siteName fallback.
+    const matches = container.textContent?.match(/example\.test/g) ?? [];
+    expect(matches.length).toBe(1);
   });
 
   it('renders nothing when fetch returns success: false', async () => {
@@ -115,8 +118,8 @@ describe('LinkPreview', () => {
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
     await waitFor(() => {
       expect(container.querySelector('[data-testid="link-preview-skeleton"]')).toBeNull();
+      expect(container.querySelector('a')).toBeNull();
     });
-    expect(container.querySelector('a')).toBeNull();
   });
 
   it('renders nothing when fetch throws', async () => {
@@ -124,8 +127,22 @@ describe('LinkPreview', () => {
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
     await waitFor(() => {
       expect(container.querySelector('[data-testid="link-preview-skeleton"]')).toBeNull();
+      expect(container.querySelector('a')).toBeNull();
     });
+  });
+
+  it('renders nothing when url is not http(s) (e.g., javascript:...)', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const { container } = render(LinkPreview, {
+      props: { url: 'javascript:alert(1)' }
+    });
+    // Should not render skeleton/card/compact, and must not call fetch.
+    expect(container.querySelector('[data-testid="link-preview-skeleton"]')).toBeNull();
+    expect(container.querySelector('[data-testid="link-preview-card"]')).toBeNull();
+    expect(container.querySelector('[data-testid="link-preview-compact"]')).toBeNull();
     expect(container.querySelector('a')).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('opens the link in a new tab with safe rel attributes', async () => {
