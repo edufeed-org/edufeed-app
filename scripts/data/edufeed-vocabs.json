@@ -2412,6 +2412,46 @@
           { "d": "13-14-jahre", "prefLabels": [{ "value": "13–14 Jahre", "lang": "de" }] }
         ]
       }
+    },
+    {
+      "d": "konfi-lernformat",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Lernformat", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Lernformate der Konfi-Arbeit. Parents (Konfieinheit, Konfiblock) sind selektierbar wie ihre Kinder — die UI-Entscheidung über Header-only-Rendering liegt in Spec B+C.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "konfieinheit",
+            "prefLabels": [{ "value": "Konfieinheit", "lang": "de" }],
+            "children": [
+              {
+                "d": "konfieinheit/60-minuten",
+                "prefLabels": [{ "value": "60 Minuten", "lang": "de" }]
+              },
+              {
+                "d": "konfieinheit/90-minuten",
+                "prefLabels": [{ "value": "90 Minuten", "lang": "de" }]
+              }
+            ]
+          },
+          {
+            "d": "konfiblock",
+            "prefLabels": [{ "value": "Konfiblock", "lang": "de" }],
+            "children": [
+              { "d": "konfiblock/halbtag", "prefLabels": [{ "value": "1 Halbtag", "lang": "de" }] },
+              { "d": "konfiblock/tag", "prefLabels": [{ "value": "1 Tag", "lang": "de" }] }
+            ]
+          },
+          { "d": "konfifreizeit", "prefLabels": [{ "value": "Konfifreizeit", "lang": "de" }] },
+          { "d": "konficamp", "prefLabels": [{ "value": "Konficamp", "lang": "de" }] },
+          { "d": "exkursion", "prefLabels": [{ "value": "Exkursion", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }
