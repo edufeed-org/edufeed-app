@@ -2489,6 +2489,39 @@
           }
         ]
       }
+    },
+    {
+      "d": "konfi-methode",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Methode", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Methodische Zugänge in der Konfi-Arbeit. Separat vom Schul-`methode`-Vokabular, da pädagogische Tradition deutlich abweicht.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          { "d": "gespraech", "prefLabels": [{ "value": "Gespräch", "lang": "de" }] },
+          { "d": "diskussion", "prefLabels": [{ "value": "Diskussion", "lang": "de" }] },
+          { "d": "bibliolog", "prefLabels": [{ "value": "Bibliolog", "lang": "de" }] },
+          { "d": "bibeltheater", "prefLabels": [{ "value": "Bibeltheater", "lang": "de" }] },
+          { "d": "rollenspiel", "prefLabels": [{ "value": "Rollenspiel", "lang": "de" }] },
+          { "d": "kreativarbeit", "prefLabels": [{ "value": "Kreativarbeit", "lang": "de" }] },
+          { "d": "musik", "prefLabels": [{ "value": "Musik", "lang": "de" }] },
+          { "d": "bewegung", "prefLabels": [{ "value": "Bewegung", "lang": "de" }] },
+          { "d": "meditation", "prefLabels": [{ "value": "Meditation", "lang": "de" }] },
+          { "d": "gebet", "prefLabels": [{ "value": "Gebet", "lang": "de" }] },
+          {
+            "d": "digitales-lernen",
+            "prefLabels": [{ "value": "Digitales Lernen", "lang": "de" }]
+          },
+          { "d": "filmarbeit", "prefLabels": [{ "value": "Filmarbeit", "lang": "de" }] },
+          { "d": "exkursion", "prefLabels": [{ "value": "Exkursion", "lang": "de" }] },
+          { "d": "escape-game", "prefLabels": [{ "value": "Escape Game", "lang": "de" }] },
+          { "d": "pilgern", "prefLabels": [{ "value": "Pilgern", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }
