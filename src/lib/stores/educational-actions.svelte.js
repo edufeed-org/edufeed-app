@@ -195,6 +195,12 @@ export function createEducationalActions() {
         const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
         for (const t of ekwTags) tags.push(t);
 
+        // Konfi tags (pre-computed by the wizard from its Bildungsbereich config)
+        const konfiTags = /** @type any */ (formData).konfiTags;
+        if (Array.isArray(konfiTags)) {
+          for (const t of konfiTags) tags.push(t);
+        }
+
         // Create the event using EventFactory
         const eventFactory = createAppEventFactory();
 
@@ -269,6 +275,12 @@ export function createEducationalActions() {
 
         const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
         for (const t of ekwTags) tags.push(t);
+
+        // Konfi tags (pre-computed by the wizard from its Bildungsbereich config)
+        const konfiTags = /** @type any */ (formData).konfiTags;
+        if (Array.isArray(konfiTags)) {
+          for (const t of konfiTags) tags.push(t);
+        }
 
         // Create the updated event
         const eventFactory = createAppEventFactory();

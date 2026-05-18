@@ -76,6 +76,16 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { applySuggestionAction } from '$lib/helpers/educational/applySuggestionAction.js';
   import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
+  import { inferBildungsbereich } from '$lib/helpers/educational/inferBildungsbereich.js';
+  import { parseKonfiTagsToFormData } from '$lib/helpers/educational/parseKonfiTagsToFormData.js';
+  import { formDataToKonfiTags } from '$lib/helpers/educational/formDataToKonfiTags.js';
+  import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
+  import {
+    advanceStepOrSubStep,
+    retreatStepOrSubStep
+  } from '$lib/helpers/educational/konfiNavigation.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import FieldsRenderer from '$lib/components/forms/FieldsRenderer.svelte';
 
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
@@ -154,6 +164,22 @@
 
   // Form data state
   let formData = $state(createInitialFormData());
+
+  // Konfi sub-step state and config (must come after formData is declared).
+  const bildungsbereichConfig = $derived(
+    /** @type {any} */ (BILDUNGSBEREICHE)[formData.bildungsbereich]
+  );
+  const step4SubSteps = $derived(bildungsbereichConfig?.step4SubSteps);
+  /** @type {string | null} */
+  let currentSubStep = $state(null);
+  const currentSubStepConfig = $derived(
+    step4SubSteps?.find((/** @type {any} */ s) => s.key === currentSubStep)
+  );
+  const schemeNaddrs = $derived(
+    /** @type {Record<string, {address: string, relay: string}>} */ (
+      /** @type {any} */ (runtimeConfig.educational?.schemeNaddrs) || {}
+    )
+  );
 
   // Per-vocab subject selection (merged into formData.about on submit).
   // Keys are vocab slugs (e.g. 'schulfaecher', 'hochschulfaecher').
@@ -626,14 +652,16 @@
     const subjects = getAMBSubjects(editEvent, getLocale());
     const eduLevels = getAMBEducationalLevels(editEvent, getLocale());
 
-    const inferred = inferBildungsbereichFromEducationalLevels(eduLevels.map((l) => l.id));
+    const inferred =
+      inferBildungsbereich(editEvent ?? { tags: [] }) ||
+      inferBildungsbereichFromEducationalLevels(eduLevels.map((l) => l.id));
     const identifier = getAMBIdentifier(editEvent) || '';
     const isUrlIdentifier = /^https?:\/\//i.test(identifier);
     hasNoUrl = !isUrlIdentifier;
 
     formData = {
       ...formData,
-      bildungsbereich: inferred ?? '',
+      bildungsbereich: /** @type {'' | BildungsbereichKey} */ (inferred ?? ''),
       urlInput: isUrlIdentifier ? identifier : '',
       name: getAMBName(editEvent),
       description: getAMBDescription(editEvent),
@@ -691,11 +719,19 @@
       bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
     };
 
+    // Merge Konfi facets parsed from ext:ekw:konfi:* tags (no-op for non-Konfi).
+    if (inferred === 'konfi') {
+      const subSteps = BILDUNGSBEREICHE.konfi.step4SubSteps ?? [];
+      const konfi = parseKonfiTagsToFormData(editEvent, subSteps);
+      formData = { ...formData, ...konfi };
+    }
+
     // Bucket pre-existing subjects into a single vocab slot for display.
     // In edit mode we don't know which vocab each subject came from, so we
     // surface them under the first vocab key of the inferred Bildungsbereich.
     if (inferred) {
-      const firstKey = BILDUNGSBEREICHE[inferred].subjectVocabKeys[0];
+      const firstKey =
+        BILDUNGSBEREICHE[/** @type {BildungsbereichKey} */ (inferred)].subjectVocabKeys[0];
       aboutByVocab = { [firstKey]: subjects.map((s) => ({ id: s.id, label: s.label })) };
     } else {
       aboutByVocab = {};
@@ -937,6 +973,7 @@
     hasSubjectVocab: subjectVocabFields.length > 0,
     subjectsCount: Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0),
     isValidUrl,
+    schemeNaddrs,
     messages: {
       bildungsbereich: () =>
         m.amb_form_validation_bildungsbereich?.() ?? 'Please choose a Bildungsbereich.',
@@ -1013,22 +1050,34 @@
   }
 
   function nextStep() {
-    if (validateCurrentStep() && currentStep < totalSteps) {
-      currentStep++;
+    // Konfi step-4 sub-step: validate the active sub-step before walking.
+    if (currentStep === 4 && step4SubSteps?.length) {
+      const errs = validateWizardStep(4, formData, validationContext, currentSubStepConfig);
+      if (Object.keys(errs).length > 0) {
+        const next = { ...touchedFields };
+        for (const k of Object.keys(errs)) next[k] = true;
+        touchedFields = next;
+        advanceAttempted = true;
+        return;
+      }
+    } else if (!validateCurrentStep()) {
+      return;
+    }
+    if (currentStep < totalSteps) {
+      const nextState = advanceStepOrSubStep({ currentStep, currentSubStep }, step4SubSteps);
+      currentStep = nextState.currentStep;
+      currentSubStep = nextState.currentSubStep;
       if (currentStep > maxVisitedStep) maxVisitedStep = currentStep;
-      // Each step starts silent: hide the summary alert until the user
-      // tries to advance again. Inline blur errors persist via touchedFields.
       advanceAttempted = false;
-      // First successful advance counts as implicit "accept" of the
-      // restored draft — clear the banner without wiping the saved draft
-      // (autosave keeps running so a refresh still recovers).
       if (draftRestoredAt !== null) draftRestoredAt = null;
     }
   }
 
   function prevStep() {
     if (currentStep > 1) {
-      currentStep--;
+      const prevState = retreatStepOrSubStep({ currentStep, currentSubStep }, step4SubSteps);
+      currentStep = prevState.currentStep;
+      currentSubStep = prevState.currentSubStep;
       advanceAttempted = false;
     }
   }
@@ -1104,7 +1153,12 @@
         methods: formData.methods,
         methodLabels: formData.methodLabels,
         methodOther: formData.methodOther,
-        bibleReferences: formData.bibleReferences
+        bibleReferences: formData.bibleReferences,
+        konfiTags: formDataToKonfiTags(
+          formData,
+          bildungsbereichConfig?.step4SubSteps ?? [],
+          bildungsbereichConfig?.bildungsbereichTag
+        )
       };
 
       let result;
@@ -1148,6 +1202,54 @@
       submitError = error instanceof Error ? error.message : m.amb_form_error_publish_failed();
     } finally {
       isSubmitting = false;
+    }
+  }
+
+  // Map formData's konfi slots into the {fieldId: value} shape FieldsRenderer expects.
+  const konfiFieldValues = $derived.by(() => {
+    if (!currentSubStepConfig) return {};
+    /** @type {Record<string, any>} */
+    const v = {};
+    /** @type {any} */
+    const fd = formData;
+    for (const f of /** @type {any[]} */ (currentSubStepConfig.fields)) {
+      if (f.kind === 'vocab') {
+        // FormConceptPicker expects rich SelectedConcept[]
+        const ids = fd[`${f.schemeKey}Ids`] || [];
+        const labels = fd[`${f.schemeKey}Labels`] || [];
+        const labelById = new Map(
+          labels.map((/** @type {{id:string,label:string}} */ l) => [l.id, l.label])
+        );
+        v[f.schemeKey] = ids.map((/** @type string */ id) => ({
+          id,
+          nostrCoord: '',
+          relay: '',
+          labels: labelById.has(id) ? { de: labelById.get(id) } : {}
+        }));
+      } else {
+        v[f.tagSlug] = fd[f.tagSlug];
+      }
+    }
+    return v;
+  });
+
+  function handleKonfiFieldChange(/** @type string */ id, /** @type any */ value) {
+    if (!currentSubStepConfig) return;
+    const field = /** @type {any[]} */ (currentSubStepConfig.fields).find(
+      (/** @type {any} */ f) => (f.kind === 'vocab' ? f.schemeKey : f.tagSlug) === id
+    );
+    if (!field) return;
+    /** @type {any} */
+    const fd = formData;
+    if (field.kind === 'vocab') {
+      const arr = Array.isArray(value) ? value : [];
+      fd[`${field.schemeKey}Ids`] = arr.map((c) => c.id);
+      fd[`${field.schemeKey}Labels`] = arr.map((c) => ({
+        id: c.id,
+        label: c.labels?.de || c.labels?.en || c.id
+      }));
+    } else {
+      fd[field.tagSlug] = value;
     }
   }
 
@@ -1381,7 +1483,9 @@
     <div class="mb-6 flex items-center justify-between">
       <p class="text-base font-medium text-base-content/70">
         {m.amb_form_step_indicator({
-          currentStep: String(currentStep),
+          currentStep: currentSubStep
+            ? `${currentStep}${currentSubStep.slice(1)}`
+            : String(currentStep),
           totalSteps: String(totalSteps)
         })}
         {stepTitles[currentStep - 1]}
@@ -1803,299 +1907,427 @@
 
       <!-- Step 4: Classification -->
       {#if currentStep === 4}
-        <div class="space-y-4">
-          <!-- Resource Type — HCRT for AMB, EKW vocab (relay-fetched) for EKW variant -->
-          <div data-skos-vocab="learningResourceType">
-            {#if isEkw}
-              {#if ekwLrtField}
-                <div class="form-control">
-                  <div class="label flex items-center gap-2">
-                    <span class="label-text font-medium">
-                      {m.amb_form_label_resource_type()}
-                      <span class="text-error">*</span>
-                    </span>
+        {#if currentSubStepConfig}
+          {@const konfiFields = subStepToFormFields(currentSubStepConfig, schemeNaddrs)}
+          <div class="space-y-4">
+            {#if currentSubStepConfig.key === '4b' && fieldErrors._topicOrDimension}
+              <p class="text-xs text-error">
+                Bitte wählen Sie mindestens ein Thema oder eine Dimension.
+              </p>
+            {/if}
+            <FieldsRenderer
+              fields={konfiFields}
+              values={konfiFieldValues}
+              errors={fieldErrors}
+              onchange={handleKonfiFieldChange}
+            />
+          </div>
+        {:else}
+          <div class="space-y-4">
+            <!-- Resource Type — HCRT for AMB, EKW vocab (relay-fetched) for EKW variant -->
+            <div data-skos-vocab="learningResourceType">
+              {#if isEkw}
+                {#if ekwLrtField}
+                  <div class="form-control">
+                    <div class="label flex items-center gap-2">
+                      <span class="label-text font-medium">
+                        {m.amb_form_label_resource_type()}
+                        <span class="text-error">*</span>
+                      </span>
+                      <SmartFillBadge
+                        provenance={provenance.learningResourceType}
+                        onclear={() => clearField('learningResourceType')}
+                      />
+                    </div>
+                    <FormConceptPicker
+                      field={ekwLrtField}
+                      multiple={true}
+                      value={formData.learningResourceType.map((c) =>
+                        toRichConcept(c, ekwLrtField.vocab.relay)
+                      )}
+                      onchange={(rich) => {
+                        formData.learningResourceType = rich.map(toCompactConcept);
+                      }}
+                    />
+                    <p class="mt-1 text-xs text-base-content/60">
+                      {m.amb_form_help_resource_type()}
+                    </p>
+                  </div>
+                {/if}
+              {:else}
+                <SKOSDropdown
+                  vocabularyKey="learningResourceType"
+                  bind:selected={formData.learningResourceType}
+                  label={m.amb_form_label_resource_type()}
+                  placeholder={m.amb_form_placeholder_resource_type()}
+                  required={true}
+                  multiple={true}
+                  helpText={m.amb_form_help_resource_type()}
+                />
+                {#if provenance.learningResourceType}
+                  <div class="mt-1">
                     <SmartFillBadge
                       provenance={provenance.learningResourceType}
                       onclear={() => clearField('learningResourceType')}
                     />
                   </div>
-                  <FormConceptPicker
-                    field={ekwLrtField}
-                    multiple={true}
-                    value={formData.learningResourceType.map((c) =>
-                      toRichConcept(c, ekwLrtField.vocab.relay)
-                    )}
-                    onchange={(rich) => {
-                      formData.learningResourceType = rich.map(toCompactConcept);
-                    }}
-                  />
-                  <p class="mt-1 text-xs text-base-content/60">
-                    {m.amb_form_help_resource_type()}
-                  </p>
-                </div>
+                {/if}
               {/if}
-            {:else}
-              <SKOSDropdown
-                vocabularyKey="learningResourceType"
-                bind:selected={formData.learningResourceType}
-                label={m.amb_form_label_resource_type()}
-                placeholder={m.amb_form_placeholder_resource_type()}
-                required={true}
-                multiple={true}
-                helpText={m.amb_form_help_resource_type()}
+              <FieldAiSuggestionBadge
+                field="learningResourceType"
+                {formData}
+                {aboutByVocab}
+                {aiSuggestions}
+                dismissedFields={dismissedSuggestionFields}
+                onapply={handleSuggestionAction}
               />
-              {#if provenance.learningResourceType}
-                <div class="mt-1">
-                  <SmartFillBadge
-                    provenance={provenance.learningResourceType}
-                    onclear={() => clearField('learningResourceType')}
-                  />
-                </div>
+              {#if showError('learningResourceType')}
+                <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
               {/if}
-            {/if}
-            <FieldAiSuggestionBadge
-              field="learningResourceType"
-              {formData}
-              {aboutByVocab}
-              {aiSuggestions}
-              dismissedFields={dismissedSuggestionFields}
-              onapply={handleSuggestionAction}
-            />
-            {#if showError('learningResourceType')}
-              <p class="mt-1 text-xs text-error">{fieldErrors.learningResourceType}</p>
-            {/if}
-          </div>
+            </div>
 
-          <!--
+            <!--
           Bildungsstufe + Fach/Thema are AMB-shared classification fields.
           For the EKKW variant they're hidden because the EKKW-specific
           Klassenstufe / Schulart / Fachrichtung pickers below cover the
           same ground (and are the canonical source for that path).
         -->
-          {#if !isEkw}
-            <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
-            {#if educationalLevelField}
-              <div class="form-control">
-                <div class="label">
-                  <span class="label-text font-medium">
-                    {m.amb_form_label_educational_level?.() ?? 'Educational level'}
-                  </span>
-                  <SmartFillBadge
-                    provenance={provenance.educationalLevels}
-                    onclear={() => clearField('educationalLevels')}
+            {#if !isEkw}
+              <!-- Educational level (Nostr concept picker, driven by Bildungsbereich preselection) -->
+              {#if educationalLevelField}
+                <div class="form-control">
+                  <div class="label">
+                    <span class="label-text font-medium">
+                      {m.amb_form_label_educational_level?.() ?? 'Educational level'}
+                    </span>
+                    <SmartFillBadge
+                      provenance={provenance.educationalLevels}
+                      onclear={() => clearField('educationalLevels')}
+                    />
+                  </div>
+                  <FormConceptPicker
+                    field={educationalLevelField}
+                    multiple={true}
+                    value={formData.educationalLevels.map((c) =>
+                      toRichConcept(c, educationalLevelField.vocab.relay)
+                    )}
+                    onchange={handleEduLevelChange}
+                  />
+                  <FieldAiSuggestionBadge
+                    field="educationalLevels"
+                    {formData}
+                    {aboutByVocab}
+                    {aiSuggestions}
+                    dismissedFields={dismissedSuggestionFields}
+                    onapply={handleSuggestionAction}
                   />
                 </div>
-                <FormConceptPicker
-                  field={educationalLevelField}
-                  multiple={true}
-                  value={formData.educationalLevels.map((c) =>
-                    toRichConcept(c, educationalLevelField.vocab.relay)
-                  )}
-                  onchange={handleEduLevelChange}
-                />
-                <FieldAiSuggestionBadge
-                  field="educationalLevels"
-                  {formData}
-                  {aboutByVocab}
-                  {aiSuggestions}
-                  dismissedFields={dismissedSuggestionFields}
-                  onapply={handleSuggestionAction}
-                />
-              </div>
-            {/if}
-
-            <!-- Subject pickers — one per Bildungsbereich vocab -->
-            {#if subjectVocabFields.length === 0}
-              <p class="text-sm text-base-content/60">
-                {m.amb_form_help_subject_pick_bildungsbereich?.() ??
-                  'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
-              </p>
-            {/if}
-            {#each subjectVocabFields as entry (entry.key)}
-              <div class="form-control">
-                <div class="label">
-                  <span class="label-text font-medium">
-                    {m.amb_form_label_subject()}
-                    <span class="text-error">*</span>
-                  </span>
-                </div>
-                {#if subjectVocabFields.length > 1}
-                  <p class="-mt-1 mb-1 text-xs text-base-content/60">
-                    {getSubjectVocabLabel(entry.key, getLocale())}
-                  </p>
-                {/if}
-                <FormConceptPicker
-                  field={entry.field}
-                  multiple={true}
-                  value={(aboutByVocab[entry.key] ?? []).map((c) =>
-                    toRichConcept(c, entry.field.vocab.relay)
-                  )}
-                  onchange={makeAboutHandler(entry.key)}
-                />
-              </div>
-            {/each}
-            {#if showError('about')}
-              <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
-            {/if}
-          {/if}
-
-          <!-- Keywords -->
-          <div class="form-control">
-            <label class="label flex items-center gap-2" for="amb-keywords">
-              <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
-              <SmartFillBadge
-                provenance={provenance.keywords}
-                onclear={() => clearField('keywords')}
-              />
-            </label>
-            <div class="relative">
-              <input
-                id="amb-keywords"
-                type="text"
-                class="input-bordered input w-full"
-                placeholder={m.amb_form_placeholder_keywords()}
-                role={isEkw ? 'combobox' : undefined}
-                aria-expanded={isEkw ? keywordSuggestionsOpen : undefined}
-                aria-controls={isEkw ? 'ekw-keyword-suggestions' : undefined}
-                aria-autocomplete={isEkw ? 'list' : undefined}
-                aria-activedescendant={isEkw && keywordSuggestionActiveIndex >= 0
-                  ? `ekw-keyword-suggestion-${keywordSuggestionActiveIndex}`
-                  : undefined}
-                autocomplete="off"
-                bind:value={keywordInputValue}
-                oninput={() => {
-                  if (isEkw) {
-                    keywordSuggestionsOpen = true;
-                    keywordSuggestionActiveIndex = -1;
-                  }
-                }}
-                onfocus={() => {
-                  if (keywordBlurTimer) {
-                    clearTimeout(keywordBlurTimer);
-                    keywordBlurTimer = null;
-                  }
-                  if (isEkw) keywordSuggestionsOpen = true;
-                }}
-                onkeydown={isEkw ? handleKeywordKeydownEkw : handleAddKeyword}
-                onblur={(e) => {
-                  if (keywordBlurTimer) clearTimeout(keywordBlurTimer);
-                  keywordBlurTimer = setTimeout(() => {
-                    keywordSuggestionsOpen = false;
-                    keywordSuggestionActiveIndex = -1;
-                    keywordBlurTimer = null;
-                  }, 120);
-                  handleKeywordBlur(e);
-                }}
-                onpaste={handleKeywordPaste}
-              />
-              {#if isEkw && keywordSuggestionsOpen && keywordSuggestions.length > 0}
-                <ul
-                  id="ekw-keyword-suggestions"
-                  role="listbox"
-                  data-testid="ekw-keyword-suggestions"
-                  class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-base-300 bg-base-100 shadow"
-                  aria-label={m.ekw_keywords_suggestions_label()}
-                >
-                  {#each keywordSuggestions as suggestion, i (suggestion)}
-                    <!-- Keyboard interaction lives on the input via aria-activedescendant; the option click is reachable through Enter on the focused input. -->
-                    <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <li
-                      id="ekw-keyword-suggestion-{i}"
-                      role="option"
-                      aria-selected={i === keywordSuggestionActiveIndex}
-                      class="cursor-pointer px-3 py-2 hover:bg-base-200"
-                      class:bg-base-200={i === keywordSuggestionActiveIndex}
-                      onmousedown={(e) => e.preventDefault()}
-                      onclick={() => pickKeywordSuggestion(suggestion)}
-                    >
-                      {suggestion}
-                    </li>
-                  {/each}
-                </ul>
               {/if}
-            </div>
-            <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
-            {#if formData.keywords.length > 0}
-              <div class="mt-2 flex flex-wrap gap-2">
-                {#each formData.keywords as keyword (keyword)}
-                  <span class="badge gap-1 badge-outline" data-testid="keyword-chip">
-                    {keyword}
-                    <button
-                      type="button"
-                      class="hover:text-error"
-                      onclick={handleRemoveKeyword(keyword)}
-                    >
-                      <CloseIcon class_="w-3 h-3" />
-                    </button>
-                  </span>
-                {/each}
-              </div>
-            {/if}
-            <FieldAiSuggestionBadge
-              field="keywords"
-              {formData}
-              {aboutByVocab}
-              {aiSuggestions}
-              dismissedFields={dismissedSuggestionFields}
-              onapply={handleSuggestionAction}
-            />
-          </div>
 
-          <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
-          {#if isEkw}
-            {#if ekwFachField}
-              <div class="form-control">
-                <div class="label">
-                  <span class="label-text font-medium">
-                    {m.amb_form_label_ekw_fachrichtung()}
-                    {#if subjectVocabFields.length > 0}<span class="text-error">*</span>{/if}
-                  </span>
-                  <SmartFillBadge
-                    provenance={provenance.ekwFachrichtung}
-                    onclear={() => clearField('ekwFachrichtung')}
+              <!-- Subject pickers — one per Bildungsbereich vocab -->
+              {#if subjectVocabFields.length === 0}
+                <p class="text-sm text-base-content/60">
+                  {m.amb_form_help_subject_pick_bildungsbereich?.() ??
+                    'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
+                </p>
+              {/if}
+              {#each subjectVocabFields as entry (entry.key)}
+                <div class="form-control">
+                  <div class="label">
+                    <span class="label-text font-medium">
+                      {m.amb_form_label_subject()}
+                      <span class="text-error">*</span>
+                    </span>
+                  </div>
+                  {#if subjectVocabFields.length > 1}
+                    <p class="-mt-1 mb-1 text-xs text-base-content/60">
+                      {getSubjectVocabLabel(entry.key, getLocale())}
+                    </p>
+                  {/if}
+                  <FormConceptPicker
+                    field={entry.field}
+                    multiple={true}
+                    value={(aboutByVocab[entry.key] ?? []).map((c) =>
+                      toRichConcept(c, entry.field.vocab.relay)
+                    )}
+                    onchange={makeAboutHandler(entry.key)}
                   />
                 </div>
-                <FormConceptPicker
-                  field={ekwFachField}
-                  multiple={true}
-                  value={(aboutByVocab.ekwFachrichtung ?? []).map((c) =>
-                    toRichConcept(c, ekwFachField.vocab.relay)
-                  )}
-                  onchange={makeAboutHandler('ekwFachrichtung')}
-                />
-                <FieldAiSuggestionBadge
-                  field="ekwFachrichtung"
-                  {formData}
-                  {aboutByVocab}
-                  {aiSuggestions}
-                  dismissedFields={dismissedSuggestionFields}
-                  onapply={handleSuggestionAction}
-                />
-              </div>
+              {/each}
               {#if showError('about')}
                 <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
               {/if}
             {/if}
 
-            {#if klassenstufenField}
-              <div class="form-control">
-                <div class="label">
-                  <span class="label-text font-medium">{m.amb_form_label_ekw_klassenstufe()}</span>
-                  <SmartFillBadge
-                    provenance={provenance.gradeLevels}
-                    onclear={() => clearField('gradeLevels')}
+            <!-- Keywords -->
+            <div class="form-control">
+              <label class="label flex items-center gap-2" for="amb-keywords">
+                <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
+                <SmartFillBadge
+                  provenance={provenance.keywords}
+                  onclear={() => clearField('keywords')}
+                />
+              </label>
+              <div class="relative">
+                <input
+                  id="amb-keywords"
+                  type="text"
+                  class="input-bordered input w-full"
+                  placeholder={m.amb_form_placeholder_keywords()}
+                  role={isEkw ? 'combobox' : undefined}
+                  aria-expanded={isEkw ? keywordSuggestionsOpen : undefined}
+                  aria-controls={isEkw ? 'ekw-keyword-suggestions' : undefined}
+                  aria-autocomplete={isEkw ? 'list' : undefined}
+                  aria-activedescendant={isEkw && keywordSuggestionActiveIndex >= 0
+                    ? `ekw-keyword-suggestion-${keywordSuggestionActiveIndex}`
+                    : undefined}
+                  autocomplete="off"
+                  bind:value={keywordInputValue}
+                  oninput={() => {
+                    if (isEkw) {
+                      keywordSuggestionsOpen = true;
+                      keywordSuggestionActiveIndex = -1;
+                    }
+                  }}
+                  onfocus={() => {
+                    if (keywordBlurTimer) {
+                      clearTimeout(keywordBlurTimer);
+                      keywordBlurTimer = null;
+                    }
+                    if (isEkw) keywordSuggestionsOpen = true;
+                  }}
+                  onkeydown={isEkw ? handleKeywordKeydownEkw : handleAddKeyword}
+                  onblur={(e) => {
+                    if (keywordBlurTimer) clearTimeout(keywordBlurTimer);
+                    keywordBlurTimer = setTimeout(() => {
+                      keywordSuggestionsOpen = false;
+                      keywordSuggestionActiveIndex = -1;
+                      keywordBlurTimer = null;
+                    }, 120);
+                    handleKeywordBlur(e);
+                  }}
+                  onpaste={handleKeywordPaste}
+                />
+                {#if isEkw && keywordSuggestionsOpen && keywordSuggestions.length > 0}
+                  <ul
+                    id="ekw-keyword-suggestions"
+                    role="listbox"
+                    data-testid="ekw-keyword-suggestions"
+                    class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-base-300 bg-base-100 shadow"
+                    aria-label={m.ekw_keywords_suggestions_label()}
+                  >
+                    {#each keywordSuggestions as suggestion, i (suggestion)}
+                      <!-- Keyboard interaction lives on the input via aria-activedescendant; the option click is reachable through Enter on the focused input. -->
+                      <!-- svelte-ignore a11y_click_events_have_key_events -->
+                      <li
+                        id="ekw-keyword-suggestion-{i}"
+                        role="option"
+                        aria-selected={i === keywordSuggestionActiveIndex}
+                        class="cursor-pointer px-3 py-2 hover:bg-base-200"
+                        class:bg-base-200={i === keywordSuggestionActiveIndex}
+                        onmousedown={(e) => e.preventDefault()}
+                        onclick={() => pickKeywordSuggestion(suggestion)}
+                      >
+                        {suggestion}
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
+              <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
+              {#if formData.keywords.length > 0}
+                <div class="mt-2 flex flex-wrap gap-2">
+                  {#each formData.keywords as keyword (keyword)}
+                    <span class="badge gap-1 badge-outline" data-testid="keyword-chip">
+                      {keyword}
+                      <button
+                        type="button"
+                        class="hover:text-error"
+                        onclick={handleRemoveKeyword(keyword)}
+                      >
+                        <CloseIcon class_="w-3 h-3" />
+                      </button>
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+              <FieldAiSuggestionBadge
+                field="keywords"
+                {formData}
+                {aboutByVocab}
+                {aiSuggestions}
+                dismissedFields={dismissedSuggestionFields}
+                onapply={handleSuggestionAction}
+              />
+            </div>
+
+            <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
+            {#if isEkw}
+              {#if ekwFachField}
+                <div class="form-control">
+                  <div class="label">
+                    <span class="label-text font-medium">
+                      {m.amb_form_label_ekw_fachrichtung()}
+                      {#if subjectVocabFields.length > 0}<span class="text-error">*</span>{/if}
+                    </span>
+                    <SmartFillBadge
+                      provenance={provenance.ekwFachrichtung}
+                      onclear={() => clearField('ekwFachrichtung')}
+                    />
+                  </div>
+                  <FormConceptPicker
+                    field={ekwFachField}
+                    multiple={true}
+                    value={(aboutByVocab.ekwFachrichtung ?? []).map((c) =>
+                      toRichConcept(c, ekwFachField.vocab.relay)
+                    )}
+                    onchange={makeAboutHandler('ekwFachrichtung')}
+                  />
+                  <FieldAiSuggestionBadge
+                    field="ekwFachrichtung"
+                    {formData}
+                    {aboutByVocab}
+                    {aiSuggestions}
+                    dismissedFields={dismissedSuggestionFields}
+                    onapply={handleSuggestionAction}
                   />
                 </div>
-                <FormConceptPicker
-                  field={klassenstufenField}
-                  multiple={true}
-                  value={formData.gradeLevelLabels.map((c) =>
-                    toRichConcept(c, klassenstufenField.vocab.relay)
-                  )}
-                  onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
-                />
+                {#if showError('about')}
+                  <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
+                {/if}
+              {/if}
+
+              {#if klassenstufenField}
+                <div class="form-control">
+                  <div class="label">
+                    <span class="label-text font-medium">{m.amb_form_label_ekw_klassenstufe()}</span
+                    >
+                    <SmartFillBadge
+                      provenance={provenance.gradeLevels}
+                      onclear={() => clearField('gradeLevels')}
+                    />
+                  </div>
+                  <FormConceptPicker
+                    field={klassenstufenField}
+                    multiple={true}
+                    value={formData.gradeLevelLabels.map((c) =>
+                      toRichConcept(c, klassenstufenField.vocab.relay)
+                    )}
+                    onchange={makeEkwPairHandler('gradeLevels', 'gradeLevelLabels')}
+                  />
+                  <FieldAiSuggestionBadge
+                    field="gradeLevels"
+                    {formData}
+                    {aboutByVocab}
+                    {aiSuggestions}
+                    dismissedFields={dismissedSuggestionFields}
+                    onapply={handleSuggestionAction}
+                  />
+                </div>
+              {/if}
+
+              {#if schulartField}
+                <div class="form-control">
+                  <div class="label">
+                    <span class="label-text font-medium">{m.amb_form_label_ekw_schulart()}</span>
+                    <SmartFillBadge
+                      provenance={provenance.schoolTypes}
+                      onclear={() => clearField('schoolTypes')}
+                    />
+                  </div>
+                  <FormConceptPicker
+                    field={schulartField}
+                    multiple={true}
+                    value={formData.schoolTypeLabels.map((c) =>
+                      toRichConcept(c, schulartField.vocab.relay)
+                    )}
+                    onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
+                  />
+                  <FieldAiSuggestionBadge
+                    field="schoolTypes"
+                    {formData}
+                    {aboutByVocab}
+                    {aiSuggestions}
+                    dismissedFields={dismissedSuggestionFields}
+                    onapply={handleSuggestionAction}
+                  />
+                </div>
+              {/if}
+
+              {#if didaktischesKonzeptField}
+                <div class="form-control">
+                  <div class="label">
+                    <span class="label-text font-medium"
+                      >{m.amb_form_label_ekw_didactic_concept()}</span
+                    >
+                    <SmartFillBadge
+                      provenance={provenance.didacticConcepts}
+                      onclear={() => clearField('didacticConcepts')}
+                    />
+                  </div>
+                  <FormConceptPicker
+                    field={didaktischesKonzeptField}
+                    multiple={true}
+                    value={formData.didacticConceptLabels.map((c) =>
+                      toRichConcept(c, didaktischesKonzeptField.vocab.relay)
+                    )}
+                    onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
+                  />
+                  <FieldAiSuggestionBadge
+                    field="didacticConcepts"
+                    {formData}
+                    {aboutByVocab}
+                    {aiSuggestions}
+                    dismissedFields={dismissedSuggestionFields}
+                    onapply={handleSuggestionAction}
+                  />
+                </div>
+              {/if}
+
+              {#if methodeField}
+                <div class="form-control">
+                  <div class="label">
+                    <span class="label-text font-medium">{m.amb_form_label_ekw_method()}</span>
+                    <SmartFillBadge
+                      provenance={provenance.methods}
+                      onclear={() => clearField('methods')}
+                    />
+                  </div>
+                  <FormConceptPicker
+                    field={methodeField}
+                    multiple={true}
+                    value={formData.methodLabels.map((c) =>
+                      toRichConcept(c, methodeField.vocab.relay)
+                    )}
+                    onchange={makeEkwPairHandler('methods', 'methodLabels')}
+                  />
+                  <FieldAiSuggestionBadge
+                    field="methods"
+                    {formData}
+                    {aboutByVocab}
+                    {aiSuggestions}
+                    dismissedFields={dismissedSuggestionFields}
+                    onapply={handleSuggestionAction}
+                  />
+                </div>
+              {/if}
+
+              <div class="form-control">
+                <label class="label flex items-center gap-2" for="ekw-method-other">
+                  <span class="label-text font-medium">{m.amb_form_label_ekw_method_free()}</span>
+                  <SmartFillBadge
+                    provenance={provenance.methodOther}
+                    onclear={() => clearField('methodOther')}
+                  />
+                </label>
+                <textarea
+                  id="ekw-method-other"
+                  class="textarea-bordered textarea w-full"
+                  rows="4"
+                  bind:value={formData.methodOther}
+                ></textarea>
                 <FieldAiSuggestionBadge
-                  field="gradeLevels"
+                  field="methodOther"
                   {formData}
                   {aboutByVocab}
                   {aiSuggestions}
@@ -2103,57 +2335,39 @@
                   onapply={handleSuggestionAction}
                 />
               </div>
-            {/if}
 
-            {#if schulartField}
-              <div class="form-control">
-                <div class="label">
-                  <span class="label-text font-medium">{m.amb_form_label_ekw_schulart()}</span>
-                  <SmartFillBadge
-                    provenance={provenance.schoolTypes}
-                    onclear={() => clearField('schoolTypes')}
-                  />
-                </div>
-                <FormConceptPicker
-                  field={schulartField}
-                  multiple={true}
-                  value={formData.schoolTypeLabels.map((c) =>
-                    toRichConcept(c, schulartField.vocab.relay)
-                  )}
-                  onchange={makeEkwPairHandler('schoolTypes', 'schoolTypeLabels')}
-                />
-                <FieldAiSuggestionBadge
-                  field="schoolTypes"
-                  {formData}
-                  {aboutByVocab}
-                  {aiSuggestions}
-                  dismissedFields={dismissedSuggestionFields}
-                  onapply={handleSuggestionAction}
-                />
-              </div>
-            {/if}
-
-            {#if didaktischesKonzeptField}
               <div class="form-control">
                 <div class="label">
                   <span class="label-text font-medium"
-                    >{m.amb_form_label_ekw_didactic_concept()}</span
+                    >{m.amb_form_label_ekw_bible_reference()}</span
                   >
                   <SmartFillBadge
-                    provenance={provenance.didacticConcepts}
-                    onclear={() => clearField('didacticConcepts')}
+                    provenance={provenance.bibleReferences}
+                    onclear={() => clearField('bibleReferences')}
                   />
                 </div>
-                <FormConceptPicker
-                  field={didaktischesKonzeptField}
-                  multiple={true}
-                  value={formData.didacticConceptLabels.map((c) =>
-                    toRichConcept(c, didaktischesKonzeptField.vocab.relay)
-                  )}
-                  onchange={makeEkwPairHandler('didacticConcepts', 'didacticConceptLabels')}
-                />
+                <div class="space-y-2">
+                  {#each formData.bibleReferences as _ref, i (i)}
+                    <BibleReferenceInput
+                      bind:value={formData.bibleReferences[i]}
+                      onremove={formData.bibleReferences.length > 1
+                        ? () => {
+                            formData.bibleReferences = formData.bibleReferences.filter(
+                              (_, j) => j !== i
+                            );
+                          }
+                        : undefined}
+                    />
+                  {/each}
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-sm"
+                    onclick={() => (formData.bibleReferences = [...formData.bibleReferences, ''])}
+                    >+ Hinzufügen</button
+                  >
+                </div>
                 <FieldAiSuggestionBadge
-                  field="didacticConcepts"
+                  field="bibleReferences"
                   {formData}
                   {aboutByVocab}
                   {aiSuggestions}
@@ -2161,124 +2375,34 @@
                   onapply={handleSuggestionAction}
                 />
               </div>
-            {/if}
 
-            {#if methodeField}
-              <div class="form-control">
-                <div class="label">
-                  <span class="label-text font-medium">{m.amb_form_label_ekw_method()}</span>
-                  <SmartFillBadge
-                    provenance={provenance.methods}
-                    onclear={() => clearField('methods')}
-                  />
-                </div>
-                <FormConceptPicker
-                  field={methodeField}
-                  multiple={true}
-                  value={formData.methodLabels.map((c) =>
-                    toRichConcept(c, methodeField.vocab.relay)
-                  )}
-                  onchange={makeEkwPairHandler('methods', 'methodLabels')}
-                />
-                <FieldAiSuggestionBadge
-                  field="methods"
-                  {formData}
-                  {aboutByVocab}
-                  {aiSuggestions}
-                  dismissedFields={dismissedSuggestionFields}
-                  onapply={handleSuggestionAction}
-                />
-              </div>
-            {/if}
-
-            <div class="form-control">
-              <label class="label flex items-center gap-2" for="ekw-method-other">
-                <span class="label-text font-medium">{m.amb_form_label_ekw_method_free()}</span>
-                <SmartFillBadge
-                  provenance={provenance.methodOther}
-                  onclear={() => clearField('methodOther')}
-                />
-              </label>
-              <textarea
-                id="ekw-method-other"
-                class="textarea-bordered textarea w-full"
-                rows="4"
-                bind:value={formData.methodOther}
-              ></textarea>
-              <FieldAiSuggestionBadge
-                field="methodOther"
-                {formData}
-                {aboutByVocab}
-                {aiSuggestions}
-                dismissedFields={dismissedSuggestionFields}
-                onapply={handleSuggestionAction}
-              />
-            </div>
-
-            <div class="form-control">
-              <div class="label">
-                <span class="label-text font-medium">{m.amb_form_label_ekw_bible_reference()}</span>
-                <SmartFillBadge
-                  provenance={provenance.bibleReferences}
-                  onclear={() => clearField('bibleReferences')}
-                />
-              </div>
-              <div class="space-y-2">
-                {#each formData.bibleReferences as _ref, i (i)}
-                  <BibleReferenceInput
-                    bind:value={formData.bibleReferences[i]}
-                    onremove={formData.bibleReferences.length > 1
-                      ? () => {
-                          formData.bibleReferences = formData.bibleReferences.filter(
-                            (_, j) => j !== i
-                          );
-                        }
-                      : undefined}
-                  />
-                {/each}
-                <button
-                  type="button"
-                  class="btn btn-outline btn-sm"
-                  onclick={() => (formData.bibleReferences = [...formData.bibleReferences, ''])}
-                  >+ Hinzufügen</button
-                >
-              </div>
-              <FieldAiSuggestionBadge
-                field="bibleReferences"
-                {formData}
-                {aboutByVocab}
-                {aiSuggestions}
-                dismissedFields={dismissedSuggestionFields}
-                onapply={handleSuggestionAction}
-              />
-            </div>
-
-            {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField && !ekwLrtField}
-              <div class="alert text-sm alert-warning">
-                <div>
-                  <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
-                  <p class="mt-1">
-                    Die EKKW-Vokabulare sind auf diesem Server noch nicht hinterlegt. Bitte wende
-                    Dich an die Administration der Plattform – das Formular lässt sich aktuell nicht
-                    vollständig ausfüllen.
-                  </p>
-                  <details class="mt-2">
-                    <summary class="cursor-pointer text-xs text-base-content/60">
-                      Technische Details
-                    </summary>
-                    <p class="mt-1 text-xs text-base-content/60">
-                      Fehlende Vokabular-Konfiguration:
-                      <code>SCHEME_NADDR_EKW_FACH</code>, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
-                      <code>SCHEME_NADDR_SCHULART</code>,
-                      <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
-                      <code>SCHEME_NADDR_METHODE</code>, <code>SCHEME_NADDR_EKW_LRT</code>.
+              {#if !ekwFachField && !klassenstufenField && !schulartField && !didaktischesKonzeptField && !methodeField && !ekwLrtField}
+                <div class="alert text-sm alert-warning">
+                  <div>
+                    <p class="font-medium">Klassifikationsfelder sind nicht verfügbar</p>
+                    <p class="mt-1">
+                      Die EKKW-Vokabulare sind auf diesem Server noch nicht hinterlegt. Bitte wende
+                      Dich an die Administration der Plattform – das Formular lässt sich aktuell
+                      nicht vollständig ausfüllen.
                     </p>
-                  </details>
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-xs text-base-content/60">
+                        Technische Details
+                      </summary>
+                      <p class="mt-1 text-xs text-base-content/60">
+                        Fehlende Vokabular-Konfiguration:
+                        <code>SCHEME_NADDR_EKW_FACH</code>, <code>SCHEME_NADDR_KLASSENSTUFEN</code>,
+                        <code>SCHEME_NADDR_SCHULART</code>,
+                        <code>SCHEME_NADDR_DIDAKTISCHES_KONZEPT</code>,
+                        <code>SCHEME_NADDR_METHODE</code>, <code>SCHEME_NADDR_EKW_LRT</code>.
+                      </p>
+                    </details>
+                  </div>
                 </div>
-              </div>
+              {/if}
             {/if}
-          {/if}
-        </div>
+          </div>
+        {/if}
       {/if}
 
       <!-- Step 5: Content & Creators -->
