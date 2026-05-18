@@ -2282,6 +2282,116 @@
           }
         ]
       }
+    },
+    {
+      "d": "landeskirchen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Landeskirche", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "EKD-Gliedkirchen (20 evangelische Landeskirchen in Deutschland).",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "anhalt",
+            "prefLabels": [{ "value": "Evangelische Landeskirche Anhalts", "lang": "de" }]
+          },
+          {
+            "d": "baden",
+            "prefLabels": [{ "value": "Evangelische Landeskirche in Baden", "lang": "de" }]
+          },
+          {
+            "d": "bayern",
+            "prefLabels": [{ "value": "Evangelisch-Lutherische Kirche in Bayern", "lang": "de" }]
+          },
+          {
+            "d": "berlin-brandenburg",
+            "prefLabels": [
+              {
+                "value": "Evangelische Kirche Berlin-Brandenburg-schlesische Oberlausitz",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "braunschweig",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche in Braunschweig", "lang": "de" }
+            ]
+          },
+          {
+            "d": "bremen",
+            "prefLabels": [{ "value": "Bremische Evangelische Kirche", "lang": "de" }]
+          },
+          {
+            "d": "hannover",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche Hannovers", "lang": "de" }
+            ]
+          },
+          {
+            "d": "hessen-nassau",
+            "prefLabels": [{ "value": "Evangelische Kirche in Hessen und Nassau", "lang": "de" }]
+          },
+          {
+            "d": "kurhessen-waldeck",
+            "prefLabels": [{ "value": "Evangelische Kirche von Kurhessen-Waldeck", "lang": "de" }]
+          },
+          { "d": "lippe", "prefLabels": [{ "value": "Lippische Landeskirche", "lang": "de" }] },
+          {
+            "d": "mitteldeutschland",
+            "prefLabels": [{ "value": "Evangelische Kirche in Mitteldeutschland", "lang": "de" }]
+          },
+          {
+            "d": "nordkirche",
+            "prefLabels": [
+              {
+                "value": "Evangelisch-Lutherische Kirche in Norddeutschland (Nordkirche)",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "oldenburg",
+            "prefLabels": [{ "value": "Evangelisch-Lutherische Kirche in Oldenburg", "lang": "de" }]
+          },
+          {
+            "d": "pfalz",
+            "prefLabels": [{ "value": "Evangelische Kirche der Pfalz", "lang": "de" }]
+          },
+          {
+            "d": "reformierte-kirche",
+            "prefLabels": [{ "value": "Evangelisch-reformierte Kirche", "lang": "de" }]
+          },
+          {
+            "d": "rheinland",
+            "prefLabels": [{ "value": "Evangelische Kirche im Rheinland", "lang": "de" }]
+          },
+          {
+            "d": "sachsen",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche Sachsens", "lang": "de" }
+            ]
+          },
+          {
+            "d": "schaumburg-lippe",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche Schaumburg-Lippe", "lang": "de" }
+            ]
+          },
+          {
+            "d": "westfalen",
+            "prefLabels": [{ "value": "Evangelische Kirche von Westfalen", "lang": "de" }]
+          },
+          {
+            "d": "wuerttemberg",
+            "prefLabels": [{ "value": "Evangelische Landeskirche in Württemberg", "lang": "de" }]
+          }
+        ]
+      }
     }
   ]
 }
