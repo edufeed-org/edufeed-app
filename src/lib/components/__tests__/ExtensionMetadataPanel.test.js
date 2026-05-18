@@ -192,4 +192,30 @@ describe('ExtensionMetadataPanel', () => {
     // The concept's prefLabel still renders as a badge
     expect(await findByText('Argumentieren')).toBeTruthy();
   });
+
+  it('renders registered Konfi labels for ext:ekw:konfi:* tags via EXTENSION_NAMESPACE_LABELS', () => {
+    const event = {
+      tags: [
+        ['ext:ekw:konfi:zielgruppen:id', 'urn:ku3'],
+        ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU3'],
+        ['ext:ekw:konfi:zielgruppen:type', 'Concept'],
+        ['ext:ekw:konfi:subtitle', 'Eine Einheit zur Taufe'],
+        ['ext:ekw:konfi:plainLanguage', 'true']
+      ]
+    };
+    const { getByText } = render(ExtensionMetadataPanel, { props: { event } });
+
+    // Section heading from EXTENSION_NAMESPACE_LABELS['ekw:konfi'].sectionKey
+    expect(getByText(/Konfi-Arbeit-Metadaten|Confirmation Work Metadata/i)).toBeTruthy();
+    // Concept facet label from the registry mapping
+    expect(getByText(/Zielgruppen|Target groups/i)).toBeTruthy();
+    // Concept's German prefLabel renders as a badge
+    expect(getByText('KU3')).toBeTruthy();
+    // Scalar facet labels from the registry
+    expect(getByText(/Untertitel|Subtitle/i)).toBeTruthy();
+    expect(getByText(/In einfacher Sprache|Plain language/i)).toBeTruthy();
+    // Scalar values render
+    expect(getByText('Eine Einheit zur Taufe')).toBeTruthy();
+    expect(getByText('true')).toBeTruthy();
+  });
 });

@@ -27,7 +27,7 @@
   import { parseExtensionTags } from '$lib/helpers/educational/parseExtensionTags.js';
   import { parseFormTemplate } from '$lib/helpers/forms.js';
   import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
-  import { ALL_VARIANTS } from '$lib/config/resource-form-variants.js';
+  import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
   import * as m from '$lib/paraglide/messages.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
@@ -102,14 +102,16 @@
     const out = [];
     for (const [ns, nsEntry] of parsed.namespaces) {
       const isFormDriven = !!formCoord && ns === formCoordToNs(formCoord);
-      const variant = variantsByNs.get(ns);
+      // Registry takes precedence over variant lookup; this lets nested
+      // namespaces (e.g. `ekw:konfi`) declare labels without a 1:1 variant.id.
+      const nsLabels = EXTENSION_NAMESPACE_LABELS[ns] ?? variantsByNs.get(ns)?.extensionLabels;
 
       const sectionLabel = isFormDriven
         ? formEvent
           ? readFormName(formEvent)
           : humanize(ns)
-        : variant?.extensionLabels?.sectionKey
-          ? translate(variant.extensionLabels.sectionKey)
+        : nsLabels?.sectionKey
+          ? translate(nsLabels.sectionKey)
           : humanize(ns);
 
       const facets = [];
@@ -117,8 +119,8 @@
         let label;
         if (isFormDriven && formFieldLabels[facetName]) {
           label = formFieldLabels[facetName];
-        } else if (variant?.extensionLabels?.facets?.[facetName]) {
-          label = translate(variant.extensionLabels.facets[facetName]);
+        } else if (nsLabels?.facets?.[facetName]) {
+          label = translate(nsLabels.facets[facetName]);
         } else {
           label = humanize(facetName);
         }
