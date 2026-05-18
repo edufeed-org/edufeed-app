@@ -20,6 +20,9 @@
   /** @type {{ title?: string, description?: string, image?: string, siteName?: string } | null} */
   let metadata = $state(null);
 
+  /** Flips to true when the OG image fails to load, forcing the Compact fallback. */
+  let imageFailed = $state(false);
+
   /** @param {unknown} value */
   function isSafeHttpUrl(value) {
     if (typeof value !== 'string' || value.length === 0) return false;
@@ -92,6 +95,7 @@
     let cancelled = false;
     phase = 'loading';
     metadata = null;
+    imageFailed = false;
     fetch(`/api/reader?mode=metadata&url=${encodeURIComponent(url)}`)
       .then((r) => r.json())
       .then((body) => {
@@ -136,7 +140,7 @@
       class="my-2 h-[88px] w-full animate-pulse rounded-lg border border-base-300 bg-base-200"
     ></div>
   {:else if phase === 'ok' && metadata}
-    {@const hasImage = isSafeHttpUrl(metadata.image)}
+    {@const hasImage = isSafeHttpUrl(metadata.image) && !imageFailed}
     {@const title = metadata.title}
     {@const description = metadata.description}
     {@const displayTitle = metadata.title?.trim() || hostname()}
@@ -149,23 +153,24 @@
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        class="my-2 flex w-full gap-3 overflow-hidden rounded-lg border border-base-300 bg-base-100 p-2 no-underline hover:bg-base-200/50"
+        class="my-2 flex w-full flex-col overflow-hidden rounded-lg border border-base-300 bg-base-100 no-underline hover:bg-base-200/50"
       >
-        <div class="h-[72px] w-[72px] shrink-0 overflow-hidden rounded bg-base-200">
+        <div class="w-full overflow-hidden bg-base-200">
           <img
             src={metadata.image}
             alt=""
             loading="lazy"
             referrerpolicy="no-referrer"
-            class="h-full w-full object-cover"
+            onerror={() => (imageFailed = true)}
+            class="aspect-[1.91/1] max-h-60 w-full object-cover"
           />
         </div>
-        <div class="min-w-0 flex-1">
+        <div class="min-w-0 flex-1 p-3">
           {#if title}
-            <div class="truncate text-sm font-semibold text-base-content">{title}</div>
+            <div class="line-clamp-2 text-sm font-semibold text-base-content">{title}</div>
           {/if}
           {#if description}
-            <div class="line-clamp-2 text-xs text-base-content/70">{description}</div>
+            <div class="mt-0.5 line-clamp-2 text-xs text-base-content/70">{description}</div>
           {/if}
           <div class="mt-1 flex items-center gap-1 text-xs text-base-content/50">
             <span class="truncate">{cardSiteName}</span>

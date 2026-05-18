@@ -179,6 +179,34 @@ describe('LinkPreview', () => {
     expect(a.href).toBe('https://x.test/page');
   });
 
+  it('falls back to Compact variant when the OG image fails to load', async () => {
+    mockFetchOnce({
+      success: true,
+      metadata: {
+        source: 'opengraph',
+        og: {
+          title: 'Hello World',
+          description: 'A short description',
+          image: 'https://x.test/broken.png',
+          siteName: 'X Test'
+        }
+      }
+    });
+    const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="link-preview-card"]')).not.toBeNull();
+    });
+    const img = /** @type {HTMLImageElement} */ (container.querySelector('img'));
+    expect(img).not.toBeNull();
+    // Simulate the browser failing to load the image.
+    img.dispatchEvent(new Event('error'));
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="link-preview-card"]')).toBeNull();
+      expect(container.querySelector('[data-testid="link-preview-compact"]')).not.toBeNull();
+    });
+    expect(container.textContent).toContain('Hello World');
+  });
+
   it('calls /api/reader?mode=metadata with the encoded url', async () => {
     const fetchSpy = vi.fn().mockResolvedValueOnce({
       ok: true,
