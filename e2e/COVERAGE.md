@@ -1172,12 +1172,13 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 
 ### Not Yet Tested
 
-| Feature                  | Priority | Notes                                                            |
-| ------------------------ | -------- | ---------------------------------------------------------------- |
-| **Article Creation**     | High     | No creation UI exists yet                                        |
-| **Mobile Responsive**    | Low      | Basic coverage in mobile-navigation.test.js, more pages possible |
-| **Accessibility (a11y)** | Low      | Keyboard navigation, screen reader                               |
-| **Error Recovery**       | Low      | Offline handling, relay failures                                 |
+| Feature                  | Priority | Notes                                                                                                                                                                                                                                                    |
+| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Article Creation**     | High     | No creation UI exists yet                                                                                                                                                                                                                                |
+| **Konfi step 4 wizard**  | Medium   | Deferred until Spec C ships Paraglide labels (currently fields render as raw scheme IDs). Round-trip publish→prefill behavior covered by `src/lib/__tests__/konfiRoundTrip.test.js` (Vitest, all 11 vocab facets + 3 scalars + L/l namespace inference). |
+| **Mobile Responsive**    | Low      | Basic coverage in mobile-navigation.test.js, more pages possible                                                                                                                                                                                         |
+| **Accessibility (a11y)** | Low      | Keyboard navigation, screen reader                                                                                                                                                                                                                       |
+| **Error Recovery**       | Low      | Offline handling, relay failures                                                                                                                                                                                                                         |
 
 ### Partially Covered
 
