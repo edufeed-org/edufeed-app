@@ -42,3 +42,71 @@ export function emitKonfiScalarTags(tagSlug, value) {
   if (str.trim() === '') return [];
   return [[`${KONFI_PREFIX}${tagSlug}`, str]];
 }
+
+/**
+ * @typedef {Object} SubStepFieldVocab
+ * @property {'vocab'} kind
+ * @property {string} schemeKey
+ * @property {string} tagSlug
+ * @property {boolean} [multi]
+ * @property {boolean} [required]
+ * @property {string} [requiredOneOf]
+ */
+
+/**
+ * @typedef {Object} SubStepFieldScalar
+ * @property {'scalar'} kind
+ * @property {string} tagSlug
+ * @property {'text' | 'textarea' | 'checkbox'} input
+ */
+
+/**
+ * @typedef {SubStepFieldVocab | SubStepFieldScalar} SubStepField
+ */
+
+/**
+ * @typedef {Object} SubStepConfig
+ * @property {string} key
+ * @property {string} titleKey
+ * @property {SubStepField[]} fields
+ */
+
+/**
+ * Inverse of `emitKonfiVocabTags` + `emitKonfiScalarTags`. Walks the same
+ * sub-step config used at emit time and produces a partial form-data object
+ * with `<schemeKey>Ids` / `<schemeKey>Labels` for vocab fields and `<tagSlug>`
+ * for scalar fields.
+ *
+ * @param {string[][]} tags
+ * @param {SubStepConfig[]} subSteps
+ * @returns {Record<string, any>}
+ */
+export function parseKonfiTags(tags, subSteps) {
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const step of subSteps) {
+    for (const field of step.fields) {
+      if (field.kind === 'vocab') {
+        const idKey = `${KONFI_PREFIX}${field.tagSlug}:id`;
+        const labelKey = `${KONFI_PREFIX}${field.tagSlug}:prefLabel:de`;
+        const ids = tags.filter((t) => t[0] === idKey).map((t) => t[1]);
+        if (ids.length === 0) continue;
+        const labelValues = tags.filter((t) => t[0] === labelKey).map((t) => t[1]);
+        out[`${field.schemeKey}Ids`] = ids;
+        out[`${field.schemeKey}Labels`] = ids.map((id, i) => ({
+          id,
+          label: labelValues[i] ?? id
+        }));
+      } else {
+        const t = tags.find((tag) => tag[0] === `${KONFI_PREFIX}${field.tagSlug}`);
+        if (!t) continue;
+        if (field.input === 'checkbox') {
+          out[field.tagSlug] = t[1] === 'true';
+        } else {
+          out[field.tagSlug] = t[1];
+        }
+      }
+    }
+  }
+  return out;
+}
