@@ -21,6 +21,7 @@ describe('subStepToFormFields', () => {
           kind: 'vocab',
           schemeKey: 'konfiZielgruppen',
           tagSlug: 'zielgruppen',
+          labelKey: 'konfi_field_zielgruppen',
           multi: true,
           required: true
         }
@@ -41,7 +42,15 @@ describe('subStepToFormFields', () => {
     const subStep = {
       key: '4a',
       titleKey: 'k',
-      fields: [{ kind: 'vocab', schemeKey: 'konfiMissing', tagSlug: 'missing', multi: true }]
+      fields: [
+        {
+          kind: 'vocab',
+          schemeKey: 'konfiMissing',
+          tagSlug: 'missing',
+          labelKey: 'konfi_field_missing',
+          multi: true
+        }
+      ]
     };
     expect(subStepToFormFields(subStep, SCHEME_NADDRS)).toEqual([]);
   });
@@ -51,9 +60,19 @@ describe('subStepToFormFields', () => {
       key: '4b',
       titleKey: 'k',
       fields: [
-        { kind: 'scalar', tagSlug: 'subtitle', input: 'text' },
-        { kind: 'scalar', tagSlug: 'requiredMaterialsNote', input: 'textarea' },
-        { kind: 'scalar', tagSlug: 'plainLanguage', input: 'checkbox' }
+        { kind: 'scalar', tagSlug: 'subtitle', labelKey: 'konfi_field_subtitle', input: 'text' },
+        {
+          kind: 'scalar',
+          tagSlug: 'requiredMaterialsNote',
+          labelKey: 'konfi_field_required_materials_note',
+          input: 'textarea'
+        },
+        {
+          kind: 'scalar',
+          tagSlug: 'plainLanguage',
+          labelKey: 'konfi_field_plain_language',
+          input: 'checkbox'
+        }
       ]
     };
     expect(subStepToFormFields(subStep, SCHEME_NADDRS)).toEqual([

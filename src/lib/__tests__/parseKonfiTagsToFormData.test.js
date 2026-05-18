@@ -7,9 +7,20 @@ const SUB_STEPS = [
     key: '4b',
     titleKey: 'k',
     fields: [
-      { kind: 'vocab', schemeKey: 'konfiThemen', tagSlug: 'themen', multi: true },
-      { kind: 'scalar', tagSlug: 'subtitle', input: 'text' },
-      { kind: 'scalar', tagSlug: 'plainLanguage', input: 'checkbox' }
+      {
+        kind: 'vocab',
+        schemeKey: 'konfiThemen',
+        tagSlug: 'themen',
+        labelKey: 'konfi_field_themen',
+        multi: true
+      },
+      { kind: 'scalar', tagSlug: 'subtitle', labelKey: 'konfi_field_subtitle', input: 'text' },
+      {
+        kind: 'scalar',
+        tagSlug: 'plainLanguage',
+        labelKey: 'konfi_field_plain_language',
+        input: 'checkbox'
+      }
     ]
   }
 ];

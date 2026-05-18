@@ -72,3 +72,19 @@ describe('Konfi step4SubSteps ↔ Spec A schemeNaddrs', () => {
     expect(unknown).toEqual([]);
   });
 });
+
+describe('Konfi field labelKey drift catcher', () => {
+  it('every Konfi vocab/scalar field has a labelKey matching /^konfi_field_/', async () => {
+    const { BILDUNGSBEREICHE: B } = await import('$lib/helpers/educational/bildungsbereich.js');
+    const missing = [];
+    for (const step of B.konfi.step4SubSteps ?? []) {
+      for (const f of step.fields) {
+        const slug = f.kind === 'vocab' ? f.schemeKey : f.tagSlug;
+        if (typeof f.labelKey !== 'string' || !/^konfi_field_/.test(f.labelKey)) {
+          missing.push(slug);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+});

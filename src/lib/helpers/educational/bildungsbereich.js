@@ -21,6 +21,7 @@
  * @property {'vocab'} kind
  * @property {string} schemeKey
  * @property {string} tagSlug
+ * @property {string} labelKey  - Paraglide message key (e.g. `konfi_field_zielgruppen`); resolved at render time
  * @property {boolean} [multi]
  * @property {boolean} [required]
  * @property {string} [requiredOneOf]
@@ -30,6 +31,7 @@
  * @typedef {Object} SubStepFieldScalar
  * @property {'scalar'} kind
  * @property {string} tagSlug
+ * @property {string} labelKey  - Paraglide message key (e.g. `konfi_field_subtitle`); resolved at render time
  * @property {'text' | 'textarea' | 'checkbox'} input
  */
 
@@ -93,12 +95,31 @@ export const BILDUNGSBEREICHE = {
             kind: 'vocab',
             schemeKey: 'konfiZielgruppen',
             tagSlug: 'zielgruppen',
+            labelKey: 'konfi_field_zielgruppen',
             multi: true,
             required: true
           },
-          { kind: 'vocab', schemeKey: 'konfiLernformat', tagSlug: 'lernformat', multi: true },
-          { kind: 'vocab', schemeKey: 'konfiZeitstruktur', tagSlug: 'zeitstruktur', multi: true },
-          { kind: 'vocab', schemeKey: 'konfiBeteiligte', tagSlug: 'beteiligte', multi: true }
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiLernformat',
+            tagSlug: 'lernformat',
+            labelKey: 'konfi_field_lernformat',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiZeitstruktur',
+            tagSlug: 'zeitstruktur',
+            labelKey: 'konfi_field_zeitstruktur',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiBeteiligte',
+            tagSlug: 'beteiligte',
+            labelKey: 'konfi_field_beteiligte',
+            multi: true
+          }
         ]
       },
       {
@@ -109,6 +130,7 @@ export const BILDUNGSBEREICHE = {
             kind: 'vocab',
             schemeKey: 'konfiThemen',
             tagSlug: 'themen',
+            labelKey: 'konfi_field_themen',
             multi: true,
             requiredOneOf: 'topicOrDimension'
           },
@@ -116,12 +138,29 @@ export const BILDUNGSBEREICHE = {
             kind: 'vocab',
             schemeKey: 'konfiDimensionen',
             tagSlug: 'dimensionen',
+            labelKey: 'konfi_field_dimensionen',
             multi: true,
             requiredOneOf: 'topicOrDimension'
           },
-          { kind: 'vocab', schemeKey: 'konfiMethode', tagSlug: 'methode', multi: true },
-          { kind: 'scalar', tagSlug: 'subtitle', input: 'text' },
-          { kind: 'scalar', tagSlug: 'plainLanguage', input: 'checkbox' }
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiMethode',
+            tagSlug: 'methode',
+            labelKey: 'konfi_field_methode',
+            multi: true
+          },
+          {
+            kind: 'scalar',
+            tagSlug: 'subtitle',
+            labelKey: 'konfi_field_subtitle',
+            input: 'text'
+          },
+          {
+            kind: 'scalar',
+            tagSlug: 'plainLanguage',
+            labelKey: 'konfi_field_plain_language',
+            input: 'checkbox'
+          }
         ]
       },
       {
@@ -132,12 +171,36 @@ export const BILDUNGSBEREICHE = {
             kind: 'vocab',
             schemeKey: 'konfiMaterialaufwand',
             tagSlug: 'materialaufwand',
+            labelKey: 'konfi_field_materialaufwand',
             multi: false
           },
-          { kind: 'scalar', tagSlug: 'requiredMaterialsNote', input: 'textarea' },
-          { kind: 'vocab', schemeKey: 'konfiTechnikbedarf', tagSlug: 'technikbedarf', multi: true },
-          { kind: 'vocab', schemeKey: 'konfiLernorte', tagSlug: 'lernorte', multi: true },
-          { kind: 'vocab', schemeKey: 'landeskirchen', tagSlug: 'landeskirche', multi: false }
+          {
+            kind: 'scalar',
+            tagSlug: 'requiredMaterialsNote',
+            labelKey: 'konfi_field_required_materials_note',
+            input: 'textarea'
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiTechnikbedarf',
+            tagSlug: 'technikbedarf',
+            labelKey: 'konfi_field_technikbedarf',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiLernorte',
+            tagSlug: 'lernorte',
+            labelKey: 'konfi_field_lernorte',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'landeskirchen',
+            tagSlug: 'landeskirche',
+            labelKey: 'konfi_field_landeskirche',
+            multi: false
+          }
         ]
       }
     ]

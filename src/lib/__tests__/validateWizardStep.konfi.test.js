@@ -25,6 +25,7 @@ const STEP_4A = {
       kind: 'vocab',
       schemeKey: 'konfiZielgruppen',
       tagSlug: 'zielgruppen',
+      labelKey: 'konfi_field_zielgruppen',
       multi: true,
       required: true
     }
@@ -39,6 +40,7 @@ const STEP_4B = {
       kind: 'vocab',
       schemeKey: 'konfiThemen',
       tagSlug: 'themen',
+      labelKey: 'konfi_field_themen',
       multi: true,
       requiredOneOf: 'topicOrDimension'
     },
@@ -46,6 +48,7 @@ const STEP_4B = {
       kind: 'vocab',
       schemeKey: 'konfiDimensionen',
       tagSlug: 'dimensionen',
+      labelKey: 'konfi_field_dimensionen',
       multi: true,
       requiredOneOf: 'topicOrDimension'
     }
@@ -55,7 +58,14 @@ const STEP_4B = {
 const STEP_4C = {
   key: '4c',
   titleKey: 'k',
-  fields: [{ kind: 'scalar', tagSlug: 'requiredMaterialsNote', input: 'textarea' }]
+  fields: [
+    {
+      kind: 'scalar',
+      tagSlug: 'requiredMaterialsNote',
+      labelKey: 'konfi_field_required_materials_note',
+      input: 'textarea'
+    }
+  ]
 };
 
 const baseCtx = {
