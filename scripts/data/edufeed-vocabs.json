@@ -2471,6 +2471,24 @@
           }
         ]
       }
+    },
+    {
+      "d": "konfi-beteiligte",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Beteiligte", "lang": "de" }],
+        "concepts": [
+          { "d": "konfis", "prefLabels": [{ "value": "Konfis", "lang": "de" }] },
+          { "d": "eltern", "prefLabels": [{ "value": "Eltern", "lang": "de" }] },
+          { "d": "teamer", "prefLabels": [{ "value": "Teamer:innen", "lang": "de" }] },
+          { "d": "hauptamtliche", "prefLabels": [{ "value": "Hauptamtliche", "lang": "de" }] },
+          { "d": "ehrenamtliche", "prefLabels": [{ "value": "Ehrenamtliche", "lang": "de" }] },
+          {
+            "d": "gemeindeoeffentlichkeit",
+            "prefLabels": [{ "value": "Gemeindeöffentlichkeit", "lang": "de" }]
+          }
+        ]
+      }
     }
   ]
 }
