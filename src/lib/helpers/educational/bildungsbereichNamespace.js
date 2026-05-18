@@ -1,4 +1,11 @@
-// src/lib/helpers/educational/bildungsbereichNamespace.js
+/**
+ * Bildungsbereich namespace declaration.
+ *
+ * Used as the NIP-32 label namespace to mark events as authored from a
+ * given Bildungsbereich variant of the resource form (e.g., konfi, schule).
+ *
+ * The IRI is the canonical identifier for the Bildungsbereich label space.
+ */
 
 /**
  * Namespace IRI for the Bildungsbereich NIP-32 label vocabulary.
