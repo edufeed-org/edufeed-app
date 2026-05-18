@@ -2452,6 +2452,25 @@
           { "d": "exkursion", "prefLabels": [{ "value": "Exkursion", "lang": "de" }] }
         ]
       }
+    },
+    {
+      "d": "konfi-zeitstruktur",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Zeitstruktur", "lang": "de" }],
+        "concepts": [
+          { "d": "45-60-minuten", "prefLabels": [{ "value": "45–60 Minuten", "lang": "de" }] },
+          { "d": "halbtagesformat", "prefLabels": [{ "value": "Halbtagesformat", "lang": "de" }] },
+          { "d": "tagesformat", "prefLabels": [{ "value": "Tagesformat", "lang": "de" }] },
+          { "d": "wochenendformat", "prefLabels": [{ "value": "Wochenendformat", "lang": "de" }] },
+          { "d": "freizeit-camp", "prefLabels": [{ "value": "Freizeit/Camp", "lang": "de" }] },
+          { "d": "mehrwoechig", "prefLabels": [{ "value": "mehrwöchig", "lang": "de" }] },
+          {
+            "d": "modular-kombinierbar",
+            "prefLabels": [{ "value": "modular kombinierbar", "lang": "de" }]
+          }
+        ]
+      }
     }
   ]
 }
