@@ -2534,6 +2534,27 @@
           { "d": "hoch", "prefLabels": [{ "value": "hoch", "lang": "de" }] }
         ]
       }
+    },
+    {
+      "d": "konfi-technikbedarf",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Technikbedarf", "lang": "de" }],
+        "concepts": [
+          { "d": "keiner", "prefLabels": [{ "value": "keiner", "lang": "de" }] },
+          { "d": "beamer", "prefLabels": [{ "value": "Beamer", "lang": "de" }] },
+          { "d": "wlan", "prefLabels": [{ "value": "WLAN", "lang": "de" }] },
+          { "d": "smartphone", "prefLabels": [{ "value": "Smartphone", "lang": "de" }] },
+          { "d": "tablet", "prefLabels": [{ "value": "Tablet", "lang": "de" }] },
+          { "d": "laptop", "prefLabels": [{ "value": "Laptop", "lang": "de" }] },
+          { "d": "audioanlage", "prefLabels": [{ "value": "Audioanlage", "lang": "de" }] },
+          { "d": "kamera", "prefLabels": [{ "value": "Kamera", "lang": "de" }] },
+          {
+            "d": "digitale-plattform",
+            "prefLabels": [{ "value": "Digitale Plattform", "lang": "de" }]
+          }
+        ]
+      }
     }
   ]
 }
