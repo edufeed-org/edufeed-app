@@ -315,7 +315,19 @@ export function GET() {
         ekwLrt: env.SCHEME_NADDR_EKW_LRT || '',
         didaktischesKonzept: env.SCHEME_NADDR_DIDAKTISCHES_KONZEPT || '',
         methode: env.SCHEME_NADDR_METHODE || '',
-        ekwKeywords: env.SCHEME_NADDR_EKW_KEYWORDS || ''
+        ekwKeywords: env.SCHEME_NADDR_EKW_KEYWORDS || '',
+        // Konfi-Arbeit vocabularies (Spec A) — surfaced for the EKW Konfi-Bildungsbereich path.
+        landeskirchen: env.SCHEME_NADDR_LANDESKIRCHEN || '',
+        konfiZielgruppen: env.SCHEME_NADDR_KONFI_ZIELGRUPPEN || '',
+        konfiLernformat: env.SCHEME_NADDR_KONFI_LERNFORMAT || '',
+        konfiZeitstruktur: env.SCHEME_NADDR_KONFI_ZEITSTRUKTUR || '',
+        konfiBeteiligte: env.SCHEME_NADDR_KONFI_BETEILIGTE || '',
+        konfiMethode: env.SCHEME_NADDR_KONFI_METHODE || '',
+        konfiMaterialaufwand: env.SCHEME_NADDR_KONFI_MATERIALAUFWAND || '',
+        konfiTechnikbedarf: env.SCHEME_NADDR_KONFI_TECHNIKBEDARF || '',
+        konfiThemen: env.SCHEME_NADDR_KONFI_THEMEN || '',
+        konfiDimensionen: env.SCHEME_NADDR_KONFI_DIMENSIONEN || '',
+        konfiLernorte: env.SCHEME_NADDR_KONFI_LERNORTE || ''
       }
     },
 
