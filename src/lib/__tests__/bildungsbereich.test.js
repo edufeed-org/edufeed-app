@@ -133,3 +133,48 @@ describe('SUBJECT_VOCAB_LABELS / getSubjectVocabLabel', () => {
     expect(getSubjectVocabLabel('nonsense', 'en')).toBe('nonsense');
   });
 });
+
+describe('Konfi step4SubSteps + bildungsbereichTag', () => {
+  it('Schule has bildungsbereichTag and no step4SubSteps', () => {
+    expect(BILDUNGSBEREICHE.schule.bildungsbereichTag).toBe('schule');
+    expect(BILDUNGSBEREICHE.schule.step4SubSteps).toBeUndefined();
+  });
+
+  it('Konfi has bildungsbereichTag=konfi and three sub-steps 4a/4b/4c', () => {
+    const k = BILDUNGSBEREICHE.konfi;
+    expect(k.bildungsbereichTag).toBe('konfi');
+    expect(k.step4SubSteps?.map((s) => s.key)).toEqual(['4a', '4b', '4c']);
+  });
+
+  it('Konfi 4a includes required konfiZielgruppen', () => {
+    const a = BILDUNGSBEREICHE.konfi.step4SubSteps?.find((s) => s.key === '4a');
+    const z = a?.fields.find(
+      (f) => f.kind === 'vocab' && /** @type any */ (f).schemeKey === 'konfiZielgruppen'
+    );
+    expect(z).toMatchObject({ tagSlug: 'zielgruppen', multi: true, required: true });
+  });
+
+  it('Konfi 4b includes the topicOrDimension XOR group', () => {
+    const b = BILDUNGSBEREICHE.konfi.step4SubSteps?.find((s) => s.key === '4b');
+    const groups = b?.fields
+      .filter((f) => f.kind === 'vocab')
+      .map((f) => /** @type any */ (f).requiredOneOf);
+    expect(groups).toContain('topicOrDimension');
+  });
+
+  it('Konfi 4c includes landeskirche with non-konfi schemeKey and multi=false', () => {
+    const c = BILDUNGSBEREICHE.konfi.step4SubSteps?.find((s) => s.key === '4c');
+    const lk = c?.fields.find(
+      (f) => f.kind === 'vocab' && /** @type any */ (f).tagSlug === 'landeskirche'
+    );
+    expect(lk).toMatchObject({ schemeKey: 'landeskirchen', multi: false });
+  });
+
+  it('every vocab tagSlug in konfi is unique', () => {
+    const slugs = [];
+    for (const step of BILDUNGSBEREICHE.konfi.step4SubSteps ?? []) {
+      for (const f of step.fields) if (f.kind === 'vocab') slugs.push(f.tagSlug);
+    }
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+});
