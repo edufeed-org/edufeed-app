@@ -2651,6 +2651,24 @@
           }
         ]
       }
+    },
+    {
+      "d": "konfi-lernorte",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Lernorte", "lang": "de" }],
+        "concepts": [
+          { "d": "gemeindehaus", "prefLabels": [{ "value": "Gemeindehaus", "lang": "de" }] },
+          { "d": "kirche", "prefLabels": [{ "value": "Kirche", "lang": "de" }] },
+          { "d": "schule", "prefLabels": [{ "value": "Schule", "lang": "de" }] },
+          { "d": "naturraum", "prefLabels": [{ "value": "Naturraum", "lang": "de" }] },
+          { "d": "gedenkort", "prefLabels": [{ "value": "Gedenkort", "lang": "de" }] },
+          { "d": "museum", "prefLabels": [{ "value": "Museum", "lang": "de" }] },
+          { "d": "stadtteil", "prefLabels": [{ "value": "Stadtteil", "lang": "de" }] },
+          { "d": "online", "prefLabels": [{ "value": "Online", "lang": "de" }] },
+          { "d": "hybrid", "prefLabels": [{ "value": "Hybrid", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }
