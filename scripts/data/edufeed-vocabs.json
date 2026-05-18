@@ -2392,6 +2392,26 @@
           }
         ]
       }
+    },
+    {
+      "d": "konfi-zielgruppen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Zielgruppen", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Zielgruppen-Bänder für Konfi-Arbeit. Mischt Altersbänder (8–14 Jahre) mit Konfi-Klassen-Kürzeln (KU3/KU4) — bewusst flach gehalten.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          { "d": "8-10-jahre", "prefLabels": [{ "value": "8–10 Jahre", "lang": "de" }] },
+          { "d": "ku3", "prefLabels": [{ "value": "KU3", "lang": "de" }] },
+          { "d": "ku4", "prefLabels": [{ "value": "KU4", "lang": "de" }] },
+          { "d": "11-12-jahre", "prefLabels": [{ "value": "11–12 Jahre", "lang": "de" }] },
+          { "d": "13-14-jahre", "prefLabels": [{ "value": "13–14 Jahre", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }
