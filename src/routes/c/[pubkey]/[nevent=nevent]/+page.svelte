@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -9,6 +10,7 @@
   import { npubToHex, fetchEventById } from '$lib/helpers/nostrUtils';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
   import { getCanonicalEventRoute } from '$lib/helpers/eventRouteRedirect.js';
+  import { getContentViewForKind } from '$lib/helpers/contentViewForKind.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
   import { decodeEventPointer } from 'applesauce-core/helpers';
@@ -57,6 +59,37 @@
     });
   });
 
+  // Keep the sidebar on the originating section (forum, polls, …) when
+  // landing on a thread/poll detail URL without a `?view=` param. The
+  // community layout reads `?view=` to pick the active tab, so once we
+  // know the resolved event's kind we rewrite the URL in place. Only
+  // fills in a missing view — never overrides an explicit one.
+  //
+  // We track the last id we patched so the effect remains idempotent
+  // across re-runs (e.g. when resolveThreadContext reassigns
+  // resolvedEvent to the same root). URL/state reads are untracked so
+  // replaceState doesn't retrigger this effect.
+  /** @type {string | null} */
+  let patchedViewForId = null;
+  $effect(() => {
+    const event = resolvedEvent;
+    if (!event) return;
+    if (patchedViewForId === event.id) return;
+    const view = getContentViewForKind(event.kind);
+    if (!view) return;
+    untrack(() => {
+      patchedViewForId = event.id;
+      if ($page.url.searchParams.has('view')) return;
+      const next = new URL($page.url);
+      next.searchParams.set('view', view);
+      goto(next.pathname + next.search, {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true
+      });
+    });
+  });
+
   // Kinds the inline ThreadDetailView can render — anything else needs to
   // redirect to a dedicated view (calendar event, article, etc.).
   const THREAD_VIEW_KINDS = new Set([1, 11, 1111]);
@@ -71,7 +104,10 @@
     const canonical = getCanonicalEventRoute(event);
     const currentPath = `/c/${$page.params.pubkey}/${nevent}`;
     if (canonical && canonical !== currentPath) {
-      goto(resolve(/** @type {any} */ (canonical)), { replaceState: true });
+      // Preserve the current URL's query string (e.g. ?view=forum) so the
+      // community layout keeps the sidebar on the originating section.
+      const target = canonical + $page.url.search;
+      goto(resolve(/** @type {any} */ (target)), { replaceState: true });
       return true;
     }
     return false;
