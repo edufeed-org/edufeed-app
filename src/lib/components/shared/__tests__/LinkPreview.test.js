@@ -68,10 +68,13 @@ describe('LinkPreview', () => {
     mockFetchOnce({
       success: true,
       metadata: {
-        title: 'Hello World',
-        description: 'A short description',
-        image: 'https://x.test/cover.png',
-        siteName: 'X Test'
+        source: 'opengraph',
+        og: {
+          title: 'Hello World',
+          description: 'A short description',
+          image: 'https://x.test/cover.png',
+          siteName: 'X Test'
+        }
       }
     });
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
@@ -88,7 +91,7 @@ describe('LinkPreview', () => {
   it('renders Compact variant when image is missing but title is present', async () => {
     mockFetchOnce({
       success: true,
-      metadata: { title: 'Hello', siteName: 'X Test' }
+      metadata: { source: 'opengraph', og: { title: 'Hello', siteName: 'X Test' } }
     });
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
     await waitFor(() => {
@@ -98,16 +101,29 @@ describe('LinkPreview', () => {
     expect(container.textContent).toContain('Hello');
   });
 
-  it('renders Compact with hostname fallback when title and image are missing', async () => {
+  it('renders nothing when metadata source is "none" (no usable fields)', async () => {
     mockFetchOnce({
       success: true,
-      metadata: {}
+      metadata: { source: 'none' }
+    });
+    const { container } = render(LinkPreview, { props: { url: 'https://example.test/page' } });
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="link-preview-skeleton"]')).toBeNull();
+      expect(container.querySelector('a')).toBeNull();
+    });
+  });
+
+  it('renders Compact with hostname fallback when only siteName is present', async () => {
+    mockFetchOnce({
+      success: true,
+      metadata: { source: 'opengraph', og: { siteName: 'X Test' } }
     });
     const { container } = render(LinkPreview, { props: { url: 'https://example.test/page' } });
     await waitFor(() => {
       expect(container.querySelector('[data-testid="link-preview-compact"]')).not.toBeNull();
     });
     expect(container.textContent).toContain('example.test');
+    expect(container.textContent).toContain('X Test');
     // Hostname must appear exactly once — no duplicate from siteName fallback.
     const matches = container.textContent?.match(/example\.test/g) ?? [];
     expect(matches.length).toBe(1);
@@ -148,7 +164,10 @@ describe('LinkPreview', () => {
   it('opens the link in a new tab with safe rel attributes', async () => {
     mockFetchOnce({
       success: true,
-      metadata: { title: 'Hello', image: 'https://x.test/cover.png' }
+      metadata: {
+        source: 'opengraph',
+        og: { title: 'Hello', image: 'https://x.test/cover.png' }
+      }
     });
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
     await waitFor(() => {
@@ -164,7 +183,13 @@ describe('LinkPreview', () => {
     const fetchSpy = vi.fn().mockResolvedValueOnce({
       ok: true,
       json: () =>
-        Promise.resolve({ success: true, metadata: { title: 'Hi', image: 'https://x.test/i.png' } })
+        Promise.resolve({
+          success: true,
+          metadata: {
+            source: 'opengraph',
+            og: { title: 'Hi', image: 'https://x.test/i.png' }
+          }
+        })
     });
     vi.stubGlobal('fetch', fetchSpy);
     render(LinkPreview, { props: { url: 'https://x.test/page?id=1' } });

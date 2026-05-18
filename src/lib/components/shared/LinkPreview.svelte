@@ -17,7 +17,7 @@
   /** @type {'loading' | 'ok' | 'error'} */
   let phase = $state('loading');
 
-  /** @type {{ title?: string, description?: string, image?: string, siteName?: string, favicon?: string } | null} */
+  /** @type {{ title?: string, description?: string, image?: string, siteName?: string } | null} */
   let metadata = $state(null);
 
   /** @param {unknown} value */
@@ -29,6 +29,55 @@
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Normalize the tagged-union response from extractMetadataFromHtml into a flat
+   * shape the template consumes. Returns null if no usable metadata.
+   *
+   * @param {any} raw
+   * @returns {{ title?: string, description?: string, image?: string, siteName?: string } | null}
+   */
+  function normalizeMetadata(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+
+    // Open Graph / Twitter (most common)
+    if (raw.source === 'opengraph' && raw.og) {
+      const og = raw.og;
+      return {
+        title: og.title,
+        description: og.description,
+        image: og.image,
+        siteName: og.siteName
+      };
+    }
+
+    // AMB JSON-LD (educational content). Fields can be strings or {en, de} maps.
+    if (raw.source === 'amb-jsonld' && raw.amb) {
+      /** @param {any} v */
+      const pickLang = (v) => {
+        if (!v) return undefined;
+        if (typeof v === 'string') return v;
+        if (Array.isArray(v)) return pickLang(v[0]);
+        if (typeof v === 'object') {
+          return v.en || v.de || /** @type {any} */ (Object.values(v)[0]);
+        }
+        return undefined;
+      };
+      const amb = raw.amb;
+      const image =
+        typeof amb.image === 'string'
+          ? amb.image
+          : amb.image?.['@id'] || amb.image?.url || amb.image?.contentUrl;
+      return {
+        title: pickLang(amb.name) || pickLang(amb.headline),
+        description: pickLang(amb.description),
+        image,
+        siteName: pickLang(amb.publisher?.name)
+      };
+    }
+
+    return null;
   }
 
   $effect(() => {
@@ -48,8 +97,16 @@
       .then((body) => {
         if (cancelled) return;
         if (body && body.success && body.metadata) {
-          metadata = body.metadata;
-          phase = 'ok';
+          const normalized = normalizeMetadata(body.metadata);
+          if (
+            normalized &&
+            (normalized.title || normalized.image || normalized.description || normalized.siteName)
+          ) {
+            metadata = normalized;
+            phase = 'ok';
+          } else {
+            phase = 'error';
+          }
         } else {
           phase = 'error';
         }
@@ -82,7 +139,6 @@
     {@const hasImage = isSafeHttpUrl(metadata.image)}
     {@const title = metadata.title}
     {@const description = metadata.description}
-    {@const favicon = metadata.favicon}
     {@const displayTitle = metadata.title?.trim() || hostname()}
     {@const displaySiteName = metadata.siteName?.trim() || null}
     {@const cardSiteName = displaySiteName || hostname()}
@@ -112,9 +168,6 @@
             <div class="line-clamp-2 text-xs text-base-content/70">{description}</div>
           {/if}
           <div class="mt-1 flex items-center gap-1 text-xs text-base-content/50">
-            {#if isSafeHttpUrl(favicon)}
-              <img src={favicon} alt="" loading="lazy" class="h-3 w-3" />
-            {/if}
             <span class="truncate">{cardSiteName}</span>
           </div>
         </div>
@@ -127,9 +180,6 @@
         rel="noopener noreferrer"
         class="my-1 flex items-center gap-1.5 text-xs text-base-content/70 no-underline hover:text-base-content"
       >
-        {#if isSafeHttpUrl(favicon)}
-          <img src={favicon} alt="" loading="lazy" class="h-3.5 w-3.5 shrink-0" />
-        {/if}
         <span class="truncate">{displayTitle}</span>
         {#if displaySiteName && displaySiteName !== displayTitle}
           <span class="shrink-0 text-base-content/40">— {displaySiteName}</span>
