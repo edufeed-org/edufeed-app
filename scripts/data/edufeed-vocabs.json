@@ -2606,6 +2606,51 @@
           { "d": "zukunft", "prefLabels": [{ "value": "Zukunft", "lang": "de" }] }
         ]
       }
+    },
+    {
+      "d": "konfi-dimensionen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Dimensionen", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Didaktische Zugänge / Bildungsdimensionen. Alternative zu konfi-themen (laut Domain-Spec), nicht Unter-Vokabular.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "gemeinschaft-erfahren",
+            "prefLabels": [{ "value": "Gemeinschaft erfahren", "lang": "de" }]
+          },
+          {
+            "d": "religioese-sprachfaehigkeit",
+            "prefLabels": [{ "value": "religiöse Sprachfähigkeit", "lang": "de" }]
+          },
+          { "d": "selbstreflexion", "prefLabels": [{ "value": "Selbstreflexion", "lang": "de" }] },
+          {
+            "d": "perspektivwechsel",
+            "prefLabels": [{ "value": "Perspektivwechsel", "lang": "de" }]
+          },
+          {
+            "d": "spirituelle-erfahrung",
+            "prefLabels": [{ "value": "spirituelle Erfahrung", "lang": "de" }]
+          },
+          { "d": "partizipation", "prefLabels": [{ "value": "Partizipation", "lang": "de" }] },
+          {
+            "d": "verantwortungsuebernahme",
+            "prefLabels": [{ "value": "Verantwortungsübernahme", "lang": "de" }]
+          },
+          {
+            "d": "urteilskompetenz",
+            "prefLabels": [{ "value": "Urteilskompetenz", "lang": "de" }]
+          },
+          {
+            "d": "ausdrucksfaehigkeit",
+            "prefLabels": [{ "value": "Ausdrucksfähigkeit", "lang": "de" }]
+          }
+        ]
+      }
     }
   ]
 }
