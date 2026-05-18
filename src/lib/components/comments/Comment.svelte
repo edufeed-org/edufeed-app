@@ -6,6 +6,7 @@
   import CommentInput from './CommentInput.svelte';
   import { ChatIcon, TrashIcon, CopyIcon } from '$lib/components/icons';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { getPlainTextExcerpt } from '$lib/helpers/commentThreading.js';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -172,6 +173,8 @@
           event={comment}
           class="prose-sm mt-2 max-w-none text-base-content/80"
         />
+
+        <LinkPreviewList event={comment} />
 
         <!-- Actions -->
         <div class="mt-3 flex flex-wrap items-center gap-1">

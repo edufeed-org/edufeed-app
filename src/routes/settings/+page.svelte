@@ -1068,6 +1068,34 @@
         </div>
       {/if}
 
+      <!-- Link Previews Card -->
+      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <h2 class="mb-2 card-title text-2xl">
+            <span class="text-2xl">{m.settings_link_previews_title()}</span>
+          </h2>
+          <p class="mb-6 text-base-content/70">
+            {m.settings_link_previews_description()}
+          </p>
+
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="checkbox"
+                class="toggle toggle-primary"
+                checked={appSettings.linkPreviewsEnabled}
+                onchange={(e) => {
+                  appSettings.linkPreviewsEnabled = /** @type {HTMLInputElement} */ (
+                    e.currentTarget
+                  ).checked;
+                }}
+              />
+              <span class="label-text font-medium">{m.settings_link_previews_label()}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Gated Mode Card -->
       <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">

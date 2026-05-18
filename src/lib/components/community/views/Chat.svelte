@@ -15,6 +15,7 @@
   } from '$lib/helpers/message-utils.js';
   import { TimelineModel } from 'applesauce-core/models';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -340,6 +341,7 @@
                 {/if}
               {/if}
               <NostrContentRenderer event={message} />
+              <LinkPreviewList event={message} />
             </div>
           </div>
         {/if}
