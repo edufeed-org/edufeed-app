@@ -1911,11 +1911,13 @@
       {#if currentStep === 4}
         {#if currentSubStepConfig}
           {@const konfiFields = subStepToFormFields(currentSubStepConfig, schemeNaddrs)}
+          {@const subStepHeading =
+            /** @type {any} */ (m)[currentSubStepConfig.titleKey]?.() ??
+            currentSubStepConfig.titleKey}
           <div class="space-y-4">
+            <h2 class="text-lg font-semibold text-base-content">{subStepHeading}</h2>
             {#if currentSubStepConfig.key === '4b' && fieldErrors._topicOrDimension}
-              <p class="text-xs text-error">
-                Bitte wählen Sie mindestens ein Thema oder eine Dimension.
-              </p>
+              <p class="text-xs text-error">{m.konfi_topic_or_dimension_required()}</p>
             {/if}
             <FieldsRenderer
               fields={konfiFields}
