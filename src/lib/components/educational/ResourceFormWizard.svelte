@@ -45,7 +45,10 @@
     getSubjectVocabLabel
   } from '$lib/helpers/educational/bildungsbereich.js';
   import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
-  import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
+  import {
+    resolveVocabField,
+    resolveSchemeNaddrsMap
+  } from '$lib/helpers/educational/vocabResolver.js';
   import { parseEkwTagsToFormData } from '$lib/helpers/educational/parseEkwTagsToFormData.js';
   import { splitKeywordInput, mergeKeywords } from '$lib/helpers/educational/keywordInput.js';
   import {
@@ -84,7 +87,6 @@
     advanceStepOrSubStep,
     retreatStepOrSubStep
   } from '$lib/helpers/educational/konfiNavigation.js';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import FieldsRenderer from '$lib/components/forms/FieldsRenderer.svelte';
 
   /**
@@ -175,11 +177,11 @@
   const currentSubStepConfig = $derived(
     step4SubSteps?.find((/** @type {any} */ s) => s.key === currentSubStep)
   );
-  const schemeNaddrs = $derived(
-    /** @type {Record<string, {address: string, relay: string}>} */ (
-      /** @type {any} */ (runtimeConfig.educational?.schemeNaddrs) || {}
-    )
-  );
+  // Decode the raw naddr map from runtimeConfig into the `{address, relay}`
+  // shape `subStepToFormFields` and `FormConceptPicker` expect. `runtimeConfig`
+  // stores naddrs as strings; without this decode, `FormConceptPicker` reads
+  // `field.vocab?.address` as undefined and the loader never fires.
+  const schemeNaddrs = $derived(resolveSchemeNaddrsMap());
 
   // Per-vocab subject selection (merged into formData.about on submit).
   // Keys are vocab slugs (e.g. 'schulfaecher', 'hochschulfaecher').
