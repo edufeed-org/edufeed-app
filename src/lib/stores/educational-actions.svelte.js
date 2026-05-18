@@ -167,13 +167,19 @@ export function createEducationalActions() {
         throw new Error('Resource description is required');
       }
       // Note: slug is optional - will auto-generate random ID if empty
-      if (!formData.learningResourceType) {
+      // Konfi resources don't render the LRT/Fach pickers — their Bildungsbereich
+      // config replaces those AMB axes with Konfi-specific facets emitted as
+      // ext:ekw:konfi:* tags. Detect the Konfi path by the presence of those tags.
+      const isKonfi =
+        Array.isArray(/** @type any */ (formData).konfiTags) &&
+        /** @type any */ (formData).konfiTags.length > 0;
+      if (!isKonfi && !formData.learningResourceType) {
         throw new Error('Learning resource type is required');
       }
       // EKKW variant uses its own Fachrichtung field instead of the AMB about/Fach
       // picker, so subjects may legitimately be empty. Mirrors the wizard skip at
       // ResourceFormWizard.svelte step 4.
-      if (variantId !== 'ekw' && (!formData.about || formData.about.length === 0)) {
+      if (!isKonfi && variantId !== 'ekw' && (!formData.about || formData.about.length === 0)) {
         throw new Error('At least one subject is required');
       }
       if (!formData.inLanguage) {

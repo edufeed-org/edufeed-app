@@ -992,7 +992,9 @@
   });
 
   /** Map of fieldKey → error message for the current step. */
-  const fieldErrors = $derived(validateWizardStep(currentStep, formData, validationContext));
+  const fieldErrors = $derived(
+    validateWizardStep(currentStep, formData, validationContext, currentSubStepConfig ?? undefined)
+  );
 
   /** Flat list used by the bottom-of-step summary alert. */
   const validationErrors = $derived(Object.values(fieldErrors));
