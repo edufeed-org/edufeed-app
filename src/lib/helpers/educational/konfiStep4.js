@@ -1,15 +1,35 @@
+import * as m from '$lib/paraglide/messages';
+
 /**
  * @typedef {import('./konfiTags.js').SubStepConfig} SubStepConfig
  * @typedef {import('$lib/helpers/forms.js').FormField} FormField
  */
 
 /**
+ * Resolve a Paraglide message key to its translated string. Returns the raw
+ * key as a fallback if the message doesn't exist (visible degradation, not a
+ * crash). Same pattern used by `ExtensionMetadataPanel.svelte`'s `translate()`.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
+function resolveLabel(key) {
+  const messages = /** @type {Record<string, any>} */ (m);
+  const fn = Object.prototype.hasOwnProperty.call(messages, key) ? messages[key] : undefined;
+  return typeof fn === 'function' ? fn() : key;
+}
+
+/**
  * Map a sub-step config into the `FormField[]` shape `FieldsRenderer` consumes.
  *
  * Vocab fields whose `schemeKey` doesn't appear in `schemeNaddrs` are dropped
  * silently — matches `FormConceptPicker`'s expectation that a `field.vocab`
- * always resolves. The drift catcher unit test (Task 7) asserts there are no
- * gaps for Konfi at CI time.
+ * always resolves. The drift catcher unit test asserts there are no gaps for
+ * Konfi at CI time.
+ *
+ * Each field's `labelKey` is resolved against Paraglide at call time so the
+ * downstream renderer receives a real string — no contract change to
+ * `FieldsRenderer`.
  *
  * @param {SubStepConfig} subStep
  * @param {Record<string, { address: string, relay: string }>} schemeNaddrs
@@ -28,7 +48,7 @@ export function subStepToFormFields(subStep, schemeNaddrs) {
       fields.push({
         id: f.schemeKey,
         type: 'vocab',
-        label: f.schemeKey,
+        label: resolveLabel(f.labelKey),
         vocab,
         options
       });
@@ -36,7 +56,7 @@ export function subStepToFormFields(subStep, schemeNaddrs) {
       fields.push({
         id: f.tagSlug,
         type: f.input,
-        label: '',
+        label: resolveLabel(f.labelKey),
         options: {}
       });
     }

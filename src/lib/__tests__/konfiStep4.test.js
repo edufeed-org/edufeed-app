@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   subStepToFormFields,
   validateKonfiTopicOrDimension
@@ -11,8 +11,15 @@ const SCHEME_NADDRS = {
   konfiThemen: { address: '39737:abc:konfi-themen', relay: 'wss://relay.example' }
 };
 
+// Mock Paraglide messages: only `konfi_field_zielgruppen` is "translated"; the
+// rest (e.g. `konfi_field_subtitle`) are intentionally missing to exercise the
+// raw-key fallback path.
+vi.mock('$lib/paraglide/messages', () => ({
+  konfi_field_zielgruppen: () => 'Zielgruppen'
+}));
+
 describe('subStepToFormFields', () => {
-  it('maps vocab fields to FormField with vocab + options.multiple/required', () => {
+  it('resolves labelKey via Paraglide for vocab fields', () => {
     const subStep = {
       key: '4a',
       titleKey: 'konfi_step4a_title',
@@ -31,10 +38,28 @@ describe('subStepToFormFields', () => {
       {
         id: 'konfiZielgruppen',
         type: 'vocab',
-        label: 'konfiZielgruppen',
+        label: 'Zielgruppen',
         vocab: { address: '39737:abc:konfi-zielgruppen', relay: 'wss://relay.example' },
         options: { multiple: true, required: true }
       }
+    ]);
+  });
+
+  it('falls back to the raw labelKey when the Paraglide message is missing', () => {
+    const subStep = {
+      key: '4b',
+      titleKey: 'k',
+      fields: [
+        {
+          kind: 'scalar',
+          tagSlug: 'subtitle',
+          labelKey: 'konfi_field_subtitle',
+          input: 'text'
+        }
+      ]
+    };
+    expect(subStepToFormFields(subStep, SCHEME_NADDRS)).toEqual([
+      { id: 'subtitle', type: 'text', label: 'konfi_field_subtitle', options: {} }
     ]);
   });
 
@@ -55,12 +80,12 @@ describe('subStepToFormFields', () => {
     expect(subStepToFormFields(subStep, SCHEME_NADDRS)).toEqual([]);
   });
 
-  it('maps scalar text/textarea/checkbox to FormField with matching type', () => {
+  it('resolves labelKey on each scalar input type (text / textarea / checkbox)', () => {
     const subStep = {
       key: '4b',
       titleKey: 'k',
       fields: [
-        { kind: 'scalar', tagSlug: 'subtitle', labelKey: 'konfi_field_subtitle', input: 'text' },
+        { kind: 'scalar', tagSlug: 'subtitle', labelKey: 'konfi_field_zielgruppen', input: 'text' },
         {
           kind: 'scalar',
           tagSlug: 'requiredMaterialsNote',
@@ -76,9 +101,20 @@ describe('subStepToFormFields', () => {
       ]
     };
     expect(subStepToFormFields(subStep, SCHEME_NADDRS)).toEqual([
-      { id: 'subtitle', type: 'text', label: '', options: {} },
-      { id: 'requiredMaterialsNote', type: 'textarea', label: '', options: {} },
-      { id: 'plainLanguage', type: 'checkbox', label: '', options: {} }
+      // Uses the mocked `konfi_field_zielgruppen` so we can prove resolution works on scalars too.
+      { id: 'subtitle', type: 'text', label: 'Zielgruppen', options: {} },
+      {
+        id: 'requiredMaterialsNote',
+        type: 'textarea',
+        label: 'konfi_field_required_materials_note',
+        options: {}
+      },
+      {
+        id: 'plainLanguage',
+        type: 'checkbox',
+        label: 'konfi_field_plain_language',
+        options: {}
+      }
     ]);
   });
 });

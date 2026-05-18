@@ -91,7 +91,7 @@ const baseCtx = {
 describe('validateWizardStep — konfi step 4 sub-steps', () => {
   it('4a flags missing konfiZielgruppen', () => {
     const errors = validateWizardStep(4, { konfiZielgruppenIds: [] }, baseCtx, STEP_4A);
-    expect(errors.konfiZielgruppen).toBe('konfiZielgruppen is required');
+    expect(errors.konfiZielgruppen).toBe('Zielgruppen is required');
   });
 
   it('4a passes when konfiZielgruppenIds has entries', () => {
