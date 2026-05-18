@@ -28,7 +28,7 @@ export function subStepToFormFields(subStep, schemeNaddrs) {
       fields.push({
         id: f.schemeKey,
         type: 'vocab',
-        label: '',
+        label: f.schemeKey,
         vocab,
         options
       });

@@ -30,7 +30,7 @@ describe('subStepToFormFields', () => {
       {
         id: 'konfiZielgruppen',
         type: 'vocab',
-        label: '',
+        label: 'konfiZielgruppen',
         vocab: { address: '39737:abc:konfi-zielgruppen', relay: 'wss://relay.example' },
         options: { multiple: true, required: true }
       }
