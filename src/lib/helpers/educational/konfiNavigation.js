@@ -51,3 +51,21 @@ export function retreatStepOrSubStep(state, step4SubSteps) {
   }
   return { currentStep: prev, currentSubStep: null };
 }
+
+/**
+ * Compute the wizard state for jumping directly to `stepNum` via a step-pill
+ * click. Mirrors `advanceStepOrSubStep`'s entry-into-step-4 behaviour: when
+ * jumping to step 4 with konfi sub-steps configured, seed the first sub-step
+ * so the wizard renders the Konfi UI branch instead of falling through to the
+ * AMB classification fallback.
+ *
+ * @param {number} stepNum
+ * @param {Array<{ key: string }> | undefined} step4SubSteps
+ * @returns {WizardNavState}
+ */
+export function jumpToStep(stepNum, step4SubSteps) {
+  if (stepNum === 4 && step4SubSteps?.length) {
+    return { currentStep: 4, currentSubStep: step4SubSteps[0].key };
+  }
+  return { currentStep: stepNum, currentSubStep: null };
+}

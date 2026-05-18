@@ -85,7 +85,8 @@
   import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
   import {
     advanceStepOrSubStep,
-    retreatStepOrSubStep
+    retreatStepOrSubStep,
+    jumpToStep
   } from '$lib/helpers/educational/konfiNavigation.js';
   import FieldsRenderer from '$lib/components/forms/FieldsRenderer.svelte';
 
@@ -1525,7 +1526,13 @@
             ? `${stepTitles[i]} (Schritt ${stepNum}) — springen`
             : `${stepTitles[i]} (Schritt ${stepNum})`}
           disabled={!canJump}
-          onclick={canJump ? () => (currentStep = stepNum) : undefined}
+          onclick={canJump
+            ? () => {
+                const next = jumpToStep(stepNum, step4SubSteps);
+                currentStep = next.currentStep;
+                currentSubStep = next.currentSubStep;
+              }
+            : undefined}
         >
           {#if isCompleted}
             <CheckIcon class_="w-4 h-4" />
