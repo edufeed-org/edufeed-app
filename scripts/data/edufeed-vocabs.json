@@ -2522,6 +2522,18 @@
           { "d": "pilgern", "prefLabels": [{ "value": "Pilgern", "lang": "de" }] }
         ]
       }
+    },
+    {
+      "d": "konfi-materialaufwand",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Materialaufwand", "lang": "de" }],
+        "concepts": [
+          { "d": "gering", "prefLabels": [{ "value": "gering", "lang": "de" }] },
+          { "d": "mittel", "prefLabels": [{ "value": "mittel", "lang": "de" }] },
+          { "d": "hoch", "prefLabels": [{ "value": "hoch", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }
