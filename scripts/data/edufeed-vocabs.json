@@ -2555,6 +2555,57 @@
           }
         ]
       }
+    },
+    {
+      "d": "konfi-themen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Themenfelder", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Inhaltliche Bausteine der Konfi-Arbeit. Bewusste Überlappung mit Methoden-Vokabular (z. B. Gebet als Thema vs. Methode) ist erwünscht.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          { "d": "bibel", "prefLabels": [{ "value": "Bibel", "lang": "de" }] },
+          { "d": "gott", "prefLabels": [{ "value": "Gott", "lang": "de" }] },
+          { "d": "taufe", "prefLabels": [{ "value": "Taufe", "lang": "de" }] },
+          { "d": "abendmahl", "prefLabels": [{ "value": "Abendmahl", "lang": "de" }] },
+          { "d": "gebet", "prefLabels": [{ "value": "Gebet", "lang": "de" }] },
+          { "d": "gottesdienst", "prefLabels": [{ "value": "Gottesdienst", "lang": "de" }] },
+          { "d": "kirchenjahr", "prefLabels": [{ "value": "Kirchenjahr", "lang": "de" }] },
+          { "d": "konfirmation", "prefLabels": [{ "value": "Konfirmation", "lang": "de" }] },
+          { "d": "reformation", "prefLabels": [{ "value": "Reformation", "lang": "de" }] },
+          { "d": "diakonie", "prefLabels": [{ "value": "Diakonie", "lang": "de" }] },
+          { "d": "kirche", "prefLabels": [{ "value": "Kirche", "lang": "de" }] },
+          { "d": "jesus-christus", "prefLabels": [{ "value": "Jesus Christus", "lang": "de" }] },
+          { "d": "schoepfung", "prefLabels": [{ "value": "Schöpfung", "lang": "de" }] },
+          { "d": "hoffnung", "prefLabels": [{ "value": "Hoffnung", "lang": "de" }] },
+          { "d": "tod-und-trauer", "prefLabels": [{ "value": "Tod und Trauer", "lang": "de" }] },
+          { "d": "segen", "prefLabels": [{ "value": "Segen", "lang": "de" }] },
+          { "d": "gemeinschaft", "prefLabels": [{ "value": "Gemeinschaft", "lang": "de" }] },
+          {
+            "d": "glaube-und-zweifel",
+            "prefLabels": [{ "value": "Glaube und Zweifel", "lang": "de" }]
+          },
+          { "d": "freundschaft", "prefLabels": [{ "value": "Freundschaft", "lang": "de" }] },
+          { "d": "identitaet", "prefLabels": [{ "value": "Identität", "lang": "de" }] },
+          { "d": "medien", "prefLabels": [{ "value": "Medien", "lang": "de" }] },
+          { "d": "social-media", "prefLabels": [{ "value": "Social Media", "lang": "de" }] },
+          {
+            "d": "liebe-und-sexualitaet",
+            "prefLabels": [{ "value": "Liebe und Sexualität", "lang": "de" }]
+          },
+          { "d": "gerechtigkeit", "prefLabels": [{ "value": "Gerechtigkeit", "lang": "de" }] },
+          { "d": "nachhaltigkeit", "prefLabels": [{ "value": "Nachhaltigkeit", "lang": "de" }] },
+          { "d": "demokratie", "prefLabels": [{ "value": "Demokratie", "lang": "de" }] },
+          { "d": "konflikte", "prefLabels": [{ "value": "Konflikte", "lang": "de" }] },
+          { "d": "vielfalt", "prefLabels": [{ "value": "Vielfalt", "lang": "de" }] },
+          { "d": "verantwortung", "prefLabels": [{ "value": "Verantwortung", "lang": "de" }] },
+          { "d": "zukunft", "prefLabels": [{ "value": "Zukunft", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }
