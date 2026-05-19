@@ -333,7 +333,7 @@
 {#if !hasOwnBottomUI && getActiveUser()}
   <GlobalFAB />
 {/if}
-{#if showDashboardNav}
+{#if showDashboardNav && !hasOwnBottomUI}
   <DashboardBottomTabBar />
 {/if}
 
