@@ -260,3 +260,73 @@ describe('GlobalFAB', () => {
     expect(mockOpenModal).toHaveBeenCalledWith('shareByNaddr', expect.objectContaining({}));
   });
 });
+
+describe('GlobalFAB — toggle + scroll behavior', () => {
+  it('does not render action buttons when closed (no phantom layout)', () => {
+    const { container } = render(GlobalFAB);
+    const actionButtons = container.querySelectorAll('.fab-item > button');
+    expect(actionButtons.length).toBe(0);
+  });
+
+  it('clicking the trigger opens the menu and renders all 9 actions', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    await fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const actionButtons = container.querySelectorAll('.fab-item > button');
+    expect(actionButtons.length).toBe(9);
+  });
+
+  it('clicking the trigger again closes the menu', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    await fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelectorAll('.fab-item > button').length).toBe(0);
+  });
+
+  it('pressing Escape closes the menu', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelectorAll('.fab-item > button').length).toBe(0);
+  });
+
+  it('items container has overflow-y-auto and a max-height class when open', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    const itemsList = /** @type {HTMLElement} */ (container.querySelector('.fab-items'));
+    expect(itemsList).toBeTruthy();
+    const cls = itemsList.className;
+    expect(cls).toMatch(/overflow-y-auto/);
+    expect(cls).toMatch(/max-h-/);
+  });
+
+  it('selecting an action closes the menu after firing its handler', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create new event"]'));
+    await fireEvent.click(btn);
+    expect(mockOpenModal).toHaveBeenCalledWith(
+      'calendarEvent',
+      expect.objectContaining({ mode: 'create' })
+    );
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+});
