@@ -92,13 +92,23 @@ describe('POST /api/enrich', () => {
 
   // The route streams whitespace heartbeats while the upstream MCP call is in
   // flight, so headers commit (status 200) before we know if extraction
-  // succeeded. On failure we write `null` JSON — the client already maps any
-  // non-success to `null`, so a `null` body is semantically equivalent.
-  it('returns 200 with null body when callExtractMetadata throws', async () => {
+  // succeeded. On failure we write {error: "ai_unavailable", code} JSON so
+  // the client can distinguish "extractor down" from "extracted nothing"
+  // and show a useful hint to the user.
+  it('returns {error, code} body when callExtractMetadata throws a generic error', async () => {
     callExtractMetadataMock.mockRejectedValueOnce(new Error('boom'));
     const res = await POST(ev(makeRequest({ url: 'https://example.org', variant: 'amb' })));
     expect(res.status).toBe(200);
-    expect(await res.json()).toBeNull();
+    expect(await res.json()).toEqual({ error: 'ai_unavailable', code: 'unknown' });
+  });
+
+  it('preserves the upstream error code (e.g. "overloaded") in the response body', async () => {
+    const upstreamErr = /** @type {Error & { code?: string }} */ (new Error('Overloaded'));
+    upstreamErr.code = 'overloaded';
+    callExtractMetadataMock.mockRejectedValueOnce(upstreamErr);
+    const res = await POST(ev(makeRequest({ url: 'https://example.org', variant: 'amb' })));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ error: 'ai_unavailable', code: 'overloaded' });
   });
 
   it('emits heartbeat whitespace while upstream is pending, then the JSON result', async () => {

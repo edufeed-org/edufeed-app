@@ -122,6 +122,22 @@ export async function callExtractMetadata({ mcpUrl, bearerToken, url, variant, s
     throw new Error(`MCP tool error: ${callRpc.error.message}`);
   }
 
+  // Tool-level errors (the MCP SDK catches throws inside the tool handler and
+  // wraps them in `result.isError: true`). We surface these with a typed
+  // `code` so /api/enrich can return a meaningful hint to the client instead
+  // of silently swallowing the failure. Common shape we see in production:
+  //   text: '529 {"type":"error","error":{"type":"overloaded_error",...}}'
+  if (callRpc.result?.isError) {
+    const errText = callRpc.result.content?.[0]?.text;
+    const errStr = typeof errText === 'string' ? errText : JSON.stringify(errText ?? '');
+    const isOverloaded = /\boverloaded/i.test(errStr) || /^\s*529\b/.test(errStr);
+    const err = /** @type {Error & { code?: string }} */ (
+      new Error(`MCP extract_metadata tool error: ${errStr.slice(0, 200)}`)
+    );
+    err.code = isOverloaded ? 'overloaded' : 'tool_error';
+    throw err;
+  }
+
   // The tool wraps its JSON result in content[0].text per MCP convention.
   const text = callRpc.result?.content?.[0]?.text;
   if (typeof text !== 'string') {

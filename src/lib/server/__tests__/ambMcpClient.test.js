@@ -143,6 +143,84 @@ describe('callExtractMetadata', () => {
     ).rejects.toThrow(/initialize/i);
   });
 
+  it('throws with code="overloaded" when tools/call returns isError with a 529/overloaded payload', async () => {
+    // Real-world failure observed against mcp.amb.edufeed.org: the MCP SDK
+    // wraps Anthropic 529s into a tool-level error envelope. The previous
+    // implementation only checked `callRpc.error` (JSON-RPC level) and then
+    // JSON.parse'd the text content, exploding on the leading "529 ".
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: '529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"},"request_id":"req_x"}'
+                }
+              ]
+            }
+          },
+          'sess'
+        )
+      );
+
+    let caught;
+    try {
+      await callExtractMetadata({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        url: 'https://example.org',
+        variant: 'amb',
+        skosSchemes: {}
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(/** @type {any} */ (caught).code).toBe('overloaded');
+    expect(/** @type {Error} */ (caught).message).toMatch(/overload/i);
+  });
+
+  it('throws with code="tool_error" when tools/call returns isError with a generic payload', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              isError: true,
+              content: [{ type: 'text', text: 'fetch failed with status 404' }]
+            }
+          },
+          'sess'
+        )
+      );
+
+    let caught;
+    try {
+      await callExtractMetadata({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        url: 'https://example.org',
+        variant: 'amb',
+        skosSchemes: {}
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(/** @type {any} */ (caught).code).toBe('tool_error');
+  });
+
   it('throws when tools/call returns a JSON-RPC error', async () => {
     fetchMock
       .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))

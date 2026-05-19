@@ -152,6 +152,15 @@
   // re-clicking on the same URL never pays the LLM cost twice.
   /** @type {'idle' | 'pending' | 'success' | 'error' | 'skipped-amb'} */
   let enrichmentStatus = $state('idle');
+  /**
+   * Reason code attached to the most recent `error` status, surfaced by
+   * `/api/enrich` (e.g. `'overloaded'` when Anthropic is at capacity,
+   * `'network'` on transport failure, `'tool_error'` for upstream tool
+   * exceptions). `''` while status is not `'error'`. Drives the banner copy
+   * so the user knows whether to wait + retry vs. fill in manually.
+   * @type {'' | 'overloaded' | 'tool_error' | 'network' | 'unknown'}
+   */
+  let enrichmentErrorCode = $state('');
   /** Stores the URL we last enriched, so re-clicking the button is a no-op. */
   let enrichedForUrl = $state('');
   /** Source of the most recent metadata fetch; gates the enrichment button. */
@@ -380,6 +389,7 @@
     maxVisitedStep = 1;
     hasNoUrl = false;
     enrichmentStatus = 'idle';
+    enrichmentErrorCode = '';
     enrichedForUrl = '';
     metadataFetchSource = '';
     imagePreviewError = false;
@@ -807,12 +817,25 @@
     if (enrichmentStatus === 'pending') return;
 
     enrichmentStatus = 'pending';
+    enrichmentErrorCode = '';
     try {
       const enriched = await enrichFromUrl(url, isEkw ? 'ekw' : 'amb', {
         bildungsbereich: formData.bildungsbereich
       });
       if (!enriched) {
         enrichmentStatus = 'error';
+        enrichmentErrorCode = 'unknown';
+        return;
+      }
+      // Server signalled the upstream extractor is unavailable (529 from
+      // Anthropic, network error, etc.). The error envelope carries a `code`
+      // so we can pick specific wording — see EnrichmentStatusBanner.
+      if ('error' in enriched) {
+        enrichmentStatus = 'error';
+        const code = /** @type {string} */ (enriched.code) ?? 'unknown';
+        enrichmentErrorCode = /** @type {typeof enrichmentErrorCode} */ (
+          ['overloaded', 'tool_error', 'network', 'unknown'].includes(code) ? code : 'unknown'
+        );
         return;
       }
       aiSuggestions = enriched;
@@ -875,8 +898,10 @@
       }
       enrichedForUrl = url;
       enrichmentStatus = 'success';
+      enrichmentErrorCode = '';
     } catch {
       enrichmentStatus = 'error';
+      enrichmentErrorCode = 'unknown';
     }
   }
 
@@ -1595,7 +1620,11 @@
       {#if currentStep > 2 && enrichmentStatus === 'error'}
         <EnrichmentStatusBanner
           status={enrichmentStatus}
-          ondismiss={() => (enrichmentStatus = 'idle')}
+          errorCode={enrichmentErrorCode}
+          ondismiss={() => {
+            enrichmentStatus = 'idle';
+            enrichmentErrorCode = '';
+          }}
         />
       {/if}
 
@@ -1697,7 +1726,12 @@
                     </button>
                     {#if enrichmentStatus === 'error'}
                       <p class="text-sm text-error">
-                        {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
+                        {#if enrichmentErrorCode === 'overloaded'}
+                          {m.amb_form_enrich_error_overloaded?.() ??
+                            'KI-Dienst gerade überlastet — bitte gleich nochmal versuchen.'}
+                        {:else}
+                          {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
+                        {/if}
                       </p>
                     {:else}
                       <p class="text-sm text-base-content/60">

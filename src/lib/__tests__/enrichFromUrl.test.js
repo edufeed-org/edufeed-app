@@ -54,21 +54,46 @@ describe('enrichFromUrl', () => {
     expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toEqual(result);
   });
 
-  it('returns null on non-200', async () => {
+  it('returns {error: "ai_unavailable", code: "network"} on non-200', async () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(new Response(JSON.stringify({ error: 'nope' }), { status: 500 }));
-    expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toBeNull();
+    expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toEqual({
+      error: 'ai_unavailable',
+      code: 'network'
+    });
   });
 
-  it('returns null on network error (does not throw)', async () => {
+  it('returns {error: "ai_unavailable", code: "network"} on network error (does not throw)', async () => {
     const fetchFn = vi.fn().mockRejectedValue(new Error('offline'));
-    expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toBeNull();
+    expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toEqual({
+      error: 'ai_unavailable',
+      code: 'network'
+    });
   });
 
-  it('returns null on malformed JSON', async () => {
+  it('returns {error: "ai_unavailable", code: "network"} on malformed JSON', async () => {
     const fetchFn = vi.fn().mockResolvedValue(new Response('not json{', { status: 200 }));
-    expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toBeNull();
+    expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toEqual({
+      error: 'ai_unavailable',
+      code: 'network'
+    });
+  });
+
+  it("passes through the server's {error, code} envelope when /api/enrich reports upstream failure", async () => {
+    // /api/enrich commits headers (status 200) before knowing whether the
+    // upstream extract_metadata succeeded, so it signals failure via a JSON
+    // body {error: "ai_unavailable", code}. Make sure the client surfaces
+    // that envelope verbatim instead of flattening to null.
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'ai_unavailable', code: 'overloaded' }), {
+        status: 200
+      })
+    );
+    expect(await enrichFromUrl('https://example.org', 'amb', { fetchFn })).toEqual({
+      error: 'ai_unavailable',
+      code: 'overloaded'
+    });
   });
 
   it('aborts after the configured timeout (default 60s, override accepted)', async () => {
@@ -82,7 +107,7 @@ describe('enrichFromUrl', () => {
     });
     const promise = enrichFromUrl('https://example.org', 'amb', { fetchFn, timeoutMs: 10 });
     const result = await promise;
-    expect(result).toBeNull();
+    expect(result).toEqual({ error: 'ai_unavailable', code: 'network' });
     expect(abortSignal?.aborted).toBe(true);
   });
 });

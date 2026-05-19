@@ -1651,6 +1651,7 @@
   "amb_form_enrich_done": "AI filled in matching fields.",
   "amb_form_enrich_retry": "✨ Retry AI enrichment",
   "amb_form_enrich_error": "AI enrichment failed.",
+  "amb_form_enrich_error_overloaded": "AI service is currently overloaded — please try again shortly.",
   "amb_form_enrich_hint": "Optional: AI pre-fills classifications — you stay in control.",
   "amb_form_enrich_more_suggestions": "{count} more suggestions",
   "amb_form_enrich_more_suggestions_one": "1 more suggestion",

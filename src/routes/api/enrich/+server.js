@@ -128,9 +128,10 @@ export async function POST({ request }) {
   // changes required.
   //
   // Headers commit before the upstream call resolves, so on error we cannot
-  // switch to status 500. Instead we write `null` as the JSON body; the
-  // client's `enrichFromUrl` already converts non-2xx and any throw to
-  // `null`, so a `null` body is semantically equivalent for callers.
+  // switch to status 500. Instead we write a structured `{error, code}`
+  // envelope as the JSON body. `enrichFromUrl` passes that through so the
+  // wizard can show a useful hint ("KI-Service vorübergehend nicht
+  // erreichbar") instead of a generic "failed" message.
   const HEARTBEAT_MS = 5_000;
   const stream = new ReadableStream({
     async start(controller) {
@@ -153,7 +154,12 @@ export async function POST({ request }) {
         controller.enqueue(enc.encode(JSON.stringify(result)));
       } catch (err) {
         console.error('[/api/enrich] extract_metadata failed:', err);
-        controller.enqueue(enc.encode('null'));
+        const code = /** @type {{ code?: unknown }} */ (err)?.code;
+        const body = {
+          error: 'ai_unavailable',
+          code: typeof code === 'string' ? code : 'unknown'
+        };
+        controller.enqueue(enc.encode(JSON.stringify(body)));
       } finally {
         clearInterval(heartbeat);
         controller.close();
