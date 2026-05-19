@@ -20,6 +20,7 @@ vi.mock('$lib/paraglide/messages', () => ({
 
 describe('subStepToFormFields', () => {
   it('resolves labelKey via Paraglide for vocab fields', () => {
+    /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig} */
     const subStep = {
       key: '4a',
       titleKey: 'konfi_step4a_title',
@@ -46,6 +47,7 @@ describe('subStepToFormFields', () => {
   });
 
   it('falls back to the raw labelKey when the Paraglide message is missing', () => {
+    /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig} */
     const subStep = {
       key: '4b',
       titleKey: 'k',
@@ -64,6 +66,7 @@ describe('subStepToFormFields', () => {
   });
 
   it('skips vocab fields with no scheme naddr (returns no entry)', () => {
+    /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig} */
     const subStep = {
       key: '4a',
       titleKey: 'k',
@@ -81,6 +84,7 @@ describe('subStepToFormFields', () => {
   });
 
   it('resolves labelKey on each scalar input type (text / textarea / checkbox)', () => {
+    /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig} */
     const subStep = {
       key: '4b',
       titleKey: 'k',

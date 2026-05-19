@@ -44,31 +44,15 @@ export function emitKonfiScalarTags(tagSlug, value) {
 }
 
 /**
- * @typedef {Object} SubStepFieldVocab
- * @property {'vocab'} kind
- * @property {string} schemeKey
- * @property {string} tagSlug
- * @property {boolean} [multi]
- * @property {boolean} [required]
- * @property {string} [requiredOneOf]
- */
-
-/**
- * @typedef {Object} SubStepFieldScalar
- * @property {'scalar'} kind
- * @property {string} tagSlug
- * @property {'text' | 'textarea' | 'checkbox'} input
- */
-
-/**
+ * Re-export the canonical sub-step type definitions from `bildungsbereich.js`
+ * so consumers of this module (e.g. `konfiStep4.js`) see the same shape as the
+ * wizard. Keeping a divergent local copy here previously caused svelte-check
+ * to lose the `labelKey` property and reject test fixtures.
+ *
+ * @typedef {import('./bildungsbereich.js').SubStepFieldVocab} SubStepFieldVocab
+ * @typedef {import('./bildungsbereich.js').SubStepFieldScalar} SubStepFieldScalar
  * @typedef {SubStepFieldVocab | SubStepFieldScalar} SubStepField
- */
-
-/**
- * @typedef {Object} SubStepConfig
- * @property {string} key
- * @property {string} titleKey
- * @property {SubStepField[]} fields
+ * @typedef {import('./bildungsbereich.js').SubStepConfig} SubStepConfig
  */
 
 /**

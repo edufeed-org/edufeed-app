@@ -36,6 +36,7 @@ describe('konfi step-4 navigation', () => {
   });
 
   it('next from 4a → 4b → 4c → step 5 (sub-step cleared)', () => {
+    /** @type {import('$lib/helpers/educational/konfiNavigation.js').WizardNavState} */
     let s = { currentStep: 4, currentSubStep: '4a' };
     s = advanceStepOrSubStep(s, STEP4_SUB);
     expect(s).toEqual({ currentStep: 4, currentSubStep: '4b' });
@@ -53,6 +54,7 @@ describe('konfi step-4 navigation', () => {
   });
 
   it('prev walks 4c → 4b → 4a → step 3', () => {
+    /** @type {import('$lib/helpers/educational/konfiNavigation.js').WizardNavState} */
     let s = { currentStep: 4, currentSubStep: '4c' };
     s = retreatStepOrSubStep(s, STEP4_SUB);
     expect(s).toEqual({ currentStep: 4, currentSubStep: '4b' });

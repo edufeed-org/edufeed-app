@@ -41,7 +41,9 @@ vi.mock('$lib/stores/config.svelte.js', () => {
 });
 
 describe('Konfi step4SubSteps ↔ Spec A schemeNaddrs', () => {
+  /** @type {typeof import('$lib/helpers/educational/bildungsbereich.js').BILDUNGSBEREICHE} */
   let BILDUNGSBEREICHE;
+  /** @type {typeof import('$lib/helpers/educational/vocabResolver.js').resolveVocabField} */
   let resolveVocabField;
 
   beforeEach(async () => {

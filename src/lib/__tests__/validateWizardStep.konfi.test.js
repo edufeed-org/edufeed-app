@@ -17,6 +17,9 @@ const SCHEME_NADDRS = {
   konfiDimensionen: { address: '39737:abc:konfi-dimensionen', relay: '' }
 };
 
+/** @typedef {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig} SubStepConfig */
+
+/** @type {SubStepConfig} */
 const STEP_4A = {
   key: '4a',
   titleKey: 'k',
@@ -32,6 +35,7 @@ const STEP_4A = {
   ]
 };
 
+/** @type {SubStepConfig} */
 const STEP_4B = {
   key: '4b',
   titleKey: 'k',
@@ -55,6 +59,7 @@ const STEP_4B = {
   ]
 };
 
+/** @type {SubStepConfig} */
 const STEP_4C = {
   key: '4c',
   titleKey: 'k',

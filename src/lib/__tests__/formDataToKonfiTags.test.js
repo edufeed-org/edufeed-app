@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { formDataToKonfiTags } from '$lib/helpers/educational/formDataToKonfiTags.js';
 
+/** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig[]} */
 const SUB_STEPS = [
   {
     key: '4a',
