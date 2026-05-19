@@ -320,9 +320,6 @@
         <div class="pointer-events-none sticky bottom-0 z-[60] mt-auto h-0 overflow-visible">
           <div class="pointer-events-auto">
             <ScrollToTopButton />
-            {#if getActiveUser()}
-              <GlobalFAB />
-            {/if}
           </div>
         </div>
       {/if}
@@ -330,6 +327,9 @@
   </div>
 </div>
 <PublishStatusToast />
+{#if !hasOwnBottomUI && getActiveUser()}
+  <GlobalFAB />
+{/if}
 {#if showDashboardNav}
   <DashboardBottomTabBar />
 {/if}
