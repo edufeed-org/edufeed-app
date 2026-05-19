@@ -253,6 +253,7 @@
                   <div class="flex flex-wrap gap-2">
                     {#each facet.items as value, i (value + '|' + i)}
                       {@const bibleUrl = toDieBibelUrl(value)}
+                      {@const isLongText = value.includes('\n') || value.length > 40}
                       {#if bibleUrl}
                         <a
                           href={bibleUrl}
@@ -262,6 +263,8 @@
                         >
                           {value}
                         </a>
+                      {:else if isLongText}
+                        <p class="w-full text-sm whitespace-pre-wrap text-base-content">{value}</p>
                       {:else}
                         <span class="badge badge-ghost font-mono">{value}</span>
                       {/if}
