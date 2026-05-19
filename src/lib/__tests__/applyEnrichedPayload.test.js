@@ -414,4 +414,184 @@ describe('applyEnrichedPayload — provenance tracking', () => {
     const { provenance } = applyEnrichedPayload.withProvenance(formData, result);
     expect(provenance).toEqual({});
   });
+
+  describe('konfi vocab fields', () => {
+    // Konfi vocab schemes live on formData as `<schemeKey>Ids: string[]` +
+    // `<schemeKey>Labels: {id, label}[]`. The wizard reads these via
+    // `konfiFieldValues` derived state — see ResourceFormWizard.svelte.
+    // Mirrors the shape parseKonfiTagsToFormData emits in edit-mode prefill.
+    // Returns `any` so test bodies can read konfi-specific slots without
+    // each call site casting individually.
+    /**
+     * @param {Record<string, any>} [overrides]
+     * @returns {any}
+     */
+    function makeKonfiFormData(overrides = {}) {
+      return makeFormData({
+        bildungsbereich: 'konfi',
+        konfiThemenIds: [],
+        konfiThemenLabels: [],
+        konfiZielgruppenIds: [],
+        konfiZielgruppenLabels: [],
+        konfiMethodeIds: [],
+        konfiMethodeLabels: [],
+        konfiLernorteIds: [],
+        konfiLernorteLabels: [],
+        landeskirchenIds: [],
+        landeskirchenLabels: [],
+        plainLanguage: false,
+        requiredMaterialsNote: '',
+        ...overrides
+      });
+    }
+
+    it('fills empty konfi vocab fields as paired Ids/Labels', () => {
+      const formData = makeKonfiFormData();
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: {
+          konfiThemen: [
+            { id: '39738:abc:taufe', prefLabel: 'Taufe' },
+            { id: '39738:abc:schoepfung', prefLabel: 'Schöpfung' }
+          ],
+          konfiZielgruppen: [{ id: '39738:abc:ku3', prefLabel: 'KU3' }],
+          landeskirchen: [{ id: '39738:abc:ekhn', prefLabel: 'EKHN' }]
+        },
+        evidence: {},
+        baseline: {}
+      };
+      const after = applyEnrichedPayload(formData, result);
+      expect(after.konfiThemenIds).toEqual(['39738:abc:taufe', '39738:abc:schoepfung']);
+      expect(after.konfiThemenLabels).toEqual([
+        { id: '39738:abc:taufe', label: 'Taufe' },
+        { id: '39738:abc:schoepfung', label: 'Schöpfung' }
+      ]);
+      expect(after.konfiZielgruppenIds).toEqual(['39738:abc:ku3']);
+      expect(after.landeskirchenIds).toEqual(['39738:abc:ekhn']);
+    });
+
+    it('does NOT overwrite konfi vocab fields the user already filled', () => {
+      const formData = makeKonfiFormData({
+        konfiThemenIds: ['user:choice'],
+        konfiThemenLabels: [{ id: 'user:choice', label: 'User Choice' }]
+      });
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: {
+          konfiThemen: [{ id: '39738:abc:taufe', prefLabel: 'Taufe' }]
+        },
+        evidence: {},
+        baseline: {}
+      };
+      const after = applyEnrichedPayload(formData, result);
+      expect(after.konfiThemenIds).toEqual(['user:choice']);
+      expect(after.konfiThemenLabels).toEqual([{ id: 'user:choice', label: 'User Choice' }]);
+    });
+
+    it('fills requiredMaterialsNote when blank, leaves it alone when set', () => {
+      const formData = makeKonfiFormData();
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: { requiredMaterialsNote: 'Bibel, Stifte, Papier' },
+        evidence: {},
+        baseline: {}
+      };
+      const after = applyEnrichedPayload(formData, result);
+      expect(after.requiredMaterialsNote).toBe('Bibel, Stifte, Papier');
+
+      const formData2 = makeKonfiFormData({ requiredMaterialsNote: 'meine eigene Notiz' });
+      const after2 = applyEnrichedPayload(formData2, result);
+      expect(after2.requiredMaterialsNote).toBe('meine eigene Notiz');
+    });
+
+    it('fills plainLanguage from boolean payload only when still default false', () => {
+      const formData = makeKonfiFormData();
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: { plainLanguage: true },
+        evidence: {},
+        baseline: {}
+      };
+      const after = applyEnrichedPayload(formData, result);
+      expect(after.plainLanguage).toBe(true);
+    });
+
+    it('skips unknown konfi vocab keys silently (forward-compat with new fields)', () => {
+      const formData = makeKonfiFormData();
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: {
+          // Hypothetical future field not in the helper's known list.
+          konfiFutureField: [{ id: 'x:y:foo', prefLabel: 'Foo' }],
+          konfiThemen: [{ id: '39738:abc:taufe', prefLabel: 'Taufe' }]
+        },
+        evidence: {},
+        baseline: {}
+      };
+      expect(() => applyEnrichedPayload(formData, result)).not.toThrow();
+      const after = /** @type {any} */ (applyEnrichedPayload(formData, result));
+      expect(after.konfiThemenIds).toEqual(['39738:abc:taufe']);
+      // Unknown keys silently dropped: no `konfiFutureFieldIds` slot created.
+      expect(after.konfiFutureFieldIds).toBeUndefined();
+    });
+
+    it('fills konfi vocab fields even when formData lacks pre-initialized slots', () => {
+      // Real wizard usage: createInitialFormData() doesn't include konfi slots
+      // (they only appear after the user picks bildungsbereich=konfi). The
+      // helper must still populate them when bildungsbereich is konfi.
+      const formData = /** @type {any} */ (makeFormData({ bildungsbereich: 'konfi' }));
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: {
+          konfiThemen: [{ id: '39738:abc:taufe', prefLabel: 'Taufe' }],
+          requiredMaterialsNote: 'Bibel'
+        },
+        evidence: {},
+        baseline: {}
+      };
+      const after = /** @type {any} */ (applyEnrichedPayload(formData, result));
+      expect(after.konfiThemenIds).toEqual(['39738:abc:taufe']);
+      expect(after.konfiThemenLabels).toEqual([{ id: '39738:abc:taufe', label: 'Taufe' }]);
+      expect(after.requiredMaterialsNote).toBe('Bibel');
+    });
+
+    it('does NOT fill konfi fields when bildungsbereich is not konfi', () => {
+      // Defensive: even if the upstream extractor leaks konfi keys into a
+      // non-konfi payload (variant=amb/ekw), we keep the form clean.
+      const formData = /** @type {any} */ (makeFormData({ bildungsbereich: 'schule' }));
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: {
+          konfiThemen: [{ id: '39738:abc:taufe', prefLabel: 'Taufe' }],
+          requiredMaterialsNote: 'leaked',
+          plainLanguage: true
+        },
+        evidence: {},
+        baseline: {}
+      };
+      const after = /** @type {any} */ (applyEnrichedPayload(formData, result));
+      expect(after.konfiThemenIds).toBeUndefined();
+      expect(after.requiredMaterialsNote).toBeUndefined();
+      expect(after.plainLanguage).toBeUndefined();
+    });
+
+    it('emits provenance entries for filled konfi fields', () => {
+      const formData = makeKonfiFormData();
+      const result = {
+        source: /** @type {const} */ ('llm-enriched'),
+        payload: {
+          konfiThemen: [{ id: '39738:abc:taufe', prefLabel: 'Taufe' }],
+          requiredMaterialsNote: 'Bibel, Stifte'
+        },
+        evidence: { konfiThemen: 'page mentions Taufe' },
+        baseline: {}
+      };
+      const { provenance } = applyEnrichedPayload.withProvenance(formData, result);
+      expect(provenance.konfiThemen).toEqual({
+        source: 'llm-enriched',
+        evidence: 'page mentions Taufe'
+      });
+      expect(provenance.requiredMaterialsNote).toEqual({ source: 'llm-enriched' });
+    });
+  });
 });

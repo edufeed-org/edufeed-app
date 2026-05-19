@@ -180,6 +180,52 @@ function applyEnrichedPayloadWithProvenance(formData, result, options = {}) {
     mark('bibleReferences');
   }
 
+  // Konfi fields — only filled when the wizard is in konfi mode. The wizard
+  // doesn't pre-initialize konfi slots in `createInitialFormData()`; they're
+  // added lazily when the user selects bildungsbereich='konfi' (or by
+  // `parseKonfiTagsToFormData` in edit mode). Gating on bildungsbereich keeps
+  // non-konfi forms inert even if the LLM ever leaks konfi keys into another
+  // variant's payload. Wizard slots are paired `<schemeKey>Ids` + `<schemeKey>Labels`
+  // for vocabs, and `<tagSlug>` for scalars — same shape as
+  // `parseKonfiTagsToFormData` emits.
+  if (next.bildungsbereich === 'konfi') {
+    const konfiVocabSchemeKeys = [
+      'konfiZielgruppen',
+      'konfiLernformat',
+      'konfiZeitstruktur',
+      'konfiBeteiligte',
+      'konfiThemen',
+      'konfiDimensionen',
+      'konfiMethode',
+      'konfiMaterialaufwand',
+      'konfiTechnikbedarf',
+      'konfiLernorte',
+      'landeskirchen'
+    ];
+    for (const key of konfiVocabSchemeKeys) {
+      if (!Array.isArray(payload[key]) || payload[key].length === 0) continue;
+      const idsKey = `${key}Ids`;
+      const labelsKey = `${key}Labels`;
+      const existingIds = Array.isArray(next[idsKey]) ? next[idsKey] : [];
+      if (existingIds.length > 0) continue;
+      const concepts = toFormConcepts(payload[key]);
+      next[idsKey] = concepts.map((c) => c.id);
+      next[labelsKey] = concepts;
+      mark(key);
+    }
+
+    // Konfi scalars. requiredMaterialsNote is filled when blank; plainLanguage
+    // is filled when still default `false`.
+    if (typeof payload.requiredMaterialsNote === 'string' && !next.requiredMaterialsNote) {
+      next.requiredMaterialsNote = payload.requiredMaterialsNote;
+      mark('requiredMaterialsNote');
+    }
+    if (typeof payload.plainLanguage === 'boolean' && !next.plainLanguage) {
+      next.plainLanguage = payload.plainLanguage;
+      mark('plainLanguage');
+    }
+  }
+
   return { formData: /** @type {T} */ (next), provenance };
 }
 

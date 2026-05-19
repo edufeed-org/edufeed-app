@@ -55,7 +55,7 @@ function parseSseJsonRpc(body) {
  * @param {string} params.mcpUrl - Full `/mcp` endpoint URL.
  * @param {string | undefined} params.bearerToken - If set, sent as `Authorization: Bearer <token>`.
  * @param {string} params.url - Public http(s) page to extract.
- * @param {'amb' | 'ekw'} params.variant
+ * @param {'amb' | 'ekw' | 'konfi'} params.variant
  * @param {Record<string, string>} params.skosSchemes - form-field → scheme naddr.
  * @returns {Promise<{ source: string, payload: object, evidence: object, baseline: object }>}
  */
