@@ -151,12 +151,6 @@ export const BILDUNGSBEREICHE = {
           },
           {
             kind: 'scalar',
-            tagSlug: 'subtitle',
-            labelKey: 'konfi_field_subtitle',
-            input: 'text'
-          },
-          {
-            kind: 'scalar',
             tagSlug: 'plainLanguage',
             labelKey: 'konfi_field_plain_language',
             input: 'checkbox'

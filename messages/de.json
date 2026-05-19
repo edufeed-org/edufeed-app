@@ -2014,7 +2014,7 @@
   "konfi_field_lernorte": "Lernorte",
   "konfi_field_landeskirche": "Landeskirche",
   "konfi_field_subtitle": "Untertitel",
-  "konfi_field_plain_language": "In einfacher Sprache",
+  "konfi_field_plain_language": "Ist der Inhalt in einfacher Sprache verfasst?",
   "konfi_field_required_materials_note": "Benötigte Materialien",
   "konfi_topic_or_dimension_required": "Bitte wählen Sie mindestens ein Thema oder eine Dimension.",
   "amb_resource_more_creators": "+{count} weitere",

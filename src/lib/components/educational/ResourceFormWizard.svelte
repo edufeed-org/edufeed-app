@@ -1525,6 +1525,7 @@
           aria-label={canJump
             ? `${stepTitles[i]} (Schritt ${stepNum}) — springen`
             : `${stepTitles[i]} (Schritt ${stepNum})`}
+          title={`${stepTitles[i]} (Schritt ${stepNum})`}
           disabled={!canJump}
           onclick={canJump
             ? () => {

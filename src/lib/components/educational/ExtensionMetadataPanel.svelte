@@ -29,8 +29,23 @@
   import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
   import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
+  import { CheckIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+
+  /**
+   * Classify a scalar facet as a boolean (single 'true' / 'false' value).
+   * @param {{ kind: string, items: string[] }} facet
+   * @returns {boolean | null} true / false for booleans, null otherwise.
+   */
+  function booleanFacetValue(facet) {
+    if (facet.kind === 'concept') return null;
+    if (facet.items.length !== 1) return null;
+    const v = facet.items[0];
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return null;
+  }
 
   /**
    * @typedef {Object} Props
@@ -213,37 +228,49 @@
 
       <div class="grid gap-6 md:grid-cols-2">
         {#each section.facets as facet (facet.facetName)}
-          <div class="rounded-lg bg-base-200 p-4">
-            <h3 class="mb-2 text-sm font-semibold text-base-content/70">
-              {facet.label}
-            </h3>
+          {@const boolValue = booleanFacetValue(facet)}
+          {#if boolValue === false}
+            <!-- Hide rows representing a boolean flag set to false -->
+          {:else}
+            <div class="rounded-lg bg-base-200 p-4">
+              {#if boolValue === true}
+                <div class="flex items-center gap-2">
+                  <CheckIcon class_="w-5 h-5 text-success" />
+                  <span class="font-medium text-base-content">{facet.label}</span>
+                </div>
+              {:else}
+                <h3 class="mb-2 text-sm font-semibold text-base-content/70">
+                  {facet.label}
+                </h3>
 
-            {#if facet.kind === 'concept'}
-              <div class="flex flex-wrap gap-2">
-                {#each facet.items as item (item.id)}
-                  <span class="badge badge-secondary">{pickLabel(item)}</span>
-                {/each}
-              </div>
-            {:else}
-              <div class="flex flex-wrap gap-2">
-                {#each facet.items as value, i (value + '|' + i)}
-                  {@const bibleUrl = toDieBibelUrl(value)}
-                  {#if bibleUrl}
-                    <a
-                      href={bibleUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="badge link badge-ghost font-mono link-hover"
-                    >
-                      {value}
-                    </a>
-                  {:else}
-                    <span class="badge badge-ghost font-mono">{value}</span>
-                  {/if}
-                {/each}
-              </div>
-            {/if}
-          </div>
+                {#if facet.kind === 'concept'}
+                  <div class="flex flex-wrap gap-2">
+                    {#each facet.items as item (item.id)}
+                      <span class="badge badge-secondary">{pickLabel(item)}</span>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="flex flex-wrap gap-2">
+                    {#each facet.items as value, i (value + '|' + i)}
+                      {@const bibleUrl = toDieBibelUrl(value)}
+                      {#if bibleUrl}
+                        <a
+                          href={bibleUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="badge link badge-ghost font-mono link-hover"
+                        >
+                          {value}
+                        </a>
+                      {:else}
+                        <span class="badge badge-ghost font-mono">{value}</span>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          {/if}
         {/each}
       </div>
     </div>

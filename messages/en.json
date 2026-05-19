@@ -2005,7 +2005,7 @@
   "konfi_field_lernorte": "Learning Locations",
   "konfi_field_landeskirche": "Regional Church",
   "konfi_field_subtitle": "Subtitle",
-  "konfi_field_plain_language": "In Plain Language",
+  "konfi_field_plain_language": "Is the content written in plain language?",
   "konfi_field_required_materials_note": "Required Materials",
   "konfi_topic_or_dimension_required": "Please select at least one topic or dimension.",
   "amb_resource_more_creators": "+{count} more",

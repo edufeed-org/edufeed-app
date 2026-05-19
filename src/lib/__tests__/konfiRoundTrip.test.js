@@ -36,7 +36,6 @@ describe('Konfi publish → prefill round trip', () => {
       konfiDimensionenLabels: [{ id: 'urn:dim:glaube', label: 'Glaube' }],
       konfiMaterialaufwandIds: ['urn:mat:gering'],
       konfiMaterialaufwandLabels: [{ id: 'urn:mat:gering', label: 'Gering' }],
-      subtitle: 'Eine Einheit zur Taufe',
       plainLanguage: true,
       requiredMaterialsNote: 'Bibel, Wasser, Tuch'
     };
@@ -53,7 +52,6 @@ describe('Konfi publish → prefill round trip', () => {
     expect(roundTripped.konfiMaterialaufwandIds).toEqual(original.konfiMaterialaufwandIds);
 
     // Scalar slots round-trip
-    expect(roundTripped.subtitle).toBe('Eine Einheit zur Taufe');
     expect(roundTripped.plainLanguage).toBe(true);
     expect(roundTripped.requiredMaterialsNote).toBe('Bibel, Wasser, Tuch');
   });
@@ -73,7 +71,7 @@ describe('Konfi publish → prefill round trip', () => {
     const original = {
       konfiZielgruppenIds: ['urn:ku3'],
       konfiZielgruppenLabels: [{ id: 'urn:ku3', label: 'KU3' }],
-      subtitle: 'mixed'
+      plainLanguage: true
     };
     const konfiTags = formDataToKonfiTags(original, SUB_STEPS, 'konfi');
 
@@ -89,7 +87,7 @@ describe('Konfi publish → prefill round trip', () => {
 
     const roundTripped = parseKonfiTagsToFormData(event, SUB_STEPS);
     expect(roundTripped.konfiZielgruppenIds).toEqual(['urn:ku3']);
-    expect(roundTripped.subtitle).toBe('mixed');
+    expect(roundTripped.plainLanguage).toBe(true);
     expect(inferBildungsbereich(event)).toBe('konfi');
   });
 });
