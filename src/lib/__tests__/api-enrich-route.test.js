@@ -15,7 +15,18 @@ vi.mock('$env/dynamic/private', () => ({
     AMB_MCP_BEARER_TOKEN: 'test-token',
     SCHEME_NADDR_HCRT: 'naddr1hcrt',
     SCHEME_NADDR_EKW_LRT: 'naddr1ekwlrt',
-    SCHEME_NADDR_KLASSENSTUFEN: 'naddr1klassen'
+    SCHEME_NADDR_KLASSENSTUFEN: 'naddr1klassen',
+    SCHEME_NADDR_LANDESKIRCHEN: 'naddr1landes',
+    SCHEME_NADDR_KONFI_ZIELGRUPPEN: 'naddr1kziel',
+    SCHEME_NADDR_KONFI_LERNFORMAT: 'naddr1klernf',
+    SCHEME_NADDR_KONFI_ZEITSTRUKTUR: 'naddr1kzeit',
+    SCHEME_NADDR_KONFI_BETEILIGTE: 'naddr1kbet',
+    SCHEME_NADDR_KONFI_THEMEN: 'naddr1kthemen',
+    SCHEME_NADDR_KONFI_DIMENSIONEN: 'naddr1kdim',
+    SCHEME_NADDR_KONFI_METHODE: 'naddr1kmeth',
+    SCHEME_NADDR_KONFI_MATERIALAUFWAND: 'naddr1kmat',
+    SCHEME_NADDR_KONFI_TECHNIKBEDARF: 'naddr1ktech',
+    SCHEME_NADDR_KONFI_LERNORTE: 'naddr1klernorte'
   }
 }));
 
@@ -181,6 +192,43 @@ describe('POST /api/enrich', () => {
     await POST(ev(makeRequest({ url: 'https://example.org', variant: 'amb' })));
     const call = callExtractMetadataMock.mock.calls[0][0];
     expect(call.skosSchemes.learningResourceType).toBe('naddr1hcrt');
+  });
+
+  it('accepts variant=konfi and forwards konfi skosSchemes (no EKW school schemes)', async () => {
+    callExtractMetadataMock.mockResolvedValueOnce({
+      source: 'llm-enriched',
+      payload: {},
+      evidence: {},
+      baseline: {}
+    });
+    const res = await POST(ev(makeRequest({ url: 'https://example.org', variant: 'konfi' })));
+    expect(res.status).toBe(200);
+    const call = callExtractMetadataMock.mock.calls[0][0];
+    expect(call.variant).toBe('konfi');
+    // Konfi reuses EKW LRT vocab (Stationenlernen etc.), not HCRT.
+    expect(call.skosSchemes.learningResourceType).toBe('naddr1ekwlrt');
+    expect(call.skosSchemes).toMatchObject({
+      learningResourceType: 'naddr1ekwlrt',
+      landeskirchen: 'naddr1landes',
+      konfiZielgruppen: 'naddr1kziel',
+      konfiLernformat: 'naddr1klernf',
+      konfiZeitstruktur: 'naddr1kzeit',
+      konfiBeteiligte: 'naddr1kbet',
+      konfiThemen: 'naddr1kthemen',
+      konfiDimensionen: 'naddr1kdim',
+      konfiMethode: 'naddr1kmeth',
+      konfiMaterialaufwand: 'naddr1kmat',
+      konfiTechnikbedarf: 'naddr1ktech',
+      konfiLernorte: 'naddr1klernorte'
+    });
+    // School-context schemes must not leak in — those would mis-steer the LLM
+    // toward EKW form fields the konfi schema rejects.
+    expect(call.skosSchemes).not.toHaveProperty('gradeLevels');
+    expect(call.skosSchemes).not.toHaveProperty('schoolTypes');
+    expect(call.skosSchemes).not.toHaveProperty('ekwFachrichtung');
+    expect(call.skosSchemes).not.toHaveProperty('methods');
+    expect(call.skosSchemes).not.toHaveProperty('didacticConcepts');
+    expect(call.skosSchemes).not.toHaveProperty('about');
   });
 });
 

@@ -819,7 +819,16 @@
     enrichmentStatus = 'pending';
     enrichmentErrorCode = '';
     try {
-      const enriched = await enrichFromUrl(url, isEkw ? 'ekw' : 'amb', {
+      // Konfi-Arbeit uses its own MCP variant so the LLM gets konfi-specific
+      // SKOS vocabs + field guidance (see /api/enrich + amb-mcp/src/lib/llm.ts).
+      // It's only reachable when the user picked the EKW variant + bildungsbereich=konfi.
+      const enrichVariant =
+        isEkw && formData.bildungsbereich === 'konfi'
+          ? /** @type {const} */ ('konfi')
+          : isEkw
+            ? /** @type {const} */ ('ekw')
+            : /** @type {const} */ ('amb');
+      const enriched = await enrichFromUrl(url, enrichVariant, {
         bildungsbereich: formData.bildungsbereich
       });
       if (!enriched) {

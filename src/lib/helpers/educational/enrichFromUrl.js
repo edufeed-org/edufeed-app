@@ -25,7 +25,7 @@ function networkError() {
 
 /**
  * @param {string} url
- * @param {'amb' | 'ekw'} variant
+ * @param {'amb' | 'ekw' | 'konfi'} variant
  * @param {{fetchFn?: typeof fetch, timeoutMs?: number, bildungsbereich?: string}} [options]
  * @returns {Promise<EnrichResult>}
  */

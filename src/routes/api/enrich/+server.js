@@ -7,14 +7,14 @@
  * (since which subject vocab applies depends on the wizard's `bildungsbereich`
  * selection, which is dynamic per-call).
  *
- * Validation: http(s) URL, variant ∈ {amb, ekw}.
+ * Validation: http(s) URL, variant ∈ {amb, ekw, konfi}.
  */
 
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { callExtractMetadata } from '$lib/server/ambMcpClient.js';
 
-const VARIANTS = new Set(['amb', 'ekw']);
+const VARIANTS = new Set(['amb', 'ekw', 'konfi']);
 const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
 
 /**
@@ -45,23 +45,61 @@ function pickSubjectSchemeNaddr(bildungsbereich) {
  * SKOS scheme map: form-field-name → naddr. The MCP server's vocab loader
  * uses these naddrs to build LLM grounding snapshots.
  *
- * The EKW variant prefers `SCHEME_NADDR_EKW_LRT` for `learningResourceType`
- * so the LLM picks from the EKKW-curated list rather than HCRT — must stay
- * aligned with the wizard's variant-specific picker (see
- * `ResourceFormWizard.svelte`'s step 4 LRT branch).
+ * Variant-specific:
+ *  - `ekw` swaps in `SCHEME_NADDR_EKW_LRT` for `learningResourceType` (curated
+ *    by EKKW) and includes school-context schemes (gradeLevels, schoolTypes,
+ *    ekwFachrichtung, didacticConcepts, methods).
+ *  - `konfi` reuses the EKW LRT vocab (Stationenlernen etc. apply to konfi
+ *    contexts too) but swaps in 11 konfi-specific schemes for the wizard's
+ *    Konfi-Arbeit form fields, and omits school-context schemes (those would
+ *    mis-steer the LLM into proposing EKW fields the konfi schema rejects).
+ *  - `amb` (default) uses HCRT + the bildungsbereich-driven subject vocab.
  *
- * @param {'amb' | 'ekw'} variant
- * @param {string | undefined} bildungsbereich - selects which subject vocab maps to `about`
+ * Must stay aligned with the wizard's variant-specific pickers (see
+ * `ResourceFormWizard.svelte`).
+ *
+ * @param {'amb' | 'ekw' | 'konfi'} variant
+ * @param {string | undefined} bildungsbereich - selects which subject vocab maps to `about` (amb only)
  * @returns {Record<string, string>}
  */
 function buildSkosSchemes(variant, bildungsbereich) {
   /** @type {Record<string, string>} */
   const schemes = {};
   const lrtNaddr =
-    variant === 'ekw' && env.SCHEME_NADDR_EKW_LRT
+    (variant === 'ekw' || variant === 'konfi') && env.SCHEME_NADDR_EKW_LRT
       ? env.SCHEME_NADDR_EKW_LRT
       : env.SCHEME_NADDR_HCRT;
   if (lrtNaddr) schemes.learningResourceType = lrtNaddr;
+
+  if (variant === 'konfi') {
+    if (env.SCHEME_NADDR_LANDESKIRCHEN) schemes.landeskirchen = env.SCHEME_NADDR_LANDESKIRCHEN;
+    if (env.SCHEME_NADDR_KONFI_ZIELGRUPPEN) {
+      schemes.konfiZielgruppen = env.SCHEME_NADDR_KONFI_ZIELGRUPPEN;
+    }
+    if (env.SCHEME_NADDR_KONFI_LERNFORMAT) {
+      schemes.konfiLernformat = env.SCHEME_NADDR_KONFI_LERNFORMAT;
+    }
+    if (env.SCHEME_NADDR_KONFI_ZEITSTRUKTUR) {
+      schemes.konfiZeitstruktur = env.SCHEME_NADDR_KONFI_ZEITSTRUKTUR;
+    }
+    if (env.SCHEME_NADDR_KONFI_BETEILIGTE) {
+      schemes.konfiBeteiligte = env.SCHEME_NADDR_KONFI_BETEILIGTE;
+    }
+    if (env.SCHEME_NADDR_KONFI_THEMEN) schemes.konfiThemen = env.SCHEME_NADDR_KONFI_THEMEN;
+    if (env.SCHEME_NADDR_KONFI_DIMENSIONEN) {
+      schemes.konfiDimensionen = env.SCHEME_NADDR_KONFI_DIMENSIONEN;
+    }
+    if (env.SCHEME_NADDR_KONFI_METHODE) schemes.konfiMethode = env.SCHEME_NADDR_KONFI_METHODE;
+    if (env.SCHEME_NADDR_KONFI_MATERIALAUFWAND) {
+      schemes.konfiMaterialaufwand = env.SCHEME_NADDR_KONFI_MATERIALAUFWAND;
+    }
+    if (env.SCHEME_NADDR_KONFI_TECHNIKBEDARF) {
+      schemes.konfiTechnikbedarf = env.SCHEME_NADDR_KONFI_TECHNIKBEDARF;
+    }
+    if (env.SCHEME_NADDR_KONFI_LERNORTE) schemes.konfiLernorte = env.SCHEME_NADDR_KONFI_LERNORTE;
+    return schemes;
+  }
+
   if (env.SCHEME_NADDR_EDUCATIONAL_LEVEL) {
     schemes.educationalLevels = env.SCHEME_NADDR_EDUCATIONAL_LEVEL;
   }
@@ -106,7 +144,7 @@ export async function POST({ request }) {
   if (!VARIANTS.has(variantRaw)) {
     return json({ error: `Invalid variant '${variantRaw}'` }, { status: 400 });
   }
-  const variant = /** @type {'amb' | 'ekw'} */ (variantRaw);
+  const variant = /** @type {'amb' | 'ekw' | 'konfi'} */ (variantRaw);
 
   const bildungsbereich =
     typeof body.bildungsbereich === 'string' && BILDUNGSBEREICHE.has(body.bildungsbereich)
