@@ -85,6 +85,7 @@
   import { parseKonfiTagsToFormData } from '$lib/helpers/educational/parseKonfiTagsToFormData.js';
   import { formDataToKonfiTags } from '$lib/helpers/educational/formDataToKonfiTags.js';
   import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
+  import { buildKonfiSummaryRows } from '$lib/helpers/educational/konfiSummary.js';
   import {
     advanceStepOrSubStep,
     retreatStepOrSubStep,
@@ -2888,6 +2889,22 @@
                     <dd class="flex-1">{bibleRefs.join(', ')}</dd>
                   </div>
                 {/if}
+              {/if}
+              {#if isEkw && formData.bildungsbereich === 'konfi'}
+                {@const konfiSummaryRows = buildKonfiSummaryRows(formData, {
+                  yes: m.common_yes(),
+                  no: m.common_no()
+                })}
+                {#each konfiSummaryRows as row (row.labelKey)}
+                  {@const labelFn = /** @type {Record<string, any>} */ (m)[row.labelKey]}
+                  {@const label = typeof labelFn === 'function' ? labelFn() : row.labelKey}
+                  <div class="flex">
+                    <dt class="w-32 shrink-0 text-base-content/60">{label}</dt>
+                    <dd class="flex-1 {row.multiline ? 'line-clamp-3 text-base-content/80' : ''}">
+                      {row.value}
+                    </dd>
+                  </div>
+                {/each}
               {/if}
               {#if formData.creators.some((c) => c.name)}
                 <div class="flex">
