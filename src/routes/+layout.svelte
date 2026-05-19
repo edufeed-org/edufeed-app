@@ -54,9 +54,12 @@
   let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
   let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
 
-  // Hide global floating buttons on views that manage their own bottom UI (chat input, DM input)
+  // Hide global floating buttons on views that manage their own bottom UI
+  // (chat input, DM input, create/edit wizards whose own CTAs sit at the bottom right).
   let hasOwnBottomUI = $derived(
-    $page.url.pathname.startsWith('/c/messages') || $page.url.searchParams.get('view') === 'chat'
+    $page.url.pathname.startsWith('/c/messages') ||
+      $page.url.pathname.startsWith('/create/') ||
+      $page.url.searchParams.get('view') === 'chat'
   );
 
   /**
@@ -320,9 +323,6 @@
         <div class="pointer-events-none sticky bottom-0 z-[60] mt-auto h-0 overflow-visible">
           <div class="pointer-events-auto">
             <ScrollToTopButton />
-            {#if getActiveUser()}
-              <GlobalFAB />
-            {/if}
           </div>
         </div>
       {/if}
@@ -330,7 +330,10 @@
   </div>
 </div>
 <PublishStatusToast />
-{#if showDashboardNav}
+{#if !hasOwnBottomUI && getActiveUser()}
+  <GlobalFAB />
+{/if}
+{#if showDashboardNav && !hasOwnBottomUI}
   <DashboardBottomTabBar />
 {/if}
 

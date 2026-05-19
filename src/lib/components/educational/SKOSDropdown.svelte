@@ -571,8 +571,6 @@
 
   <!-- Help Text -->
   {#if helpText}
-    <div class="label">
-      <span class="label-text-alt text-base-content/60">{helpText}</span>
-    </div>
+    <p class="mt-1 text-xs text-base-content/60">{helpText}</p>
   {/if}
 </div>

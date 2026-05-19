@@ -95,6 +95,19 @@ beforeEach(() => {
   ]);
 });
 
+/**
+ * Renders <GlobalFAB /> and clicks the trigger to open the menu.
+ * @returns {Promise<{ container: HTMLElement, trigger: HTMLButtonElement }>}
+ */
+async function renderOpen() {
+  const { container } = render(GlobalFAB);
+  const trigger = /** @type {HTMLButtonElement} */ (
+    container.querySelector('[aria-label="Open actions menu"]')
+  );
+  await fireEvent.click(trigger);
+  return { container, trigger };
+}
+
 describe('GlobalFAB', () => {
   it('renders the main FAB button', () => {
     const { container } = render(GlobalFAB);
@@ -102,46 +115,45 @@ describe('GlobalFAB', () => {
     expect(mainButton).toBeTruthy();
   });
 
-  it('renders all 9 action buttons', () => {
-    const { container } = render(GlobalFAB);
-    // Action buttons are wrapped in .fab-item containers (for hover-reveal animation);
-    // only the main FAB toggle is a direct child of .fab.
-    const actionButtons = container.querySelectorAll('.fab .fab-item > button');
+  it('renders all 9 action buttons', async () => {
+    const { container } = await renderOpen();
+    // Action buttons are wrapped in .fab-item containers inside the .fab-items scroll list.
+    const actionButtons = container.querySelectorAll('.fab-items .fab-item > button');
     expect(actionButtons.length).toBe(9);
   });
 
-  it('has create event button', () => {
-    const { container } = render(GlobalFAB);
+  it('has create event button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Create new event"]');
     expect(btn).toBeTruthy();
   });
 
-  it('has create calendar button', () => {
-    const { container } = render(GlobalFAB);
+  it('has create calendar button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Create new calendar"]');
     expect(btn).toBeTruthy();
   });
 
-  it('has create learning content button', () => {
-    const { container } = render(GlobalFAB);
+  it('has create learning content button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Create new learning content"]');
     expect(btn).toBeTruthy();
   });
 
-  it('has write article button', () => {
-    const { container } = render(GlobalFAB);
+  it('has write article button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Write Article"]');
     expect(btn).toBeTruthy();
   });
 
-  it('has write wiki button', () => {
-    const { container } = render(GlobalFAB);
+  it('has write wiki button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Write Wiki"]');
     expect(btn).toBeTruthy();
   });
 
   it('opens calendar event modal on event button click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create new event"]'));
     await fireEvent.click(btn);
     expect(mockOpenModal).toHaveBeenCalledWith(
@@ -154,7 +166,7 @@ describe('GlobalFAB', () => {
   });
 
   it('opens create calendar modal on calendar button click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (
       container.querySelector('[aria-label="Create new calendar"]')
     );
@@ -163,7 +175,7 @@ describe('GlobalFAB', () => {
   });
 
   it('navigates to /create/resource/<default> on learning content click in single-variant mode', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (
       container.querySelector('[aria-label="Create new learning content"]')
     );
@@ -184,7 +196,7 @@ describe('GlobalFAB', () => {
         descriptionKey: 'resource_form_variant_ekw_description'
       }
     ]);
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (
       container.querySelector('[aria-label="Create new learning content"]')
     );
@@ -193,70 +205,140 @@ describe('GlobalFAB', () => {
   });
 
   it('navigates to /create/article on article click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Write Article"]'));
     await fireEvent.click(btn);
     expect(mockGoto).toHaveBeenCalledWith('/create/article');
   });
 
   it('navigates to /create/wiki on wiki click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Write Wiki"]'));
     await fireEvent.click(btn);
     expect(mockGoto).toHaveBeenCalledWith('/create/wiki');
   });
 
-  it('has create form button', () => {
-    const { container } = render(GlobalFAB);
+  it('has create form button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Create Form"]');
     expect(btn).toBeTruthy();
   });
 
   it('navigates to /forms/new on form button click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create Form"]'));
     await fireEvent.click(btn);
     expect(mockGoto).toHaveBeenCalledWith('/forms/new');
   });
 
-  it('has create poll button', () => {
-    const { container } = render(GlobalFAB);
+  it('has create poll button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Create new poll"]');
     expect(btn).toBeTruthy();
   });
 
   it('opens createPoll modal on poll button click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create new poll"]'));
     await fireEvent.click(btn);
     expect(mockOpenModal).toHaveBeenCalledWith('createPoll', expect.any(Object));
   });
 
-  it('has add bookmark button', () => {
-    const { container } = render(GlobalFAB);
+  it('has add bookmark button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Add Bookmark"]');
     expect(btn).toBeTruthy();
   });
 
   it('opens add bookmark modal on bookmark button click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (container.querySelector('[aria-label="Add Bookmark"]'));
     await fireEvent.click(btn);
     expect(mockOpenModal).toHaveBeenCalledWith('addBookmark', expect.objectContaining({}));
   });
 
-  it('has share existing content button', () => {
-    const { container } = render(GlobalFAB);
+  it('has share existing content button', async () => {
+    const { container } = await renderOpen();
     const btn = container.querySelector('[aria-label="Share existing content with community"]');
     expect(btn).toBeTruthy();
   });
 
   it('opens share by naddr modal on share existing click', async () => {
-    const { container } = render(GlobalFAB);
+    const { container } = await renderOpen();
     const btn = /** @type {Element} */ (
       container.querySelector('[aria-label="Share existing content with community"]')
     );
     await fireEvent.click(btn);
     expect(mockOpenModal).toHaveBeenCalledWith('shareByNaddr', expect.objectContaining({}));
+  });
+});
+
+describe('GlobalFAB — toggle + scroll behavior', () => {
+  it('does not render action buttons when closed (no phantom layout)', () => {
+    const { container } = render(GlobalFAB);
+    const actionButtons = container.querySelectorAll('.fab-item > button');
+    expect(actionButtons.length).toBe(0);
+  });
+
+  it('clicking the trigger opens the menu and renders all 9 actions', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    await fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const actionButtons = container.querySelectorAll('.fab-item > button');
+    expect(actionButtons.length).toBe(9);
+  });
+
+  it('clicking the trigger again closes the menu', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    await fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelectorAll('.fab-item > button').length).toBe(0);
+  });
+
+  it('pressing Escape closes the menu', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelectorAll('.fab-item > button').length).toBe(0);
+  });
+
+  it('items container has overflow-y-auto and a max-height class when open', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    const itemsList = /** @type {HTMLElement} */ (container.querySelector('.fab-items'));
+    expect(itemsList).toBeTruthy();
+    const cls = itemsList.className;
+    expect(cls).toMatch(/overflow-y-auto/);
+    expect(cls).toMatch(/max-h-/);
+  });
+
+  it('selecting an action closes the menu after firing its handler', async () => {
+    const { container } = render(GlobalFAB);
+    const trigger = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[aria-label="Open actions menu"]')
+    );
+    await fireEvent.click(trigger);
+    const btn = /** @type {Element} */ (container.querySelector('[aria-label="Create new event"]'));
+    await fireEvent.click(btn);
+    expect(mockOpenModal).toHaveBeenCalledWith(
+      'calendarEvent',
+      expect.objectContaining({ mode: 'create' })
+    );
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 });
