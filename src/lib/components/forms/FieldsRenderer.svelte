@@ -1,5 +1,6 @@
 <script>
   import FormConceptPicker from './FormConceptPicker.svelte';
+  import CustomValueAffordance from './CustomValueAffordance.svelte';
 
   /**
    * @type {{
@@ -7,10 +8,20 @@
    *   values: Record<string, any>,
    *   errors: Record<string, string | null>,
    *   onchange: (id: string, value: any) => void,
+   *   customValues?: Record<string, string>,
+   *   oncustomchange?: (id: string, value: string) => void,
    *   readonly?: boolean
    * }}
    */
-  let { fields, values, errors, onchange, readonly = false } = $props();
+  let {
+    fields,
+    values,
+    errors,
+    onchange,
+    customValues = {},
+    oncustomchange = () => {},
+    readonly = false
+  } = $props();
 </script>
 
 <div class="space-y-5">
@@ -33,6 +44,16 @@
           disabled={readonly}
           onchange={(v) => onchange(field.id, v)}
         />
+        {#if field.options?.allowCustom}
+          <CustomValueAffordance
+            value={customValues[field.id] ?? ''}
+            label={field.options?.customLabel ?? ''}
+            buttonLabel={field.options?.customButtonLabel ?? '+ custom'}
+            placeholder={field.options?.customPlaceholder ?? ''}
+            {readonly}
+            onchange={(v) => oncustomchange(field.id, v)}
+          />
+        {/if}
       {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
         <input
           id={field.id}
