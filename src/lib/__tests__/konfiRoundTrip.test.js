@@ -36,6 +36,9 @@ describe('Konfi publish → prefill round trip', () => {
       konfiDimensionenLabels: [{ id: 'urn:dim:glaube', label: 'Glaube' }],
       konfiMaterialaufwandIds: ['urn:mat:gering'],
       konfiMaterialaufwandLabels: [{ id: 'urn:mat:gering', label: 'Gering' }],
+      konfiZeitstrukturIds: ['urn:zt:wochenende'],
+      konfiZeitstrukturLabels: [{ id: 'urn:zt:wochenende', label: 'Wochenende' }],
+      konfiZeitstrukturCustom: '3-Tage-Freizeit',
       plainLanguage: true,
       requiredMaterialsNote: 'Bibel, Wasser, Tuch'
     };
@@ -50,6 +53,9 @@ describe('Konfi publish → prefill round trip', () => {
     expect(roundTripped.konfiThemenIds).toEqual(original.konfiThemenIds);
     expect(roundTripped.konfiDimensionenIds).toEqual(original.konfiDimensionenIds);
     expect(roundTripped.konfiMaterialaufwandIds).toEqual(original.konfiMaterialaufwandIds);
+    expect(roundTripped.konfiZeitstrukturIds).toEqual(original.konfiZeitstrukturIds);
+    expect(roundTripped.konfiZeitstrukturLabels).toEqual(original.konfiZeitstrukturLabels);
+    expect(roundTripped.konfiZeitstrukturCustom).toBe('3-Tage-Freizeit');
 
     // Scalar slots round-trip
     expect(roundTripped.plainLanguage).toBe(true);
