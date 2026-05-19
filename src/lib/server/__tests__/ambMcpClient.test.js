@@ -187,6 +187,50 @@ describe('callExtractMetadata', () => {
     expect(/** @type {Error} */ (caught).message).toMatch(/overload/i);
   });
 
+  it('throws with code="page_too_large" when tools/call returns isError flagging an oversized page', async () => {
+    // amb-mcp's fetchPage throws PageTooLargeError when the body exceeds the
+    // configured byte cap. The MCP SDK wraps the throw into result.isError
+    // with the error message in content[0].text. We surface this distinctly
+    // so the wizard can prompt the user with a useful hint instead of the
+    // generic "AI enrichment failed".
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: 'PDF body (12345678 bytes) exceeds size cap (5242880 bytes)'
+                }
+              ]
+            }
+          },
+          'sess'
+        )
+      );
+
+    let caught;
+    try {
+      await callExtractMetadata({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        url: 'https://example.org/huge.pdf',
+        variant: 'amb',
+        skosSchemes: {}
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(/** @type {any} */ (caught).code).toBe('page_too_large');
+  });
+
   it('throws with code="tool_error" when tools/call returns isError with a generic payload', async () => {
     fetchMock
       .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))

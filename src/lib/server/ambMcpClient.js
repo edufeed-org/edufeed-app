@@ -131,10 +131,16 @@ export async function callExtractMetadata({ mcpUrl, bearerToken, url, variant, s
     const errText = callRpc.result.content?.[0]?.text;
     const errStr = typeof errText === 'string' ? errText : JSON.stringify(errText ?? '');
     const isOverloaded = /\boverloaded/i.test(errStr) || /^\s*529\b/.test(errStr);
+    // amb-mcp's PageTooLargeError stringifies as
+    //   "PDF body (… bytes) exceeds size cap (… bytes)"
+    //   "HTML body (… bytes) exceeds size cap (… bytes)"
+    // We match on "exceeds size cap" so the wizard can show "page too big"
+    // copy instead of the generic AI-failure message.
+    const isPageTooLarge = /exceeds size cap/i.test(errStr);
     const err = /** @type {Error & { code?: string }} */ (
       new Error(`MCP extract_metadata tool error: ${errStr.slice(0, 200)}`)
     );
-    err.code = isOverloaded ? 'overloaded' : 'tool_error';
+    err.code = isOverloaded ? 'overloaded' : isPageTooLarge ? 'page_too_large' : 'tool_error';
     throw err;
   }
 

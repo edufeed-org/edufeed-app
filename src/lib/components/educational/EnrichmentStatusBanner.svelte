@@ -12,7 +12,7 @@
   /**
    * @type {{
    *   status: 'idle' | 'pending' | 'success' | 'error' | 'skipped-amb',
-   *   errorCode?: '' | 'overloaded' | 'tool_error' | 'network' | 'unknown',
+   *   errorCode?: '' | 'overloaded' | 'page_too_large' | 'tool_error' | 'network' | 'unknown',
    *   ondismiss?: () => void
    * }}
    */
@@ -50,6 +50,11 @@
     {#if errorCode === 'overloaded'}
       <span
         >KI-Dienst gerade überlastet — bitte gleich nochmal versuchen oder manuell ausfüllen.</span
+      >
+    {:else if errorCode === 'page_too_large'}
+      <span
+        >Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen oder eine kleinere
+        Quelle wählen.</span
       >
     {:else}
       <span>KI konnte keine Vorschläge erstellen — bitte manuell ausfüllen.</span>

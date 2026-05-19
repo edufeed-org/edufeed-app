@@ -158,7 +158,7 @@
    * `'network'` on transport failure, `'tool_error'` for upstream tool
    * exceptions). `''` while status is not `'error'`. Drives the banner copy
    * so the user knows whether to wait + retry vs. fill in manually.
-   * @type {'' | 'overloaded' | 'tool_error' | 'network' | 'unknown'}
+   * @type {'' | 'overloaded' | 'page_too_large' | 'tool_error' | 'network' | 'unknown'}
    */
   let enrichmentErrorCode = $state('');
   /** Stores the URL we last enriched, so re-clicking the button is a no-op. */
@@ -834,7 +834,9 @@
         enrichmentStatus = 'error';
         const code = /** @type {string} */ (enriched.code) ?? 'unknown';
         enrichmentErrorCode = /** @type {typeof enrichmentErrorCode} */ (
-          ['overloaded', 'tool_error', 'network', 'unknown'].includes(code) ? code : 'unknown'
+          ['overloaded', 'page_too_large', 'tool_error', 'network', 'unknown'].includes(code)
+            ? code
+            : 'unknown'
         );
         return;
       }
@@ -1729,6 +1731,9 @@
                         {#if enrichmentErrorCode === 'overloaded'}
                           {m.amb_form_enrich_error_overloaded?.() ??
                             'KI-Dienst gerade überlastet — bitte gleich nochmal versuchen.'}
+                        {:else if enrichmentErrorCode === 'page_too_large'}
+                          {m.amb_form_enrich_error_page_too_large?.() ??
+                            'Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen.'}
                         {:else}
                           {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
                         {/if}
