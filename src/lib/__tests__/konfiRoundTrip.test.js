@@ -96,4 +96,14 @@ describe('Konfi publish → prefill round trip', () => {
     expect(roundTripped.plainLanguage).toBe(true);
     expect(inferBildungsbereich(event)).toBe('konfi');
   });
+
+  it('round-trips a custom-only Zeitstruktur (no vocab picks) via real event shape', () => {
+    const original = { konfiZeitstrukturCustom: '3-Tage-Freizeit' };
+    const konfiTags = formDataToKonfiTags(original, SUB_STEPS, 'konfi');
+    const event = {
+      tags: [['d', 'r1'], ['title', 'X'], ...konfiTags]
+    };
+    const out = parseKonfiTagsToFormData(event, SUB_STEPS);
+    expect(out.konfiZeitstrukturCustom).toBe('3-Tage-Freizeit');
+  });
 });
