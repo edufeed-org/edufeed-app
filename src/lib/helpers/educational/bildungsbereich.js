@@ -25,6 +25,10 @@
  * @property {boolean} [multi]
  * @property {boolean} [required]
  * @property {string} [requiredOneOf]
+ * @property {boolean} [allowCustom] - When true, the wizard renders a "+ eigene Angabe" affordance below the vocab picker. The custom value lives at `<schemeKey>Custom` in formData and serializes to a `ext:ekw:konfi:<tagSlug>:custom` scalar tag. Vocab + custom may coexist.
+ * @property {string} [customLabelKey] - Paraglide key for the custom input label (required when `allowCustom`).
+ * @property {string} [customButtonLabelKey] - Paraglide key for the "+ Hinzufügen" button (required when `allowCustom`).
+ * @property {string} [customPlaceholderKey] - Paraglide key for the input placeholder (optional).
  */
 
 /**
@@ -111,7 +115,11 @@ export const BILDUNGSBEREICHE = {
             schemeKey: 'konfiZeitstruktur',
             tagSlug: 'zeitstruktur',
             labelKey: 'konfi_field_zeitstruktur',
-            multi: true
+            multi: true,
+            allowCustom: true,
+            customLabelKey: 'konfi_field_zeitstruktur_custom',
+            customButtonLabelKey: 'konfi_field_zeitstruktur_add_custom',
+            customPlaceholderKey: 'konfi_field_zeitstruktur_custom_placeholder'
           },
           {
             kind: 'vocab',
