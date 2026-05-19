@@ -182,9 +182,10 @@ describe('Konfi step4SubSteps + bildungsbereichTag', () => {
 describe('Konfi Zeitstruktur allowCustom flag', () => {
   it('Zeitstruktur field opts into a custom freetext companion', () => {
     const step4a = BILDUNGSBEREICHE.konfi.step4SubSteps?.find((s) => s.key === '4a');
-    const zeit = step4a?.fields.find(
-      (f) => f.kind === 'vocab' && f.schemeKey === 'konfiZeitstruktur'
-    );
+    const zeit =
+      /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepFieldVocab | undefined} */ (
+        step4a?.fields.find((f) => f.kind === 'vocab' && f.schemeKey === 'konfiZeitstruktur')
+      );
     expect(zeit).toBeDefined();
     expect(zeit?.allowCustom).toBe(true);
     expect(zeit?.customLabelKey).toBe('konfi_field_zeitstruktur_custom');
