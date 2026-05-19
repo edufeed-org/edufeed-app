@@ -53,9 +53,9 @@
     {#each sections as section (section.id)}
       {@const isActive = activeSection === section.id}
       {@const Icon = section.icon}
-      <a href={section.href} class:dock-active={isActive}>
+      <a href={section.href} aria-label={section.label()} class:dock-active={isActive}>
         <span class="relative">
-          <Icon class_="size-[1.2em]" />
+          <Icon class_="size-[1.4em]" />
           {#if section.id === 'inbox' && getTotalUnreadCount() > 0}
             <span
               class="absolute -top-1 -right-1.5 badge h-3.5 min-w-3.5 badge-sm text-[9px] badge-secondary"
@@ -70,7 +70,6 @@
             </span>
           {/if}
         </span>
-        <span class="dock-label text-xs">{section.label()}</span>
       </a>
     {/each}
   </div>
