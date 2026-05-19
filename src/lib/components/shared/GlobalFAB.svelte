@@ -142,7 +142,7 @@
 {#if !isDetailPage}
   {#if open}
     <!-- Backdrop scrim — dismiss handled by global pointerdown listener -->
-    <div class="fixed inset-0 z-[55] bg-black/40 lg:bg-transparent" aria-hidden="true"></div>
+    <div class="fixed inset-0 z-[55] bg-black/40" aria-hidden="true"></div>
   {/if}
   <div
     bind:this={fabRoot}
