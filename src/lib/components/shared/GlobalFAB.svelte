@@ -140,6 +140,10 @@
 />
 
 {#if !isDetailPage}
+  {#if open}
+    <!-- Backdrop scrim — dismiss handled by global pointerdown listener -->
+    <div class="fixed inset-0 z-[55] bg-black/40 lg:bg-transparent" aria-hidden="true"></div>
+  {/if}
   <div
     bind:this={fabRoot}
     class="fixed right-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] flex flex-col-reverse items-end gap-3 lg:right-6 lg:bottom-6"
