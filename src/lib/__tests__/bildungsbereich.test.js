@@ -178,3 +178,30 @@ describe('Konfi step4SubSteps + bildungsbereichTag', () => {
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 });
+
+describe('Konfi Zeitstruktur allowCustom flag', () => {
+  it('Zeitstruktur field opts into a custom freetext companion', () => {
+    const step4a = BILDUNGSBEREICHE.konfi.step4SubSteps?.find((s) => s.key === '4a');
+    const zeit =
+      /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepFieldVocab | undefined} */ (
+        step4a?.fields.find((f) => f.kind === 'vocab' && f.schemeKey === 'konfiZeitstruktur')
+      );
+    expect(zeit).toBeDefined();
+    expect(zeit?.allowCustom).toBe(true);
+    expect(zeit?.customLabelKey).toBe('konfi_field_zeitstruktur_custom');
+    expect(zeit?.customButtonLabelKey).toBe('konfi_field_zeitstruktur_add_custom');
+    expect(zeit?.customPlaceholderKey).toBe('konfi_field_zeitstruktur_custom_placeholder');
+  });
+
+  it('no other Konfi vocab field opts into allowCustom (scope is Zeitstruktur only)', () => {
+    const offenders = [];
+    for (const step of BILDUNGSBEREICHE.konfi.step4SubSteps ?? []) {
+      for (const f of step.fields) {
+        if (f.kind !== 'vocab') continue;
+        if (f.schemeKey === 'konfiZeitstruktur') continue;
+        if (f.allowCustom) offenders.push(f.schemeKey);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

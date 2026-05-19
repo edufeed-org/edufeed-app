@@ -1326,6 +1326,32 @@
     }
   }
 
+  // Map formData's <schemeKey>Custom slots into the {fieldId: string} shape FieldsRenderer expects.
+  const konfiCustomValues = $derived.by(() => {
+    if (!currentSubStepConfig) return /** @type {Record<string, string>} */ ({});
+    /** @type {Record<string, string>} */
+    const v = {};
+    /** @type {any} */
+    const fd = formData;
+    for (const f of /** @type {any[]} */ (currentSubStepConfig.fields)) {
+      if (f.kind === 'vocab' && f.allowCustom) {
+        v[f.schemeKey] = fd[`${f.schemeKey}Custom`] ?? '';
+      }
+    }
+    return v;
+  });
+
+  function handleKonfiCustomChange(/** @type string */ id, /** @type string */ value) {
+    if (!currentSubStepConfig) return;
+    const field = /** @type {any[]} */ (currentSubStepConfig.fields).find(
+      (/** @type {any} */ f) => f.kind === 'vocab' && f.schemeKey === id && f.allowCustom
+    );
+    if (!field) return;
+    /** @type {any} */
+    const fd = formData;
+    fd[`${field.schemeKey}Custom`] = value;
+  }
+
   /**
    * Handle cancel / back navigation
    */
@@ -2013,7 +2039,9 @@
               fields={konfiFields}
               values={konfiFieldValues}
               errors={fieldErrors}
+              customValues={konfiCustomValues}
               onchange={handleKonfiFieldChange}
+              oncustomchange={handleKonfiCustomChange}
             />
           </div>
         {:else}

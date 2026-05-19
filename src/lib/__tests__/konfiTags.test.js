@@ -153,6 +153,83 @@ describe('parseKonfiTags', () => {
   });
 });
 
+describe('parseKonfiTags — allowCustom', () => {
+  it('reads <tagSlug>:custom into <schemeKey>Custom for allowCustom fields', () => {
+    const subSteps =
+      /** @type {import('$lib/helpers/educational/konfiTags.js').SubStepConfig[]} */ ([
+        {
+          key: 'x',
+          titleKey: 'x',
+          fields: [
+            {
+              kind: 'vocab',
+              schemeKey: 'konfiZeitstruktur',
+              tagSlug: 'zeitstruktur',
+              labelKey: 'konfi_field_zeitstruktur',
+              multi: true,
+              allowCustom: true
+            }
+          ]
+        }
+      ]);
+    const tags = [
+      ['ext:ekw:konfi:zeitstruktur:id', 'urn:zt:wochenende'],
+      ['ext:ekw:konfi:zeitstruktur:prefLabel:de', 'Wochenende'],
+      ['ext:ekw:konfi:zeitstruktur:type', 'Concept'],
+      ['ext:ekw:konfi:zeitstruktur:custom', '3-Tage-Freizeit']
+    ];
+    const out = parseKonfiTags(tags, subSteps);
+    expect(out.konfiZeitstrukturIds).toEqual(['urn:zt:wochenende']);
+    expect(out.konfiZeitstrukturCustom).toBe('3-Tage-Freizeit');
+  });
+
+  it('reads custom-only (no vocab picks) when only the custom tag is present', () => {
+    const subSteps =
+      /** @type {import('$lib/helpers/educational/konfiTags.js').SubStepConfig[]} */ ([
+        {
+          key: 'x',
+          titleKey: 'x',
+          fields: [
+            {
+              kind: 'vocab',
+              schemeKey: 'konfiZeitstruktur',
+              tagSlug: 'zeitstruktur',
+              labelKey: 'konfi_field_zeitstruktur',
+              multi: true,
+              allowCustom: true
+            }
+          ]
+        }
+      ]);
+    const tags = [['ext:ekw:konfi:zeitstruktur:custom', 'monatlich']];
+    const out = parseKonfiTags(tags, subSteps);
+    expect(out.konfiZeitstrukturCustom).toBe('monatlich');
+    expect(out.konfiZeitstrukturIds).toBeUndefined();
+  });
+
+  it('does not read custom for vocab fields without allowCustom', () => {
+    const subSteps =
+      /** @type {import('$lib/helpers/educational/konfiTags.js').SubStepConfig[]} */ ([
+        {
+          key: 'x',
+          titleKey: 'x',
+          fields: [
+            {
+              kind: 'vocab',
+              schemeKey: 'konfiLernformat',
+              tagSlug: 'lernformat',
+              labelKey: 'konfi_field_lernformat',
+              multi: true
+            }
+          ]
+        }
+      ]);
+    const tags = [['ext:ekw:konfi:lernformat:custom', 'should be ignored']];
+    const out = parseKonfiTags(tags, subSteps);
+    expect(out.konfiLernformatCustom).toBeUndefined();
+  });
+});
+
 describe('konfi tag round-trip', () => {
   it('emit → parse is stable for vocab + scalar mix', () => {
     const concepts = [

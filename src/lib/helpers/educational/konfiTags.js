@@ -74,13 +74,21 @@ export function parseKonfiTags(tags, subSteps) {
         const idKey = `${KONFI_PREFIX}${field.tagSlug}:id`;
         const labelKey = `${KONFI_PREFIX}${field.tagSlug}:prefLabel:de`;
         const ids = tags.filter((t) => t[0] === idKey).map((t) => t[1]);
-        if (ids.length === 0) continue;
-        const labelValues = tags.filter((t) => t[0] === labelKey).map((t) => t[1]);
-        out[`${field.schemeKey}Ids`] = ids;
-        out[`${field.schemeKey}Labels`] = ids.map((id, i) => ({
-          id,
-          label: labelValues[i] ?? id
-        }));
+        if (ids.length > 0) {
+          const labelValues = tags.filter((t) => t[0] === labelKey).map((t) => t[1]);
+          out[`${field.schemeKey}Ids`] = ids;
+          out[`${field.schemeKey}Labels`] = ids.map((id, i) => ({
+            id,
+            label: labelValues[i] ?? id
+          }));
+        }
+        if (field.allowCustom) {
+          const customKey = `${KONFI_PREFIX}${field.tagSlug}:custom`;
+          const customTag = tags.find((t) => t[0] === customKey);
+          if (customTag && typeof customTag[1] === 'string' && customTag[1].trim() !== '') {
+            out[`${field.schemeKey}Custom`] = customTag[1];
+          }
+        }
       } else {
         const t = tags.find((tag) => tag[0] === `${KONFI_PREFIX}${field.tagSlug}`);
         if (!t) continue;

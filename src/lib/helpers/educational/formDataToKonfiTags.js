@@ -31,6 +31,11 @@ export function formDataToKonfiTags(formData, subSteps, bildungsbereichTag) {
           labels: labelById.has(id) ? { de: labelById.get(id) } : {}
         }));
         tags.push(...emitKonfiVocabTags(field.tagSlug, concepts));
+        if (field.allowCustom) {
+          tags.push(
+            ...emitKonfiScalarTags(`${field.tagSlug}:custom`, formData[`${field.schemeKey}Custom`])
+          );
+        }
       } else {
         tags.push(...emitKonfiScalarTags(field.tagSlug, formData[field.tagSlug]));
       }

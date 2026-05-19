@@ -102,4 +102,29 @@ describe('buildKonfiSummaryRows', () => {
       'konfi_field_landeskirche'
     ]);
   });
+
+  it('emits a separate row for konfiZeitstrukturCustom alongside vocab picks', () => {
+    const rows = buildKonfiSummaryRows(
+      {
+        konfiZeitstrukturLabels: [{ id: 'urn:zt:we', label: 'Wochenende' }],
+        konfiZeitstrukturCustom: '3-Tage-Freizeit'
+      },
+      YES_NO
+    );
+    expect(rows).toEqual([
+      { labelKey: 'konfi_field_zeitstruktur', value: 'Wochenende', multiline: false },
+      { labelKey: 'konfi_field_zeitstruktur_custom', value: '3-Tage-Freizeit', multiline: false }
+    ]);
+  });
+
+  it('emits only the custom row when no vocab picks are present', () => {
+    const rows = buildKonfiSummaryRows({ konfiZeitstrukturCustom: 'monatlich' }, YES_NO);
+    expect(rows).toEqual([
+      { labelKey: 'konfi_field_zeitstruktur_custom', value: 'monatlich', multiline: false }
+    ]);
+  });
+
+  it('skips the custom row when the value is empty / whitespace', () => {
+    expect(buildKonfiSummaryRows({ konfiZeitstrukturCustom: '   ' }, YES_NO)).toEqual([]);
+  });
 });

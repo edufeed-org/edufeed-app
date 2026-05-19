@@ -28,11 +28,18 @@ export function buildKonfiSummaryRows(formData, booleanLabels) {
     for (const field of step.fields) {
       if (field.kind === 'vocab') {
         const labels = formData?.[`${field.schemeKey}Labels`];
-        if (!Array.isArray(labels) || labels.length === 0) continue;
-        const value = labels
-          .map((/** @type {{id:string,label?:string}} */ l) => l.label || l.id)
-          .join(', ');
-        rows.push({ labelKey: field.labelKey, value, multiline: false });
+        if (Array.isArray(labels) && labels.length > 0) {
+          const value = labels
+            .map((/** @type {{id:string,label?:string}} */ l) => l.label || l.id)
+            .join(', ');
+          rows.push({ labelKey: field.labelKey, value, multiline: false });
+        }
+        if (field.allowCustom && field.customLabelKey) {
+          const custom = formData?.[`${field.schemeKey}Custom`];
+          if (typeof custom === 'string' && custom.trim() !== '') {
+            rows.push({ labelKey: field.customLabelKey, value: custom, multiline: false });
+          }
+        }
       } else if (field.input === 'checkbox') {
         if (formData?.[field.tagSlug] === true) {
           rows.push({ labelKey: field.labelKey, value: booleanLabels.yes, multiline: false });
