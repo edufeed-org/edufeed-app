@@ -158,7 +158,7 @@
 
     {#if open}
       <div
-        class="fab-items fab flex max-h-[70vh] flex-col-reverse items-end gap-3 overflow-y-auto pr-1"
+        class="fab-items flex max-h-[70vh] flex-col-reverse items-end gap-3 overflow-y-auto pr-1"
         role="menu"
       >
         <!-- Create Event -->

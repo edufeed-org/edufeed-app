@@ -117,9 +117,8 @@ describe('GlobalFAB', () => {
 
   it('renders all 9 action buttons', async () => {
     const { container } = await renderOpen();
-    // Action buttons are wrapped in .fab-item containers (for hover-reveal animation);
-    // only the main FAB toggle is a direct child of .fab.
-    const actionButtons = container.querySelectorAll('.fab .fab-item > button');
+    // Action buttons are wrapped in .fab-item containers inside the .fab-items scroll list.
+    const actionButtons = container.querySelectorAll('.fab-items .fab-item > button');
     expect(actionButtons.length).toBe(9);
   });
 
