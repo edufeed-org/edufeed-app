@@ -1859,11 +1859,9 @@
                 readonly
                 disabled
               />
-              <div class="label">
-                <span class="label-text-alt text-base-content/60">
-                  {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
-                </span>
-              </div>
+              <p class="mt-1 text-xs text-base-content/60">
+                {m.amb_form_help_url_no_edit?.() ?? 'Change the URL in step 2 to update it here.'}
+              </p>
             </div>
           {/if}
 
