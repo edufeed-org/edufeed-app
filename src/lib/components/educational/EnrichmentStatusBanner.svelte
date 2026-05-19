@@ -12,10 +12,11 @@
   /**
    * @type {{
    *   status: 'idle' | 'pending' | 'success' | 'error' | 'skipped-amb',
+   *   errorCode?: '' | 'overloaded' | 'page_too_large' | 'tool_error' | 'network' | 'unknown',
    *   ondismiss?: () => void
    * }}
    */
-  let { status, ondismiss } = $props();
+  let { status, errorCode = '', ondismiss } = $props();
 </script>
 
 {#if status === 'pending'}
@@ -46,7 +47,18 @@
   </div>
 {:else if status === 'error'}
   <div role="status" class="my-3 alert alert-warning" aria-live="polite">
-    <span>KI konnte keine Vorschläge erstellen — bitte manuell ausfüllen.</span>
+    {#if errorCode === 'overloaded'}
+      <span
+        >KI-Dienst gerade überlastet — bitte gleich nochmal versuchen oder manuell ausfüllen.</span
+      >
+    {:else if errorCode === 'page_too_large'}
+      <span
+        >Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen oder eine kleinere
+        Quelle wählen.</span
+      >
+    {:else}
+      <span>KI konnte keine Vorschläge erstellen — bitte manuell ausfüllen.</span>
+    {/if}
     {#if ondismiss}
       <button
         type="button"

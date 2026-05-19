@@ -38,6 +38,29 @@ describe('EnrichmentStatusBanner', () => {
     expect(alert?.className).toContain('alert-warning');
   });
 
+  it('shows the overloaded-specific copy when errorCode is "overloaded"', () => {
+    const { container } = render(EnrichmentStatusBanner, {
+      props: { status: 'error', errorCode: 'overloaded' }
+    });
+    const alert = container.querySelector('[role="status"]');
+    expect(alert?.textContent).toMatch(/überlastet/i);
+  });
+
+  it('shows the page-too-large-specific copy when errorCode is "page_too_large"', () => {
+    const { container } = render(EnrichmentStatusBanner, {
+      props: { status: 'error', errorCode: 'page_too_large' }
+    });
+    const alert = container.querySelector('[role="status"]');
+    expect(alert?.textContent).toMatch(/zu groß/i);
+  });
+
+  it('shows the generic error copy when errorCode is unset', () => {
+    const { container } = render(EnrichmentStatusBanner, { props: { status: 'error' } });
+    const alert = container.querySelector('[role="status"]');
+    expect(alert?.textContent).toMatch(/manuell ausfüllen/i);
+    expect(alert?.textContent).not.toMatch(/überlastet/i);
+  });
+
   it('renders an info chip when status is "skipped-amb"', () => {
     const { container } = render(EnrichmentStatusBanner, { props: { status: 'skipped-amb' } });
     const alert = container.querySelector('[role="status"]');

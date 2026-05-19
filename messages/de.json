@@ -1651,6 +1651,8 @@
   "amb_form_enrich_done": "KI hat passende Felder ergänzt.",
   "amb_form_enrich_retry": "✨ Erneut mit KI ergänzen",
   "amb_form_enrich_error": "KI-Ergänzung ist fehlgeschlagen.",
+  "amb_form_enrich_error_overloaded": "KI-Dienst gerade überlastet — bitte gleich nochmal versuchen.",
+  "amb_form_enrich_error_page_too_large": "Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen oder eine kleinere Quelle wählen.",
   "amb_form_enrich_hint": "Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.",
   "amb_form_enrich_more_suggestions": "{count} weitere Vorschläge",
   "amb_form_enrich_more_suggestions_one": "1 weiterer Vorschlag",

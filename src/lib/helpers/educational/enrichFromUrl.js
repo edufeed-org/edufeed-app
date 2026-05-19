@@ -1,12 +1,27 @@
 /**
  * Tiny client-side wrapper around POST /api/enrich. Pure (fetch is injected),
  * so it can be unit-tested without a browser. Always resolves — never throws.
- * Returns `null` on any failure so callers can fall back gracefully.
  *
- * @typedef {import('./applyEnrichedPayload.js').ExtractMetadataResult | null} EnrichResult
+ * Returns either:
+ *  - an `ExtractMetadataResult` on success,
+ *  - `{ error: 'ai_unavailable', code }` when the upstream extractor is
+ *    unavailable (network failure, non-2xx, malformed body, or the server's
+ *    own {error, code} envelope when extract_metadata failed in-flight).
+ *
+ * Callers should treat the error envelope as "show a 'try again' hint" and
+ * leave the existing form values untouched.
+ *
+ * @typedef {import('./applyEnrichedPayload.js').ExtractMetadataResult} ExtractMetadataResult
+ * @typedef {{ error: 'ai_unavailable', code: string }} EnrichError
+ * @typedef {ExtractMetadataResult | EnrichError | null} EnrichResult
  */
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+
+/** @returns {EnrichError} */
+function networkError() {
+  return { error: 'ai_unavailable', code: 'network' };
+}
 
 /**
  * @param {string} url
@@ -32,10 +47,14 @@ export async function enrichFromUrl(url, variant, options = {}) {
       body: JSON.stringify(body),
       signal: controller.signal
     });
-    if (!res.ok) return null;
-    return /** @type {EnrichResult} */ (await res.json());
+    if (!res.ok) return networkError();
+    try {
+      return /** @type {EnrichResult} */ (await res.json());
+    } catch {
+      return networkError();
+    }
   } catch {
-    return null;
+    return networkError();
   } finally {
     clearTimeout(timer);
   }
