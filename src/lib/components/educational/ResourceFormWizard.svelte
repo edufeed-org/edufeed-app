@@ -19,6 +19,7 @@
 -->
 
 <script>
+  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve as _resolve } from '$app/paths';
   /** @type {(path: string) => string} */
@@ -73,6 +74,7 @@
   import { buildPreviewResource } from '$lib/helpers/educational/buildPreviewResource.js';
   import { loadDraft, saveDraft, clearDraft } from '$lib/helpers/educational/draftStore.js';
   import { createInitialFormData } from '$lib/helpers/educational/wizardInitialState.js';
+  import { attachWizardHistoryNav } from '$lib/helpers/educational/wizardHistoryNav.js';
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -187,6 +189,35 @@
   const currentSubStepConfig = $derived(
     step4SubSteps?.find((/** @type {any} */ s) => s.key === currentSubStep)
   );
+
+  // Browser history integration: mouse-back / browser-back walks wizard steps
+  // until the user is past step 1, at which point the default route handler
+  // navigates away. Without this, the wizard's step state lives only in
+  // component memory and back leaves the wizard mid-flow.
+  /** @type {import('$lib/helpers/educational/wizardHistoryNav.js').WizardHistoryNav | undefined} */
+  let historyNav;
+  $effect(() => {
+    // untrack so this effect runs exactly once on mount — reading currentStep
+    // reactively here would re-attach (and reset the wizardInstanceId) every
+    // time the user advances, leaving the back stack orphaned.
+    historyNav = attachWizardHistoryNav({
+      initial: untrack(() => ({ step: currentStep, subStep: currentSubStep })),
+      onPop: ({ step, subStep }) => {
+        currentStep = step;
+        currentSubStep = subStep;
+        advanceAttempted = false;
+      }
+    });
+    return () => {
+      historyNav?.destroy();
+      historyNav = undefined;
+    };
+  });
+  $effect(() => {
+    const step = currentStep;
+    const subStep = currentSubStep;
+    historyNav?.pushIfChanged({ step, subStep });
+  });
   // Decode the raw naddr map from runtimeConfig into the `{address, relay}`
   // shape `subStepToFormFields` and `FormConceptPicker` expect. `runtimeConfig`
   // stores naddrs as strings; without this decode, `FormConceptPicker` reads
