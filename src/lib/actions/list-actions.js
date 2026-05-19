@@ -21,7 +21,7 @@ import * as List from 'applesauce-common/operations/list';
 /** Crude but sufficient d-tag generator — 12 random hex chars. */
 function randomDTag() {
   const bytes = new Uint8Array(6);
-  (globalThis.crypto || require('node:crypto').webcrypto).getRandomValues(bytes);
+  globalThis.crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
