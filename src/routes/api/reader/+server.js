@@ -74,6 +74,18 @@ export async function GET({ url }) {
       );
     }
 
+    // Metadata mode + PDF: short-circuit. PDFs carry no AMB JSON-LD or Open
+    // Graph (those live in HTML <head>), so there's nothing to extract here —
+    // and the size cap below would otherwise reject any PDF >5MB before the
+    // wizard could fall through to the AI-enrich path that knows how to
+    // handle large PDFs.
+    if (mode === 'metadata' && isPdfResponse(response.headers, articleUrl)) {
+      return Response.json(
+        { success: true, metadata: { source: 'none' } },
+        { headers: { 'Cache-Control': 'public, max-age=3600' } }
+      );
+    }
+
     const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
     if (contentLength > MAX_SIZE) {
       return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
