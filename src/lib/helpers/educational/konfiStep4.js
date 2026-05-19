@@ -45,6 +45,14 @@ export function subStepToFormFields(subStep, schemeNaddrs) {
       /** @type {Record<string, any>} */
       const options = { multiple: f.multi === true };
       if (f.required) options.required = true;
+      if (f.allowCustom) {
+        options.allowCustom = true;
+        if (f.customLabelKey) options.customLabel = resolveLabel(f.customLabelKey);
+        if (f.customButtonLabelKey)
+          options.customButtonLabel = resolveLabel(f.customButtonLabelKey);
+        if (f.customPlaceholderKey)
+          options.customPlaceholder = resolveLabel(f.customPlaceholderKey);
+      }
       fields.push({
         id: f.schemeKey,
         type: 'vocab',

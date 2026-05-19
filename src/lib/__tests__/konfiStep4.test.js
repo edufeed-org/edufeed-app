@@ -11,11 +11,14 @@ const SCHEME_NADDRS = {
   konfiThemen: { address: '39737:abc:konfi-themen', relay: 'wss://relay.example' }
 };
 
-// Mock Paraglide messages: only `konfi_field_zielgruppen` is "translated"; the
-// rest (e.g. `konfi_field_subtitle`) are intentionally missing to exercise the
-// raw-key fallback path.
+// Mock Paraglide messages: only selected keys are "translated"; the
+// rest are intentionally missing to exercise the raw-key fallback path.
 vi.mock('$lib/paraglide/messages', () => ({
-  konfi_field_zielgruppen: () => 'Zielgruppen'
+  konfi_field_zielgruppen: () => 'Zielgruppen',
+  konfi_field_zeitstruktur: () => 'Zeitstruktur',
+  konfi_field_zeitstruktur_custom: () => 'Eigene Zeitstruktur',
+  konfi_field_zeitstruktur_add_custom: () => 'Hinzufügen',
+  konfi_field_zeitstruktur_custom_placeholder: () => 'z.B. monatlich'
 }));
 
 describe('subStepToFormFields', () => {
@@ -153,5 +156,59 @@ describe('validateKonfiTopicOrDimension', () => {
 
   it('returns the error key when both keys are undefined', () => {
     expect(validateKonfiTopicOrDimension({})).toBe('konfi_topic_or_dimension_required');
+  });
+});
+
+describe('subStepToFormFields — allowCustom', () => {
+  it('propagates allowCustom + custom label keys into field.options', () => {
+    /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig} */
+    const subStep = {
+      key: '4a',
+      titleKey: 'konfi_step4a_title',
+      fields: [
+        {
+          kind: 'vocab',
+          schemeKey: 'konfiZeitstruktur',
+          tagSlug: 'zeitstruktur',
+          labelKey: 'konfi_field_zeitstruktur',
+          multi: true,
+          allowCustom: true,
+          customLabelKey: 'konfi_field_zeitstruktur_custom',
+          customButtonLabelKey: 'konfi_field_zeitstruktur_add_custom',
+          customPlaceholderKey: 'konfi_field_zeitstruktur_custom_placeholder'
+        }
+      ]
+    };
+    const schemeNaddrs = {
+      konfiZeitstruktur: { address: '30142:abc:zs', relay: 'wss://x' }
+    };
+    const fields = subStepToFormFields(subStep, schemeNaddrs);
+    expect(fields).toHaveLength(1);
+    expect(fields[0].options?.allowCustom).toBe(true);
+    expect(typeof fields[0].options?.customLabel).toBe('string');
+    expect(typeof fields[0].options?.customButtonLabel).toBe('string');
+    expect(typeof fields[0].options?.customPlaceholder).toBe('string');
+  });
+
+  it('omits allowCustom in options when not set on the field', () => {
+    /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig} */
+    const subStep = {
+      key: '4a',
+      titleKey: 'konfi_step4a_title',
+      fields: [
+        {
+          kind: 'vocab',
+          schemeKey: 'konfiLernformat',
+          tagSlug: 'lernformat',
+          labelKey: 'konfi_field_lernformat',
+          multi: true
+        }
+      ]
+    };
+    const schemeNaddrs = {
+      konfiLernformat: { address: '30142:abc:lf', relay: 'wss://x' }
+    };
+    const fields = subStepToFormFields(subStep, schemeNaddrs);
+    expect(fields[0].options?.allowCustom).toBeUndefined();
   });
 });
