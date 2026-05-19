@@ -64,6 +64,20 @@ describe('resolveVocabField', () => {
     expect(field.id).toBe('schulfaecher');
   });
 
+  it('resolveSchemeNaddrsMap decodes every non-empty naddr into {address, relay}', async () => {
+    const { resolveSchemeNaddrsMap } = await import('$lib/helpers/educational/vocabResolver.js');
+    const map = resolveSchemeNaddrsMap();
+    expect(map.schulfaecher).toEqual({
+      address: `${VOCAB_KIND}:${PUBKEY}:schulfaecher`,
+      relay: 'wss://vocab.example'
+    });
+    expect(map.hochschulfaecher.address).toBe(`${VOCAB_KIND}:${PUBKEY}:hochschulfaecher`);
+    expect(map.educationalLevel.relay).toBe('wss://vocab.example');
+    // Empty / undecodable slots are dropped silently
+    expect(map.hcrt).toBeUndefined();
+    expect(map.lrmiAudience).toBeUndefined();
+  });
+
   it('passes through an empty relay when naddr carries no relays', () => {
     const noRelayNaddr = nip19.naddrEncode({
       pubkey: PUBKEY,

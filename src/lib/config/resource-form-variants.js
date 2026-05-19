@@ -122,3 +122,37 @@ export function getBildungsbereichKeysForVariant(variantId) {
   const variant = ALL_VARIANTS.find((v) => v.id === variantId);
   return variant?.bildungsbereichKeys ?? BILDUNGSBEREICH_KEYS;
 }
+
+/**
+ * Labels for `ext:<ns>:<facet>:*` tag namespaces that aren't 1:1 with a
+ * form-variant id. `ExtensionMetadataPanel` consults this map BEFORE the
+ * variant-id-keyed registry, so nested namespaces like `ekw:konfi` (which
+ * have no matching `variant.id`) get curated labels instead of the humanized
+ * fallback.
+ *
+ * Keys are namespace strings as produced by `parseExtensionTags.js`
+ * (e.g. `ext:ekw:konfi:zielgruppen:id` → ns=`ekw:konfi`).
+ *
+ * @type {Record<string, { sectionKey?: string, facets?: Record<string, string> }>}
+ */
+export const EXTENSION_NAMESPACE_LABELS = {
+  'ekw:konfi': {
+    sectionKey: 'konfi_metadata_section',
+    facets: {
+      zielgruppen: 'konfi_field_zielgruppen',
+      lernformat: 'konfi_field_lernformat',
+      zeitstruktur: 'konfi_field_zeitstruktur',
+      beteiligte: 'konfi_field_beteiligte',
+      themen: 'konfi_field_themen',
+      dimensionen: 'konfi_field_dimensionen',
+      methode: 'konfi_field_methode',
+      materialaufwand: 'konfi_field_materialaufwand',
+      technikbedarf: 'konfi_field_technikbedarf',
+      lernorte: 'konfi_field_lernorte',
+      landeskirche: 'konfi_field_landeskirche',
+      subtitle: 'konfi_field_subtitle',
+      plainLanguage: 'konfi_field_plain_language',
+      requiredMaterialsNote: 'konfi_field_required_materials_note'
+    }
+  }
+};

@@ -2282,6 +2282,393 @@
           }
         ]
       }
+    },
+    {
+      "d": "landeskirchen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Landeskirche", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "EKD-Gliedkirchen (20 evangelische Landeskirchen in Deutschland).",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "anhalt",
+            "prefLabels": [{ "value": "Evangelische Landeskirche Anhalts", "lang": "de" }]
+          },
+          {
+            "d": "baden",
+            "prefLabels": [{ "value": "Evangelische Landeskirche in Baden", "lang": "de" }]
+          },
+          {
+            "d": "bayern",
+            "prefLabels": [{ "value": "Evangelisch-Lutherische Kirche in Bayern", "lang": "de" }]
+          },
+          {
+            "d": "berlin-brandenburg",
+            "prefLabels": [
+              {
+                "value": "Evangelische Kirche Berlin-Brandenburg-schlesische Oberlausitz",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "braunschweig",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche in Braunschweig", "lang": "de" }
+            ]
+          },
+          {
+            "d": "bremen",
+            "prefLabels": [{ "value": "Bremische Evangelische Kirche", "lang": "de" }]
+          },
+          {
+            "d": "hannover",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche Hannovers", "lang": "de" }
+            ]
+          },
+          {
+            "d": "hessen-nassau",
+            "prefLabels": [{ "value": "Evangelische Kirche in Hessen und Nassau", "lang": "de" }]
+          },
+          {
+            "d": "kurhessen-waldeck",
+            "prefLabels": [{ "value": "Evangelische Kirche von Kurhessen-Waldeck", "lang": "de" }]
+          },
+          { "d": "lippe", "prefLabels": [{ "value": "Lippische Landeskirche", "lang": "de" }] },
+          {
+            "d": "mitteldeutschland",
+            "prefLabels": [{ "value": "Evangelische Kirche in Mitteldeutschland", "lang": "de" }]
+          },
+          {
+            "d": "nordkirche",
+            "prefLabels": [
+              {
+                "value": "Evangelisch-Lutherische Kirche in Norddeutschland (Nordkirche)",
+                "lang": "de"
+              }
+            ]
+          },
+          {
+            "d": "oldenburg",
+            "prefLabels": [{ "value": "Evangelisch-Lutherische Kirche in Oldenburg", "lang": "de" }]
+          },
+          {
+            "d": "pfalz",
+            "prefLabels": [{ "value": "Evangelische Kirche der Pfalz", "lang": "de" }]
+          },
+          {
+            "d": "reformierte-kirche",
+            "prefLabels": [{ "value": "Evangelisch-reformierte Kirche", "lang": "de" }]
+          },
+          {
+            "d": "rheinland",
+            "prefLabels": [{ "value": "Evangelische Kirche im Rheinland", "lang": "de" }]
+          },
+          {
+            "d": "sachsen",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche Sachsens", "lang": "de" }
+            ]
+          },
+          {
+            "d": "schaumburg-lippe",
+            "prefLabels": [
+              { "value": "Evangelisch-Lutherische Landeskirche Schaumburg-Lippe", "lang": "de" }
+            ]
+          },
+          {
+            "d": "westfalen",
+            "prefLabels": [{ "value": "Evangelische Kirche von Westfalen", "lang": "de" }]
+          },
+          {
+            "d": "wuerttemberg",
+            "prefLabels": [{ "value": "Evangelische Landeskirche in Württemberg", "lang": "de" }]
+          }
+        ]
+      }
+    },
+    {
+      "d": "konfi-zielgruppen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Zielgruppen", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Zielgruppen-Bänder für Konfi-Arbeit. Mischt Altersbänder (8–14 Jahre) mit Konfi-Klassen-Kürzeln (KU3/KU4) — bewusst flach gehalten.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          { "d": "8-10-jahre", "prefLabels": [{ "value": "8–10 Jahre", "lang": "de" }] },
+          { "d": "ku3", "prefLabels": [{ "value": "KU3", "lang": "de" }] },
+          { "d": "ku4", "prefLabels": [{ "value": "KU4", "lang": "de" }] },
+          { "d": "11-12-jahre", "prefLabels": [{ "value": "11–12 Jahre", "lang": "de" }] },
+          { "d": "13-14-jahre", "prefLabels": [{ "value": "13–14 Jahre", "lang": "de" }] }
+        ]
+      }
+    },
+    {
+      "d": "konfi-lernformat",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Lernformat", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Lernformate der Konfi-Arbeit. Parents (Konfieinheit, Konfiblock) sind selektierbar wie ihre Kinder — die UI-Entscheidung über Header-only-Rendering liegt in Spec B+C.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "konfieinheit",
+            "prefLabels": [{ "value": "Konfieinheit", "lang": "de" }],
+            "children": [
+              {
+                "d": "konfieinheit/60-minuten",
+                "prefLabels": [{ "value": "60 Minuten", "lang": "de" }]
+              },
+              {
+                "d": "konfieinheit/90-minuten",
+                "prefLabels": [{ "value": "90 Minuten", "lang": "de" }]
+              }
+            ]
+          },
+          {
+            "d": "konfiblock",
+            "prefLabels": [{ "value": "Konfiblock", "lang": "de" }],
+            "children": [
+              { "d": "konfiblock/halbtag", "prefLabels": [{ "value": "1 Halbtag", "lang": "de" }] },
+              { "d": "konfiblock/tag", "prefLabels": [{ "value": "1 Tag", "lang": "de" }] }
+            ]
+          },
+          { "d": "konfifreizeit", "prefLabels": [{ "value": "Konfifreizeit", "lang": "de" }] },
+          { "d": "konficamp", "prefLabels": [{ "value": "Konficamp", "lang": "de" }] },
+          { "d": "exkursion", "prefLabels": [{ "value": "Exkursion", "lang": "de" }] }
+        ]
+      }
+    },
+    {
+      "d": "konfi-zeitstruktur",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Zeitstruktur", "lang": "de" }],
+        "concepts": [
+          { "d": "45-60-minuten", "prefLabels": [{ "value": "45–60 Minuten", "lang": "de" }] },
+          { "d": "halbtagesformat", "prefLabels": [{ "value": "Halbtagesformat", "lang": "de" }] },
+          { "d": "tagesformat", "prefLabels": [{ "value": "Tagesformat", "lang": "de" }] },
+          { "d": "wochenendformat", "prefLabels": [{ "value": "Wochenendformat", "lang": "de" }] },
+          { "d": "freizeit-camp", "prefLabels": [{ "value": "Freizeit/Camp", "lang": "de" }] },
+          { "d": "mehrwoechig", "prefLabels": [{ "value": "mehrwöchig", "lang": "de" }] },
+          {
+            "d": "modular-kombinierbar",
+            "prefLabels": [{ "value": "modular kombinierbar", "lang": "de" }]
+          }
+        ]
+      }
+    },
+    {
+      "d": "konfi-beteiligte",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Beteiligte", "lang": "de" }],
+        "concepts": [
+          { "d": "konfis", "prefLabels": [{ "value": "Konfis", "lang": "de" }] },
+          { "d": "eltern", "prefLabels": [{ "value": "Eltern", "lang": "de" }] },
+          { "d": "teamer", "prefLabels": [{ "value": "Teamer:innen", "lang": "de" }] },
+          { "d": "hauptamtliche", "prefLabels": [{ "value": "Hauptamtliche", "lang": "de" }] },
+          { "d": "ehrenamtliche", "prefLabels": [{ "value": "Ehrenamtliche", "lang": "de" }] },
+          {
+            "d": "gemeindeoeffentlichkeit",
+            "prefLabels": [{ "value": "Gemeindeöffentlichkeit", "lang": "de" }]
+          }
+        ]
+      }
+    },
+    {
+      "d": "konfi-methode",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Methode", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Methodische Zugänge in der Konfi-Arbeit. Separat vom Schul-`methode`-Vokabular, da pädagogische Tradition deutlich abweicht.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          { "d": "gespraech", "prefLabels": [{ "value": "Gespräch", "lang": "de" }] },
+          { "d": "diskussion", "prefLabels": [{ "value": "Diskussion", "lang": "de" }] },
+          { "d": "bibliolog", "prefLabels": [{ "value": "Bibliolog", "lang": "de" }] },
+          { "d": "bibeltheater", "prefLabels": [{ "value": "Bibeltheater", "lang": "de" }] },
+          { "d": "rollenspiel", "prefLabels": [{ "value": "Rollenspiel", "lang": "de" }] },
+          { "d": "kreativarbeit", "prefLabels": [{ "value": "Kreativarbeit", "lang": "de" }] },
+          { "d": "musik", "prefLabels": [{ "value": "Musik", "lang": "de" }] },
+          { "d": "bewegung", "prefLabels": [{ "value": "Bewegung", "lang": "de" }] },
+          { "d": "meditation", "prefLabels": [{ "value": "Meditation", "lang": "de" }] },
+          { "d": "gebet", "prefLabels": [{ "value": "Gebet", "lang": "de" }] },
+          {
+            "d": "digitales-lernen",
+            "prefLabels": [{ "value": "Digitales Lernen", "lang": "de" }]
+          },
+          { "d": "filmarbeit", "prefLabels": [{ "value": "Filmarbeit", "lang": "de" }] },
+          { "d": "exkursion", "prefLabels": [{ "value": "Exkursion", "lang": "de" }] },
+          { "d": "escape-game", "prefLabels": [{ "value": "Escape Game", "lang": "de" }] },
+          { "d": "pilgern", "prefLabels": [{ "value": "Pilgern", "lang": "de" }] }
+        ]
+      }
+    },
+    {
+      "d": "konfi-materialaufwand",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Materialaufwand", "lang": "de" }],
+        "concepts": [
+          { "d": "gering", "prefLabels": [{ "value": "gering", "lang": "de" }] },
+          { "d": "mittel", "prefLabels": [{ "value": "mittel", "lang": "de" }] },
+          { "d": "hoch", "prefLabels": [{ "value": "hoch", "lang": "de" }] }
+        ]
+      }
+    },
+    {
+      "d": "konfi-technikbedarf",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Technikbedarf", "lang": "de" }],
+        "concepts": [
+          { "d": "keiner", "prefLabels": [{ "value": "keiner", "lang": "de" }] },
+          { "d": "beamer", "prefLabels": [{ "value": "Beamer", "lang": "de" }] },
+          { "d": "wlan", "prefLabels": [{ "value": "WLAN", "lang": "de" }] },
+          { "d": "smartphone", "prefLabels": [{ "value": "Smartphone", "lang": "de" }] },
+          { "d": "tablet", "prefLabels": [{ "value": "Tablet", "lang": "de" }] },
+          { "d": "laptop", "prefLabels": [{ "value": "Laptop", "lang": "de" }] },
+          { "d": "audioanlage", "prefLabels": [{ "value": "Audioanlage", "lang": "de" }] },
+          { "d": "kamera", "prefLabels": [{ "value": "Kamera", "lang": "de" }] },
+          {
+            "d": "digitale-plattform",
+            "prefLabels": [{ "value": "Digitale Plattform", "lang": "de" }]
+          }
+        ]
+      }
+    },
+    {
+      "d": "konfi-themen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Themenfelder", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Inhaltliche Bausteine der Konfi-Arbeit. Bewusste Überlappung mit Methoden-Vokabular (z. B. Gebet als Thema vs. Methode) ist erwünscht.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          { "d": "bibel", "prefLabels": [{ "value": "Bibel", "lang": "de" }] },
+          { "d": "gott", "prefLabels": [{ "value": "Gott", "lang": "de" }] },
+          { "d": "taufe", "prefLabels": [{ "value": "Taufe", "lang": "de" }] },
+          { "d": "abendmahl", "prefLabels": [{ "value": "Abendmahl", "lang": "de" }] },
+          { "d": "gebet", "prefLabels": [{ "value": "Gebet", "lang": "de" }] },
+          { "d": "gottesdienst", "prefLabels": [{ "value": "Gottesdienst", "lang": "de" }] },
+          { "d": "kirchenjahr", "prefLabels": [{ "value": "Kirchenjahr", "lang": "de" }] },
+          { "d": "konfirmation", "prefLabels": [{ "value": "Konfirmation", "lang": "de" }] },
+          { "d": "reformation", "prefLabels": [{ "value": "Reformation", "lang": "de" }] },
+          { "d": "diakonie", "prefLabels": [{ "value": "Diakonie", "lang": "de" }] },
+          { "d": "kirche", "prefLabels": [{ "value": "Kirche", "lang": "de" }] },
+          { "d": "jesus-christus", "prefLabels": [{ "value": "Jesus Christus", "lang": "de" }] },
+          { "d": "schoepfung", "prefLabels": [{ "value": "Schöpfung", "lang": "de" }] },
+          { "d": "hoffnung", "prefLabels": [{ "value": "Hoffnung", "lang": "de" }] },
+          { "d": "tod-und-trauer", "prefLabels": [{ "value": "Tod und Trauer", "lang": "de" }] },
+          { "d": "segen", "prefLabels": [{ "value": "Segen", "lang": "de" }] },
+          { "d": "gemeinschaft", "prefLabels": [{ "value": "Gemeinschaft", "lang": "de" }] },
+          {
+            "d": "glaube-und-zweifel",
+            "prefLabels": [{ "value": "Glaube und Zweifel", "lang": "de" }]
+          },
+          { "d": "freundschaft", "prefLabels": [{ "value": "Freundschaft", "lang": "de" }] },
+          { "d": "identitaet", "prefLabels": [{ "value": "Identität", "lang": "de" }] },
+          { "d": "medien", "prefLabels": [{ "value": "Medien", "lang": "de" }] },
+          { "d": "social-media", "prefLabels": [{ "value": "Social Media", "lang": "de" }] },
+          {
+            "d": "liebe-und-sexualitaet",
+            "prefLabels": [{ "value": "Liebe und Sexualität", "lang": "de" }]
+          },
+          { "d": "gerechtigkeit", "prefLabels": [{ "value": "Gerechtigkeit", "lang": "de" }] },
+          { "d": "nachhaltigkeit", "prefLabels": [{ "value": "Nachhaltigkeit", "lang": "de" }] },
+          { "d": "demokratie", "prefLabels": [{ "value": "Demokratie", "lang": "de" }] },
+          { "d": "konflikte", "prefLabels": [{ "value": "Konflikte", "lang": "de" }] },
+          { "d": "vielfalt", "prefLabels": [{ "value": "Vielfalt", "lang": "de" }] },
+          { "d": "verantwortung", "prefLabels": [{ "value": "Verantwortung", "lang": "de" }] },
+          { "d": "zukunft", "prefLabels": [{ "value": "Zukunft", "lang": "de" }] }
+        ]
+      }
+    },
+    {
+      "d": "konfi-dimensionen",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Dimensionen", "lang": "de" }],
+        "descriptions": [
+          {
+            "value": "Didaktische Zugänge / Bildungsdimensionen. Alternative zu konfi-themen (laut Domain-Spec), nicht Unter-Vokabular.",
+            "lang": "de"
+          }
+        ],
+        "concepts": [
+          {
+            "d": "gemeinschaft-erfahren",
+            "prefLabels": [{ "value": "Gemeinschaft erfahren", "lang": "de" }]
+          },
+          {
+            "d": "religioese-sprachfaehigkeit",
+            "prefLabels": [{ "value": "religiöse Sprachfähigkeit", "lang": "de" }]
+          },
+          { "d": "selbstreflexion", "prefLabels": [{ "value": "Selbstreflexion", "lang": "de" }] },
+          {
+            "d": "perspektivwechsel",
+            "prefLabels": [{ "value": "Perspektivwechsel", "lang": "de" }]
+          },
+          {
+            "d": "spirituelle-erfahrung",
+            "prefLabels": [{ "value": "spirituelle Erfahrung", "lang": "de" }]
+          },
+          { "d": "partizipation", "prefLabels": [{ "value": "Partizipation", "lang": "de" }] },
+          {
+            "d": "verantwortungsuebernahme",
+            "prefLabels": [{ "value": "Verantwortungsübernahme", "lang": "de" }]
+          },
+          {
+            "d": "urteilskompetenz",
+            "prefLabels": [{ "value": "Urteilskompetenz", "lang": "de" }]
+          },
+          {
+            "d": "ausdrucksfaehigkeit",
+            "prefLabels": [{ "value": "Ausdrucksfähigkeit", "lang": "de" }]
+          }
+        ]
+      }
+    },
+    {
+      "d": "konfi-lernorte",
+      "source": {
+        "type": "inline",
+        "prefLabels": [{ "value": "Lernorte", "lang": "de" }],
+        "concepts": [
+          { "d": "gemeindehaus", "prefLabels": [{ "value": "Gemeindehaus", "lang": "de" }] },
+          { "d": "kirche", "prefLabels": [{ "value": "Kirche", "lang": "de" }] },
+          { "d": "schule", "prefLabels": [{ "value": "Schule", "lang": "de" }] },
+          { "d": "naturraum", "prefLabels": [{ "value": "Naturraum", "lang": "de" }] },
+          { "d": "gedenkort", "prefLabels": [{ "value": "Gedenkort", "lang": "de" }] },
+          { "d": "museum", "prefLabels": [{ "value": "Museum", "lang": "de" }] },
+          { "d": "stadtteil", "prefLabels": [{ "value": "Stadtteil", "lang": "de" }] },
+          { "d": "online", "prefLabels": [{ "value": "Online", "lang": "de" }] },
+          { "d": "hybrid", "prefLabels": [{ "value": "Hybrid", "lang": "de" }] }
+        ]
+      }
     }
   ]
 }

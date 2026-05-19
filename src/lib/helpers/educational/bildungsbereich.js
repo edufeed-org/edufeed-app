@@ -17,10 +17,38 @@
  */
 
 /**
+ * @typedef {Object} SubStepFieldVocab
+ * @property {'vocab'} kind
+ * @property {string} schemeKey
+ * @property {string} tagSlug
+ * @property {string} labelKey  - Paraglide message key (e.g. `konfi_field_zielgruppen`); resolved at render time
+ * @property {boolean} [multi]
+ * @property {boolean} [required]
+ * @property {string} [requiredOneOf]
+ */
+
+/**
+ * @typedef {Object} SubStepFieldScalar
+ * @property {'scalar'} kind
+ * @property {string} tagSlug
+ * @property {string} labelKey  - Paraglide message key (e.g. `konfi_field_subtitle`); resolved at render time
+ * @property {'text' | 'textarea' | 'checkbox'} input
+ */
+
+/**
+ * @typedef {Object} SubStepConfig
+ * @property {string} key
+ * @property {string} titleKey
+ * @property {Array<SubStepFieldVocab | SubStepFieldScalar>} fields
+ */
+
+/**
  * @typedef {Object} BildungsbereichConfig
  * @property {{ de: string, en: string }} label
  * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`). Empty array = no subject picker rendered on step 4.
  * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only). Empty array = never auto-inferred.
+ * @property {string} [bildungsbereichTag]  - short slug for NIP-32 `l` tag; omitted = no Bildungsbereich detection tag emitted
+ * @property {SubStepConfig[]} [step4SubSteps]  - when present, step 4 splits into named sub-steps
  */
 
 /**
@@ -36,7 +64,8 @@ export const BILDUNGSBEREICHE = {
       'https://w3id.org/kim/educationalLevel/level_1', // Primarbereich
       'https://w3id.org/kim/educationalLevel/level_2', // Sekundarbereich I
       'https://w3id.org/kim/educationalLevel/level_3' // Sekundarbereich II
-    ]
+    ],
+    bildungsbereichTag: 'schule'
   },
   hochschule: {
     label: { de: 'Hochschule', en: 'Higher Education' },
@@ -53,12 +82,122 @@ export const BILDUNGSBEREICHE = {
     ]
   },
   konfi: {
-    // EKW-specific. Downstream config (vocab, level mapping) is intentionally
-    // deferred; see plan 2a. Empty vocab/level arrays naturally suppress the
-    // step 4 subject picker and the edit-mode inference path.
     label: { de: 'Konfi-Arbeit', en: 'Confirmation program' },
     subjectVocabKeys: [],
-    educationalLevelMapping: []
+    educationalLevelMapping: [],
+    bildungsbereichTag: 'konfi',
+    step4SubSteps: [
+      {
+        key: '4a',
+        titleKey: 'konfi_step4a_title',
+        fields: [
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiZielgruppen',
+            tagSlug: 'zielgruppen',
+            labelKey: 'konfi_field_zielgruppen',
+            multi: true,
+            required: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiLernformat',
+            tagSlug: 'lernformat',
+            labelKey: 'konfi_field_lernformat',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiZeitstruktur',
+            tagSlug: 'zeitstruktur',
+            labelKey: 'konfi_field_zeitstruktur',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiBeteiligte',
+            tagSlug: 'beteiligte',
+            labelKey: 'konfi_field_beteiligte',
+            multi: true
+          }
+        ]
+      },
+      {
+        key: '4b',
+        titleKey: 'konfi_step4b_title',
+        fields: [
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiThemen',
+            tagSlug: 'themen',
+            labelKey: 'konfi_field_themen',
+            multi: true,
+            requiredOneOf: 'topicOrDimension'
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiDimensionen',
+            tagSlug: 'dimensionen',
+            labelKey: 'konfi_field_dimensionen',
+            multi: true,
+            requiredOneOf: 'topicOrDimension'
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiMethode',
+            tagSlug: 'methode',
+            labelKey: 'konfi_field_methode',
+            multi: true
+          },
+          {
+            kind: 'scalar',
+            tagSlug: 'plainLanguage',
+            labelKey: 'konfi_field_plain_language',
+            input: 'checkbox'
+          }
+        ]
+      },
+      {
+        key: '4c',
+        titleKey: 'konfi_step4c_title',
+        fields: [
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiMaterialaufwand',
+            tagSlug: 'materialaufwand',
+            labelKey: 'konfi_field_materialaufwand',
+            multi: false
+          },
+          {
+            kind: 'scalar',
+            tagSlug: 'requiredMaterialsNote',
+            labelKey: 'konfi_field_required_materials_note',
+            input: 'textarea'
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiTechnikbedarf',
+            tagSlug: 'technikbedarf',
+            labelKey: 'konfi_field_technikbedarf',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'konfiLernorte',
+            tagSlug: 'lernorte',
+            labelKey: 'konfi_field_lernorte',
+            multi: true
+          },
+          {
+            kind: 'vocab',
+            schemeKey: 'landeskirchen',
+            tagSlug: 'landeskirche',
+            labelKey: 'konfi_field_landeskirche',
+            multi: false
+          }
+        ]
+      }
+    ]
   }
 };
 

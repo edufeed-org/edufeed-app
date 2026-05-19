@@ -60,3 +60,22 @@ export function resolveVocabField(key) {
     return null;
   }
 }
+
+/**
+ * Decode every entry of `runtimeConfig.educational.schemeNaddrs` into the
+ * `{ address, relay }` shape `subStepToFormFields` (and any other map-consuming
+ * caller) expects. Slots whose value is empty or fails to decode are dropped
+ * silently — mirrors `resolveVocabField`'s tolerance.
+ *
+ * @returns {Record<string, VocabFieldVocab>}
+ */
+export function resolveSchemeNaddrsMap() {
+  const raw = /** @type {Record<string, string>} */ (runtimeConfig.educational?.schemeNaddrs ?? {});
+  /** @type {Record<string, VocabFieldVocab>} */
+  const out = {};
+  for (const key of Object.keys(raw)) {
+    const field = resolveVocabField(key);
+    if (field) out[key] = field.vocab;
+  }
+  return out;
+}

@@ -190,6 +190,9 @@ export function validateField(field, value) {
       if (!arr.some((v) => typeof v === 'string' && v.trim().length > 0)) {
         return `${label} is required`;
       }
+    } else if (field.vocab) {
+      const arr = Array.isArray(value) ? value : [];
+      if (arr.length === 0) return `${label} is required`;
     } else if (field.type !== 'checkbox' && !value) {
       return `${label} is required`;
     }
@@ -197,6 +200,7 @@ export function validateField(field, value) {
 
   // Skip further checks if empty and not required
   if (field.type === 'text-array') return null;
+  if (field.vocab) return null;
   if (!value) return null;
   // After this point, only scalar field types remain; treat value as string.
   const str = /** @type {string} */ (value);

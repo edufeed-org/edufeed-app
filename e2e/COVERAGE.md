@@ -1172,12 +1172,13 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 
 ### Not Yet Tested
 
-| Feature                  | Priority | Notes                                                            |
-| ------------------------ | -------- | ---------------------------------------------------------------- |
-| **Article Creation**     | High     | No creation UI exists yet                                        |
-| **Mobile Responsive**    | Low      | Basic coverage in mobile-navigation.test.js, more pages possible |
-| **Accessibility (a11y)** | Low      | Keyboard navigation, screen reader                               |
-| **Error Recovery**       | Low      | Offline handling, relay failures                                 |
+| Feature                  | Priority | Notes                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Article Creation**     | High     | No creation UI exists yet                                                                                                                                                                                                                                                                                                                                                 |
+| **Konfi step 4 wizard**  | Medium   | Round-trip publish→prefill behavior covered by `src/lib/__tests__/konfiRoundTrip.test.js` (Vitest, all 11 vocab facets + 3 scalars + L/l namespace inference). A Playwright E2E walking the wizard UI publish → reload → edit-prefill is now feasible (Spec C delivered the Paraglide labels referenced by selectors) but is out of scope for Spec C — see a future plan. |
+| **Mobile Responsive**    | Low      | Basic coverage in mobile-navigation.test.js, more pages possible                                                                                                                                                                                                                                                                                                          |
+| **Accessibility (a11y)** | Low      | Keyboard navigation, screen reader                                                                                                                                                                                                                                                                                                                                        |
+| **Error Recovery**       | Low      | Offline handling, relay failures                                                                                                                                                                                                                                                                                                                                          |
 
 ### Partially Covered
 

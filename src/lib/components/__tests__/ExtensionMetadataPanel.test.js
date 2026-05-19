@@ -192,4 +192,54 @@ describe('ExtensionMetadataPanel', () => {
     // The concept's prefLabel still renders as a badge
     expect(await findByText('Argumentieren')).toBeTruthy();
   });
+
+  it('renders registered Konfi labels for ext:ekw:konfi:* tags via EXTENSION_NAMESPACE_LABELS', () => {
+    const event = {
+      tags: [
+        ['ext:ekw:konfi:zielgruppen:id', 'urn:ku3'],
+        ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU3'],
+        ['ext:ekw:konfi:zielgruppen:type', 'Concept'],
+        ['ext:ekw:konfi:subtitle', 'Eine Einheit zur Taufe'],
+        ['ext:ekw:konfi:plainLanguage', 'true']
+      ]
+    };
+    const { getByText, queryByText } = render(ExtensionMetadataPanel, { props: { event } });
+
+    // Section heading from EXTENSION_NAMESPACE_LABELS['ekw:konfi'].sectionKey
+    expect(getByText(/Konfi-Arbeit-Metadaten|Confirmation Work Metadata/i)).toBeTruthy();
+    // Concept facet label from the registry mapping
+    expect(getByText(/Zielgruppen|Target groups/i)).toBeTruthy();
+    // Concept's German prefLabel renders as a badge
+    expect(getByText('KU3')).toBeTruthy();
+    // Legacy subtitle scalar still renders (registry kept for backward compat)
+    expect(getByText(/Untertitel|Subtitle/i)).toBeTruthy();
+    expect(getByText('Eine Einheit zur Taufe')).toBeTruthy();
+    // Boolean facet (plainLanguage=true) renders the label itself, not the literal "true"
+    expect(
+      getByText(
+        /Ist der Inhalt in einfacher Sprache verfasst\?|Is the content written in plain language\?/i
+      )
+    ).toBeTruthy();
+    expect(queryByText('true')).toBeNull();
+  });
+
+  it('hides boolean facets whose value is "false"', () => {
+    const event = {
+      tags: [
+        ['ext:ekw:konfi:zielgruppen:id', 'urn:ku3'],
+        ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU3'],
+        ['ext:ekw:konfi:zielgruppen:type', 'Concept'],
+        ['ext:ekw:konfi:plainLanguage', 'false']
+      ]
+    };
+    const { queryByText } = render(ExtensionMetadataPanel, { props: { event } });
+
+    // The boolean facet label must NOT appear at all when value is false
+    expect(
+      queryByText(
+        /Ist der Inhalt in einfacher Sprache verfasst\?|Is the content written in plain language\?/i
+      )
+    ).toBeNull();
+    expect(queryByText('false')).toBeNull();
+  });
 });
