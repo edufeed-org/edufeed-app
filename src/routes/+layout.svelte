@@ -49,7 +49,9 @@
 
   // Sidebar navigation — active state based on current route
   let currentCommunityPubkey = $derived($page.params.pubkey ? $page.data?.pubkey : null);
-  let isOnCommunityRoutes = $derived($page.url.pathname.startsWith('/c'));
+  let isOnCommunityRoutes = $derived(
+    $page.url.pathname === '/c' || $page.url.pathname.startsWith('/c/')
+  );
   let isDashboardActive = $derived(isOnCommunityRoutes && !currentCommunityPubkey);
   let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
   let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
