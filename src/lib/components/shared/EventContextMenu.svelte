@@ -105,7 +105,7 @@
   async function copyShareLink() {
     try {
       const naddr = encodeEventToNaddr(event);
-      await navigator.clipboard.writeText(`https://njump.me/${naddr}`);
+      await navigator.clipboard.writeText(`${window.location.origin}/${naddr}`);
       showToast(m.event_menu_share_link_copied(), 'success');
     } catch (err) {
       console.error('Failed to copy share link:', err);
