@@ -56,12 +56,39 @@
   let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
   let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
 
+  // Pages with master/detail patterns (e.g. /c/messages) can opt in to the
+  // "own bottom UI" rule reactively, so the bottom nav stays visible on the
+  // list view but hides on the detail view where the page draws its own
+  // bottom composer.
+  /** @type {(() => boolean) | undefined} */
+  let getPageHasOwnBottomUI = $state();
+  setContext('setPageHasOwnBottomUI', (/** @type {(() => boolean) | undefined} */ getter) => {
+    getPageHasOwnBottomUI = getter;
+  });
+
+  // Separately, pages can declare they already provide a primary "create"
+  // affordance (e.g. /c/messages has a "Neu" button to start a new DM).
+  // When set, the global FAB is suppressed but the bottom nav stays visible.
+  /** @type {(() => boolean) | undefined} */
+  let getPageHasOwnCreateAction = $state();
+  setContext('setPageHasOwnCreateAction', (/** @type {(() => boolean) | undefined} */ getter) => {
+    getPageHasOwnCreateAction = getter;
+  });
+  let pageHasOwnCreateAction = $derived(getPageHasOwnCreateAction?.() ?? false);
+
   // Hide global floating buttons on views that manage their own bottom UI
   // (chat input, DM input, create/edit wizards whose own CTAs sit at the bottom right).
   let hasOwnBottomUI = $derived(
-    $page.url.pathname.startsWith('/c/messages') ||
-      $page.url.pathname.startsWith('/create/') ||
-      $page.url.searchParams.get('view') === 'chat'
+    (() => {
+      const pathname = $page.url.pathname;
+      if (pathname.startsWith('/create/')) return true;
+      if ($page.url.searchParams.get('view') === 'chat') return true;
+      if (pathname.startsWith('/c/messages')) {
+        // Page reports whether a thread is currently open
+        return getPageHasOwnBottomUI?.() ?? false;
+      }
+      return false;
+    })()
   );
 
   /**
@@ -332,7 +359,7 @@
   </div>
 </div>
 <PublishStatusToast />
-{#if !hasOwnBottomUI && getActiveUser()}
+{#if !hasOwnBottomUI && !pageHasOwnCreateAction && getActiveUser()}
   <GlobalFAB />
 {/if}
 {#if showDashboardNav && !hasOwnBottomUI}

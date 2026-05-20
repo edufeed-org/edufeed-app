@@ -111,9 +111,9 @@
 </script>
 
 <div class="container mx-auto my-8 p-4">
-  <div class="mb-6 flex items-center justify-between">
+  <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <h1 class="text-2xl font-bold">{m.account_manager_title()}</h1>
-    <button class="btn btn-primary" onclick={createNewAccount}
+    <button class="btn self-start btn-primary sm:self-auto" onclick={createNewAccount}
       >{m.account_manager_create_button()}</button
     >
   </div>
