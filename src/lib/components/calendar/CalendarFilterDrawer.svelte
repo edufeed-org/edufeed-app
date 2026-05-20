@@ -59,7 +59,7 @@
     <div class="absolute inset-0 bg-base-300/70" onclick={onClose} aria-hidden="true"></div>
 
     <div
-      class="absolute inset-y-0 left-0 w-80 max-w-[85vw] overflow-y-auto bg-base-100 p-4 shadow-xl"
+      class="absolute inset-y-0 left-0 w-full overflow-y-auto bg-base-100 p-4 shadow-xl sm:w-80 sm:max-w-[85vw]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="filter-drawer-title"

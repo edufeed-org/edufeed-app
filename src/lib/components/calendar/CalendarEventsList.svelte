@@ -5,7 +5,6 @@
 -->
 
 <script>
-  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { CalendarIcon, AlertIcon, ChevronDownIcon } from '$lib/components/icons';
   import { filterEventsByViewMode } from '$lib/helpers/calendar.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -80,15 +79,6 @@
   let authorProfiles = $derived(getAuthorProfiles());
 
   /**
-   * Handle event click
-   * @param {CalendarEvent} event
-   */
-  function handleEventClick(event) {
-    modalStore.openModal('eventDetails', { event });
-    console.log('📅 SimpleCalendarEventsList: Event clicked, opening details modal:', event.title);
-  }
-
-  /**
    * Scroll to past events section
    */
   function scrollToPastEvents() {
@@ -142,7 +132,6 @@
             {event}
             compact={false}
             authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
-            onEventClick={handleEventClick}
           />
         {/each}
       </div>
@@ -197,7 +186,6 @@
             {event}
             compact={false}
             authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
-            onEventClick={handleEventClick}
           />
         {/each}
       </div>

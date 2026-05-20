@@ -229,10 +229,11 @@
           {@const Icon = type.icon}
           <button
             onclick={() => handleDockClick(type.id)}
-            class="flex-shrink-0 snap-center rounded-lg p-2 {isActive
+            class="flex flex-shrink-0 snap-center flex-col items-center gap-1 rounded-lg px-2 py-1.5 {isActive
               ? 'bg-primary/10 text-primary'
               : 'text-base-content/70'}"
             title={type.label}
+            aria-label={type.label}
           >
             <span class="relative">
               <Icon class_="size-[1.4em]" />
@@ -251,6 +252,7 @@
                 </span>
               {/if}
             </span>
+            <span class="text-[10px] leading-none whitespace-nowrap">{type.label}</span>
           </button>
         {/each}
       </div>

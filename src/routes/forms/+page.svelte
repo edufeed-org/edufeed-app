@@ -37,9 +37,9 @@
 </script>
 
 <div class="container mx-auto max-w-3xl p-4">
-  <div class="mb-6 flex items-center justify-between">
+  <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <h1 class="text-2xl font-bold">{m.forms_my_forms()}</h1>
-    <a href="/forms/new" class="btn btn-sm btn-primary">
+    <a href="/forms/new" class="btn self-start btn-sm btn-primary sm:self-auto">
       <PlusIcon class_="w-4 h-4" />
       {m.forms_new_form()}
     </a>

@@ -46,6 +46,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_create_form: () => 'Create Form',
   fab_create_poll: () => 'Create Poll',
   fab_create_poll_aria: () => 'Create new poll',
+  fab_section_create: () => 'Create',
+  fab_section_add: () => 'Add',
+  fab_section_share: () => 'Share',
   // Picker modal keys (rendered only when variantPickerOpen becomes true)
   resource_variant_picker_title: () => 'Welche Art?',
   resource_variant_picker_description: () => 'Wähle eine Form.',

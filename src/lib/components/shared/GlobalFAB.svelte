@@ -10,7 +10,8 @@
     BookmarkIcon,
     RepostIcon,
     ScrollTextIcon,
-    PollIcon
+    PollIcon,
+    CloseIcon
   } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
@@ -20,7 +21,7 @@
 
   let open = $state(false);
   /** @type {HTMLDivElement | undefined} */
-  let fabRoot;
+  let fabRoot = $state(undefined);
 
   function close() {
     open = false;
@@ -131,7 +132,115 @@
     modalStore.openModal('shareByNaddr', { communityPubkey });
     close();
   }
+
+  // Single source of truth for the action list — feeds both desktop stack and mobile sheet.
+  // Items render their icon via the {@render actionIcon(id)} snippet below.
+  let actions = $derived([
+    {
+      id: 'event',
+      section: 'create',
+      label: m.fab_create_event(),
+      ariaLabel: m.fab_create_event_aria(),
+      onClick: handleCreateEvent
+    },
+    {
+      id: 'calendar',
+      section: 'create',
+      label: m.fab_create_calendar(),
+      ariaLabel: m.fab_create_calendar_aria(),
+      onClick: handleCreateCalendar
+    },
+    {
+      id: 'resource',
+      section: 'create',
+      label: m.fab_create_resource(),
+      ariaLabel: m.fab_create_resource_aria(),
+      onClick: handleCreateResource
+    },
+    {
+      id: 'article',
+      section: 'create',
+      label: m.article_fab_write(),
+      ariaLabel: m.article_fab_write(),
+      onClick: handleCreateArticle
+    },
+    {
+      id: 'wiki',
+      section: 'create',
+      label: m.wiki_fab_write(),
+      ariaLabel: m.wiki_fab_write(),
+      onClick: handleCreateWiki
+    },
+    {
+      id: 'form',
+      section: 'create',
+      label: m.fab_create_form(),
+      ariaLabel: m.fab_create_form(),
+      onClick: handleCreateForm
+    },
+    {
+      id: 'poll',
+      section: 'create',
+      label: m.fab_create_poll(),
+      ariaLabel: m.fab_create_poll_aria(),
+      onClick: handleCreatePoll
+    },
+    {
+      id: 'bookmark',
+      section: 'add',
+      label: m.fab_add_bookmark(),
+      ariaLabel: m.fab_add_bookmark(),
+      onClick: handleAddBookmark
+    },
+    {
+      id: 'share',
+      section: 'share',
+      label: m.fab_share_existing(),
+      ariaLabel: m.fab_share_existing_aria(),
+      onClick: handleShareExisting
+    }
+  ]);
+
+  let createActions = $derived(actions.filter((a) => a.section === 'create'));
+  let addActions = $derived(actions.filter((a) => a.section === 'add'));
+  let shareActions = $derived(actions.filter((a) => a.section === 'share'));
 </script>
+
+{#snippet actionIcon(/** @type {string} */ id)}
+  {#if id === 'event'}
+    <CalendarIcon class_="h-5 w-5" />
+  {:else if id === 'calendar'}
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+      />
+    </svg>
+  {:else if id === 'resource'}
+    <GraduationCapIcon class_="h-5 w-5" />
+  {:else if id === 'article'}
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      />
+    </svg>
+  {:else if id === 'wiki'}
+    <BookIcon class_="h-5 w-5" />
+  {:else if id === 'form'}
+    <ScrollTextIcon class_="h-5 w-5" />
+  {:else if id === 'poll'}
+    <PollIcon class_="h-5 w-5" />
+  {:else if id === 'bookmark'}
+    <BookmarkIcon class_="h-5 w-5" />
+  {:else if id === 'share'}
+    <RepostIcon class_="h-5 w-5" />
+  {/if}
+{/snippet}
 
 <ResourceVariantPickerModal
   open={variantPickerOpen}
@@ -140,151 +249,137 @@
 />
 
 {#if !isDetailPage}
-  {#if open}
-    <!-- Backdrop scrim — dismiss handled by global pointerdown listener -->
-    <div class="fixed inset-0 z-[55] bg-black/40" aria-hidden="true"></div>
-  {/if}
-  <div
-    bind:this={fabRoot}
-    class="fixed right-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] flex flex-col-reverse items-end gap-3 lg:right-6 lg:bottom-6"
-  >
-    <!-- Main FAB Button -->
-    <button
-      type="button"
-      class="btn btn-circle shadow-lg btn-lg btn-primary hover:shadow-xl"
-      aria-label={m.fab_open_menu()}
-      aria-expanded={open}
-      aria-haspopup="menu"
-      onclick={() => (open = !open)}
-    >
-      <PlusIcon class_="h-6 w-6" />
-    </button>
+  <!-- fabRoot wraps button + both menus so the click-outside listener doesn't dismiss
+       when clicking inside the mobile bottom sheet (which sits outside the button's stack). -->
+  <div bind:this={fabRoot}>
+    {#if open}
+      <!-- Backdrop scrim — tap to dismiss -->
+      <button
+        type="button"
+        class="fixed inset-0 z-[55] cursor-default bg-black/40"
+        aria-label={m.aria_close_modal()}
+        onclick={close}
+      ></button>
+    {/if}
 
+    <div
+      class="fixed right-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] flex flex-col-reverse items-end gap-3 lg:right-6 lg:bottom-6"
+    >
+      <!-- Main FAB Button -->
+      <button
+        type="button"
+        class="btn btn-circle shadow-lg btn-lg btn-primary hover:shadow-xl"
+        aria-label={m.fab_open_menu()}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onclick={() => (open = !open)}
+      >
+        {#if open}
+          <CloseIcon class_="h-6 w-6" />
+        {:else}
+          <PlusIcon class_="h-6 w-6" />
+        {/if}
+      </button>
+
+      {#if open}
+        <!-- Desktop (lg:+) — vertical stack with circle buttons + floating labels -->
+        <div
+          class="fab-items hidden max-h-[70vh] flex-col-reverse items-end gap-3 overflow-y-auto pr-1 lg:flex"
+          role="menu"
+        >
+          {#each actions as action (action.id)}
+            <div class="fab-item">
+              <span class="fab-label">{action.label}</span>
+              <button
+                class="btn btn-circle btn-lg"
+                onclick={action.onClick}
+                aria-label={action.ariaLabel}
+              >
+                {@render actionIcon(action.id)}
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Mobile / tablet (< lg) — bottom sheet with grouped tiles -->
     {#if open}
       <div
-        class="fab-items flex max-h-[70vh] flex-col-reverse items-end gap-3 overflow-y-auto pr-1"
+        class="pb-safe fixed inset-x-0 bottom-0 z-[60] max-h-[80vh] overflow-y-auto rounded-t-2xl bg-base-100 shadow-2xl lg:hidden"
         role="menu"
+        aria-label={m.fab_open_menu()}
       >
-        <!-- Create Event -->
-        <div class="fab-item">
-          <span class="fab-label">{m.fab_create_event()}</span>
+        <!-- Grab handle + close button row -->
+        <div class="relative flex items-center justify-center pt-2 pb-1">
+          <div class="h-1 w-12 rounded-full bg-base-content/20"></div>
           <button
-            class="btn btn-circle btn-lg"
-            onclick={handleCreateEvent}
-            aria-label={m.fab_create_event_aria()}
+            type="button"
+            class="btn absolute top-1 right-2 btn-circle btn-ghost btn-sm"
+            aria-label={m.aria_close_modal()}
+            onclick={close}
           >
-            <CalendarIcon class_="h-5 w-5" />
+            <CloseIcon class_="h-5 w-5" />
           </button>
         </div>
 
-        <!-- Create Calendar -->
-        <div class="fab-item">
-          <span class="fab-label">{m.fab_create_calendar()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleCreateCalendar}
-            aria-label={m.fab_create_calendar_aria()}
-          >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-              />
-            </svg>
-          </button>
-        </div>
+        <div class="space-y-5 px-4 pt-2 pb-6">
+          <section>
+            <h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+              {m.fab_section_create()}
+            </h3>
+            <div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {#each createActions as action (action.id)}
+                <button
+                  type="button"
+                  onclick={action.onClick}
+                  aria-label={action.ariaLabel}
+                  class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300"
+                >
+                  <span class="text-primary">{@render actionIcon(action.id)}</span>
+                  <span class="text-xs leading-tight">{action.label}</span>
+                </button>
+              {/each}
+            </div>
+          </section>
 
-        <!-- Create Learning Content -->
-        <div class="fab-item">
-          <span class="fab-label">{m.fab_create_resource()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleCreateResource}
-            aria-label={m.fab_create_resource_aria()}
-          >
-            <GraduationCapIcon class_="h-5 w-5" />
-          </button>
-        </div>
+          <section>
+            <h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+              {m.fab_section_add()}
+            </h3>
+            <div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {#each addActions as action (action.id)}
+                <button
+                  type="button"
+                  onclick={action.onClick}
+                  aria-label={action.ariaLabel}
+                  class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300"
+                >
+                  <span class="text-primary">{@render actionIcon(action.id)}</span>
+                  <span class="text-xs leading-tight">{action.label}</span>
+                </button>
+              {/each}
+            </div>
+          </section>
 
-        <!-- Write Article -->
-        <div class="fab-item">
-          <span class="fab-label">{m.article_fab_write()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleCreateArticle}
-            aria-label={m.article_fab_write()}
-          >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Write Wiki -->
-        <div class="fab-item">
-          <span class="fab-label">{m.wiki_fab_write()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleCreateWiki}
-            aria-label={m.wiki_fab_write()}
-          >
-            <BookIcon class_="h-5 w-5" />
-          </button>
-        </div>
-
-        <!-- Create Form -->
-        <div class="fab-item">
-          <span class="fab-label">{m.fab_create_form()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleCreateForm}
-            aria-label={m.fab_create_form()}
-          >
-            <ScrollTextIcon class_="h-5 w-5" />
-          </button>
-        </div>
-
-        <!-- Create Poll -->
-        <div class="fab-item">
-          <span class="fab-label">{m.fab_create_poll()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleCreatePoll}
-            aria-label={m.fab_create_poll_aria()}
-          >
-            <PollIcon class_="h-5 w-5" />
-          </button>
-        </div>
-
-        <!-- Add Bookmark -->
-        <div class="fab-item">
-          <span class="fab-label">{m.fab_add_bookmark()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleAddBookmark}
-            aria-label={m.fab_add_bookmark()}
-          >
-            <BookmarkIcon class_="h-5 w-5" />
-          </button>
-        </div>
-
-        <!-- Share Existing Content -->
-        <div class="fab-item">
-          <span class="fab-label">{m.fab_share_existing()}</span>
-          <button
-            class="btn btn-circle btn-lg"
-            onclick={handleShareExisting}
-            aria-label={m.fab_share_existing_aria()}
-          >
-            <RepostIcon class_="h-5 w-5" />
-          </button>
+          <section>
+            <h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+              {m.fab_section_share()}
+            </h3>
+            <div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {#each shareActions as action (action.id)}
+                <button
+                  type="button"
+                  onclick={action.onClick}
+                  aria-label={action.ariaLabel}
+                  class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300"
+                >
+                  <span class="text-primary">{@render actionIcon(action.id)}</span>
+                  <span class="text-xs leading-tight">{action.label}</span>
+                </button>
+              {/each}
+            </div>
+          </section>
         </div>
       </div>
     {/if}

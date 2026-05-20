@@ -6,6 +6,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { getDmRelays, hasDmRelayList } from '$lib/services/dm-service.svelte.js';
   import * as m from '$lib/paraglide/messages';
+  import { getContext, onDestroy } from 'svelte';
 
   /** @type {{ data: import('./$types').PageData }} */
   let { data } = $props();
@@ -33,6 +34,27 @@
 
   let dmRelays = $derived(getDmRelays());
   let hasDedicatedRelays = $derived(hasDmRelayList());
+
+  // Report to the root layout that we have our own bottom UI (DM composer)
+  // only when a thread is actually open. On the list view, the bottom nav
+  // should remain visible so users can navigate away on mobile.
+  const setPageHasOwnBottomUI =
+    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
+      getContext('setPageHasOwnBottomUI')
+    );
+  setPageHasOwnBottomUI?.(() => selectedConversationId !== null);
+  onDestroy(() => setPageHasOwnBottomUI?.(undefined));
+
+  // We always have our own primary create action (the "Neu" button in
+  // ConversationList, plus the in-thread composer). Suppress the global FAB
+  // so users aren't presented with a generic "create anything" menu when the
+  // contextual action is "start a new conversation".
+  const setPageHasOwnCreateAction =
+    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
+      getContext('setPageHasOwnCreateAction')
+    );
+  setPageHasOwnCreateAction?.(() => true);
+  onDestroy(() => setPageHasOwnCreateAction?.(undefined));
 
   /**
    * @param {string} id

@@ -188,6 +188,8 @@
           class:btn-primary={presentationViewMode === 'calendar'}
           onclick={() => handlePresentationViewModeClick('calendar')}
           title={m.calendar_navigation_calendar_grid_view()}
+          aria-label={m.calendar_navigation_calendar_grid_view()}
+          aria-pressed={presentationViewMode === 'calendar'}
         >
           <CalendarIcon class_="w-4 h-4" />
         </button>
@@ -197,6 +199,8 @@
           class:btn-primary={presentationViewMode === 'list'}
           onclick={() => handlePresentationViewModeClick('list')}
           title={m.calendar_navigation_list_view()}
+          aria-label={m.calendar_navigation_list_view()}
+          aria-pressed={presentationViewMode === 'list'}
         >
           <MenuIcon class_="w-4 h-4" />
         </button>
@@ -206,6 +210,8 @@
           class:btn-primary={presentationViewMode === 'map'}
           onclick={() => handlePresentationViewModeClick('map')}
           title={m.calendar_navigation_map_view()}
+          aria-label={m.calendar_navigation_map_view()}
+          aria-pressed={presentationViewMode === 'map'}
         >
           <LocationIcon class_="w-4 h-4" />
         </button>
@@ -298,6 +304,8 @@
           class:btn-primary={presentationViewMode === 'calendar'}
           onclick={() => handlePresentationViewModeClick('calendar')}
           title={m.calendar_navigation_calendar_grid_view()}
+          aria-label={m.calendar_navigation_calendar_grid_view()}
+          aria-pressed={presentationViewMode === 'calendar'}
         >
           <CalendarIcon class_="w-4 h-4" />
         </button>
@@ -307,6 +315,8 @@
           class:btn-primary={presentationViewMode === 'list'}
           onclick={() => handlePresentationViewModeClick('list')}
           title={m.calendar_navigation_list_view()}
+          aria-label={m.calendar_navigation_list_view()}
+          aria-pressed={presentationViewMode === 'list'}
         >
           <MenuIcon class_="w-4 h-4" />
         </button>
@@ -316,6 +326,8 @@
           class:btn-primary={presentationViewMode === 'map'}
           onclick={() => handlePresentationViewModeClick('map')}
           title={m.calendar_navigation_map_view()}
+          aria-label={m.calendar_navigation_map_view()}
+          aria-pressed={presentationViewMode === 'map'}
         >
           <LocationIcon class_="w-4 h-4" />
         </button>

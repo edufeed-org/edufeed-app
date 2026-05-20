@@ -29,8 +29,8 @@
         class:btn-ghost={appSettings.themeFamily !== family.value}
         onclick={() => (appSettings.themeFamily = family.value)}
       >
-        <span class="text-lg">{family.icon}</span>
-        <span class="hidden sm:inline">{family.label}</span>
+        <span class="text-lg" aria-hidden="true">{family.icon}</span>
+        <span>{family.label}</span>
       </button>
     {/each}
   </div>
@@ -48,8 +48,8 @@
         class:btn-ghost={appSettings.colorMode !== mode.value}
         onclick={() => (appSettings.colorMode = mode.value)}
       >
-        <span class="text-lg">{mode.icon}</span>
-        <span class="hidden sm:inline">{mode.label}</span>
+        <span class="text-lg" aria-hidden="true">{mode.icon}</span>
+        <span>{mode.label}</span>
       </button>
     {/each}
   </div>
