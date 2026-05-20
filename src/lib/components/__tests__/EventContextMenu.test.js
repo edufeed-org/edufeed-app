@@ -169,12 +169,14 @@ describe('EventContextMenu', () => {
     expect(dividers.length).toBe(1);
   });
 
-  it('copies njump share link on Copy link click', async () => {
+  it('copies deployed-instance share link on Copy link click', async () => {
     render(EventContextMenu, { props: { event: mockEvent } });
 
     await fireEvent.click(screen.getByText('Copy link'));
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://njump.me/naddr1test123');
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/naddr1test123`
+    );
     expect(mockShowToast).toHaveBeenCalledWith('Link copied!', 'success');
   });
 
