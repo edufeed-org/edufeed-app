@@ -610,9 +610,21 @@
       : undefined
   );
 
-  // Prefill form with edit data when in edit mode
+  // Prefill form with edit data when in edit mode.
+  //
+  // The guard is essential: `prefillEditData()` is async, but when the
+  // resource has no `["p", <pubkey>, "", "creator"]` tags, no `await` is
+  // reached before its synchronous `formData = { ...formData, ... }` writes.
+  // Those spread reads + assignment make the effect read/write the same
+  // `$state` in one tracked run — Svelte detects this as
+  // `effect_update_depth_exceeded` and the form fails to load. Running once
+  // (we re-mount when the user navigates to a different edit naddr, so
+  // editEvent never changes after first hydration) avoids the loop.
+  let didPrefillEdit = false;
   $effect(() => {
+    if (didPrefillEdit) return;
     if (isEditMode && editEvent && editResource) {
+      didPrefillEdit = true;
       prefillEditData();
     }
   });
