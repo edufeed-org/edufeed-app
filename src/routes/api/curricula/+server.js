@@ -24,7 +24,37 @@ const CACHE_HEADER = 'public, max-age=86400';
 
 const PREFIXES = `PREFIX lp: <https://w3id.org/lehrplan/ontology/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>`;
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX obo: <http://purl.obolibrary.org/obo/>`;
+
+// "Has part" relation between a Lehrplan and its topic nodes. Bayern's data
+// carries BOTH lp:LP_0000008 ("hat Teil", clean chapter-level TOC, ~7 entries
+// per Lehrplan) AND obo:BFO_0000051 ("has part", full flattened has-part
+// graph, ~70+ entries mixing chapters with leaf bullet points). Rheinland-
+// Pfalz / Sachsen / Berlin only carry obo:BFO_0000051. A naive alternation
+// would noise up Bayern by returning the BFO superset; a strict LP_0000008
+// would return nothing for RP/SN. The pattern below PREFERS LP_0000008 when
+// the node has any such children, and FALLS BACK to BFO_0000051 only when
+// LP_0000008 yields nothing for that node — best of both worlds.
+//
+// Usage in a query:
+//   ${hasPartBlock('<node-uri>', '?child')}
+//
+// Expands to two UNION branches; the second is gated by FILTER NOT EXISTS.
+//
+// @param {string} parentTerm  SPARQL term for the parent node (already `<uri>`-wrapped)
+// @param {string} childVar    SPARQL variable for the child (e.g. '?child')
+function hasPartBlock(parentTerm, childVar) {
+  return `{ ${parentTerm} lp:LP_0000008 ${childVar} . }
+  UNION
+  { ${parentTerm} obo:BFO_0000051 ${childVar} .
+    FILTER NOT EXISTS { ${parentTerm} lp:LP_0000008 ?_ax . } }`;
+}
+
+// For EXISTS-style "does this node have ANY expandable children?" checks the
+// distinction doesn't matter — if either predicate finds a sub-node, the
+// chevron should render. Use the alternation here for compactness.
+const HAS_PART_ANY = '(lp:LP_0000008|obo:BFO_0000051)';
 
 /**
  * Reject anything that isn't a plain http(s) URL or that contains characters
@@ -76,42 +106,56 @@ SELECT DISTINCT ?uri (SAMPLE(?l) AS ?label) WHERE {
 
     case 'list_schulfaecher': {
       const bl = validateUri(args.bundeslandUri);
-      const sa = validateUri(args.schulartUri);
-      if (!bl || !sa) return null;
+      if (!bl) return null;
+      // schulartUri is optional. When omitted ("Alle Schularten"), drop the
+      // LP_0000812 filter so subjects whose Lehrpläne aren't Schulart-tagged
+      // (common in RP, SN, …) still surface.
+      const sa =
+        args.schulartUri == null || args.schulartUri === '' ? null : validateUri(args.schulartUri);
+      if (args.schulartUri != null && args.schulartUri !== '' && !sa) return null;
+      const schulartFilter = sa ? `\n  ?s lp:LP_0000812 <${sa}> .` : '';
       return `${PREFIXES}
 SELECT DISTINCT ?uri (SAMPLE(?l) AS ?label) WHERE {
   ?s lp:LP_0000537 ?uri .
   ?uri rdfs:label ?l .
-  ?s lp:LP_0000029 <${bl}> .
-  ?s lp:LP_0000812 <${sa}> .
+  ?s lp:LP_0000029 <${bl}> .${schulartFilter}
   FILTER(lang(?l) = "de")
 } GROUP BY ?uri ORDER BY ?label`;
     }
 
     case 'find_lehrplaene': {
       const bl = validateUri(args.bundeslandUri);
-      const sa = validateUri(args.schulartUri);
       const sf = validateUri(args.schulfachUri);
-      if (!bl || !sa || !sf) return null;
+      if (!bl || !sf) return null;
+      const sa =
+        args.schulartUri == null || args.schulartUri === '' ? null : validateUri(args.schulartUri);
+      if (args.schulartUri != null && args.schulartUri !== '' && !sa) return null;
+      const schulartFilter = sa ? `\n  ?s lp:LP_0000812 <${sa}> .` : '';
       return `${PREFIXES}
 SELECT DISTINCT ?s ?label WHERE {
   ?lpsubclass rdfs:subClassOf* lp:LP_0000438 .
   ?s rdf:type ?lpsubclass .
   ?s rdfs:label ?label .
   ?s lp:LP_0000029 <${bl}> .
-  ?s lp:LP_0000537 <${sf}> .
-  ?s lp:LP_0000812 <${sa}> .
+  ?s lp:LP_0000537 <${sf}> .${schulartFilter}
 } ORDER BY ?label LIMIT 50`;
     }
 
     case 'get_lehrplan_tree': {
       const lp = validateUri(args.lehrplanUri);
       if (!lp) return null;
+      // Top-level edges from the Lehrplan: prefer LP_0000008 (Bayern's clean
+      // TOC), fall back to BFO_0000051 (RP/SN). Second level reuses the same
+      // helper from each first-level ?step1 node.
       return `${PREFIXES}
 SELECT DISTINCT ?parent ?parentLabel ?child ?childLabel WHERE {
-  { BIND(<${lp}> AS ?parent) . ?parent lp:LP_0000008 ?child . }
+  { BIND(<${lp}> AS ?parent) . ${hasPartBlock(`<${lp}>`, '?child')} }
   UNION
-  { <${lp}> lp:LP_0000008 ?step1 . ?step1 lp:LP_0000008 ?child . BIND(?step1 AS ?parent) }
+  {
+    ${hasPartBlock(`<${lp}>`, '?step1')}
+    ${hasPartBlock('?step1', '?child')}
+    BIND(?step1 AS ?parent)
+  }
   OPTIONAL { ?parent rdfs:label ?parentLabel . }
   OPTIONAL { ?child rdfs:label ?childLabel . }
 } ORDER BY ?parent ?child`;
@@ -126,11 +170,14 @@ SELECT DISTINCT ?parent ?parentLabel ?child ?childLabel WHERE {
       // The `hasChildren` flag (EXISTS-subquery) lets the picker decide
       // up-front whether to render an expand chevron or a leaf glyph,
       // avoiding the "click chevron only to learn it's a leaf" UX trap.
+      // ORDER BY DESC(?hasChildren) ?childLabel lifts category-like nodes
+      // ("Lesen", "Schreiben") above the wall of leaf bullets in RP/SN — the
+      // BFO-only states whose root level mixes chapters and bullet points.
       return `${PREFIXES}
-SELECT DISTINCT ?child ?childLabel (EXISTS { ?child lp:LP_0000008 ?gc } AS ?hasChildren) WHERE {
-  <${node}> lp:LP_0000008 ?child .
+SELECT DISTINCT ?child ?childLabel (EXISTS { ?child ${HAS_PART_ANY} ?gc } AS ?hasChildren) WHERE {
+  ${hasPartBlock(`<${node}>`, '?child')}
   OPTIONAL { ?child rdfs:label ?childLabel . }
-} ORDER BY ?childLabel`;
+} ORDER BY DESC(?hasChildren) ?childLabel`;
     }
 
     default:

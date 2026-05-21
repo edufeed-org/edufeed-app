@@ -1544,6 +1544,7 @@
   "amb_form_help_curriculum": "Link this resource to a topic from a German Lehrplan.",
   "curriculum_picker_bundesland": "State",
   "curriculum_picker_schulart": "School type",
+  "curriculum_picker_schulart_any": "All school types",
   "curriculum_picker_schulfach": "Subject",
   "curriculum_picker_lehrplan": "Curriculum",
   "curriculum_picker_topic": "Topic",

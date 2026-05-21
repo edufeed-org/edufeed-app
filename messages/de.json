@@ -1544,6 +1544,7 @@
   "amb_form_help_curriculum": "Verknüpfen Sie die Ressource mit einem Thema aus einem deutschen Lehrplan.",
   "curriculum_picker_bundesland": "Bundesland",
   "curriculum_picker_schulart": "Schulart",
+  "curriculum_picker_schulart_any": "Alle Schularten",
   "curriculum_picker_schulfach": "Schulfach",
   "curriculum_picker_lehrplan": "Lehrplan",
   "curriculum_picker_topic": "Thema",

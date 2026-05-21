@@ -45,6 +45,13 @@
     onremove = () => {}
   } = $props();
 
+  // Sentinel value for the "Alle Schularten" option. Many states (RP, SN, …)
+  // don't tag every Lehrplan with a Schulart, so the per-Schulart filter would
+  // silently hide subjects that exist. Picking this sentinel strips the
+  // schulartUri arg from the downstream `list_schulfaecher` / `find_lehrplaene`
+  // requests so those Lehrpläne surface again.
+  const ANY_SCHULART = '__any__';
+
   // Cascade UI state — URIs end-to-end, throwaway, not persisted into the AMB doc.
   let bundeslandUri = $state('');
   let schulartUri = $state('');
@@ -57,6 +64,13 @@
   let lehrplaene = $state(/** @type {CurriculumItem[]} */ ([]));
   /** Direct children of the chosen Lehrplan — root nodes of the tree. */
   let rootNodes = $state(/** @type {CurriculumItem[]} */ ([]));
+
+  // Loading flags drive the "Lade…" placeholder option in each select so users
+  // see something happening while the upstream SPARQL endpoint is slow.
+  let loadingBundeslaender = $state(false);
+  let loadingSchularten = $state(false);
+  let loadingSchulfaecher = $state(false);
+  let loadingLehrplaene = $state(false);
 
   /**
    * POST to /api/curricula and return parsed JSON body.
@@ -74,12 +88,16 @@
   }
 
   $effect(() => {
+    loadingBundeslaender = true;
     fetchTool('list_bundeslaender', {})
       .then((body) => {
         bundeslaender = Array.isArray(body.items) ? body.items : [];
       })
       .catch(() => {
         bundeslaender = [];
+      })
+      .finally(() => {
+        loadingBundeslaender = false;
       });
   });
 
@@ -93,12 +111,16 @@
     lehrplaene = [];
     rootNodes = [];
     if (!bl) return;
+    loadingSchularten = true;
     fetchTool('list_schularten', { bundeslandUri: bl })
       .then((body) => {
         schularten = Array.isArray(body.items) ? body.items : [];
       })
       .catch(() => {
         schularten = [];
+      })
+      .finally(() => {
+        loadingSchularten = false;
       });
   });
 
@@ -111,12 +133,21 @@
     lehrplaene = [];
     rootNodes = [];
     if (!sa || !bl) return;
-    fetchTool('list_schulfaecher', { bundeslandUri: bl, schulartUri: sa })
+    // ANY_SCHULART sentinel = "Alle Schularten" → omit the schulartUri arg so
+    // the server skips the LP_0000812 filter.
+    /** @type {{ bundeslandUri: string, schulartUri?: string }} */
+    const args = { bundeslandUri: bl };
+    if (sa !== ANY_SCHULART) args.schulartUri = sa;
+    loadingSchulfaecher = true;
+    fetchTool('list_schulfaecher', args)
       .then((body) => {
         schulfaecher = Array.isArray(body.items) ? body.items : [];
       })
       .catch(() => {
         schulfaecher = [];
+      })
+      .finally(() => {
+        loadingSchulfaecher = false;
       });
   });
 
@@ -128,16 +159,19 @@
     lehrplaene = [];
     rootNodes = [];
     if (!sf || !sa || !bl) return;
-    fetchTool('find_lehrplaene', {
-      bundeslandUri: bl,
-      schulartUri: sa,
-      schulfachUri: sf
-    })
+    /** @type {{ bundeslandUri: string, schulfachUri: string, schulartUri?: string }} */
+    const args = { bundeslandUri: bl, schulfachUri: sf };
+    if (sa !== ANY_SCHULART) args.schulartUri = sa;
+    loadingLehrplaene = true;
+    fetchTool('find_lehrplaene', args)
       .then((body) => {
         lehrplaene = Array.isArray(body.items) ? body.items : [];
       })
       .catch(() => {
         lehrplaene = [];
+      })
+      .finally(() => {
+        loadingLehrplaene = false;
       });
   });
 
@@ -174,7 +208,11 @@
       aria-label={m.curriculum_picker_bundesland()}
       bind:value={bundeslandUri}
     >
-      <option value="">{m.curriculum_picker_choose()}</option>
+      {#if loadingBundeslaender}
+        <option value="">{m.curriculum_picker_loading()}</option>
+      {:else}
+        <option value="">{m.curriculum_picker_choose()}</option>
+      {/if}
       {#each bundeslaender as item (item.id)}
         <option value={item.id}>{item.label}</option>
       {/each}
@@ -189,7 +227,12 @@
       bind:value={schulartUri}
       disabled={!bundeslandUri}
     >
-      <option value="">{m.curriculum_picker_choose()}</option>
+      {#if loadingSchularten}
+        <option value="">{m.curriculum_picker_loading()}</option>
+      {:else}
+        <option value="">{m.curriculum_picker_choose()}</option>
+        <option value={ANY_SCHULART}>{m.curriculum_picker_schulart_any()}</option>
+      {/if}
       {#each schularten as item (item.id)}
         <option value={item.id}>{item.label}</option>
       {/each}
@@ -204,7 +247,11 @@
       bind:value={schulfachUri}
       disabled={!schulartUri}
     >
-      <option value="">{m.curriculum_picker_choose()}</option>
+      {#if loadingSchulfaecher}
+        <option value="">{m.curriculum_picker_loading()}</option>
+      {:else}
+        <option value="">{m.curriculum_picker_choose()}</option>
+      {/if}
       {#each schulfaecher as item (item.id)}
         <option value={item.id}>{item.label}</option>
       {/each}
@@ -219,7 +266,11 @@
       bind:value={lehrplanUri}
       disabled={!schulfachUri}
     >
-      <option value="">{m.curriculum_picker_choose()}</option>
+      {#if loadingLehrplaene}
+        <option value="">{m.curriculum_picker_loading()}</option>
+      {:else}
+        <option value="">{m.curriculum_picker_choose()}</option>
+      {/if}
       {#each lehrplaene as item (item.id)}
         <option value={item.id}>{item.label}</option>
       {/each}

@@ -23,6 +23,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   curriculum_picker_topic: () => 'Thema',
   curriculum_picker_choose: () => 'Bitte wählen…',
   curriculum_picker_loading: () => 'Lade…',
+  curriculum_picker_schulart_any: () => 'Alle Schularten',
   curriculum_picker_add_to_teaches: () => 'Vermittelt',
   curriculum_picker_add_to_assesses: () => 'Prüft',
   curriculum_picker_add_to_competency_required: () => 'Voraussetzt',
@@ -180,6 +181,87 @@ describe('CurriculumPicker', () => {
     expect(getByText('Topic A1')).toBeTruthy();
     // empty competencyRequired section shows the empty-state hint
     expect(queryByText('Noch keine ausgewählt')).toBeTruthy();
+  });
+
+  it('Schulart dropdown offers an "Alle Schularten" option', async () => {
+    const { findByLabelText } = render(CurriculumPicker, {
+      props: {
+        teaches: [],
+        assesses: [],
+        competencyRequired: [],
+        onadd: vi.fn(),
+        onremove: vi.fn()
+      }
+    });
+    const bundesland = /** @type {HTMLSelectElement} */ (await findByLabelText('Bundesland'));
+    await waitFor(() => expect(bundesland.querySelectorAll('option').length).toBeGreaterThan(1));
+    await fireEvent.change(bundesland, { target: { value: BAYERN } });
+    const schulart = /** @type {HTMLSelectElement} */ (await findByLabelText('Schulart'));
+    await waitFor(() => expect(schulart.disabled).toBe(false));
+    expect(schulart.textContent).toContain('Alle Schularten');
+  });
+
+  it('selecting "Alle Schularten" triggers list_schulfaecher WITHOUT schulartUri', async () => {
+    const rendered = render(CurriculumPicker, {
+      props: {
+        teaches: [],
+        assesses: [],
+        competencyRequired: [],
+        onadd: vi.fn(),
+        onremove: vi.fn()
+      }
+    });
+    const { findByLabelText } = rendered;
+    const bundesland = /** @type {HTMLSelectElement} */ (await findByLabelText('Bundesland'));
+    await waitFor(() => expect(bundesland.querySelectorAll('option').length).toBeGreaterThan(1));
+    await fireEvent.change(bundesland, { target: { value: BAYERN } });
+    const schulart = /** @type {HTMLSelectElement} */ (await findByLabelText('Schulart'));
+    await waitFor(() => expect(schulart.disabled).toBe(false));
+    // Locate the "Alle Schularten" option and select it by its actual value.
+    const anyOption = /** @type {HTMLOptionElement} */ (
+      Array.from(schulart.querySelectorAll('option')).find(
+        (o) => o.textContent?.trim() === 'Alle Schularten'
+      )
+    );
+    expect(anyOption).toBeTruthy();
+    await fireEvent.change(schulart, { target: { value: anyOption.value } });
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
+      const sfCall = calls.find((c) => c.tool === 'list_schulfaecher');
+      expect(sfCall).toBeTruthy();
+      // schulartUri must be absent (or undefined) when "Alle Schularten" is picked.
+      expect(sfCall.args.schulartUri).toBeUndefined();
+      expect(sfCall.args.bundeslandUri).toBe(BAYERN);
+    });
+  });
+
+  it('shows a "Lade…" placeholder while Bundesländer are loading', async () => {
+    // Hold the first fetch (list_bundeslaender) so we can observe the loading state.
+    /** @type {(value: Response) => void} */
+    let resolveBundeslaender = () => {};
+    const pending = new Promise((resolve) => {
+      resolveBundeslaender = resolve;
+    });
+    const deferredFetch = vi.fn((input, init) => {
+      const body = JSON.parse(init.body);
+      if (body.tool === 'list_bundeslaender') return pending;
+      return Promise.resolve(jsonResponse({ items: [] }));
+    });
+    vi.stubGlobal('fetch', deferredFetch);
+    const { findByLabelText } = render(CurriculumPicker, {
+      props: {
+        teaches: [],
+        assesses: [],
+        competencyRequired: [],
+        onadd: vi.fn(),
+        onremove: vi.fn()
+      }
+    });
+    const bundesland = /** @type {HTMLSelectElement} */ (await findByLabelText('Bundesland'));
+    // Should show the "Lade…" placeholder before the fetch resolves.
+    expect(bundesland.textContent).toContain('Lade…');
+    resolveBundeslaender(jsonResponse({ items: [{ id: BAYERN, label: 'Bayern' }] }));
+    await waitFor(() => expect(bundesland.textContent).toContain('Bayern'));
   });
 
   it('clicking a chip × calls onremove(id, relation)', async () => {
