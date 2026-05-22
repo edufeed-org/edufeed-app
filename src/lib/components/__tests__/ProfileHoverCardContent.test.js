@@ -68,7 +68,7 @@ vi.mock('applesauce-core/models', () => ({
 }));
 
 vi.mock('$lib/stores/badge-awards.svelte.js', () => ({
-  useBadgeAwards: () => ({
+  useProfileBadges: () => ({
     getBadges: () => [],
     isLoading: false
   })
