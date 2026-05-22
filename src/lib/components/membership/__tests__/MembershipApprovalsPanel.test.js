@@ -89,7 +89,7 @@ function makeResponse(wishedHandle = 'maria') {
  */
 function mockFetch({ wellKnown, proxyPost }) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-    const url = typeof input === 'string' ? input : input.url;
+    const url = input instanceof Request ? input.url : String(input);
     if (url.includes('/.well-known/nostr.json')) return wellKnown.clone();
     if (url.includes('/api/nip05') && proxyPost) return proxyPost.clone();
     throw new Error(`Unexpected fetch: ${url}`);
