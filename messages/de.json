@@ -1,5 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "nip05_verified_label": "Verifiziert",
+  "nip05_mismatch_label": "Kennung stimmt nicht mit diesem Konto überein",
   "common_login": "Anmelden",
   "common_logout": "Abmelden",
   "common_profile": "Profil",

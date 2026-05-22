@@ -1,5 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "nip05_verified_label": "Verified",
+  "nip05_mismatch_label": "Identifier does not match this account",
   "common_login": "Login",
   "common_logout": "Logout",
   "common_profile": "Profile",
