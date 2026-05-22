@@ -1072,6 +1072,7 @@
   "admin_membership_taken": "Adresse bereits vergeben",
   "admin_membership_no_handle": "Kein Wunsch-Handle hinterlegt",
   "admin_membership_approve_failed": "Genehmigung fehlgeschlagen",
+  "admin_membership_notify_dm": "Willkommen auf edufeed.org! Deine Adresse {address} ist jetzt freigeschaltet. Öffne Einstellungen → Mitgliedschaft, um sie in dein Profil einzutragen.",
   "admin_membership_reject": "Ablehnen",
   "admin_membership_reject_confirm": "Diesen Antrag aus der Liste entfernen? (Lokal, nicht synchronisiert)",
   "admin_membership_revoke": "Widerrufen",
