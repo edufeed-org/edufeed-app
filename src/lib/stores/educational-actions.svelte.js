@@ -123,11 +123,16 @@ function buildRelatedEventsMap(formData) {
  */
 function buildAMBEventTagsFromFormData(formData, pubkey) {
   const ambData = convertFormDataToAMB(formData);
-  const result = ambToNostr(/** @type {any} */ (ambData), {
-    pubkey,
-    timestamp: Math.floor(Date.now() / 1000),
-    relatedEvents: buildRelatedEventsMap(formData)
-  });
+  const result = ambToNostr(
+    /** @type {any} */ (ambData),
+    // `relatedEvents` is accepted at runtime but missing from the upstream
+    // package's ConversionOptions .d.ts — cast to bypass the stale type.
+    /** @type {any} */ ({
+      pubkey,
+      timestamp: Math.floor(Date.now() / 1000),
+      relatedEvents: buildRelatedEventsMap(formData)
+    })
+  );
   if (!result.success || !result.data) {
     const msg = result.error?.message ?? 'Unknown conversion error';
     throw new Error(`AMB serialization failed: ${msg}`);

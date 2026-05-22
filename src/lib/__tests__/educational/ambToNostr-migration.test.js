@@ -156,18 +156,22 @@ describe('AMB serialization migration: flatten vs ambToNostr', () => {
       isPartOf: [{ id: '30142:bb:program-1' }]
     };
 
-    const result = ambToNostr(/** @type {any} */ (amb), {
-      pubkey: '0'.repeat(64),
-      timestamp: 1_700_000_000,
-      relatedEvents: {
-        '30142:aa:video-1': {
-          pubkey: 'aa',
-          dTag: 'video-1',
-          relayHint: 'wss://relay.example.com/'
-        },
-        '30142:bb:program-1': { pubkey: 'bb', dTag: 'program-1', relayHint: '' }
-      }
-    });
+    const result = ambToNostr(
+      /** @type {any} */ (amb),
+      // See educational-actions.svelte.js — relatedEvents is runtime-only.
+      /** @type {any} */ ({
+        pubkey: '0'.repeat(64),
+        timestamp: 1_700_000_000,
+        relatedEvents: {
+          '30142:aa:video-1': {
+            pubkey: 'aa',
+            dTag: 'video-1',
+            relayHint: 'wss://relay.example.com/'
+          },
+          '30142:bb:program-1': { pubkey: 'bb', dTag: 'program-1', relayHint: '' }
+        }
+      })
+    );
     expect(result.success).toBe(true);
 
     const aTags = (result.data?.tags ?? []).filter((t) => t[0] === 'a');
