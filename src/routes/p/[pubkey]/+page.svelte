@@ -16,7 +16,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { showToast } from '$lib/helpers/toast';
-  import { useBadgeAwards } from '$lib/stores/badge-awards.svelte.js';
+  import { useProfileBadges } from '$lib/stores/badge-awards.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import ProfileFeedView from '$lib/components/profile/ProfileFeedView.svelte';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
@@ -55,9 +55,9 @@
   let communityPubkeys = $state(/** @type {string[]} */ ([]));
   let communitiesLoading = $state(true);
 
-  // Badge awards
-  const badgeAwards = useBadgeAwards(() => data.pubkey);
-  const getBadges = badgeAwards.getBadges;
+  // Accepted badges (NIP-58 profile_badges)
+  const profileBadges = useProfileBadges(() => data.pubkey);
+  const getBadges = profileBadges.getBadges;
   const getIssuerProfiles = useProfileMap(() => getBadges().map((b) => b.issuerPubkey));
 
   const getActiveUser = useActiveUser();
@@ -491,7 +491,7 @@
         <div class:hidden={activeTab !== 'badges'}>
           {#if activatedTabs.has('badges')}
             <div class="py-4">
-              {#if badgeAwards.isLoading}
+              {#if profileBadges.isLoading}
                 <div class="flex flex-col items-center justify-center py-16">
                   <span class="loading loading-lg loading-spinner text-primary"></span>
                   <p class="mt-4 text-base-content/60">{m.profile_content_loading()}</p>
