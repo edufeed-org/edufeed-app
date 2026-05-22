@@ -35,6 +35,7 @@
     UserIcon,
     MessageSquareIcon
   } from '$lib/components/icons';
+  import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {import('./$types').PageProps} */
@@ -361,9 +362,8 @@
 
           <!-- NIP-05 -->
           {#if profile?.nip05}
-            <div class="mt-0.5 flex items-center gap-1 text-sm text-primary">
-              <CheckIcon class_="w-3.5 h-3.5" />
-              <span>{profile.nip05}</span>
+            <div class="mt-0.5 text-sm text-primary">
+              <Nip05VerifiedBadge pubkey={data.pubkey} nip05={profile.nip05} />
             </div>
           {/if}
 
