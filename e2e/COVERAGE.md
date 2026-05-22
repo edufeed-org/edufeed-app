@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-05-08
-**Total tests:** 302
+**Last updated:** 2026-05-20
+**Total tests:** 304
 
 ## Quick Summary
 
@@ -41,6 +41,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                            |
 | `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
 | `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                     |
+| `membership-application.test.js`     | 2     | No   | Default-disabled regression: signup wizard 4 steps, admin route                                                                   |
 
 ## Detailed Coverage
 
@@ -1346,6 +1347,32 @@ renders without any relay traffic.
 **Components exercised:** EventStore + nostr-idb cache pipeline, `cacheRequest` loader integration, CalendarEventsList rendering from cache.
 
 ---
+
+---
+
+### membership-application.test.js (2 tests)
+
+**Routes:** `/` (signup wizard via login modal), `/admin/membership`
+**Auth required:** No
+
+Edufeed.org membership application flow (NIP-05 handle request via kind 30168
+form / 1069 response). Almost all behaviour is unit-tested at the component
+level — handle availability checks, NIP-44 encryption, response publishing,
+admin authorization — see `src/lib/__tests__/` and
+`src/lib/components/membership/__tests__/`. The runtime config flag
+(`runtimeConfig.membership.enabled`) is loaded SSR-time via `/api/config`
+and cannot be flipped per-test from Playwright. This file exists as a
+regression boundary against unintended config bleed-through.
+
+**Note:** SignupModal integration is deferred — upstream `dev` refactored
+the signup wizard to 3 steps after this branch was forked. The membership
+step needs to be re-integrated against the new wizard structure. Until
+then, the Settings page `MembershipCard` is the primary entry point.
+
+| Test                                                               | What it verifies                                           |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| signup wizard renders without membership step by default           | Default-disabled env keeps wizard at upstream step count   |
+| /admin/membership shows login-required when membership is disabled | Route renders, login alert shown for unauthenticated visit |
 
 ## Maintenance Guidelines
 

@@ -158,6 +158,13 @@ const defaultConfig = {
     svg: '/favicon.svg',
     png32: '/favicon-32x32.png',
     png16: '/favicon-16x16.png'
+  },
+  // Membership application (NIP-05 handle request flow)
+  membership: {
+    enabled: false,
+    handleDomain: '',
+    formAddress: '',
+    adminPubkeys: /** @type {string[]} */ ([])
   }
 };
 
@@ -295,6 +302,10 @@ export function initializeConfig(runtimeConfig) {
     favicon: {
       ...defaultConfig.favicon,
       ...runtimeConfig.favicon
+    },
+    membership: {
+      ...defaultConfig.membership,
+      ...runtimeConfig.membership
     }
   };
 
@@ -382,5 +393,8 @@ export const runtimeConfig = {
   },
   get resourceFormVariants() {
     return config.resourceFormVariants;
+  },
+  get membership() {
+    return config.membership;
   }
 };

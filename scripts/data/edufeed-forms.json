@@ -277,6 +277,46 @@
           "output": "amb:keywords"
         }
       ]
+    },
+    {
+      "d": "edufeed-membership",
+      "name": "Edufeed.org-Mitgliedschaftsantrag",
+      "description": "Antrag auf eine edufeed.org-Mitgliedschaft mit eigener @edufeed.org-Adresse.",
+      "fields": [
+        {
+          "id": "wished_handle",
+          "type": "text",
+          "label": "Wunsch-Adresse",
+          "required": true,
+          "min": 2,
+          "max": 30,
+          "pattern": "^[a-z0-9._-]+$",
+          "placeholder": "z. B. maria"
+        },
+        {
+          "id": "full_name",
+          "type": "text",
+          "label": "Vollständiger Name",
+          "required": true
+        },
+        {
+          "id": "affiliation",
+          "type": "text",
+          "label": "Institution / Schule"
+        },
+        {
+          "id": "role",
+          "type": "text",
+          "label": "Rolle",
+          "placeholder": "z. B. Lehrkraft, Verlag, Forschung"
+        },
+        {
+          "id": "motivation",
+          "type": "textarea",
+          "label": "Warum möchtest du Mitglied von edufeed.org werden?",
+          "required": true
+        }
+      ]
     }
   ]
 }
