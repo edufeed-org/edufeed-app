@@ -11,9 +11,16 @@ const APPLICANT_PUBKEY = 'b'.repeat(64);
 const hoisted = vi.hoisted(() => ({
   /** @type {{ events: any[] }} */
   timelineState: { events: [] },
-  nip44DecryptMock: vi.fn()
+  nip44DecryptMock: vi.fn(),
+  actionRunnerOptimisticRunMock: vi.fn(),
+  /** Stub for SendWrappedMessage. We compare identity so the test can verify
+   *  approve() passes the right builder to the action runner. */
+  sendWrappedMessageMock: vi.fn(
+    /** @param {any[]} args */ (...args) => ({ __action: 'SendWrappedMessage', args })
+  )
 }));
-const { timelineState, nip44DecryptMock } = hoisted;
+const { timelineState, nip44DecryptMock, actionRunnerOptimisticRunMock, sendWrappedMessageMock } =
+  hoisted;
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
@@ -64,6 +71,17 @@ vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: () => ({ build: vi.fn(), sign: vi.fn() })
 }));
 
+vi.mock('$lib/stores/action-runner.svelte.js', () => ({
+  actionRunnerOptimistic: {
+    run: (/** @type {any} */ builder, /** @type {any} */ ...args) =>
+      hoisted.actionRunnerOptimisticRunMock(builder, ...args)
+  }
+}));
+
+vi.mock('applesauce-actions/actions', () => ({
+  SendWrappedMessage: hoisted.sendWrappedMessageMock
+}));
+
 import MembershipApprovalsPanel from '../MembershipApprovalsPanel.svelte';
 
 /** @returns {any} */
@@ -103,6 +121,9 @@ describe('MembershipApprovalsPanel', () => {
     timelineState.events = [];
     nip44DecryptMock.mockClear();
     nip44DecryptMock.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
+    actionRunnerOptimisticRunMock.mockReset();
+    actionRunnerOptimisticRunMock.mockResolvedValue(undefined);
+    sendWrappedMessageMock.mockClear();
     vi.restoreAllMocks();
   });
 
@@ -188,5 +209,63 @@ describe('MembershipApprovalsPanel', () => {
 
     const { findByText } = render(MembershipApprovalsPanel);
     await findByText(/already taken|bereits vergeben|vergeben/i);
+  });
+
+  it('sends a NIP-17 notify-DM to the applicant after a successful approve', async () => {
+    timelineState.events = [makeResponse('maria')];
+    mockFetch({
+      wellKnown: emptyWellKnown(),
+      proxyPost: new Response(JSON.stringify({ name: 'maria', pubkey: APPLICANT_PUBKEY }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' }
+      })
+    });
+
+    const { findByRole } = render(MembershipApprovalsPanel);
+    const btn = await findByRole('button', { name: /Approve|Genehmigen/i });
+    await fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(actionRunnerOptimisticRunMock).toHaveBeenCalled();
+    });
+    const [builder, recipient, body] = actionRunnerOptimisticRunMock.mock.calls[0];
+    expect(builder).toBe(sendWrappedMessageMock);
+    expect(recipient).toBe(APPLICANT_PUBKEY);
+    expect(typeof body).toBe('string');
+    expect(body).toMatch(/maria@edufeed\.org/);
+  });
+
+  it('still marks the row approved if the notify-DM fails', async () => {
+    timelineState.events = [makeResponse('maria')];
+    actionRunnerOptimisticRunMock.mockRejectedValueOnce(new Error('relay down'));
+    mockFetch({
+      wellKnown: emptyWellKnown(),
+      proxyPost: new Response(JSON.stringify({ name: 'maria', pubkey: APPLICANT_PUBKEY }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' }
+      })
+    });
+
+    const { findByRole, findByText } = render(MembershipApprovalsPanel);
+    const btn = await findByRole('button', { name: /Approve|Genehmigen/i });
+    await fireEvent.click(btn);
+
+    // The row still settles to "approved" — the DM is best-effort.
+    await findByText(/Approved|Genehmigt/i);
+  });
+
+  it('does not send a notify-DM when approve fails upstream', async () => {
+    timelineState.events = [makeResponse('maria')];
+    mockFetch({
+      wellKnown: emptyWellKnown(),
+      proxyPost: new Response(JSON.stringify({ error: 'Entry already exists' }), { status: 409 })
+    });
+
+    const { findByRole, findByText } = render(MembershipApprovalsPanel);
+    const btn = await findByRole('button', { name: /Approve|Genehmigen/i });
+    await fireEvent.click(btn);
+
+    await findByText(/already taken|bereits vergeben|vergeben/i);
+    expect(actionRunnerOptimisticRunMock).not.toHaveBeenCalled();
   });
 });

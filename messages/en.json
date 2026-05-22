@@ -1066,6 +1066,7 @@
   "admin_membership_taken": "Handle already taken",
   "admin_membership_no_handle": "No wished handle on this application",
   "admin_membership_approve_failed": "Approval failed",
+  "admin_membership_notify_dm": "Welcome to edufeed.org! Your handle {address} is now active. Open Settings → Membership to add it to your profile.",
   "admin_membership_reject": "Reject",
   "admin_membership_reject_confirm": "Remove this application from your queue? (Local-only, not synced.)",
   "admin_membership_revoke": "Revoke",

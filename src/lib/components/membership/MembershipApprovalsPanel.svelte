@@ -19,6 +19,8 @@
   import { formResponseLoader } from '$lib/loaders/community.js';
   import { parseResponseTags } from '$lib/helpers/forms.js';
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
+  import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
+  import { SendWrappedMessage } from 'applesauce-actions/actions';
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
 
@@ -186,6 +188,17 @@
       });
       if (res.ok) {
         approvalState = new Map([...approvalState, [response.id, 'approved']]);
+        // Best-effort: notify the applicant via NIP-17 DM. Failures here must
+        // not roll back the approval — the handle is provisioned upstream and
+        // the row is already marked approved.
+        try {
+          const dmBody = m.admin_membership_notify_dm({
+            address: `${name}@${handleDomain}`
+          });
+          await actionRunnerOptimistic.run(SendWrappedMessage, response.pubkey, dmBody);
+        } catch (notifyErr) {
+          console.warn('Failed to send approval notification DM', notifyErr);
+        }
         return;
       }
       if (res.status === 409) {
