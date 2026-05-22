@@ -32,6 +32,7 @@ vi.mock('$app/stores', () => {
 
 vi.mock('$lib/paraglide/messages', () => ({
   fab_open_menu: () => 'Open actions menu',
+  aria_close_modal: () => 'Close',
   fab_create_event: () => 'Create Event',
   fab_create_event_aria: () => 'Create new event',
   fab_create_calendar: () => 'Create Calendar',

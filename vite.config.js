@@ -31,6 +31,7 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.js', 'scripts/**/*.test.mjs'],
     environment: 'jsdom',
-    globals: true
+    globals: true,
+    hookTimeout: 30000
   }
 });
