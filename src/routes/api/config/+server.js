@@ -351,6 +351,15 @@ export function GET() {
       svg: env.FAVICON_SVG || '/favicon.svg',
       png32: env.FAVICON_32 || '/favicon-32x32.png',
       png16: env.FAVICON_16 || '/favicon-16x16.png'
+    },
+
+    // Membership application (NIP-05 handle request flow)
+    // All public — the actual NIP-05 service is provisioned manually in v1.
+    membership: {
+      enabled: parseBool(env.MEMBERSHIP_ENABLED, false),
+      handleDomain: env.NIP05_HANDLE_DOMAIN || '',
+      formAddress: env.MEMBERSHIP_FORM_ADDRESS || '',
+      adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
     }
   };
 

@@ -1,0 +1,354 @@
+<script>
+  /**
+   * Admin-only approvals panel.
+   *
+   * Lists pending kind 1069 membership applications, decrypts each
+   * (NIP-44 from applicant → admin), and offers an Approve button that
+   * provisions the handle via the SvelteKit `/api/nip05` proxy. The proxy
+   * verifies a NIP-98 header (the admin signs the request), then forwards
+   * the call to the nip-05-service with the server-held Bearer token.
+   *
+   * This component is rendered ALONGSIDE the existing `<FormResponses>` —
+   * it does not replace it. FormResponses still provides the rich
+   * inspect/expand UI; this panel just adds the action surface.
+   */
+  import { TimelineModel } from 'applesauce-core/models';
+  import { manager } from '$lib/stores/accounts.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { formResponseLoader } from '$lib/loaders/community.js';
+  import { parseResponseTags } from '$lib/helpers/forms.js';
+  import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
+  import { nip19 } from 'nostr-tools';
+  import * as m from '$lib/paraglide/messages';
+
+  const cfg = $derived(runtimeConfig.membership);
+  const formAddress = $derived(cfg?.formAddress || '');
+  const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
+  const handleDomain = $derived(cfg?.handleDomain || '');
+
+  /** @type {import('nostr-tools').NostrEvent[]} */
+  let responses = $state.raw([]);
+
+  /** @type {Map<string, {wished_handle?: string, full_name?: string} & Record<string, string>>} */
+  let decrypted = $state.raw(new Map());
+
+  /** Approval state per response id: 'idle' | 'pending' | 'approved' | error message */
+  /** @type {Map<string, string>} */
+  let approvalState = $state.raw(new Map());
+
+  /**
+   * Locally-persisted set of response IDs the admin has rejected. Scoped per
+   * admin pubkey via the localStorage key. Single-admin v1: not synced across
+   * devices. Easy upgrade path is a private NIP-51 list later.
+   *
+   * @type {Set<string>}
+   */
+  let rejectedIds = $state.raw(new Set());
+
+  /** @param {string} pubkey */
+  function rejectedKey(pubkey) {
+    return `membership-rejected:${pubkey}`;
+  }
+
+  $effect(() => {
+    const pubkey = manager.active?.pubkey;
+    if (!pubkey || typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(rejectedKey(pubkey));
+      rejectedIds = new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      rejectedIds = new Set();
+    }
+  });
+
+  const visibleResponses = $derived(responses.filter((r) => !rejectedIds.has(r.id)));
+
+  // Subscribe to kind 1069 responses for this form.
+  $effect(() => {
+    if (!formAddress || !adminPubkey) return;
+
+    const loader = formResponseLoader(formAddress, adminPubkey);
+    const sub = loader().subscribe();
+
+    const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
+      responses = (events || []).filter((e) =>
+        e.tags.some((t) => t[0] === 'a' && t[1] === formAddress)
+      );
+    });
+
+    return () => {
+      sub.unsubscribe();
+      modelSub.unsubscribe();
+    };
+  });
+
+  // Decrypt each response as it arrives.
+  $effect(() => {
+    for (const response of responses) {
+      if (decrypted.has(response.id)) continue;
+      decryptOne(response);
+    }
+  });
+
+  // After decryption, check upstream NIP-05 to reflect already-provisioned handles.
+  $effect(() => {
+    if (!handleDomain) return;
+    for (const response of responses) {
+      const values = decrypted.get(response.id);
+      const name = values?.wished_handle?.trim();
+      if (!name) continue;
+      if (approvalState.has(response.id)) continue;
+      checkUpstream(response, name);
+    }
+  });
+
+  /**
+   * Check whether the wished_handle already resolves on the public domain. If
+   * it maps to the applicant's pubkey, mark the row as already approved. If it
+   * maps to a different pubkey, mark it taken.
+   *
+   * @param {import('nostr-tools').NostrEvent} response
+   * @param {string} name
+   */
+  async function checkUpstream(response, name) {
+    try {
+      const url = `https://${handleDomain}/.well-known/nostr.json?name=${encodeURIComponent(name)}`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const json = await res.json();
+      const mapped = json?.names?.[name];
+      if (!mapped) return;
+      const state = mapped === response.pubkey ? 'approved' : m.admin_membership_taken();
+      approvalState = new Map([...approvalState, [response.id, state]]);
+    } catch {
+      // Network/CORS — leave row as idle; admin can still try Approve.
+    }
+  }
+
+  /**
+   * @param {import('nostr-tools').NostrEvent} response
+   */
+  async function decryptOne(response) {
+    if (!manager.active) return;
+    const isEncrypted = response.tags.some((/** @type {string[]} */ t) => t[0] === 'encrypted');
+    let values;
+    try {
+      if (isEncrypted) {
+        const plaintext = await manager.active.signer.nip44.decrypt(
+          response.pubkey,
+          response.content
+        );
+        const tags = JSON.parse(plaintext);
+        values = parseResponseTags(tags);
+      } else {
+        const tags = response.tags.filter((/** @type {string[]} */ t) => t[0] === 'response');
+        values = parseResponseTags(tags);
+      }
+      decrypted = new Map([...decrypted, [response.id, values]]);
+    } catch {
+      // Skip — FormResponses surfaces decrypt errors already.
+    }
+  }
+
+  /**
+   * @param {import('nostr-tools').NostrEvent} response
+   */
+  async function approve(response) {
+    const values = decrypted.get(response.id);
+    const name = values?.wished_handle?.trim();
+    if (!name) {
+      approvalState = new Map([...approvalState, [response.id, m.admin_membership_no_handle()]]);
+      return;
+    }
+
+    const active = manager.active;
+    if (!active) {
+      approvalState = new Map([
+        ...approvalState,
+        [response.id, m.admin_membership_login_required()]
+      ]);
+      return;
+    }
+    approvalState = new Map([...approvalState, [response.id, 'pending']]);
+
+    const url = new URL('/api/nip05', window.location.origin).toString();
+    const body = JSON.stringify({ name, pubkey: response.pubkey });
+
+    try {
+      const authHeader = await createNIP98AuthHeader(url, 'POST', body, (draft) =>
+        active.signer.signEvent(draft)
+      );
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: authHeader },
+        body
+      });
+      if (res.ok) {
+        approvalState = new Map([...approvalState, [response.id, 'approved']]);
+        return;
+      }
+      if (res.status === 409) {
+        approvalState = new Map([...approvalState, [response.id, m.admin_membership_taken()]]);
+        return;
+      }
+      const errText = await res.text().catch(() => '');
+      approvalState = new Map([
+        ...approvalState,
+        [
+          response.id,
+          `${m.admin_membership_approve_failed()} (${res.status})${errText ? `: ${errText}` : ''}`
+        ]
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      approvalState = new Map([
+        ...approvalState,
+        [response.id, `${m.admin_membership_approve_failed()}: ${msg}`]
+      ]);
+    }
+  }
+
+  /**
+   * Hide a pending application from this admin's queue. Persists the response
+   * ID in localStorage (keyed by admin pubkey). Not a Nostr-level deletion —
+   * the kind 1069 event remains on relays; we just stop showing it.
+   *
+   * @param {import('nostr-tools').NostrEvent} response
+   */
+  function reject(response) {
+    if (!confirm(m.admin_membership_reject_confirm())) return;
+    const pubkey = manager.active?.pubkey;
+    if (!pubkey || typeof window === 'undefined') return;
+    const next = new Set([...rejectedIds, response.id]);
+    rejectedIds = next;
+    try {
+      window.localStorage.setItem(rejectedKey(pubkey), JSON.stringify([...next]));
+    } catch {
+      // localStorage may be disabled — UI still hides for this session.
+    }
+  }
+
+  /**
+   * Revoke a previously approved handle. Proxies a DELETE to the NIP-05 service
+   * via /api/nip05/<name>; the proxy verifies a NIP-98 Authorization signed by
+   * an admin and forwards with the server-held Bearer token.
+   *
+   * @param {import('nostr-tools').NostrEvent} response
+   */
+  async function revoke(response) {
+    const values = decrypted.get(response.id);
+    const name = values?.wished_handle?.trim();
+    if (!name) return;
+    if (!confirm(m.admin_membership_revoke_confirm({ handle: `${name}@${handleDomain}` }))) return;
+
+    const active = manager.active;
+    if (!active) {
+      approvalState = new Map([
+        ...approvalState,
+        [response.id, m.admin_membership_login_required()]
+      ]);
+      return;
+    }
+    approvalState = new Map([...approvalState, [response.id, 'pending']]);
+
+    const url = new URL(
+      `/api/nip05/${encodeURIComponent(name)}`,
+      window.location.origin
+    ).toString();
+    try {
+      const authHeader = await createNIP98AuthHeader(url, 'DELETE', '', (draft) =>
+        active.signer.signEvent(draft)
+      );
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { authorization: authHeader }
+      });
+      if (res.ok) {
+        // Row drops back to idle — admin can re-approve or reject.
+        approvalState = new Map([...approvalState].filter(([k]) => k !== response.id));
+        return;
+      }
+      const errText = await res.text().catch(() => '');
+      approvalState = new Map([
+        ...approvalState,
+        [
+          response.id,
+          `${m.admin_membership_revoke_failed()} (${res.status})${errText ? `: ${errText}` : ''}`
+        ]
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      approvalState = new Map([
+        ...approvalState,
+        [response.id, `${m.admin_membership_revoke_failed()}: ${msg}`]
+      ]);
+    }
+  }
+
+  /** @param {string} hex */
+  function shortNpub(hex) {
+    try {
+      const npub = nip19.npubEncode(hex);
+      return npub.slice(0, 12) + '…' + npub.slice(-6);
+    } catch {
+      return hex.slice(0, 10) + '…';
+    }
+  }
+</script>
+
+{#if visibleResponses.length > 0}
+  <section class="mb-6">
+    <h2 class="mb-3 text-xl font-semibold">{m.admin_membership_pending_title()}</h2>
+    <div class="overflow-x-auto rounded-box border border-base-300">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{m.admin_membership_col_handle()}</th>
+            <th>{m.admin_membership_col_pubkey()}</th>
+            <th>{m.admin_membership_col_action()}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each visibleResponses as response (response.id)}
+            {@const values = decrypted.get(response.id)}
+            {@const state = approvalState.get(response.id) || 'idle'}
+            <tr>
+              <td>
+                {#if values?.wished_handle}
+                  <code>{values.wished_handle}@{cfg.handleDomain}</code>
+                {:else}
+                  <span class="text-base-content/50">…</span>
+                {/if}
+              </td>
+              <td><code class="text-xs">{shortNpub(response.pubkey)}</code></td>
+              <td class="flex flex-wrap items-center gap-2">
+                {#if state === 'approved'}
+                  <span class="badge badge-success">{m.admin_membership_approved()}</span>
+                  <button class="btn btn-outline btn-xs btn-error" onclick={() => revoke(response)}>
+                    {m.admin_membership_revoke()}
+                  </button>
+                {:else if state === 'pending'}
+                  <span class="loading loading-sm loading-spinner"></span>
+                {:else if state !== 'idle'}
+                  <span class="text-sm text-error">{state}</span>
+                {:else}
+                  <button
+                    class="btn btn-sm btn-primary"
+                    disabled={!values?.wished_handle}
+                    onclick={() => approve(response)}
+                  >
+                    {m.admin_membership_approve()}
+                  </button>
+                  <button class="btn btn-ghost btn-sm" onclick={() => reject(response)}>
+                    {m.admin_membership_reject()}
+                  </button>
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{/if}

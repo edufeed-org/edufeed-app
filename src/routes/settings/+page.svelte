@@ -32,6 +32,7 @@
   import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
   import LocalCachePanel from '$lib/components/settings/LocalCachePanel.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import MembershipCard from '$lib/components/membership/MembershipCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
@@ -596,6 +597,13 @@
     <div class="mb-6">
       <LocalCachePanel />
     </div>
+
+    <!-- Membership Card (only when membership feature is enabled and user is logged in) -->
+    {#if activeAccount}
+      <div class="mb-6">
+        <MembershipCard />
+      </div>
+    {/if}
 
     {#if !activeAccount}
       <div class="alert alert-warning shadow-lg">

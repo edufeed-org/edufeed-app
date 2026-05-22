@@ -358,6 +358,71 @@ export async function createDefaultMembershipForm(signer) {
 }
 
 /**
+ * Returns the edufeed.org membership application form definition.
+ * Separate from getDefaultMembershipForm() because that one is used by
+ * per-community join templates (EditCommunityModal/CreateCommunityModal).
+ * @returns {{ dTag: string, name: string, fields: FormField[] }}
+ */
+export function getEdufeedMembershipForm() {
+  return {
+    dTag: 'edufeed-membership',
+    name: m.edufeed_membership_form_name(),
+    fields: [
+      {
+        id: 'wished_handle',
+        type: 'text',
+        label: m.edufeed_membership_field_wished_handle_label(),
+        options: {
+          required: true,
+          min: 2,
+          max: 30,
+          pattern: '^[a-z0-9._-]+$',
+          placeholder: m.edufeed_membership_field_wished_handle_placeholder()
+        }
+      },
+      {
+        id: 'full_name',
+        type: 'text',
+        label: m.edufeed_membership_field_full_name_label(),
+        options: { required: true }
+      },
+      {
+        id: 'affiliation',
+        type: 'text',
+        label: m.edufeed_membership_field_affiliation_label(),
+        options: {}
+      },
+      {
+        id: 'role',
+        type: 'text',
+        label: m.edufeed_membership_field_role_label(),
+        options: { placeholder: m.edufeed_membership_field_role_placeholder() }
+      },
+      {
+        id: 'motivation',
+        type: 'textarea',
+        label: m.edufeed_membership_field_motivation_label(),
+        options: { required: true }
+      }
+    ]
+  };
+}
+
+/**
+ * Create and sign the edufeed.org membership form template event (kind 30168).
+ * Published once by admin via scripts/publish-membership-form.js.
+ * @param {import('applesauce-signers').ISigner} signer
+ * @returns {Promise<import('nostr-tools').NostrEvent>}
+ */
+export async function createEdufeedMembershipForm(signer) {
+  const { dTag, name, fields } = getEdufeedMembershipForm();
+  const tags = buildFormTemplateTags(dTag, fields, { name });
+  const factory = createAppEventFactory({ signer });
+  const template = await factory.build({ kind: FORM_TEMPLATE_KIND, tags, content: '' });
+  return factory.sign(template);
+}
+
+/**
  * Build a Nostr filter to find a user's existing response to a form.
  * @param {string} formAddress - e.g. "30168:pubkey:d-tag"
  * @param {string} userPubkey - hex pubkey of the user

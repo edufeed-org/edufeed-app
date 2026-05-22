@@ -15,9 +15,16 @@
   import * as m from '$lib/paraglide/messages';
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
-  import { PersonIcon, GearIcon, ArrowLeftRightIcon, InfoCircleIcon } from '$lib/components/icons';
+  import {
+    PersonIcon,
+    GearIcon,
+    ArrowLeftRightIcon,
+    InfoCircleIcon,
+    CheckIcon
+  } from '$lib/components/icons';
 
   /** @type {{ onClose?: () => void }} */
   let { onClose = () => {} } = $props();
@@ -43,6 +50,11 @@
   const getProfile = useUserProfile(() => activeAccount?.pubkey);
   const displayName = $derived(
     getDisplayName(getProfile(), activeAccount?.pubkey?.slice(0, 8) ?? '')
+  );
+
+  const isMembershipAdmin = $derived(
+    !!activeAccount?.pubkey &&
+      (runtimeConfig.membership?.adminPubkeys || []).includes(activeAccount.pubkey)
   );
 
   function openLoginModal() {
@@ -101,6 +113,14 @@
       {m.common_settings()}
     </a>
   </li>
+  {#if isMembershipAdmin}
+    <li>
+      <a href={resolve('/admin/membership')} onclick={onClose}>
+        <CheckIcon class_="w-4 h-4" />
+        {m.admin_membership_title()}
+      </a>
+    </li>
+  {/if}
 
   <li class="menu-disabled"><hr class="my-1 border-base-300" /></li>
 
