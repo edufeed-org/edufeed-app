@@ -59,6 +59,26 @@ describe('<Nip05VerifiedBadge>', () => {
     expect(container.querySelector('[data-testid="nip05-verified"]')).toBeFalsy();
   });
 
+  it('strikes through and mutes the nip05 text on mismatch (anti-impersonation)', async () => {
+    fetchSpy.mockResolvedValue(jsonResponse({ names: { alice: BOB } }));
+
+    const { container } = render(Nip05VerifiedBadge, {
+      pubkey: ALICE,
+      nip05: 'alice@edufeed.org'
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="nip05-mismatch"]')).toBeTruthy();
+    });
+
+    const textSpan = Array.from(container.querySelectorAll('span')).find(
+      (el) => el.textContent?.trim() === 'alice@edufeed.org'
+    );
+    expect(textSpan).toBeTruthy();
+    expect(textSpan?.className).toMatch(/line-through/);
+    expect(textSpan?.className).toMatch(/text-base-content\/50/);
+  });
+
   it('renders no badge (and no fetch) when nip05 prop is empty', async () => {
     const { container } = render(Nip05VerifiedBadge, { pubkey: ALICE, nip05: '' });
     await tick();

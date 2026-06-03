@@ -5,7 +5,8 @@
 
   States:
   - verified  → green CheckIcon (`names[name]` matches the user's pubkey)
-  - mismatch  → AlertIcon (resolves to a different pubkey, or not present)
+  - mismatch  → error-colored AlertIcon + strikethrough + muted text so the
+                false claim is visually de-emphasized (anti-impersonation)
   - pending / error → render the text only, no icon (don't flag transient
     CORS/network failures as a security warning)
 
@@ -57,15 +58,21 @@
       >
         <CheckIcon class_="w-3.5 h-3.5" />
       </span>
+      <span class="truncate">{nip05}</span>
     {:else if status === 'mismatch'}
       <span
-        class="inline-flex text-warning"
+        class="inline-flex text-error"
         data-testid="nip05-mismatch"
         aria-label={m.nip05_mismatch_label()}
+        title={m.nip05_mismatch_label()}
       >
         <AlertIcon class_="w-3.5 h-3.5" />
       </span>
+      <span class="truncate text-base-content/50 line-through" title={m.nip05_mismatch_label()}>
+        {nip05}
+      </span>
+    {:else}
+      <span class="truncate">{nip05}</span>
     {/if}
-    <span class="truncate">{nip05}</span>
   </span>
 {/if}
