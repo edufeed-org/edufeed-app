@@ -13,6 +13,7 @@
    * signs a NIP-98 header, the proxy verifies it and forwards to the
    * standalone nip-05-service with the server-held Bearer token.
    */
+  import { resolve } from '$app/paths';
   import { TimelineModel } from 'applesauce-core/models';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -396,21 +397,27 @@
         <li class="rounded-box border border-base-300 bg-base-100">
           <!-- Header: identity + wished handle + actions + expand toggle -->
           <div class="flex flex-wrap items-start gap-3 bg-base-200/40 p-4">
-            <ProfileAvatar pubkey={response.pubkey} {profile} size="md" />
-            <div class="min-w-0 flex-1">
-              <div class="text-sm font-semibold">
-                {profile?.name || profile?.display_name || response.pubkey.slice(0, 8) + '…'}
+            <a
+              href={resolve(`/p/${response.pubkey}`)}
+              class="group flex min-w-0 flex-1 items-start gap-3 transition-opacity hover:opacity-80"
+              aria-label={m.admin_membership_view_profile()}
+            >
+              <ProfileAvatar pubkey={response.pubkey} {profile} size="md" />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold group-hover:underline">
+                  {profile?.name || profile?.display_name || response.pubkey.slice(0, 8) + '…'}
+                </div>
+                <div class="text-xs text-base-content/60">
+                  {formatTimestamp(response.created_at)}
+                  · <code class="text-xs">{shortNpub(response.pubkey)}</code>
+                </div>
               </div>
-              <div class="text-xs text-base-content/60">
-                {formatTimestamp(response.created_at)}
-                · <code class="text-xs">{shortNpub(response.pubkey)}</code>
-              </div>
-              {#if values?.wished_handle}
-                <code class="mt-2 inline-block rounded bg-base-200 px-2 py-1 text-sm">
-                  {values.wished_handle}@{cfg.handleDomain}
-                </code>
-              {/if}
-            </div>
+            </a>
+            {#if values?.wished_handle}
+              <code class="self-center rounded bg-base-200 px-2 py-1 text-sm">
+                {values.wished_handle}@{cfg.handleDomain}
+              </code>
+            {/if}
             <div class="flex flex-wrap items-center gap-2">
               {#if state === 'pending'}
                 <span class="loading loading-sm loading-spinner"></span>
@@ -471,9 +478,13 @@
             <code class="text-sm">
               {values?.wished_handle ?? '…'}@{cfg.handleDomain}
             </code>
-            <span class="text-base-content/60">
+            <a
+              href={resolve(`/p/${response.pubkey}`)}
+              class="text-base-content/70 hover:underline"
+              aria-label={m.admin_membership_view_profile()}
+            >
               {profile?.name || profile?.display_name || shortNpub(response.pubkey)}
-            </span>
+            </a>
             <button
               class="btn ml-auto btn-outline btn-xs btn-error"
               onclick={() => revoke(response)}
