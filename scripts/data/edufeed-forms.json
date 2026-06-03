@@ -280,13 +280,13 @@
     },
     {
       "d": "edufeed-membership",
-      "name": "Edufeed.org-Mitgliedschaftsantrag",
-      "description": "Antrag auf eine edufeed.org-Mitgliedschaft mit eigener @edufeed.org-Adresse.",
+      "name": "Verifizierte edufeed.org-Adresse erhalten",
+      "description": "Als verifiziertes Mitglied bekommst du eine gut merkbare Adresse (dein-name@edufeed.org) und kannst auf edufeed.org-Community-Relays veröffentlichen. Erzähl uns kurz etwas über dich, damit wir deinen Antrag prüfen können.",
       "fields": [
         {
           "id": "wished_handle",
           "type": "text",
-          "label": "Wunsch-Adresse",
+          "label": "Deine Wunsch-Adresse",
           "required": true,
           "min": 2,
           "max": 30,

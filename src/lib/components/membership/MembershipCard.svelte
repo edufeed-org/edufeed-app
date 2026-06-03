@@ -198,7 +198,7 @@
       {:else}
         <div class="card-actions">
           <button class="btn btn-primary" onclick={() => (showForm = !showForm)}>
-            {m.auth_signup_modal_membership_title()}
+            {m.membership_apply_cta()}
           </button>
         </div>
       {/if}

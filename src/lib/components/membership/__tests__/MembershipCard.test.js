@@ -111,9 +111,7 @@ describe('MembershipCard', () => {
 
   it('shows CTA when no application exists', () => {
     const { getByRole } = render(MembershipCard);
-    expect(
-      getByRole('button', { name: /Mitgliedschaft beantragen|Apply.*membership/i })
-    ).toBeTruthy();
+    expect(getByRole('button', { name: /Jetzt beantragen|Apply now/i })).toBeTruthy();
   });
 
   it('shows submitted-on text when an application exists', () => {
