@@ -7,7 +7,11 @@
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { buildResponseTags, buildUserResponseFilter } from '$lib/helpers/forms.js';
+  import {
+    buildResponseTags,
+    buildUserResponseFilter,
+    parseResponseTags
+  } from '$lib/helpers/forms.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { formatTimestamp } from '$lib/helpers/dates.js';
 
@@ -36,6 +40,15 @@
 
   /** @type {{ kind: number, pubkey: string, tags: string[][], content: string, created_at: number, id: string, sig: string } | null} */
   let existingResponse = $state(null);
+
+  /**
+   * Decrypted values from the user's previous application, used to pre-fill
+   * the form when they choose "Update application". null while loading; an
+   * empty object means decrypt failed (FormRenderer falls back to empty).
+   *
+   * @type {Record<string, string> | null}
+   */
+  let prefilledValues = $state(null);
 
   let wishedHandle = $state('');
   /** @type {'idle' | 'checking' | 'available' | 'taken' | 'invalid'} */
@@ -82,6 +95,50 @@
       existingResponse = events?.[0] || null;
     });
     return () => sub.unsubscribe();
+  });
+
+  // Decrypt the previous response so "Update application" pre-fills the form.
+  // NIP-44 ECDH is symmetric — the applicant can decrypt their own response
+  // using the admin pubkey on the other side of the shared secret.
+  $effect(() => {
+    if (!existingResponse || !manager.active) {
+      prefilledValues = null;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const isEncrypted = existingResponse.tags.some((t) => t[0] === 'encrypted');
+        /** @type {string[][]} */
+        let tags;
+        if (isEncrypted) {
+          if (!manager.active.signer?.nip44) {
+            prefilledValues = {};
+            return;
+          }
+          const plaintext = await manager.active.signer.nip44.decrypt(
+            adminPubkey,
+            existingResponse.content
+          );
+          tags = JSON.parse(plaintext);
+        } else {
+          tags = existingResponse.tags.filter((t) => t[0] === 'response');
+        }
+        if (cancelled) return;
+        const values = parseResponseTags(tags);
+        prefilledValues = values;
+        // Seed wishedHandle so the live status check reflects the pre-filled
+        // value without waiting for the user to retype.
+        if (typeof values?.wished_handle === 'string') {
+          scheduleHandleCheck(values.wished_handle.trim().toLowerCase());
+        }
+      } catch {
+        if (!cancelled) prefilledValues = {};
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   });
 
   /**
@@ -259,7 +316,19 @@
     </div>
   {/if}
 
-  <FormRenderer {formEvent} onsubmit={handleSubmit} />
+  <!-- Block render until the previous response is decrypted so FormRenderer's
+       one-shot init picks up the pre-fill. -->
+  {#if existingResponse && prefilledValues === null}
+    <div class="flex justify-center p-4">
+      <span class="loading loading-spinner"></span>
+    </div>
+  {:else}
+    <FormRenderer
+      {formEvent}
+      onsubmit={handleSubmit}
+      initialValues={prefilledValues ?? undefined}
+    />
+  {/if}
 
   {#if error}
     <div class="mt-2 alert alert-error">{error}</div>
