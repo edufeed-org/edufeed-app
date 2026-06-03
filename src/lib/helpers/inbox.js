@@ -48,6 +48,21 @@ export function filterSelfNotifications(events, userPubkey) {
 }
 
 /**
+ * Membership applications are kind 1069 form responses targeting the
+ * deployment-configured membership form. They are processed in the dedicated
+ * admin panel, not the general inbox.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string | null | undefined} membershipFormAddress
+ * @returns {boolean}
+ */
+export function isMembershipApplication(event, membershipFormAddress) {
+  if (!membershipFormAddress) return false;
+  if (event.kind !== 1069) return false;
+  return event.tags.some((t) => t[0] === 'a' && t[1] === membershipFormAddress);
+}
+
+/**
  * @param {import('nostr-tools').NostrEvent} event
  * @returns {string | null}
  */

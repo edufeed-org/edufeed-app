@@ -14,6 +14,7 @@ import {
   getNotificationType,
   isUnread,
   filterSelfNotifications,
+  isMembershipApplication,
   getNotificationUrl,
   extractMentionPubkeys
 } from '$lib/helpers/inbox.js';
@@ -91,6 +92,41 @@ describe('filterSelfNotifications', () => {
   });
   it('returns empty array when all events are self', () => {
     expect(filterSelfNotifications([{ pubkey: 'aaa', kind: 7 }], 'aaa')).toEqual([]);
+  });
+});
+
+describe('isMembershipApplication', () => {
+  const formAddress = '30168:admin:edufeed-membership';
+  const makeResponse = (/** @type {string[][]} */ tags, /** @type {number} */ kind = 1069) => ({
+    kind,
+    tags
+  });
+
+  it('is true for a kind 1069 with matching `a` tag', () => {
+    expect(isMembershipApplication(makeResponse([['a', formAddress]]), formAddress)).toBe(true);
+  });
+
+  it('is false when the `a` tag points at a different form', () => {
+    expect(isMembershipApplication(makeResponse([['a', '30168:admin:other']]), formAddress)).toBe(
+      false
+    );
+  });
+
+  it('is false for non-1069 events even with matching `a` tag', () => {
+    expect(isMembershipApplication(makeResponse([['a', formAddress]], 1070), formAddress)).toBe(
+      false
+    );
+  });
+
+  it('is false when membershipFormAddress is empty or nullish', () => {
+    const evt = makeResponse([['a', formAddress]]);
+    expect(isMembershipApplication(evt, '')).toBe(false);
+    expect(isMembershipApplication(evt, null)).toBe(false);
+    expect(isMembershipApplication(evt, undefined)).toBe(false);
+  });
+
+  it('is false when the event has no `a` tag at all', () => {
+    expect(isMembershipApplication(makeResponse([['p', 'abc']]), formAddress)).toBe(false);
   });
 });
 

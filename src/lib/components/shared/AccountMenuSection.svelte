@@ -17,6 +17,8 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { useMembershipPendingCount } from '$lib/stores/membership-pending.svelte.js';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import {
     PersonIcon,
@@ -56,6 +58,8 @@
     !!activeAccount?.pubkey &&
       (runtimeConfig.membership?.adminPubkeys || []).includes(activeAccount.pubkey)
   );
+
+  const pendingMembershipCount = useMembershipPendingCount();
 
   function openLoginModal() {
     modalStore.openModal('login');
@@ -102,7 +106,7 @@
 
   <!-- Group 1: personal actions -->
   <li>
-    <a href={resolve(`/p/${activeAccount.pubkey}`)} onclick={onClose}>
+    <a href={resolve(profileLink(activeAccount.pubkey))} onclick={onClose}>
       <PersonIcon class_="w-4 h-4" />
       {m.common_profile()}
     </a>
@@ -117,7 +121,12 @@
     <li>
       <a href={resolve('/admin/membership')} onclick={onClose}>
         <CheckIcon class_="w-4 h-4" />
-        {m.admin_membership_title()}
+        <span class="flex-1">{m.admin_membership_title()}</span>
+        {#if pendingMembershipCount() > 0}
+          <span class="badge badge-sm badge-primary" data-testid="membership-pending-badge">
+            {pendingMembershipCount()}
+          </span>
+        {/if}
       </a>
     </li>
   {/if}

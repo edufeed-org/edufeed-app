@@ -16,7 +16,13 @@ import {
   getEducationalRelays,
   getAllLookupRelays
 } from '$lib/helpers/relay-helper.js';
-import { getNotificationType, isUnread, filterSelfNotifications } from '$lib/helpers/inbox.js';
+import {
+  getNotificationType,
+  isUnread,
+  filterSelfNotifications,
+  isMembershipApplication
+} from '$lib/helpers/inbox.js';
+import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
@@ -273,7 +279,10 @@ export function initializeInbox(pubkey) {
       { kinds: [1111], '#P': [pubkey] }
     ])
     .subscribe((events) => {
-      const filtered = filterSelfNotifications(events || [], pubkey);
+      const membershipFormAddress = runtimeConfig.membership?.formAddress;
+      const filtered = filterSelfNotifications(events || [], pubkey).filter(
+        (e) => !isMembershipApplication(e, membershipFormAddress)
+      );
       mainNotifications = filtered;
       prefetchReferencedContent(filtered);
     });

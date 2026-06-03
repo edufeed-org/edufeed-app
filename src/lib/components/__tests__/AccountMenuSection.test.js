@@ -42,6 +42,18 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => ({ name: 'Alice' })
 }));
 
+const mockPendingCount = vi.hoisted(() => ({ value: 0 }));
+vi.mock('$lib/stores/membership-pending.svelte.js', () => ({
+  useMembershipPendingCount: () => () => mockPendingCount.value
+}));
+
+const mockRuntimeConfig = vi.hoisted(() => ({
+  membership: { adminPubkeys: /** @type {string[]} */ ([]) }
+}));
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: mockRuntimeConfig
+}));
+
 vi.mock('applesauce-core/helpers', () => ({
   getDisplayName: (profile, fallback) => profile?.name || fallback
 }));
@@ -60,7 +72,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   navbar_imprint: () => 'Impressum',
   navbar_logout_current: () => 'Abmelden',
   navbar_logout_all: () => 'Alle Konten abmelden',
-  navbar_logout_all_confirm: () => 'Sure?'
+  navbar_logout_all_confirm: () => 'Sure?',
+  admin_membership_title: () => 'Mitgliedschaftsanträge'
 }));
 
 const PUBKEY_A = 'a'.repeat(64);
@@ -76,6 +89,8 @@ beforeEach(() => {
   mockManager.accounts = [ACCOUNT_A];
   mockManager.removeAccount.mockReset();
   mockModalStore.openModal.mockReset();
+  mockPendingCount.value = 0;
+  mockRuntimeConfig.membership = { adminPubkeys: [] };
 });
 
 describe('AccountMenuSection', () => {
@@ -139,6 +154,32 @@ describe('AccountMenuSection', () => {
     await fireEvent.click(await findByText('Abmelden'));
     expect(mockManager.removeAccount).toHaveBeenCalledWith(ACCOUNT_A.id);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  describe('Membership applications row', () => {
+    it('is hidden when the active account is not on the admin allowlist', async () => {
+      mockRuntimeConfig.membership = { adminPubkeys: [] };
+      const { queryByText } = render(AccountMenuSection, { onClose: vi.fn() });
+      expect(queryByText('Mitgliedschaftsanträge')).toBeNull();
+    });
+
+    it('renders without a badge when admin and pending count is 0', async () => {
+      mockRuntimeConfig.membership = { adminPubkeys: [PUBKEY_A] };
+      mockPendingCount.value = 0;
+      const { findByText, container } = render(AccountMenuSection, { onClose: vi.fn() });
+      await findByText('Mitgliedschaftsanträge');
+      expect(container.querySelector('[data-testid="membership-pending-badge"]')).toBeNull();
+    });
+
+    it('renders a badge with the count when admin and pending > 0', async () => {
+      mockRuntimeConfig.membership = { adminPubkeys: [PUBKEY_A] };
+      mockPendingCount.value = 3;
+      const { findByText, container } = render(AccountMenuSection, { onClose: vi.fn() });
+      await findByText('Mitgliedschaftsanträge');
+      const badge = container.querySelector('[data-testid="membership-pending-badge"]');
+      expect(badge).toBeTruthy();
+      expect(badge?.textContent?.trim()).toBe('3');
+    });
   });
 
   it('"Abmelden" row carries the text-error class', async () => {
