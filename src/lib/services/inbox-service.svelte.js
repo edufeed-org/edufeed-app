@@ -135,8 +135,23 @@ function prefetchReferencedContent(notifications) {
 
 // --- Reactive service (Svelte 5 runes) ---
 
+/**
+ * Raw notifications from the event store, with only the self-filter applied.
+ * The membership-application filter is applied *reactively* in the derived
+ * `mainNotifications` below — needed because runtimeConfig.membership loads
+ * asynchronously after the inbox subscription fires its initial callback,
+ * so filtering inside the subscribe callback would silently miss everything
+ * received before config arrives.
+ *
+ * @type {import('nostr-tools').NostrEvent[]}
+ */
+let rawMainNotifications = $state.raw([]);
+
 /** @type {import('nostr-tools').NostrEvent[]} */
-let mainNotifications = $state.raw([]);
+let mainNotifications = $derived.by(() => {
+  const membershipFormAddress = runtimeConfig.membership?.formAddress;
+  return rawMainNotifications.filter((e) => !isMembershipApplication(e, membershipFormAddress));
+});
 
 /** @type {import('nostr-tools').NostrEvent[]} */
 let rsvpNotifications = $state.raw([]);
@@ -279,11 +294,8 @@ export function initializeInbox(pubkey) {
       { kinds: [1111], '#P': [pubkey] }
     ])
     .subscribe((events) => {
-      const membershipFormAddress = runtimeConfig.membership?.formAddress;
-      const filtered = filterSelfNotifications(events || [], pubkey).filter(
-        (e) => !isMembershipApplication(e, membershipFormAddress)
-      );
-      mainNotifications = filtered;
+      const filtered = filterSelfNotifications(events || [], pubkey);
+      rawMainNotifications = filtered;
       prefetchReferencedContent(filtered);
     });
   subscriptions.push(modelSub);
