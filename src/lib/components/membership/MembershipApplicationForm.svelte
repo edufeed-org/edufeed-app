@@ -228,6 +228,10 @@
     }
   }
 
+  // True once FormRenderer is in the DOM. Used to retrigger the listener-
+  // attaching effect after the spinner-gated update flow swaps in the form.
+  const formRendered = $derived(!!formEvent && (!existingResponse || prefilledValues !== null));
+
   // The membership-specific live availability/format checks live next to a
   // generic FormRenderer field, so we sync into the DOM directly:
   //   1) listen for input events on `#wished_handle`,
@@ -235,7 +239,7 @@
   //   3) insert a sibling status element right below the input so the feedback
   //      appears next to the field rather than at the bottom of the form.
   $effect(() => {
-    if (!formEvent) return;
+    if (!formRendered) return;
     const el = document.getElementById('wished_handle');
     if (!el) return;
     const handler = /** @type {EventListener} */ (
