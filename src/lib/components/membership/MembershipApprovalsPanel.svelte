@@ -480,10 +480,13 @@
             </code>
             <a
               href={resolve(`/p/${response.pubkey}`)}
-              class="text-base-content/70 hover:underline"
+              class="group flex items-center gap-2 text-base-content/70"
               aria-label={m.admin_membership_view_profile()}
             >
-              {profile?.name || profile?.display_name || shortNpub(response.pubkey)}
+              <ProfileAvatar pubkey={response.pubkey} {profile} size="xs" />
+              <span class="group-hover:underline">
+                {profile?.name || profile?.display_name || shortNpub(response.pubkey)}
+              </span>
             </a>
             <button
               class="btn ml-auto btn-outline btn-xs btn-error"
