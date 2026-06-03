@@ -25,6 +25,8 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import { ChevronDownIcon, ChevronUpIcon } from '$lib/components/icons';
+  import { SvelteSet } from 'svelte/reactivity';
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
 
@@ -84,6 +86,38 @@
     visibleResponses.filter((r) => approvalState.get(r.id) === 'approved')
   );
   const getProfiles = useProfileMap(() => visibleResponses.map((r) => r.pubkey));
+
+  /**
+   * Per-row expansion state. Pending applications default to expanded so the
+   * admin sees everything at once; approved rows default to collapsed to keep
+   * the history list scannable. Tracked as "diffs from the default" — a
+   * pending row in `collapsedPending` is collapsed; an approved row in
+   * `expandedApproved` is expanded.
+   */
+  const collapsedPending = new SvelteSet();
+  const expandedApproved = new SvelteSet();
+
+  /** @param {string} id */
+  function isPendingExpanded(id) {
+    return !collapsedPending.has(id);
+  }
+
+  /** @param {string} id */
+  function togglePending(id) {
+    if (collapsedPending.has(id)) collapsedPending.delete(id);
+    else collapsedPending.add(id);
+  }
+
+  /** @param {string} id */
+  function isApprovedExpanded(id) {
+    return expandedApproved.has(id);
+  }
+
+  /** @param {string} id */
+  function toggleApproved(id) {
+    if (expandedApproved.has(id)) expandedApproved.delete(id);
+    else expandedApproved.add(id);
+  }
 
   // Subscribe to kind 1069 responses for this form.
   $effect(() => {
@@ -329,6 +363,25 @@
   }
 </script>
 
+{#snippet formFieldsBody(/** @type {Record<string, string> | undefined} */ values)}
+  <div class="space-y-3 border-t border-base-300 p-4 text-sm">
+    {#if values}
+      {#each parsedTemplate.fields as field (field.id)}
+        {#if field.id !== 'wished_handle'}
+          <div>
+            <div class="text-xs text-base-content/50">{field.label}</div>
+            <div class="break-words">{values[field.id] || '—'}</div>
+          </div>
+        {/if}
+      {/each}
+    {:else}
+      <div class="flex justify-center p-2">
+        <span class="loading loading-sm loading-spinner"></span>
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
 {#if pendingResponses.length > 0}
   <section class="mb-8">
     <h2 class="mb-3 text-xl font-semibold">
@@ -339,9 +392,10 @@
         {@const values = decrypted.get(response.id)}
         {@const state = approvalState.get(response.id) || 'idle'}
         {@const profile = getProfiles()?.get(response.pubkey)}
+        {@const expanded = isPendingExpanded(response.id)}
         <li class="rounded-box border border-base-300 bg-base-100">
-          <!-- Header: identity + wished handle -->
-          <div class="flex flex-wrap items-start gap-3 border-b border-base-300 bg-base-200/40 p-4">
+          <!-- Header: identity + wished handle + actions + expand toggle -->
+          <div class="flex flex-wrap items-start gap-3 bg-base-200/40 p-4">
             <ProfileAvatar pubkey={response.pubkey} {profile} size="md" />
             <div class="min-w-0 flex-1">
               <div class="text-sm font-semibold">
@@ -357,60 +411,44 @@
                 </code>
               {/if}
             </div>
-          </div>
-
-          <!-- Body: form field values -->
-          <div class="space-y-3 p-4 text-sm">
-            {#if values}
-              {#each parsedTemplate.fields as field (field.id)}
-                {#if field.id !== 'wished_handle'}
-                  <div>
-                    <div class="text-xs text-base-content/50">{field.label}</div>
-                    <div class="break-words">{values[field.id] || '—'}</div>
-                  </div>
-                {/if}
-              {/each}
-            {:else}
-              <div class="flex justify-center p-2">
+            <div class="flex flex-wrap items-center gap-2">
+              {#if state === 'pending'}
                 <span class="loading loading-sm loading-spinner"></span>
-              </div>
-            {/if}
+                <span class="text-sm text-base-content/60">{m.admin_membership_approve()}…</span>
+              {:else}
+                {#if state !== 'idle' && state !== 'approved'}
+                  <span class="text-sm text-error">{state}</span>
+                {/if}
+                <button
+                  class="btn btn-sm btn-primary"
+                  disabled={!values?.wished_handle}
+                  onclick={() => approve(response)}
+                >
+                  {m.admin_membership_approve()}
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick={() => reject(response)}>
+                  {m.admin_membership_reject()}
+                </button>
+              {/if}
+              <button
+                class="btn btn-circle btn-ghost btn-sm"
+                aria-label={expanded ? m.admin_membership_collapse() : m.admin_membership_expand()}
+                aria-expanded={expanded}
+                onclick={() => togglePending(response.id)}
+              >
+                {#if expanded}
+                  <ChevronUpIcon class_="w-4 h-4" />
+                {:else}
+                  <ChevronDownIcon class_="w-4 h-4" />
+                {/if}
+              </button>
+            </div>
           </div>
 
-          <!-- Footer: actions -->
-          <div
-            class="flex flex-wrap items-center gap-2 border-t border-base-300 bg-base-200/40 p-3"
-          >
-            {#if state === 'pending'}
-              <span class="loading loading-sm loading-spinner"></span>
-              <span class="text-sm text-base-content/60">
-                {m.admin_membership_approve()}…
-              </span>
-            {:else if state !== 'idle' && state !== 'approved'}
-              <span class="text-sm text-error">{state}</span>
-              <button
-                class="btn btn-sm btn-primary"
-                disabled={!values?.wished_handle}
-                onclick={() => approve(response)}
-              >
-                {m.admin_membership_approve()}
-              </button>
-              <button class="btn btn-ghost btn-sm" onclick={() => reject(response)}>
-                {m.admin_membership_reject()}
-              </button>
-            {:else}
-              <button
-                class="btn btn-sm btn-primary"
-                disabled={!values?.wished_handle}
-                onclick={() => approve(response)}
-              >
-                {m.admin_membership_approve()}
-              </button>
-              <button class="btn btn-ghost btn-sm" onclick={() => reject(response)}>
-                {m.admin_membership_reject()}
-              </button>
-            {/if}
-          </div>
+          <!-- Body: form field values (collapsible) -->
+          {#if expanded}
+            {@render formFieldsBody(values)}
+          {/if}
         </li>
       {/each}
     </ul>
@@ -426,17 +464,38 @@
       {#each approvedResponses as response (response.id)}
         {@const values = decrypted.get(response.id)}
         {@const profile = getProfiles()?.get(response.pubkey)}
-        <li class="flex flex-wrap items-center gap-3 p-3 text-sm">
-          <span class="badge badge-sm badge-success">{m.admin_membership_approved()}</span>
-          <code class="text-sm">
-            {values?.wished_handle ?? '…'}@{cfg.handleDomain}
-          </code>
-          <span class="text-base-content/60">
-            {profile?.name || profile?.display_name || shortNpub(response.pubkey)}
-          </span>
-          <button class="btn ml-auto btn-outline btn-xs btn-error" onclick={() => revoke(response)}>
-            {m.admin_membership_revoke()}
-          </button>
+        {@const expanded = isApprovedExpanded(response.id)}
+        <li>
+          <div class="flex flex-wrap items-center gap-3 p-3 text-sm">
+            <span class="badge badge-sm badge-success">{m.admin_membership_approved()}</span>
+            <code class="text-sm">
+              {values?.wished_handle ?? '…'}@{cfg.handleDomain}
+            </code>
+            <span class="text-base-content/60">
+              {profile?.name || profile?.display_name || shortNpub(response.pubkey)}
+            </span>
+            <button
+              class="btn ml-auto btn-outline btn-xs btn-error"
+              onclick={() => revoke(response)}
+            >
+              {m.admin_membership_revoke()}
+            </button>
+            <button
+              class="btn btn-circle btn-ghost btn-xs"
+              aria-label={expanded ? m.admin_membership_collapse() : m.admin_membership_expand()}
+              aria-expanded={expanded}
+              onclick={() => toggleApproved(response.id)}
+            >
+              {#if expanded}
+                <ChevronUpIcon class_="w-4 h-4" />
+              {:else}
+                <ChevronDownIcon class_="w-4 h-4" />
+              {/if}
+            </button>
+          </div>
+          {#if expanded}
+            {@render formFieldsBody(values)}
+          {/if}
         </li>
       {/each}
     </ul>

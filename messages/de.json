@@ -1078,6 +1078,8 @@
   "admin_membership_revoke": "Widerrufen",
   "admin_membership_revoke_confirm": "{handle} entziehen? Die Adresse löst danach nicht mehr auf.",
   "admin_membership_revoke_failed": "Entzug fehlgeschlagen",
+  "admin_membership_expand": "Details anzeigen",
+  "admin_membership_collapse": "Details ausblenden",
   "advanced_settings_label": "Erweiterte Einstellungen",
   "edit_community_modal_title": "Community-Einstellungen bearbeiten",
   "edit_community_modal_error_no_community": "Keine Community-Daten verfügbar",
