@@ -42,8 +42,10 @@ PREFIX obo: <http://purl.obolibrary.org/obo/>`;
 //
 // Expands to two UNION branches; the second is gated by FILTER NOT EXISTS.
 //
-// @param {string} parentTerm  SPARQL term for the parent node (already `<uri>`-wrapped)
-// @param {string} childVar    SPARQL variable for the child (e.g. '?child')
+/**
+ * @param {string} parentTerm  SPARQL term for the parent node (already `<uri>`-wrapped)
+ * @param {string} childVar    SPARQL variable for the child (e.g. '?child')
+ */
 function hasPartBlock(parentTerm, childVar) {
   return `{ ${parentTerm} lp:LP_0000008 ${childVar} . }
   UNION

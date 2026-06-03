@@ -42,10 +42,11 @@ export function useMembershipPendingCount() {
     const adminPubkey = adminPubkeys[0] || '';
     const handleDomain = cfg?.handleDomain || '';
 
-    if (!enabled || !isAdmin || !formAddress || !adminPubkey) {
+    if (!enabled || !isAdmin || !formAddress || !adminPubkey || !pubkey) {
       count = 0;
       return;
     }
+    const activePubkey = pubkey;
 
     /** @type {import('nostr-tools').NostrEvent[]} */
     let cachedEvents = [];
@@ -57,7 +58,9 @@ export function useMembershipPendingCount() {
       let rejectedIds = {};
       try {
         const raw =
-          typeof window !== 'undefined' ? window.localStorage.getItem(rejectedKey(pubkey)) : null;
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem(rejectedKey(activePubkey))
+            : null;
         const list = /** @type {string[]} */ (raw ? JSON.parse(raw) : []);
         for (const id of list) rejectedIds[id] = true;
       } catch {

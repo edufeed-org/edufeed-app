@@ -101,28 +101,27 @@
   // NIP-44 ECDH is symmetric — the applicant can decrypt their own response
   // using the admin pubkey on the other side of the shared secret.
   $effect(() => {
-    if (!existingResponse || !manager.active) {
+    const active = manager.active;
+    const response = existingResponse;
+    if (!response || !active) {
       prefilledValues = null;
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const isEncrypted = existingResponse.tags.some((t) => t[0] === 'encrypted');
+        const isEncrypted = response.tags.some((t) => t[0] === 'encrypted');
         /** @type {string[][]} */
         let tags;
         if (isEncrypted) {
-          if (!manager.active.signer?.nip44) {
+          if (!active.signer?.nip44) {
             prefilledValues = {};
             return;
           }
-          const plaintext = await manager.active.signer.nip44.decrypt(
-            adminPubkey,
-            existingResponse.content
-          );
+          const plaintext = await active.signer.nip44.decrypt(adminPubkey, response.content);
           tags = JSON.parse(plaintext);
         } else {
-          tags = existingResponse.tags.filter((t) => t[0] === 'response');
+          tags = response.tags.filter((t) => t[0] === 'response');
         }
         if (cancelled) return;
         const values = parseResponseTags(tags);
