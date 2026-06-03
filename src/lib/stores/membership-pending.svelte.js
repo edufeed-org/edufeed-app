@@ -1,12 +1,15 @@
 /**
- * Reactive count of pending membership applications for the active admin.
+ * Reactive count of *unprocessed* membership applications for the active admin.
  *
- * Mirrors the loader/model setup of `MembershipApprovalsPanel.svelte` but
- * exposes only the count — no decryption, no upstream NIP-05 check. Cheap
- * enough for navbar/menu indicators.
+ * Loads kind 1069 responses for the configured form, then excludes:
+ *   - locally-rejected rows (localStorage set, mirrors MembershipApprovalsPanel)
+ *   - rows whose applicant pubkey is already in the upstream NIP-05 directory
+ *     (i.e. already approved — fetched once from `/.well-known/nostr.json`,
+ *     re-fetched on `window.focus` so coming back to the tab after upstream
+ *     work refreshes the badge)
  *
- * Slightly overcounts: already-approved rows still contribute until the admin
- * removes them. Acceptable tradeoff for a nudge-style indicator.
+ * No decryption involved. The well-known endpoint returns the full directory
+ * when called without a `name=` parameter, so one HTTPS call covers all rows.
  */
 import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -37,15 +40,19 @@ export function useMembershipPendingCount() {
     const isAdmin = !!pubkey && adminPubkeys.includes(pubkey);
     const formAddress = cfg?.formAddress || '';
     const adminPubkey = adminPubkeys[0] || '';
+    const handleDomain = cfg?.handleDomain || '';
 
     if (!enabled || !isAdmin || !formAddress || !adminPubkey) {
       count = 0;
       return;
     }
 
-    const loader = formResponseLoader(formAddress, adminPubkey);
-    const loaderSub = loader().subscribe();
-    const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
+    /** @type {import('nostr-tools').NostrEvent[]} */
+    let cachedEvents = [];
+    /** @type {Record<string, true>} Pubkeys with an upstream NIP-05 entry. */
+    let approvedPubkeys = {};
+
+    function recompute() {
       /** @type {Record<string, true>} */
       let rejectedIds = {};
       try {
@@ -57,15 +64,48 @@ export function useMembershipPendingCount() {
         // localStorage unavailable — treat nothing as rejected.
       }
 
-      const matching = (events || []).filter((e) =>
+      const matching = cachedEvents.filter((e) =>
         e.tags.some((t) => t[0] === 'a' && t[1] === formAddress)
       );
-      count = matching.filter((e) => !rejectedIds[e.id]).length;
+      count = matching.filter((e) => !rejectedIds[e.id] && !approvedPubkeys[e.pubkey]).length;
+    }
+
+    async function refreshApproved() {
+      if (!handleDomain) return;
+      try {
+        const res = await fetch(`https://${handleDomain}/.well-known/nostr.json`);
+        if (!res.ok) return;
+        const json = await res.json();
+        /** @type {Record<string, true>} */
+        const next = {};
+        for (const pk of Object.values(json?.names || {})) {
+          if (typeof pk === 'string') next[pk] = true;
+        }
+        approvedPubkeys = next;
+        recompute();
+      } catch {
+        // Network/CORS — leave approvedPubkeys as-is.
+      }
+    }
+
+    refreshApproved();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', refreshApproved);
+    }
+
+    const loader = formResponseLoader(formAddress, adminPubkey);
+    const loaderSub = loader().subscribe();
+    const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
+      cachedEvents = events || [];
+      recompute();
     });
 
     return () => {
       loaderSub.unsubscribe();
       modelSub.unsubscribe();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', refreshApproved);
+      }
     };
   });
 
