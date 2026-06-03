@@ -1306,6 +1306,7 @@
   "wiki_view_share_with_communities": "Share with Communities",
   "wiki_view_comments": "Comments",
   "wiki_view_delete_confirm_title": "Delete Wiki Article?",
+  "poll_delete_confirm_title": "Delete Poll?",
   "wiki_view_delete_success": "Wiki article deleted",
   "wiki_view_delete_failed": "Failed to delete wiki article",
   "community_wikis_title": "Wikis",

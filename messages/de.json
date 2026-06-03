@@ -1257,6 +1257,7 @@
   "article_view_edit": "Bearbeiten",
   "article_view_delete": "Löschen",
   "article_view_delete_confirm_title": "Artikel löschen?",
+  "poll_delete_confirm_title": "Umfrage löschen?",
   "article_view_delete_success": "Artikel gelöscht",
   "article_view_delete_failed": "Artikel konnte nicht gelöscht werden",
   "delete_confirm_text": "Möchtest du wirklich löschen:",
