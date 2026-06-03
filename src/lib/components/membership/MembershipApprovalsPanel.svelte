@@ -2,27 +2,39 @@
   /**
    * Admin-only approvals panel.
    *
-   * Lists pending kind 1069 membership applications, decrypts each
-   * (NIP-44 from applicant → admin), and offers an Approve button that
-   * provisions the handle via the SvelteKit `/api/nip05` proxy. The proxy
-   * verifies a NIP-98 header (the admin signs the request), then forwards
-   * the call to the nip-05-service with the server-held Bearer token.
+   * Lists kind 1069 membership applications and offers Approve / Reject /
+   * Revoke actions. Renders each pending application as a single self-contained
+   * card (applicant identity + form values + actions) so the admin doesn't
+   * have to cross-reference a separate response list — that was confusing
+   * when both surfaces grew. Already-approved handles render as a compact
+   * summary list below.
    *
-   * This component is rendered ALONGSIDE the existing `<FormResponses>` —
-   * it does not replace it. FormResponses still provides the rich
-   * inspect/expand UI; this panel just adds the action surface.
+   * Provisioning goes through the SvelteKit `/api/nip05` proxy: the admin
+   * signs a NIP-98 header, the proxy verifies it and forwards to the
+   * standalone nip-05-service with the server-held Bearer token.
    */
   import { TimelineModel } from 'applesauce-core/models';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { formResponseLoader } from '$lib/loaders/community.js';
-  import { parseResponseTags } from '$lib/helpers/forms.js';
+  import { parseResponseTags, parseFormTemplate } from '$lib/helpers/forms.js';
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import { SendWrappedMessage } from 'applesauce-actions/actions';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { formatTimestamp } from '$lib/helpers/dates.js';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
+
+  /**
+   * @type {{
+   *   formEvent: { kind: number, pubkey: string, tags: string[][], content: string, created_at: number } | null
+   * }}
+   */
+  let { formEvent } = $props();
+  const parsedTemplate = $derived(formEvent ? parseFormTemplate(formEvent) : { fields: [] });
 
   const cfg = $derived(runtimeConfig.membership);
   const formAddress = $derived(cfg?.formAddress || '');
@@ -65,6 +77,13 @@
   });
 
   const visibleResponses = $derived(responses.filter((r) => !rejectedIds.has(r.id)));
+  const pendingResponses = $derived(
+    visibleResponses.filter((r) => approvalState.get(r.id) !== 'approved')
+  );
+  const approvedResponses = $derived(
+    visibleResponses.filter((r) => approvalState.get(r.id) === 'approved')
+  );
+  const getProfiles = useProfileMap(() => visibleResponses.map((r) => r.pubkey));
 
   // Subscribe to kind 1069 responses for this form.
   $effect(() => {
@@ -310,58 +329,116 @@
   }
 </script>
 
-{#if visibleResponses.length > 0}
+{#if pendingResponses.length > 0}
+  <section class="mb-8">
+    <h2 class="mb-3 text-xl font-semibold">
+      {m.admin_membership_pending_title()} ({pendingResponses.length})
+    </h2>
+    <ul class="space-y-4">
+      {#each pendingResponses as response (response.id)}
+        {@const values = decrypted.get(response.id)}
+        {@const state = approvalState.get(response.id) || 'idle'}
+        {@const profile = getProfiles()?.get(response.pubkey)}
+        <li class="rounded-box border border-base-300 bg-base-100">
+          <!-- Header: identity + wished handle -->
+          <div class="flex flex-wrap items-start gap-3 border-b border-base-300 bg-base-200/40 p-4">
+            <ProfileAvatar pubkey={response.pubkey} {profile} size="md" />
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold">
+                {profile?.name || profile?.display_name || response.pubkey.slice(0, 8) + '…'}
+              </div>
+              <div class="text-xs text-base-content/60">
+                {formatTimestamp(response.created_at)}
+                · <code class="text-xs">{shortNpub(response.pubkey)}</code>
+              </div>
+              {#if values?.wished_handle}
+                <code class="mt-2 inline-block rounded bg-base-200 px-2 py-1 text-sm">
+                  {values.wished_handle}@{cfg.handleDomain}
+                </code>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Body: form field values -->
+          <div class="space-y-3 p-4 text-sm">
+            {#if values}
+              {#each parsedTemplate.fields as field (field.id)}
+                {#if field.id !== 'wished_handle'}
+                  <div>
+                    <div class="text-xs text-base-content/50">{field.label}</div>
+                    <div class="break-words">{values[field.id] || '—'}</div>
+                  </div>
+                {/if}
+              {/each}
+            {:else}
+              <div class="flex justify-center p-2">
+                <span class="loading loading-sm loading-spinner"></span>
+              </div>
+            {/if}
+          </div>
+
+          <!-- Footer: actions -->
+          <div
+            class="flex flex-wrap items-center gap-2 border-t border-base-300 bg-base-200/40 p-3"
+          >
+            {#if state === 'pending'}
+              <span class="loading loading-sm loading-spinner"></span>
+              <span class="text-sm text-base-content/60">
+                {m.admin_membership_approve()}…
+              </span>
+            {:else if state !== 'idle' && state !== 'approved'}
+              <span class="text-sm text-error">{state}</span>
+              <button
+                class="btn btn-sm btn-primary"
+                disabled={!values?.wished_handle}
+                onclick={() => approve(response)}
+              >
+                {m.admin_membership_approve()}
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick={() => reject(response)}>
+                {m.admin_membership_reject()}
+              </button>
+            {:else}
+              <button
+                class="btn btn-sm btn-primary"
+                disabled={!values?.wished_handle}
+                onclick={() => approve(response)}
+              >
+                {m.admin_membership_approve()}
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick={() => reject(response)}>
+                {m.admin_membership_reject()}
+              </button>
+            {/if}
+          </div>
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/if}
+
+{#if approvedResponses.length > 0}
   <section class="mb-6">
-    <h2 class="mb-3 text-xl font-semibold">{m.admin_membership_pending_title()}</h2>
-    <div class="overflow-x-auto rounded-box border border-base-300">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>{m.admin_membership_col_handle()}</th>
-            <th>{m.admin_membership_col_pubkey()}</th>
-            <th>{m.admin_membership_col_action()}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each visibleResponses as response (response.id)}
-            {@const values = decrypted.get(response.id)}
-            {@const state = approvalState.get(response.id) || 'idle'}
-            <tr>
-              <td>
-                {#if values?.wished_handle}
-                  <code>{values.wished_handle}@{cfg.handleDomain}</code>
-                {:else}
-                  <span class="text-base-content/50">…</span>
-                {/if}
-              </td>
-              <td><code class="text-xs">{shortNpub(response.pubkey)}</code></td>
-              <td class="flex flex-wrap items-center gap-2">
-                {#if state === 'approved'}
-                  <span class="badge badge-success">{m.admin_membership_approved()}</span>
-                  <button class="btn btn-outline btn-xs btn-error" onclick={() => revoke(response)}>
-                    {m.admin_membership_revoke()}
-                  </button>
-                {:else if state === 'pending'}
-                  <span class="loading loading-sm loading-spinner"></span>
-                {:else if state !== 'idle'}
-                  <span class="text-sm text-error">{state}</span>
-                {:else}
-                  <button
-                    class="btn btn-sm btn-primary"
-                    disabled={!values?.wished_handle}
-                    onclick={() => approve(response)}
-                  >
-                    {m.admin_membership_approve()}
-                  </button>
-                  <button class="btn btn-ghost btn-sm" onclick={() => reject(response)}>
-                    {m.admin_membership_reject()}
-                  </button>
-                {/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+    <h2 class="mb-3 text-lg font-semibold text-base-content/70">
+      {m.admin_membership_approved()} ({approvedResponses.length})
+    </h2>
+    <ul class="divide-y divide-base-300 rounded-box border border-base-300">
+      {#each approvedResponses as response (response.id)}
+        {@const values = decrypted.get(response.id)}
+        {@const profile = getProfiles()?.get(response.pubkey)}
+        <li class="flex flex-wrap items-center gap-3 p-3 text-sm">
+          <span class="badge badge-sm badge-success">{m.admin_membership_approved()}</span>
+          <code class="text-sm">
+            {values?.wished_handle ?? '…'}@{cfg.handleDomain}
+          </code>
+          <span class="text-base-content/60">
+            {profile?.name || profile?.display_name || shortNpub(response.pubkey)}
+          </span>
+          <button class="btn ml-auto btn-outline btn-xs btn-error" onclick={() => revoke(response)}>
+            {m.admin_membership_revoke()}
+          </button>
+        </li>
+      {/each}
+    </ul>
   </section>
 {/if}

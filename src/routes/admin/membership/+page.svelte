@@ -5,12 +5,10 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import FormResponses from '$lib/components/forms/FormResponses.svelte';
   import MembershipApprovalsPanel from '$lib/components/membership/MembershipApprovalsPanel.svelte';
 
   const cfg = $derived(runtimeConfig.membership);
   const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
-  const formAddress = $derived(cfg?.formAddress || '');
   const adminPubkeys = $derived(cfg?.adminPubkeys || []);
 
   // `manager.active` is an RxJS-backed property (not a Svelte rune), so we
@@ -73,7 +71,6 @@
       <span class="ml-2">{m.admin_membership_loading_form()}</span>
     </div>
   {:else if formEvent}
-    <MembershipApprovalsPanel />
-    <FormResponses {formEvent} {formAddress} />
+    <MembershipApprovalsPanel {formEvent} />
   {/if}
 </div>

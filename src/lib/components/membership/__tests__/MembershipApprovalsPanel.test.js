@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, fireEvent, waitFor, screen } from '@testing-library/svelte';
 
 const ADMIN_PUBKEY = 'a'.repeat(64);
 const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
@@ -81,6 +81,12 @@ vi.mock('$lib/stores/action-runner.svelte.js', () => ({
 vi.mock('applesauce-actions/actions', () => ({
   SendWrappedMessage: hoisted.sendWrappedMessageMock
 }));
+
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map()
+}));
+
+vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 
 import MembershipApprovalsPanel from '../MembershipApprovalsPanel.svelte';
 
@@ -193,8 +199,12 @@ describe('MembershipApprovalsPanel', () => {
       })
     });
 
-    const { findByText, queryByRole } = render(MembershipApprovalsPanel);
-    await findByText(/Approved|Genehmigt/i);
+    const { queryByRole } = render(MembershipApprovalsPanel);
+    // Two matches expected: the section header "Approved (N)" and the per-row badge.
+    await waitFor(() => {
+      const matches = screen.queryAllByText(/Approved|Genehmigt/i);
+      expect(matches.length).toBeGreaterThan(0);
+    });
     // The Approve button should no longer be present for this row.
     expect(queryByRole('button', { name: /Approve|Genehmigen/i })).toBeNull();
   });
@@ -246,12 +256,16 @@ describe('MembershipApprovalsPanel', () => {
       })
     });
 
-    const { findByRole, findByText } = render(MembershipApprovalsPanel);
+    const { findByRole } = render(MembershipApprovalsPanel);
     const btn = await findByRole('button', { name: /Approve|Genehmigen/i });
     await fireEvent.click(btn);
 
     // The row still settles to "approved" — the DM is best-effort.
-    await findByText(/Approved|Genehmigt/i);
+    // Two matches expected: the section header "Approved (N)" and the per-row badge.
+    await waitFor(() => {
+      const matches = screen.queryAllByText(/Approved|Genehmigt/i);
+      expect(matches.length).toBeGreaterThan(0);
+    });
   });
 
   it('does not send a notify-DM when approve fails upstream', async () => {
