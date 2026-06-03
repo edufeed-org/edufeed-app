@@ -171,10 +171,12 @@
     }
   }
 
-  // Capture wished_handle from the FormRenderer values whenever it changes,
-  // by listening to the rendered input via the document. Simpler: read from
-  // values on submit, but we also need live checks — so we listen via the
-  // template's input element by id.
+  // The membership-specific live availability/format checks live next to a
+  // generic FormRenderer field, so we sync into the DOM directly:
+  //   1) listen for input events on `#wished_handle`,
+  //   2) toggle `input-error` + `aria-invalid` on the input itself,
+  //   3) insert a sibling status element right below the input so the feedback
+  //      appears next to the field rather than at the bottom of the form.
   $effect(() => {
     if (!formEvent) return;
     const el = document.getElementById('wished_handle');
@@ -183,7 +185,60 @@
       (ev) => onWishedHandleInput(/** @type {Event} */ (ev))
     );
     el.addEventListener('input', handler);
-    return () => el.removeEventListener('input', handler);
+
+    const statusEl = document.createElement('div');
+    statusEl.dataset.testid = 'wished-handle-status';
+    statusEl.className = 'mt-1 text-sm';
+    el.insertAdjacentElement('afterend', statusEl);
+
+    return () => {
+      el.removeEventListener('input', handler);
+      statusEl.remove();
+      el.classList.remove('input-error');
+      el.removeAttribute('aria-invalid');
+    };
+  });
+
+  // Reactively reflect handleStatus / wishedHandle into the input's error
+  // styling and the sibling status element's text. Reads handleStatus +
+  // wishedHandle so Svelte re-runs whenever either changes.
+  $effect(() => {
+    const el = /** @type {HTMLInputElement | null} */ (document.getElementById('wished_handle'));
+    if (!el) return;
+    const statusEl = /** @type {HTMLElement | null} */ (
+      el.nextElementSibling instanceof HTMLElement &&
+      el.nextElementSibling.dataset?.testid === 'wished-handle-status'
+        ? el.nextElementSibling
+        : null
+    );
+
+    const isError = handleStatus === 'invalid' || handleStatus === 'taken';
+    el.classList.toggle('input-error', isError);
+    if (isError) el.setAttribute('aria-invalid', 'true');
+    else el.removeAttribute('aria-invalid');
+
+    if (!statusEl) return;
+    if (!wishedHandle) {
+      statusEl.textContent = '';
+      statusEl.className = 'mt-1 text-sm';
+      return;
+    }
+    if (handleStatus === 'checking') {
+      statusEl.textContent = m.membership_handle_checking();
+      statusEl.className = 'mt-1 text-sm text-base-content/60';
+    } else if (handleStatus === 'available') {
+      statusEl.textContent = `✓ ${m.membership_handle_available()} — ${m.membership_handle_preview({ handle: wishedHandle, domain: handleDomain })}`;
+      statusEl.className = 'mt-1 text-sm text-success';
+    } else if (handleStatus === 'taken') {
+      statusEl.textContent = `✗ ${m.membership_handle_taken()}`;
+      statusEl.className = 'mt-1 text-sm text-error';
+    } else if (handleStatus === 'invalid') {
+      statusEl.textContent = m.membership_handle_invalid();
+      statusEl.className = 'mt-1 text-sm text-error';
+    } else {
+      statusEl.textContent = '';
+      statusEl.className = 'mt-1 text-sm';
+    }
   });
 </script>
 
@@ -205,24 +260,6 @@
   {/if}
 
   <FormRenderer {formEvent} onsubmit={handleSubmit} />
-
-  <!-- Handle status feedback (positioned under the rendered form) -->
-  {#if wishedHandle}
-    <div class="mt-2 text-sm" data-testid="handle-status">
-      {#if handleStatus === 'checking'}
-        <span class="text-base-content/60">{m.membership_handle_checking()}</span>
-      {:else if handleStatus === 'available'}
-        <span class="text-success">
-          ✓ {m.membership_handle_available()} —
-          {m.membership_handle_preview({ handle: wishedHandle, domain: handleDomain })}
-        </span>
-      {:else if handleStatus === 'taken'}
-        <span class="text-error">✗ {m.membership_handle_taken()}</span>
-      {:else if handleStatus === 'invalid'}
-        <span class="text-error">{m.membership_handle_invalid()}</span>
-      {/if}
-    </div>
-  {/if}
 
   {#if error}
     <div class="mt-2 alert alert-error">{error}</div>
