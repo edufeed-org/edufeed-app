@@ -73,6 +73,19 @@ export function npubToHex(npub) {
 }
 
 /**
+ * Build a profile route path (`/p/<npub>`) for a pubkey.
+ * Accepts hex or npub; falls back to the original value if npub encoding fails
+ * so the route's hex/npub-tolerant param matcher can still resolve it.
+ * @param {string} pubkey - hex pubkey or npub
+ * @returns {`/p/${string}`}
+ */
+export function profileLink(pubkey) {
+  if (pubkey.startsWith('npub1')) return `/p/${pubkey}`;
+  const npub = hexToNpub(pubkey);
+  return `/p/${npub || pubkey}`;
+}
+
+/**
  * Normalize pubkey identifier to hex format
  * Accepts both hex and npub, returns hex
  * @param {string} identifier - hex pubkey or npub

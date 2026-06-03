@@ -8,7 +8,7 @@
   import { resolve } from '$app/paths';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import { UserIcon } from '$lib/components/icons';
 
@@ -82,7 +82,7 @@
 
 {#if linkToProfile}
   <a
-    href={resolve(`/p/${pubkey}`)}
+    href={resolve(profileLink(pubkey))}
     class="flex items-center rounded-lg bg-base-200 transition hover:bg-base-300 {paddingClasses[
       size
     ]} {gapClasses[size]} {className}"

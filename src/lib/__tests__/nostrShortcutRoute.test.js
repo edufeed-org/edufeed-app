@@ -12,18 +12,19 @@ const HEX_PUBKEY = '3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa
 const HEX_EVENT_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
 describe('resolveNostrShortcutRoute', () => {
-  it('maps npub → /p/<hex>', () => {
+  it('maps npub → /p/<npub>', () => {
     const npub = nip19.npubEncode(HEX_PUBKEY);
-    expect(resolveNostrShortcutRoute(npub)).toBe(`/p/${HEX_PUBKEY}`);
+    expect(resolveNostrShortcutRoute(npub)).toBe(`/p/${npub}`);
   });
 
-  it('maps nprofile → /p/<hex> and drops relay hints', () => {
+  it('maps nprofile → /p/<npub> and drops relay hints', () => {
+    const npub = nip19.npubEncode(HEX_PUBKEY);
     const nprofile = nip19.nprofileEncode({
       pubkey: HEX_PUBKEY,
       relays: ['wss://relay.example.com', 'wss://other.example.com']
     });
     const target = resolveNostrShortcutRoute(nprofile);
-    expect(target).toBe(`/p/${HEX_PUBKEY}`);
+    expect(target).toBe(`/p/${npub}`);
     expect(target).not.toContain('relay');
   });
 

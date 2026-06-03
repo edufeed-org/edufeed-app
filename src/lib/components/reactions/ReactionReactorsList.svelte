@@ -9,6 +9,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import * as m from '$lib/paraglide/messages';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   const MAX_DISPLAY = 10;
 
@@ -49,7 +50,7 @@
       <li class="flex items-center gap-2">
         <ProfileAvatar {pubkey} {profile} size="xs" linkToProfile showHoverCard />
         <a
-          href={resolve(`/p/${pubkey}`)}
+          href={resolve(profileLink(pubkey))}
           class="truncate text-sm text-base-content/80 hover:underline"
         >
           {getDisplayName(profile) || `${pubkey.slice(0, 8)}...`}

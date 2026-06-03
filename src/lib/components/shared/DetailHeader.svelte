@@ -15,6 +15,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import EventContextMenu from './EventContextMenu.svelte';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @typedef {Object} Props
@@ -83,7 +84,7 @@
       <div class="order-2 flex min-w-0 flex-1 items-center gap-2 sm:flex-initial">
         <ProfileAvatar pubkey={authorPubkey} size="xs" linkToProfile />
         <span class="truncate text-xs">
-          <a href={resolve(`/p/${authorPubkey}`)} class="font-medium hover:underline">
+          <a href={resolve(profileLink(authorPubkey))} class="font-medium hover:underline">
             {authorName}
           </a>
           {#if date}

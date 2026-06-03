@@ -88,7 +88,7 @@ export function getNotificationUrl(event) {
 
   // Waves — link to waver's profile
   if (type === 'wave') {
-    return `/p/${event.pubkey}`;
+    return `/p/${nip19.npubEncode(event.pubkey)}`;
   }
 
   // Reactions — use last e/a tag per NIP-25

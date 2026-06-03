@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
+import { nip19 } from 'nostr-tools';
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: vi.fn(() => ({}))
@@ -211,7 +212,7 @@ describe('getNotificationUrl', () => {
         ['a', '0:' + 'c'.repeat(64) + ':']
       ]
     };
-    expect(getNotificationUrl(event)).toBe(`/p/${pokerPubkey}`);
+    expect(getNotificationUrl(event)).toBe(`/p/${nip19.npubEncode(pokerPubkey)}`);
   });
   it('returns null for reaction without navigable tags', () => {
     expect(getNotificationUrl({ kind: 7, tags: [] })).toBe(null);

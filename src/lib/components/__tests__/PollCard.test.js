@@ -117,6 +117,10 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   poll_delete_confirm_title: () => 'Delete Poll?'
 }));
 
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  profileLink: (/** @type {string} */ pubkey) => (pubkey ? `/p/${pubkey}` : '#')
+}));
+
 /**
  * Build a minimal kind 1068 poll event.
  * @param {Object} [overrides]

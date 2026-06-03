@@ -29,7 +29,7 @@
   import ExpandableListCard from './ExpandableListCard.svelte';
   import NewListModal from '$lib/components/lists/NewListModal.svelte';
   import { BookmarkIcon, ChevronRightIcon, PlusIcon } from '$lib/components/icons';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
@@ -301,7 +301,7 @@
       {@const profile = getProfile()}
       {@const displayName = getDisplayName(profile) || `${pointer.pubkey.slice(0, 8)}...`}
       <a
-        href={resolve(`/p/${pointer.pubkey}`)}
+        href={resolve(profileLink(pointer.pubkey))}
         class="flex items-center gap-2 rounded-full border border-base-300 bg-base-100 px-3 py-1.5 shadow-sm hover:shadow-md"
       >
         <ProfileAvatar pubkey={pointer.pubkey} size="sm" fallbackType="robohash" />
@@ -422,7 +422,7 @@
       {#if contactsList}
         {@const pointers = getProfilePointersFromList(contactsList)}
         <a
-          href={resolve(`/p/${pubkey}`)}
+          href={resolve(profileLink(pubkey))}
           class="flex items-center justify-between rounded-lg border border-base-300 bg-base-100 p-3 hover:bg-base-200"
           data-testid="list-contacts"
         >

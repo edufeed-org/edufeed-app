@@ -15,6 +15,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { nip19 } from 'nostr-tools';
   import { getSeenRelays } from 'applesauce-core/helpers';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -159,7 +160,7 @@
       <!-- Author & Timestamp -->
       <div class="flex-1">
         <div class="flex items-baseline gap-2">
-          <a href={resolve(`/p/${comment.pubkey}`)} class="font-semibold hover:underline">
+          <a href={resolve(profileLink(comment.pubkey))} class="font-semibold hover:underline">
             {getDisplayName(authorProfile) ||
               `${comment.pubkey.slice(0, 8)}...${comment.pubkey.slice(-4)}`}
           </a>

@@ -10,7 +10,7 @@
   const resolve = /** @type {any} */ (_resolve);
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import { profileLink } from '$lib/helpers/nostrUtils';
   import HoverCard from '../HoverCard.svelte';
   import ProfileHoverCardContent from '../ProfileHoverCardContent.svelte';
 
@@ -40,7 +40,7 @@
   );
 
   // Determine link href
-  let profileUrl = $derived(resolve(pubkey ? `/p/${hexToNpub(pubkey) || pubkey}` : '#'));
+  let profileUrl = $derived(pubkey ? resolve(profileLink(pubkey)) : '#');
 </script>
 
 {#if !decoded.success || !pubkey}

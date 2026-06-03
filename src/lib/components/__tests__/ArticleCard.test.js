@@ -48,7 +48,8 @@ vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: () => 'Jan 15'
 }));
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
-  encodeEventToNaddr: () => 'naddr1test'
+  encodeEventToNaddr: () => 'naddr1test',
+  profileLink: (/** @type {string} */ pubkey) => (pubkey ? `/p/${pubkey}` : '#')
 }));
 vi.mock('$lib/loaders/comments.js', () => ({
   createCommentLoaderForEvent: () => () => ({

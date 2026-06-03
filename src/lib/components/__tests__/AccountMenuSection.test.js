@@ -58,6 +58,10 @@ vi.mock('applesauce-core/helpers', () => ({
   getDisplayName: (profile, fallback) => profile?.name || fallback
 }));
 
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  profileLink: (pubkey) => (pubkey ? `/p/${pubkey}` : '#')
+}));
+
 // Heavy avatar component — replace with stub.
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 

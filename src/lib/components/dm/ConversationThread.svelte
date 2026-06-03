@@ -21,6 +21,7 @@
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon, ChevronLeftIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @type {{
@@ -260,7 +261,10 @@
 
             <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
               {#if !isOwnMessage}
-                <a href={resolve(`/p/${message.pubkey}`)} class="font-semibold hover:underline">
+                <a
+                  href={resolve(profileLink(message.pubkey))}
+                  class="font-semibold hover:underline"
+                >
                   {getUserDisplayName(message.pubkey)}
                 </a>
                 <span>&middot;</span>

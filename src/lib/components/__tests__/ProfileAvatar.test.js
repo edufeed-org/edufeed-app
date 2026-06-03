@@ -32,6 +32,10 @@ vi.mock('$app/paths', () => ({
   resolve: (/** @type {string} */ path) => path
 }));
 
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  profileLink: (/** @type {string} */ pubkey) => (pubkey ? `/p/${pubkey}` : '#')
+}));
+
 vi.mock('../shared/ImageWithFallback.svelte', () => ({
   default: {}
 }));

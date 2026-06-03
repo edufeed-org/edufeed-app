@@ -13,7 +13,7 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @typedef {Object} Props
@@ -111,7 +111,7 @@
     <ProfileAvatar pubkey={wiki.pubkey} profile={authorProfile} size="md" linkToProfile />
     <div class="min-w-0 flex-1">
       <a
-        href={resolve(`/p/${wiki.pubkey}`)}
+        href={resolve(profileLink(wiki.pubkey))}
         class="truncate font-medium text-base-content hover:underline">{authorName}</a
       >
       <div class="text-sm text-base-content/60">

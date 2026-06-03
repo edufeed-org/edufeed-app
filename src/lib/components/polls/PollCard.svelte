@@ -15,6 +15,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @typedef {Object} Props
@@ -306,7 +307,7 @@
                         {@const name = getDisplayName(profile, voterPubkey.slice(0, 8) + '…')}
                         <li>
                           <a
-                            href={resolve(`/p/${voterPubkey}`)}
+                            href={resolve(profileLink(voterPubkey))}
                             class="flex items-center gap-2 rounded px-2 py-1 hover:bg-base-200"
                           >
                             <ProfileAvatar pubkey={voterPubkey} {profile} size="2xs" />

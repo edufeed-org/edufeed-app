@@ -4,8 +4,8 @@
 -->
 
 <script>
-  import { nip19 } from 'nostr-tools';
   import { Track, ParticipantEvent } from 'livekit-client';
+  import { profileLink } from '$lib/helpers/nostrUtils';
   import { getDisplayName } from 'applesauce-core/helpers';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
@@ -169,10 +169,7 @@
       {#if participant?.identity && !isLocal}
         <HoverCard position="top" fixed={true}>
           {#snippet trigger()}
-            <a
-              href="/p/{nip19.npubEncode(participant.identity)}"
-              class="text-xs text-white hover:underline"
-            >
+            <a href={profileLink(participant.identity)} class="text-xs text-white hover:underline">
               {displayName}
             </a>
           {/snippet}
@@ -191,7 +188,7 @@
     <div class="absolute inset-0 z-10 flex items-center justify-center">
       <HoverCard position="top" fixed={true}>
         {#snippet trigger()}
-          <a href="/p/{nip19.npubEncode(participant.identity)}" class="text-center">
+          <a href={profileLink(participant.identity)} class="text-center">
             <ProfileAvatar
               pubkey={participant.identity}
               {profile}

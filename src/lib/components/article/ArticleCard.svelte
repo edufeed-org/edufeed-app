@@ -14,7 +14,7 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
@@ -161,7 +161,7 @@
       <div class="truncate font-semibold text-base-content">{title}</div>
       <div class="truncate text-sm text-base-content/60">
         <a
-          href={resolve(`/p/${article.pubkey}`)}
+          href={resolve(profileLink(article.pubkey))}
           class="hover:underline"
           onclick={(e) => e.stopPropagation()}>{authorName}</a
         >
@@ -205,7 +205,7 @@
       />
       <div class="min-w-0 flex-1">
         <a
-          href={resolve(`/p/${article.pubkey}`)}
+          href={resolve(profileLink(article.pubkey))}
           class="truncate font-medium text-base-content hover:underline">{authorName}</a
         >
         <div class="text-sm text-base-content/60">

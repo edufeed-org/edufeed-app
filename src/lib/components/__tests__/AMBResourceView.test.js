@@ -150,7 +150,8 @@ vi.mock('$lib/helpers/toast.js', () => ({
   showToast: vi.fn()
 }));
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
-  encodeEventToNaddr: vi.fn(() => 'naddr1test')
+  encodeEventToNaddr: vi.fn(() => 'naddr1test'),
+  profileLink: vi.fn((/** @type {string} */ pubkey) => (pubkey ? `/p/${pubkey}` : '#'))
 }));
 // Mock heavy sub-components
 vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));

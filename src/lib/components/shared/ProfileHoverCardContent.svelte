@@ -7,7 +7,7 @@
 <script>
   import { resolve } from '$app/paths';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { hexToNpub, generateAuthorColor } from '$lib/helpers/nostrUtils.js';
+  import { hexToNpub, generateAuthorColor, profileLink } from '$lib/helpers/nostrUtils.js';
   import Nip05VerifiedBadge from './Nip05VerifiedBadge.svelte';
   import { useProfileBadges } from '$lib/stores/badge-awards.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
@@ -57,7 +57,7 @@
   });
 </script>
 
-<a href={resolve(`/p/${pubkey}`)} class="block w-72 overflow-hidden rounded-lg">
+<a href={resolve(profileLink(pubkey))} class="block w-72 overflow-hidden rounded-lg">
   <!-- Banner -->
   {#if profile?.banner}
     <ImageWithFallback
