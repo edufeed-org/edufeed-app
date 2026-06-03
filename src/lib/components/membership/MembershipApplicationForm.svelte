@@ -9,6 +9,7 @@
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { buildResponseTags, buildUserResponseFilter } from '$lib/helpers/forms.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
+  import { formatTimestamp } from '$lib/helpers/dates.js';
 
   /**
    * @type {{
@@ -198,7 +199,7 @@
   {#if showHeader && existingResponse}
     <div class="mb-4 alert alert-info">
       {m.membership_already_applied({
-        date: new Date(existingResponse.created_at * 1000).toLocaleDateString()
+        date: formatTimestamp(existingResponse.created_at)
       })}
     </div>
   {/if}

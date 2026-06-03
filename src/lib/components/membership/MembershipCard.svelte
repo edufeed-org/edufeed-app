@@ -10,6 +10,7 @@
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
   import { UpdateProfile } from 'applesauce-actions/actions';
   import MembershipApplicationForm from './MembershipApplicationForm.svelte';
+  import { formatTimestamp } from '$lib/helpers/dates.js';
 
   const cfg = $derived(runtimeConfig.membership);
   const enabled = $derived(cfg?.enabled === true);
@@ -157,7 +158,7 @@
         <div class="alert alert-info">
           <span>
             {m.membership_already_applied({
-              date: new Date(existingResponse.created_at * 1000).toLocaleDateString()
+              date: formatTimestamp(existingResponse.created_at)
             })}
           </span>
         </div>
