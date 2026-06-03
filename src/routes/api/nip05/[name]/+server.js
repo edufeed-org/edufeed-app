@@ -79,7 +79,10 @@ export async function DELETE({ request, params, url }) {
       headers: { Authorization: `Bearer ${serviceApiKey}` }
     }
   );
-  const upstreamBody = await upstreamRes.text();
+  // Null-body statuses (204/205/304) per Fetch spec — Response constructor
+  // throws if a body is passed, which would surface as a misleading 500.
+  const hasBody = ![204, 205, 304].includes(upstreamRes.status);
+  const upstreamBody = hasBody ? await upstreamRes.text() : null;
   return new Response(upstreamBody, {
     status: upstreamRes.status,
     headers: {

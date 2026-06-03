@@ -107,6 +107,19 @@ describe('DELETE /api/nip05/[name]', () => {
     expect(String(calledUrl)).toBe('https://nip05.test/api/nip05/odd%20name');
   });
 
+  it('forwards upstream 204 No Content without constructing a body (regression)', async () => {
+    // Upstream returns 204 on successful delete. The Response constructor
+    // throws for null-body statuses with a non-null body — handler must pass null.
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const targetUrl = 'http://localhost/api/nip05/maria';
+    const auth = await buildAuthHeader(adminSk, targetUrl, 'DELETE');
+
+    const res = await DELETE(makeRequest({ url: targetUrl, authHeader: auth, name: 'maria' }));
+    expect(res.status).toBe(204);
+    expect(res.body).toBeNull();
+  });
+
   it('forwards upstream 404 (unknown name) to the caller', async () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: 'Not found' }), {
