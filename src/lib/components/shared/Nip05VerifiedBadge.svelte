@@ -7,8 +7,12 @@
   - verified  → green CheckIcon (`names[name]` matches the user's pubkey)
   - mismatch  → error-colored AlertIcon + strikethrough + muted text so the
                 false claim is visually de-emphasized (anti-impersonation)
-  - pending / error → render the text only, no icon (don't flag transient
-    CORS/network failures as a security warning)
+  - error     → muted AlertIcon + dimmed text + hover-explained tooltip.
+                Covers typo domains (e.g. `…@edufeed.or`), 4xx/5xx, network
+                failures, CORS. Softer than mismatch — we're not asserting
+                the claim is false, only that we couldn't prove it true.
+  - pending / idle → render the text only, no icon (avoid flicker while the
+    verify call is in flight)
 
   Result is cached in-memory per (nip05, pubkey) pair across the session by
   `verifyNip05`, so repeated mounts of this component don't refetch.
@@ -69,6 +73,18 @@
         <AlertIcon class_="w-3.5 h-3.5" />
       </span>
       <span class="truncate text-base-content/50 line-through" title={m.nip05_mismatch_label()}>
+        {nip05}
+      </span>
+    {:else if status === 'error'}
+      <span
+        class="inline-flex text-warning"
+        data-testid="nip05-unverified"
+        aria-label={m.nip05_unverified_label()}
+        title={m.nip05_unverified_label()}
+      >
+        <AlertIcon class_="w-3.5 h-3.5" />
+      </span>
+      <span class="truncate text-base-content/60" title={m.nip05_unverified_label()}>
         {nip05}
       </span>
     {:else}

@@ -59,6 +59,22 @@ describe('<Nip05VerifiedBadge>', () => {
     expect(container.querySelector('[data-testid="nip05-verified"]')).toBeFalsy();
   });
 
+  it('shows an unverified warning when the well-known fetch fails (typo domain, offline, CORS)', async () => {
+    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const { container } = render(Nip05VerifiedBadge, {
+      pubkey: ALICE,
+      nip05: 'alice@edufeed.or'
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="nip05-unverified"]')).toBeTruthy();
+    });
+    // Not flagged as definitively wrong — softer than mismatch.
+    expect(container.querySelector('[data-testid="nip05-mismatch"]')).toBeFalsy();
+    expect(container.querySelector('[data-testid="nip05-verified"]')).toBeFalsy();
+  });
+
   it('strikes through and mutes the nip05 text on mismatch (anti-impersonation)', async () => {
     fetchSpy.mockResolvedValue(jsonResponse({ names: { alice: BOB } }));
 
@@ -85,20 +101,5 @@ describe('<Nip05VerifiedBadge>', () => {
     expect(container.querySelector('[data-testid="nip05-verified"]')).toBeFalsy();
     expect(container.querySelector('[data-testid="nip05-mismatch"]')).toBeFalsy();
     expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('renders the nip05 text but no status icon when fetch fails (network/CORS)', async () => {
-    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
-
-    const { container, getByText } = render(Nip05VerifiedBadge, {
-      pubkey: ALICE,
-      nip05: 'alice@edufeed.org'
-    });
-
-    expect(getByText('alice@edufeed.org')).toBeTruthy();
-    // Wait a tick for the effect to settle.
-    await new Promise((r) => setTimeout(r, 10));
-    expect(container.querySelector('[data-testid="nip05-verified"]')).toBeFalsy();
-    expect(container.querySelector('[data-testid="nip05-mismatch"]')).toBeFalsy();
   });
 });
