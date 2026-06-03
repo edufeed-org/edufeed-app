@@ -5,7 +5,7 @@
 
 <script>
   import * as m from '$lib/paraglide/messages.js';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventBech32 } from '$lib/helpers/nostrUtils.js';
   import { showToast } from '$lib/helpers/toast.js';
   import {
     MoreIcon,
@@ -104,8 +104,8 @@
 
   async function copyShareLink() {
     try {
-      const naddr = encodeEventToNaddr(event);
-      await navigator.clipboard.writeText(`${window.location.origin}/${naddr}`);
+      const id = encodeEventBech32(event);
+      await navigator.clipboard.writeText(`${window.location.origin}/${id}`);
       showToast(m.event_menu_share_link_copied(), 'success');
     } catch (err) {
       console.error('Failed to copy share link:', err);
@@ -130,8 +130,8 @@
 
   async function copyEventId() {
     try {
-      const naddr = encodeEventToNaddr(event);
-      await navigator.clipboard.writeText(naddr);
+      const id = encodeEventBech32(event);
+      await navigator.clipboard.writeText(id);
       showToast(m.event_menu_event_id_copied(), 'success');
     } catch (err) {
       console.error('Failed to copy event ID:', err);

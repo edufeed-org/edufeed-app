@@ -502,6 +502,41 @@ export const encodeEventToNaddr = (event, relays = []) => {
 };
 
 /**
+ * Encode an event into the right NIP-19 bech32 form:
+ *   - addressable kinds (30000–39999) → naddr
+ *   - everything else (regular, replaceable) → nevent
+ *
+ * Use this for shareable links / copy-id actions that need to work for any kind.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string[]} [relays]
+ * @returns {string}
+ */
+export const encodeEventBech32 = (event, relays = []) => {
+  const isAddressable = event.kind >= 30000 && event.kind < 40000;
+  if (isAddressable) return encodeEventToNaddr(event, relays);
+
+  try {
+    let relayHints = relays;
+    if (!relayHints || relayHints.length === 0) {
+      const seenRelays = getSeenRelays(event);
+      if (seenRelays && seenRelays.size > 0) {
+        relayHints = Array.from(seenRelays).slice(0, 3);
+      }
+    }
+    return nip19.neventEncode({
+      id: event.id,
+      kind: event.kind,
+      author: event.pubkey,
+      relays: relayHints && relayHints.length > 0 ? relayHints : undefined
+    });
+  } catch (error) {
+    console.error('Error encoding event to nevent:', error);
+    return '';
+  }
+};
+
+/**
  * NIP-C1 core: convert a hue (0-359) to RGB using fixed saturation
  * and adaptive brightness. Shared by pubkey and kind color functions.
  *

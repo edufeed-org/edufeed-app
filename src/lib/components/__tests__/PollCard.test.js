@@ -106,6 +106,17 @@ vi.mock('$lib/components/shared/ProfileAvatar.svelte', async () => {
   return { default: Stub };
 });
 
+// Stub EventContextMenu — its own behavior is covered in EventContextMenu.test.js.
+// Here we only verify PollCard wires onDelete + delete labels correctly.
+vi.mock('$lib/components/shared/EventContextMenu.svelte', async () => {
+  const Stub = (await import('./PollCardEventContextMenuStub.svelte')).default;
+  return { default: Stub };
+});
+
+vi.mock('$lib/paraglide/messages.js', () => ({
+  poll_delete_confirm_title: () => 'Delete Poll?'
+}));
+
 /**
  * Build a minimal kind 1068 poll event.
  * @param {Object} [overrides]
@@ -307,48 +318,37 @@ describe('PollCard — render skeleton + states', () => {
   it('shows delete affordance to the poll author', async () => {
     managerState.active = { pubkey: 'author'.padEnd(64, '0'), signEvent: vi.fn() };
     render(PollCard, { props: { event: makePoll() } });
-    expect(screen.getByRole('button', { name: /delete poll/i })).toBeTruthy();
+    expect(screen.getByTestId('poll-delete-trigger')).toBeTruthy();
   });
 
   it('does NOT show delete affordance to non-authors', async () => {
     managerState.active = { pubkey: 'someone-else'.padEnd(64, '0'), signEvent: vi.fn() };
     render(PollCard, { props: { event: makePoll() } });
-    expect(screen.queryByRole('button', { name: /delete poll/i })).toBeNull();
+    expect(screen.queryByTestId('poll-delete-trigger')).toBeNull();
   });
 
   it('does NOT show delete affordance when logged out', async () => {
     managerState.active = null;
     render(PollCard, { props: { event: makePoll() } });
-    expect(screen.queryByRole('button', { name: /delete poll/i })).toBeNull();
+    expect(screen.queryByTestId('poll-delete-trigger')).toBeNull();
+  });
+
+  it('passes a poll-specific title and the poll question to the confirm modal', async () => {
+    managerState.active = { pubkey: 'author'.padEnd(64, '0'), signEvent: vi.fn() };
+    render(PollCard, { props: { event: makePoll({ content: 'Apple or banana?' }) } });
+    const trigger = screen.getByTestId('poll-delete-trigger');
+    expect(trigger.getAttribute('data-delete-title')).toBe('Delete Poll?');
+    expect(trigger.getAttribute('data-delete-item-name')).toBe('Apple or banana?');
   });
 
   it('calls deleteEvent helper when delete is confirmed', async () => {
     managerState.active = { pubkey: 'author'.padEnd(64, '0'), signEvent: vi.fn() };
-    const originalConfirm = window.confirm;
-    window.confirm = vi.fn(() => true);
-    try {
-      render(PollCard, { props: { event: makePoll() } });
-      await fireEvent.click(screen.getByRole('button', { name: /delete poll/i }));
-      await waitFor(() => expect(deleteEventSpy).toHaveBeenCalled());
-      const [eventArg, accountArg] = deleteEventSpy.mock.calls[0];
-      expect(eventArg.kind).toBe(1068);
-      expect(accountArg).toBe(managerState.active);
-    } finally {
-      window.confirm = originalConfirm;
-    }
-  });
-
-  it('does NOT call deleteEvent when delete is cancelled', async () => {
-    managerState.active = { pubkey: 'author'.padEnd(64, '0'), signEvent: vi.fn() };
-    const originalConfirm = window.confirm;
-    window.confirm = vi.fn(() => false);
-    try {
-      render(PollCard, { props: { event: makePoll() } });
-      await fireEvent.click(screen.getByRole('button', { name: /delete poll/i }));
-      expect(deleteEventSpy).not.toHaveBeenCalled();
-    } finally {
-      window.confirm = originalConfirm;
-    }
+    render(PollCard, { props: { event: makePoll() } });
+    await fireEvent.click(screen.getByTestId('poll-delete-trigger'));
+    await waitFor(() => expect(deleteEventSpy).toHaveBeenCalled());
+    const [eventArg, accountArg] = deleteEventSpy.mock.calls[0];
+    expect(eventArg.kind).toBe(1068);
+    expect(accountArg).toBe(managerState.active);
   });
 
   it('shows "You voted" badge when user has cast a vote', async () => {

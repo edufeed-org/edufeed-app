@@ -10,14 +10,14 @@ import { BehaviorSubject } from 'rxjs';
 import EventContextMenu from '../shared/EventContextMenu.svelte';
 
 const mockShowToast = vi.fn();
-const mockEncodeEventToNaddr = vi.fn(() => 'naddr1test123');
+const mockEncodeEventBech32 = vi.fn(() => 'naddr1test123');
 
 vi.mock('$lib/helpers/toast.js', () => ({
   showToast: (/** @type {any[]} */ ...args) => mockShowToast(...args)
 }));
 
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
-  encodeEventToNaddr: (/** @type {any[]} */ ...args) => mockEncodeEventToNaddr(...args)
+  encodeEventBech32: (/** @type {any[]} */ ...args) => mockEncodeEventBech32(...args)
 }));
 
 vi.mock('$lib/paraglide/messages.js', () => ({
@@ -185,7 +185,7 @@ describe('EventContextMenu', () => {
 
     await fireEvent.click(screen.getByText('Copy event ID'));
 
-    expect(mockEncodeEventToNaddr).toHaveBeenCalledWith(mockEvent);
+    expect(mockEncodeEventBech32).toHaveBeenCalledWith(mockEvent);
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('naddr1test123');
     expect(mockShowToast).toHaveBeenCalledWith('Event ID copied!', 'success');
   });

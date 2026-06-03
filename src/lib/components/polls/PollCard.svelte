@@ -10,7 +10,11 @@
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
+  import * as m from '$lib/paraglide/messages.js';
+  import { resolve } from '$app/paths';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
+  import HoverCard from '$lib/components/shared/HoverCard.svelte';
 
   /**
    * @typedef {Object} Props
@@ -141,7 +145,6 @@
   async function handleDelete() {
     const account = manager.active;
     if (!account || !isAuthor) return;
-    if (!window.confirm('Delete this poll? This cannot be undone.')) return;
     try {
       await deleteEvent(event, account);
     } catch (err) {
@@ -201,33 +204,20 @@
   {onclick}
   onkeydown={handleKeydown}
 >
-  {#if isAuthor}
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <details class="dropdown absolute dropdown-end top-3 right-3" onclick={stop} onkeydown={stop}>
-      <summary class="btn btn-circle btn-ghost btn-sm" aria-label="Poll actions">
-        <span aria-hidden="true">⋯</span>
-      </summary>
-      <ul class="dropdown-content menu z-10 w-44 rounded-box bg-base-100 shadow">
-        <li>
-          <button
-            type="button"
-            class="text-error"
-            onclick={(e) => {
-              e.stopPropagation();
-              handleDelete();
-            }}
-          >
-            Delete poll
-          </button>
-        </li>
-      </ul>
-    </details>
-  {/if}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="absolute top-3 right-3" onclick={stop} onkeydown={stop}>
+    <EventContextMenu
+      {event}
+      onDelete={isAuthor ? handleDelete : undefined}
+      deleteTitle={m.poll_delete_confirm_title()}
+      deleteItemName={event.content}
+    />
+  </div>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     data-testid="poll-author"
-    class="mb-3 flex items-center gap-2 {isAuthor ? 'pr-10' : ''}"
+    class="mb-3 flex items-center gap-2 pr-10"
     onclick={stop}
     onkeydown={stop}
   >
@@ -299,7 +289,34 @@
                 </div>
               {/each}
               {#if (slot?.voters?.length ?? 0) > 6}
-                <span class="ml-3 text-xs opacity-60">+{(slot?.voters?.length ?? 0) - 6}</span>
+                {@const overflow = (slot?.voters ?? []).slice(6)}
+                <HoverCard>
+                  {#snippet trigger()}
+                    <span
+                      class="ml-3 cursor-pointer text-xs opacity-60 hover:underline"
+                      data-testid="poll-overflow-voters"
+                    >
+                      +{overflow.length}
+                    </span>
+                  {/snippet}
+                  {#snippet content()}
+                    <ul class="max-h-64 w-48 overflow-y-auto p-1">
+                      {#each overflow as voterPubkey (voterPubkey)}
+                        {@const profile = profiles.get(voterPubkey)}
+                        {@const name = getDisplayName(profile, voterPubkey.slice(0, 8) + '…')}
+                        <li>
+                          <a
+                            href={resolve(`/p/${voterPubkey}`)}
+                            class="flex items-center gap-2 rounded px-2 py-1 hover:bg-base-200"
+                          >
+                            <ProfileAvatar pubkey={voterPubkey} {profile} size="2xs" />
+                            <span class="truncate text-sm">{name}</span>
+                          </a>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/snippet}
+                </HoverCard>
               {/if}
             </div>
           {/if}
