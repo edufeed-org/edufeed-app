@@ -75,7 +75,7 @@
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
 
   // Render markdown to HTML
-  const htmlContent = $derived(renderMarkdown(event.content));
+  const htmlContent = $derived(renderMarkdown(event.content, { headingAnchors: true }));
 
   // Address pointer for this article
   const addressPointer = $derived.by(() => ({

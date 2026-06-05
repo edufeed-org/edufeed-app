@@ -75,6 +75,21 @@
       matchedHighlights = [];
       unmatchedHighlights = [];
     }
+
+    // Scroll to URL hash anchor (e.g. shared deep link to a section heading).
+    // Native browser scroll fails because the HTML lands in the DOM after
+    // navigation; we re-run it once the content is mounted.
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (id) {
+        const target = container.querySelector(`#${CSS.escape(id)}`);
+        if (target) {
+          requestAnimationFrame(() => {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        }
+      }
+    }
   });
 
   // Scroll to target highlight

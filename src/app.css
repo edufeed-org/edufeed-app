@@ -205,6 +205,45 @@ body {
   color: var(--color-base-content);
 }
 
+/* Heading anchor links injected by markdown / djot / asciidoctor renderers.
+ * Positioned in the left gutter so the heading text itself sits at the same
+ * x-position as body paragraphs; fades in on heading hover (desktop). */
+.prose :is(h1, h2, h3, h4, h5, h6) {
+  position: relative;
+}
+
+.prose :is(h1, h2, h3, h4, h5, h6) :is(a.heading-anchor, a.anchor) {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  margin-right: 0.25em;
+  color: var(--color-base-content);
+  opacity: 0;
+  text-decoration: none;
+  font-weight: 400;
+  transition: opacity 0.15s ease-in-out;
+}
+
+/* AsciiDoctor's sectanchors emits an empty <a class="anchor">; restore the `#` glyph. */
+.prose :is(h1, h2, h3, h4, h5, h6) a.anchor:empty::before {
+  content: '#';
+}
+
+.prose :is(h1, h2, h3, h4, h5, h6):hover :is(a.heading-anchor, a.anchor) {
+  opacity: 0.5;
+}
+
+.prose :is(h1, h2, h3, h4, h5, h6) :is(a.heading-anchor, a.anchor):hover {
+  opacity: 1;
+  text-decoration: none;
+}
+
+@media (hover: none) {
+  .prose :is(h1, h2, h3, h4, h5, h6) :is(a.heading-anchor, a.anchor) {
+    opacity: 0.4;
+  }
+}
+
 .select.select-trigger {
   height: auto;
   min-height: var(--size);
