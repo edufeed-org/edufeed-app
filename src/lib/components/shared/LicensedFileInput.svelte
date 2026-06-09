@@ -481,6 +481,7 @@
               type="button"
               class="btn btn-xs btn-warning"
               onclick={handleAddLicense(index)}
+              disabled={isUploading}
               data-testid="licensed-file-add-license"
             >
               {m.licensed_file_input_add_license()}
@@ -502,6 +503,7 @@
             type="button"
             class="btn text-error btn-ghost btn-xs"
             onclick={handleRemoveFile(index)}
+            disabled={isUploading}
             aria-label={m.aria_remove_file()}
           >
             <CloseIcon class_="w-4 h-4" />
