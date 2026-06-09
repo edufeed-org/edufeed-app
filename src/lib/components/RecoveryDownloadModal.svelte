@@ -11,6 +11,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { downloadRecoveryFile } from '$lib/helpers/recoveryFile.js';
+  import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
 
   let { modalId } = $props();
 
@@ -54,7 +55,7 @@
       downloadRecoveryFile({ privateKey, nsec });
     }
 
-    localStorage.setItem(`backup-downloaded:${user.pubkey}`, '1');
+    markBackupDownloaded(user.pubkey);
     modalStore.closeModal();
   }
 </script>

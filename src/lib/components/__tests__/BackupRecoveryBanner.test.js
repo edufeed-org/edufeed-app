@@ -12,6 +12,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { tick } from 'svelte';
 import { render, fireEvent } from '@testing-library/svelte';
 
 const mockActiveUser = vi.hoisted(() => ({ value: null }));
@@ -44,6 +45,7 @@ vi.mock('$lib/paraglide/messages', () =>
 );
 
 import BackupRecoveryBanner from '../BackupRecoveryBanner.svelte';
+import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
 
 const NSEC_PUBKEY = 'a'.repeat(64);
 const EXT_PUBKEY = 'b'.repeat(64);
@@ -125,6 +127,20 @@ describe('BackupRecoveryBanner', () => {
     await fireEvent.click(/** @type {HTMLElement} */ (dismissBtn));
 
     expect(localStorage.getItem(`backup-banner-dismissed:${NSEC_PUBKEY}`)).toBe('1');
+    expect(container.querySelector('[data-testid="backup-recovery-banner"]')).toBeNull();
+  });
+
+  it('hides reactively when markBackupDownloaded() is called after render (no reload needed)', async () => {
+    // Reproduces the bug: the recovery modal completes a download and marks
+    // the user's backup as saved, but the banner kept its stale view of
+    // localStorage and stayed visible until the next reload.
+    mockActiveUser.value = nsecAccount();
+    const { container } = render(BackupRecoveryBanner);
+    expect(container.querySelector('[data-testid="backup-recovery-banner"]')).not.toBeNull();
+
+    markBackupDownloaded(NSEC_PUBKEY);
+    await tick();
+
     expect(container.querySelector('[data-testid="backup-recovery-banner"]')).toBeNull();
   });
 

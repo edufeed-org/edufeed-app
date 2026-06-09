@@ -338,7 +338,7 @@
     >
       {#if curatedReady}
         {#if getActiveUser()}
-          <div class="px-4 pt-2">
+          <div class="px-4 pt-3 pb-2">
             <BackupRecoveryBanner />
           </div>
         {/if}
