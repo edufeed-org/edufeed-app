@@ -166,3 +166,44 @@ describe('buildPreviewResource', () => {
     expect(labelTag?.[1]).not.toContain('[object Object]');
   });
 });
+
+describe('buildPreviewResource — x tag', () => {
+  it('emits x tag when imageLicenseEvent carries a hash', () => {
+    const hash = 'a'.repeat(64);
+    const r = buildPreviewResource(
+      {
+        name: 'Test',
+        image: `https://blossom.example/${hash}.jpg`,
+        imageLicenseEvent: {
+          kind: 1063,
+          tags: [
+            ['url', `https://blossom.example/${hash}.jpg`],
+            ['x', hash]
+          ]
+        }
+      },
+      'b'.repeat(64)
+    );
+    const xTag = r?.tags?.find((t) => t[0] === 'x');
+    expect(xTag?.[1]).toBe(hash);
+  });
+
+  it('emits x tag for a pasted Blossom URL', () => {
+    const hash = 'c'.repeat(64);
+    const r = buildPreviewResource(
+      { name: 'Test', image: `https://blossom.example/${hash}.jpg` },
+      'b'.repeat(64)
+    );
+    const xTag = r?.tags?.find((t) => t[0] === 'x');
+    expect(xTag?.[1]).toBe(hash);
+  });
+
+  it('does not emit x tag for a non-Blossom URL', () => {
+    const r = buildPreviewResource(
+      { name: 'Test', image: 'https://wikipedia.org/foo.jpg' },
+      'b'.repeat(64)
+    );
+    const xTag = r?.tags?.find((t) => t[0] === 'x');
+    expect(xTag).toBeUndefined();
+  });
+});
