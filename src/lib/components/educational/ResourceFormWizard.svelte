@@ -29,7 +29,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, CloseIcon } from '$lib/components/icons';
   import SKOSDropdown from './SKOSDropdown.svelte';
-  import BlossomUploader from './BlossomUploader.svelte';
+  import LicensedFileInput from '../shared/LicensedFileInput.svelte';
   import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import CreatorInput from './CreatorInput.svelte';
   import ExternalUrlInput from './ExternalUrlInput.svelte';
@@ -2564,12 +2564,18 @@
             onapply={handleSuggestionAction}
           />
 
-          <BlossomUploader
+          <LicensedFileInput
             bind:files={formData.encodings}
             label={m.amb_form_label_content_files()}
             helpText={m.amb_form_help_content_files()}
             multiple={true}
+            activeUserDisplayName={previewAuthorProfile?.display_name ??
+              previewAuthorProfile?.name ??
+              ''}
           />
+          {#if showError('encodings')}
+            <p class="text-xs text-error">{fieldErrors.encodings}</p>
+          {/if}
 
           <ExternalUrlInput
             bind:urls={formData.externalUrls}
