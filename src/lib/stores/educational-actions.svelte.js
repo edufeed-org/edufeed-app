@@ -4,6 +4,7 @@
  */
 
 import { ambToNostr } from 'amb-nostr-converter';
+import { getSha256FromURL } from 'applesauce-common/helpers';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
@@ -141,6 +142,27 @@ function buildAMBEventTagsFromFormData(formData, pubkey) {
 }
 
 /**
+ * Resolve the SHA-256 hash for the resource's thumbnail image, if any.
+ * Prefers the license-event's `x` tag (set via the upload+license flow).
+ * Falls back to parsing the URL itself (only succeeds for Blossom-style
+ * URLs that carry the hash in the path).
+ *
+ * @param {any} formData
+ * @returns {string | undefined}
+ */
+function resolveImageHash(formData) {
+  const licenseEvent = formData?.imageLicenseEvent;
+  if (licenseEvent && Array.isArray(licenseEvent.tags)) {
+    const xTag = licenseEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1];
+    if (xTag) return xTag;
+  }
+  if (formData?.image) {
+    return getSha256FromURL(formData.image) ?? undefined;
+  }
+  return undefined;
+}
+
+/**
  * Create educational actions for managing AMB resources
  * @returns {EducationalActions} Educational actions object
  */
@@ -210,6 +232,13 @@ export function createEducationalActions() {
         const konfiTags = /** @type any */ (formData).konfiTags;
         if (Array.isArray(konfiTags)) {
           for (const t of konfiTags) tags.push(t);
+        }
+
+        // Image hash (NIP-94 cross-reference). Set when an upload happened
+        // OR when the pasted URL was content-addressable Blossom.
+        const imageHash = resolveImageHash(formData);
+        if (imageHash) {
+          tags.push(['x', imageHash]);
         }
 
         // Create the event using EventFactory
@@ -291,6 +320,11 @@ export function createEducationalActions() {
         const konfiTags = /** @type any */ (formData).konfiTags;
         if (Array.isArray(konfiTags)) {
           for (const t of konfiTags) tags.push(t);
+        }
+
+        const imageHash = resolveImageHash(formData);
+        if (imageHash) {
+          tags.push(['x', imageHash]);
         }
 
         // Create the updated event
