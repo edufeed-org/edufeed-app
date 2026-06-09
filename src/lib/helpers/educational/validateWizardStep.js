@@ -23,6 +23,7 @@ import { subStepToFormFields, validateKonfiTopicOrDimension } from './konfiStep4
  *   noUrlNeedsAttachment: () => string,
  *   license: () => string,
  *   imageLicenseMissing: () => string,
+ *   encodingLicenseMissing: () => string,
  * }} ValidationMessages
  *
  * @typedef {{
@@ -101,6 +102,13 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       const urls = formData.externalUrls?.length ?? 0;
       if (ctx.hasNoUrl && encodings === 0 && urls === 0) {
         errors.attachments = m.noUrlNeedsAttachment();
+      }
+      // License gate: any encoding with a sha256 but no license event blocks publish.
+      const missing = (formData.encodings ?? []).some(
+        (/** @type {any} */ e) => e?.sha256 && !e?.licenseEvent
+      );
+      if (missing) {
+        errors.encodings = m.encodingLicenseMissing();
       }
       break;
     }

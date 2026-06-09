@@ -2285,5 +2285,6 @@
   "license_modal_save": "Lizenz speichern",
   "license_modal_cancel": "Abbrechen",
   "license_modal_publish_failed": "Lizenz-Attestierung konnte nicht veröffentlicht werden.",
-  "amb_form_validation_image_license_missing": "Hochgeladene Bilder benötigen eine Lizenz-Attestierung. Öffne den Lizenz-Dialog."
+  "amb_form_validation_image_license_missing": "Hochgeladene Bilder benötigen eine Lizenz-Attestierung. Öffne den Lizenz-Dialog.",
+  "amb_form_validation_encoding_license_missing": "Hochgeladene Dateien benötigen eine Lizenzangabe. Öffne den Lizenzdialog je Datei, um eine Angabe zu hinterlegen."
 }
