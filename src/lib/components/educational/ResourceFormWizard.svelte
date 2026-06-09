@@ -30,6 +30,7 @@
   import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, CloseIcon } from '$lib/components/icons';
   import SKOSDropdown from './SKOSDropdown.svelte';
   import BlossomUploader from './BlossomUploader.svelte';
+  import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import CreatorInput from './CreatorInput.svelte';
   import ExternalUrlInput from './ExternalUrlInput.svelte';
   import MetadataFetchStep from './MetadataFetchStep.svelte';
@@ -1986,21 +1987,20 @@
             />
           </div>
 
-          <!-- Image URL -->
+          <!-- Image (upload + URL paste, with NIP-94 license attestation) -->
           <div class="form-control">
             <label class="label flex items-center gap-2" for="amb-image">
               <span class="label-text font-medium">{m.amb_form_label_image()}</span>
               <SmartFillBadge provenance={provenance.image} onclear={() => clearField('image')} />
             </label>
-            <input
-              id="amb-image"
-              type="url"
-              class="input-bordered input w-full"
-              bind:value={formData.image}
-              placeholder={m.amb_form_placeholder_image()}
-              oninput={() => {
-                imagePreviewError = false;
-              }}
+            <LicensedImageInput
+              bind:imageUrl={formData.image}
+              bind:imageWasUploaded={formData.imageWasUploaded}
+              bind:licenseEvent={formData.imageLicenseEvent}
+              errors={fieldErrors}
+              activeUserDisplayName={previewAuthorProfile?.display_name ??
+                previewAuthorProfile?.name ??
+                ''}
             />
             <FieldAiSuggestionBadge
               field="image"
@@ -2010,9 +2010,6 @@
               dismissedFields={dismissedSuggestionFields}
               onapply={handleSuggestionAction}
             />
-            {#if formData.image && imagePreviewError}
-              <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
-            {/if}
           </div>
         </div>
       {/if}
