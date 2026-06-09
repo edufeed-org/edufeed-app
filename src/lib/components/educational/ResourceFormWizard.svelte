@@ -79,6 +79,7 @@
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { applySuggestionAction } from '$lib/helpers/educational/applySuggestionAction.js';
   import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
@@ -350,6 +351,22 @@
   const previewAuthorProfile = $derived(
     activePubkey ? (getPreviewAuthorProfile()?.get(activePubkey) ?? null) : null
   );
+
+  // Edit mode: rehydrate the image license event from EventStore when the
+  // resource being edited carries an x tag. The hook fires a loader to
+  // populate EventStore if the event isn't already cached.
+  const editImageHash = $derived(
+    editEvent?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
+  );
+  const getEditLicense = useLicenseForHash(() => editImageHash);
+  $effect(() => {
+    // Only populate when the user hasn't already changed the image in this
+    // session (i.e., LicensedImageInput hasn't yet set its own license).
+    if (editImageHash && !formData.imageLicenseEvent) {
+      const lic = getEditLicense();
+      if (lic) formData.imageLicenseEvent = lic;
+    }
+  });
   const previewResource = $derived.by(() => {
     if (currentStep < 3) return null;
     // `about` lives in the wizard-internal `aboutByVocab` (one bucket per
@@ -709,6 +726,8 @@
       description: getAMBDescription(editEvent),
       inLanguage: getAMBLanguages(editEvent)[0] || 'de',
       image: getAMBImage(editEvent) || '',
+      imageWasUploaded: !!editEvent.tags?.find((/** @type {string[]} */ t) => t[0] === 'x'),
+      imageLicenseEvent: null, // resolved reactively below
       identifier: isUrlIdentifier ? identifier : '',
       learningResourceType: isEkw
         ? lrtTypes
