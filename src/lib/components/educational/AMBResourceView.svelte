@@ -36,6 +36,8 @@
   import { EditIcon } from '$lib/components/icons';
   import DetailHeader from '../shared/DetailHeader.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
+  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -76,6 +78,12 @@
 
   // Check if current user owns this resource
   const isOwner = $derived(activeUser?.pubkey === event.pubkey);
+
+  // Thumbnail license attestation (kind 1063 keyed by x-tag SHA-256)
+  const imageHash = $derived(
+    event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
+  );
+  const getImageLicense = useLicenseForHash(() => imageHash);
 
   /**
    * Handle edit button click - navigate to edit page
@@ -319,7 +327,7 @@
   <!-- FEATURED IMAGE -->
   {#if resource.image}
     <div class="mb-8">
-      <div class="aspect-[16/9] w-full overflow-hidden rounded-lg">
+      <div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg">
         <ImageWithFallback
           src={resource.image}
           alt={resource.name}
@@ -327,6 +335,12 @@
           size="hero"
           class="h-full w-full object-cover"
         />
+        {#if getImageLicense()}
+          <LicenseBadge
+            licenseEvent={getImageLicense()}
+            class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+          />
+        {/if}
       </div>
     </div>
   {/if}
