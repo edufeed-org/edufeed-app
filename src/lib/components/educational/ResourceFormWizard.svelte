@@ -66,7 +66,7 @@
     dropUnlabeled
   } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
-  import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import SmartFillBadge from './SmartFillBadge.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
@@ -542,25 +542,9 @@
     return () => subscription.unsubscribe();
   });
 
-  // License options. The static list covers the common picks; if the LLM
-  // enrichment (or an edited event) carries a URL outside this list — e.g.
-  // CC 3.0/de — append it dynamically so the bound value matches an
-  // <option> and the select doesn't snap back to the first entry.
-  const STATIC_LICENSE_OPTIONS = [
-    { id: 'https://creativecommons.org/licenses/by/4.0/', label: 'CC BY 4.0' },
-    { id: 'https://creativecommons.org/licenses/by-sa/4.0/', label: 'CC BY-SA 4.0' },
-    { id: 'https://creativecommons.org/licenses/by-nc/4.0/', label: 'CC BY-NC 4.0' },
-    { id: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', label: 'CC BY-NC-SA 4.0' },
-    { id: 'https://creativecommons.org/publicdomain/zero/1.0/', label: 'CC0 (Public Domain)' },
-    { id: 'https://opensource.org/licenses/MIT', label: 'MIT License' }
-  ];
-  const licenseOptions = $derived.by(() => {
-    const url = formData.license;
-    if (!url || STATIC_LICENSE_OPTIONS.some((o) => o.id === url)) {
-      return STATIC_LICENSE_OPTIONS;
-    }
-    return [...STATIC_LICENSE_OPTIONS, { id: url, label: formatLicenseUrl(url) }];
-  });
+  // License options. Extracted to $lib/helpers/educational/licenseOptions.js so
+  // the image-license modal can reuse the same list.
+  const licenseOptions = $derived(getLicenseOptions(formData.license));
 
   // Language options
   const languageOptions = [
