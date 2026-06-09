@@ -38,6 +38,8 @@ export function createInitialFormData() {
     description: '',
     inLanguage: 'de',
     image: '',
+    imageWasUploaded: false,
+    imageLicenseEvent: /** @type {import('nostr-tools').NostrEvent | null} */ (null),
     identifier: '',
 
     // Step 4: Classification

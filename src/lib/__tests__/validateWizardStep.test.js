@@ -35,7 +35,8 @@ const messages = {
   resourceType: () => 'ERR_RESOURCE_TYPE',
   subject: () => 'ERR_SUBJECT',
   noUrlNeedsAttachment: () => 'ERR_NO_URL_NEEDS_ATTACHMENT',
-  license: () => 'ERR_LICENSE'
+  license: () => 'ERR_LICENSE',
+  imageLicenseMissing: () => 'ERR_IMAGE_LICENSE_MISSING'
 };
 
 const isValidUrl = (s) => /^https?:\/\//.test(s);
@@ -127,6 +128,60 @@ describe('validateWizardStep', () => {
       const formData = { ...emptyFormData(), name: 'Test', description: 'Desc' };
       const errors = validateWizardStep(3, formData, ctx());
       expect(errors).toEqual({});
+    });
+
+    describe('image license validation', () => {
+      it('flags uploaded image without license event as invalid', () => {
+        const formData = {
+          ...emptyFormData(),
+          name: 'Test',
+          description: 'Desc',
+          image: 'https://blossom.example/abc.jpg',
+          imageWasUploaded: true,
+          imageLicenseEvent: null
+        };
+        const errors = validateWizardStep(3, formData, ctx());
+        expect(errors.image).toBe('ERR_IMAGE_LICENSE_MISSING');
+      });
+
+      it('accepts uploaded image with license event', () => {
+        const formData = {
+          ...emptyFormData(),
+          name: 'Test',
+          description: 'Desc',
+          image: 'https://blossom.example/abc.jpg',
+          imageWasUploaded: true,
+          imageLicenseEvent: { kind: 1063, tags: [['x', 'a'.repeat(64)]] }
+        };
+        const errors = validateWizardStep(3, formData, ctx());
+        expect(errors.image).toBeFalsy();
+      });
+
+      it('accepts pasted URL without license event', () => {
+        const formData = {
+          ...emptyFormData(),
+          name: 'Test',
+          description: 'Desc',
+          image: 'https://wikipedia.org/img.jpg',
+          imageWasUploaded: false,
+          imageLicenseEvent: null
+        };
+        const errors = validateWizardStep(3, formData, ctx());
+        expect(errors.image).toBeFalsy();
+      });
+
+      it('accepts empty image regardless of upload/license state', () => {
+        const formData = {
+          ...emptyFormData(),
+          name: 'Test',
+          description: 'Desc',
+          image: '',
+          imageWasUploaded: true,
+          imageLicenseEvent: null
+        };
+        const errors = validateWizardStep(3, formData, ctx());
+        expect(errors.image).toBeFalsy();
+      });
     });
   });
 

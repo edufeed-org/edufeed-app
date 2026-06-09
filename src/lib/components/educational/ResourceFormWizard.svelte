@@ -30,6 +30,7 @@
   import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, CloseIcon } from '$lib/components/icons';
   import SKOSDropdown from './SKOSDropdown.svelte';
   import BlossomUploader from './BlossomUploader.svelte';
+  import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import CreatorInput from './CreatorInput.svelte';
   import ExternalUrlInput from './ExternalUrlInput.svelte';
   import MetadataFetchStep from './MetadataFetchStep.svelte';
@@ -66,7 +67,7 @@
     dropUnlabeled
   } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
-  import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import SmartFillBadge from './SmartFillBadge.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
@@ -78,6 +79,7 @@
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { applySuggestionAction } from '$lib/helpers/educational/applySuggestionAction.js';
   import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
@@ -349,6 +351,22 @@
   const previewAuthorProfile = $derived(
     activePubkey ? (getPreviewAuthorProfile()?.get(activePubkey) ?? null) : null
   );
+
+  // Edit mode: rehydrate the image license event from EventStore when the
+  // resource being edited carries an x tag. The hook fires a loader to
+  // populate EventStore if the event isn't already cached.
+  const editImageHash = $derived(
+    editEvent?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
+  );
+  const getEditLicense = useLicenseForHash(() => editImageHash);
+  $effect(() => {
+    // Only populate when the user hasn't already changed the image in this
+    // session (i.e., LicensedImageInput hasn't yet set its own license).
+    if (editImageHash && !formData.imageLicenseEvent) {
+      const lic = getEditLicense();
+      if (lic) formData.imageLicenseEvent = lic;
+    }
+  });
   const previewResource = $derived.by(() => {
     if (currentStep < 3) return null;
     // `about` lives in the wizard-internal `aboutByVocab` (one bucket per
@@ -542,25 +560,9 @@
     return () => subscription.unsubscribe();
   });
 
-  // License options. The static list covers the common picks; if the LLM
-  // enrichment (or an edited event) carries a URL outside this list — e.g.
-  // CC 3.0/de — append it dynamically so the bound value matches an
-  // <option> and the select doesn't snap back to the first entry.
-  const STATIC_LICENSE_OPTIONS = [
-    { id: 'https://creativecommons.org/licenses/by/4.0/', label: 'CC BY 4.0' },
-    { id: 'https://creativecommons.org/licenses/by-sa/4.0/', label: 'CC BY-SA 4.0' },
-    { id: 'https://creativecommons.org/licenses/by-nc/4.0/', label: 'CC BY-NC 4.0' },
-    { id: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', label: 'CC BY-NC-SA 4.0' },
-    { id: 'https://creativecommons.org/publicdomain/zero/1.0/', label: 'CC0 (Public Domain)' },
-    { id: 'https://opensource.org/licenses/MIT', label: 'MIT License' }
-  ];
-  const licenseOptions = $derived.by(() => {
-    const url = formData.license;
-    if (!url || STATIC_LICENSE_OPTIONS.some((o) => o.id === url)) {
-      return STATIC_LICENSE_OPTIONS;
-    }
-    return [...STATIC_LICENSE_OPTIONS, { id: url, label: formatLicenseUrl(url) }];
-  });
+  // License options. Extracted to $lib/helpers/educational/licenseOptions.js so
+  // the image-license modal can reuse the same list.
+  const licenseOptions = $derived(getLicenseOptions(formData.license));
 
   // Language options
   const languageOptions = [
@@ -724,6 +726,8 @@
       description: getAMBDescription(editEvent),
       inLanguage: getAMBLanguages(editEvent)[0] || 'de',
       image: getAMBImage(editEvent) || '',
+      imageWasUploaded: !!editEvent.tags?.find((/** @type {string[]} */ t) => t[0] === 'x'),
+      imageLicenseEvent: null, // resolved reactively below
       identifier: isUrlIdentifier ? identifier : '',
       learningResourceType: isEkw
         ? lrtTypes
@@ -1070,7 +1074,8 @@
       noUrlNeedsAttachment: () =>
         m.amb_form_validation_no_url_needs_attachment?.() ??
         'Pure Nostr resources must have at least one file or external reference.',
-      license: m.amb_form_validation_license
+      license: m.amb_form_validation_license,
+      imageLicenseMissing: m.amb_form_validation_image_license_missing
     }
   });
 
@@ -2002,21 +2007,20 @@
             />
           </div>
 
-          <!-- Image URL -->
+          <!-- Image (upload + URL paste, with NIP-94 license attestation) -->
           <div class="form-control">
             <label class="label flex items-center gap-2" for="amb-image">
               <span class="label-text font-medium">{m.amb_form_label_image()}</span>
               <SmartFillBadge provenance={provenance.image} onclear={() => clearField('image')} />
             </label>
-            <input
-              id="amb-image"
-              type="url"
-              class="input-bordered input w-full"
-              bind:value={formData.image}
-              placeholder={m.amb_form_placeholder_image()}
-              oninput={() => {
-                imagePreviewError = false;
-              }}
+            <LicensedImageInput
+              bind:imageUrl={formData.image}
+              bind:imageWasUploaded={formData.imageWasUploaded}
+              bind:licenseEvent={formData.imageLicenseEvent}
+              errors={fieldErrors}
+              activeUserDisplayName={previewAuthorProfile?.display_name ??
+                previewAuthorProfile?.name ??
+                ''}
             />
             <FieldAiSuggestionBadge
               field="image"
@@ -2026,9 +2030,6 @@
               dismissedFields={dismissedSuggestionFields}
               onapply={handleSuggestionAction}
             />
-            {#if formData.image && imagePreviewError}
-              <p class="mt-2 text-xs text-base-content/60">Preview unavailable</p>
-            {/if}
           </div>
         </div>
       {/if}

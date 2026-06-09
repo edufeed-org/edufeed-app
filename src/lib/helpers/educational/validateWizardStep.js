@@ -22,6 +22,7 @@ import { subStepToFormFields, validateKonfiTopicOrDimension } from './konfiStep4
  *   subject: () => string,
  *   noUrlNeedsAttachment: () => string,
  *   license: () => string,
+ *   imageLicenseMissing: () => string,
  * }} ValidationMessages
  *
  * @typedef {{
@@ -63,6 +64,12 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       }
       if (!formData.name?.trim()) errors.name = m.title();
       if (!formData.description?.trim()) errors.description = m.description();
+      // Block publish if an uploaded image lacks a license attestation (NIP-94 kind 1063).
+      // Pasted URLs (imageWasUploaded=false) are exempt — license accountability falls
+      // on whoever hosts the image elsewhere. Cleared images (formData.image empty) pass.
+      if (formData.image && formData.imageWasUploaded && !formData.imageLicenseEvent) {
+        errors.image = m.imageLicenseMissing();
+      }
       break;
 
     case 4:

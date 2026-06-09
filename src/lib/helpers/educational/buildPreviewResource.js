@@ -13,6 +13,7 @@
 import { ambToNostr } from 'amb-nostr-converter';
 import { convertFormDataToAMB } from './formDataToAmb.js';
 import { formatAMBResource } from './ambHelpers.js';
+import { getSha256FromURL } from 'applesauce-common/helpers';
 
 const AMB_RESOURCE_KIND = 30142;
 const PLACEHOLDER_PUBKEY = '0'.repeat(64);
@@ -127,6 +128,16 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
     if (formData.inLanguage && !hasTag('inLanguage'))
       tags.push(['inLanguage', formData.inLanguage]);
     if (formData.slug?.trim() && !hasTag('d')) tags.push(['d', formData.slug.trim()]);
+  }
+
+  // x tag (NIP-94 hash cross-reference for thumbnail). Prefer the license
+  // event's x tag; fall back to parsing the URL for Blossom-style sources.
+  if (!hasTag('x') && formData) {
+    const licenseEvent = formData.imageLicenseEvent;
+    const fromLicense = licenseEvent?.tags?.find((t) => t[0] === 'x')?.[1];
+    const fromUrl = formData.image ? getSha256FromURL(formData.image) : undefined;
+    const hash = fromLicense ?? fromUrl;
+    if (hash) tags.push(['x', hash]);
   }
 
   /** @type {any} */

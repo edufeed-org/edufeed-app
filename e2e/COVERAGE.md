@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-05-20
-**Total tests:** 304
+**Last updated:** 2026-06-09
+**Total tests:** 306
 
 ## Quick Summary
 
@@ -20,6 +20,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                      |
 | `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                 |
 | `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                    |
+| `image-license.test.js`              | 2     | Yes  | Image upload triggers license modal; cancel-without-save flags the field; save dismisses the modal                                |
 | `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                    |
 | `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                        |
 | `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                            |
@@ -317,6 +318,25 @@ Tests use `setupMetadataMock(page, { mode: 'og' | 'amb' | 'none', ... })` to stu
 | no critical JavaScript errors during page interaction | Error capture throughout flow |
 
 **Components exercised:** EducationalFAB, ResourceFormWizard (/create/resource page), SKOSDropdown (partial)
+
+---
+
+### image-license.test.js (2 tests)
+
+**Route:** `/create/resource` (Basic step of the AMB wizard)
+**Auth required:** Yes (all tests use `authenticatedPage` fixture)
+**Infrastructure:** Blossom server (port 3000) for the actual upload; relies on `navigateToAMBCreation` auto-advance to land on the Basic step.
+
+Tightly scoped: exercises only the new `LicensedImageInput` + license modal behaviors. Does NOT publish a kind 30142 resource (that flow lives in `amb-creation-full.test.js`, currently skipped pending SKOS seed work).
+
+#### License Modal Flow (2 tests)
+
+| Test                                                            | What it verifies                                                                                         |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| uploading an image opens the license modal                      | Blossom upload triggers auto-open of `[data-testid="license-modal"]`; saving with credit dismisses it    |
+| closing the modal without saving leaves the image field flagged | Cancel keeps `imageWasUploaded=true` without a license; clicking Next surfaces the validation error copy |
+
+**Components exercised:** LicensedImageInput, license modal (in LicensedImageInput), ResourceFormWizard validator (`imageLicenseMissing`).
 
 ---
 
