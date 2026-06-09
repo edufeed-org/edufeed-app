@@ -38,6 +38,7 @@
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import EncodingRowBadge from './EncodingRowBadge.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -591,8 +592,11 @@
             <span class="text-2xl">{getFileIcon(file.mimeType)}</span>
             <div class="min-w-0 flex-1">
               <div class="truncate font-medium text-base-content">{file.name}</div>
-              <div class="text-xs text-base-content/60">
-                {file.mimeType} • {formatFileSize(file.size)}
+              <div class="flex flex-wrap items-center gap-2 text-xs text-base-content/60">
+                <span>{file.mimeType} • {formatFileSize(file.size)}</span>
+                {#if file.sha256}
+                  <EncodingRowBadge sha256={file.sha256} />
+                {/if}
               </div>
             </div>
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: uploaded file URLs -->

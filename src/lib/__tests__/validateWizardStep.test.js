@@ -36,7 +36,8 @@ const messages = {
   subject: () => 'ERR_SUBJECT',
   noUrlNeedsAttachment: () => 'ERR_NO_URL_NEEDS_ATTACHMENT',
   license: () => 'ERR_LICENSE',
-  imageLicenseMissing: () => 'ERR_IMAGE_LICENSE_MISSING'
+  imageLicenseMissing: () => 'ERR_IMAGE_LICENSE_MISSING',
+  encodingLicenseMissing: () => 'ERR_ENCODING_LICENSE_MISSING'
 };
 
 const isValidUrl = (s) => /^https?:\/\//.test(s);
@@ -265,6 +266,42 @@ describe('validateWizardStep', () => {
     it('passes with no attachments when there IS a URL on step 2', () => {
       const errors = validateWizardStep(5, emptyFormData(), ctx({ hasNoUrl: false }));
       expect(errors).toEqual({});
+    });
+
+    it('step 5: blocks publish when an encoding has sha256 but no licenseEvent', () => {
+      const errors = validateWizardStep(
+        5,
+        {
+          encodings: [{ url: 'x', sha256: 'a'.repeat(64), licenseEvent: null }],
+          externalUrls: []
+        },
+        ctx()
+      );
+      expect(errors.encodings).toBe('ERR_ENCODING_LICENSE_MISSING');
+    });
+
+    it('step 5: passes when every encoding with sha256 has a licenseEvent', () => {
+      const errors = validateWizardStep(
+        5,
+        {
+          encodings: [{ url: 'x', sha256: 'a'.repeat(64), licenseEvent: { id: 'lic1' } }],
+          externalUrls: []
+        },
+        ctx()
+      );
+      expect(errors.encodings).toBeUndefined();
+    });
+
+    it('step 5: passes when encoding has no sha256 (legacy)', () => {
+      const errors = validateWizardStep(
+        5,
+        {
+          encodings: [{ url: 'x' }],
+          externalUrls: []
+        },
+        ctx()
+      );
+      expect(errors.encodings).toBeUndefined();
     });
   });
 

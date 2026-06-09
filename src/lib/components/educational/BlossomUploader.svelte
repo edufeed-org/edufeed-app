@@ -21,6 +21,7 @@
    * @property {string} type - MIME type
    * @property {number} size - File size in bytes
    * @property {string} [sha256] - SHA256 hash if available
+   * @property {any} [licenseEvent] - License event (kind 1063) when attested
    */
 
   /** @type {{ files?: UploadedFile[], multiple?: boolean, accept?: string, maxSize?: number, label?: string, helpText?: string, disabled?: boolean, required?: boolean, onchange?: (files: UploadedFile[]) => void }} */
