@@ -40,8 +40,6 @@
   let isPublishing = $state(false);
   let validationError = $state('');
 
-  const coverImage = $derived(imageUrl);
-
   // Active user display name for the license modal's "I created this" auto-credit.
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
@@ -79,8 +77,10 @@
         const img = getArticleImage(event);
         if (img) {
           imageUrl = img;
-          // Edit flow: not a fresh upload in this session, so the gate stays off.
-          imageWasUploaded = false;
+          // Re-gate on edit if the existing article carries an x tag (prior upload).
+          // The reactive $effect below will load a matching license event from
+          // EventStore; if found, imageLicenseEvent is set and the gate passes.
+          imageWasUploaded = !!event.tags?.find((/** @type {any} */ t) => t[0] === 'x');
         }
         hashtags =
           event.tags
@@ -137,7 +137,7 @@
         title: title.trim(),
         content: editorContent,
         summary: summary.trim() || undefined,
-        image: coverImage || undefined,
+        image: imageUrl || undefined,
         imageHash,
         hashtags: hashtags.length > 0 ? hashtags : undefined
       };
