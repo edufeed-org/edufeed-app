@@ -88,7 +88,8 @@ const baseCtx = {
     resourceType: () => 'r',
     subject: () => 's',
     noUrlNeedsAttachment: () => 'a',
-    license: () => 'l'
+    license: () => 'l',
+    imageLicenseMissing: () => 'il'
   },
   schemeNaddrs: SCHEME_NADDRS
 };

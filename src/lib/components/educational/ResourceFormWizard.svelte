@@ -1055,7 +1055,8 @@
       noUrlNeedsAttachment: () =>
         m.amb_form_validation_no_url_needs_attachment?.() ??
         'Pure Nostr resources must have at least one file or external reference.',
-      license: m.amb_form_validation_license
+      license: m.amb_form_validation_license,
+      imageLicenseMissing: m.amb_form_validation_image_license_missing
     }
   });
 
