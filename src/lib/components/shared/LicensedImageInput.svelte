@@ -10,6 +10,7 @@
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { buildLicenseTemplate } from '$lib/helpers/image-license.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 
   let {
     imageUrl = $bindable(''),
@@ -140,7 +141,7 @@
     try {
       const signer = manager.active;
       if (!signer) throw new Error('No active account');
-      const baseTemplate = buildLicenseTemplate({
+      const { kind, content, tags } = buildLicenseTemplate({
         hash: currentHash,
         url: imageUrl,
         mime: modalMime,
@@ -151,8 +152,9 @@
         description: modalDescription || undefined,
         size: modalSize
       });
-      const template = { ...baseTemplate, created_at: Math.floor(Date.now() / 1000) };
-      const signed = await signer.signEvent(template);
+      const factory = createAppEventFactory();
+      const eventTemplate = await factory.build({ kind, content, tags });
+      const signed = await signer.signEvent(eventTemplate);
       eventStore.add(signed);
       publishEventOptimistic(signed, [], {});
       modalOpen = false;

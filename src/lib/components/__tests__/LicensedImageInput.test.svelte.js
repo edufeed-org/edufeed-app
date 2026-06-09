@@ -52,6 +52,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { add: vi.fn() }
 }));
 
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: () => ({
+    /** @param {any} template */
+    build: async (template) => ({ ...template, created_at: 1000, pubkey: 'b'.repeat(64) })
+  })
+}));
+
 function makeFile(name = 'test.jpg', type = 'image/jpeg', size = 100) {
   const blob = new Blob([new Uint8Array(size)], { type });
   return new File([blob], name, { type });
