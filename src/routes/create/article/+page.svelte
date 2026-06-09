@@ -9,7 +9,11 @@
   import { createArticle, updateArticle } from '$lib/stores/article-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
-  import BlossomUploader from '$lib/components/educational/BlossomUploader.svelte';
+  import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: { communityPubkey: string, editNaddr: string } }} */
@@ -26,14 +30,26 @@
   let title = $state('');
   let summary = $state('');
   let editorContent = $state('');
-  let coverImageFiles = $state(/** @type {any[]} */ ([]));
+  let imageUrl = $state('');
+  let imageWasUploaded = $state(false);
+  /** @type {any} */
+  let imageLicenseEvent = $state(null);
   let hashtags = $state(/** @type {string[]} */ ([]));
 
   // UI state
   let isPublishing = $state(false);
   let validationError = $state('');
 
-  const coverImage = $derived(coverImageFiles[0]?.url || '');
+  const coverImage = $derived(imageUrl);
+
+  // Active user display name for the license modal's "I created this" auto-credit.
+  const getActiveUser = useActiveUser();
+  const activeUser = $derived(getActiveUser());
+  const getActiveUserProfile = useUserProfile(() => activeUser?.pubkey);
+  const activeUserProfile = $derived(getActiveUserProfile());
+  const activeUserDisplayName = $derived(
+    activeUser ? getDisplayName(activeUserProfile, activeUser.pubkey.slice(0, 8)) : ''
+  );
 
   // Resolve edit naddr to event
   $effect(() => {
@@ -62,7 +78,9 @@
         editorContent = event.content || '';
         const img = getArticleImage(event);
         if (img) {
-          coverImageFiles = [{ url: img, name: 'cover', type: 'image/*', size: 0 }];
+          imageUrl = img;
+          // Edit flow: not a fresh upload in this session, so the gate stays off.
+          imageWasUploaded = false;
         }
         hashtags =
           event.tags
@@ -75,6 +93,18 @@
         isLoadingEdit = false;
       }
     })();
+  });
+
+  // Edit-flow license rehydration via existing `x` tag on the article event.
+  const editImageHash = $derived(
+    editEvent?.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1] ?? null
+  );
+  const getEditLicense = useLicenseForHash(() => editImageHash);
+  $effect(() => {
+    if (editImageHash && !imageLicenseEvent) {
+      const lic = getEditLicense();
+      if (lic) imageLicenseEvent = lic;
+    }
   });
 
   function handleBack() {
@@ -92,15 +122,23 @@
       validationError = m.article_editor_validation_content();
       return;
     }
+    if (imageUrl && imageWasUploaded && !imageLicenseEvent) {
+      validationError = m.amb_form_validation_image_license_missing();
+      return;
+    }
 
     isPublishing = true;
     try {
+      const imageHash =
+        imageLicenseEvent?.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1] || undefined;
+
       /** @type {import('$lib/stores/article-actions.svelte.js').ArticleFormData} */
       const formData = {
         title: title.trim(),
         content: editorContent,
         summary: summary.trim() || undefined,
         image: coverImage || undefined,
+        imageHash,
         hashtags: hashtags.length > 0 ? hashtags : undefined
       };
 
@@ -168,13 +206,18 @@
         bind:value={title}
       />
 
-      <!-- Cover Image -->
-      <BlossomUploader
-        bind:files={coverImageFiles}
-        multiple={false}
-        accept="image/*"
-        label={m.article_editor_cover_image()}
-      />
+      <!-- Cover Image with license attestation -->
+      <div>
+        <label for="article-cover-image" class="label mb-1">
+          <span class="label-text">{m.article_editor_cover_image()}</span>
+        </label>
+        <LicensedImageInput
+          bind:imageUrl
+          bind:imageWasUploaded
+          bind:licenseEvent={imageLicenseEvent}
+          {activeUserDisplayName}
+        />
+      </div>
 
       <!-- Summary -->
       <textarea
