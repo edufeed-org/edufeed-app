@@ -13,6 +13,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { callExtractMetadata } from '$lib/server/ambMcpClient.js';
+import { parseHttpUrl } from '$lib/server/httpUrl.js';
 
 const VARIANTS = new Set(['amb', 'ekw', 'konfi']);
 const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
@@ -129,15 +130,8 @@ export async function POST({ request }) {
   if (!url) {
     return json({ error: 'Missing url' }, { status: 400 });
   }
-
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return json({ error: 'Invalid url' }, { status: 400 });
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return json({ error: 'URL must be http or https' }, { status: 400 });
+  if (!parseHttpUrl(url)) {
+    return json({ error: 'URL must be a valid http or https URL' }, { status: 400 });
   }
 
   const variantRaw = body.variant ?? 'amb';

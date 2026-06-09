@@ -3,6 +3,7 @@ import { parseHTML } from 'linkedom';
 import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
 import { extractMetadataFromHtml } from '$lib/server/metadataExtraction.js';
 import { isHedgedocPage, extractHedgedocArticle } from '$lib/helpers/hedgedocExtractor.js';
+import { parseHttpUrl } from '$lib/server/httpUrl.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
@@ -34,16 +35,12 @@ export async function GET({ url }) {
     return Response.json({ success: false, error: 'Missing url parameter' }, { status: 400 });
   }
 
-  /** @type {URL} */
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(articleUrl);
-  } catch {
-    return Response.json({ success: false, error: 'Invalid url parameter' }, { status: 400 });
-  }
-
-  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    return Response.json({ success: false, error: 'URL must be http or https' }, { status: 400 });
+  const parsedUrl = parseHttpUrl(articleUrl);
+  if (!parsedUrl) {
+    return Response.json(
+      { success: false, error: 'URL must be a valid http or https URL' },
+      { status: 400 }
+    );
   }
 
   if (isPrivateIp(parsedUrl)) {

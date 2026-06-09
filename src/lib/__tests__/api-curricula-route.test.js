@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { postJson, ev } from './apiRoute.fixtures.js';
 
 vi.mock('$env/dynamic/private', () => ({
   env: {
@@ -12,27 +13,8 @@ vi.mock('$lib/server/sparqlClient.js', () => ({
   query: (/** @type {any} */ args) => queryMock(args)
 }));
 
-/**
- * Build a Request for the POST handler.
- * @param {object} body
- */
-function postRequest(body) {
-  return new Request('http://localhost/api/curricula', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-}
-
-/**
- * Cast a partial RequestEvent for tests. SvelteKit's full type has many
- * runtime-only fields the route doesn't touch.
- * @param {Request} request
- * @returns {any}
- */
-function ev(request) {
-  return { request };
-}
+/** @param {Record<string, unknown>} body */
+const postRequest = (body) => postJson('/api/curricula', body);
 
 /**
  * Build a SPARQL-JSON response.
@@ -81,7 +63,10 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(queryMock).toHaveBeenCalledTimes(1);
     const callArg = queryMock.mock.calls[0][0];
     expect(callArg.endpoint).toBe('https://sparql.example/sparql/');
-    expect(callArg.sparql).toMatch(/lp:LP_0000029/);
+    // Query the Bundesland class directly, not via reverse lp:LP_0000029 scan
+    // (that reverse-scan walks ~1.6M triples to find 16 distinct objects).
+    expect(callArg.sparql).toMatch(/lp:LP_0000040/);
+    expect(callArg.sparql).not.toMatch(/lp:LP_0000029/);
   });
 
   it('list_schularten: substitutes the bundesland URI into the query', async () => {
@@ -186,48 +171,6 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(sparql).toContain('<https://w3id.org/schulfach/BY_0000030>');
   });
 
-  it('get_lehrplan_tree: substitutes lehrplanUri and parses parent/child rows into deduped nodes', async () => {
-    const lehrplan = 'https://lp-bavaria.org/lis_live_isb.c.221348.de';
-    const planet = 'https://lp-bavaria.org/lis_live_isb.c.221308.de';
-    const einzig = 'https://lp-bavaria.org/3463992d';
-    queryMock.mockResolvedValueOnce(
-      sparqlResponse(
-        ['parent', 'parentLabel', 'child', 'childLabel'],
-        [
-          {
-            parent: { type: 'uri', value: lehrplan },
-            parentLabel: { type: 'literal', value: 'Geographie 5' },
-            child: { type: 'uri', value: planet },
-            childLabel: { type: 'literal', value: 'Planet Erde' }
-          },
-          {
-            parent: { type: 'uri', value: planet },
-            parentLabel: { type: 'literal', value: 'Planet Erde' },
-            child: { type: 'uri', value: einzig },
-            childLabel: { type: 'literal', value: 'Einzigartigkeit' }
-          }
-        ]
-      )
-    );
-    const { POST } = await import('../../routes/api/curricula/+server.js');
-    const res = await POST(
-      ev(
-        postRequest({
-          tool: 'get_lehrplan_tree',
-          args: { lehrplanUri: lehrplan }
-        })
-      )
-    );
-    const body = await res.json();
-    expect(body.nodes).toEqual([
-      { id: planet, label: 'Planet Erde', parentId: null },
-      { id: einzig, label: 'Einzigartigkeit', parentId: planet }
-    ]);
-    const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toContain(`<${lehrplan}>`);
-    expect(sparql).toMatch(/lp:LP_0000008/);
-  });
-
   it('get_node_children: substitutes nodeUri and parses child/childLabel/hasChildren bindings', async () => {
     const parent = 'https://lp-bavaria.org/lis_live_isb.c.221308.de';
     const childA = 'https://lp-bavaria.org/3463992d';
@@ -270,7 +213,7 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     ]);
     const sparql = queryMock.mock.calls[0][0].sparql;
     expect(sparql).toContain(`<${parent}>`);
-    expect(sparql).toMatch(/lp:LP_0000008/);
+    expect(sparql).toMatch(/obo:BFO_0000051/);
     expect(sparql).toMatch(/EXISTS/);
   });
 
@@ -335,28 +278,11 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(queryMock).not.toHaveBeenCalled();
   });
 
-  it('get_lehrplan_tree: queries both lp:LP_0000008 and obo:BFO_0000051 (multi-state predicate union)', async () => {
-    // Background: Bayern's data uses lp:LP_0000008 ("hat Teil"); other states
-    // (Rheinland-Pfalz, Sachsen, …) only carry the standard BFO "has part"
-    // predicate obo:BFO_0000051. Querying just one returns an empty tree for
-    // those states. The route must walk both via a SPARQL alternation path.
-    queryMock.mockResolvedValueOnce(sparqlResponse(['parent', 'child', 'childLabel'], []));
-    const { POST } = await import('../../routes/api/curricula/+server.js');
-    await POST(
-      ev(
-        postRequest({
-          tool: 'get_lehrplan_tree',
-          args: { lehrplanUri: 'https://lp-rlp.org/resource/356' }
-        })
-      )
-    );
-    const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toMatch(/lp:LP_0000008/);
-    expect(sparql).toMatch(/obo:BFO_0000051/);
-    expect(sparql).toMatch(/PREFIX\s+obo:/);
-  });
-
-  it('get_node_children: queries both lp:LP_0000008 and obo:BFO_0000051 (multi-state predicate union)', async () => {
+  it('get_node_children: traverses obo:BFO_0000051 with the obo prefix declared', async () => {
+    // State data graphs materialise the has-part relation exclusively via
+    // obo:BFO_0000051. The sub-property lp:LP_0000008 is declared in the
+    // ontology but never present in data, and Virtuoso does no property-
+    // hierarchy reasoning.
     queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel'], []));
     const { POST } = await import('../../routes/api/curricula/+server.js');
     await POST(
@@ -368,44 +294,35 @@ describe('POST /api/curricula (SPARQL backend)', () => {
       )
     );
     const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toMatch(/lp:LP_0000008/);
     expect(sparql).toMatch(/obo:BFO_0000051/);
     expect(sparql).toMatch(/PREFIX\s+obo:/);
+    expect(sparql).not.toMatch(/lp:LP_0000008/);
   });
 
-  it('get_node_children: prefers lp:LP_0000008 with a NOT EXISTS fallback to obo:BFO_0000051', async () => {
-    // Bayern carries both lp:LP_0000008 ("hat Teil") and obo:BFO_0000051
-    // ("has part"). LP_0000008 is Bayern's clean table-of-contents (e.g. 7
-    // chapters on Geographie 5); BFO_0000051 is the full flattened has-part
-    // graph (chapters + every leaf bullet, ~70 entries). A naive alternation
-    // path returns the noisy 70-entry view for Bayern. RP/SN carry only
-    // BFO_0000051, so we still need to fall back to it when LP_0000008 is
-    // empty for the node in question. Pattern:
-    //   { ?node lp:LP_0000008 ?child }
-    //   UNION
-    //   { ?node obo:BFO_0000051 ?child .
-    //     FILTER NOT EXISTS { ?node lp:LP_0000008 ?_ } }
+  it('get_node_children: filters transitive BFO_0000051 over-assertion', async () => {
+    // State data over-asserts has-part transitively: a Lehrplan with 5
+    // chapters and 100 leaves emits all 105 nodes as direct BFO_0000051
+    // children. Without a FILTER NOT EXISTS clause excluding children
+    // reachable via an intermediate hop, the picker shows the flattened set.
     queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel'], []));
     const { POST } = await import('../../routes/api/curricula/+server.js');
     await POST(
       ev(
         postRequest({
           tool: 'get_node_children',
-          args: { nodeUri: 'https://lp-bavaria.org/lis_live_isb.c.1800.de' }
+          args: { nodeUri: 'https://lp-rlp.org/resource/155' }
         })
       )
     );
     const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toMatch(/lp:LP_0000008/);
-    expect(sparql).toMatch(/obo:BFO_0000051/);
     expect(sparql).toMatch(/FILTER\s+NOT\s+EXISTS/i);
+    expect(sparql).toMatch(/\?intermediate\s+obo:BFO_0000051\s+\?child/);
   });
 
   it('get_node_children: orders branchy children before leaves (DESC hasChildren, then label)', async () => {
-    // For states without an LP_0000008 TOC (RP, SN), the BFO fallback returns
-    // 100+ root children mixing categories and leaf bullet points. Sorting
-    // alphabetically buries the category nodes behind a wall of "..." bullets.
-    // ORDER BY DESC(?hasChildren) lifts categories to the top.
+    // Root-level nodes can mix category-like nodes ("Lesen", "Schreiben") with
+    // leaf bullet points. Sorting alphabetically buries the categories behind a
+    // wall of bullets; ORDER BY DESC(?hasChildren) lifts them to the top.
     queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel'], []));
     const { POST } = await import('../../routes/api/curricula/+server.js');
     await POST(
@@ -418,23 +335,6 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     );
     const sparql = queryMock.mock.calls[0][0].sparql;
     expect(sparql).toMatch(/ORDER\s+BY\s+DESC\(\s*\?hasChildren\s*\)/i);
-  });
-
-  it('get_lehrplan_tree: prefers lp:LP_0000008 with a NOT EXISTS fallback to obo:BFO_0000051', async () => {
-    queryMock.mockResolvedValueOnce(sparqlResponse(['parent', 'child', 'childLabel'], []));
-    const { POST } = await import('../../routes/api/curricula/+server.js');
-    await POST(
-      ev(
-        postRequest({
-          tool: 'get_lehrplan_tree',
-          args: { lehrplanUri: 'https://lp-bavaria.org/lis_live_isb.c.1800.de' }
-        })
-      )
-    );
-    const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toMatch(/lp:LP_0000008/);
-    expect(sparql).toMatch(/obo:BFO_0000051/);
-    expect(sparql).toMatch(/FILTER\s+NOT\s+EXISTS/i);
   });
 
   it('get_node_children: rejects malformed nodeUri (injection guard)', async () => {

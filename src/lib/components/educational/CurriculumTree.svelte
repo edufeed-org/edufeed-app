@@ -61,6 +61,20 @@
   /** Per-node URI: is a fetch currently in flight? */
   const loadingByParent = new SvelteSet();
 
+  // Reset caches when rootNodes is replaced — i.e. when the parent picker
+  // switches to a different Lehrplan. The picker's `{#if rootNodes.length > 0}`
+  // gate normally unmounts this component during the switch, but the gate can
+  // be bypassed if a fast reassignment keeps `.length > 0` the whole time.
+  // Without this reset, expanded/fetched state from the previous Lehrplan
+  // would survive into the new one.
+  $effect(() => {
+    rootNodes;
+    expanded.clear();
+    fetched.clear();
+    childrenByParent.clear();
+    loadingByParent.clear();
+  });
+
   /**
    * @param {TreeNode} node
    * @returns {Concept}

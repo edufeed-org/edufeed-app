@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { postJson, ev } from './apiRoute.fixtures.js';
 
 // Mock the MCP client BEFORE importing the route — the route imports it eagerly.
 const callExtractMetadataMock = vi.fn();
@@ -33,23 +34,7 @@ vi.mock('$env/dynamic/private', () => ({
 const { POST } = await import('../../routes/api/enrich/+server.js');
 
 /** @param {Record<string, unknown>} body */
-function makeRequest(body) {
-  return new Request('http://localhost/api/enrich', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-}
-
-/**
- * Cast a partial RequestEvent for tests. SvelteKit's full type has many
- * runtime-only fields the route doesn't touch.
- * @param {Request} request
- * @returns {any}
- */
-function ev(request) {
-  return { request };
-}
+const makeRequest = (body) => postJson('/api/enrich', body);
 
 describe('POST /api/enrich', () => {
   beforeEach(() => {
