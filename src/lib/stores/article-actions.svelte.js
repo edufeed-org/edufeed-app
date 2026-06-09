@@ -8,6 +8,7 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
+import { getSha256FromURL } from 'applesauce-common/helpers';
 
 /** Kind number for NIP-23 long-form articles */
 const ARTICLE_KIND = 30023;
@@ -54,8 +55,11 @@ export function buildArticleTags(formData, dTag, communityPubkey) {
     tags.push(['image', formData.image.trim()]);
   }
 
-  if (formData.imageHash?.trim()) {
-    tags.push(['x', formData.imageHash.trim()]);
+  const resolvedHash =
+    formData.imageHash?.trim() ||
+    (formData.image?.trim() ? getSha256FromURL(formData.image.trim()) : null);
+  if (resolvedHash) {
+    tags.push(['x', resolvedHash]);
   }
 
   if (formData.hashtags) {

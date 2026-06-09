@@ -45,4 +45,18 @@ describe('buildArticleTags', () => {
     const xTag = tags.find((t) => t[0] === 'x');
     expect(xTag).toEqual(['x', 'b'.repeat(64)]);
   });
+
+  it('falls back to getSha256FromURL when no imageHash but image URL contains a Blossom hash', () => {
+    const blossomHash = 'c'.repeat(64);
+    const tags = buildArticleTags(
+      {
+        title: 'Test',
+        content: 'body',
+        image: `https://example.com/${blossomHash}.jpg`
+      },
+      'd-tag-fixed'
+    );
+    const xTag = tags.find((t) => t[0] === 'x');
+    expect(xTag).toEqual(['x', blossomHash]);
+  });
 });

@@ -208,9 +208,9 @@
 
       <!-- Cover Image with license attestation -->
       <div>
-        <label for="article-cover-image" class="label mb-1">
+        <div class="label mb-1">
           <span class="label-text">{m.article_editor_cover_image()}</span>
-        </label>
+        </div>
         <LicensedImageInput
           bind:imageUrl
           bind:imageWasUploaded
