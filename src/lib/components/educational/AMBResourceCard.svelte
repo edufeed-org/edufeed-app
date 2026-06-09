@@ -27,6 +27,8 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
+  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -67,6 +69,12 @@
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
+
+  // Thumbnail license attestation (kind 1063 keyed by x-tag SHA-256)
+  const imageHash = $derived(
+    resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
+  );
+  const getImageLicense = useLicenseForHash(() => imageHash);
 
   // Reactive SKOS concepts for URI-to-label resolution
   const resourceTypeConcepts = $derived(getCachedConcepts('learningResourceType'));
@@ -187,7 +195,7 @@
       </div>
     {/if}
     <div
-      class="list-thumbnail h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
+      class="list-thumbnail relative h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
     >
       {#if resource.image}
         <ImageWithFallback
@@ -197,6 +205,12 @@
           size="thumbnail"
           class="h-full w-full object-cover"
         />
+        {#if getImageLicense()}
+          <LicenseBadge
+            licenseEvent={getImageLicense()}
+            class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+          />
+        {/if}
       {:else}
         <div class="flex h-full w-full items-center justify-center text-2xl text-base-content/30">
           📚
@@ -307,7 +321,7 @@
     <!-- Resource Image — always shown for consistent card height -->
     {#if !compact}
       <div class="mb-3">
-        <div class="aspect-[2/1] w-full overflow-hidden rounded-lg bg-base-200">
+        <div class="relative aspect-[2/1] w-full overflow-hidden rounded-lg bg-base-200">
           {#if resource.image}
             <ImageWithFallback
               src={resource.image}
@@ -316,6 +330,12 @@
               size="card"
               class="h-full w-full object-cover"
             />
+            {#if getImageLicense()}
+              <LicenseBadge
+                licenseEvent={getImageLicense()}
+                class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+              />
+            {/if}
           {:else}
             <div class="flex h-full w-full items-center justify-center text-5xl">📚</div>
           {/if}
