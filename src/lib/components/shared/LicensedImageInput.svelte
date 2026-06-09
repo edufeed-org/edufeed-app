@@ -36,6 +36,10 @@
   let modalSaving = $state(false);
   let modalError = $state('');
 
+  // Upload-side ephemeral error (invalid file type, too large, upload failed).
+  // Kept separate from `errors` prop which is owned by the wizard's $derived validator.
+  let uploadError = $state('');
+
   // Reactive license event from EventStore.
   const getLicense = useLicenseForHash(() => currentHash);
   $effect(() => {
@@ -60,19 +64,19 @@
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      errors.image = m.licensed_image_input_error_invalid_file();
+      uploadError = m.licensed_image_input_error_invalid_file();
       return;
     }
     const maxBytes = runtimeConfig.blossom?.maxFileSize ?? 5 * 1024 * 1024;
     if (file.size > maxBytes) {
-      errors.image = m.licensed_image_input_error_too_large({
+      uploadError = m.licensed_image_input_error_too_large({
         size: Math.round(maxBytes / (1024 * 1024))
       });
       return;
     }
 
     uploading = true;
-    errors.image = '';
+    uploadError = '';
     try {
       const signer = manager.active;
       if (!signer) throw new Error('No active account');
@@ -95,7 +99,7 @@
       }
     } catch (e) {
       console.error('Image upload failed', e);
-      errors.image = m.licensed_image_input_error_upload_failed();
+      uploadError = m.licensed_image_input_error_upload_failed();
     } finally {
       uploading = false;
       if (fileInputRef) fileInputRef.value = '';
@@ -199,8 +203,8 @@
     />
   </div>
 
-  {#if errors.image}
-    <p class="mt-1 text-xs text-error">{errors.image}</p>
+  {#if uploadError || errors.image}
+    <p class="mt-1 text-xs text-error">{uploadError || errors.image}</p>
   {/if}
 </div>
 
