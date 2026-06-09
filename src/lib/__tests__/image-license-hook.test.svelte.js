@@ -24,6 +24,11 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 
+/**
+ * @param {string} hash
+ * @param {number} createdAt
+ * @param {string} [id]
+ */
 function makeLicenseEvent(hash, createdAt, id = 'a') {
   return {
     id: id.padEnd(64, '0'),
@@ -43,14 +48,15 @@ function makeLicenseEvent(hash, createdAt, id = 'a') {
 }
 
 describe('useLicenseForHash', () => {
-  beforeEach(() => {
-    sharedStore.database?.clear?.();
-  });
+  beforeEach(() => {});
 
   it('returns null when no license event exists for the hash', () => {
     const hash = '1'.repeat(64);
-    let getter;
-    const cleanup = $effect.root(() => {
+    /** @type {() => any} */
+    let getter = () => null;
+    /** @type {() => void} */
+    let cleanup = () => {};
+    cleanup = $effect.root(() => {
       getter = useLicenseForHash(() => hash);
     });
     flushSync();
@@ -65,8 +71,11 @@ describe('useLicenseForHash', () => {
     sharedStore.add(older);
     sharedStore.add(newer);
 
-    let getter;
-    const cleanup = $effect.root(() => {
+    /** @type {() => any} */
+    let getter = () => null;
+    /** @type {() => void} */
+    let cleanup = () => {};
+    cleanup = $effect.root(() => {
       getter = useLicenseForHash(() => hash);
     });
     flushSync();
@@ -75,8 +84,11 @@ describe('useLicenseForHash', () => {
   });
 
   it('returns null when getHash returns null', () => {
-    let getter;
-    const cleanup = $effect.root(() => {
+    /** @type {() => any} */
+    let getter = () => null;
+    /** @type {() => void} */
+    let cleanup = () => {};
+    cleanup = $effect.root(() => {
       getter = useLicenseForHash(() => null);
     });
     flushSync();
@@ -86,8 +98,11 @@ describe('useLicenseForHash', () => {
 
   it('reacts when a new event for the hash arrives later', () => {
     const hash = '3'.repeat(64);
-    let getter;
-    const cleanup = $effect.root(() => {
+    /** @type {() => any} */
+    let getter = () => null;
+    /** @type {() => void} */
+    let cleanup = () => {};
+    cleanup = $effect.root(() => {
       getter = useLicenseForHash(() => hash);
     });
     flushSync();

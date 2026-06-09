@@ -3,10 +3,18 @@
 
   let { licenseEvent = null, class: klass = '' } = $props();
 
-  const licenseUrl = $derived(licenseEvent?.tags.find((t) => t[0] === 'license')?.[1] ?? null);
-  const credit = $derived(licenseEvent?.tags.find((t) => t[0] === 'credit')?.[1] ?? null);
-  const source = $derived(licenseEvent?.tags.find((t) => t[0] === 'source')?.[1] ?? null);
-  const creatorP = $derived(licenseEvent?.tags.find((t) => t[0] === 'p')?.[1] ?? null);
+  const licenseUrl = $derived(
+    licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'license')?.[1] ?? null
+  );
+  const credit = $derived(
+    licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'credit')?.[1] ?? null
+  );
+  const source = $derived(
+    licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'source')?.[1] ?? null
+  );
+  const creatorP = $derived(
+    licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'p')?.[1] ?? null
+  );
 
   const label = $derived(licenseUrl ? formatLicenseUrl(licenseUrl) : null);
 

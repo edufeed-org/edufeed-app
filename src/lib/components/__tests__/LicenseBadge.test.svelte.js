@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/svelte';
 import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
 
+/** @param {string[][]} [extraTags] */
 function makeEvent(extraTags = []) {
   return {
     id: 'a'.repeat(64),
