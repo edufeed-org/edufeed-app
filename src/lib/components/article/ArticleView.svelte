@@ -20,6 +20,9 @@
   import { TimelineModel } from 'applesauce-core/models';
   import DetailHeader from '../shared/DetailHeader.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+  import LicenseBadge from '../shared/LicenseBadge.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import { getSha256FromURL } from 'applesauce-common/helpers';
   import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
@@ -42,6 +45,15 @@
   // Extract article metadata
   const title = $derived(getArticleTitle(event) || 'Untitled Article');
   const image = $derived(getArticleImage(event));
+
+  const imageHash = $derived.by(() => {
+    const xTag = event.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1];
+    if (xTag) return xTag;
+    return image ? (getSha256FromURL(image) ?? null) : null;
+  });
+
+  const getCoverLicense = useLicenseForHash(() => imageHash);
+  const coverLicense = $derived(getCoverLicense());
 
   const dTag = $derived.by(() => {
     const tag = event.tags?.find((/** @type {any} */ t) => t[0] === 'd');
@@ -165,7 +177,7 @@
   <!-- Featured Image -->
   {#if image}
     <div class="mb-8">
-      <div class="aspect-[16/9] w-full overflow-hidden rounded-lg">
+      <div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg">
         <ImageWithFallback
           src={image}
           alt={title}
@@ -173,6 +185,12 @@
           size="hero"
           class="h-full w-full object-cover"
         />
+        {#if coverLicense}
+          <LicenseBadge
+            licenseEvent={coverLicense}
+            class="absolute right-2 bottom-2 bg-base-100/80 backdrop-blur"
+          />
+        {/if}
       </div>
     </div>
   {/if}
