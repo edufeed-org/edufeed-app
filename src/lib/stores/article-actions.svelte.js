@@ -18,6 +18,7 @@ const ARTICLE_KIND = 30023;
  * @property {string} content - Markdown content
  * @property {string} [summary] - Optional summary
  * @property {string} [image] - Optional cover image URL
+ * @property {string} [imageHash] - SHA-256 of the cover image (for NIP-94 license attestation lookup)
  * @property {string[]} [hashtags] - Optional hashtags
  */
 
@@ -36,7 +37,7 @@ function generateRandomId() {
  * @param {string} [communityPubkey] - Optional community targeting
  * @returns {string[][]}
  */
-function buildArticleTags(formData, dTag, communityPubkey) {
+export function buildArticleTags(formData, dTag, communityPubkey) {
   const tags = [
     ['d', dTag || generateRandomId()],
     ['title', formData.title]
@@ -51,6 +52,10 @@ function buildArticleTags(formData, dTag, communityPubkey) {
 
   if (formData.image?.trim()) {
     tags.push(['image', formData.image.trim()]);
+  }
+
+  if (formData.imageHash?.trim()) {
+    tags.push(['x', formData.imageHash.trim()]);
   }
 
   if (formData.hashtags) {
