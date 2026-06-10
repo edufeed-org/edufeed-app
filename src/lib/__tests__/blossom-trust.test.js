@@ -5,18 +5,28 @@ import { describe, it, expect } from 'vitest';
 import { normalizeServerUrl, urlIsOnTrustedServer } from '$lib/helpers/blossom-trust.js';
 
 describe('normalizeServerUrl', () => {
-  it('strips trailing slash', () => {
-    expect(normalizeServerUrl('https://blossom.edufeed.org/')).toBe('https://blossom.edufeed.org');
+  it('drops the scheme and lowercases the host', () => {
+    expect(normalizeServerUrl('https://Blossom.EDUFEED.org/')).toBe('blossom.edufeed.org');
   });
 
-  it('lowercases the host but preserves path case', () => {
-    expect(normalizeServerUrl('https://Blossom.EDUFEED.org/Path')).toBe(
-      'https://blossom.edufeed.org/Path'
+  it('drops the scheme but preserves path case', () => {
+    expect(normalizeServerUrl('https://blossom.edufeed.org/Path')).toBe('blossom.edufeed.org/Path');
+  });
+
+  it('treats http and https on the same host as equal', () => {
+    expect(normalizeServerUrl('http://blossom.edufeed.org')).toBe(
+      normalizeServerUrl('https://blossom.edufeed.org')
     );
   });
 
-  it('returns the string unchanged when already normalized', () => {
-    expect(normalizeServerUrl('https://blossom.edufeed.org')).toBe('https://blossom.edufeed.org');
+  it('strips trailing slash from bare host', () => {
+    expect(normalizeServerUrl('https://blossom.edufeed.org/')).toBe('blossom.edufeed.org');
+  });
+
+  it('keeps explicit port', () => {
+    expect(normalizeServerUrl('http://blossom.edufeed.org:8080/path')).toBe(
+      'blossom.edufeed.org:8080/path'
+    );
   });
 
   it('passes through invalid input unchanged', () => {
@@ -42,6 +52,16 @@ describe('urlIsOnTrustedServer', () => {
 
   it('matches a different trusted server', () => {
     expect(urlIsOnTrustedServer('https://files.example.org/x.png', servers)).toBe(true);
+  });
+
+  it('matches http URL against an https trusted entry (scheme-insensitive)', () => {
+    expect(urlIsOnTrustedServer('http://blossom.edufeed.org/abc.png', servers)).toBe(true);
+  });
+
+  it('matches https URL against an http trusted entry (scheme-insensitive)', () => {
+    expect(
+      urlIsOnTrustedServer('https://blossom.edufeed.org/abc.png', ['http://blossom.edufeed.org'])
+    ).toBe(true);
   });
 
   it('rejects look-alike domain', () => {

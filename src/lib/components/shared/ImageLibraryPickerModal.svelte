@@ -105,25 +105,6 @@
     return [...byHash.values()].sort((a, b) => b.event.created_at - a.event.created_at);
   });
 
-  // DIAGNOSTIC — logs once when picker opens; remove after triage.
-  $effect(() => {
-    if (!open) return;
-    console.debug('[ImageLibraryPickerModal] state', {
-      loading,
-      eventCount: events.length,
-      trustedServers,
-      tileCount: tiles.length,
-      sampleEvent: events[0]
-        ? {
-            kind: events[0].kind,
-            url: events[0].tags.find((/** @type {string[]} */ t) => t[0] === 'url')?.[1],
-            x: events[0].tags.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1]
-          }
-        : null,
-      sampleTileUrl: tiles[0]?.meta?.url ?? null
-    });
-  });
-
   /**
    * @param {{ event: any, meta: any }} tile
    */
