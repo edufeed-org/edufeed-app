@@ -1,6 +1,9 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import ProfileAvatar from './ProfileAvatar.svelte';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
 
   let {
     open = $bindable(false),
@@ -34,15 +37,6 @@
    */
   function getAttestationSource(event) {
     return event?.tags?.find(/** @param {string[]} t */ (t) => t[0] === 'source')?.[1] ?? null;
-  }
-
-  /**
-   * @param {string} pubkey
-   * @returns {string}
-   */
-  function shortPubkey(pubkey) {
-    if (!pubkey || pubkey.length <= 16) return pubkey;
-    return `${pubkey.slice(0, 8)}…${pubkey.slice(-6)}`;
   }
 
   /**
@@ -102,6 +96,9 @@
     }
     return [...byAuthor.values()].sort((a, b) => b.created_at - a.created_at);
   });
+
+  // Batch-load profiles for every unique-attestation author.
+  const getProfiles = useProfileMap(() => uniqueAttestations.map((a) => a.pubkey));
 
   /**
    * @param {Event} ev
@@ -166,6 +163,18 @@
               {@const credit = getAttestationCredit(attestation)}
               {@const source = getAttestationSource(attestation)}
               <li class="rounded border border-base-200 p-2" data-testid="detail-attestation">
+                <div class="mb-2 flex items-center gap-2">
+                  <ProfileAvatar
+                    pubkey={attestation.pubkey}
+                    profile={getProfiles().get(attestation.pubkey)}
+                    size="xs"
+                    fallbackType="robohash"
+                    showHoverCard
+                  />
+                  <span class="font-medium" title={attestation.pubkey}>
+                    {getDisplayName(getProfiles().get(attestation.pubkey), attestation.pubkey)}
+                  </span>
+                </div>
                 {#if license}
                   <div>
                     <span class="font-medium">{m.license_modal_license_label()}:</span>
@@ -186,10 +195,6 @@
                     >
                   </div>
                 {/if}
-                <div class="break-all opacity-70">
-                  <span class="font-medium">{m.license_modal_attested_by()}:</span>
-                  <span title={attestation.pubkey}>{shortPubkey(attestation.pubkey)}</span>
-                </div>
                 <div class="opacity-70">
                   <span class="font-medium">{m.image_library_picker_attestation_date()}:</span>
                   {formatTimestamp(attestation.created_at)}

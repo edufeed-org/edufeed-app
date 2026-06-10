@@ -21,8 +21,19 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_license_label: () => 'License',
   license_modal_credit_label: () => 'Credit',
   license_modal_source_label: () => 'Source',
-  license_modal_attested_by: () => 'Attested by',
   image_source_chooser_cancel: () => 'Cancel'
+}));
+
+function StubComponent() {}
+vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: StubComponent }));
+
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map()
+}));
+
+vi.mock('applesauce-core/helpers', () => ({
+  getDisplayName: (/** @type {any} */ _profile, /** @type {string} */ pubkey) =>
+    `name-of-${pubkey.slice(0, 6)}`
 }));
 
 import ImageLibraryDetailModal from '../shared/ImageLibraryDetailModal.svelte';
@@ -255,5 +266,40 @@ describe('ImageLibraryDetailModal', () => {
     expect(backdrop).toBeTruthy();
     await fireEvent.click(backdrop);
     expect(oncancel).toHaveBeenCalledOnce();
+  });
+
+  it('renders display name from profile resolver for each attestation', () => {
+    /**
+     * @param {{ id: string, pubkey: string, created_at: number, credit: string }} o
+     */
+    function makeEvent({ id, pubkey, created_at, credit }) {
+      return {
+        id,
+        kind: 1063,
+        pubkey,
+        created_at,
+        content: '',
+        sig: '',
+        tags: [
+          ['url', 'https://blossom.edufeed.org/h1.png'],
+          ['x', 'h1'],
+          ['m', 'image/png'],
+          ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+          ['credit', credit]
+        ]
+      };
+    }
+    const tile = {
+      event: makeEvent({ id: 'a', pubkey: 'alice-aaaa', created_at: 100, credit: 'Cred A' }),
+      meta: { url: 'https://blossom.edufeed.org/h1.png', sha256: 'h1', type: 'image/png' },
+      events: [
+        makeEvent({ id: 'a', pubkey: 'alice-aaaa', created_at: 100, credit: 'Cred A' }),
+        makeEvent({ id: 'b', pubkey: 'bob-bbbb', created_at: 200, credit: 'Cred B' })
+      ]
+    };
+    const { getByText } = render(ImageLibraryDetailModal, { props: { open: true, tile } });
+    // getDisplayName mock returns `name-of-${first 6 of pubkey}`
+    expect(getByText('name-of-alice-')).toBeTruthy();
+    expect(getByText('name-of-bob-bb')).toBeTruthy();
   });
 });
