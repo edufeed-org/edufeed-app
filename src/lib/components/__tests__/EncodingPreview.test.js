@@ -75,7 +75,48 @@ describe('EncodingPreview', () => {
     expect(container.querySelector('img')).toBeTruthy();
   });
 
-  it('renders an Open-PDF fallback link inside the <object>', () => {
+  it('upgrades http:// to https:// in the PDF embed source', () => {
+    const { container } = render(EncodingPreview, {
+      props: {
+        url: 'http://blossom.example.com/doc.pdf',
+        mimeType: 'application/pdf',
+        name: 'doc.pdf'
+      }
+    });
+    const obj = container.querySelector('object[type="application/pdf"]');
+    expect(obj).toBeTruthy();
+    expect(obj?.getAttribute('data')).toBe('https://blossom.example.com/doc.pdf');
+  });
+
+  it('upgrades http:// to https:// in the image src', () => {
+    const { container } = render(EncodingPreview, {
+      props: {
+        url: 'http://blossom.example.com/pic.png',
+        mimeType: 'image/png',
+        name: 'pic.png'
+      }
+    });
+    const img = container.querySelector('img');
+    expect(img?.getAttribute('src')).toBe('https://blossom.example.com/pic.png');
+  });
+
+  it('renders a compact PDF fallback card when the URL scheme is not http(s)', () => {
+    const { container } = render(EncodingPreview, {
+      props: {
+        url: 'ftp://example.com/doc.pdf',
+        mimeType: 'application/pdf',
+        name: 'doc.pdf'
+      }
+    });
+    expect(container.querySelector('object')).toBeNull();
+    const link = container.querySelector('a[href="ftp://example.com/doc.pdf"]');
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toContain('noopener');
+    expect(link?.textContent).toContain('Open PDF in a new tab');
+  });
+
+  it('does not render the inline fallback link inside the <object> on the happy path', () => {
     const { container } = render(EncodingPreview, {
       props: {
         url: 'https://example.com/doc.pdf',
@@ -83,10 +124,8 @@ describe('EncodingPreview', () => {
         name: 'doc.pdf'
       }
     });
-    const link = container.querySelector('object a[href="https://example.com/doc.pdf"]');
-    expect(link).toBeTruthy();
-    expect(link?.getAttribute('target')).toBe('_blank');
-    expect(link?.getAttribute('rel')).toContain('noopener');
-    expect(link?.textContent).toContain('Open PDF in a new tab');
+    // The 80vh viewer renders cleanly; the row's existing View/Download buttons
+    // handle the fallback affordance, so no link inside the <object>.
+    expect(container.querySelector('object a')).toBeNull();
   });
 });
