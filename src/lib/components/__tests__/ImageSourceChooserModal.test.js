@@ -59,7 +59,7 @@ describe('ImageSourceChooserModal', () => {
     const { container } = render(ImageSourceChooserModal, {
       props: { open: true, oncancel }
     });
-    const backdrop = container.querySelector('.modal-backdrop');
+    const backdrop = /** @type {Element} */ (container.querySelector('.modal-backdrop'));
     expect(backdrop).toBeTruthy();
     await fireEvent.click(backdrop);
     expect(oncancel).toHaveBeenCalledOnce();

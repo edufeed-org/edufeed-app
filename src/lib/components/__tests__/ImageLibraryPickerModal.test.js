@@ -4,8 +4,10 @@ import { render, fireEvent } from '@testing-library/svelte';
 import { BehaviorSubject } from 'rxjs';
 
 // Mocked event store. We control what timeline() emits via a BehaviorSubject.
-const timeline$ = new BehaviorSubject([]);
-const replaceable$ = new BehaviorSubject(undefined);
+/** @type {import('rxjs').BehaviorSubject<any[]>} */
+const timeline$ = new BehaviorSubject(/** @type {any[]} */ ([]));
+/** @type {import('rxjs').BehaviorSubject<any>} */
+const replaceable$ = new BehaviorSubject(/** @type {any} */ (undefined));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
@@ -234,7 +236,7 @@ describe('ImageLibraryPickerModal', () => {
     timeline$.next([ev({ id: 'a', hash: 'h1', url: 'https://blossom.edufeed.org/h1.png' })]);
     const oncancel = vi.fn();
     const { container } = render(ImageLibraryPickerModal, { props: { open: true, oncancel } });
-    const backdrop = container.querySelector('.modal-backdrop');
+    const backdrop = /** @type {Element} */ (container.querySelector('.modal-backdrop'));
     expect(backdrop).toBeTruthy();
     await fireEvent.click(backdrop);
     expect(oncancel).toHaveBeenCalledOnce();

@@ -66,7 +66,9 @@ const defaultConfig = {
     suggestedCommunities: []
   },
   blossom: {
-    maxFileSize: 5 * 1024 * 1024 // 5MB
+    maxFileSize: 5 * 1024 * 1024, // 5MB
+    /** @type {string | undefined} */
+    serverUrl: undefined
   },
   geocoding: {
     cacheDurationDays: 30,
