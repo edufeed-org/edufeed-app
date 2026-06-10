@@ -2,7 +2,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import CameraIcon from '$lib/components/icons/actions/CameraIcon.svelte';
   import * as m from '$lib/paraglide/messages';
-  import { uploadWithAutoSelfLicense } from '$lib/helpers/auto-self-license.js';
+  import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
 
   let { userData = $bindable(), signer = null, errors = $bindable({}) } = $props();
 
@@ -51,16 +51,7 @@
       };
       reader.readAsDataURL(file);
 
-      // Upload to Blossom + auto-publish kind 1063 self-credit license event.
-      const displayName =
-        (userData.display_name && userData.display_name.trim()) ||
-        (userData.name && userData.name.trim()) ||
-        '';
-      const { url } = await uploadWithAutoSelfLicense(file, {
-        signer,
-        displayName,
-        pubkey: signer.pubkey
-      });
+      const { url } = await uploadAndFindLicense(file, { signer });
       userData.picture = url;
     } catch (error) {
       console.error('Image upload failed:', error);
