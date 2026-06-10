@@ -39,6 +39,7 @@
   import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import EncodingRowBadge from './EncodingRowBadge.svelte';
+  import EncodingPreview from './EncodingPreview.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -647,6 +648,7 @@
             </a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </div>
+          <EncodingPreview url={file.url} mimeType={file.mimeType} name={file.name} />
         {/each}
       </div>
     </div>
