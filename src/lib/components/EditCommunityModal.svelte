@@ -512,12 +512,44 @@
     resetState();
   }
 
-  // Check if current user is the owner
-  let isOwner = $derived(
-    communityEvent?.pubkey &&
-      manager.active?.pubkey &&
-      communityEvent.pubkey === manager.active.pubkey
-  );
+  // The signer that can edit this community's profile metadata. Either the
+  // active user's own signer (current-keypair community) or the new-keypair
+  // community's signer registered with the account manager.
+  let communitySigner = $derived.by(() => {
+    const pk = communityEvent?.pubkey;
+    if (!pk) return null;
+    const account = manager.getAccountForPubkey(pk);
+    return account?.signer ?? null;
+  });
+
+  // Check if current user is the owner (holds the community's signer).
+  let isOwner = $derived(!!communitySigner);
+
+  /**
+   * Open EditProfileModal in "community mode": pass the community's pubkey
+   * and signer so the kind 0 metadata event is published under the community
+   * identity (not the active user's identity). The user sees the same Edit
+   * Profile UI they use for their own profile, with header copy that calls
+   * out the kind 0 semantics.
+   */
+  function openCommunityProfileEdit() {
+    if (!communityEvent?.pubkey || !communitySigner) return;
+    // Try to seed the form with existing kind 0 content from EventStore.
+    const existing = /** @type {any} */ (eventStore.getReplaceable(0, communityEvent.pubkey));
+    let profile = {};
+    if (existing?.content) {
+      try {
+        profile = JSON.parse(existing.content);
+      } catch {
+        /* ignore parse errors — start with empty form */
+      }
+    }
+    modalStore.openModal('profile', {
+      profile,
+      pubkey: communityEvent.pubkey,
+      signer: communitySigner
+    });
+  }
 </script>
 
 <dialog id={modalId} class="modal">
@@ -540,6 +572,26 @@
       </div>
     {:else}
       <div class="space-y-6">
+        <!-- Community profile metadata (kind 0): avatar, banner, name, about, etc.
+             Delegates to the standard EditProfileModal but signed by the
+             community's keypair. -->
+        <div class="rounded-lg border border-base-300 bg-base-200 p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <div>
+              <h2 class="font-medium">
+                {m.edit_community_modal_profile_section_title?.() || 'Community profile'}
+              </h2>
+              <p class="text-xs text-base-content/60">
+                {m.edit_community_modal_profile_section_note?.() ||
+                  'Avatar, banner, name, and other kind 0 metadata.'}
+              </p>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick={openCommunityProfileEdit}>
+              {m.edit_community_modal_profile_section_button?.() || 'Edit community profile'}
+            </button>
+          </div>
+        </div>
+
         <!-- Location -->
         <LocationInput
           bind:value={communityData.location}
