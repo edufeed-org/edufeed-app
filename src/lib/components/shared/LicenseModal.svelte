@@ -6,6 +6,7 @@
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { buildLicenseTemplate } from '$lib/helpers/image-license.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
+  import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
 
   let {
     open = $bindable(false),
@@ -15,6 +16,7 @@
     size = 0,
     activeUserDisplayName = '',
     defaultSelfCreator = false,
+    existingLicense = /** @type {any} */ (null),
     /** @type {(license: any) => void} */
     onsave = () => {},
     /** @type {() => void} */
@@ -29,7 +31,28 @@
   let modalSaving = $state(false);
   let modalError = $state('');
 
+  // Two-state modal:
+  //   - 'existing': showing the existing license event with Accept / Create-my-own
+  //   - 'form':     the standard create-a-license form
+  // Defaults to 'existing' when `existingLicense` is provided, else 'form'.
+  let view = $state(/** @type {'existing' | 'form'} */ ('form'));
+
   const licenseOptions = $derived(getLicenseOptions(modalLicense));
+
+  // Existing-license tag readers
+  const existingLicenseUrl = $derived(
+    existingLicense?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'license')?.[1] ?? null
+  );
+  const existingCredit = $derived(
+    existingLicense?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'credit')?.[1] ?? null
+  );
+  const existingSource = $derived(
+    existingLicense?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'source')?.[1] ?? null
+  );
+  const existingDescription = $derived(existingLicense?.content || '');
+  const existingLicenseLabel = $derived(
+    existingLicenseUrl ? formatLicenseUrl(existingLicenseUrl) : null
+  );
 
   // Reset modal fields each time it opens. The effect re-runs on every change
   // of `open` but the `if (open)` guard ensures we only reset on the rising edge.
@@ -41,6 +64,7 @@
       modalSource = '';
       modalDescription = '';
       modalError = '';
+      view = existingLicense ? 'existing' : 'form';
     }
   });
 
@@ -49,6 +73,17 @@
     if (modalSelfCreator && activeUserDisplayName) {
       modalCredit = activeUserDisplayName;
     }
+  }
+
+  function acceptExisting() {
+    if (!existingLicense) return;
+    open = false;
+    onsave(existingLicense);
+  }
+
+  function switchToForm() {
+    view = 'form';
+    modalError = '';
   }
 
   async function handleSave() {
@@ -100,87 +135,161 @@
 {#if open}
   <div class="modal-open modal" data-testid="license-modal">
     <div class="modal-box">
-      <h3 class="mb-2 text-lg font-bold">{m.license_modal_title()}</h3>
-      <p class="mb-4 text-sm opacity-70">{m.license_modal_description()}</p>
+      {#if view === 'existing' && existingLicense}
+        <!-- State A: existing license found, ask user to accept or create their own -->
+        <h3 class="mb-2 text-lg font-bold">{m.license_modal_existing_title()}</h3>
+        <p class="mb-4 text-sm opacity-70">{m.license_modal_existing_description()}</p>
 
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-license">
-          <span class="label-text">{m.license_modal_license_label()}</span>
-        </label>
-        <select id="license-modal-license" class="select-bordered select" bind:value={modalLicense}>
-          {#each licenseOptions as opt (opt.id)}
-            <option value={opt.id}>{opt.label}</option>
-          {/each}
-        </select>
-      </div>
+        <div class="mb-4 rounded-lg border border-base-300 bg-base-200 p-4 text-sm">
+          <dl class="space-y-2">
+            {#if existingLicenseLabel}
+              <div class="flex gap-2">
+                <dt class="w-24 font-medium">{m.license_modal_license_label()}</dt>
+                <dd>
+                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external link -->
+                  <a
+                    href={existingLicenseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="link">{existingLicenseLabel}</a
+                  >
+                </dd>
+              </div>
+            {/if}
+            {#if existingCredit}
+              <div class="flex gap-2">
+                <dt class="w-24 font-medium">{m.license_modal_credit_label()}</dt>
+                <dd>{existingCredit}</dd>
+              </div>
+            {/if}
+            {#if existingSource}
+              <div class="flex gap-2">
+                <dt class="w-24 font-medium">{m.license_modal_source_label()}</dt>
+                <dd class="break-all">
+                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external link -->
+                  <a href={existingSource} target="_blank" rel="noopener noreferrer" class="link"
+                    >{existingSource}</a
+                  >
+                </dd>
+              </div>
+            {/if}
+            {#if existingDescription}
+              <div class="flex gap-2">
+                <dt class="w-24 font-medium">{m.license_modal_description_label()}</dt>
+                <dd>{existingDescription}</dd>
+              </div>
+            {/if}
+            <div class="flex gap-2 text-xs opacity-60">
+              <dt class="w-24 font-medium">{m.license_modal_attested_by()}</dt>
+              <dd class="break-all">{existingLicense.pubkey}</dd>
+            </div>
+          </dl>
+        </div>
 
-      <div class="form-control mb-3">
-        <label class="label cursor-pointer justify-start gap-2">
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" onclick={handleCancel}>
+            {m.license_modal_cancel()}
+          </button>
+          <button type="button" class="btn btn-outline" onclick={switchToForm}>
+            {m.license_modal_create_own()}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-testid="license-modal-accept-existing"
+            onclick={acceptExisting}
+          >
+            {m.license_modal_accept_existing()}
+          </button>
+        </div>
+      {:else}
+        <!-- State B: create a new license event -->
+        <h3 class="mb-2 text-lg font-bold">{m.license_modal_title()}</h3>
+        <p class="mb-4 text-sm opacity-70">{m.license_modal_description()}</p>
+
+        <div class="form-control mb-3">
+          <label class="label" for="license-modal-license">
+            <span class="label-text">{m.license_modal_license_label()}</span>
+          </label>
+          <select
+            id="license-modal-license"
+            class="select-bordered select"
+            bind:value={modalLicense}
+          >
+            {#each licenseOptions as opt (opt.id)}
+              <option value={opt.id}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+
+        <div class="form-control mb-3">
+          <label class="label cursor-pointer justify-start gap-2">
+            <input
+              type="checkbox"
+              class="checkbox"
+              checked={modalSelfCreator}
+              onchange={toggleSelfCreator}
+            />
+            <span class="label-text">{m.license_modal_self_creator()}</span>
+          </label>
+        </div>
+
+        <div class="form-control mb-3">
+          <label class="label" for="license-modal-credit">
+            <span class="label-text">{m.license_modal_credit_label()}</span>
+          </label>
           <input
-            type="checkbox"
-            class="checkbox"
-            checked={modalSelfCreator}
-            onchange={toggleSelfCreator}
+            id="license-modal-credit"
+            type="text"
+            class="input-bordered input"
+            placeholder={m.license_modal_credit_placeholder()}
+            bind:value={modalCredit}
           />
-          <span class="label-text">{m.license_modal_self_creator()}</span>
-        </label>
-      </div>
+        </div>
 
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-credit">
-          <span class="label-text">{m.license_modal_credit_label()}</span>
-        </label>
-        <input
-          id="license-modal-credit"
-          type="text"
-          class="input-bordered input"
-          placeholder={m.license_modal_credit_placeholder()}
-          bind:value={modalCredit}
-        />
-      </div>
+        <div class="form-control mb-3">
+          <label class="label" for="license-modal-source">
+            <span class="label-text">{m.license_modal_source_label()}</span>
+          </label>
+          <input
+            id="license-modal-source"
+            type="url"
+            class="input-bordered input"
+            bind:value={modalSource}
+          />
+        </div>
 
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-source">
-          <span class="label-text">{m.license_modal_source_label()}</span>
-        </label>
-        <input
-          id="license-modal-source"
-          type="url"
-          class="input-bordered input"
-          bind:value={modalSource}
-        />
-      </div>
+        <div class="form-control mb-3">
+          <label class="label" for="license-modal-desc">
+            <span class="label-text">{m.license_modal_description_label()}</span>
+          </label>
+          <textarea
+            id="license-modal-desc"
+            class="textarea-bordered textarea"
+            bind:value={modalDescription}
+          ></textarea>
+        </div>
 
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-desc">
-          <span class="label-text">{m.license_modal_description_label()}</span>
-        </label>
-        <textarea
-          id="license-modal-desc"
-          class="textarea-bordered textarea"
-          bind:value={modalDescription}
-        ></textarea>
-      </div>
+        {#if modalError}
+          <p class="mb-2 text-xs text-error">{modalError}</p>
+        {/if}
 
-      {#if modalError}
-        <p class="mb-2 text-xs text-error">{modalError}</p>
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" onclick={handleCancel} disabled={modalSaving}>
+            {m.license_modal_cancel()}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-testid="license-modal-save"
+            onclick={handleSave}
+            disabled={modalSaving}
+          >
+            {#if modalSaving}<span class="loading loading-sm loading-spinner"></span>{/if}
+            {m.license_modal_save()}
+          </button>
+        </div>
       {/if}
-
-      <div class="modal-action">
-        <button type="button" class="btn btn-ghost" onclick={handleCancel} disabled={modalSaving}>
-          {m.license_modal_cancel()}
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          data-testid="license-modal-save"
-          onclick={handleSave}
-          disabled={modalSaving}
-        >
-          {#if modalSaving}<span class="loading loading-sm loading-spinner"></span>{/if}
-          {m.license_modal_save()}
-        </button>
-      </div>
     </div>
   </div>
 {/if}
