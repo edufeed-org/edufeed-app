@@ -5,6 +5,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { SimpleSigner } from 'applesauce-signers';
   import { SimpleAccount } from 'applesauce-accounts/accounts';
+  import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -12,7 +13,8 @@
   import ChevronLeftIcon from './icons/ui/ChevronLeftIcon.svelte';
   import ChevronRightIcon from './icons/ui/ChevronRightIcon.svelte';
   import KeypairGenerator from './shared/KeypairGenerator.svelte';
-  import ImageUploader from './shared/ImageUploader.svelte';
+  import AvatarUploader from './shared/AvatarUploader.svelte';
+  import BannerUploader from './shared/BannerUploader.svelte';
   import ProfileForm from './shared/ProfileForm.svelte';
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
@@ -45,6 +47,7 @@
     name: '',
     about: '',
     picture: '',
+    banner: '',
     website: '',
     privateKey: /** @type {Uint8Array | null} */ (null),
     publicKey: '',
@@ -53,6 +56,45 @@
     downloadConfirmed: false,
     ncryptsecPassword: '',
     useEncryption: false
+  });
+
+  /**
+   * Signer used for the community's uploads + kind 1063 license attestations
+   * (avatar, banner). Derived so the avatar/banner widgets always see the
+   * right signer regardless of which keypair flow the user picked.
+   *
+   *   - useCurrentKeypair: use the active user's own signer
+   *   - new keypair:       SimpleSigner around the freshly-generated privateKey
+   */
+  const communitySigner = $derived.by(() => {
+    if (useCurrentKeypair) return manager.active?.signer ?? null;
+    if (userData.privateKey) {
+      try {
+        return new SimpleSigner(userData.privateKey);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  // Generate the community keypair as soon as the user picks "new keypair" so
+  // the AvatarUploader/BannerUploader in Step 1 have a working signer for
+  // Blossom uploads + kind 1063 license attestations. KeypairGenerator at
+  // Step 2 just displays the already-generated keys.
+  $effect(() => {
+    if (!useCurrentKeypair && currentStep > 0 && !userData.privateKey) {
+      try {
+        const privateKey = generateSecretKey();
+        const publicKey = getPublicKey(privateKey);
+        userData.privateKey = privateKey;
+        userData.publicKey = publicKey;
+        userData.nsec = nip19.nsecEncode(privateKey);
+        userData.npub = nip19.npubEncode(publicKey);
+      } catch (e) {
+        console.error('Community keypair generation failed:', e);
+      }
+    }
   });
 
   // Community data state
@@ -169,6 +211,7 @@
           name: '',
           about: '',
           picture: '',
+          banner: '',
           website: '',
           privateKey: /** @type {Uint8Array | null} */ (null),
           publicKey: '',
@@ -410,6 +453,7 @@
             name: userData.name,
             about: userData.about,
             picture: userData.picture,
+            banner: userData.banner,
             website: userData.website
           }),
           pubkey: account.pubkey
@@ -524,6 +568,7 @@
       name: '',
       about: '',
       picture: '',
+      banner: '',
       website: '',
       privateKey: /** @type {Uint8Array | null} */ (null),
       publicKey: '',
@@ -845,9 +890,10 @@
             </p>
           </div>
 
-          <ImageUploader {userData} {errors} />
+          <AvatarUploader bind:userData signer={communitySigner} bind:errors />
+          <BannerUploader bind:userData signer={communitySigner} bind:errors />
 
-          <ProfileForm {userData} {errors} />
+          <ProfileForm {userData} {errors} hideBanner={true} />
         </div>
       {:else if currentStep === 2 && !useCurrentKeypair}
         <!-- Keys Generation for New Keypair -->
