@@ -36,13 +36,15 @@ export function buildTulluCaption(licenseEvent, options = {}) {
   const licenseUrl = tagValue('license');
   const credit = tagValue('credit');
   const sourceUrl = tagValue('source');
+  const titleTag = tagValue('title');
   const description = (licenseEvent.content || '').trim();
 
   // No license URL → no meaningful caption.
   if (!licenseUrl) return '';
 
   const licenseLabel = formatLicenseUrl(licenseUrl) || licenseUrl;
-  const title = description || (options.alt ?? '').trim() || m.tullu_no_title();
+  // Title precedence: explicit `title` tag → description (content) → alt → fallback.
+  const title = titleTag || description || (options.alt ?? '').trim() || m.tullu_no_title();
 
   const parts = [];
   parts.push(`"${title}"`);

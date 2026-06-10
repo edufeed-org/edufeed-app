@@ -3,8 +3,9 @@
  * Pure function: no I/O, no signing. Caller signs + publishes.
  *
  * NIP-94 (file metadata) provides the bones: url, x (sha256), m (mime).
- * We add three application tags for the license attestation semantics:
- *   - license: license URL (CC, MIT, etc.)
+ * We add application tags for the license attestation semantics:
+ *   - title:   (optional) the work's title — used by TULLU as Titel
+ *   - license: license URL (CC, etc.)
  *   - credit:  human-readable attribution
  *   - source:  (optional) where the image was originally found
  *   - p:       (optional) attribution to a Nostr pubkey
@@ -15,6 +16,7 @@
  *   mime: string,
  *   license: string,
  *   credit: string,
+ *   title?: string,
  *   source?: string,
  *   creatorPubkey?: string,
  *   description?: string,
@@ -24,7 +26,8 @@
  * @returns {{ kind: 1063, content: string, tags: string[][] }}
  */
 export function buildLicenseTemplate(input) {
-  const { hash, url, mime, license, credit, source, creatorPubkey, description, size, dim } = input;
+  const { hash, url, mime, license, credit, title, source, creatorPubkey, description, size, dim } =
+    input;
   if (!hash) throw new Error('buildLicenseTemplate: hash is required');
   if (!url) throw new Error('buildLicenseTemplate: url is required');
   if (!mime) throw new Error('buildLicenseTemplate: mime is required');
@@ -39,6 +42,7 @@ export function buildLicenseTemplate(input) {
   ];
   if (typeof size === 'number') tags.push(['size', String(size)]);
   if (dim) tags.push(['dim', dim]);
+  if (title && title.trim()) tags.push(['title', title.trim()]);
   tags.push(['license', license]);
   tags.push(['credit', credit]);
   if (source) tags.push(['source', source]);

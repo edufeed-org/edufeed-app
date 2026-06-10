@@ -2289,6 +2289,8 @@
   "license_modal_title": "Bild lizenzieren",
   "license_modal_description": "Vor dem Veröffentlichen eines hochgeladenen Bildes benötigen wir eine Lizenz. Dies erzeugt eine öffentliche Attestierung auf Nostr.",
   "license_modal_license_label": "Lizenz",
+  "license_modal_title_field_label": "Titel des Werks (optional)",
+  "license_modal_title_field_placeholder": "z. B. Mona Lisa, Berliner Skyline, Periodensystem",
   "license_modal_credit_label": "Urheber (Attribution)",
   "license_modal_credit_placeholder": "z. B. Jane Doe, OpenStax, Wikipedia-Nutzer XYZ",
   "license_modal_self_creator": "Ich bin die Urheberin / der Urheber dieses Bildes",

@@ -33,6 +33,17 @@ describe('buildLicenseTemplate', () => {
     expect(keys).not.toContain('dim');
     expect(keys).not.toContain('source');
     expect(keys).not.toContain('p');
+    expect(keys).not.toContain('title');
+  });
+
+  it('emits a title tag when supplied', () => {
+    const tpl = buildLicenseTemplate({ ...required, title: 'Mona Lisa' });
+    expect(tpl.tags).toEqual(expect.arrayContaining([['title', 'Mona Lisa']]));
+  });
+
+  it('trims and omits an empty title', () => {
+    const tpl = buildLicenseTemplate({ ...required, title: '   ' });
+    expect(tpl.tags.map((t) => t[0])).not.toContain('title');
   });
 
   it('includes optional tags when supplied', () => {

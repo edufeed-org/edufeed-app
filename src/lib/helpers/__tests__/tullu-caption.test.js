@@ -96,6 +96,18 @@ describe('buildTulluCaption', () => {
     );
   });
 
+  it('prefers an explicit title tag over content and alt', () => {
+    const ev = mkEvent('https://creativecommons.org/licenses/by/4.0/', {
+      credit: 'Jane',
+      description: 'A picture of a cat sitting on a wall'
+    });
+    ev.tags.push(['title', 'Cat on Wall']);
+    const result = buildTulluCaption(ev, { alt: 'fallback.jpg' });
+    expect(result).toContain('"Cat on Wall"');
+    expect(result).not.toContain('A picture of a cat');
+    expect(result).not.toContain('fallback.jpg');
+  });
+
   it('uses the raw URL as label when formatLicenseUrl does not recognize it', () => {
     const ev = mkEvent('https://example.com/custom-license', {
       credit: 'Org'

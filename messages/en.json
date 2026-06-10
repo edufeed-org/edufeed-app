@@ -2289,6 +2289,8 @@
   "license_modal_title": "License this image",
   "license_modal_description": "We need a license before publishing an uploaded image. This creates a public attestation on Nostr.",
   "license_modal_license_label": "License",
+  "license_modal_title_field_label": "Title of the work (optional)",
+  "license_modal_title_field_placeholder": "e.g. Mona Lisa, Berlin skyline, Periodic Table",
   "license_modal_credit_label": "Credit (attribution)",
   "license_modal_credit_placeholder": "e.g. Jane Doe, OpenStax, Wikipedia user XYZ",
   "license_modal_self_creator": "I am the creator of this image",
