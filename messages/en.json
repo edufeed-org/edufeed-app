@@ -424,6 +424,8 @@
   "account_profile_active_button": "Active",
   "account_profile_set_active_button": "Set Active",
   "profile_edit_modal_title": "Edit Profile",
+  "profile_edit_modal_title_community": "Edit Community Profile",
+  "profile_edit_modal_kind0_note": "This publishes a kind 0 metadata event signed by the community's keypair.",
   "profile_edit_modal_success": "Profile updated successfully!",
   "profile_edit_modal_cancel_button": "Cancel",
   "profile_edit_modal_save_button": "Save Profile",
