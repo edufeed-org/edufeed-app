@@ -76,6 +76,12 @@
   let modalOpen = $state(false);
   let modalTargetIndex = $state(/** @type {number | null} */ (null));
 
+  // Snapshot of `files` taken just before a brand-new upload appends/replaces.
+  // Set ONLY when the modal is being opened for a mandatory (upload-loop) flow.
+  // Null when the modal was opened from a row button (optional, replace-only
+  // flow) — in which case cancel must NOT mutate `files`.
+  let preFileSnapshot = $state(/** @type {any[] | null} */ (null));
+
   const modalTargetFile = $derived(modalTargetIndex !== null ? files[modalTargetIndex] : null);
 
   // Callbacks that resolve the Promise the upload loop is awaiting. Cleared on
@@ -90,6 +96,8 @@
   }
 
   function openModalFor(/** @type {number} */ index) {
+    // Optional case (row-button trigger): never revert files on cancel.
+    preFileSnapshot = null;
     modalTargetIndex = index;
     modalOpen = true;
   }
@@ -218,6 +226,12 @@
       for (const file of filesToUpload) {
         const uploaded = await uploadFile(file);
 
+        // Snapshot files BEFORE the append/replace. If the user cancels the
+        // mandatory license modal, we revert to this exact state — which both
+        // (a) restores the previously-selected file in single-file mode, and
+        // (b) drops only this latest append in multi-file mode.
+        const snapshot = files;
+
         // Determine the index this file will occupy *after* the append.
         let targetIndex;
         if (multiple) {
@@ -240,7 +254,11 @@
           const idx = targetIndex;
           files = files.map((item, i) => (i === idx ? { ...item, licenseEvent: existing } : item));
         } else {
+          // Mandatory case: openModalFor() clears the snapshot, so set it
+          // AFTER the call (the modal handlers read preFileSnapshot when it
+          // closes). This is the signal the cancel handler uses to revert.
           openModalFor(targetIndex);
+          preFileSnapshot = snapshot;
           await new Promise((resolve) => {
             modalCloseListeners.push(resolve);
           });
@@ -477,15 +495,19 @@
       const idx = modalTargetIndex;
       files = files.map((f, i) => (i === idx ? { ...f, licenseEvent: license } : f));
     }
+    preFileSnapshot = null;
     modalTargetIndex = null;
     notifyModalClosed();
   }}
   oncancel={() => {
-    // Mandatory mode — cancel removes the un-licensed file row entirely.
-    if (modalTargetIndex !== null) {
-      const idx = modalTargetIndex;
-      files = files.filter((_, i) => i !== idx);
+    // Mandatory case: revert files to the pre-upload snapshot. This handles
+    // both single-file replace (restores the previous file) and multi-file
+    // append (drops only this latest append). Optional row-button cancel
+    // leaves preFileSnapshot null so files stays untouched.
+    if (preFileSnapshot !== null) {
+      files = preFileSnapshot;
     }
+    preFileSnapshot = null;
     modalTargetIndex = null;
     notifyModalClosed();
   }}

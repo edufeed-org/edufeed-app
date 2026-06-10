@@ -198,6 +198,63 @@ describe('LicensedImageInput', () => {
     expect(state.licenseEvent).toBeNull();
   });
 
+  it('cancel on the license modal clears imageUrl, imageWasUploaded, licenseEvent and does not publish', async () => {
+    const hash = 'a'.repeat(64);
+    mockUploadBlob.mockResolvedValue({
+      url: `https://blossom.example/${hash}.jpg`,
+      sha256: hash,
+      size: 100,
+      type: 'image/jpeg'
+    });
+
+    let state = $state({ imageUrl: '', imageWasUploaded: false, licenseEvent: null });
+    const { getByTestId } = render(LicensedImageInput, {
+      get imageUrl() {
+        return state.imageUrl;
+      },
+      set imageUrl(v) {
+        state.imageUrl = v;
+      },
+      get imageWasUploaded() {
+        return state.imageWasUploaded;
+      },
+      set imageWasUploaded(v) {
+        state.imageWasUploaded = v;
+      },
+      get licenseEvent() {
+        return state.licenseEvent;
+      },
+      set licenseEvent(v) {
+        state.licenseEvent = v;
+      },
+      errors: {},
+      activeUserDisplayName: 'Tester'
+    });
+
+    const fileInput = getByTestId('licensed-image-file-input');
+    await fireEvent.change(fileInput, { target: { files: [makeFile()] } });
+
+    // Wait for upload to complete and the mandatory modal to appear.
+    await waitFor(() => expect(state.imageWasUploaded).toBe(true));
+    const modal = getByTestId('license-modal');
+    expect(modal).toBeTruthy();
+
+    // Cancel button is the first button in .modal-action (Save has the testid).
+    const modalActionButtons = modal.querySelectorAll('.modal-action button');
+    const cancelBtn = /** @type {HTMLButtonElement} */ (modalActionButtons[0]);
+    expect(cancelBtn).toBeTruthy();
+    await fireEvent.click(cancelBtn);
+
+    // Cancel must wipe the upload state and not publish/sign anything.
+    await waitFor(() => {
+      expect(state.imageUrl).toBe('');
+      expect(state.imageWasUploaded).toBe(false);
+      expect(state.licenseEvent).toBeNull();
+    });
+    expect(mockPublish).not.toHaveBeenCalled();
+    expect(mockSignEvent).not.toHaveBeenCalled();
+  });
+
   it('"I am the creator" autofills credit and adds a p tag', async () => {
     const hash = 'e'.repeat(64);
     mockUploadBlob.mockResolvedValue({
