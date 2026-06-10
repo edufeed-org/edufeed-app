@@ -192,6 +192,7 @@
   {activeUserDisplayName}
   defaultSelfCreator={true}
   existingLicense={pendingExistingLicense}
+  {signer}
   onsave={() => {
     userData.picture = pendingUrl;
     pendingUrl = '';

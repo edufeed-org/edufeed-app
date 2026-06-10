@@ -71,7 +71,8 @@
     if (userData.privateKey) {
       try {
         return new SimpleSigner(userData.privateKey);
-      } catch {
+      } catch (e) {
+        console.error('CreateCommunityModal: failed to build community signer:', e);
         return null;
       }
     }

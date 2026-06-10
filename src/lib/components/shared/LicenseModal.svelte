@@ -17,6 +17,13 @@
     activeUserDisplayName = '',
     defaultSelfCreator = false,
     existingLicense = /** @type {any} */ (null),
+    /**
+     * Signer used to publish the kind 1063 attestation. Falls back to
+     * `manager.active` when not provided. Set this to a community signer when
+     * attesting the community's own uploads (avatar / banner) so the license
+     * event is signed by the community's keypair, not the active user's.
+     */
+    signer = /** @type {{ pubkey: string, signEvent: (e: any) => Promise<any> } | null} */ (null),
     /** @type {(license: any) => void} */
     onsave = () => {},
     /** @type {() => void} */
@@ -98,8 +105,8 @@
     }
     modalSaving = true;
     try {
-      const signer = manager.active;
-      if (!signer) throw new Error('No active account');
+      const effectiveSigner = signer ?? manager.active;
+      if (!effectiveSigner) throw new Error('No active account');
       const template = buildLicenseTemplate({
         hash,
         url,
@@ -108,12 +115,12 @@
         license: modalLicense,
         credit: modalCredit,
         source: modalSource || undefined,
-        creatorPubkey: modalSelfCreator ? signer.pubkey : undefined,
+        creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
         description: modalDescription || undefined
       });
       const factory = createAppEventFactory();
       const eventTemplate = await factory.build(template);
-      const signed = await signer.signEvent(eventTemplate);
+      const signed = await effectiveSigner.signEvent(eventTemplate);
       eventStore.add(signed);
       publishEventOptimistic(signed, [], {});
       open = false;
