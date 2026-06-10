@@ -76,21 +76,21 @@
   });
 
   const tiles = $derived.by(() => {
-    /** @type {Record<string, { event: any, meta: any }>} */
-    const byHash = Object.create(null);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup inside $derived.by, never stored in reactive state
+    const byHash = new Map();
     for (const event of events) {
       if (event?.kind !== 1063) continue;
       const meta = getFileMetadata(event);
       if (!meta?.url || !meta.sha256) continue;
       if (!urlIsOnTrustedServer(meta.url, trustedServers)) continue;
-      const existing = byHash[meta.sha256];
+      const existing = byHash.get(meta.sha256);
       const wins =
         !existing ||
         event.created_at > existing.event.created_at ||
         (event.created_at === existing.event.created_at && event.id < existing.event.id);
-      if (wins) byHash[meta.sha256] = { event, meta };
+      if (wins) byHash.set(meta.sha256, { event, meta });
     }
-    return Object.values(byHash).sort((a, b) => b.event.created_at - a.event.created_at);
+    return [...byHash.values()].sort((a, b) => b.event.created_at - a.event.created_at);
   });
 
   /**

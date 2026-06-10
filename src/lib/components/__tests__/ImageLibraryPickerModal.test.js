@@ -221,4 +221,33 @@ describe('ImageLibraryPickerModal', () => {
     // Reset for subsequent tests.
     replaceable$.next(undefined);
   });
+
+  it('invokes oncancel when Cancel button clicked', async () => {
+    timeline$.next([ev({ id: 'a', hash: 'h1', url: 'https://blossom.edufeed.org/h1.png' })]);
+    const oncancel = vi.fn();
+    const { getByText } = render(ImageLibraryPickerModal, { props: { open: true, oncancel } });
+    await fireEvent.click(getByText('Cancel'));
+    expect(oncancel).toHaveBeenCalledOnce();
+  });
+
+  it('invokes oncancel when backdrop clicked', async () => {
+    timeline$.next([ev({ id: 'a', hash: 'h1', url: 'https://blossom.edufeed.org/h1.png' })]);
+    const oncancel = vi.fn();
+    const { container } = render(ImageLibraryPickerModal, { props: { open: true, oncancel } });
+    const backdrop = container.querySelector('.modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    await fireEvent.click(backdrop);
+    expect(oncancel).toHaveBeenCalledOnce();
+  });
+
+  it('tie-breaks by lex order of id (lower wins) when created_at is equal', () => {
+    timeline$.next([
+      ev({ id: 'zzz', hash: 'h1', url: 'https://blossom.edufeed.org/h1.png', created_at: 500 }),
+      ev({ id: 'aaa', hash: 'h1', url: 'https://blossom.edufeed.org/h1.png', created_at: 500 })
+    ]);
+    const { getAllByTestId } = render(ImageLibraryPickerModal, { props: { open: true } });
+    const tiles = getAllByTestId('library-tile');
+    expect(tiles.length).toBe(1);
+    expect(tiles[0].getAttribute('data-event-id')).toBe('aaa');
+  });
 });
