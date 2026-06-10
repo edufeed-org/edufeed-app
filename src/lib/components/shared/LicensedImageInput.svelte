@@ -57,8 +57,15 @@
   function handleLibraryPick(picked) {
     imageUrl = picked.url;
     currentHash = picked.hash;
-    licenseEvent = picked.licenseEvent;
+    // library-picked images already carry a licenseEvent; skip the upload gate
     imageWasUploaded = false;
+    // Add to EventStore so the reactive useLicenseForHash($effect) resolves
+    // licenseEvent for us — avoids a race with the imperative write.
+    try {
+      eventStore.add(picked.licenseEvent);
+    } catch {
+      /* duplicate add — no-op */
+    }
   }
 
   function triggerUpload() {
