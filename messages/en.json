@@ -2059,6 +2059,7 @@
   "amb_resource_nostr_native_description": "This content is stored on the Nostr network and available directly without external dependencies.",
   "amb_resource_view_file": "View",
   "amb_resource_download_file": "Download",
+  "amb_resource_open_pdf_inline_fallback": "Open PDF in a new tab",
   "amb_resource_external_references": "External References",
   "amb_resource_external_reference": "External Reference",
   "amb_resource_ekw_metadata": "EKKW Metadata",
