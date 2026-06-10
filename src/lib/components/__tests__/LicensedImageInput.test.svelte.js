@@ -236,7 +236,8 @@ describe('LicensedImageInput', () => {
     });
     await waitFor(() => expect(getByTestId('license-modal')).toBeTruthy());
 
-    await fireEvent.click(getByLabelText(/I am the creator/));
+    // LicenseModal pre-checks "I am the creator" when activeUserDisplayName
+    // is provided and autofills credit. No user click required.
     const creditInput = /** @type {HTMLInputElement} */ (getByLabelText(/Credit/));
     expect(creditInput.value).toBe('Jane Doe');
 
