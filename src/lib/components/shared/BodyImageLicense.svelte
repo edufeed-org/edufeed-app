@@ -1,10 +1,17 @@
 <!--
   BodyImageLicense
-  Renders a license attribution + watermark badge for a body image, looked up
-  by SHA-256 hash derived from the image URL (Blossom URLs only).
+  Renders a license watermark badge for a body image, looked up by SHA-256
+  hash derived from the image URL (Blossom URLs only).
 
   Mounted dynamically by MarkdownRenderer's body-image-license action, one
   instance per <img> tag. Stays empty when no license event is reachable.
+
+  This component renders ONLY the watermark overlay. The full TULLU
+  attribution is inserted by MarkdownEditor into the raw markdown text
+  immediately after the image at upload time (see buildTulluCaption), so it
+  travels with the content and is editable by the author. The watermark
+  here is a discoverability hint for body images that didn't get the
+  inline caption (e.g., legacy content, external Blossom URLs).
 -->
 
 <script>
@@ -51,16 +58,4 @@
     <span class="font-medium">{label}</span>
     {#if credit}<span class="opacity-70">· {credit}</span>{/if}
   </span>
-  <!-- Attribution caption under the image. The MarkdownRenderer action
-       mounts this component directly into a <figure>, so figcaption IS a
-       proper child of figure at runtime. svelte-check's static analyzer
-       can't see the runtime parent. -->
-  <!-- svelte-ignore a11y_figcaption_parent -->
-  <figcaption class="mt-1 text-xs text-base-content/60" data-testid="body-image-license-caption">
-    {label}{#if credit}
-      · {credit}{/if}{#if source}
-      ·
-      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external link -->
-      <a href={source} target="_blank" rel="noopener noreferrer" class="link">source</a>{/if}
-  </figcaption>
 {/if}
