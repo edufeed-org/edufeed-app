@@ -75,6 +75,7 @@
       console.error('Banner upload failed:', e);
       errors.banner = m.banner_uploader_error_upload_failed();
       preview = null;
+      pendingExistingLicense = null;
     } finally {
       uploading = false;
       if (fileInputRef) fileInputRef.value = '';

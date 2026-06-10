@@ -84,6 +84,7 @@
       console.error('Image upload failed:', error);
       errors.image = m.avatar_uploader_error_upload_failed();
       imagePreview = null;
+      pendingExistingLicense = null;
     } finally {
       uploadingImage = false;
     }

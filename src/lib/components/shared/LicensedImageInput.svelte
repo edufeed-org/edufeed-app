@@ -91,6 +91,7 @@
     } catch (e) {
       console.error('Image upload failed', e);
       uploadError = m.licensed_image_input_error_upload_failed();
+      pendingExistingLicense = null;
     } finally {
       uploading = false;
       if (fileInputRef) fileInputRef.value = '';
