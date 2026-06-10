@@ -1,11 +1,8 @@
 <script>
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { manager } from '$lib/stores/accounts.svelte';
   import CameraIcon from '$lib/components/icons/actions/CameraIcon.svelte';
   import * as m from '$lib/paraglide/messages';
-  import { BlossomClient } from 'blossom-client-sdk';
-  import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
+  import { uploadWithAutoSelfLicense } from '$lib/helpers/auto-self-license.js';
 
   let { userData = $bindable(), signer = null, errors = $bindable({}) } = $props();
 
@@ -13,32 +10,6 @@
   let uploadingImage = $state(false);
   let imagePreview = $state(/** @type {string | null} */ (null));
   let fileInputRef = $state(/** @type {HTMLInputElement | null} */ (null));
-
-  /**
-   * Upload image to Blossom server using the SDK
-   * @param {File} file
-   * @returns {Promise<string>} URL of uploaded image
-   */
-  async function uploadImageToBlossom(file) {
-    if (!signer) {
-      throw new Error('Signer not available for authorization');
-    }
-
-    // Create a signer function compatible with blossom-client-sdk
-    const signerFn = async (/** @type {any} */ event) => {
-      return await signer.signEvent(event);
-    };
-
-    // Get the blossom server (user's preference or default)
-    const userPubkey = manager.active?.pubkey;
-    const serverUrl = getActiveBlossomServer(userPubkey || '', eventStore);
-
-    // Create Blossom client and upload
-    const client = new BlossomClient(serverUrl, signerFn);
-    const blob = await client.uploadBlob(file);
-
-    return blob.url;
-  }
 
   /**
    * Handle image file selection
@@ -63,6 +34,11 @@
       return;
     }
 
+    if (!signer) {
+      errors.image = m.avatar_uploader_error_no_signer();
+      return;
+    }
+
     try {
       uploadingImage = true;
       errors.image = '';
@@ -75,9 +51,17 @@
       };
       reader.readAsDataURL(file);
 
-      // Upload to Blossom
-      const imageUrl = await uploadImageToBlossom(file);
-      userData.picture = imageUrl;
+      // Upload to Blossom + auto-publish kind 1063 self-credit license event.
+      const displayName =
+        (userData.display_name && userData.display_name.trim()) ||
+        (userData.name && userData.name.trim()) ||
+        '';
+      const { url } = await uploadWithAutoSelfLicense(file, {
+        signer,
+        displayName,
+        pubkey: signer.pubkey
+      });
+      userData.picture = url;
     } catch (error) {
       console.error('Image upload failed:', error);
       errors.image = m.avatar_uploader_error_upload_failed();

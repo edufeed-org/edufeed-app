@@ -3,6 +3,7 @@
   import { manager } from '$lib/stores/accounts.svelte.js';
   import ProfileForm from './shared/ProfileForm.svelte';
   import AvatarUploader from './shared/AvatarUploader.svelte';
+  import BannerUploader from './shared/BannerUploader.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -258,10 +259,17 @@
         <AvatarUploader bind:userData signer={manager.active?.signer} bind:errors />
       </div>
 
+      <!-- Banner Uploader (centered with max-width) -->
+      <div class="flex w-full flex-col items-center">
+        <div class="w-full max-w-md">
+          <BannerUploader bind:userData signer={manager.active?.signer} bind:errors />
+        </div>
+      </div>
+
       <!-- Form Fields (centered with max-width) -->
       <div class="flex w-full flex-col items-center">
         <div class="w-full max-w-md space-y-4">
-          <ProfileForm bind:userData bind:errors />
+          <ProfileForm bind:userData bind:errors hideBanner />
         </div>
       </div>
     </div>
