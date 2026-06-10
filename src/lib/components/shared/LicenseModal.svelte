@@ -14,6 +14,7 @@
     mime = '',
     size = 0,
     activeUserDisplayName = '',
+    defaultSelfCreator = false,
     /** @type {(license: any) => void} */
     onsave = () => {},
     /** @type {() => void} */
@@ -35,8 +36,8 @@
   $effect(() => {
     if (open) {
       modalLicense = 'https://creativecommons.org/licenses/by/4.0/';
-      modalCredit = activeUserDisplayName || '';
-      modalSelfCreator = !!activeUserDisplayName;
+      modalSelfCreator = defaultSelfCreator;
+      modalCredit = defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : '';
       modalSource = '';
       modalDescription = '';
       modalError = '';
