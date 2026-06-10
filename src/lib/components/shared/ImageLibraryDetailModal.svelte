@@ -82,6 +82,28 @@
   }
 
   /**
+   * Dedupe attestations by author, newest-wins per pubkey. Since kind 1063 is
+   * a regular (not replaceable) event, a single author may publish many
+   * attestations for the same hash as they refine credit/license; we surface
+   * only the most recent per author so the list reflects unique perspectives.
+   */
+  const uniqueAttestations = $derived.by(() => {
+    const events = tile?.events ?? [];
+    if (events.length === 0) return [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup inside $derived.by, never stored in reactive state
+    const byAuthor = new Map();
+    for (const event of events) {
+      const existing = byAuthor.get(event.pubkey);
+      const wins =
+        !existing ||
+        event.created_at > existing.created_at ||
+        (event.created_at === existing.created_at && event.id < existing.id);
+      if (wins) byAuthor.set(event.pubkey, event);
+    }
+    return [...byAuthor.values()].sort((a, b) => b.created_at - a.created_at);
+  });
+
+  /**
    * @param {Event} ev
    */
   function swapPlaceholder(ev) {
@@ -136,10 +158,10 @@
 
         <div>
           <p class="mb-2 text-sm font-medium">
-            {m.image_library_picker_attestations_title({ count: tile.events.length })}
+            {m.image_library_picker_attestations_title({ count: uniqueAttestations.length })}
           </p>
           <ul class="max-h-96 space-y-3 overflow-y-auto pr-2 text-xs">
-            {#each tile.events as attestation (attestation.id)}
+            {#each uniqueAttestations as attestation (attestation.id)}
               {@const license = getAttestationLicense(attestation)}
               {@const credit = getAttestationCredit(attestation)}
               {@const source = getAttestationSource(attestation)}

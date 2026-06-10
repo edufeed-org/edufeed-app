@@ -113,12 +113,13 @@ describe('ImageLibraryDetailModal', () => {
     expect(oncancel).toHaveBeenCalledOnce();
   });
 
-  it('lists every attestation for the tile', () => {
+  it('lists every attestation for the tile (one per unique author)', () => {
     const evA = ev({
       id: 'a1',
       hash: 'h1',
       url: 'https://blossom.edufeed.org/h1.png',
       credit: 'Alice',
+      pubkey: 'aaaa000000000000000000000000000000000000000000000000000000000000',
       created_at: 100
     });
     const evB = ev({
@@ -126,6 +127,7 @@ describe('ImageLibraryDetailModal', () => {
       hash: 'h1',
       url: 'https://blossom.edufeed.org/h1.png',
       credit: 'Bob',
+      pubkey: 'bbbb000000000000000000000000000000000000000000000000000000000000',
       created_at: 200
     });
     const tile = {
@@ -139,6 +141,52 @@ describe('ImageLibraryDetailModal', () => {
     expect(getByText('2 license attestations')).toBeTruthy();
     expect(getAllByTestId('detail-attestation').length).toBe(2);
     expect(getByText(/Alice/)).toBeTruthy();
+    expect(getByText(/Bob/)).toBeTruthy();
+  });
+
+  it('dedupes attestations by author, newest per author wins', () => {
+    /**
+     * @param {{ id: string, pubkey: string, created_at: number, credit: string }} o
+     */
+    function makeEvent({ id, pubkey, created_at, credit }) {
+      return {
+        id,
+        kind: 1063,
+        pubkey,
+        created_at,
+        content: '',
+        sig: '',
+        tags: [
+          ['url', 'https://blossom.edufeed.org/h1.png'],
+          ['x', 'h1'],
+          ['m', 'image/png'],
+          ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+          ['credit', credit]
+        ]
+      };
+    }
+    const tile = {
+      event: makeEvent({ id: 'newest', pubkey: 'alice', created_at: 300, credit: 'Alice latest' }),
+      meta: { url: 'https://blossom.edufeed.org/h1.png', sha256: 'h1', type: 'image/png' },
+      events: [
+        makeEvent({ id: 'alice-old', pubkey: 'alice', created_at: 100, credit: 'Alice early' }),
+        makeEvent({ id: 'alice-mid', pubkey: 'alice', created_at: 200, credit: 'Alice middle' }),
+        makeEvent({ id: 'alice-new', pubkey: 'alice', created_at: 300, credit: 'Alice latest' }),
+        makeEvent({ id: 'bob-only', pubkey: 'bob', created_at: 150, credit: 'Bob' })
+      ]
+    };
+    const { getByText, queryByText, getAllByTestId } = render(ImageLibraryDetailModal, {
+      props: { open: true, tile }
+    });
+    // Count reflects unique authors (alice + bob = 2), not raw event count (4).
+    expect(getByText('2 license attestations')).toBeTruthy();
+    // List shows exactly 2 rows.
+    expect(getAllByTestId('detail-attestation').length).toBe(2);
+    // Alice's newest credit appears; older Alice credits do not.
+    expect(getByText(/Alice latest/)).toBeTruthy();
+    expect(queryByText(/Alice early/)).toBeNull();
+    expect(queryByText(/Alice middle/)).toBeNull();
+    // Bob appears.
     expect(getByText(/Bob/)).toBeTruthy();
   });
 
