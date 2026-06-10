@@ -141,7 +141,7 @@
   });
 
   // ---------------------------------------------------------------------------
-  // File icon + size helpers (copied verbatim from BlossomUploader.svelte)
+  // File icon + size helpers (pure formatters)
   // ---------------------------------------------------------------------------
   /**
    * Format file size for display
