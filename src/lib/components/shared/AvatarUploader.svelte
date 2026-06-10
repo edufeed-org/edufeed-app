@@ -2,7 +2,8 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import CameraIcon from '$lib/components/icons/actions/CameraIcon.svelte';
   import * as m from '$lib/paraglide/messages';
-  import { uploadWithAutoSelfLicense } from '$lib/helpers/auto-self-license.js';
+  import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
+  import LicenseModal from './LicenseModal.svelte';
 
   let { userData = $bindable(), signer = null, errors = $bindable({}) } = $props();
 
@@ -10,6 +11,20 @@
   let uploadingImage = $state(false);
   let imagePreview = $state(/** @type {string | null} */ (null));
   let fileInputRef = $state(/** @type {HTMLInputElement | null} */ (null));
+
+  // Pending upload awaiting license modal
+  let pendingUrl = $state('');
+  let pendingHash = $state('');
+  let pendingMime = $state('');
+  let pendingSize = $state(0);
+  let modalOpen = $state(false);
+  let previousPicture = $state('');
+
+  const activeUserDisplayName = $derived(
+    (userData.display_name && userData.display_name.trim()) ||
+      (userData.name && userData.name.trim()) ||
+      ''
+  );
 
   /**
    * Handle image file selection
@@ -51,17 +66,21 @@
       };
       reader.readAsDataURL(file);
 
-      // Upload to Blossom + auto-publish kind 1063 self-credit license event.
-      const displayName =
-        (userData.display_name && userData.display_name.trim()) ||
-        (userData.name && userData.name.trim()) ||
-        '';
-      const { url } = await uploadWithAutoSelfLicense(file, {
-        signer,
-        displayName,
-        pubkey: signer.pubkey
-      });
-      userData.picture = url;
+      const result = await uploadAndFindLicense(file, { signer });
+
+      if (result.existingLicense) {
+        // Reuse path — bind directly.
+        userData.picture = result.url;
+      } else {
+        // Mandatory modal path. Stash previous so cancel can revert.
+        previousPicture = userData.picture || '';
+        pendingUrl = result.url;
+        pendingHash = result.sha256;
+        pendingMime = result.type;
+        pendingSize = result.size;
+        modalOpen = true;
+        // DO NOT bind userData.picture yet — wait for modal save.
+      }
     } catch (error) {
       console.error('Image upload failed:', error);
       errors.image = m.avatar_uploader_error_upload_failed();
@@ -98,10 +117,10 @@
             <span class="loading loading-lg loading-spinner"></span>
             <span class="mt-2 text-xs opacity-70">{m.avatar_uploader_uploading()}</span>
           </div>
-        {:else if userData.picture || imagePreview}
+        {:else if userData.picture || pendingUrl || imagePreview}
           <!-- Image Preview -->
           <img
-            src={userData.picture || imagePreview}
+            src={userData.picture || pendingUrl || imagePreview}
             alt="Profile"
             class="h-full w-full object-cover"
           />
@@ -163,3 +182,24 @@
     </div>
   {/if}
 </div>
+
+<LicenseModal
+  bind:open={modalOpen}
+  hash={pendingHash}
+  url={pendingUrl}
+  mime={pendingMime}
+  size={pendingSize}
+  {activeUserDisplayName}
+  defaultSelfCreator={true}
+  onsave={() => {
+    userData.picture = pendingUrl;
+    pendingUrl = '';
+    pendingHash = '';
+  }}
+  oncancel={() => {
+    userData.picture = previousPicture;
+    pendingUrl = '';
+    pendingHash = '';
+    imagePreview = null;
+  }}
+/>

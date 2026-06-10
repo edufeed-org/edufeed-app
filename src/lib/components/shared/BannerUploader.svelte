@@ -2,7 +2,8 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import CameraIcon from '$lib/components/icons/actions/CameraIcon.svelte';
   import * as m from '$lib/paraglide/messages';
-  import { uploadWithAutoSelfLicense } from '$lib/helpers/auto-self-license.js';
+  import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
+  import LicenseModal from './LicenseModal.svelte';
 
   let { userData = $bindable(), signer = null, errors = $bindable({}) } = $props();
 
@@ -11,6 +12,20 @@
   let preview = $state(null);
   /** @type {HTMLInputElement | null} */
   let fileInputRef = $state(null);
+
+  // Pending upload awaiting license modal
+  let pendingUrl = $state('');
+  let pendingHash = $state('');
+  let pendingMime = $state('');
+  let pendingSize = $state(0);
+  let modalOpen = $state(false);
+  let previousBanner = $state('');
+
+  const activeUserDisplayName = $derived(
+    (userData.display_name && userData.display_name.trim()) ||
+      (userData.name && userData.name.trim()) ||
+      ''
+  );
 
   async function handleFileSelected(/** @type {Event} */ event) {
     const target = /** @type {HTMLInputElement} */ (event.target);
@@ -43,16 +58,18 @@
       };
       reader.readAsDataURL(file);
 
-      const displayName =
-        (userData.display_name && userData.display_name.trim()) ||
-        (userData.name && userData.name.trim()) ||
-        '';
-      const { url } = await uploadWithAutoSelfLicense(file, {
-        signer,
-        displayName,
-        pubkey: signer.pubkey
-      });
-      userData.banner = url;
+      const result = await uploadAndFindLicense(file, { signer });
+
+      if (result.existingLicense) {
+        userData.banner = result.url;
+      } else {
+        previousBanner = userData.banner || '';
+        pendingUrl = result.url;
+        pendingHash = result.sha256;
+        pendingMime = result.type;
+        pendingSize = result.size;
+        modalOpen = true;
+      }
     } catch (e) {
       console.error('Banner upload failed:', e);
       errors.banner = m.banner_uploader_error_upload_failed();
@@ -81,8 +98,12 @@
         <div class="flex h-full w-full items-center justify-center">
           <span class="loading loading-lg loading-spinner"></span>
         </div>
-      {:else if userData.banner || preview}
-        <img src={userData.banner || preview} alt="Banner" class="h-full w-full object-cover" />
+      {:else if userData.banner || pendingUrl || preview}
+        <img
+          src={userData.banner || pendingUrl || preview}
+          alt="Banner"
+          class="h-full w-full object-cover"
+        />
       {:else}
         <button
           type="button"
@@ -94,7 +115,7 @@
         </button>
       {/if}
 
-      {#if userData.banner || preview}
+      {#if userData.banner || pendingUrl || preview}
         <button
           type="button"
           onclick={triggerUpload}
@@ -139,3 +160,24 @@
     </div>
   {/if}
 </div>
+
+<LicenseModal
+  bind:open={modalOpen}
+  hash={pendingHash}
+  url={pendingUrl}
+  mime={pendingMime}
+  size={pendingSize}
+  {activeUserDisplayName}
+  defaultSelfCreator={true}
+  onsave={() => {
+    userData.banner = pendingUrl;
+    pendingUrl = '';
+    pendingHash = '';
+  }}
+  oncancel={() => {
+    userData.banner = previousBanner;
+    pendingUrl = '';
+    pendingHash = '';
+    preview = null;
+  }}
+/>

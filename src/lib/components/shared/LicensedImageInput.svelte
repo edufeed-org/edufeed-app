@@ -3,15 +3,13 @@
   import { getSha256FromURL } from 'applesauce-common/helpers';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { manager } from '$lib/stores/accounts.svelte';
   import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
-  import { publishEventOptimistic } from '$lib/services/publish-service.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
-  import { buildLicenseTemplate, findExistingLicense } from '$lib/helpers/image-license.js';
-  import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { findExistingLicense } from '$lib/helpers/image-license.js';
   import LicenseBadge from './LicenseBadge.svelte';
+  import LicenseModal from './LicenseModal.svelte';
+  import { manager } from '$lib/stores/accounts.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
   let {
     imageUrl = $bindable(''),
@@ -26,16 +24,9 @@
   let uploading = $state(false);
   let modalOpen = $state(false);
 
-  // Modal form state
-  let modalLicense = $state('https://creativecommons.org/licenses/by/4.0/');
-  let modalCredit = $state('');
-  let modalSelfCreator = $state(false);
-  let modalSource = $state('');
-  let modalDescription = $state('');
+  // MIME / size of last-uploaded blob — passed through to LicenseModal.
   let modalSize = $state(/** @type {number | undefined} */ (undefined));
   let modalMime = $state('image/jpeg');
-  let modalSaving = $state(false);
-  let modalError = $state('');
 
   // Upload-side ephemeral error (invalid file type, too large, upload failed).
   // Kept separate from `errors` prop which is owned by the wizard's $derived validator.
@@ -46,8 +37,6 @@
   $effect(() => {
     licenseEvent = getLicense();
   });
-
-  const licenseOptions = $derived(getLicenseOptions(modalLicense));
 
   /** @type {HTMLInputElement | null} */
   let fileInputRef = null;
@@ -97,7 +86,7 @@
       // to EventStore so useLicenseForHash will resolve it) and skip the modal.
       const existing = await findExistingLicense(blob.sha256);
       if (!existing && !getLicense()) {
-        openModal();
+        modalOpen = true;
       }
     } catch (e) {
       console.error('Image upload failed', e);
@@ -117,63 +106,6 @@
     const hashFromUrl = getSha256FromURL(imageUrl);
     currentHash = hashFromUrl ?? null;
     imageWasUploaded = false;
-  }
-
-  function openModal() {
-    modalLicense = 'https://creativecommons.org/licenses/by/4.0/';
-    modalCredit = '';
-    modalSelfCreator = false;
-    modalSource = '';
-    modalDescription = '';
-    modalError = '';
-    modalOpen = true;
-  }
-
-  function toggleSelfCreator() {
-    modalSelfCreator = !modalSelfCreator;
-    if (modalSelfCreator && activeUserDisplayName) {
-      modalCredit = activeUserDisplayName;
-    }
-  }
-
-  async function saveLicense() {
-    modalError = '';
-    if (!currentHash || !imageUrl) return;
-    if (!modalLicense || !modalCredit) {
-      modalError = m.amb_form_validation_image_license_missing();
-      return;
-    }
-    modalSaving = true;
-    try {
-      const signer = manager.active;
-      if (!signer) throw new Error('No active account');
-      const { kind, content, tags } = buildLicenseTemplate({
-        hash: currentHash,
-        url: imageUrl,
-        mime: modalMime,
-        license: modalLicense,
-        credit: modalCredit,
-        source: modalSource || undefined,
-        creatorPubkey: modalSelfCreator ? signer.pubkey : undefined,
-        description: modalDescription || undefined,
-        size: modalSize
-      });
-      const factory = createAppEventFactory();
-      const eventTemplate = await factory.build({ kind, content, tags });
-      const signed = await signer.signEvent(eventTemplate);
-      eventStore.add(signed);
-      publishEventOptimistic(signed, [], {});
-      modalOpen = false;
-    } catch (e) {
-      console.error('License publish failed', e);
-      modalError = m.license_modal_publish_failed();
-    } finally {
-      modalSaving = false;
-    }
-  }
-
-  function closeModal() {
-    modalOpen = false;
   }
 </script>
 
@@ -208,7 +140,13 @@
   {#if licenseEvent}
     <div class="mt-2 flex items-center gap-2 text-xs">
       <LicenseBadge {licenseEvent} />
-      <button type="button" class="btn btn-ghost btn-xs" onclick={openModal}>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        onclick={() => {
+          modalOpen = true;
+        }}
+      >
         {m.licensed_image_input_replace_license()}
       </button>
     </div>
@@ -219,92 +157,21 @@
   {/if}
 </div>
 
-{#if modalOpen}
-  <div class="modal-open modal" data-testid="license-modal">
-    <div class="modal-box">
-      <h3 class="mb-2 text-lg font-bold">{m.license_modal_title()}</h3>
-      <p class="mb-4 text-sm opacity-70">{m.license_modal_description()}</p>
-
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-license">
-          <span class="label-text">{m.license_modal_license_label()}</span>
-        </label>
-        <select id="license-modal-license" class="select-bordered select" bind:value={modalLicense}>
-          {#each licenseOptions as opt (opt.id)}
-            <option value={opt.id}>{opt.label}</option>
-          {/each}
-        </select>
-      </div>
-
-      <div class="form-control mb-3">
-        <label class="label cursor-pointer justify-start gap-2">
-          <input
-            type="checkbox"
-            class="checkbox"
-            checked={modalSelfCreator}
-            onchange={toggleSelfCreator}
-          />
-          <span class="label-text">{m.license_modal_self_creator()}</span>
-        </label>
-      </div>
-
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-credit">
-          <span class="label-text">{m.license_modal_credit_label()}</span>
-        </label>
-        <input
-          id="license-modal-credit"
-          type="text"
-          class="input-bordered input"
-          placeholder={m.license_modal_credit_placeholder()}
-          bind:value={modalCredit}
-        />
-      </div>
-
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-source">
-          <span class="label-text">{m.license_modal_source_label()}</span>
-        </label>
-        <input
-          id="license-modal-source"
-          type="url"
-          class="input-bordered input"
-          bind:value={modalSource}
-        />
-      </div>
-
-      <div class="form-control mb-3">
-        <label class="label" for="license-modal-desc">
-          <span class="label-text">{m.license_modal_description_label()}</span>
-        </label>
-        <textarea
-          id="license-modal-desc"
-          class="textarea-bordered textarea"
-          bind:value={modalDescription}
-        ></textarea>
-      </div>
-
-      {#if modalError}
-        <p class="mb-2 text-xs text-error">{modalError}</p>
-      {/if}
-
-      <div class="modal-action">
-        <button type="button" class="btn btn-ghost" onclick={closeModal} disabled={modalSaving}>
-          {m.license_modal_cancel()}
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          data-testid="license-modal-save"
-          onclick={saveLicense}
-          disabled={modalSaving}
-        >
-          {#if modalSaving}
-            <span class="loading loading-sm loading-spinner"></span>
-          {/if}
-          {m.license_modal_save()}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
+<LicenseModal
+  bind:open={modalOpen}
+  hash={currentHash || ''}
+  url={imageUrl}
+  mime={modalMime}
+  size={modalSize ?? 0}
+  {activeUserDisplayName}
+  onsave={(/** @type {any} */ license) => {
+    licenseEvent = license;
+  }}
+  oncancel={() => {
+    // Mandatory mode: cancel discards the upload entirely.
+    imageUrl = '';
+    currentHash = null;
+    imageWasUploaded = false;
+    licenseEvent = null;
+  }}
+/>
