@@ -17,6 +17,8 @@
   let pendingHash = $state('');
   let pendingMime = $state('');
   let pendingSize = $state(0);
+  /** @type {any} */
+  let pendingExistingLicense = $state(null);
   let modalOpen = $state(false);
   let previousPicture = $state('');
 
@@ -68,23 +70,21 @@
 
       const result = await uploadAndFindLicense(file, { signer });
 
-      if (result.existingLicense) {
-        // Reuse path — bind directly.
-        userData.picture = result.url;
-      } else {
-        // Mandatory modal path. Stash previous so cancel can revert.
-        previousPicture = userData.picture || '';
-        pendingUrl = result.url;
-        pendingHash = result.sha256;
-        pendingMime = result.type;
-        pendingSize = result.size;
-        modalOpen = true;
-        // DO NOT bind userData.picture yet — wait for modal save.
-      }
+      // Always open the modal. If an existing license is found, LicenseModal
+      // shows it in "Accept / Create my own" mode; if not, the standard form.
+      // DO NOT bind userData.picture yet — wait for modal save.
+      previousPicture = userData.picture || '';
+      pendingUrl = result.url;
+      pendingHash = result.sha256;
+      pendingMime = result.type;
+      pendingSize = result.size;
+      pendingExistingLicense = result.existingLicense;
+      modalOpen = true;
     } catch (error) {
       console.error('Image upload failed:', error);
       errors.image = m.avatar_uploader_error_upload_failed();
       imagePreview = null;
+      pendingExistingLicense = null;
     } finally {
       uploadingImage = false;
     }
@@ -191,15 +191,18 @@
   size={pendingSize}
   {activeUserDisplayName}
   defaultSelfCreator={true}
+  existingLicense={pendingExistingLicense}
   onsave={() => {
     userData.picture = pendingUrl;
     pendingUrl = '';
     pendingHash = '';
+    pendingExistingLicense = null;
   }}
   oncancel={() => {
     userData.picture = previousPicture;
     pendingUrl = '';
     pendingHash = '';
+    pendingExistingLicense = null;
     imagePreview = null;
   }}
 />

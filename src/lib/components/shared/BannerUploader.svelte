@@ -18,6 +18,8 @@
   let pendingHash = $state('');
   let pendingMime = $state('');
   let pendingSize = $state(0);
+  /** @type {any} */
+  let pendingExistingLicense = $state(null);
   let modalOpen = $state(false);
   let previousBanner = $state('');
 
@@ -60,20 +62,20 @@
 
       const result = await uploadAndFindLicense(file, { signer });
 
-      if (result.existingLicense) {
-        userData.banner = result.url;
-      } else {
-        previousBanner = userData.banner || '';
-        pendingUrl = result.url;
-        pendingHash = result.sha256;
-        pendingMime = result.type;
-        pendingSize = result.size;
-        modalOpen = true;
-      }
+      // Always open the modal for explicit consent. If an existing license
+      // is found, LicenseModal shows the Accept / Create-my-own view.
+      previousBanner = userData.banner || '';
+      pendingUrl = result.url;
+      pendingHash = result.sha256;
+      pendingMime = result.type;
+      pendingSize = result.size;
+      pendingExistingLicense = result.existingLicense;
+      modalOpen = true;
     } catch (e) {
       console.error('Banner upload failed:', e);
       errors.banner = m.banner_uploader_error_upload_failed();
       preview = null;
+      pendingExistingLicense = null;
     } finally {
       uploading = false;
       if (fileInputRef) fileInputRef.value = '';
@@ -169,15 +171,18 @@
   size={pendingSize}
   {activeUserDisplayName}
   defaultSelfCreator={true}
+  existingLicense={pendingExistingLicense}
   onsave={() => {
     userData.banner = pendingUrl;
     pendingUrl = '';
     pendingHash = '';
+    pendingExistingLicense = null;
   }}
   oncancel={() => {
     userData.banner = previousBanner;
     pendingUrl = '';
     pendingHash = '';
+    pendingExistingLicense = null;
     preview = null;
   }}
 />

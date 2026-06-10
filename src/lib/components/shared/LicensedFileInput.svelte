@@ -82,6 +82,10 @@
   // flow) — in which case cancel must NOT mutate `files`.
   let preFileSnapshot = $state(/** @type {any[] | null} */ (null));
 
+  // Existing license event (if any) for the file currently targeted by the modal.
+  /** @type {any} */
+  let pendingExistingLicense = $state(null);
+
   const modalTargetFile = $derived(modalTargetIndex !== null ? files[modalTargetIndex] : null);
 
   // Callbacks that resolve the Promise the upload loop is awaiting. Cleared on
@@ -245,24 +249,20 @@
         uploadedCount++;
         uploadProgress = Math.round((uploadedCount / totalFiles) * 100);
 
-        // Network check: skip the modal if a kind 1063 event for this hash
-        // already exists from any user. findExistingLicense added it to EventStore
-        // already, so the reactive $effect would pick it up — but we also assign
-        // directly so the row UI updates immediately in this tick.
-        const existing = uploaded.sha256 ? await findExistingLicense(uploaded.sha256) : null;
-        if (existing) {
-          const idx = targetIndex;
-          files = files.map((item, i) => (i === idx ? { ...item, licenseEvent: existing } : item));
-        } else {
-          // Mandatory case: openModalFor() clears the snapshot, so set it
-          // AFTER the call (the modal handlers read preFileSnapshot when it
-          // closes). This is the signal the cancel handler uses to revert.
-          openModalFor(targetIndex);
-          preFileSnapshot = snapshot;
-          await new Promise((resolve) => {
-            modalCloseListeners.push(resolve);
-          });
-        }
+        // Always open the modal for explicit user consent. If an existing
+        // license event exists for this hash, LicenseModal shows it in
+        // Accept / Create-my-own mode; otherwise the standard form.
+        pendingExistingLicense = uploaded.sha256
+          ? await findExistingLicense(uploaded.sha256)
+          : null;
+        // Mandatory case: openModalFor() clears the snapshot, so set it
+        // AFTER the call (the modal handlers read preFileSnapshot when it
+        // closes). This is the signal the cancel handler uses to revert.
+        openModalFor(targetIndex);
+        preFileSnapshot = snapshot;
+        await new Promise((resolve) => {
+          modalCloseListeners.push(resolve);
+        });
       }
     } catch (e) {
       uploadError = e instanceof Error ? e.message : 'Upload failed';
@@ -490,11 +490,13 @@
   mime={modalTargetFile?.type ?? ''}
   size={modalTargetFile?.size ?? 0}
   {activeUserDisplayName}
+  existingLicense={pendingExistingLicense}
   onsave={(/** @type {any} */ license) => {
     if (modalTargetIndex !== null) {
       const idx = modalTargetIndex;
       files = files.map((f, i) => (i === idx ? { ...f, licenseEvent: license } : f));
     }
+    pendingExistingLicense = null;
     preFileSnapshot = null;
     modalTargetIndex = null;
     notifyModalClosed();
@@ -507,6 +509,7 @@
     if (preFileSnapshot !== null) {
       files = preFileSnapshot;
     }
+    pendingExistingLicense = null;
     preFileSnapshot = null;
     modalTargetIndex = null;
     notifyModalClosed();

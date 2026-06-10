@@ -7,6 +7,7 @@
 <script>
   import { manager } from '$lib/stores/accounts.svelte';
   import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
+  import { buildTulluCaption } from '$lib/helpers/tullu-caption.js';
   import LicenseModal from './LicenseModal.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -34,6 +35,8 @@
    * @typedef {{ url: string, hash: string, mime: string, size: number, alt: string }} PendingUpload
    */
   let pendingUpload = $state(/** @type {PendingUpload | null} */ (null));
+  /** @type {any} */
+  let pendingExistingLicense = $state(null);
   let modalOpen = $state(false);
 
   /**
@@ -110,20 +113,18 @@
     try {
       const result = await uploadAndFindLicense(file, { signer: activeUser });
 
-      if (result.existingLicense) {
-        // Existing-license fast path — insert immediately.
-        insertMarkdown(`![${file.name}](`, ')', result.url);
-      } else {
-        // Mandatory modal: stash pending state; commit on save, discard on cancel.
-        pendingUpload = {
-          url: result.url,
-          hash: result.sha256,
-          mime: result.type,
-          size: result.size,
-          alt: file.name
-        };
-        modalOpen = true;
-      }
+      // Always open the modal. If an existing license was found, the modal
+      // shows it in Accept / Create-my-own mode; otherwise the standard form.
+      // Nothing is inserted into the markdown until the modal saves.
+      pendingUpload = {
+        url: result.url,
+        hash: result.sha256,
+        mime: result.type,
+        size: result.size,
+        alt: file.name
+      };
+      pendingExistingLicense = result.existingLicense;
+      modalOpen = true;
     } catch (err) {
       console.error('Image upload failed:', err);
     } finally {
@@ -224,13 +225,21 @@
   mime={pendingUpload?.mime ?? ''}
   size={pendingUpload?.size ?? 0}
   defaultSelfCreator={false}
-  onsave={() => {
+  existingLicense={pendingExistingLicense}
+  onsave={(/** @type {any} */ license) => {
     if (pendingUpload) {
-      insertMarkdown(`![${pendingUpload.alt}](`, ')', pendingUpload.url);
+      // Insert the image, then a TULLU attribution line beneath it so the
+      // attribution is preserved in the raw markdown (independent of any
+      // future render-side license lookup).
+      const caption = buildTulluCaption(license, { alt: pendingUpload.alt });
+      const tail = caption ? `)\n\n${caption}\n\n` : ')';
+      insertMarkdown(`![${pendingUpload.alt}](`, tail, pendingUpload.url);
     }
     pendingUpload = null;
+    pendingExistingLicense = null;
   }}
   oncancel={() => {
     pendingUpload = null;
+    pendingExistingLicense = null;
   }}
 />
