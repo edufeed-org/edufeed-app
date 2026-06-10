@@ -70,9 +70,8 @@
     const fromList = userServerList
       ? getBlossomServersFromList(userServerList).map((u) => u.href)
       : [];
-    const deploymentDefault = runtimeConfig.blossom?.serverUrl;
-    const all = deploymentDefault ? [deploymentDefault, ...fromList] : fromList;
-    return [...new Set(all.map(normalizeServerUrl))];
+    const deploymentDefaults = /** @type {string[]} */ (runtimeConfig.defaultBlossomServers ?? []);
+    return [...new Set([...deploymentDefaults, ...fromList].map(normalizeServerUrl))];
   });
 
   const tiles = $derived.by(() => {

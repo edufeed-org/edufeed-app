@@ -22,7 +22,10 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: { blossom: { serverUrl: 'https://blossom.edufeed.org' } },
+  runtimeConfig: {
+    blossom: { maxFileSize: 5 * 1024 * 1024 },
+    defaultBlossomServers: ['https://blossom.edufeed.org']
+  },
   configReady: {
     subscribe: (/** @type {(v: boolean) => void} */ cb) => {
       cb(true);
@@ -49,7 +52,6 @@ vi.mock('$lib/paraglide/messages', () => ({
   image_library_picker_empty_desc: () => 'Upload your first one to start your library.',
   image_library_picker_empty_cta: () => 'Upload from computer',
   image_library_picker_thumbnail_alt: () => 'Licensed image',
-  image_library_picker_loading: () => 'Loading…',
   image_source_chooser_cancel: () => 'Cancel'
 }));
 
