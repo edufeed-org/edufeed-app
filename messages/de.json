@@ -2068,6 +2068,7 @@
   "amb_resource_nostr_native_description": "Dieser Inhalt ist im Nostr-Netzwerk gespeichert und direkt ohne externe Abhängigkeiten verfügbar.",
   "amb_resource_view_file": "Anzeigen",
   "amb_resource_download_file": "Herunterladen",
+  "amb_resource_open_pdf_inline_fallback": "PDF in neuem Tab öffnen",
   "amb_resource_external_references": "Externe Referenzen",
   "amb_resource_external_reference": "Externe Referenz",
   "amb_resource_ekw_metadata": "EKKW-Metadaten",

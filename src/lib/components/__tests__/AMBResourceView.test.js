@@ -53,6 +53,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_all_contributors: () => 'Contributors',
   amb_resource_related_resources: () => 'Related',
   amb_resource_uploaded_files: () => 'Uploaded Files',
+  amb_resource_open_pdf_inline_fallback: () => 'Open PDF in a new tab',
   amb_resource_discussion: () => 'Discussion',
   common_back: () => 'Back',
   common_edit: () => 'Edit',
@@ -288,6 +289,16 @@ describe('AMBResourceView', () => {
       const href = link.getAttribute('href');
       expect(href).toBe('https://example.com/file.pdf');
     }
+  });
+
+  it('renders an inline PDF preview <object> for PDF encodings', () => {
+    const { container } = render(AMBResourceView, {
+      props: { event: mockEvent, resource: mockResource }
+    });
+
+    const obj = container.querySelector('object[type="application/pdf"]');
+    expect(obj).toBeTruthy();
+    expect(obj?.getAttribute('data')).toBe('https://example.com/file.pdf');
   });
 });
 
