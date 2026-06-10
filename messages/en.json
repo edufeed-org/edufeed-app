@@ -2329,5 +2329,6 @@
   "image_library_picker_empty_desc": "Upload your first one to start your library.",
   "image_library_picker_empty_cta": "Upload from computer",
   "image_library_picker_thumbnail_alt": "Licensed image",
+  "image_library_picker_loading": "Loading licensed images…",
   "licensed_image_input_add_button": "Add image"
 }

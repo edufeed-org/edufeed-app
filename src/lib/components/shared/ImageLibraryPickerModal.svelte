@@ -28,6 +28,7 @@
   // Symbol-bearing event arrays MUST use $state.raw — see CLAUDE.md.
   let events = $state.raw(/** @type {any[]} */ ([]));
   let userServerList = $state.raw(/** @type {any} */ (undefined));
+  let loading = $state(false);
 
   /** @type {import('rxjs').Subscription | undefined} */
   let timelineSub;
@@ -39,15 +40,27 @@
   $effect(() => {
     if (!open) return;
 
+    loading = true;
+
     // Timeline subscription: reactive view of all kind 1063 events in the store.
     const filter = { kinds: [1063] };
     const loader = createTimelineLoader(timedPool, getAllLookupRelays(), filter, {
       eventStore,
       limit: 100
     });
-    loaderSub = loader().subscribe({ error: () => {} });
+    loaderSub = loader().subscribe({
+      complete: () => {
+        loading = false;
+      },
+      error: () => {
+        loading = false;
+      }
+    });
     timelineSub = eventStore.timeline(filter).subscribe((next) => {
       events = next ?? [];
+      // Once we've received any timeline emission, we know the subscription is live.
+      // Loader may still be fetching more, but we have enough to render meaningfully.
+      loading = false;
     });
 
     // Active user's kind 10063 list (for trusted server expansion).
@@ -92,6 +105,25 @@
     return [...byHash.values()].sort((a, b) => b.event.created_at - a.event.created_at);
   });
 
+  // DIAGNOSTIC — logs once when picker opens; remove after triage.
+  $effect(() => {
+    if (!open) return;
+    console.debug('[ImageLibraryPickerModal] state', {
+      loading,
+      eventCount: events.length,
+      trustedServers,
+      tileCount: tiles.length,
+      sampleEvent: events[0]
+        ? {
+            kind: events[0].kind,
+            url: events[0].tags.find((/** @type {string[]} */ t) => t[0] === 'url')?.[1],
+            x: events[0].tags.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1]
+          }
+        : null,
+      sampleTileUrl: tiles[0]?.meta?.url ?? null
+    });
+  });
+
   /**
    * @param {{ event: any, meta: any }} tile
    */
@@ -131,7 +163,12 @@
     <div class="modal-box w-11/12 max-w-4xl">
       <h3 class="text-lg font-semibold">{m.image_library_picker_title()}</h3>
 
-      {#if tiles.length === 0}
+      {#if loading && tiles.length === 0}
+        <div class="py-12 text-center" data-testid="library-loading">
+          <span class="loading loading-md loading-spinner"></span>
+          <p class="mt-2 text-sm opacity-70">{m.image_library_picker_loading()}</p>
+        </div>
+      {:else if tiles.length === 0}
         <div class="py-12 text-center">
           <p class="font-medium">{m.image_library_picker_empty_title()}</p>
           <p class="mt-1 text-sm opacity-70">{m.image_library_picker_empty_desc()}</p>
