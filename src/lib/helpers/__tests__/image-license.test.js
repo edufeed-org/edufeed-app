@@ -38,7 +38,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
 });
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getEducationalRelays: () => ['wss://relay.example']
+  getAllLookupRelays: () => ['wss://relay.example', 'wss://relay.other']
 }));
 
 const { findExistingLicense } = await import('../image-license.js');
@@ -55,29 +55,23 @@ describe('findExistingLicense', () => {
     expect(result).toBeNull();
   });
 
-  it('queries educational relays with the correct filter', async () => {
+  it('queries the full lookup-relay set with the correct filter', async () => {
     await findExistingLicense('a'.repeat(64));
     expect(mocks.captured).toHaveLength(1);
-    expect(mocks.captured[0].relays).toEqual(['wss://relay.example']);
+    expect(mocks.captured[0].relays).toEqual(['wss://relay.example', 'wss://relay.other']);
     expect(mocks.captured[0].filter).toEqual([{ kinds: [1063], '#x': ['a'.repeat(64)] }]);
   });
 
-  it('returns the newest event by created_at', async () => {
+  it('returns the first event emitted by the upstream (take-1 semantics)', async () => {
+    // With take(1), the first-emitted event wins regardless of created_at order.
+    // The newest-wins guarantee is intentionally dropped for speed; the user can
+    // click Replace if they disagree with the picked attestation.
     mocks.events.push(
-      { id: 'old', kind: 1063, created_at: 100, tags: [['x', 'a'.repeat(64)]] },
-      { id: 'new', kind: 1063, created_at: 200, tags: [['x', 'a'.repeat(64)]] }
+      { id: 'first', kind: 1063, created_at: 100, tags: [['x', 'a'.repeat(64)]] },
+      { id: 'second', kind: 1063, created_at: 200, tags: [['x', 'a'.repeat(64)]] }
     );
     const result = await findExistingLicense('a'.repeat(64));
-    expect(result?.id).toBe('new');
-  });
-
-  it('breaks ties by id lex order (smaller id wins)', async () => {
-    mocks.events.push(
-      { id: 'bbb', kind: 1063, created_at: 100, tags: [] },
-      { id: 'aaa', kind: 1063, created_at: 100, tags: [] }
-    );
-    const result = await findExistingLicense('a'.repeat(64));
-    expect(result?.id).toBe('aaa');
+    expect(result?.id).toBe('first');
   });
 
   it('returns null and does not throw on empty hash', async () => {
@@ -85,20 +79,31 @@ describe('findExistingLicense', () => {
     expect(result).toBeNull();
   });
 
-  it('returns buffered events when the upstream never completes within the timeout', async () => {
-    // Mock returns a Subject that emits events then NEVER completes — simulating
-    // a relay that sends data but never EOSEs.
+  it('returns the first emitted event when upstream never completes within the timeout', async () => {
+    // Mock returns a Subject that emits events but never completes — simulating
+    // a relay that streams data without sending EOSE. take(1) should still resolve.
     const subject = new Subject();
 
-    // Override the mock's request implementation for this test only.
-    const originalRequest = mocks.requestImpl;
     mocks.requestImpl = (relays, filter) => {
       mocks.captured.push({ relays, filter });
       queueMicrotask(() => {
         subject.next({ id: 'a', kind: 1063, created_at: 100, tags: [['x', 'a'.repeat(64)]] });
-        subject.next({ id: 'b', kind: 1063, created_at: 200, tags: [['x', 'a'.repeat(64)]] });
         // Deliberately do NOT call subject.complete() — simulates hanging relay.
+        // take(1) completes after the first emission regardless.
       });
+      return subject.asObservable();
+    };
+
+    const result = await findExistingLicense('a'.repeat(64));
+    expect(result?.id).toBe('a');
+  });
+
+  it('returns null when the upstream emits nothing within 2 seconds', async () => {
+    // Mock returns a Subject that never emits and never completes.
+    const subject = new Subject();
+
+    mocks.requestImpl = (relays, filter) => {
+      mocks.captured.push({ relays, filter });
       return subject.asObservable();
     };
 
@@ -107,10 +112,9 @@ describe('findExistingLicense', () => {
       const promise = findExistingLicense('a'.repeat(64));
       await vi.advanceTimersByTimeAsync(2100);
       const result = await promise;
-      expect(result?.id).toBe('b'); // newest by created_at
+      expect(result).toBeNull();
     } finally {
       vi.useRealTimers();
-      mocks.requestImpl = originalRequest;
     }
   });
 });
