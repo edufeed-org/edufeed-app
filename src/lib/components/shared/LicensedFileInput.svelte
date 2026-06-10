@@ -17,7 +17,7 @@
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-  import { buildLicenseTemplate } from '$lib/helpers/image-license.js';
+  import { buildLicenseTemplate, findExistingLicense } from '$lib/helpers/image-license.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import LicenseBadge from './LicenseBadge.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -301,11 +301,20 @@
         uploadedCount++;
         uploadProgress = Math.round((uploadedCount / totalFiles) * 100);
 
-        // Open modal for this file and wait until it closes (save or cancel).
-        openModalFor(targetIndex);
-        await new Promise((resolve) => {
-          modalCloseListeners.push(resolve);
-        });
+        // Network check: skip the modal if a kind 1063 event for this hash
+        // already exists from any user. findExistingLicense added it to EventStore
+        // already, so the reactive $effect would pick it up — but we also assign
+        // directly so the row UI updates immediately in this tick.
+        const existing = uploaded.sha256 ? await findExistingLicense(uploaded.sha256) : null;
+        if (existing) {
+          const idx = targetIndex;
+          files = files.map((item, i) => (i === idx ? { ...item, licenseEvent: existing } : item));
+        } else {
+          openModalFor(targetIndex);
+          await new Promise((resolve) => {
+            modalCloseListeners.push(resolve);
+          });
+        }
       }
     } catch (e) {
       uploadError = e instanceof Error ? e.message : 'Upload failed';
@@ -476,6 +485,14 @@
 
           {#if file.licenseEvent}
             <LicenseBadge licenseEvent={file.licenseEvent} />
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onclick={handleAddLicense(index)}
+              disabled={isUploading}
+            >
+              {m.licensed_image_input_replace_license()}
+            </button>
           {:else}
             <button
               type="button"
