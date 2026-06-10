@@ -50,3 +50,53 @@ export function buildLicenseTemplate(input) {
     tags
   };
 }
+
+import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
+import { firstValueFrom, toArray, timeout, catchError, of } from 'rxjs';
+
+/**
+ * One-shot relay lookup for an existing NIP-94 kind 1063 license event
+ * keyed by SHA-256 hash. Queries the educational relays with a 2-second
+ * timeout, adds received events to EventStore, and returns the newest
+ * (tie-break by lex id). Returns null on empty hash, no relays, no events,
+ * or timeout.
+ *
+ * @param {string} hash - SHA-256 hex of the blob.
+ * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ */
+export async function findExistingLicense(hash) {
+  if (!hash) return null;
+  const relays = getEducationalRelays();
+  if (!relays || relays.length === 0) return null;
+
+  /** @type {import('nostr-tools').Filter} */
+  const filter = { kinds: [1063], '#x': [hash] };
+
+  const events = await firstValueFrom(
+    pool.request(relays, [filter]).pipe(
+      toArray(),
+      timeout({ each: 2000, with: () => of([]) }),
+      catchError(() => of(/** @type {any[]} */ ([])))
+    )
+  );
+
+  if (!events || events.length === 0) return null;
+
+  // Persist to EventStore so subsequent useLicenseForHash subscribers see them.
+  for (const ev of events) {
+    try {
+      eventStore.add(ev);
+    } catch {
+      /* no-op on duplicates */
+    }
+  }
+
+  // Newest by created_at; tie-break by lex id (smaller wins).
+  const sorted = [...events].sort((a, b) => {
+    if (b.created_at !== a.created_at) return b.created_at - a.created_at;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  return sorted[0] ?? null;
+}
