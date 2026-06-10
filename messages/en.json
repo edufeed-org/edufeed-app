@@ -2303,6 +2303,9 @@
   "license_modal_accept_existing": "Use this license",
   "license_modal_create_own": "Create my own",
   "license_modal_attested_by": "Attested by",
+  "tullu_by": "by",
+  "tullu_source": "source",
+  "tullu_no_title": "untitled",
   "amb_form_validation_image_license_missing": "Uploaded images require a license attestation. Open the license modal to add one.",
   "amb_form_validation_encoding_license_missing": "Uploaded files require a license attestation. Open the license modal for each file to add one.",
   "licensed_file_input_add_license": "Add license"

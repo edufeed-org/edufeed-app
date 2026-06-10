@@ -2303,6 +2303,9 @@
   "license_modal_accept_existing": "Diese Lizenz verwenden",
   "license_modal_create_own": "Eigene Lizenz erstellen",
   "license_modal_attested_by": "Bestätigt von",
+  "tullu_by": "von",
+  "tullu_source": "Quelle",
+  "tullu_no_title": "ohne Titel",
   "amb_form_validation_image_license_missing": "Hochgeladene Bilder benötigen eine Lizenz-Attestierung. Öffne den Lizenz-Dialog.",
   "amb_form_validation_encoding_license_missing": "Hochgeladene Dateien benötigen eine Lizenzangabe. Öffne den Lizenzdialog je Datei, um eine Angabe zu hinterlegen.",
   "licensed_file_input_add_license": "Lizenz hinzufügen"

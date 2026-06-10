@@ -7,6 +7,7 @@
 <script>
   import { manager } from '$lib/stores/accounts.svelte';
   import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
+  import { buildTulluCaption } from '$lib/helpers/tullu-caption.js';
   import LicenseModal from './LicenseModal.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -225,9 +226,14 @@
   size={pendingUpload?.size ?? 0}
   defaultSelfCreator={false}
   existingLicense={pendingExistingLicense}
-  onsave={() => {
+  onsave={(/** @type {any} */ license) => {
     if (pendingUpload) {
-      insertMarkdown(`![${pendingUpload.alt}](`, ')', pendingUpload.url);
+      // Insert the image, then a TULLU attribution line beneath it so the
+      // attribution is preserved in the raw markdown (independent of any
+      // future render-side license lookup).
+      const caption = buildTulluCaption(license, { alt: pendingUpload.alt });
+      const tail = caption ? `)\n\n${caption}\n\n` : ')';
+      insertMarkdown(`![${pendingUpload.alt}](`, tail, pendingUpload.url);
     }
     pendingUpload = null;
     pendingExistingLicense = null;
