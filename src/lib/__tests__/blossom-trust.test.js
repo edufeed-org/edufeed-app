@@ -2,7 +2,11 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeServerUrl, urlIsOnTrustedServer } from '$lib/helpers/blossom-trust.js';
+import {
+  normalizeServerUrl,
+  urlIsOnTrustedServer,
+  reconcileBlobUrlScheme
+} from '$lib/helpers/blossom-trust.js';
 
 describe('normalizeServerUrl', () => {
   it('drops the scheme and lowercases the host', () => {
@@ -84,5 +88,51 @@ describe('urlIsOnTrustedServer', () => {
     expect(
       urlIsOnTrustedServer('https://blossom.edufeed.org/x.png', ['https://blossom.edufeed.org/'])
     ).toBe(true);
+  });
+});
+
+describe('reconcileBlobUrlScheme', () => {
+  it('rewrites http blob URL to https when we uploaded over https on the same host', () => {
+    expect(
+      reconcileBlobUrlScheme('http://blossom.edufeed.org/abc.png', 'https://blossom.edufeed.org/')
+    ).toBe('https://blossom.edufeed.org/abc.png');
+  });
+
+  it('rewrites https blob URL to http when we uploaded over http on the same host', () => {
+    expect(reconcileBlobUrlScheme('https://blossom.local/abc.png', 'http://blossom.local')).toBe(
+      'http://blossom.local/abc.png'
+    );
+  });
+
+  it('leaves blob URL unchanged when hostnames differ', () => {
+    expect(
+      reconcileBlobUrlScheme('http://cdn.other.host/abc.png', 'https://blossom.edufeed.org')
+    ).toBe('http://cdn.other.host/abc.png');
+  });
+
+  it('leaves blob URL unchanged when schemes already match', () => {
+    expect(
+      reconcileBlobUrlScheme('https://blossom.edufeed.org/abc.png', 'https://blossom.edufeed.org/')
+    ).toBe('https://blossom.edufeed.org/abc.png');
+  });
+
+  it('matches hostname case-insensitively (result hostname is lowercased by URL parser)', () => {
+    expect(
+      reconcileBlobUrlScheme('http://Blossom.Edufeed.ORG/abc.png', 'https://blossom.edufeed.org')
+    ).toBe('https://blossom.edufeed.org/abc.png');
+  });
+
+  it('returns blob URL unchanged on parse failure', () => {
+    expect(reconcileBlobUrlScheme('not-a-url', 'https://blossom.edufeed.org')).toBe('not-a-url');
+  });
+
+  it('returns blob URL unchanged when uploadServerUrl is empty', () => {
+    expect(reconcileBlobUrlScheme('http://blossom.edufeed.org/abc.png', '')).toBe(
+      'http://blossom.edufeed.org/abc.png'
+    );
+  });
+
+  it('returns empty string when blob URL is empty', () => {
+    expect(reconcileBlobUrlScheme('', 'https://blossom.edufeed.org')).toBe('');
   });
 });

@@ -35,6 +35,39 @@ export function normalizeServerUrl(url) {
 }
 
 /**
+ * Reconcile a Blossom server's reported blob URL with the scheme we actually
+ * used to upload. Some Blossom servers advertise an http base URL in their
+ * BlobDescriptor response even when accessed over https (deployment bug we
+ * can't fix server-side). When the reported URL's hostname matches the upload
+ * server's hostname but the scheme differs, prefer the upload server's
+ * scheme. The same image is reachable on either scheme on that host, but the
+ * scheme we used to upload is the canonical one for our trust set.
+ *
+ * Returns `blobUrl` unchanged on parse failure or hostname mismatch.
+ *
+ * @param {string} blobUrl - URL reported by the Blossom server's response
+ * @param {string} uploadServerUrl - URL we used to upload (e.g. from getActiveBlossomServer)
+ * @returns {string}
+ */
+export function reconcileBlobUrlScheme(blobUrl, uploadServerUrl) {
+  if (!blobUrl || !uploadServerUrl) return blobUrl;
+  try {
+    const blob = new URL(blobUrl);
+    const upload = new URL(uploadServerUrl);
+    if (
+      blob.hostname.toLowerCase() === upload.hostname.toLowerCase() &&
+      blob.protocol !== upload.protocol
+    ) {
+      blob.protocol = upload.protocol;
+      return blob.toString();
+    }
+  } catch {
+    /* parse failure — return as-is */
+  }
+  return blobUrl;
+}
+
+/**
  * True when `url` lives on one of the trusted Blossom `servers`. Matches the
  * server URL itself OR any path under it. Comparison is case-insensitive on
  * host, case-sensitive on path, and ignores scheme (http vs https on the same

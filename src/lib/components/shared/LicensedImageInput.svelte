@@ -6,6 +6,7 @@
   import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { findExistingLicense } from '$lib/helpers/image-license.js';
+  import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
   import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
@@ -99,7 +100,7 @@
       const client = new BlossomClient(serverUrl, signerFn);
       const blob = await client.uploadBlob(file);
 
-      imageUrl = blob.url;
+      imageUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
       currentHash = blob.sha256;
       modalMime = blob.type || file.type;
       modalSize = blob.size ?? file.size;

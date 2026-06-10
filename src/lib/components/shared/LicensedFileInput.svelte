@@ -16,6 +16,7 @@
   import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
   import { findExistingLicense } from '$lib/helpers/image-license.js';
+  import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -197,7 +198,7 @@
     const client = new BlossomClient(serverUrl, signerFn);
     const blob = await client.uploadBlob(file);
     return {
-      url: blob.url,
+      url: reconcileBlobUrlScheme(blob.url, serverUrl),
       name: file.name,
       type: file.type || 'application/octet-stream',
       size: file.size,
