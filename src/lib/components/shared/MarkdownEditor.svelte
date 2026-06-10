@@ -6,9 +6,8 @@
 
 <script>
   import { manager } from '$lib/stores/accounts.svelte';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { BlossomClient } from 'blossom-client-sdk';
-  import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
+  import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
+  import LicenseModal from './LicenseModal.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -29,6 +28,13 @@
   let textareaRef = $state(null);
   /** @type {HTMLInputElement | null} */
   let imageInputRef = $state(null);
+
+  // pending-upload pattern (4th instance; extract a composable if a 5th appears).
+  /**
+   * @typedef {{ url: string, hash: string, mime: string, size: number, alt: string }} PendingUpload
+   */
+  let pendingUpload = $state(/** @type {PendingUpload | null} */ (null));
+  let modalOpen = $state(false);
 
   /**
    * Insert markdown syntax at cursor position in textarea
@@ -83,7 +89,12 @@
   }
 
   /**
-   * Handle image file selected for inline insertion
+   * Handle image file selected for inline insertion. Uploads via Blossom,
+   * checks the network for an existing license event, and either inserts
+   * the markdown image immediately (if a license is already attested) or
+   * opens the mandatory LicenseModal. Cancel on the modal discards the
+   * upload — nothing is inserted into the markdown.
+   *
    * @param {Event} e
    */
   async function handleImageUpload(e) {
@@ -97,16 +108,22 @@
 
     imageUploading = true;
     try {
-      const signer = async (/** @type {any} */ event) => {
-        if (!activeUser) throw new Error('User not available');
-        return await activeUser.signEvent(event);
-      };
+      const result = await uploadAndFindLicense(file, { signer: activeUser });
 
-      const serverUrl = getActiveBlossomServer(activeUser.pubkey, eventStore);
-      const client = new BlossomClient(serverUrl, signer);
-      const blob = await client.uploadBlob(file);
-
-      insertMarkdown(`![${file.name}](`, ')', blob.url);
+      if (result.existingLicense) {
+        // Existing-license fast path — insert immediately.
+        insertMarkdown(`![${file.name}](`, ')', result.url);
+      } else {
+        // Mandatory modal: stash pending state; commit on save, discard on cancel.
+        pendingUpload = {
+          url: result.url,
+          hash: result.sha256,
+          mime: result.type,
+          size: result.size,
+          alt: file.name
+        };
+        modalOpen = true;
+      }
     } catch (err) {
       console.error('Image upload failed:', err);
     } finally {
@@ -199,3 +216,21 @@
     </div>
   {/if}
 </div>
+
+<LicenseModal
+  bind:open={modalOpen}
+  hash={pendingUpload?.hash ?? ''}
+  url={pendingUpload?.url ?? ''}
+  mime={pendingUpload?.mime ?? ''}
+  size={pendingUpload?.size ?? 0}
+  defaultSelfCreator={false}
+  onsave={() => {
+    if (pendingUpload) {
+      insertMarkdown(`![${pendingUpload.alt}](`, ')', pendingUpload.url);
+    }
+    pendingUpload = null;
+  }}
+  oncancel={() => {
+    pendingUpload = null;
+  }}
+/>
