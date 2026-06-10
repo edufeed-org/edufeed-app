@@ -31,6 +31,7 @@
   } = $props();
 
   let modalLicense = $state('https://creativecommons.org/licenses/by/4.0/');
+  let modalTitle = $state('');
   let modalCredit = $state('');
   let modalSelfCreator = $state(false);
   let modalSource = $state('');
@@ -66,6 +67,7 @@
   $effect(() => {
     if (open) {
       modalLicense = 'https://creativecommons.org/licenses/by/4.0/';
+      modalTitle = '';
       modalSelfCreator = defaultSelfCreator;
       modalCredit = defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : '';
       modalSource = '';
@@ -114,6 +116,7 @@
         size,
         license: modalLicense,
         credit: modalCredit,
+        title: modalTitle || undefined,
         source: modalSource || undefined,
         creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
         description: modalDescription || undefined
@@ -213,6 +216,20 @@
         <!-- State B: create a new license event -->
         <h3 class="mb-2 text-lg font-bold">{m.license_modal_title()}</h3>
         <p class="mb-4 text-sm opacity-70">{m.license_modal_description()}</p>
+
+        <!-- Title (TULLU: Titel — the work's title, distinct from description/alt) -->
+        <div class="form-control mb-3">
+          <label class="label" for="license-modal-title">
+            <span class="label-text">{m.license_modal_title_field_label()}</span>
+          </label>
+          <input
+            id="license-modal-title"
+            type="text"
+            class="input-bordered input"
+            placeholder={m.license_modal_title_field_placeholder()}
+            bind:value={modalTitle}
+          />
+        </div>
 
         <div class="form-control mb-3">
           <label class="label" for="license-modal-license">

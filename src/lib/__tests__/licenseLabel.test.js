@@ -37,8 +37,26 @@ describe('formatLicenseUrl', () => {
     );
   });
 
-  it('formats MIT', () => {
+  it('formats MIT (legacy)', () => {
     expect(formatLicenseUrl('https://opensource.org/licenses/MIT')).toBe('MIT License');
+  });
+
+  it('formats Pixabay', () => {
+    expect(formatLicenseUrl('https://pixabay.com/service/license-summary/')).toBe(
+      'Pixabay License'
+    );
+  });
+
+  it('formats Canva', () => {
+    expect(formatLicenseUrl('https://www.canva.com/policies/content-license-agreement/')).toBe(
+      'Canva Content License'
+    );
+  });
+
+  it('formats Urheberrechtlich geschützt', () => {
+    expect(formatLicenseUrl('https://de.wikipedia.org/wiki/Urheberrecht_(Deutschland)')).toBe(
+      'Urheberrechtlich geschützt'
+    );
   });
 
   it('returns the URL itself for unknown licenses', () => {

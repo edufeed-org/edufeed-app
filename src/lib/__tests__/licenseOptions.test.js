@@ -30,8 +30,20 @@ describe('getLicenseOptions', () => {
         { id: 'https://creativecommons.org/licenses/by-nc/4.0/', label: 'CC BY-NC 4.0' },
         { id: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', label: 'CC BY-NC-SA 4.0' },
         { id: 'https://creativecommons.org/publicdomain/zero/1.0/', label: 'CC0 (Public Domain)' },
-        { id: 'https://opensource.org/licenses/MIT', label: 'MIT License' }
+        { id: 'https://pixabay.com/service/license-summary/', label: 'Pixabay License' },
+        {
+          id: 'https://www.canva.com/policies/content-license-agreement/',
+          label: 'Canva Content License'
+        },
+        {
+          id: 'https://de.wikipedia.org/wiki/Urheberrecht_(Deutschland)',
+          label: 'Urheberrechtlich geschützt'
+        }
       ])
     );
+  });
+
+  it('does not include MIT (removed; kept in formatLicenseUrl for legacy back-compat)', () => {
+    expect(STATIC_LICENSE_OPTIONS.find((o) => o.id.includes('MIT'))).toBeUndefined();
   });
 });

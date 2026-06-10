@@ -27,7 +27,22 @@ export function formatLicenseUrl(url) {
     return 'CC0 (Public Domain)';
   }
 
-  // MIT
+  // Pixabay
+  if (/pixabay\.com\/service\/license/i.test(trimmed)) {
+    return 'Pixabay License';
+  }
+
+  // Canva
+  if (/canva\.com\/policies\/content-license/i.test(trimmed)) {
+    return 'Canva Content License';
+  }
+
+  // Urheberrechtlich geschützt (all rights reserved / German copyright)
+  if (/wikipedia\.org\/wiki\/Urheberrecht/i.test(trimmed)) {
+    return 'Urheberrechtlich geschützt';
+  }
+
+  // MIT (legacy — kept for back-compat with previously-published events)
   if (/opensource\.org\/licenses\/MIT/i.test(trimmed)) {
     return 'MIT License';
   }
