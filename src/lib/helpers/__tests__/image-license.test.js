@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Subject } from 'rxjs';
 
 // app-settings touches window.matchMedia at module load through transitive
 // imports; stub before importing.
@@ -17,7 +18,9 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
 // the factory.
 const mocks = vi.hoisted(() => ({
   captured: /** @type {any[]} */ ([]),
-  events: /** @type {any[]} */ ([])
+  events: /** @type {any[]} */ ([]),
+  /** @type {((relays: string[], filter: any) => any) | null} */
+  requestImpl: null
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
@@ -25,6 +28,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   return {
     pool: {
       request: (/** @type {string[]} */ relays, /** @type {any} */ filter) => {
+        if (mocks.requestImpl) return mocks.requestImpl(relays, filter);
         mocks.captured.push({ relays, filter });
         return from(mocks.events);
       }
@@ -42,6 +46,7 @@ const { findExistingLicense } = await import('../image-license.js');
 beforeEach(() => {
   mocks.captured.length = 0;
   mocks.events.length = 0;
+  mocks.requestImpl = null;
 });
 
 describe('findExistingLicense', () => {
@@ -78,5 +83,34 @@ describe('findExistingLicense', () => {
   it('returns null and does not throw on empty hash', async () => {
     const result = await findExistingLicense('');
     expect(result).toBeNull();
+  });
+
+  it('returns buffered events when the upstream never completes within the timeout', async () => {
+    // Mock returns a Subject that emits events then NEVER completes — simulating
+    // a relay that sends data but never EOSEs.
+    const subject = new Subject();
+
+    // Override the mock's request implementation for this test only.
+    const originalRequest = mocks.requestImpl;
+    mocks.requestImpl = (relays, filter) => {
+      mocks.captured.push({ relays, filter });
+      queueMicrotask(() => {
+        subject.next({ id: 'a', kind: 1063, created_at: 100, tags: [['x', 'a'.repeat(64)]] });
+        subject.next({ id: 'b', kind: 1063, created_at: 200, tags: [['x', 'a'.repeat(64)]] });
+        // Deliberately do NOT call subject.complete() — simulates hanging relay.
+      });
+      return subject.asObservable();
+    };
+
+    vi.useFakeTimers();
+    try {
+      const promise = findExistingLicense('a'.repeat(64));
+      await vi.advanceTimersByTimeAsync(2100);
+      const result = await promise;
+      expect(result?.id).toBe('b'); // newest by created_at
+    } finally {
+      vi.useRealTimers();
+      mocks.requestImpl = originalRequest;
+    }
   });
 });

@@ -53,7 +53,7 @@ export function buildLicenseTemplate(input) {
 
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
-import { firstValueFrom, toArray, timeout, catchError, of } from 'rxjs';
+import { firstValueFrom, toArray, takeUntil, timer, catchError, of } from 'rxjs';
 
 /**
  * One-shot relay lookup for an existing NIP-94 kind 1063 license event
@@ -75,8 +75,8 @@ export async function findExistingLicense(hash) {
 
   const events = await firstValueFrom(
     pool.request(relays, [filter]).pipe(
+      takeUntil(timer(2000)), // force-complete upstream at 2s so toArray emits
       toArray(),
-      timeout({ each: 2000, with: () => of([]) }),
       catchError(() => of(/** @type {any[]} */ ([])))
     )
   );
