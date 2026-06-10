@@ -117,7 +117,8 @@ describe('uploadWithAutoSelfLicense', () => {
     });
     expect(signer.signEvent).toHaveBeenCalledTimes(1);
     expect(mocks.published).toHaveLength(1);
-    expect(mocks.added).toHaveLength(1);
+    // Note: publishEventOptimistic internally adds to eventStore; we no longer
+    // call eventStore.add() explicitly from auto-self-license.
 
     const published = mocks.published[0];
     expect(published.kind).toBe(1063);

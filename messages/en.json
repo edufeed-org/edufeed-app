@@ -775,6 +775,7 @@
   "avatar_uploader_error_invalid_file": "Please select a valid image file",
   "avatar_uploader_error_too_large": "Image must be smaller than {size}MB",
   "avatar_uploader_error_upload_failed": "Failed to upload image. Please try again.",
+  "avatar_uploader_error_no_signer": "No signer available. Please log in.",
   "banner_uploader_label": "Banner Image",
   "banner_uploader_drop_or_click": "Click to upload your banner",
   "banner_uploader_replace_button": "Replace",

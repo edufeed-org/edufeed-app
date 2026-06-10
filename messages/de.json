@@ -729,6 +729,7 @@
   "avatar_uploader_error_invalid_file": "Bitte wählen Sie eine gültige Bilddatei aus",
   "avatar_uploader_error_too_large": "Bild muss kleiner als {size}MB sein",
   "avatar_uploader_error_upload_failed": "Bild konnte nicht hochgeladen werden. Bitte versuchen Sie es erneut.",
+  "avatar_uploader_error_no_signer": "Kein Signer verfügbar. Bitte einloggen.",
   "banner_uploader_label": "Banner-Bild",
   "banner_uploader_drop_or_click": "Klicke hier, um dein Banner hochzuladen",
   "banner_uploader_replace_button": "Ersetzen",

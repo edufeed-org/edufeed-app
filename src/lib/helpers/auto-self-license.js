@@ -71,7 +71,6 @@ export async function uploadWithAutoSelfLicense(file, opts) {
   const factory = createAppEventFactory();
   const eventTemplate = await factory.build(template);
   const signed = await signer.signEvent(eventTemplate);
-  eventStore.add(signed);
   publishEventOptimistic(signed, [], {});
 
   result.licenseEvent = signed;

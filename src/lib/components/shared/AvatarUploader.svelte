@@ -34,6 +34,11 @@
       return;
     }
 
+    if (!signer) {
+      errors.image = m.avatar_uploader_error_no_signer();
+      return;
+    }
+
     try {
       uploadingImage = true;
       errors.image = '';
