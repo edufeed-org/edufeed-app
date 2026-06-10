@@ -79,7 +79,11 @@ function parseThemeToSettings(theme) {
  */
 function getDefaultSettings() {
   // Get system theme preference
-  const prefersDark = browser && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const prefersDark =
+    browser &&
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches;
 
   // Use runtime config for default theme, falling back to hardcoded defaults
   const defaultTheme = /** @type {'light' | 'dark' | 'stil' | 'stil-dark'} */ (
@@ -202,7 +206,7 @@ let settings = $state(loadSettings());
 /** @type {'light' | 'dark'} */
 let systemTheme = $state('light');
 
-if (browser) {
+if (browser && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   systemTheme = /** @type {'light' | 'dark'} */ (mediaQuery.matches ? 'dark' : 'light');
 
