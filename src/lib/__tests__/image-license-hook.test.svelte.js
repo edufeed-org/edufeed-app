@@ -12,7 +12,7 @@ vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getEducationalRelays: () => ['wss://relay.example']
+  getAllLookupRelays: () => ['wss://relay.example']
 }));
 
 const sharedStore = new EventStore();

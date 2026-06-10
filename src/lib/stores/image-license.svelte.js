@@ -1,7 +1,7 @@
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { timedPool } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
 /**
  * Reactive lookup of the best kind 1063 license event for a SHA-256 hash.
@@ -28,7 +28,7 @@ export function useLicenseForHash(getHash) {
     }
 
     const filter = { kinds: [1063], '#x': [hash], limit: 50 };
-    const loader = createTimelineLoader(timedPool, getEducationalRelays(), filter, {
+    const loader = createTimelineLoader(timedPool, getAllLookupRelays(), filter, {
       eventStore,
       limit: 50
     });

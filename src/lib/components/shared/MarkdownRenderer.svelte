@@ -65,14 +65,20 @@
     wire();
 
     // Re-wire when content changes (e.g., write/preview toggle in the editor).
+    // We must exclude DOM mutations caused by the action itself (insertion of
+    // <figure>, plus the watermark + figcaption mounted reactively by
+    // BodyImageLicense). Easiest signal: any node inside a wired <figure>
+    // — or the figure itself — is ours.
     const observer = new MutationObserver((mutations) => {
-      // Only re-wire if a non-license-related DOM change happened.
-      // The action itself inserts <figure> nodes which would otherwise loop.
       const meaningful = mutations.some((mu) =>
         Array.from(mu.addedNodes).some((n) => {
           if (n.nodeType !== 1) return false;
           const elNode = /** @type {Element} */ (n);
-          return elNode.tagName !== 'FIGURE' && !elNode.hasAttribute?.('data-body-license-wired');
+          if (elNode.tagName === 'FIGURE') return false;
+          // Reject anything mounted inside (or as a sibling of) a wired figure.
+          if (elNode.closest?.('figure > [data-body-license-wired]')) return false;
+          if (elNode.parentElement?.matches?.('figure')) return false;
+          return true;
         })
       );
       if (meaningful) wire();
