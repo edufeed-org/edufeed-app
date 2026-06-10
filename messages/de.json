@@ -2332,5 +2332,11 @@
   "image_library_picker_loading": "Lizenzierte Bilder werden geladen…",
   "image_library_picker_attestations_title": "Lizenzangaben ({count})",
   "image_library_picker_attestation_date": "Datum",
+  "image_library_detail_title": "Bilddetails",
+  "image_library_detail_use": "Dieses Bild verwenden",
+  "image_library_detail_type": "Typ",
+  "image_library_detail_size": "Größe",
+  "image_library_detail_dimensions": "Maße",
+  "image_library_detail_hash": "SHA-256",
   "licensed_image_input_add_button": "Bild hinzufügen"
 }

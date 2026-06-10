@@ -14,7 +14,7 @@
   import { normalizeServerUrl, urlIsOnTrustedServer } from '$lib/helpers/blossom-trust.js';
   import * as m from '$lib/paraglide/messages';
   import LicenseBadge from './LicenseBadge.svelte';
-  import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import ImageLibraryDetailModal from './ImageLibraryDetailModal.svelte';
 
   let {
     open = $bindable(false),
@@ -25,46 +25,6 @@
     /** @type {() => void} */
     oncancel = () => {}
   } = $props();
-
-  /**
-   * @param {any} event
-   * @returns {string | null}
-   */
-  function getAttestationLicense(event) {
-    return event?.tags?.find(/** @param {string[]} t */ (t) => t[0] === 'license')?.[1] ?? null;
-  }
-
-  /**
-   * @param {any} event
-   * @returns {string | null}
-   */
-  function getAttestationCredit(event) {
-    return event?.tags?.find(/** @param {string[]} t */ (t) => t[0] === 'credit')?.[1] ?? null;
-  }
-
-  /**
-   * @param {string} pubkey
-   * @returns {string}
-   */
-  function shortPubkey(pubkey) {
-    if (!pubkey || pubkey.length <= 16) return pubkey;
-    return `${pubkey.slice(0, 8)}…${pubkey.slice(-6)}`;
-  }
-
-  /**
-   * @param {number} unixSeconds
-   * @returns {string}
-   */
-  function formatTimestamp(unixSeconds) {
-    const date = new Date(unixSeconds * 1000);
-    return date.toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
 
   // Symbol-bearing event arrays MUST use $state.raw — see CLAUDE.md.
   let events = $state.raw(/** @type {any[]} */ ([]));
@@ -161,12 +121,28 @@
     return [...byHash.values()].sort((a, b) => b.event.created_at - a.event.created_at);
   });
 
+  let detailOpen = $state(false);
+  /** @type {{ event: any, events: any[], meta: any } | null} */
+  let detailTile = $state(null);
+
   /**
-   * @param {{ event: any, meta: any }} tile
+   * @param {{ event: any, events: any[], meta: any }} tile
    */
-  function handlePick(tile) {
+  function showDetails(tile) {
+    detailTile = tile;
+    detailOpen = true;
+  }
+
+  function confirmDetail() {
+    if (!detailTile) return;
+    const t = detailTile;
     open = false;
-    onpick({ url: tile.meta.url, hash: tile.meta.sha256, licenseEvent: tile.event });
+    detailTile = null;
+    onpick({ url: t.meta.url, hash: t.meta.sha256, licenseEvent: t.event });
+  }
+
+  function cancelDetail() {
+    detailTile = null;
   }
 
   function handleUpload() {
@@ -216,56 +192,24 @@
       {:else}
         <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {#each tiles as tile (tile.event.id)}
-            <div class="group relative">
-              <button
-                type="button"
-                class="flex w-full flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary"
-                onclick={() => handlePick(tile)}
-                data-testid="library-tile"
-                data-event-id={tile.event.id}
-              >
-                <div class="aspect-square overflow-hidden rounded bg-base-200">
-                  <img
-                    src={tile.meta.url}
-                    alt={m.image_library_picker_thumbnail_alt()}
-                    loading="lazy"
-                    onerror={swapPlaceholder}
-                    class="h-full w-full object-cover"
-                  />
-                </div>
-                <LicenseBadge licenseEvent={tile.event} class="self-start" />
-              </button>
-
-              <!-- Hover/focus-visible popover with full attestation history -->
-              <div
-                class="pointer-events-none invisible absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border bg-base-100 p-3 text-xs opacity-0 shadow-lg transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
-                data-testid="library-tile-attestations"
-              >
-                <p class="mb-2 font-semibold">
-                  {m.image_library_picker_attestations_title({ count: tile.events.length })}
-                </p>
-                <ul class="space-y-1">
-                  {#each tile.events as attestation (attestation.id)}
-                    {@const license = getAttestationLicense(attestation)}
-                    {@const credit = getAttestationCredit(attestation)}
-                    <li
-                      class="flex flex-wrap items-baseline gap-x-1 border-b border-base-200 pb-1 last:border-b-0 last:pb-0"
-                    >
-                      {#if license}
-                        <span class="font-medium">{formatLicenseUrl(license)}</span>
-                      {/if}
-                      {#if credit}
-                        <span>· {credit}</span>
-                      {/if}
-                      <span class="opacity-70" title={attestation.pubkey}
-                        >· {shortPubkey(attestation.pubkey)}</span
-                      >
-                      <span class="opacity-70">· {formatTimestamp(attestation.created_at)}</span>
-                    </li>
-                  {/each}
-                </ul>
+            <button
+              type="button"
+              class="flex flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary"
+              onclick={() => showDetails(tile)}
+              data-testid="library-tile"
+              data-event-id={tile.event.id}
+            >
+              <div class="aspect-square overflow-hidden rounded bg-base-200">
+                <img
+                  src={tile.meta.url}
+                  alt={m.image_library_picker_thumbnail_alt()}
+                  loading="lazy"
+                  onerror={swapPlaceholder}
+                  class="h-full w-full object-cover"
+                />
               </div>
-            </div>
+              <LicenseBadge licenseEvent={tile.event} class="self-start" />
+            </button>
           {/each}
         </div>
       {/if}
@@ -279,3 +223,10 @@
     <button class="modal-backdrop" onclick={handleCancel} aria-label="Close">close</button>
   </dialog>
 {/if}
+
+<ImageLibraryDetailModal
+  bind:open={detailOpen}
+  tile={detailTile}
+  onuse={confirmDetail}
+  oncancel={cancelDetail}
+/>
