@@ -28,7 +28,7 @@
 </script>
 
 {#if open}
-  <div class="modal-open modal" role="dialog" aria-modal="true">
+  <dialog class="modal-open modal">
     <div class="modal-box max-w-md">
       <h3 class="text-lg font-semibold">{m.image_source_chooser_title()}</h3>
 
@@ -63,6 +63,6 @@
         </button>
       </div>
     </div>
-    <div class="modal-backdrop" onclick={handleCancel} role="presentation"></div>
-  </div>
+    <button class="modal-backdrop" onclick={handleCancel} aria-label="Close">close</button>
+  </dialog>
 {/if}

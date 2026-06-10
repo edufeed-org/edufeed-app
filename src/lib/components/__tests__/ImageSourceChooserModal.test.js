@@ -53,4 +53,15 @@ describe('ImageSourceChooserModal', () => {
     await fireEvent.click(getByText('Cancel'));
     expect(oncancel).toHaveBeenCalledOnce();
   });
+
+  it('invokes oncancel when backdrop clicked', async () => {
+    const oncancel = vi.fn();
+    const { container } = render(ImageSourceChooserModal, {
+      props: { open: true, oncancel }
+    });
+    const backdrop = container.querySelector('.modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    await fireEvent.click(backdrop);
+    expect(oncancel).toHaveBeenCalledOnce();
+  });
 });
