@@ -24,6 +24,8 @@
   let uploading = $state(false);
   let modalOpen = $state(false);
 
+  /** @type {any} */
+  let pendingExistingLicense = $state(null);
   // MIME / size of last-uploaded blob — passed through to LicenseModal.
   let modalSize = $state(/** @type {number | undefined} */ (undefined));
   let modalMime = $state('image/jpeg');
@@ -81,13 +83,11 @@
       modalSize = blob.size ?? file.size;
       imageWasUploaded = true;
 
-      // Network check: is there already a kind 1063 license event for this
-      // hash from another user? If so, bind it reactively (the helper added it
-      // to EventStore so useLicenseForHash will resolve it) and skip the modal.
-      const existing = await findExistingLicense(blob.sha256);
-      if (!existing && !getLicense()) {
-        modalOpen = true;
-      }
+      // Always open the modal for explicit user consent. If an existing
+      // license event is found, the modal shows it in "Accept / Create my own"
+      // mode; if not, it shows the standard create-license form.
+      pendingExistingLicense = await findExistingLicense(blob.sha256);
+      modalOpen = true;
     } catch (e) {
       console.error('Image upload failed', e);
       uploadError = m.licensed_image_input_error_upload_failed();
@@ -164,8 +164,10 @@
   mime={modalMime}
   size={modalSize ?? 0}
   {activeUserDisplayName}
+  existingLicense={pendingExistingLicense}
   onsave={(/** @type {any} */ license) => {
     licenseEvent = license;
+    pendingExistingLicense = null;
   }}
   oncancel={() => {
     // Mandatory mode: cancel discards the upload entirely.
@@ -173,5 +175,6 @@
     currentHash = null;
     imageWasUploaded = false;
     licenseEvent = null;
+    pendingExistingLicense = null;
   }}
 />

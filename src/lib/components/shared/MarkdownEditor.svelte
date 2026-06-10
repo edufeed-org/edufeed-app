@@ -34,6 +34,8 @@
    * @typedef {{ url: string, hash: string, mime: string, size: number, alt: string }} PendingUpload
    */
   let pendingUpload = $state(/** @type {PendingUpload | null} */ (null));
+  /** @type {any} */
+  let pendingExistingLicense = $state(null);
   let modalOpen = $state(false);
 
   /**
@@ -110,20 +112,18 @@
     try {
       const result = await uploadAndFindLicense(file, { signer: activeUser });
 
-      if (result.existingLicense) {
-        // Existing-license fast path — insert immediately.
-        insertMarkdown(`![${file.name}](`, ')', result.url);
-      } else {
-        // Mandatory modal: stash pending state; commit on save, discard on cancel.
-        pendingUpload = {
-          url: result.url,
-          hash: result.sha256,
-          mime: result.type,
-          size: result.size,
-          alt: file.name
-        };
-        modalOpen = true;
-      }
+      // Always open the modal. If an existing license was found, the modal
+      // shows it in Accept / Create-my-own mode; otherwise the standard form.
+      // Nothing is inserted into the markdown until the modal saves.
+      pendingUpload = {
+        url: result.url,
+        hash: result.sha256,
+        mime: result.type,
+        size: result.size,
+        alt: file.name
+      };
+      pendingExistingLicense = result.existingLicense;
+      modalOpen = true;
     } catch (err) {
       console.error('Image upload failed:', err);
     } finally {
@@ -224,13 +224,16 @@
   mime={pendingUpload?.mime ?? ''}
   size={pendingUpload?.size ?? 0}
   defaultSelfCreator={false}
+  existingLicense={pendingExistingLicense}
   onsave={() => {
     if (pendingUpload) {
       insertMarkdown(`![${pendingUpload.alt}](`, ')', pendingUpload.url);
     }
     pendingUpload = null;
+    pendingExistingLicense = null;
   }}
   oncancel={() => {
     pendingUpload = null;
+    pendingExistingLicense = null;
   }}
 />
