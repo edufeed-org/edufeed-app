@@ -8,9 +8,10 @@
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
-  import { buildLicenseTemplate } from '$lib/helpers/image-license.js';
+  import { buildLicenseTemplate, findExistingLicense } from '$lib/helpers/image-license.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import LicenseBadge from './LicenseBadge.svelte';
 
   let {
     imageUrl = $bindable(''),
@@ -91,10 +92,11 @@
       modalSize = blob.size ?? file.size;
       imageWasUploaded = true;
 
-      // Wait one microtask for useLicenseForHash to settle; if no existing
-      // license event is in store, open the modal.
-      await Promise.resolve();
-      if (!getLicense()) {
+      // Network check: is there already a kind 1063 license event for this
+      // hash from another user? If so, bind it reactively (the helper added it
+      // to EventStore so useLicenseForHash will resolve it) and skip the modal.
+      const existing = await findExistingLicense(blob.sha256);
+      if (!existing && !getLicense()) {
         openModal();
       }
     } catch (e) {
@@ -202,6 +204,15 @@
       onchange={handleFileSelected}
     />
   </div>
+
+  {#if licenseEvent}
+    <div class="mt-2 flex items-center gap-2 text-xs">
+      <LicenseBadge {licenseEvent} />
+      <button type="button" class="btn btn-ghost btn-xs" onclick={openModal}>
+        {m.licensed_image_input_replace_license()}
+      </button>
+    </div>
+  {/if}
 
   {#if uploadError || errors.image}
     <p class="mt-1 text-xs text-error">{uploadError || errors.image}</p>

@@ -2274,6 +2274,7 @@
   "licensed_image_input_error_invalid_file": "Please choose an image file",
   "licensed_image_input_error_too_large": "Image is too large (max {size}MB)",
   "licensed_image_input_error_upload_failed": "Upload failed. Please try again.",
+  "licensed_image_input_replace_license": "Replace license",
   "license_modal_title": "License this image",
   "license_modal_description": "We need a license before publishing an uploaded image. This creates a public attestation on Nostr.",
   "license_modal_license_label": "License",
