@@ -238,38 +238,29 @@
 
               <!-- Hover/focus-visible popover with full attestation history -->
               <div
-                class="pointer-events-none invisible absolute top-full right-0 left-0 z-10 mt-1 rounded-lg border bg-base-100 p-3 text-xs opacity-0 shadow-lg transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+                class="pointer-events-none invisible absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border bg-base-100 p-3 text-xs opacity-0 shadow-lg transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
                 data-testid="library-tile-attestations"
               >
                 <p class="mb-2 font-semibold">
                   {m.image_library_picker_attestations_title({ count: tile.events.length })}
                 </p>
-                <ul class="space-y-2">
+                <ul class="space-y-1">
                   {#each tile.events as attestation (attestation.id)}
-                    {@const attestationLicense = getAttestationLicense(attestation)}
-                    {@const attestationCredit = getAttestationCredit(attestation)}
-                    <li class="border-b border-base-200 pb-2 last:border-b-0 last:pb-0">
-                      {#if attestationLicense}
-                        <div>
-                          <span class="font-medium">{m.license_modal_license_label()}:</span>
-                          {formatLicenseUrl(attestationLicense)}
-                        </div>
+                    {@const license = getAttestationLicense(attestation)}
+                    {@const credit = getAttestationCredit(attestation)}
+                    <li
+                      class="flex flex-wrap items-baseline gap-x-1 border-b border-base-200 pb-1 last:border-b-0 last:pb-0"
+                    >
+                      {#if license}
+                        <span class="font-medium">{formatLicenseUrl(license)}</span>
                       {/if}
-                      {#if attestationCredit}
-                        <div>
-                          <span class="font-medium">{m.license_modal_credit_label()}:</span>
-                          {attestationCredit}
-                        </div>
+                      {#if credit}
+                        <span>· {credit}</span>
                       {/if}
-                      <div class="opacity-70">
-                        <span class="font-medium">{m.license_modal_attested_by()}:</span>
-                        {shortPubkey(attestation.pubkey)}
-                      </div>
-                      <div class="opacity-70">
-                        <span class="font-medium">{m.image_library_picker_attestation_date()}:</span
-                        >
-                        {formatTimestamp(attestation.created_at)}
-                      </div>
+                      <span class="opacity-70" title={attestation.pubkey}
+                        >· {shortPubkey(attestation.pubkey)}</span
+                      >
+                      <span class="opacity-70">· {formatTimestamp(attestation.created_at)}</span>
                     </li>
                   {/each}
                 </ul>

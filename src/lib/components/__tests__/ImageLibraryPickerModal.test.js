@@ -308,8 +308,8 @@ describe('ImageLibraryPickerModal', () => {
     // Two attestations for the same hash → popover shows count "2"
     expect(getByText('2 license attestations')).toBeTruthy();
     // Both credits appear in the popover
-    expect(getByText('Alice')).toBeTruthy();
-    expect(getByText('Bob')).toBeTruthy();
+    expect(getByText(/Alice/)).toBeTruthy();
+    expect(getByText(/Bob/)).toBeTruthy();
   });
 
   it('shows the singular form when only one attestation exists', () => {
@@ -318,6 +318,6 @@ describe('ImageLibraryPickerModal', () => {
     ]);
     const { getByText } = render(ImageLibraryPickerModal, { props: { open: true } });
     expect(getByText('1 license attestation')).toBeTruthy();
-    expect(getByText('Solo')).toBeTruthy();
+    expect(getByText(/Solo/)).toBeTruthy();
   });
 });
