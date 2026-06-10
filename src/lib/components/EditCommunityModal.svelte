@@ -436,14 +436,11 @@
     try {
       isPublishing = true;
 
-      const account = manager.active;
-
-      if (!account) {
-        throw new Error(m.create_community_modal_error_no_account());
-      }
-
-      // Verify ownership
-      if (communityEvent?.pubkey !== account.pubkey) {
+      // Sign with the community's signer (held in the manager), not the
+      // active user's signer. For current-keypair communities the two are
+      // the same; for new-keypair communities they differ.
+      const signer = communitySigner;
+      if (!signer || !communityEvent?.pubkey) {
         throw new Error(
           m.edit_community_modal_error_not_owner?.() || 'Only the community owner can edit settings'
         );
@@ -473,7 +470,7 @@
         content: ''
       };
 
-      const signedEvent = await account.signEvent(communityUpdateEvent);
+      const signedEvent = await signer.signEvent(communityUpdateEvent);
       publishEventOptimistic(signedEvent, [], {
         additionalRelays: getCommunityGlobalRelays(signedEvent)
       });
@@ -493,7 +490,7 @@
           content: ''
         };
 
-        const signedProfileList = await account.signEvent(profileListEvent);
+        const signedProfileList = await signer.signEvent(profileListEvent);
         publishEventOptimistic(signedProfileList);
       }
 
@@ -534,6 +531,20 @@
    */
   function openCommunityProfileEdit() {
     if (!communityEvent?.pubkey || !communitySigner) return;
+
+    // The modal store only renders one modal at a time, so opening the profile
+    // editor unmounts this one — any unsaved community-settings changes would
+    // be silently discarded. Warn the user before navigating.
+    // TODO: refactor EditProfileModal into an embeddable component so it can
+    // be rendered inline within EditCommunityModal without modal switching.
+    const proceed =
+      typeof window === 'undefined' ||
+      window.confirm(
+        m.edit_community_modal_profile_section_confirm?.() ||
+          'Editing the community profile will close this dialog. Save your community settings first, or click OK to continue (unsaved changes will be lost).'
+      );
+    if (!proceed) return;
+
     // Try to seed the form with existing kind 0 content from EventStore.
     const existing = /** @type {any} */ (eventStore.getReplaceable(0, communityEvent.pubkey));
     let profile = {};

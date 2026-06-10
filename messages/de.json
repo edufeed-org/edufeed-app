@@ -385,6 +385,7 @@
   "edit_community_modal_profile_section_title": "Community-Profil",
   "edit_community_modal_profile_section_note": "Avatar, Banner, Name und weitere Kind-0-Metadaten.",
   "edit_community_modal_profile_section_button": "Community-Profil bearbeiten",
+  "edit_community_modal_profile_section_confirm": "Beim Bearbeiten des Community-Profils wird dieser Dialog geschlossen. Speichere zuerst die Community-Einstellungen oder bestätige mit OK, um fortzufahren (nicht gespeicherte Änderungen gehen verloren).",
   "profile_edit_modal_kind0_note": "Veröffentlicht ein Kind-0-Metadaten-Event, signiert mit dem Schlüssel der Community.",
   "profile_edit_modal_success": "Profil erfolgreich aktualisiert!",
   "profile_edit_modal_cancel_button": "Abbrechen",

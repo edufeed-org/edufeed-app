@@ -428,6 +428,7 @@
   "edit_community_modal_profile_section_title": "Community profile",
   "edit_community_modal_profile_section_note": "Avatar, banner, name, and other kind 0 metadata.",
   "edit_community_modal_profile_section_button": "Edit community profile",
+  "edit_community_modal_profile_section_confirm": "Editing the community profile will close this dialog. Save your community settings first, or click OK to continue (unsaved changes will be lost).",
   "profile_edit_modal_kind0_note": "This publishes a kind 0 metadata event signed by the community's keypair.",
   "profile_edit_modal_success": "Profile updated successfully!",
   "profile_edit_modal_cancel_button": "Cancel",
