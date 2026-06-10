@@ -52,51 +52,50 @@ export function buildLicenseTemplate(input) {
 }
 
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
-import { firstValueFrom, toArray, takeUntil, timer, catchError, of } from 'rxjs';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { firstValueFrom, take, timeout, catchError, of } from 'rxjs';
 
 /**
  * One-shot relay lookup for an existing NIP-94 kind 1063 license event
- * keyed by SHA-256 hash. Queries the educational relays with a 2-second
- * timeout, adds received events to EventStore, and returns the newest
- * (tie-break by lex id). Returns null on empty hash, no relays, no events,
- * or timeout.
+ * keyed by SHA-256 hash. Queries the full lookup-relay set (educational
+ * + fallback + user NIP-65 read relays) and resolves as soon as the FIRST
+ * matching event arrives. Adds the event to EventStore so reactive
+ * subscribers see it. Returns null on empty hash, no relays, or 2-second
+ * timeout with no events.
+ *
+ * Trade-off: take(1) returns the first event from any relay rather than
+ * waiting to collect candidates from all relays for a newest-wins pick.
+ * For "does a license exist for this hash" the first hit is sufficient;
+ * if the user disagrees with the picked attestation they can click Replace.
  *
  * @param {string} hash - SHA-256 hex of the blob.
  * @returns {Promise<import('nostr-tools').NostrEvent | null>}
  */
 export async function findExistingLicense(hash) {
   if (!hash) return null;
-  const relays = getEducationalRelays();
+  const relays = getAllLookupRelays();
   if (!relays || relays.length === 0) return null;
 
   /** @type {import('nostr-tools').Filter} */
   const filter = { kinds: [1063], '#x': [hash] };
 
-  const events = await firstValueFrom(
+  const event = await firstValueFrom(
     pool.request(relays, [filter]).pipe(
-      takeUntil(timer(2000)), // force-complete upstream at 2s so toArray emits
-      toArray(),
-      catchError(() => of(/** @type {any[]} */ ([])))
-    )
+      take(1),
+      timeout({ each: 2000, with: () => of(null) }),
+      catchError(() => of(null))
+    ),
+    { defaultValue: null }
   );
 
-  if (!events || events.length === 0) return null;
+  if (!event) return null;
 
-  // Persist to EventStore so subsequent useLicenseForHash subscribers see them.
-  for (const ev of events) {
-    try {
-      eventStore.add(ev);
-    } catch {
-      /* no-op on duplicates */
-    }
+  // Persist to EventStore so subsequent useLicenseForHash subscribers see it.
+  try {
+    eventStore.add(event);
+  } catch {
+    /* no-op on duplicates */
   }
 
-  // Newest by created_at; tie-break by lex id (smaller wins).
-  const sorted = [...events].sort((a, b) => {
-    if (b.created_at !== a.created_at) return b.created_at - a.created_at;
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
-
-  return sorted[0] ?? null;
+  return event;
 }
