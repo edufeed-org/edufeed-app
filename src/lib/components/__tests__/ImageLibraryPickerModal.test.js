@@ -9,6 +9,11 @@ const timeline$ = new BehaviorSubject(/** @type {any[]} */ ([]));
 /** @type {import('rxjs').BehaviorSubject<any>} */
 const replaceable$ = new BehaviorSubject(/** @type {any} */ (undefined));
 
+vi.mock('$lib/helpers/educational/licenseLabel.js', () => ({
+  formatLicenseUrl: (/** @type {string} */ url) =>
+    url === 'https://creativecommons.org/licenses/by/4.0/' ? 'CC BY 4.0' : url
+}));
+
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     timeline: () => timeline$,
@@ -53,7 +58,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   image_library_picker_empty_cta: () => 'Upload from computer',
   image_library_picker_thumbnail_alt: () => 'Licensed image',
   image_library_picker_loading: () => 'Loading licensed images…',
-  image_source_chooser_cancel: () => 'Cancel'
+  image_source_chooser_cancel: () => 'Cancel',
+  image_library_picker_attestations_title: (/** @type {{ count: number }} */ { count }) =>
+    count === 1 ? '1 license attestation' : `${count} license attestations`,
+  image_library_picker_attestation_date: () => 'Date',
+  license_modal_license_label: () => 'License',
+  license_modal_credit_label: () => 'Credit',
+  license_modal_attested_by: () => 'Attested by'
 }));
 
 // Stub LicenseBadge to avoid pulling its dependency tree into the test.
@@ -274,5 +285,39 @@ describe('ImageLibraryPickerModal', () => {
     // subscribe, which immediately clears loading. Verify the loading spinner
     // is NOT shown and the empty-state CTA is reachable instead.
     expect(queryByTestId('library-loading')).toBeNull();
+  });
+
+  it('renders an attestation popover per tile with the event count', () => {
+    timeline$.next([
+      ev({
+        id: 'a1',
+        hash: 'h1',
+        url: 'https://blossom.edufeed.org/h1.png',
+        credit: 'Alice',
+        created_at: 100
+      }),
+      ev({
+        id: 'a2',
+        hash: 'h1',
+        url: 'https://blossom.edufeed.org/h1.png',
+        credit: 'Bob',
+        created_at: 200
+      })
+    ]);
+    const { getByText } = render(ImageLibraryPickerModal, { props: { open: true } });
+    // Two attestations for the same hash → popover shows count "2"
+    expect(getByText('2 license attestations')).toBeTruthy();
+    // Both credits appear in the popover
+    expect(getByText('Alice')).toBeTruthy();
+    expect(getByText('Bob')).toBeTruthy();
+  });
+
+  it('shows the singular form when only one attestation exists', () => {
+    timeline$.next([
+      ev({ id: 'only', hash: 'h1', url: 'https://blossom.edufeed.org/h1.png', credit: 'Solo' })
+    ]);
+    const { getByText } = render(ImageLibraryPickerModal, { props: { open: true } });
+    expect(getByText('1 license attestation')).toBeTruthy();
+    expect(getByText('Solo')).toBeTruthy();
   });
 });

@@ -2330,5 +2330,7 @@
   "image_library_picker_empty_cta": "Upload from computer",
   "image_library_picker_thumbnail_alt": "Licensed image",
   "image_library_picker_loading": "Loading licensed images…",
+  "image_library_picker_attestations_title": "License attestations ({count})",
+  "image_library_picker_attestation_date": "Date",
   "licensed_image_input_add_button": "Add image"
 }
