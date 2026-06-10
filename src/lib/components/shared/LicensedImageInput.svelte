@@ -8,6 +8,8 @@
   import { findExistingLicense } from '$lib/helpers/image-license.js';
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
+  import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
+  import ImageLibraryPickerModal from './ImageLibraryPickerModal.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
@@ -23,6 +25,8 @@
   let currentHash = $state(/** @type {string | null} */ (null));
   let uploading = $state(false);
   let modalOpen = $state(false);
+  let chooserOpen = $state(false);
+  let libraryOpen = $state(false);
 
   /** @type {any} */
   let pendingExistingLicense = $state(null);
@@ -42,6 +46,20 @@
 
   /** @type {HTMLInputElement | null} */
   let fileInputRef = null;
+
+  function handleAddImage() {
+    chooserOpen = true;
+  }
+
+  /**
+   * @param {{ url: string, hash: string, licenseEvent: any }} picked
+   */
+  function handleLibraryPick(picked) {
+    imageUrl = picked.url;
+    currentHash = picked.hash;
+    licenseEvent = picked.licenseEvent;
+    imageWasUploaded = false;
+  }
 
   function triggerUpload() {
     fileInputRef?.click();
@@ -120,12 +138,18 @@
       bind:value={imageUrl}
       onblur={handleUrlBlur}
     />
-    <button type="button" class="btn btn-secondary" onclick={triggerUpload} disabled={uploading}>
+    <button
+      type="button"
+      class="btn btn-secondary"
+      onclick={handleAddImage}
+      disabled={uploading}
+      data-testid="licensed-image-add-button"
+    >
       {#if uploading}
         <span class="loading loading-sm loading-spinner"></span>
         {m.licensed_image_input_uploading()}
       {:else}
-        {m.licensed_image_input_upload_button()}
+        {m.licensed_image_input_add_button()}
       {/if}
     </button>
     <input
@@ -178,4 +202,18 @@
     licenseEvent = null;
     pendingExistingLicense = null;
   }}
+/>
+
+<ImageSourceChooserModal
+  bind:open={chooserOpen}
+  onupload={triggerUpload}
+  onlibrary={() => {
+    libraryOpen = true;
+  }}
+/>
+
+<ImageLibraryPickerModal
+  bind:open={libraryOpen}
+  onpick={handleLibraryPick}
+  onupload={triggerUpload}
 />

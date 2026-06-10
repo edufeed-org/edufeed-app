@@ -49,7 +49,8 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: vi.fn() }
+  eventStore: { add: vi.fn() },
+  pool: { request: vi.fn(() => ({ pipe: vi.fn(() => ({ subscribe: vi.fn() })) })) }
 }));
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
