@@ -2,7 +2,9 @@
   EncodingPreview
   Inline preview for an AMB resource encoding (uploaded file).
 
-  - PDFs render via <object type="application/pdf"> in an 80vh container.
+  - PDFs render via <PdfInlineViewer> (pdf.js) in an 80vh container, so they
+    preview on every platform including mobile Safari and Android Chrome
+    where the native <object type="application/pdf"> embed renders blank.
   - Images render via a lazy <img> in the same container.
   - For URLs the browser cannot embed as a sub-resource (non-http(s) schemes),
     we render a compact fallback card with an "Open in new tab" link instead
@@ -17,6 +19,7 @@
 
 <script>
   import * as m from '$lib/paraglide/messages.js';
+  import PdfInlineViewer from './PdfInlineViewer.svelte';
 
   /**
    * @typedef {Object} Props
@@ -65,9 +68,8 @@
 </script>
 
 {#if kind === 'pdf' && embedSrc}
-  <div class="mt-2 mb-1 overflow-hidden rounded-lg border border-base-300 bg-base-200/30">
-    <object type="application/pdf" data={embedSrc} title={name} class="block h-[80vh] w-full"
-    ></object>
+  <div class="mt-2 mb-1">
+    <PdfInlineViewer src={embedSrc} {name} />
   </div>
 {:else if kind === 'pdf'}
   <div
