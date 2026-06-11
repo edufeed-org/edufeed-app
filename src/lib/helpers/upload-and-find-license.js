@@ -7,6 +7,7 @@ import { BlossomClient } from 'blossom-client-sdk';
 import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { findExistingLicense } from '$lib/helpers/image-license.js';
+import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
 
 /**
  * @typedef {Object} UploadAndFindOptions
@@ -38,7 +39,7 @@ export async function uploadAndFindLicense(file, opts) {
   const existing = await findExistingLicense(blob.sha256);
 
   return {
-    url: blob.url,
+    url: reconcileBlobUrlScheme(blob.url, serverUrl),
     sha256: blob.sha256,
     size: blob.size ?? /** @type {any} */ (file).size ?? 0,
     type: blob.type || /** @type {any} */ (file).type || 'application/octet-stream',

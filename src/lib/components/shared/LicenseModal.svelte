@@ -144,7 +144,7 @@
 
 {#if open}
   <div class="modal-open modal" data-testid="license-modal">
-    <div class="modal-box">
+    <div class="modal-box max-w-2xl">
       {#if view === 'existing' && existingLicense}
         <!-- State A: existing license found, ask user to accept or create their own -->
         <h3 class="mb-2 text-lg font-bold">{m.license_modal_existing_title()}</h3>
