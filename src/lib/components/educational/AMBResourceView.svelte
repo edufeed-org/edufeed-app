@@ -13,7 +13,6 @@
   import { nip19 } from 'nostr-tools';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import CommentList from '../comments/CommentList.svelte';
@@ -36,10 +35,9 @@
   import { EditIcon } from '$lib/components/icons';
   import DetailHeader from '../shared/DetailHeader.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
-  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
-  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import EncodingRowBadge from './EncodingRowBadge.svelte';
   import EncodingPreview from './EncodingPreview.svelte';
+  import ResourceCover from './ResourceCover.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -80,12 +78,6 @@
 
   // Check if current user owns this resource
   const isOwner = $derived(activeUser?.pubkey === event.pubkey);
-
-  // Thumbnail license attestation (kind 1063 keyed by x-tag SHA-256)
-  const imageHash = $derived(
-    event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
-  );
-  const getImageLicense = useLicenseForHash(() => imageHash);
 
   /**
    * Handle edit button click - navigate to edit page
@@ -326,26 +318,10 @@
     />
   {/if}
 
-  <!-- FEATURED IMAGE -->
-  {#if resource.image}
-    <div class="mb-8">
-      <div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg">
-        <ImageWithFallback
-          src={resource.image}
-          alt={resource.name}
-          fallbackType="article"
-          size="hero"
-          class="h-full w-full object-cover"
-        />
-        {#if getImageLicense()}
-          <LicenseBadge
-            licenseEvent={getImageLicense()}
-            class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
-          />
-        {/if}
-      </div>
-    </div>
-  {/if}
+  <!-- FEATURED COVER — image at 16:9 when present, typo cover at 3:4 (max-w 360) when absent. -->
+  <div class="mb-8">
+    <ResourceCover {resource} size="full" aspect="video" class="max-w-[360px]" />
+  </div>
 
   <!-- VIEW CONTENT CTA - Only show when d-tag identifier contains a URL -->
   {#if hasIdentifierUrl}
