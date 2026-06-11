@@ -202,7 +202,10 @@ describe('AMBResourceCard', () => {
         props: { resource: mockResource, authorProfile: mockAuthorProfile, variant: 'list' }
       });
 
-      const thumbnail = container.querySelector('.amb-card-list .list-thumbnail');
+      // ResourceCover renders either resource-cover-image (has image) or resource-cover-typo (no image)
+      const thumbnail =
+        container.querySelector('[data-testid="resource-cover-image"]') ||
+        container.querySelector('[data-testid="resource-cover-typo"]');
       expect(thumbnail).toBeTruthy();
     });
 
@@ -369,8 +372,8 @@ describe('AMBResourceCard', () => {
       });
       expect(getByText('Test Lesson')).toBeTruthy();
       expect(getByText('Open Content')).toBeTruthy();
-      // Image placeholder emoji should be present (no image URL provided)
-      expect(container.textContent).toContain('📚');
+      // ResourceCover should be present (no image URL provided → typo cover)
+      expect(container.querySelector('[data-testid="resource-cover-typo"]')).toBeTruthy();
     });
   });
 });

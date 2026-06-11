@@ -22,13 +22,11 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
-  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
-  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
-  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import ResourceCover from './ResourceCover.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -69,12 +67,6 @@
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
-
-  // Thumbnail license attestation (kind 1063 keyed by x-tag SHA-256)
-  const imageHash = $derived(
-    resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
-  );
-  const getImageLicense = useLicenseForHash(() => imageHash);
 
   // Reactive SKOS concepts for URI-to-label resolution
   const resourceTypeConcepts = $derived(getCachedConcepts('learningResourceType'));
@@ -194,29 +186,12 @@
         <BookmarkButton event={resource.rawEvent} />
       </div>
     {/if}
-    <div
-      class="list-thumbnail relative h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
-    >
-      {#if resource.image}
-        <ImageWithFallback
-          src={resource.image}
-          alt={resource.name}
-          fallbackType="generic"
-          size="thumbnail"
-          class="h-full w-full object-cover"
-        />
-        {#if getImageLicense()}
-          <LicenseBadge
-            licenseEvent={getImageLicense()}
-            class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
-          />
-        {/if}
-      {:else}
-        <div class="flex h-full w-full items-center justify-center text-2xl text-base-content/30">
-          📚
-        </div>
-      {/if}
-    </div>
+    <ResourceCover
+      {resource}
+      size="thumbnail"
+      aspect="square"
+      class="h-16 w-16 flex-shrink-0 sm:h-20 sm:w-20"
+    />
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
         <span class="truncate font-semibold text-base-content">{resource.name}</span>
@@ -318,28 +293,10 @@
       {/if}
     </div>
 
-    <!-- Resource Image — always shown for consistent card height -->
+    <!-- Resource cover — image at 2:1 when present, typo cover at 3:4 (capped) when absent. -->
     {#if !compact}
       <div class="mb-3">
-        <div class="relative aspect-[2/1] w-full overflow-hidden rounded-lg bg-base-200">
-          {#if resource.image}
-            <ImageWithFallback
-              src={resource.image}
-              alt={resource.name}
-              fallbackType="generic"
-              size="card"
-              class="h-full w-full object-cover"
-            />
-            {#if getImageLicense()}
-              <LicenseBadge
-                licenseEvent={getImageLicense()}
-                class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
-              />
-            {/if}
-          {:else}
-            <div class="flex h-full w-full items-center justify-center text-5xl">📚</div>
-          {/if}
-        </div>
+        <ResourceCover {resource} size="full" aspect="wide" />
       </div>
     {/if}
 

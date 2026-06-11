@@ -13,7 +13,7 @@
   import { fetchEventById } from '$lib/helpers/nostrUtils.js';
   import { getTagValue, getNestedTagValues } from '$lib/helpers/educational/ambTransform.js';
   import { CopyIcon } from '$lib/components/icons';
-  import ImageWithFallback from '../ImageWithFallback.svelte';
+  import ResourceCover from '$lib/components/educational/ResourceCover.svelte';
 
   let { identifier, decoded: _decoded, inline: _inline = false } = $props();
 
@@ -30,6 +30,8 @@
   let image = $state(null);
   /** @type {string} */
   let resourceType = $state('');
+  /** @type {string} */
+  let identifierDTag = $state('');
 
   $effect(() => {
     isLoading = true;
@@ -43,6 +45,7 @@
           title = getTagValue(tags, 'name') || getTagValue(tags, 'd') || 'Untitled Resource';
           summary = getTagValue(tags, 'description') || '';
           image = getTagValue(tags, 'image');
+          identifierDTag = getTagValue(tags, 'd') || '';
           // Pick the first learningResourceType prefLabel if present
           const types = getNestedTagValues(tags, 'learningResourceType:0:prefLabel');
           resourceType = types[0] || '';
@@ -60,6 +63,18 @@
 
   /** @type {string} */
   let eventUrl = $derived(resolve(`/${identifier}`));
+
+  /**
+   * Minimal AMB resource shape ResourceCover consumes. Only the fields it
+   * actually reads — image, name, identifier, tags, pubkey.
+   */
+  let previewResource = $derived({
+    image,
+    name: title,
+    identifier: identifierDTag,
+    tags: event?.tags ?? [],
+    pubkey: event?.pubkey ?? ''
+  });
 
   function copyIdentifier() {
     navigator.clipboard.writeText(identifier);
@@ -84,17 +99,12 @@
     class="card my-2 block border-l-4 border-l-accent bg-base-200 no-underline shadow-md transition-all hover:bg-base-300 hover:shadow-lg"
   >
     <div class="card-body flex-row gap-3 p-4">
-      {#if image}
-        <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-300 sm:h-20 sm:w-20">
-          <ImageWithFallback
-            src={image}
-            alt={title}
-            fallbackType="article"
-            size="thumbnail"
-            class="h-full w-full object-cover"
-          />
-        </div>
-      {/if}
+      <ResourceCover
+        resource={previewResource}
+        size="thumbnail"
+        aspect="square"
+        class="h-16 w-16 flex-shrink-0 sm:h-20 sm:w-20"
+      />
       <div class="min-w-0 flex-1">
         <h3 class="mb-1 card-title text-base text-base-content">{title}</h3>
         {#if summary}
