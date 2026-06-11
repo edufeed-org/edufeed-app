@@ -486,8 +486,13 @@
               {file.type} • {formatFileSize(file.size)}
             </div>
             {#if file.licenseEvent}
+              <!-- Render flush with the name/meta: strip the badge's chrome so its
+                   text starts at the same left edge instead of being padding-indented. -->
               <div class="mt-1 flex">
-                <LicenseBadge licenseEvent={file.licenseEvent} />
+                <LicenseBadge
+                  licenseEvent={file.licenseEvent}
+                  class="!h-auto !border-0 !bg-transparent !px-0"
+                />
               </div>
             {/if}
           </div>
