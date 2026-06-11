@@ -174,6 +174,21 @@
     return '📎';
   }
 
+  /**
+   * Display name for a file row.
+   * If the file has a kind 1063 license event with a `title` tag, that
+   * title is shown — it's the human-readable label the user typed in the
+   * licence modal. Otherwise we fall back to the OS filename.
+   * @param {UploadedFileWithLicense} file
+   * @returns {string}
+   */
+  function getDisplayName(file) {
+    const title = file.licenseEvent?.tags
+      ?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1]
+      ?.trim();
+    return title || file.name;
+  }
+
   // ---------------------------------------------------------------------------
   // Upload pipeline
   // ---------------------------------------------------------------------------
@@ -426,7 +441,7 @@
         <div class="flex flex-wrap items-center gap-3 rounded-lg bg-base-200 p-3">
           <span class="text-2xl">{getFileIcon(file.type)}</span>
           <div class="min-w-0 flex-1">
-            <div class="truncate font-medium text-base-content">{file.name}</div>
+            <div class="truncate font-medium text-base-content">{getDisplayName(file)}</div>
             <div class="text-xs text-base-content/60">
               {file.type} • {formatFileSize(file.size)}
             </div>
