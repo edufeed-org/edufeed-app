@@ -166,6 +166,7 @@ describe('LicenseModal — beforeAttest hook', () => {
 
     expect(beforeAttest).toHaveBeenCalledTimes(1);
     expect(order[0]).toBe('beforeAttest');
+    expect(order[1]).toBe('onsave');
     expect(onsave).toHaveBeenCalledTimes(1);
   });
 
