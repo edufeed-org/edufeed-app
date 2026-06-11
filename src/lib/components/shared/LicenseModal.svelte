@@ -106,7 +106,7 @@
       onsave(existingLicense);
     } catch (e) {
       console.error('Accept-existing upload failed', e);
-      modalError = m.license_modal_publish_failed();
+      modalError = m.license_modal_upload_failed();
     } finally {
       modalSaving = false;
     }
@@ -140,7 +140,14 @@
       let attestMime = mime;
       let attestSize = size;
       if (beforeAttest) {
-        const out = await beforeAttest();
+        let out;
+        try {
+          out = await beforeAttest();
+        } catch (e) {
+          console.error('Deferred upload failed', e);
+          modalError = m.license_modal_upload_failed();
+          return;
+        }
         attestUrl = out.url;
         attestHash = out.hash;
         attestMime = out.mime;

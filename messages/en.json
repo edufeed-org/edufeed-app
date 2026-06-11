@@ -2312,6 +2312,8 @@
   "license_modal_disclosure_label": "I have provided all licence details correctly, I am allowed to upload this material here, and I understand I am responsible for it.",
   "license_modal_disclosure_required_error": "Please confirm the responsibility statement before saving.",
   "license_modal_publish_failed": "Failed to publish license attestation.",
+  "license_modal_upload_failed": "File upload failed. Please try again.",
+  "licensed_file_input_duplicate_file": "\"{name}\" has identical content to a file already in the list — skipped.",
   "license_modal_error_missing_hash": "Missing file hash. Re-upload the file.",
   "license_modal_existing_title": "License already attested",
   "license_modal_existing_description": "Someone has already filed a license for this image. You can use their license or file your own.",

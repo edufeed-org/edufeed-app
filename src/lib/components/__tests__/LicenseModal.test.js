@@ -28,6 +28,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_disclosure_label: () => 'I confirm responsibility',
   license_modal_disclosure_required_error: () => 'Please confirm',
   license_modal_publish_failed: () => 'publish failed',
+  license_modal_upload_failed: () => 'upload failed',
   license_modal_title_file: () => 'License this file',
   license_modal_description_file: () => 'file desc',
   license_modal_self_creator_file: () => 'I am the creator of this file',
@@ -344,6 +345,6 @@ describe('LicenseModal — beforeAttest hook', () => {
 
     expect(beforeAttest).toHaveBeenCalledTimes(1);
     expect(onsave).not.toHaveBeenCalled();
-    await findByText('publish failed');
+    await findByText('upload failed');
   });
 });

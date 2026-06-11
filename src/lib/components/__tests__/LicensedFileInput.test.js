@@ -88,7 +88,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   blossom_view: () => 'View',
   aria_remove_file: () => 'remove',
   licensed_image_input_replace_license: () => 'Replace',
-  licensed_file_input_add_license: () => 'Add license'
+  licensed_file_input_add_license: () => 'Add license',
+  licensed_file_input_duplicate_file: ({ name }) => `duplicate: ${name}`
 }));
 
 vi.mock('../shared/LicenseModal.svelte', () => ({
@@ -195,6 +196,39 @@ describe('LicensedFileInput — defer upload', () => {
     expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
     expect(mocks.findExistingLicense).toHaveBeenCalledTimes(1);
     expect(mocks.uploadBlob).not.toHaveBeenCalled();
+  });
+});
+
+describe('LicensedFileInput — duplicate content', () => {
+  it('skips a picked file whose sha256 already exists in the list (no crash, no modal)', async () => {
+    // Existing slot already carries hash 'a'*64 — same value the sha256Hex mock returns.
+    const files = [
+      {
+        url: 'https://blossom.example/abc.pdf',
+        name: 'original.pdf',
+        type: 'application/pdf',
+        size: 4321,
+        sha256: 'a'.repeat(64),
+        licenseEvent: makeLicenseEvent('Original')
+      }
+    ];
+
+    const { container, findByText, queryByText } = render(LicensedFileInput, {
+      props: { files }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    const dupe = new File(['payload'], 'copy-of-original.pdf', { type: 'application/pdf' });
+    await fireEvent.change(fileInput, { target: { files: [dupe] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await findByText('duplicate: copy-of-original.pdf');
+    // The duplicate never entered the list and no upload started.
+    expect(
+      queryByText('copy-of-original.pdf', { exact: false, selector: '.font-medium' })
+    ).toBeNull();
+    expect(mocks.uploadBlob).not.toHaveBeenCalled();
+    expect(mocks.findExistingLicense).not.toHaveBeenCalled();
   });
 });
 

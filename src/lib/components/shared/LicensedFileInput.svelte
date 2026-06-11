@@ -201,38 +201,15 @@
   // ---------------------------------------------------------------------------
 
   /**
-   * Compute the file's SHA-256 client-side, look up any prior kind 1063
-   * attestation, and return a pre-upload descriptor. No bytes leave the
-   * browser yet — the upload happens later, from the modal's beforeAttest hook.
-   * @param {File} file
-   * @returns {Promise<{ descriptor: UploadedFileWithLicense, existingLicense: any }>}
-   */
-  async function prepareFile(file) {
-    if (file.size > maxSize) {
-      throw new Error(`File "${file.name}" exceeds maximum size of ${formatFileSize(maxSize)}`);
-    }
-    const hash = await sha256Hex(file);
-    const existingLicense = await findExistingLicense(hash);
-    return {
-      descriptor: {
-        url: '',
-        name: file.name,
-        type: file.type || 'application/octet-stream',
-        size: file.size,
-        sha256: hash,
-        licenseEvent: null
-      },
-      existingLicense
-    };
-  }
-
-  /**
    * Process picked or dropped files one at a time. For each file:
-   *   1. Prepare a descriptor (sha256 + existing-licence lookup), no upload.
-   *   2. Stash the File against the slot index it will occupy.
-   *   3. Open the modal; the modal's beforeAttest hook performs the upload
+   *   1. Compute its SHA-256 client-side (no bytes leave the browser yet) and
+   *      skip it if a file with identical content is already in the list —
+   *      duplicate hashes would collide on slot keys and license lookups.
+   *   2. Look up any prior kind 1063 attestation, build a pre-upload descriptor.
+   *   3. Stash the File against the slot index it will occupy.
+   *   4. Open the modal; the modal's beforeAttest hook performs the upload
    *      from `makeBeforeAttest(index)` when the user clicks Save.
-   *   4. On modal close, drop the File from the stash and move to the next.
+   *   5. On modal close, drop the File from the stash and move to the next.
    * @param {FileList | null} fileList
    */
   async function handleFiles(fileList) {
@@ -252,7 +229,26 @@
 
     try {
       for (const file of filesToUpload) {
-        const { descriptor, existingLicense } = await prepareFile(file);
+        if (file.size > maxSize) {
+          throw new Error(`File "${file.name}" exceeds maximum size of ${formatFileSize(maxSize)}`);
+        }
+        const hash = await sha256Hex(file);
+        if (files.some((f) => f.sha256 === hash)) {
+          uploadError = m.licensed_file_input_duplicate_file({ name: file.name });
+          preparedCount++;
+          uploadProgress = Math.round((preparedCount / totalFiles) * 100);
+          continue;
+        }
+        const existingLicense = await findExistingLicense(hash);
+        /** @type {UploadedFileWithLicense} */
+        const descriptor = {
+          url: '',
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          sha256: hash,
+          licenseEvent: null
+        };
 
         const snapshot = files;
         let targetIndex;
@@ -480,7 +476,8 @@
       <div class="text-sm font-medium text-base-content/70">
         {m.blossom_uploaded_files({ count: String(files.length) })}
       </div>
-      {#each files as file, index (file.sha256)}
+      <!-- Index in the key guards against duplicate hashes in legacy/edit-flow data. -->
+      {#each files as file, index (`${file.sha256}-${index}`)}
         <div class="flex flex-wrap items-center gap-3 rounded-lg bg-base-200 p-3">
           <span class="text-2xl">{getFileIcon(file.type)}</span>
           <div class="min-w-0 flex-1">
