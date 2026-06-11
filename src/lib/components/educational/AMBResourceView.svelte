@@ -318,9 +318,10 @@
     />
   {/if}
 
-  <!-- FEATURED COVER — image at 16:9 when present, typo cover at 3:4 (max-w 360) when absent. -->
+  <!-- FEATURED COVER — image at 16:9 full-width when present, typo cover at 3:4 (capped by
+       ResourceCover's internal max-w-[280px] for size='full') when absent. -->
   <div class="mb-8">
-    <ResourceCover {resource} size="full" aspect="video" class="max-w-[360px]" />
+    <ResourceCover {resource} size="full" aspect="video" />
   </div>
 
   <!-- VIEW CONTENT CTA - Only show when d-tag identifier contains a URL -->

@@ -48,12 +48,7 @@
   });
 </script>
 
-<div
-  class="typo-cover {className}"
-  style={inlineStyle}
-  data-testid="typo-cover-frame"
-  data-theme-hue={hue ?? 'neutral'}
->
+<div class="typo-cover {className}" style={inlineStyle} data-testid="typo-cover-frame">
   <div class="typo-cover-card aspect-[3/4]" data-testid="typo-cover-card">
     <div class="typo-cover-inner" class:is-thumb={size === 'thumbnail'}>
       {#if contentTypeLabel}
