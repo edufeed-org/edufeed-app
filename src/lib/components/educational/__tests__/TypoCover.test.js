@@ -116,4 +116,40 @@ describe('TypoCover', () => {
     expect(getByTestId('typo-cover-title-script').textContent).toContain('bestimme');
     expect(container.querySelector('[data-testid="typo-cover-title-headline"]')).toBeNull();
   });
+
+  it('defaults credit lines to "edufeed" / "cc by 4.0" when not provided', () => {
+    const { getByTestId } = render(TypoCover, { props: defaultProps() });
+    const credit = getByTestId('typo-cover-credit');
+    expect(credit.textContent).toContain('edufeed');
+    expect(credit.textContent).toContain('cc by 4.0');
+  });
+
+  it('renders custom creditPrimary + creditSecondary as two lines', () => {
+    const { getByTestId } = render(TypoCover, {
+      props: defaultProps({
+        creditPrimary: 'Constanze von Kitzing',
+        creditSecondary: 'cc by-sa 4.0'
+      })
+    });
+    const credit = getByTestId('typo-cover-credit');
+    expect(credit.textContent).toContain('Constanze von Kitzing');
+    expect(credit.textContent).toContain('cc by-sa 4.0');
+  });
+
+  it('omits creditSecondary line when null but keeps primary', () => {
+    const { container, getByTestId } = render(TypoCover, {
+      props: defaultProps({ creditPrimary: '@fortbildner', creditSecondary: null })
+    });
+    expect(getByTestId('typo-cover-credit').textContent).toContain('@fortbildner');
+    // The .typo-cover-credit-secondary span should not be present.
+    expect(container.querySelector('.typo-cover-credit-secondary')).toBeNull();
+  });
+
+  it('omits creditPrimary line when null but keeps secondary', () => {
+    const { container, getByTestId } = render(TypoCover, {
+      props: defaultProps({ creditPrimary: null, creditSecondary: 'cc 0' })
+    });
+    expect(getByTestId('typo-cover-credit').textContent).toContain('cc 0');
+    expect(container.querySelector('.typo-cover-credit-primary')).toBeNull();
+  });
 });

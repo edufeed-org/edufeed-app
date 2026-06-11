@@ -2,7 +2,7 @@
  * ResourceCover component tests.
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/svelte';
 
 // Stub the license-hook before importing the component so the module-level
@@ -20,6 +20,13 @@ vi.mock('$lib/stores/skos-cache.svelte.js', () => ({
 // Stub runtime so paraglide locale lookups don't blow up in jsdom.
 vi.mock('$lib/paraglide/runtime.js', () => ({
   getLocale: () => 'en'
+}));
+
+// Stub publisher-profile lookup. Tests that want to exercise the fallback
+// can override `mockedProfile` before rendering.
+const profileState = { current: /** @type {any} */ (null) };
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({
+  useUserProfile: () => () => profileState.current
 }));
 
 import ResourceCover from '../ResourceCover.svelte';
@@ -154,6 +161,84 @@ describe('ResourceCover — typo branch', () => {
       }
     });
     expect(container.querySelector('[data-testid="typo-cover-meta"]')).toBeNull();
+  });
+});
+
+describe('ResourceCover — credit derivation', () => {
+  beforeEach(() => {
+    profileState.current = null;
+  });
+
+  it('uses creator:name tag(s) as creditPrimary when present', () => {
+    const tags = [
+      ['d', 'r-with-creators'],
+      ['creator:name', 'Constanze von Kitzing'],
+      ['learningResourceType:prefLabel:en', 'Lesson plan']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: null, tags, identifier: 'r-with-creators' }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-credit').textContent).toContain('Constanze von Kitzing');
+  });
+
+  it('joins multiple creator:name tags with comma', () => {
+    const tags = [
+      ['d', 'r-multi'],
+      ['creator:name', 'Alice'],
+      ['creator:name', 'Bob'],
+      ['learningResourceType:prefLabel:en', 'Worksheet']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: null, tags, identifier: 'r-multi' }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-credit').textContent).toContain('Alice, Bob');
+  });
+
+  it('falls back to publisher profile display name when no creator:name tags', () => {
+    profileState.current = { name: 'Fortbildner', display_name: '@Fortbild' };
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: null }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-credit').textContent).toContain('@Fortbild');
+  });
+
+  it('falls back to shortened pubkey when no creator:name and no profile', () => {
+    profileState.current = null;
+    const pubkey = '0'.repeat(64);
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: { ...buildResource({ image: null }), pubkey },
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-credit').textContent).toContain('00000000…');
+  });
+
+  it('uses resource.license.label (lowercased) as creditSecondary', () => {
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: {
+          ...buildResource({ image: null }),
+          license: { id: 'https://example.org/cc-by-sa', label: 'CC BY-SA 4.0' }
+        },
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-credit').textContent).toContain('cc by-sa 4.0');
   });
 });
 

@@ -19,6 +19,8 @@
    * @property {string} title
    * @property {string | null} contentTypeLabel
    * @property {string | null} metaLabel
+   * @property {string | null} [creditPrimary] - Footer-right top line (e.g. author display name). Defaults to "edufeed".
+   * @property {string | null} [creditSecondary] - Footer-right bottom line (e.g. license shorthand). Defaults to "cc by 4.0".
    * @property {string} paletteId
    * @property {'thumbnail' | 'full'} [size]
    * @property {string} [class]
@@ -29,6 +31,8 @@
     title,
     contentTypeLabel,
     metaLabel,
+    creditPrimary = 'edufeed',
+    creditSecondary = 'cc by 4.0',
     paletteId,
     size = 'full',
     class: className = ''
@@ -102,7 +106,15 @@
               <span class="typo-cover-meta typo-cover-meta-empty" aria-hidden="true"></span>
             {/if}
             <span class="typo-cover-credit" data-testid="typo-cover-credit">
-              edufeed / cc by 4.0
+              {#if creditPrimary}
+                <span class="typo-cover-credit-line typo-cover-credit-primary">{creditPrimary}</span
+                >
+              {/if}
+              {#if creditSecondary}
+                <span class="typo-cover-credit-line typo-cover-credit-secondary"
+                  >{creditSecondary}</span
+                >
+              {/if}
             </span>
           </div>
         </div>
@@ -285,6 +297,30 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: clamp(0.45rem, 2.2cqi, 0.7rem);
     color: oklch(100% 0 0 / 0.75);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.2;
+    max-width: 60%;
+    text-align: right;
+  }
+
+  .typo-cover-credit-line {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .typo-cover-credit-primary {
+    color: oklch(100% 0 0 / 0.92);
+    font-weight: 500;
+  }
+
+  .typo-cover-credit-secondary {
+    color: oklch(100% 0 0 / 0.7);
+    font-size: 0.85em;
   }
 
   /* Thumbnail variant: drop title stack + footer entirely. */

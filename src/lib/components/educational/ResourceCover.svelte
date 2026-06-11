@@ -17,6 +17,8 @@
   import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
   import TypoCover from './TypoCover.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
@@ -85,6 +87,29 @@
 
   const paletteId = $derived(resource?.identifier ?? '');
   const title = $derived(resource?.name ?? '');
+
+  // Footer credit derivation.
+  // creditPrimary prefers the AMB resource's own creator:name tags
+  // (the *actual* author of the metadata, e.g. "Constanze von Kitzing")
+  // over the publisher's Nostr pubkey. Falls back to the publisher's
+  // profile display name, then to a shortened pubkey.
+  const creatorNames = $derived(
+    (resource?.tags ?? [])
+      .filter((/** @type {string[]} */ t) => t[0] === 'creator:name')
+      .map((/** @type {string[]} */ t) => t[1])
+      .filter(Boolean)
+  );
+  const publisherProfile = useUserProfile(() => resource?.pubkey);
+  const creditPrimary = $derived.by(() => {
+    if (creatorNames.length > 0) return creatorNames.join(', ');
+    const profile = publisherProfile();
+    if (profile) return getDisplayName(profile, '');
+    if (resource?.pubkey) return resource.pubkey.slice(0, 8) + '…';
+    return null;
+  });
+  const creditSecondary = $derived(
+    resource?.license?.label ? resource.license.label.toLowerCase() : null
+  );
 </script>
 
 {#if resource?.image}
@@ -110,6 +135,14 @@
       : 'w-full'} {className}"
     data-testid="resource-cover-typo"
   >
-    <TypoCover {title} {contentTypeLabel} {metaLabel} {paletteId} {size} />
+    <TypoCover
+      {title}
+      {contentTypeLabel}
+      {metaLabel}
+      {creditPrimary}
+      {creditSecondary}
+      {paletteId}
+      {size}
+    />
   </div>
 {/if}
