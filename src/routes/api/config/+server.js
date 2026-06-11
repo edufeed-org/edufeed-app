@@ -210,16 +210,15 @@ export function GET() {
     calendar: {
       weekStartDay: parseInt(env.CALENDAR_WEEK_START_DAY, 1),
       locale: env.CALENDAR_LOCALE || 'de-DE',
-      timeFormat: env.CALENDAR_TIME_FORMAT || '24h'
+      timeFormat: env.CALENDAR_TIME_FORMAT || '24h',
+      featuredAuthors: parseArray(env.CALENDAR_FEATURED_AUTHORS)
     },
 
     // Signup
     signup: {
-      suggestedUsers: parseArray(env.SIGNUP_SUGGESTED_USERS, [
-        'npub1f7jar3qnu269uyx5p0e4v24hqxjnxysxudvujza2ur5ehltvdeqsly2fx9',
-        'npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma',
-        'npub1tgftg8kptdrxxg0g3sm3hckuglv3j0uu3way4vylc5qyt0f44m0s3gun6e'
-      ])
+      // Communities (npub or hex) pre-checked in the signup step-3 community picker.
+      // Users can untick or skip; empty = no defaults. See SignupModal.
+      suggestedCommunities: parseArray(env.SIGNUP_SUGGESTED_COMMUNITIES)
     },
 
     // Blossom (media uploads)
@@ -296,7 +295,46 @@ export function GET() {
         learningResourceType: env.EDUCATIONAL_VOCAB_LEARNING_RESOURCE_TYPE || 'hcrt',
         about: env.EDUCATIONAL_VOCAB_ABOUT || 'hochschulfaechersystematik',
         audience: env.EDUCATIONAL_VOCAB_AUDIENCE || 'intendedEndUserRole'
+      },
+      // naddr references to kind 39737 ConceptScheme events. Keys match the
+      // `SCHEME_NADDR_<UPPER_SNAKE>` env var slugs and are consumed by the
+      // AMB wizard's vocab resolver (see `helpers/educational/vocabResolver.js`).
+      schemeNaddrs: {
+        schulfaecher: env.SCHEME_NADDR_SCHULFAECHER || '',
+        hochschulfaecher: env.SCHEME_NADDR_HOCHSCHULFAECHER || '',
+        educationalLevel: env.SCHEME_NADDR_EDUCATIONAL_LEVEL || '',
+        hcrt: env.SCHEME_NADDR_HCRT || '',
+        newLrt: env.SCHEME_NADDR_NEW_LRT || '',
+        lrmiAudience: env.SCHEME_NADDR_LRMI_AUDIENCE || '',
+        interactivityType: env.SCHEME_NADDR_INTERACTIVITY_TYPE || '',
+        conditionsOfAccess: env.SCHEME_NADDR_CONDITIONS_OF_ACCESS || '',
+        // EKW vocabularies (kind 39737) — surfaced for the EKW resource form variant.
+        klassenstufen: env.SCHEME_NADDR_KLASSENSTUFEN || '',
+        schulart: env.SCHEME_NADDR_SCHULART || '',
+        ekwFach: env.SCHEME_NADDR_EKW_FACH || '',
+        ekwLrt: env.SCHEME_NADDR_EKW_LRT || '',
+        didaktischesKonzept: env.SCHEME_NADDR_DIDAKTISCHES_KONZEPT || '',
+        methode: env.SCHEME_NADDR_METHODE || '',
+        ekwKeywords: env.SCHEME_NADDR_EKW_KEYWORDS || '',
+        // Konfi-Arbeit vocabularies (Spec A) — surfaced for the EKW Konfi-Bildungsbereich path.
+        landeskirchen: env.SCHEME_NADDR_LANDESKIRCHEN || '',
+        konfiZielgruppen: env.SCHEME_NADDR_KONFI_ZIELGRUPPEN || '',
+        konfiLernformat: env.SCHEME_NADDR_KONFI_LERNFORMAT || '',
+        konfiZeitstruktur: env.SCHEME_NADDR_KONFI_ZEITSTRUKTUR || '',
+        konfiBeteiligte: env.SCHEME_NADDR_KONFI_BETEILIGTE || '',
+        konfiMethode: env.SCHEME_NADDR_KONFI_METHODE || '',
+        konfiMaterialaufwand: env.SCHEME_NADDR_KONFI_MATERIALAUFWAND || '',
+        konfiTechnikbedarf: env.SCHEME_NADDR_KONFI_TECHNIKBEDARF || '',
+        konfiThemen: env.SCHEME_NADDR_KONFI_THEMEN || '',
+        konfiDimensionen: env.SCHEME_NADDR_KONFI_DIMENSIONEN || '',
+        konfiLernorte: env.SCHEME_NADDR_KONFI_LERNORTE || ''
       }
+    },
+
+    // Resource form variants (AMB vs EKW, etc.)
+    // Order in the env var determines picker display order + default variant.
+    resourceFormVariants: {
+      enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb'])
     },
 
     // UI settings
@@ -313,6 +351,15 @@ export function GET() {
       svg: env.FAVICON_SVG || '/favicon.svg',
       png32: env.FAVICON_32 || '/favicon-32x32.png',
       png16: env.FAVICON_16 || '/favicon-16x16.png'
+    },
+
+    // Membership application (NIP-05 handle request flow)
+    // All public — the actual NIP-05 service is provisioned manually in v1.
+    membership: {
+      enabled: parseBool(env.MEMBERSHIP_ENABLED, false),
+      handleDomain: env.NIP05_HANDLE_DOMAIN || '',
+      formAddress: env.MEMBERSHIP_FORM_ADDRESS || '',
+      adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
     }
   };
 

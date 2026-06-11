@@ -299,7 +299,18 @@ WoT extends curated mode by using anchor pubkeys' follow graphs. Anchor pubkeys'
 
 **Signup**
 
-- `SIGNUP_SUGGESTED_USERS`: Suggested users to follow (comma-separated npubs)
+- `SIGNUP_SUGGESTED_COMMUNITIES`: Communities pre-checked in the signup step-3 picker (comma-separated npubs or hex pubkeys). Leave empty to disable.
+
+**Membership & NIP-05 Handles**
+
+Lets users apply for a memorable `name@<domain>` handle during signup. Requires a separately deployed [nip-05-service](https://git.edufeed.org/edufeed/nip-05-service) instance — the app proxies admin approvals to it, it does not host its own NIP-05 backend.
+
+- `MEMBERSHIP_ENABLED`: Feature flag (true/false). When false, signup step 4 and the settings card are hidden
+- `NIP05_HANDLE_DOMAIN`: Single domain handles are issued under (e.g. `edufeed.org`). Used for UI labels and for the live availability check against `https://<domain>/.well-known/nostr.json`
+- `MEMBERSHIP_FORM_ADDRESS`: Kind 30168 form template address in the form `30168:<admin-pubkey-hex>:membership`. Published once via `scripts/publish-membership-form.js`
+- `MEMBERSHIP_ADMIN_PUBKEYS`: Hex pubkeys allowed to see `/admin/membership` (comma-separated). The same allowlist is enforced server-side by `/api/nip05` — only NIP-98 events signed by one of these pubkeys are forwarded
+- `NIP05_SERVICE_URL`: **SECRET** — Base URL of the standalone nip-05-service. Server-only (never sent to the browser)
+- `NIP05_SERVICE_API_KEY`: **SECRET** — Bearer token for the nip-05-service admin API. Server-only
 
 **Media Uploads (Blossom)**
 
@@ -370,6 +381,9 @@ docker compose logs -f
 
 ## Architecture
 
+- [Nostr Event Kinds](#nostr-event-kinds)
+- [Membership & NIP-05 Handle Provisioning](#membership--nip-05-handle-provisioning)
+
 ### Nostr Event Kinds
 
 Comcal uses the following Nostr event kinds:
@@ -382,6 +396,9 @@ Comcal uses the following Nostr event kinds:
 | 7     | NIP-25     | Reaction                          |
 | 8     | NIP-58     | Badge award                       |
 | 9     | —          | Chat message                      |
+| 14    | NIP-17     | Private direct message (rumor)    |
+| 1059  | NIP-17     | Gift wrap (sealed DM envelope)    |
+| 1069  | —          | Form response                     |
 | 1111  | NIP-22     | Comment                           |
 | 10002 | NIP-65     | Relay list (outbox model)         |
 | 10063 | —          | Blossom server list               |
@@ -389,6 +406,7 @@ Comcal uses the following Nostr event kinds:
 | 30002 | NIP-51     | Relay set (user relay overrides)  |
 | 30009 | NIP-58     | Badge definition                  |
 | 30142 | AMB        | Educational resource (OER)        |
+| 30168 | —          | Form template                     |
 | 30222 | Communikey | Targeted publication              |
 | 30301 | —          | Kanban board                      |
 | 30000 | NIP-51     | Follow set (community membership) |
@@ -398,6 +416,32 @@ Comcal uses the following Nostr event kinds:
 | 31925 | NIP-52     | Calendar RSVP                     |
 
 See `CLAUDE.md` for the full reference including implementation details.
+
+### Membership & NIP-05 Handle Provisioning
+
+Edufeed-style deployments hand out memorable `name@<domain>` handles (NIP-05) to vetted members. The app **does not** run its own NIP-05 backend — it integrates with a separately deployed [nip-05-service](https://git.edufeed.org/edufeed/nip-05-service).
+
+**Components:**
+
+- **Application form** (in-app): rendered as signup step 4 and as a settings card. Submits a kind 1069 form response addressing the kind 30168 membership form template. The wished handle is sent NIP-44-encrypted to admin pubkeys.
+- **Admin review** (in-app, `/admin/membership`): lists pending applications, gated by `MEMBERSHIP_ADMIN_PUBKEYS`. Each row shows the applicant's profile and decrypted wished handle, with live status against the upstream NIP-05 directory (available / already taken / already mapped to applicant).
+- **Approval proxy** (server-side, `/api/nip05`): SvelteKit endpoint that re-authenticates the admin via NIP-98, verifies their pubkey is on the allowlist, then forwards a `POST` to the standalone nip-05-service with `NIP05_SERVICE_API_KEY`. The browser never sees the API key.
+- **Applicant notification**: on successful approval, the admin browser sends a NIP-17 wrapped DM (kind 1059) to the applicant with the activated handle.
+- **Add-to-profile**: a CTA appears in the applicant's settings card once `/.well-known/nostr.json` lists their handle. One click writes `nip05: name@<domain>` to their kind 0 profile.
+
+**Operator setup checklist:**
+
+1. Deploy the standalone nip-05-service (see its own README) and note its base URL and admin Bearer token.
+2. In this app's `.env`, set `MEMBERSHIP_ENABLED=true`, `NIP05_HANDLE_DOMAIN`, `MEMBERSHIP_ADMIN_PUBKEYS`, `NIP05_SERVICE_URL`, `NIP05_SERVICE_API_KEY`.
+3. Bootstrap the form template once with the admin key:
+
+   ```bash
+   ADMIN_NSEC=nsec1… node scripts/publish-membership-form.js
+   ```
+
+   Copy the printed `30168:<pubkey>:membership` address into `MEMBERSHIP_FORM_ADDRESS` and restart.
+
+4. Sign in as an admin pubkey and verify `/admin/membership` is reachable.
 
 ## Resources & Support
 

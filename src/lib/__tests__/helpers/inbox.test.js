@@ -1,15 +1,21 @@
 // @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
+import { nip19 } from 'nostr-tools';
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: vi.fn(() => ({}))
+}));
+
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getCommunikeyRelays: () => []
 }));
 
 import {
   getNotificationType,
   isUnread,
   filterSelfNotifications,
+  isMembershipApplication,
   getNotificationUrl,
   extractMentionPubkeys
 } from '$lib/helpers/inbox.js';
@@ -44,6 +50,9 @@ describe('getNotificationType', () => {
   });
   it('returns "formResponse" for kind 1069', () => {
     expect(getNotificationType({ kind: 1069 })).toBe('formResponse');
+  });
+  it('returns "pollVote" for kind 1018', () => {
+    expect(getNotificationType({ kind: 1018 })).toBe('pollVote');
   });
   it('returns null for unknown kind', () => {
     expect(getNotificationType({ kind: 1 })).toBe(null);
@@ -84,6 +93,41 @@ describe('filterSelfNotifications', () => {
   });
   it('returns empty array when all events are self', () => {
     expect(filterSelfNotifications([{ pubkey: 'aaa', kind: 7 }], 'aaa')).toEqual([]);
+  });
+});
+
+describe('isMembershipApplication', () => {
+  const formAddress = '30168:admin:edufeed-membership';
+  const makeResponse = (/** @type {string[][]} */ tags, /** @type {number} */ kind = 1069) => ({
+    kind,
+    tags
+  });
+
+  it('is true for a kind 1069 with matching `a` tag', () => {
+    expect(isMembershipApplication(makeResponse([['a', formAddress]]), formAddress)).toBe(true);
+  });
+
+  it('is false when the `a` tag points at a different form', () => {
+    expect(isMembershipApplication(makeResponse([['a', '30168:admin:other']]), formAddress)).toBe(
+      false
+    );
+  });
+
+  it('is false for non-1069 events even with matching `a` tag', () => {
+    expect(isMembershipApplication(makeResponse([['a', formAddress]], 1070), formAddress)).toBe(
+      false
+    );
+  });
+
+  it('is false when membershipFormAddress is empty or nullish', () => {
+    const evt = makeResponse([['a', formAddress]]);
+    expect(isMembershipApplication(evt, '')).toBe(false);
+    expect(isMembershipApplication(evt, null)).toBe(false);
+    expect(isMembershipApplication(evt, undefined)).toBe(false);
+  });
+
+  it('is false when the event has no `a` tag at all', () => {
+    expect(isMembershipApplication(makeResponse([['p', 'abc']]), formAddress)).toBe(false);
   });
 });
 
@@ -168,7 +212,7 @@ describe('getNotificationUrl', () => {
         ['a', '0:' + 'c'.repeat(64) + ':']
       ]
     };
-    expect(getNotificationUrl(event)).toBe(`/p/${pokerPubkey}`);
+    expect(getNotificationUrl(event)).toBe(`/p/${nip19.npubEncode(pokerPubkey)}`);
   });
   it('returns null for reaction without navigable tags', () => {
     expect(getNotificationUrl({ kind: 7, tags: [] })).toBe(null);
@@ -180,6 +224,21 @@ describe('getNotificationUrl', () => {
   });
   it('returns null for RSVP without a-tag', () => {
     expect(getNotificationUrl({ kind: 31925, tags: [] })).toBe(null);
+  });
+  it('returns nevent URL for pollVote with e-tag', () => {
+    const pollId = 'a'.repeat(64);
+    const event = {
+      kind: 1018,
+      tags: [
+        ['e', pollId, 'wss://relay.example.com'],
+        ['response', 'option-id']
+      ]
+    };
+    const url = getNotificationUrl(event);
+    expect(url).toMatch(/^\/nevent1/);
+  });
+  it('returns null for pollVote without e-tag', () => {
+    expect(getNotificationUrl({ kind: 1018, tags: [['response', 'opt']] })).toBe(null);
   });
 });
 

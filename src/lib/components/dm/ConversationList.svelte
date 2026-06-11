@@ -1,11 +1,12 @@
 <script>
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { WrappedMessagesGroups } from 'applesauce-common/models';
   import {
     isDmConversationUnread,
     isUnlockingDms,
+    getLockedCount,
+    getDmConversations,
+    hasInitialDmsLoaded,
     markConversationAsRead
   } from '$lib/services/dm-service.svelte.js';
   import { formatMessageTimestamp } from '$lib/helpers/message-utils.js';
@@ -24,18 +25,13 @@
 
   const getActiveUser = useActiveUser();
 
-  /** @type {{ id: string, participants: string[], lastMessage: any }[]} */
-  let conversations = $state.raw([]);
-
-  $effect(() => {
-    const user = getActiveUser();
-    if (!user) return;
-
-    const sub = eventStore.model(WrappedMessagesGroups, user.pubkey).subscribe((convs) => {
-      conversations = convs || [];
-    });
-    return () => sub.unsubscribe();
-  });
+  // Read conversations directly from the dm-service, which subscribes once at
+  // login and keeps `dmConversations` populated module-wide. This avoids a
+  // race where ConversationList's own subscription would mount before the
+  // applesauce model had cached its first emission for this navigation.
+  let conversations = $derived(getDmConversations());
+  let hasInitialLoad = $derived(hasInitialDmsLoaded());
+  let isLoading = $derived(!hasInitialLoad || isUnlockingDms() || getLockedCount() > 0);
 
   // Collect all participant pubkeys for profile loading
   const getProfiles = useProfileMap(() => {
@@ -98,7 +94,14 @@
 
   <!-- Conversation list -->
   <div class="flex-1 overflow-y-auto">
-    {#if conversations.length === 0}
+    {#if conversations.length === 0 && isLoading}
+      <div
+        class="flex flex-col items-center justify-center gap-2 py-12 text-center text-base-content/50"
+      >
+        <span class="loading loading-md loading-spinner"></span>
+        <p>{m.dm_loading_messages()}</p>
+      </div>
+    {:else if conversations.length === 0}
       <div class="flex flex-col items-center justify-center py-12 text-center text-base-content/50">
         <p>{m.dm_no_conversations()}</p>
       </div>

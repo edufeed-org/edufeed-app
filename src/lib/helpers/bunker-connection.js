@@ -30,13 +30,17 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
 
   NostrConnectSigner.pool = pool;
 
+  // fromBunkerURI parses the URI, builds the signer, AND calls .connect(secret,
+  // permissions) internally — see applesauce-signers nostr-connect-signer.js
+  // line 351. The returned signer is already opened and connected. Calling
+  // .open()/.connect() again re-sends a Connect RPC without the bunker's
+  // secret, which strict bunkers (nsec.app, recent Amber) reject — and
+  // connect()'s error path calls close(), destroying the subscription.
   const signer = await NostrConnectSigner.fromBunkerURI(url, {
     signer: clientSigner,
     onAuth
   });
 
-  await signer.open();
-  await signer.connect();
   const pubkey = await signer.getPublicKey();
 
   return { signer, pubkey };
@@ -48,6 +52,29 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
  */
 function generateSecret() {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+}
+
+/**
+ * The NIP-46 rendezvous relay. Most popular bunkers (nsec.app, recent Amber)
+ * publish their Connect-RPC ack ONLY to this relay regardless of what the
+ * client lists in the `nostrconnect://` URI's `relay=` params. If our QR URI
+ * doesn't list this relay, we never see the ack and `waitForSigner` hangs.
+ * The official applesauce example (`signers/bunker`) uses this relay alone
+ * for the same reason.
+ */
+const NIP46_RENDEZVOUS_RELAY = 'wss://relay.nsec.app';
+
+/**
+ * Build the list of relays for a client-initiated nostrconnect:// URI.
+ * Always includes the NIP-46 rendezvous relay, deduplicated against the
+ * caller-supplied fallback list.
+ *
+ * @param {string[] | undefined | null} fallbackRelays
+ * @returns {string[]}
+ */
+export function buildClientConnectRelays(fallbackRelays) {
+  const fallback = Array.isArray(fallbackRelays) ? fallbackRelays.filter(Boolean) : [];
+  return Array.from(new Set([NIP46_RENDEZVOUS_RELAY, ...fallback]));
 }
 
 /**
@@ -80,19 +107,28 @@ export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
 }
 
 /**
- * Register a bunker account with the account manager (add-or-activate pattern)
+ * Register a bunker account with the account manager (add-or-activate pattern).
+ *
+ * If an account with the same pubkey already exists, the EXISTING account
+ * reference is activated (applesauce's setActive looks up by `id`, so a
+ * freshly-constructed account with the same pubkey would throw
+ * "Cant find account with that ID"). The caller can use `alreadyExisted`
+ * to surface a friendlier message instead of treating it as an error.
+ *
  * @param {any} manager
  * @param {string} pubkey
  * @param {NostrConnectSigner} signer
- * @returns {NostrConnectAccount}
+ * @returns {{ account: NostrConnectAccount, alreadyExisted: boolean }}
  */
 export function registerBunkerAccount(manager, pubkey, signer) {
-  const account = new NostrConnectAccount(pubkey, signer);
-
-  if (!manager.getAccountForPubkey(pubkey)) {
-    manager.addAccount(account);
+  const existing = manager.getAccountForPubkey(pubkey);
+  if (existing) {
+    manager.setActive(existing);
+    return { account: existing, alreadyExisted: true };
   }
-  manager.setActive(account);
 
-  return account;
+  const account = new NostrConnectAccount(pubkey, signer);
+  manager.addAccount(account);
+  manager.setActive(account);
+  return { account, alreadyExisted: false };
 }

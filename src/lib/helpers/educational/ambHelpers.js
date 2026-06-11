@@ -281,3 +281,73 @@ export function formatAMBResource(event, lang = 'en') {
     rawEvent: event // Keep original raw Nostr event for debug purposes
   };
 }
+
+/**
+ * @typedef {Object} AMBRelationRef
+ * @property {string} coordinate - Full `kind:pubkey:dTag` coordinate
+ * @property {string} pubkey - Author pubkey extracted from coordinate
+ * @property {string} dTag - d-tag extracted from coordinate (may be empty)
+ * @property {string | undefined} relayHint - Optional relay hint from the tag's 3rd slot
+ */
+
+/**
+ * Bounded split for a `kind:pubkey:dTag` coordinate — only splits on the
+ * first two colons so a d-tag that is a URL (e.g. `https://…`) is preserved.
+ * @param {string} coord
+ * @returns {{kind: string, pubkey: string, dTag: string} | null}
+ */
+function splitCoord(coord) {
+  const i = coord.indexOf(':');
+  if (i < 0) return null;
+  const j = coord.indexOf(':', i + 1);
+  if (j < 0) return null;
+  return {
+    kind: coord.slice(0, i),
+    pubkey: coord.slice(i + 1, j),
+    dTag: coord.slice(j + 1)
+  };
+}
+
+/**
+ * Reads relation `a`-tags carrying the given marker from an AMB event.
+ * Skips tags whose coordinate is not in `kind:pubkey:dTag` form.
+ *
+ * @param {{tags?: Array<Array<string>>} | null | undefined} event
+ * @param {'hasPart' | 'isPartOf' | 'isBasedOn'} marker
+ * @returns {AMBRelationRef[]}
+ */
+function readRelations(event, marker) {
+  /** @type {AMBRelationRef[]} */
+  const out = [];
+  for (const t of event?.tags ?? []) {
+    if (t[0] !== 'a' || t[3] !== marker) continue;
+    const coord = t[1] ?? '';
+    const parts = splitCoord(coord);
+    if (!parts || !parts.kind || !parts.pubkey) continue;
+    out.push({
+      coordinate: coord,
+      pubkey: parts.pubkey,
+      dTag: parts.dTag,
+      relayHint: t[2] ? t[2] : undefined
+    });
+  }
+  return out;
+}
+
+/**
+ * Extracts `hasPart` relation references from an AMB event.
+ * @param {{tags?: Array<Array<string>>} | null | undefined} event
+ * @returns {AMBRelationRef[]}
+ */
+export function getAMBHasPart(event) {
+  return readRelations(event, 'hasPart');
+}
+
+/**
+ * Extracts `isPartOf` relation references from an AMB event.
+ * @param {{tags?: Array<Array<string>>} | null | undefined} event
+ * @returns {AMBRelationRef[]}
+ */
+export function getAMBIsPartOf(event) {
+  return readRelations(event, 'isPartOf');
+}

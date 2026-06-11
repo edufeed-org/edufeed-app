@@ -1,11 +1,9 @@
 <script>
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { manager } from '$lib/stores/accounts.svelte';
   import CameraIcon from '$lib/components/icons/actions/CameraIcon.svelte';
   import * as m from '$lib/paraglide/messages';
-  import { BlossomClient } from 'blossom-client-sdk';
-  import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
+  import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
+  import LicenseModal from './LicenseModal.svelte';
 
   let { userData = $bindable(), signer = null, errors = $bindable({}) } = $props();
 
@@ -14,31 +12,21 @@
   let imagePreview = $state(/** @type {string | null} */ (null));
   let fileInputRef = $state(/** @type {HTMLInputElement | null} */ (null));
 
-  /**
-   * Upload image to Blossom server using the SDK
-   * @param {File} file
-   * @returns {Promise<string>} URL of uploaded image
-   */
-  async function uploadImageToBlossom(file) {
-    if (!signer) {
-      throw new Error('Signer not available for authorization');
-    }
+  // Pending upload awaiting license modal
+  let pendingUrl = $state('');
+  let pendingHash = $state('');
+  let pendingMime = $state('');
+  let pendingSize = $state(0);
+  /** @type {any} */
+  let pendingExistingLicense = $state(null);
+  let modalOpen = $state(false);
+  let previousPicture = $state('');
 
-    // Create a signer function compatible with blossom-client-sdk
-    const signerFn = async (/** @type {any} */ event) => {
-      return await signer.signEvent(event);
-    };
-
-    // Get the blossom server (user's preference or default)
-    const userPubkey = manager.active?.pubkey;
-    const serverUrl = getActiveBlossomServer(userPubkey || '', eventStore);
-
-    // Create Blossom client and upload
-    const client = new BlossomClient(serverUrl, signerFn);
-    const blob = await client.uploadBlob(file);
-
-    return blob.url;
-  }
+  const activeUserDisplayName = $derived(
+    (userData.display_name && userData.display_name.trim()) ||
+      (userData.name && userData.name.trim()) ||
+      ''
+  );
 
   /**
    * Handle image file selection
@@ -63,6 +51,11 @@
       return;
     }
 
+    if (!signer) {
+      errors.image = m.avatar_uploader_error_no_signer();
+      return;
+    }
+
     try {
       uploadingImage = true;
       errors.image = '';
@@ -75,13 +68,23 @@
       };
       reader.readAsDataURL(file);
 
-      // Upload to Blossom
-      const imageUrl = await uploadImageToBlossom(file);
-      userData.picture = imageUrl;
+      const result = await uploadAndFindLicense(file, { signer });
+
+      // Always open the modal. If an existing license is found, LicenseModal
+      // shows it in "Accept / Create my own" mode; if not, the standard form.
+      // DO NOT bind userData.picture yet — wait for modal save.
+      previousPicture = userData.picture || '';
+      pendingUrl = result.url;
+      pendingHash = result.sha256;
+      pendingMime = result.type;
+      pendingSize = result.size;
+      pendingExistingLicense = result.existingLicense;
+      modalOpen = true;
     } catch (error) {
       console.error('Image upload failed:', error);
       errors.image = m.avatar_uploader_error_upload_failed();
       imagePreview = null;
+      pendingExistingLicense = null;
     } finally {
       uploadingImage = false;
     }
@@ -114,10 +117,10 @@
             <span class="loading loading-lg loading-spinner"></span>
             <span class="mt-2 text-xs opacity-70">{m.avatar_uploader_uploading()}</span>
           </div>
-        {:else if userData.picture || imagePreview}
+        {:else if userData.picture || pendingUrl || imagePreview}
           <!-- Image Preview -->
           <img
-            src={userData.picture || imagePreview}
+            src={userData.picture || pendingUrl || imagePreview}
             alt="Profile"
             class="h-full w-full object-cover"
           />
@@ -179,3 +182,28 @@
     </div>
   {/if}
 </div>
+
+<LicenseModal
+  bind:open={modalOpen}
+  hash={pendingHash}
+  url={pendingUrl}
+  mime={pendingMime}
+  size={pendingSize}
+  {activeUserDisplayName}
+  defaultSelfCreator={true}
+  existingLicense={pendingExistingLicense}
+  {signer}
+  onsave={() => {
+    userData.picture = pendingUrl;
+    pendingUrl = '';
+    pendingHash = '';
+    pendingExistingLicense = null;
+  }}
+  oncancel={() => {
+    userData.picture = previousPicture;
+    pendingUrl = '';
+    pendingHash = '';
+    pendingExistingLicense = null;
+    imagePreview = null;
+  }}
+/>

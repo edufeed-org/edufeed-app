@@ -40,6 +40,8 @@
   let wrapperEl;
   /** @type {HTMLDivElement | undefined} */
   let triggerEl;
+  /** @type {HTMLDivElement | undefined} */
+  let popupEl = $state();
 
   function clearTimers() {
     if (enterTimer) clearTimeout(enterTimer);
@@ -89,7 +91,11 @@
 
   /** @param {PointerEvent} e */
   function handleClickOutside(e) {
-    if (isOpen && wrapperEl && !wrapperEl.contains(/** @type {Node} */ (e.target))) {
+    if (!isOpen) return;
+    const target = /** @type {Node} */ (e.target);
+    const insideWrapper = wrapperEl?.contains(target);
+    const insidePopup = popupEl?.contains(target);
+    if (!insideWrapper && !insidePopup) {
       isOpen = false;
     }
   }
@@ -101,6 +107,47 @@
       document.removeEventListener('pointerdown', handleClickOutside);
     };
   });
+
+  /**
+   * Mount the popover into document.body when active so that ancestor
+   * `overflow: auto` (e.g. inside a modal-box) does not clip it or, in
+   * modern browsers, capture it as the containing block for `position:
+   * fixed`. The position math already uses viewport coordinates via
+   * getBoundingClientRect, so a body-portaled fixed popover lands at
+   * the correct viewport-relative location.
+   *
+   * @param {HTMLElement} node
+   * @param {boolean} active
+   */
+  function portal(node, active) {
+    /** @type {HTMLElement | null} */
+    let originalParent = null;
+    /** @type {Node | null} */
+    let originalNext = null;
+    function mount() {
+      if (node.parentElement === document.body) return;
+      originalParent = node.parentElement;
+      originalNext = node.nextSibling;
+      document.body.appendChild(node);
+    }
+    function unmount() {
+      if (originalParent && document.body.contains(node)) {
+        originalParent.insertBefore(node, originalNext);
+      }
+      originalParent = originalNext = null;
+    }
+    if (active) mount();
+    return {
+      /** @param {boolean} next */
+      update(next) {
+        if (next && node.parentElement !== document.body) mount();
+        else if (!next && originalParent) unmount();
+      },
+      destroy() {
+        unmount();
+      }
+    };
+  }
 </script>
 
 <div
@@ -121,7 +168,10 @@
 
   {#if isOpen}
     <div
-      class="not-prose z-50 rounded-lg border border-base-300 bg-base-100 shadow-xl"
+      bind:this={popupEl}
+      class="not-prose rounded-lg border border-base-300 bg-base-100 shadow-xl"
+      class:z-50={!fixed}
+      class:z-[1000]={fixed}
       class:absolute={!fixed}
       class:fixed
       class:bottom-full={!fixed && position === 'top'}
@@ -133,6 +183,9 @@
         : ''}
       role="tooltip"
       transition:fade={{ duration: 150 }}
+      use:portal={fixed}
+      onmouseenter={fixed ? handleMouseEnter : undefined}
+      onmouseleave={fixed ? handleMouseLeave : undefined}
     >
       {@render content()}
     </div>

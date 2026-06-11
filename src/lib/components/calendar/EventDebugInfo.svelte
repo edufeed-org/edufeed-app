@@ -6,7 +6,7 @@
 <script>
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import { profileLink } from '$lib/helpers/nostrUtils';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
@@ -91,8 +91,7 @@
    */
   function goToProfile() {
     if (event?.pubkey) {
-      const npub = hexToNpub(event.pubkey);
-      goto(resolve(`/p/${npub || event.pubkey}`));
+      goto(resolve(profileLink(event.pubkey)));
     }
   }
 

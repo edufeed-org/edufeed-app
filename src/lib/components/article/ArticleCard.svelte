@@ -11,10 +11,13 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+  import LicenseBadge from '../shared/LicenseBadge.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import { getSha256FromURL } from 'applesauce-common/helpers';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
@@ -43,6 +46,15 @@
   // Extract article metadata using applesauce helpers
   const title = $derived(getArticleTitle(article) || 'Untitled Article');
   const image = $derived(getArticleImage(article));
+
+  const imageHash = $derived.by(() => {
+    const xTag = article.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1];
+    if (xTag) return xTag;
+    return image ? (getSha256FromURL(image) ?? null) : null;
+  });
+
+  const getCoverLicense = useLicenseForHash(() => imageHash);
+  const coverLicense = $derived(getCoverLicense());
 
   // Get summary from tags or truncate content
   const summary = $derived.by(() => {
@@ -161,7 +173,7 @@
       <div class="truncate font-semibold text-base-content">{title}</div>
       <div class="truncate text-sm text-base-content/60">
         <a
-          href={resolve(`/p/${article.pubkey}`)}
+          href={resolve(profileLink(article.pubkey))}
           class="hover:underline"
           onclick={(e) => e.stopPropagation()}>{authorName}</a
         >
@@ -205,7 +217,7 @@
       />
       <div class="min-w-0 flex-1">
         <a
-          href={resolve(`/p/${article.pubkey}`)}
+          href={resolve(profileLink(article.pubkey))}
           class="truncate font-medium text-base-content hover:underline">{authorName}</a
         >
         <div class="text-sm text-base-content/60">
@@ -217,7 +229,7 @@
     <!-- Article Image -->
     {#if image && !compact}
       <div class="mb-3">
-        <div class="aspect-[2/1] w-full overflow-hidden rounded-lg">
+        <div class="relative aspect-[2/1] w-full overflow-hidden rounded-lg">
           <ImageWithFallback
             src={image}
             alt={title}
@@ -225,6 +237,12 @@
             size="card"
             class="h-full w-full object-cover"
           />
+          {#if coverLicense}
+            <LicenseBadge
+              licenseEvent={coverLicense}
+              class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+            />
+          {/if}
         </div>
       </div>
     {/if}

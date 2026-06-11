@@ -1,3 +1,6 @@
+// Install `Promise.try` shim before unpdf evaluates — pdf.js calls it at
+// module load on Node 22.x runtimes that don't yet have it.
+import './promiseTryShim.js';
 import { getDocumentProxy, getMeta } from 'unpdf';
 
 /**

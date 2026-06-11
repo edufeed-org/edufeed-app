@@ -10,14 +10,14 @@ import { BehaviorSubject } from 'rxjs';
 import EventContextMenu from '../shared/EventContextMenu.svelte';
 
 const mockShowToast = vi.fn();
-const mockEncodeEventToNaddr = vi.fn(() => 'naddr1test123');
+const mockEncodeEventBech32 = vi.fn(() => 'naddr1test123');
 
 vi.mock('$lib/helpers/toast.js', () => ({
   showToast: (/** @type {any[]} */ ...args) => mockShowToast(...args)
 }));
 
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
-  encodeEventToNaddr: (/** @type {any[]} */ ...args) => mockEncodeEventToNaddr(...args)
+  encodeEventBech32: (/** @type {any[]} */ ...args) => mockEncodeEventBech32(...args)
 }));
 
 vi.mock('$lib/paraglide/messages.js', () => ({
@@ -169,12 +169,14 @@ describe('EventContextMenu', () => {
     expect(dividers.length).toBe(1);
   });
 
-  it('copies njump share link on Copy link click', async () => {
+  it('copies deployed-instance share link on Copy link click', async () => {
     render(EventContextMenu, { props: { event: mockEvent } });
 
     await fireEvent.click(screen.getByText('Copy link'));
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://njump.me/naddr1test123');
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/naddr1test123`
+    );
     expect(mockShowToast).toHaveBeenCalledWith('Link copied!', 'success');
   });
 
@@ -183,7 +185,7 @@ describe('EventContextMenu', () => {
 
     await fireEvent.click(screen.getByText('Copy event ID'));
 
-    expect(mockEncodeEventToNaddr).toHaveBeenCalledWith(mockEvent);
+    expect(mockEncodeEventBech32).toHaveBeenCalledWith(mockEvent);
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('naddr1test123');
     expect(mockShowToast).toHaveBeenCalledWith('Event ID copied!', 'success');
   });

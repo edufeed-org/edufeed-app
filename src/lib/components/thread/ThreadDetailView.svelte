@@ -13,6 +13,7 @@
   import { resolve } from '$app/paths';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import NostrContentRenderer from '../shared/NostrContentRenderer.svelte';
+  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
@@ -122,6 +123,7 @@
       <!-- kind 1 and kind 1111 both use inline content rendering -->
       <NostrContentRenderer {event} />
     {/if}
+    <LinkPreviewList {event} />
   </div>
 
   <!-- Reactions -->

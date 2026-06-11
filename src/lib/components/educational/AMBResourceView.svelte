@@ -15,6 +15,7 @@
   import { resolve } from '$app/paths';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
 
@@ -24,6 +25,7 @@
     getLanguageDisplayName
   } from '$lib/helpers/educational/ambTransform.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
+  import ExtensionMetadataPanel from './ExtensionMetadataPanel.svelte';
   import { buildAMBJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
   import { page } from '$app/stores';
   import * as m from '$lib/paraglide/messages.js';
@@ -31,9 +33,13 @@
   import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { EditIcon, TrashIcon } from '$lib/components/icons';
-  import EventContextMenu from '../shared/EventContextMenu.svelte';
+  import { EditIcon } from '$lib/components/icons';
+  import DetailHeader from '../shared/DetailHeader.svelte';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
+  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import EncodingRowBadge from './EncodingRowBadge.svelte';
+  import EncodingPreview from './EncodingPreview.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -74,6 +80,12 @@
 
   // Check if current user owns this resource
   const isOwner = $derived(activeUser?.pubkey === event.pubkey);
+
+  // Thumbnail license attestation (kind 1063 keyed by x-tag SHA-256)
+  const imageHash = $derived(
+    event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
+  );
+  const getImageLicense = useLicenseForHash(() => imageHash);
 
   /**
    * Handle edit button click - navigate to edit page
@@ -136,15 +148,25 @@
     }
   }
 
-  // Parse related resources from 'a' tags (includes relay hints when available)
+  // Parse related resources from marker 'a' tags (hasPart / isPartOf / …).
+  // Only a-tags with a relation marker in slot 3 are treated as related
+  // resources — bare `a`-tags are ignored so we don't pick up unrelated refs.
   const relatedResources = $derived.by(() => {
     return (
       event.tags
-        ?.filter((/** @type {any} */ t) => t[0] === 'a')
+        ?.filter((/** @type {any} */ t) => t[0] === 'a' && t[3])
         .map((/** @type {any} */ t) => {
           try {
-            const [kind, pubkey, identifier] = t[1].split(':');
-            const relayHint = t[2]; // a-tag format: ['a', 'kind:pubkey:d-tag', 'relay-hint']
+            const coord = t[1] ?? '';
+            // Bounded split so URL d-tags (containing ':') survive intact.
+            const i = coord.indexOf(':');
+            const j = i >= 0 ? coord.indexOf(':', i + 1) : -1;
+            if (i < 0 || j < 0) return null;
+            const kind = coord.slice(0, i);
+            const pubkey = coord.slice(i + 1, j);
+            const identifier = coord.slice(j + 1);
+            if (!kind || !pubkey) return null;
+            const relayHint = t[2]; // a-tag format: ['a', 'kind:pubkey:d-tag', 'relay-hint', marker]
             return {
               naddr: nip19.naddrEncode({
                 kind: parseInt(kind),
@@ -152,8 +174,8 @@
                 identifier,
                 relays: relayHint ? [relayHint] : undefined
               }),
-              raw: t[1],
-              label: identifier || t[1]
+              raw: coord,
+              label: identifier || coord
             };
           } catch {
             return null;
@@ -257,129 +279,57 @@
 </svelte:head>
 
 <article class="amb-resource-view mx-auto max-w-4xl">
-  <!-- HEADER SECTION -->
-  <header class="mb-6">
-    <!-- Title -->
-    <h1 class="mb-4 text-4xl font-bold text-base-content md:text-5xl">
-      {resource.name}
-    </h1>
+  <DetailHeader
+    title={resource.name}
+    {event}
+    authorPubkey={event.pubkey}
+    date={publishedAt ? formatCalendarDate(publishedAt, 'short') : undefined}
+    dateLabel={publishedAt ? m.amb_resource_published_label() : undefined}
+    onEdit={isOwner ? handleEditClick : undefined}
+    onDelete={isOwner
+      ? () => {
+          showDeleteConfirmation = true;
+        }
+      : undefined}
+    deleteTitle={m.common_delete() + '?'}
+    deleteItemName={resource.name}
+  >
+    {#snippet metadata()}
+      {#if localizedLearningResourceTypes.length > 0}
+        <div class="flex flex-wrap gap-1">
+          {#each localizedLearningResourceTypes.slice(0, 2) as type (type.id)}
+            <span class="badge badge-sm badge-primary">{type.label}</span>
+          {/each}
+        </div>
+      {/if}
+    {/snippet}
 
-    <!-- Learning Resource Type Badge (prominent) -->
-    {#if localizedLearningResourceTypes.length > 0}
-      <div class="mb-4 flex flex-wrap gap-2">
-        {#each localizedLearningResourceTypes.slice(0, 2) as type (type.id)}
-          <span class="badge badge-lg badge-primary"
-            >{type.label}{#if type.fallbackLang}
-              <span class="ml-1 text-xs opacity-60"
-                >({getLanguageDisplayName(type.fallbackLang, getLocale())})</span
-              >{/if}</span
-          >
-        {/each}
-      </div>
-    {/if}
+    {#snippet actions()}
+      {#if isOwner && formRef}
+        <button
+          class="btn btn-outline btn-sm"
+          onclick={handleEditInFormClick}
+          aria-label={m.amb_resource_edit_in_form()}
+        >
+          <EditIcon class="h-4 w-4" />
+          {m.amb_resource_edit_in_form()}
+        </button>
+      {/if}
+    {/snippet}
+  </DetailHeader>
 
-    <!-- Description -->
-    {#if resource.description}
-      <MarkdownRenderer
-        content={resource.description}
-        class="prose prose-lg mb-6 max-w-none text-base-content/80"
-      />
-    {/if}
-
-    <!-- Metadata bar -->
-    <div class="flex flex-col gap-4 border-y border-base-300 py-4 md:flex-row md:items-center">
-      <!-- Creator Info -->
-      <div class="flex flex-1 items-center gap-3">
-        {#if creators.length > 0}
-          {@const firstCreator = creators[0]}
-          {@const getCreatorProfile = useUserProfile(firstCreator.pubkey)}
-          {@const creatorProfile = getCreatorProfile()}
-          <div class="avatar">
-            <div class="h-12 w-12 rounded-full">
-              <img
-                src={getProfilePicture(creatorProfile) ||
-                  `https://robohash.org/${firstCreator.pubkey}`}
-                alt={m.amb_resource_creator_alt()}
-              />
-            </div>
-          </div>
-          <div>
-            <div class="font-semibold text-base-content">
-              {getDisplayName(creatorProfile, firstCreator.pubkey.slice(0, 8) + '...')}
-            </div>
-            {#if creators.length > 1}
-              <div class="text-sm text-base-content/60">
-                {m.amb_resource_more_creators({ count: creators.length - 1 })}
-              </div>
-            {/if}
-          </div>
-        {:else if resource.creatorNames.length > 0}
-          <!-- Fallback to name-only creators -->
-          <div class="avatar">
-            <div class="h-12 w-12 rounded-full">
-              <img
-                src={`https://robohash.org/${encodeURIComponent(resource.creatorNames[0])}`}
-                alt={m.amb_resource_creator_alt()}
-              />
-            </div>
-          </div>
-          <div>
-            <div class="font-semibold text-base-content">{resource.creatorNames[0]}</div>
-            {#if resource.creatorNames.length > 1}
-              <div class="text-sm text-base-content/60">
-                +{resource.creatorNames.length - 1} more
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <!-- Published date -->
-        {#if publishedAt}
-          <div class="ml-auto text-sm text-base-content/60">
-            {m.amb_resource_published({ date: formatCalendarDate(publishedAt, 'short') })}
-          </div>
-        {/if}
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-2">
-        {#if isOwner}
-          <button
-            class="btn btn-outline btn-sm"
-            onclick={handleEditClick}
-            aria-label={m.common_edit()}
-          >
-            <EditIcon class="h-4 w-4" />
-            {m.common_edit()}
-          </button>
-          {#if formRef}
-            <button
-              class="btn btn-outline btn-sm"
-              onclick={handleEditInFormClick}
-              aria-label={m.amb_resource_edit_in_form()}
-            >
-              <EditIcon class="h-4 w-4" />
-              {m.amb_resource_edit_in_form()}
-            </button>
-          {/if}
-          <button
-            class="btn btn-outline btn-sm btn-error"
-            onclick={() => (showDeleteConfirmation = true)}
-            aria-label={m.common_delete()}
-          >
-            <TrashIcon class="h-4 w-4" />
-            {m.common_delete()}
-          </button>
-        {/if}
-        <EventContextMenu {event} />
-      </div>
-    </div>
-  </header>
+  <!-- Description -->
+  {#if resource.description}
+    <MarkdownRenderer
+      content={resource.description}
+      class="prose prose-lg mb-6 max-w-none text-base-content/80"
+    />
+  {/if}
 
   <!-- FEATURED IMAGE -->
   {#if resource.image}
     <div class="mb-8">
-      <div class="aspect-[16/9] w-full overflow-hidden rounded-lg">
+      <div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg">
         <ImageWithFallback
           src={resource.image}
           alt={resource.name}
@@ -387,6 +337,12 @@
           size="hero"
           class="h-full w-full object-cover"
         />
+        {#if getImageLicense()}
+          <LicenseBadge
+            licenseEvent={getImageLicense()}
+            class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+          />
+        {/if}
       </div>
     </div>
   {/if}
@@ -503,6 +459,9 @@
       </div>
     </div>
   {/if}
+
+  <!-- EXTENSION METADATA (ext:* tags + legacy ekw:* shape) -->
+  <ExtensionMetadataPanel {event} />
 
   <!-- LICENSE INFORMATION -->
   {#if resource.license}
@@ -634,8 +593,11 @@
             <span class="text-2xl">{getFileIcon(file.mimeType)}</span>
             <div class="min-w-0 flex-1">
               <div class="truncate font-medium text-base-content">{file.name}</div>
-              <div class="text-xs text-base-content/60">
-                {file.mimeType} • {formatFileSize(file.size)}
+              <div class="flex flex-wrap items-center gap-2 text-xs text-base-content/60">
+                <span>{file.mimeType} • {formatFileSize(file.size)}</span>
+                {#if file.sha256}
+                  <EncodingRowBadge sha256={file.sha256} />
+                {/if}
               </div>
             </div>
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: uploaded file URLs -->
@@ -686,6 +648,7 @@
             </a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </div>
+          <EncodingPreview url={file.url} mimeType={file.mimeType} name={file.name} />
         {/each}
       </div>
     </div>
@@ -747,8 +710,9 @@
   {/if}
 
   <!-- REACTIONS (Nostr-first: Primary interaction) -->
-  <div class="mb-8 border-y border-base-300 py-4">
+  <div class="mb-8 flex items-center gap-2 border-y border-base-300 py-4">
     <ReactionBar {event} />
+    <BookmarkButton {event} />
   </div>
 
   <!-- COMMENTS SECTION (Nostr-first: Primary interaction) -->

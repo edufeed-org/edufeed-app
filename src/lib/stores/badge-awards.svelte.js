@@ -1,18 +1,25 @@
 /**
- * Badge Awards Hook
+ * Profile Badges Hook (NIP-58)
  *
- * Encapsulates the full badge loading flow:
- * 1. Load kind 8 awards (createTimelineLoader + TimelineModel)
- * 2. Load kind 30009 definitions (addressLoader + eventStore.replaceable)
- * 3. Combine into BadgeDisplayItem[] + load issuer profiles via useProfileMap
+ * Shows only the badges a user has explicitly accepted via their
+ * profile_badges event (kind 10008, with kind 30008 as legacy fallback),
+ * in the order they chose.
+ *
+ * Flow:
+ * 1. Subscribe to kind 10008 + 30008 profile_badges events; pick the most recent.
+ * 2. Extract (badgeAddress, awardId) slots from its `a`/`e` tag pairs.
+ * 3. For each slot, load the kind 8 award (by id) + kind 30009 definition (by address).
+ * 4. Compose display items in slot order.
  */
 /* eslint-disable svelte/prefer-svelte-reactivity -- Map used intentionally to avoid infinite loops */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
-import { TimelineModel } from 'applesauce-core/models';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { timedPool, addressLoader } from '$lib/loaders/base.js';
+import { addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { untrack } from 'svelte';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+
+const PROFILE_BADGES_KIND = 10008;
+const LEGACY_PROFILE_BADGES_KIND = 30008;
+const PROFILE_BADGES_IDENTIFIER = 'profile_badges';
 
 /**
  * @typedef {{
@@ -28,161 +35,238 @@ import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
  */
 
 /**
- * Pure function: combine awards + definitions into display items.
- * Exported for testing.
+ * @typedef {{ badgeAddress: string, awardId: string }} ProfileBadgeSlot
+ */
+
+/**
+ * Pure helper: extract ordered (badge, award) slots from a profile_badges event.
+ * Per NIP-58, the event contains alternating `a` (definition pointer) + `e` (award id) tags.
  *
- * @param {any[]} awards - Award objects with id, issuerPubkey, badgeAddress, created_at
- * @param {Map<string, any>} definitions - Map of badgeAddress → badge definition
+ * @param {{ tags?: string[][] } | null | undefined} event
+ * @returns {ProfileBadgeSlot[]}
+ */
+export function extractProfileBadgeSlots(event) {
+  if (!event?.tags) return [];
+  const slots = [];
+  for (let i = 0; i < event.tags.length; i++) {
+    const tag = event.tags[i];
+    if (tag?.[0] !== 'a' || !tag[1]) continue;
+    const next = event.tags[i + 1];
+    if (next?.[0] !== 'e' || !next[1]) continue;
+    slots.push({ badgeAddress: tag[1], awardId: next[1] });
+    i++; // consume the paired `e` tag
+  }
+  return slots;
+}
+
+/**
+ * Pure helper: compose display items from slots + loaded awards + loaded definitions.
+ * Order follows the slot array (the user's curated choice).
+ *
+ * @param {ProfileBadgeSlot[]} slots
+ * @param {Map<string, any>} awards - awardId → kind 8 event
+ * @param {Map<string, any>} definitions - badgeAddress → definition shape
  * @returns {BadgeDisplayItem[]}
  */
-export function buildBadgeDisplayItems(awards, definitions) {
-  // Deduplicate by badge address, keeping most recent award
-  /** @type {Map<string, any>} */
-  const deduped = new Map();
-  for (const award of awards) {
-    const existing = deduped.get(award.badgeAddress);
-    if (!existing || award.created_at > existing.created_at) {
-      deduped.set(award.badgeAddress, award);
-    }
-  }
-
+export function buildProfileBadgeDisplayItems(slots, awards, definitions) {
   const items = [];
-  for (const award of deduped.values()) {
-    const def = definitions.get(award.badgeAddress);
+  for (const slot of slots) {
+    const award = awards.get(slot.awardId);
+    const def = definitions.get(slot.badgeAddress);
+    const issuerPubkey = def?.pubkey || slot.badgeAddress.split(':')[1] || '';
     items.push({
-      id: award.id,
+      id: award?.id || slot.awardId,
       badgeName: def?.name || '',
       badgeDescription: def?.description || '',
       badgeImage: def?.image || '',
       badgeThumb: def?.thumb || '',
-      issuerPubkey: award.issuerPubkey,
-      awardedAt: award.created_at,
-      badgeAddress: award.badgeAddress
+      issuerPubkey,
+      awardedAt: award?.created_at || 0,
+      badgeAddress: slot.badgeAddress
     });
   }
-
-  // Sort by award date descending
-  items.sort((a, b) => b.awardedAt - a.awardedAt);
   return items;
 }
 
+/** Parse a kind 30009 event into the fields the UI needs.
+ * @param {any} event - kind 30009 event
+ */
+function parseBadgeDefinition(event) {
+  /** @param {string} name */
+  const tag = (name) => event.tags?.find((/** @type {string[]} */ t) => t[0] === name)?.[1] || '';
+  return {
+    pubkey: event.pubkey,
+    name: tag('name'),
+    description: tag('description'),
+    image: tag('image'),
+    thumb: tag('thumb')
+  };
+}
+
 /**
- * Reactive hook: load and combine badge awards for a pubkey.
+ * Reactive hook: load a user's accepted badges (NIP-58 profile_badges list).
  *
- * @param {() => string} getPubkey - Reactive getter for user pubkey
+ * @param {() => string} getPubkey - reactive pubkey getter
  * @returns {{ getBadges: () => BadgeDisplayItem[], isLoading: boolean }}
  */
-export function useBadgeAwards(getPubkey) {
-  // Output state — these drive the UI
+export function useProfileBadges(getPubkey) {
+  // Output state — drives the UI
   let badges = $state.raw(/** @type {BadgeDisplayItem[]} */ ([]));
   let isLoading = $state(true);
 
-  // Internal state — plain let to avoid $effect re-triggers
-  /** @type {any[]} */
-  let currentAwards = [];
+  // Internal state — plain `let` so writes don't re-trigger the effect
+  /** @type {ProfileBadgeSlot[]} */
+  let slots = [];
+  /** @type {Map<string, any>} */
+  let awardsMap = new Map();
   /** @type {Map<string, any>} */
   let definitionsMap = new Map();
-  /** @type {Map<string, import('rxjs').Subscription>} */
-  const defSubscriptions = new Map();
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let defUpdateTimer;
 
-  /** Recompute badges from current awards + definitions */
-  function updateBadges() {
-    badges = buildBadgeDisplayItems(currentAwards, definitionsMap);
+  /** @type {Map<string, import('rxjs').Subscription>} */
+  const slotSubscriptions = new Map();
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let updateTimer;
+
+  function recompute() {
+    badges = buildProfileBadgeDisplayItems(slots, awardsMap, definitionsMap);
   }
 
-  // Load awards and subscribe to definitions
+  function scheduleRecompute() {
+    clearTimeout(updateTimer);
+    updateTimer = setTimeout(recompute, 50);
+  }
+
+  function clearSlotSubscriptions() {
+    for (const sub of slotSubscriptions.values()) sub.unsubscribe();
+    slotSubscriptions.clear();
+  }
+
+  /** Subscribe to a single slot's award + definition. Idempotent per key.
+   * @param {ProfileBadgeSlot} slot
+   * @param {string[]} relays
+   */
+  function subscribeSlot(slot, relays) {
+    // Award (kind 8) — fetch by id, subscribe to store
+    const awardKey = 'award:' + slot.awardId;
+    if (!slotSubscriptions.has(awardKey)) {
+      const loaderSub = eventLoader({ id: slot.awardId, relays }).subscribe();
+      slotSubscriptions.set(awardKey + ':loader', loaderSub);
+      const storeSub = eventStore.event(slot.awardId).subscribe((event) => {
+        if (event) {
+          awardsMap.set(slot.awardId, event);
+          scheduleRecompute();
+        }
+      });
+      slotSubscriptions.set(awardKey, storeSub);
+    }
+
+    // Definition (kind 30009) — fetch by address, subscribe to store
+    const [kindStr, defPubkey, identifier] = slot.badgeAddress.split(':');
+    const kind = parseInt(kindStr, 10);
+    if (!defPubkey || isNaN(kind)) return;
+
+    const defKey = 'def:' + slot.badgeAddress;
+    if (!slotSubscriptions.has(defKey)) {
+      const loaderSub = addressLoader({
+        kind,
+        pubkey: defPubkey,
+        identifier: identifier || '',
+        relays
+      }).subscribe();
+      slotSubscriptions.set(defKey + ':loader', loaderSub);
+      const storeSub = eventStore
+        .replaceable(kind, defPubkey, identifier || '')
+        .subscribe((event) => {
+          if (event) {
+            definitionsMap.set(slot.badgeAddress, parseBadgeDefinition(event));
+            scheduleRecompute();
+          }
+        });
+      slotSubscriptions.set(defKey, storeSub);
+    }
+  }
+
   $effect(() => {
     const pubkey = getPubkey();
-    if (!pubkey) return;
+    if (!pubkey) {
+      slots = [];
+      awardsMap = new Map();
+      definitionsMap = new Map();
+      badges = [];
+      isLoading = false;
+      return;
+    }
 
-    // Reset internal state
-    currentAwards = [];
+    // Reset state
+    slots = [];
+    awardsMap = new Map();
     definitionsMap = new Map();
-    for (const sub of defSubscriptions.values()) sub.unsubscribe();
-    defSubscriptions.clear();
+    clearSlotSubscriptions();
     badges = [];
     isLoading = true;
 
-    // Capture relays once to avoid reactive re-triggers (untrack prevents
-    // the SvelteMap in userOverrideCache from creating a dependency)
+    // Capture relays once (untrack avoids reactive deps through the SvelteMap)
     const relays = untrack(() => getAllLookupRelays());
 
-    // Step 1: Load kind 8 awards from network
-    const filter = { kinds: [8], '#p': [pubkey], limit: 200 };
-    const loader = createTimelineLoader(timedPool, relays, filter, { eventStore });
-    const loaderSub = loader().subscribe();
+    /** Track the newest profile_badges event seen across kinds 10008 + 30008. */
+    /** @type {any} */
+    let bestEvent = null;
 
-    // Step 2: Model subscribes to awards in EventStore
-    const modelSub = eventStore.model(TimelineModel, { kinds: [8], '#p': [pubkey] }).subscribe({
-      next: (events) => {
-        currentAwards = (events || []).map((/** @type {any} */ event) => ({
-          id: event.id,
-          issuerPubkey: event.pubkey,
-          created_at: event.created_at,
-          badgeAddress: event.tags.find((/** @type {string[]} */ t) => t[0] === 'a')?.[1] || '',
-          recipients: event.tags
-            .filter((/** @type {string[]} */ t) => t[0] === 'p')
-            .map((/** @type {string[]} */ t) => t[1])
-        }));
+    /** @param {any} event */
+    function applyCandidate(event) {
+      if (!event) return;
+      if (bestEvent && event.created_at <= bestEvent.created_at) {
         isLoading = false;
-        updateBadges();
-
-        // Step 3: For each award, load the badge definition
-        for (const award of currentAwards) {
-          if (!award.badgeAddress || defSubscriptions.has(award.badgeAddress)) continue;
-
-          const [kindStr, defPubkey, identifier] = award.badgeAddress.split(':');
-          const kind = parseInt(kindStr, 10);
-          if (!defPubkey || isNaN(kind)) continue;
-
-          // Fetch definition from network
-          const defLoaderSub = addressLoader({
-            kind,
-            pubkey: defPubkey,
-            identifier: identifier || '',
-            relays
-          }).subscribe();
-          defSubscriptions.set(award.badgeAddress + ':loader', defLoaderSub);
-
-          // Subscribe to definition in EventStore
-          const defModelSub = eventStore
-            .replaceable(kind, defPubkey, identifier || '')
-            .subscribe((event) => {
-              if (event) {
-                const dTag =
-                  event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
-                definitionsMap.set(award.badgeAddress, {
-                  name: event.tags?.find((/** @type {string[]} */ t) => t[0] === 'name')?.[1] || '',
-                  description:
-                    event.tags?.find((/** @type {string[]} */ t) => t[0] === 'description')?.[1] ||
-                    '',
-                  image:
-                    event.tags?.find((/** @type {string[]} */ t) => t[0] === 'image')?.[1] || '',
-                  thumb:
-                    event.tags?.find((/** @type {string[]} */ t) => t[0] === 'thumb')?.[1] || '',
-                  identifier: dTag,
-                  address: award.badgeAddress
-                });
-                // Batch definition updates
-                clearTimeout(defUpdateTimer);
-                defUpdateTimer = setTimeout(() => {
-                  updateBadges();
-                }, 50);
-              }
-            });
-          defSubscriptions.set(award.badgeAddress, defModelSub);
-        }
+        return;
       }
-    });
+      bestEvent = event;
+      slots = extractProfileBadgeSlots(event);
+      isLoading = false;
+
+      // Re-subscribe per slot. Subs for removed badges are torn down.
+      clearSlotSubscriptions();
+      awardsMap = new Map();
+      definitionsMap = new Map();
+      for (const slot of slots) subscribeSlot(slot, relays);
+
+      recompute();
+    }
+
+    // Kick off network fetches for both spec kinds
+    const pbLoaderNew = addressLoader({
+      kind: PROFILE_BADGES_KIND,
+      pubkey,
+      identifier: PROFILE_BADGES_IDENTIFIER,
+      relays
+    }).subscribe();
+    const pbLoaderLegacy = addressLoader({
+      kind: LEGACY_PROFILE_BADGES_KIND,
+      pubkey,
+      identifier: PROFILE_BADGES_IDENTIFIER,
+      relays
+    }).subscribe();
+
+    // Subscribe to store for whichever lands first / is newer
+    const pbStoreNew = eventStore
+      .replaceable(PROFILE_BADGES_KIND, pubkey, PROFILE_BADGES_IDENTIFIER)
+      .subscribe(applyCandidate);
+    const pbStoreLegacy = eventStore
+      .replaceable(LEGACY_PROFILE_BADGES_KIND, pubkey, PROFILE_BADGES_IDENTIFIER)
+      .subscribe(applyCandidate);
+
+    // Flip off the loading flag after first network round-trip even if no event found
+    const noBadgesTimer = setTimeout(() => {
+      isLoading = false;
+    }, 3000);
 
     return () => {
-      loaderSub.unsubscribe();
-      modelSub.unsubscribe();
-      for (const sub of defSubscriptions.values()) sub.unsubscribe();
-      defSubscriptions.clear();
-      clearTimeout(defUpdateTimer);
+      pbLoaderNew.unsubscribe();
+      pbLoaderLegacy.unsubscribe();
+      pbStoreNew.unsubscribe();
+      pbStoreLegacy.unsubscribe();
+      clearSlotSubscriptions();
+      clearTimeout(updateTimer);
+      clearTimeout(noBadgesTimer);
     };
   });
 

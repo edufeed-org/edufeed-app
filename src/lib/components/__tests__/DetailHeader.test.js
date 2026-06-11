@@ -35,6 +35,10 @@ vi.mock('applesauce-core/helpers', () => ({
   getDisplayName: () => 'Test User'
 }));
 
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  profileLink: (pubkey) => (pubkey ? `/p/${pubkey}` : '#')
+}));
+
 // Mock heavy sub-components to avoid deep dependency chains
 vi.mock('../shared/EventContextMenu.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));

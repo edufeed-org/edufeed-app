@@ -3,6 +3,7 @@
   import { manager } from '$lib/stores/accounts.svelte.js';
   import ProfileForm from './shared/ProfileForm.svelte';
   import AvatarUploader from './shared/AvatarUploader.svelte';
+  import BannerUploader from './shared/BannerUploader.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -13,6 +14,12 @@
   const modalProps = $derived(/** @type {any} */ (modalStore.modalProps));
   const profile = $derived(modalProps.profile || {});
   const pubkey = $derived(modalProps.pubkey);
+  // Optional signer override — used when editing a community profile (the
+  // active user holds the community's signer in addition to their own). When
+  // absent, falls back to the active user's signer (standard personal edit).
+  const signer = $derived(modalProps.signer ?? manager.active?.signer ?? null);
+  // True when the editor is editing their own profile.
+  const isOwn = $derived(pubkey === manager.active?.pubkey);
 
   // Initialize form data with current profile values
   let userData = $state(
@@ -129,14 +136,15 @@
       return;
     }
 
-    // Check if user is logged in
-    if (!manager.active) {
+    // Check we have a signer for the target pubkey (own profile → active
+    // user's signer; community → caller-supplied community signer).
+    if (!signer || !pubkey) {
       submitError = m.profile_edit_modal_error_must_login();
       return;
     }
 
-    // Verify ownership
-    if (manager.active.pubkey !== pubkey) {
+    // Verify the signer can actually sign for the target entity.
+    if (signer.pubkey !== pubkey) {
       submitError = m.profile_edit_modal_error_ownership();
       return;
     }
@@ -161,11 +169,11 @@
         created_at: Math.floor(Date.now() / 1000),
         tags: [],
         content: JSON.stringify(profileContent),
-        pubkey: manager.active.pubkey
+        pubkey
       };
 
-      // Sign the event
-      const signedEvent = await manager.active.signer.signEvent(event);
+      // Sign the event with the appropriate signer (own or community).
+      const signedEvent = await signer.signEvent(event);
 
       // Publish using outbox model
       const result = await publishEvent(signedEvent);
@@ -205,7 +213,14 @@
   <div class="modal-box max-w-2xl">
     <!-- Modal Header -->
     <div class="mb-6 flex items-center justify-between">
-      <h3 class="text-2xl font-bold">{m.profile_edit_modal_title()}</h3>
+      <div>
+        <h3 class="text-2xl font-bold">
+          {isOwn ? m.profile_edit_modal_title() : m.profile_edit_modal_title_community()}
+        </h3>
+        {#if !isOwn}
+          <p class="text-xs text-base-content/60">{m.profile_edit_modal_kind0_note()}</p>
+        {/if}
+      </div>
       <button onclick={handleClose} class="btn btn-circle btn-ghost btn-sm" disabled={isSubmitting}>
         ✕
       </button>
@@ -255,13 +270,20 @@
     <div class="space-y-6">
       <!-- Avatar Uploader (centered) -->
       <div class="flex flex-col items-center">
-        <AvatarUploader bind:userData signer={manager.active?.signer} bind:errors />
+        <AvatarUploader bind:userData {signer} bind:errors />
+      </div>
+
+      <!-- Banner Uploader (centered with max-width) -->
+      <div class="flex w-full flex-col items-center">
+        <div class="w-full max-w-md">
+          <BannerUploader bind:userData {signer} bind:errors />
+        </div>
       </div>
 
       <!-- Form Fields (centered with max-width) -->
       <div class="flex w-full flex-col items-center">
         <div class="w-full max-w-md space-y-4">
-          <ProfileForm bind:userData bind:errors />
+          <ProfileForm bind:userData bind:errors hideBanner />
         </div>
       </div>
     </div>

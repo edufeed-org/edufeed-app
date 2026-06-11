@@ -15,6 +15,7 @@
   } from '$lib/helpers/message-utils.js';
   import { TimelineModel } from 'applesauce-core/models';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -22,6 +23,7 @@
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import { extractMentionPubkeys } from '$lib/helpers/inbox.js';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   const getAllowedAuthors = getContext('allowedAuthors');
 
@@ -82,13 +84,22 @@
     ...(runtimeConfig.fallbackRelays || [])
   ]);
 
-  // Subscribe to chat messages using storeEvents + TimelineModel pattern
+  // Subscribe to chat messages using storeEvents + TimelineModel pattern.
+  // isLoading clears on whichever happens first: model emits events, EOSE
+  // arrives, error, or a fallback timeout. The fallback is required because
+  // pool.group(...).subscription(...) does not reliably deliver EOSE on a
+  // tab-switch resubscribe (cold reload works because connection state is
+  // fresh). The pool's eoseTimeout is 3s; we add a small grace period.
   $effect(() => {
     if (!derivedCommunityPubkey) return;
 
     isLoading = true;
     hasMore = true;
     const filter = { kinds: [9], '#h': [derivedCommunityPubkey] };
+
+    const fallbackTimer = setTimeout(() => {
+      isLoading = false;
+    }, 4000);
 
     const subSub = pool
       .group(chatRelays)
@@ -98,17 +109,20 @@
         next: (response) => {
           if (response === 'EOSE') isLoading = false;
         },
-        error: (err) => {
-          console.error('Chat subscription error:', err);
+        error: () => {
           isLoading = false;
         }
       });
 
     const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
       messages = events;
+      // First batch of events means we have something to render — drop the
+      // spinner immediately so users see content even if EOSE never arrives.
+      if (events.length > 0) isLoading = false;
     });
 
     return () => {
+      clearTimeout(fallbackTimer);
       subSub.unsubscribe();
       modelSub.unsubscribe();
     };
@@ -291,7 +305,7 @@
 
             <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
               {#if !isOwnMessage}
-                <a href={resolve(`/p/${message.pubkey}`)} class="font-semibold hover:underline"
+                <a href={resolve(profileLink(message.pubkey))} class="font-semibold hover:underline"
                   >{getUserDisplayName(message.pubkey)}</a
                 >
                 <span>&middot;</span>
@@ -328,6 +342,7 @@
                 {/if}
               {/if}
               <NostrContentRenderer event={message} />
+              <LinkPreviewList event={message} />
             </div>
           </div>
         {/if}

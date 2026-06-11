@@ -7,7 +7,7 @@
 <script>
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import { profileLink } from '$lib/helpers/nostrUtils';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -107,8 +107,7 @@
    */
   function goToProfile() {
     if (rawEvent?.pubkey) {
-      const npub = hexToNpub(rawEvent.pubkey);
-      goto(resolve(`/p/${npub || rawEvent.pubkey}`));
+      goto(resolve(profileLink(rawEvent.pubkey)));
     }
   }
 

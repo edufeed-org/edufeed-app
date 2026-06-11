@@ -19,6 +19,7 @@
   const FIELD_TYPES = [
     'text',
     'textarea',
+    'text-array',
     'number',
     'email',
     'url',
@@ -318,11 +319,11 @@
 
 <div class="container mx-auto max-w-3xl p-4">
   <!-- Header -->
-  <div class="mb-6 flex items-center justify-between">
+  <div class="mb-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="text-sm tracking-wide text-base-content/50 uppercase">
       {m.form_builder_header()}
     </div>
-    <div class="flex gap-2">
+    <div class="flex flex-wrap gap-2">
       {#if !existingEvent}
         <button class="btn btn-ghost btn-sm" onclick={() => (forkDialogOpen = true)}>
           {m.form_builder_fork_from()}

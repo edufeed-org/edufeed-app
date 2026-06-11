@@ -18,9 +18,17 @@ vi.mock('applesauce-core/helpers', () => ({
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {}
 }));
-vi.mock('$lib/loaders/base.js', () => ({
-  timedPool: vi.fn()
-}));
+vi.mock('$lib/loaders/base.js', async () => {
+  const { createTimelineLoader } = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return {
+    timedPool: vi.fn(),
+    createCachedTimelineLoader: (
+      /** @type {string[]} */ relays,
+      /** @type {any} */ filter,
+      /** @type {any} */ opts = {}
+    ) => createTimelineLoader(vi.fn(), relays, filter, { eventStore: {}, ...opts })
+  };
+});
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: { fallbackRelays: ['wss://relay.example.com'] }
 }));

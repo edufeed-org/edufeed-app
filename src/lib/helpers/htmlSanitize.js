@@ -42,7 +42,19 @@ export const ALLOWED_TAGS = [
   'section'
 ];
 
-export const ALLOWED_ATTR = ['href', 'target', 'rel', 'src', 'alt', 'title', 'class'];
+export const ALLOWED_ATTR = [
+  'href',
+  'target',
+  'rel',
+  'src',
+  'alt',
+  'title',
+  'class',
+  'id',
+  'aria-label',
+  'aria-hidden',
+  'tabindex'
+];
 
 /**
  * Sanitize raw HTML string using DOMPurify.

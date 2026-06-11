@@ -14,6 +14,7 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { formatTimestamp } from '$lib/helpers/dates.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -246,7 +247,10 @@
     }
 
     try {
-      const plaintext = await manager.active.signer.nip44Decrypt(response.pubkey, response.content);
+      const plaintext = await manager.active.signer.nip44.decrypt(
+        response.pubkey,
+        response.content
+      );
       const tags = JSON.parse(plaintext);
       const values = parseResponseTags(tags);
       decryptedMap = new Map([...decryptedMap, [response.id, values]]);
@@ -311,7 +315,7 @@
                 {profile?.name || response.pubkey.slice(0, 8) + '...'}
               </div>
               <div class="text-xs text-base-content/40">
-                {new Date(response.created_at * 1000).toLocaleDateString()}
+                {formatTimestamp(response.created_at)}
               </div>
             </div>
           </div>

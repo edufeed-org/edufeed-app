@@ -7,6 +7,7 @@
   import BoardsView from '../views/BoardsView.svelte';
   import ArticlesView from '../views/ArticlesView.svelte';
   import ForumView from '../views/ForumView.svelte';
+  import PollsView from '../views/PollsView.svelte';
   import WikisView from '../views/WikisView.svelte';
   import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
   import MeetView from '$lib/components/meet/MeetView.svelte';
@@ -33,11 +34,7 @@
 </script>
 
 <!-- Main Content Area -->
-<div
-  class="min-h-0 flex-1 transition-all duration-300 lg:ml-(--sidebar-nav-w)"
-  class:overflow-auto={selectedContentType !== 'chat'}
-  class:overflow-hidden={selectedContentType === 'chat'}
->
+<div class="min-h-0 flex-1 transition-all duration-300">
   {#if !selectedCommunityId}
     <!-- Empty state: No community selected -->
     <div class="flex h-full flex-col items-center justify-center p-8 text-center">
@@ -95,6 +92,8 @@
         <ArticlesView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'forum'}
         <ForumView communityPubkey={selectedCommunityId} {communityProfile} {canPublish} />
+      {:else if selectedContentType === 'polls'}
+        <PollsView communityPubkey={selectedCommunityId} {communityProfile} {canPublish} />
       {:else if selectedContentType === 'wikis'}
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'social-bookmarks'}

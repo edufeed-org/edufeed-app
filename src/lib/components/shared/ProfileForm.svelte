@@ -1,7 +1,7 @@
 <script>
   import * as m from '$lib/paraglide/messages';
 
-  let { userData = $bindable(), errors = $bindable({}) } = $props();
+  let { userData = $bindable(), errors = $bindable({}), hideBanner = false } = $props();
 
   function validateStep() {
     errors = {};
@@ -122,24 +122,26 @@
   </div>
 
   <!-- Banner Image URL -->
-  <div class="form-control flex flex-col">
-    <label class="label" for="profile-banner">
-      <span class="label-text w-full text-center">{m.profile_form_banner_label()}</span>
-    </label>
-    <input
-      id="profile-banner"
-      type="url"
-      bind:value={userData.banner}
-      placeholder={m.profile_form_banner_placeholder()}
-      class="input-bordered input w-full"
-      class:input-error={errors.banner}
-    />
-    {#if errors.banner}
-      <div class="label" aria-live="polite">
-        <span class="label-text-alt w-full text-center text-error">{errors.banner}</span>
-      </div>
-    {/if}
-  </div>
+  {#if !hideBanner}
+    <div class="form-control flex flex-col">
+      <label class="label" for="profile-banner">
+        <span class="label-text w-full text-center">{m.profile_form_banner_label()}</span>
+      </label>
+      <input
+        id="profile-banner"
+        type="url"
+        bind:value={userData.banner}
+        placeholder={m.profile_form_banner_placeholder()}
+        class="input-bordered input w-full"
+        class:input-error={errors.banner}
+      />
+      {#if errors.banner}
+        <div class="label" aria-live="polite">
+          <span class="label-text-alt w-full text-center text-error">{errors.banner}</span>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Website -->
   <div class="form-control flex flex-col">

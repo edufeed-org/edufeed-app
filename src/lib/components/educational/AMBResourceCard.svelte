@@ -10,6 +10,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import ReactionBar from '../reactions/ReactionBar.svelte';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
   import { getLocale } from '$lib/paraglide/runtime.js';
@@ -26,6 +27,8 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
+  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -45,10 +48,19 @@
    * @property {any} [authorProfile] - Author's profile
    * @property {boolean} [compact=false] - Compact display mode
    * @property {'card'|'list'} [variant='card'] - Display variant
+   * @property {string} [communityNpub] - Community npub for route construction
+   * @property {boolean} [preview=false] - Preview mode: non-interactive, no bookmark/reactions/debug
    */
 
   /** @type {Props} */
-  let { resource, authorProfile = null, compact = false, variant = 'card' } = $props();
+  let {
+    resource,
+    authorProfile = null,
+    compact = false,
+    variant = 'card',
+    communityNpub = undefined,
+    preview = false
+  } = $props();
 
   const isList = $derived(variant === 'list');
 
@@ -57,6 +69,12 @@
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
+
+  // Thumbnail license attestation (kind 1063 keyed by x-tag SHA-256)
+  const imageHash = $derived(
+    resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
+  );
+  const getImageLicense = useLicenseForHash(() => imageHash);
 
   // Reactive SKOS concepts for URI-to-label resolution
   const resourceTypeConcepts = $derived(getCachedConcepts('learningResourceType'));
@@ -111,10 +129,21 @@
   const shouldShowOpenContentButton = $derived(hasExternalUrl || isNostrUri(resource.identifier));
 
   /**
+   * Build the resolved route for this resource.
+   * @returns {string | null}
+   */
+  function getResourceHref() {
+    if (!resourceNaddr) return null;
+    if (communityNpub) return resolve(`/c/${communityNpub}/r/${resourceNaddr}`);
+    return resolve(`/${resourceNaddr}`);
+  }
+
+  /**
    * Navigate to resource detail view
    */
   function navigateToDetail() {
-    goto(resolve(`/${resourceNaddr}`));
+    const href = getResourceHref();
+    if (href) goto(href);
   }
 
   /**
@@ -148,14 +177,25 @@
 {#if isList}
   <!-- List variant: horizontal row -->
   <div
-    class="amb-card-list focus:ring-opacity-50 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
+    class="amb-card-list focus:ring-opacity-50 relative flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 transition-shadow hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
     role="button"
     tabindex="0"
     onclick={navigateToDetail}
     onkeydown={handleKeydown}
   >
+    {#if resource.rawEvent}
+      <div
+        class="absolute top-1 right-1"
+        role="toolbar"
+        tabindex="-1"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
+        <BookmarkButton event={resource.rawEvent} />
+      </div>
+    {/if}
     <div
-      class="list-thumbnail h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
+      class="list-thumbnail relative h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
     >
       {#if resource.image}
         <ImageWithFallback
@@ -165,6 +205,12 @@
           size="thumbnail"
           class="h-full w-full object-cover"
         />
+        {#if getImageLicense()}
+          <LicenseBadge
+            licenseEvent={getImageLicense()}
+            class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+          />
+        {/if}
       {:else}
         <div class="flex h-full w-full items-center justify-center text-2xl text-base-content/30">
           📚
@@ -231,17 +277,17 @@
   </div>
 {:else}
   <div
-    class="amb-card cursor-pointer rounded-lg border border-base-300 bg-base-100 shadow-sm transition-shadow hover:shadow-md {compact
-      ? 'p-3'
-      : 'p-4'}"
-    class:focus:outline-none={true}
-    class:focus:ring-2={true}
-    class:focus:ring-primary={true}
-    class:focus:ring-opacity-50={true}
-    role="button"
-    tabindex="0"
-    onclick={navigateToDetail}
-    onkeydown={handleKeydown}
+    class="amb-card rounded-lg border border-base-300 bg-base-100 shadow-sm {preview
+      ? ''
+      : 'cursor-pointer transition-shadow hover:shadow-md'} {compact ? 'p-3' : 'p-4'}"
+    class:focus:outline-none={!preview}
+    class:focus:ring-2={!preview}
+    class:focus:ring-primary={!preview}
+    class:focus:ring-opacity-50={!preview}
+    role={preview ? undefined : 'button'}
+    tabindex={preview ? undefined : 0}
+    onclick={preview ? undefined : navigateToDetail}
+    onkeydown={preview ? undefined : handleKeydown}
   >
     <!-- Author Header -->
     <div class="mb-3 flex items-center gap-3">
@@ -275,7 +321,7 @@
     <!-- Resource Image — always shown for consistent card height -->
     {#if !compact}
       <div class="mb-3">
-        <div class="aspect-[2/1] w-full overflow-hidden rounded-lg bg-base-200">
+        <div class="relative aspect-[2/1] w-full overflow-hidden rounded-lg bg-base-200">
           {#if resource.image}
             <ImageWithFallback
               src={resource.image}
@@ -284,6 +330,12 @@
               size="card"
               class="h-full w-full object-cover"
             />
+            {#if getImageLicense()}
+              <LicenseBadge
+                licenseEvent={getImageLicense()}
+                class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+              />
+            {/if}
           {:else}
             <div class="flex h-full w-full items-center justify-center text-5xl">📚</div>
           {/if}
@@ -428,30 +480,29 @@
       {/if}
 
       <!-- Reactions & Comments -->
-      {#if !compact && resource.tags}
-        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div class="flex items-center gap-2 pt-2" onclick={(e) => e.stopPropagation()}>
+      {#if !compact && !preview && resource.rawEvent}
+        <div
+          class="flex items-center gap-2 pt-2"
+          role="toolbar"
+          tabindex="-1"
+          onclick={(e) => e.stopPropagation()}
+          onkeydown={(e) => e.stopPropagation()}
+        >
           {#if commentCount > 0}
             <span class="flex items-center gap-1 text-sm text-base-content/60">
               <ChatIcon class_="w-4 h-4" />
               {commentCount}
             </span>
           {/if}
-          <ReactionBar
-            event={{
-              id: resource.id,
-              kind: resource.kind,
-              pubkey: resource.pubkey,
-              tags: resource.tags
-            }}
-          />
+          <ReactionBar event={resource.rawEvent} />
+          <BookmarkButton event={resource.rawEvent} />
         </div>
       {/if}
 
       <!-- Debug Panel -->
-      {#if !compact}
+      {#if !compact && !preview}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div onclick={(e) => e.stopPropagation()}>
+        <div data-testid="amb-debug-wrapper" onclick={(e) => e.stopPropagation()}>
           <EventDebugPanel event={resource} />
         </div>
       {/if}

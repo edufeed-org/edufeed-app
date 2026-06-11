@@ -6,9 +6,23 @@ vi.mock('applesauce-core/helpers', () => ({
   getSeenRelays: vi.fn()
 }));
 
-// Mock applesauce-common/helpers (needed by urlGrouping.js)
+// Mock applesauce-common/helpers (needed by urlGrouping.js + contentNavigation.js)
 vi.mock('applesauce-common/helpers', () => ({
-  getHighlightSourceUrl: vi.fn()
+  getHighlightSourceUrl: vi.fn(),
+  // Minimal NIP-22 root-pointer mock derived from uppercase tags (K/I/E/A).
+  // Real applesauce caches via Symbol; we don't need that here.
+  getCommentRootPointer: vi.fn((/** @type {any} */ event) => {
+    const K = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'K')?.[1];
+    const I = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'I')?.[1];
+    const E = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'E')?.[1];
+    const A = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'A')?.[1];
+    if (!K) return null;
+    if (I) return { type: 'external', kind: K, identifier: I };
+    if (A) return { type: 'address', kind: parseInt(K) };
+    if (E) return { type: 'event', kind: parseInt(K) };
+    return null;
+  }),
+  isCommentExternalPointer: vi.fn((/** @type {any} */ p) => !!p && p.type === 'external')
 }));
 
 // Mock nostrUtils — our module's direct dependency — to avoid its transitive imports
@@ -79,16 +93,57 @@ describe('getContentEventRoute', () => {
       const route = getContentEventRoute(event);
       expect(route).toMatch(/^\/calendar\/event\/naddr1/);
     });
+
+    it('returns /c/{npub}/event/{naddr} when communityPubkey is provided', () => {
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({
+        kind: 31923,
+        tags: [['d', 'my-time-event']]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/event\/naddr1/);
+    });
   });
 
   describe('educational content (kind 30142)', () => {
-    it('returns /discover?resource={naddr}', () => {
+    it('returns /{naddr} (detail page via naddr catch-all route)', () => {
       const event = makeEvent({
         kind: 30142,
         tags: [['d', 'my-resource']]
       });
       const route = getContentEventRoute(event);
-      expect(route).toMatch(/^\/discover\?resource=naddr1/);
+      expect(route).toMatch(/^\/naddr1/);
+    });
+
+    it('returns /c/{npub}/r/{naddr} when communityPubkey is provided', () => {
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({
+        kind: 30142,
+        tags: [['d', 'my-resource']]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/r\/naddr1/);
+    });
+  });
+
+  describe('kanban board (kind 30301)', () => {
+    it('returns /{naddr} without community', () => {
+      const event = makeEvent({
+        kind: 30301,
+        tags: [['d', 'my-board']]
+      });
+      const route = getContentEventRoute(event);
+      expect(route).toMatch(/^\/naddr1/);
+    });
+
+    it('returns /c/{npub}/board/{naddr} when communityPubkey is provided', () => {
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({
+        kind: 30301,
+        tags: [['d', 'my-board']]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/board\/naddr1/);
     });
   });
 
@@ -210,13 +265,18 @@ describe('getContentEventRoute', () => {
       expect(route).toContain(`#highlight-${event.id}`);
     });
 
-    it('returns undefined without community', () => {
+    it('falls back to /nevent without community', () => {
+      // Without community context the bookmark route can't be built; rather
+      // than producing a silent no-op click, fall through to the generic
+      // nevent route. The detail page will show an "unsupported kind" message
+      // for kind 9802, but that's honest UX vs. dead clicks.
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
       const event = makeEvent({
         kind: 9802,
         tags: [['r', 'https://example.com/article']]
       });
       const route = getContentEventRoute(event);
-      expect(route).toBeUndefined();
+      expect(route).toMatch(/^\/nevent1/);
     });
   });
 
@@ -235,7 +295,11 @@ describe('getContentEventRoute', () => {
       expect(route).toContain('/bookmarks/');
     });
 
-    it('returns undefined without community', () => {
+    it('falls back to /nevent for K=web page-note without community', () => {
+      // Without community context we can't build the /c/{npub}/bookmarks/{url}
+      // route, so the click should still go somewhere — fall through to the
+      // generic nevent detail route, which renders kind 1111 via ThreadDetailView.
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
       const event = makeEvent({
         kind: 1111,
         tags: [
@@ -244,20 +308,40 @@ describe('getContentEventRoute', () => {
         ]
       });
       const route = getContentEventRoute(event);
-      expect(route).toBeUndefined();
+      expect(route).toMatch(/^\/nevent1/);
     });
 
-    it('returns undefined for non-web page note', () => {
+    it('returns /nevent for kind 1111 reply (event-rooted, not a page note)', () => {
       const communityPubkey = 'aa'.repeat(32);
+      const targetPubkey = 'bb'.repeat(32);
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
       const event = makeEvent({
         kind: 1111,
         tags: [
-          ['K', 'nostr'],
-          ['I', 'some-event-id']
+          ['K', '30142'],
+          ['A', `30142:${targetPubkey}:some-resource`]
         ]
       });
       const route = getContentEventRoute(event, { communityPubkey });
-      expect(route).toBeUndefined();
+      expect(route).toMatch(/^\/nevent1/);
+    });
+
+    it('returns /nevent for kind 1111 community-targeted reply (h-tag)', () => {
+      // The actual user-reported case: a NIP-22 reply with an h-tag landing in the
+      // community feed. The detail page handles the h-tag → /c/{npub}/{nevent} redirect.
+      const communityPubkey = 'aa'.repeat(32);
+      const targetPubkey = 'bb'.repeat(32);
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
+      const event = makeEvent({
+        kind: 1111,
+        tags: [
+          ['h', communityPubkey],
+          ['K', '30142'],
+          ['A', `30142:${targetPubkey}:some-resource`]
+        ]
+      });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/nevent1/);
     });
   });
 
@@ -281,6 +365,21 @@ describe('getContentEventRoute', () => {
       const event = makeEvent({ kind: 9 });
       const route = getContentEventRoute(event);
       expect(route).toMatch(/^\/nevent1/);
+    });
+
+    it('returns /{nevent} for kind 1068 (poll) without community', () => {
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
+      const event = makeEvent({ kind: 1068 });
+      const route = getContentEventRoute(event);
+      expect(route).toMatch(/^\/nevent1/);
+    });
+
+    it('returns /c/{npub}/{nevent} for kind 1068 (poll) when communityPubkey is provided', () => {
+      /** @type {any} */ (getSeenRelays).mockReturnValue(undefined);
+      const communityPubkey = 'aa'.repeat(32);
+      const event = makeEvent({ kind: 1068 });
+      const route = getContentEventRoute(event, { communityPubkey });
+      expect(route).toMatch(/^\/c\/npub1[a-z0-9]+\/nevent1/);
     });
   });
 });

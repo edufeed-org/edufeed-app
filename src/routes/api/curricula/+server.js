@@ -1,0 +1,228 @@
+/**
+ * Curriculum cascade endpoint.
+ *
+ * Thin proxy over the publicly reachable Lehrplan ontology Virtuoso
+ * (`SPARQL_ENDPOINT_URL`). The CurriculumPicker drives a five-level cascade
+ * (Bundesland → Schulart → Schulfach → Lehrplan → topic node) by POSTing
+ * { tool, args } here. We translate the chosen tool into a SPARQL 1.1 query
+ * with the user's URIs substituted in, run it via `sparqlClient.query`,
+ * and shape the resulting bindings into the picker's typed JSON.
+ *
+ * Cached for 24h since curriculum data changes rarely.
+ *
+ * Tool name is whitelisted to keep raw SPARQL out of the browser, and every
+ * URI argument is validated as a real http(s) URL containing none of
+ * `< > " \ whitespace` — so user-supplied values cannot break out of the
+ * `<URI>` slots in the templates below.
+ */
+
+import { json } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
+import { query } from '$lib/server/sparqlClient.js';
+import { validateSparqlIri } from '$lib/server/httpUrl.js';
+
+const CACHE_HEADER = 'public, max-age=86400';
+
+const PREFIXES = `PREFIX lp: <https://w3id.org/lehrplan/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX obo: <http://purl.obolibrary.org/obo/>`;
+
+/**
+ * Resolve the optional Schulart filter clause used by list_schulfaecher and
+ * find_lehrplaene. The frontend's "Alle Schularten" sentinel omits the arg,
+ * which must drop the LP_0000812 filter so Lehrpläne that don't declare a
+ * Schulart (common in RP, SN, …) still surface.
+ *
+ * - undefined / ''          → `{filter: ''}`     (omit clause)
+ * - valid http(s) IRI       → `{filter: ' …'}`   (add LP_0000812 clause)
+ * - non-empty invalid IRI   → `null`              (caller should return 400)
+ *
+ * @param {unknown} rawSchulartUri
+ * @returns {{ filter: string } | null}
+ */
+function resolveOptionalSchulartFilter(rawSchulartUri) {
+  if (rawSchulartUri == null || rawSchulartUri === '') return { filter: '' };
+  const sa = validateSparqlIri(rawSchulartUri);
+  if (!sa) return null;
+  return { filter: `\n  ?s lp:LP_0000812 <${sa}> .` };
+}
+
+/**
+ * Build the SPARQL query for a tool, substituting URIs.
+ * Returns null if any required arg is missing or invalid.
+ *
+ * @param {string} tool
+ * @param {Record<string, unknown>} args
+ * @returns {string | null}
+ */
+function buildSparql(tool, args) {
+  switch (tool) {
+    case 'list_bundeslaender':
+      // Query the Bundesland class (LP_0000040 "Bundesland Bezeichnung")
+      // directly instead of reverse-scanning lp:LP_0000029 — every node in
+      // every state graph carries that predicate, so the reverse scan walks
+      // ~1.6M triples to find 16 distinct objects. The class has 16 typed
+      // instances, full stop.
+      return `${PREFIXES}
+SELECT DISTINCT ?uri ?label WHERE {
+  ?uri a lp:LP_0000040 ;
+       rdfs:label ?label .
+  FILTER(lang(?label) = "de")
+} ORDER BY ?label`;
+
+    case 'list_schularten': {
+      const bl = validateSparqlIri(args.bundeslandUri);
+      if (!bl) return null;
+      return `${PREFIXES}
+SELECT DISTINCT ?uri (SAMPLE(?l) AS ?label) WHERE {
+  ?s lp:LP_0000812 ?uri .
+  ?uri rdfs:label ?l .
+  ?s lp:LP_0000029 <${bl}> .
+  FILTER(lang(?l) = "de")
+} GROUP BY ?uri ORDER BY ?label`;
+    }
+
+    case 'list_schulfaecher': {
+      const bl = validateSparqlIri(args.bundeslandUri);
+      if (!bl) return null;
+      const sa = resolveOptionalSchulartFilter(args.schulartUri);
+      if (!sa) return null;
+      return `${PREFIXES}
+SELECT DISTINCT ?uri (SAMPLE(?l) AS ?label) WHERE {
+  ?s lp:LP_0000537 ?uri .
+  ?uri rdfs:label ?l .
+  ?s lp:LP_0000029 <${bl}> .${sa.filter}
+  FILTER(lang(?l) = "de")
+} GROUP BY ?uri ORDER BY ?label`;
+    }
+
+    case 'find_lehrplaene': {
+      const bl = validateSparqlIri(args.bundeslandUri);
+      const sf = validateSparqlIri(args.schulfachUri);
+      if (!bl || !sf) return null;
+      const sa = resolveOptionalSchulartFilter(args.schulartUri);
+      if (!sa) return null;
+      return `${PREFIXES}
+SELECT DISTINCT ?s ?label WHERE {
+  ?lpsubclass rdfs:subClassOf* lp:LP_0000438 .
+  ?s rdf:type ?lpsubclass .
+  ?s rdfs:label ?label .
+  ?s lp:LP_0000029 <${bl}> .
+  ?s lp:LP_0000537 <${sf}> .${sa.filter}
+} ORDER BY ?label LIMIT 50`;
+    }
+
+    case 'get_node_children': {
+      const node = validateSparqlIri(args.nodeUri);
+      if (!node) return null;
+      // Topic-node labels in the state graphs are mostly untagged, so we
+      // don't filter by language — a `lang(?l) = "de"` filter would silently
+      // drop most of them.
+      //
+      // Has-part is materialised exclusively as obo:BFO_0000051. The ontology
+      // declares lp:LP_0000008 ("hat Teil") as a sub-property, but no state
+      // graph contains LP_0000008 triples and Virtuoso does no property-
+      // hierarchy reasoning — always query the super-property.
+      //
+      // The data over-asserts BFO_0000051 transitively — a Lehrplan with 5
+      // chapters and 100 leaf bullets emits all 105 as direct has-part
+      // children of the Lehrplan. We want only the truly-direct children
+      // (the 5 chapters), so we exclude any ?child that's also reachable
+      // via an intermediate has-part hop from the same parent.
+      return `${PREFIXES}
+SELECT DISTINCT ?child ?childLabel
+  (EXISTS { ?child obo:BFO_0000051 ?gc } AS ?hasChildren)
+WHERE {
+  <${node}> obo:BFO_0000051 ?child .
+  FILTER NOT EXISTS {
+    <${node}> obo:BFO_0000051 ?intermediate .
+    ?intermediate obo:BFO_0000051 ?child .
+    FILTER(?intermediate != ?child)
+  }
+  OPTIONAL { ?child rdfs:label ?childLabel . }
+} ORDER BY DESC(?hasChildren) ?childLabel`;
+    }
+
+    default:
+      return null;
+  }
+}
+
+/** Tools the picker may invoke. Anything else is rejected. */
+const ALLOWED_TOOLS = new Set([
+  'list_bundeslaender',
+  'list_schularten',
+  'list_schulfaecher',
+  'find_lehrplaene',
+  'get_node_children'
+]);
+
+/**
+ * Convert SPARQL bindings to picker items. The id column varies by tool —
+ * `?uri` for the term listings, `?s` for find_lehrplaene, `?child` for
+ * get_node_children — so coalesce across the three shapes. The optional
+ * `?hasChildren` is only emitted by get_node_children.
+ *
+ * @param {Record<string, { value: string, datatype?: string }>[]} bindings
+ * @returns {{ id: string, label: string, hasChildren?: boolean }[]}
+ */
+function bindingsToItems(bindings) {
+  /** @type {{ id: string, label: string, hasChildren?: boolean }[]} */
+  const out = [];
+  for (const b of bindings) {
+    const id = b.uri?.value ?? b.s?.value ?? b.child?.value ?? '';
+    const label = b.label?.value ?? b.childLabel?.value ?? '';
+    if (!id || !label) continue;
+    /** @type {{ id: string, label: string, hasChildren?: boolean }} */
+    const item = { id, label };
+    // Virtuoso returns EXISTS as xsd:integer "1"/"0"; other SPARQL stores
+    // return xsd:boolean "true"/"false". Accept both.
+    if (b.hasChildren) {
+      const v = b.hasChildren.value;
+      item.hasChildren = v === 'true' || v === '1';
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+/** @type {import('@sveltejs/kit').RequestHandler} */
+export async function POST({ request }) {
+  /** @type {{ tool?: string, args?: Record<string, unknown> }} */
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const tool = typeof body.tool === 'string' ? body.tool : '';
+  if (!ALLOWED_TOOLS.has(tool)) {
+    return json({ error: `Unknown tool '${tool}'` }, { status: 400 });
+  }
+
+  const args = body.args && typeof body.args === 'object' ? body.args : {};
+
+  const endpoint = env.SPARQL_ENDPOINT_URL;
+  if (!endpoint) {
+    console.error('[/api/curricula] SPARQL_ENDPOINT_URL is not configured');
+    return json({ error: 'Curriculum service not configured' }, { status: 503 });
+  }
+
+  const sparql = buildSparql(tool, args);
+  if (!sparql) {
+    return json({ error: `Invalid or missing arguments for '${tool}'` }, { status: 400 });
+  }
+
+  let result;
+  try {
+    result = await query({ endpoint, sparql });
+  } catch (err) {
+    console.error(`[/api/curricula] ${tool} SPARQL query failed:`, err);
+    return json({ error: 'Upstream SPARQL error' }, { status: 502 });
+  }
+
+  const items = bindingsToItems(result?.results?.bindings ?? []);
+  return json({ items }, { headers: { 'cache-control': CACHE_HEADER } });
+}

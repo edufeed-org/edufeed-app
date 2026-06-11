@@ -5,7 +5,7 @@
   import { nip19 } from 'nostr-tools';
   import { RepliesModel } from 'applesauce-common/models';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
-  import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils';
   import { ChatIcon, RepostIcon, LightningIcon } from '$lib/components/icons';
   import BookmarkButton from '$lib/components/bookmarks/BookmarkButton.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -30,7 +30,7 @@
 
   let showComments = $state(false);
   let commentCount = $state(0);
-  let profileHref = $derived(resolve(`/p/${hexToNpub(note.pubkey) || note.pubkey}`));
+  let profileHref = $derived(resolve(profileLink(note.pubkey)));
 
   // Generate nevent for navigation — route directly to community context when available
   const neventHref = $derived.by(() => {

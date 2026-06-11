@@ -185,8 +185,8 @@
           bind:value={topic}
           disabled={isEditMode}
         />
-        <div class="label">
-          <span class="label-text-alt text-base-content/60">{m.wiki_editor_topic_help()}</span>
+        <div class="mt-1 text-xs text-base-content/60">
+          {m.wiki_editor_topic_help()}
         </div>
         {#if normalizedTopic && !isEditMode}
           <div class="mt-1">

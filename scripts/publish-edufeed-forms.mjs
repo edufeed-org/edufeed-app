@@ -62,6 +62,10 @@ function emitFieldTags(field, vocabCoord) {
   const options = {};
   if (field.required) options.required = true;
   if (field.multiple) options.multiple = true;
+  if (field.min !== undefined) options.min = field.min;
+  if (field.max !== undefined) options.max = field.max;
+  if (field.pattern) options.pattern = field.pattern;
+  if (field.placeholder) options.placeholder = field.placeholder;
   const tags = [
     ['field', field.id, field.type, field.label, field.defaultValue || '', JSON.stringify(options)]
   ];

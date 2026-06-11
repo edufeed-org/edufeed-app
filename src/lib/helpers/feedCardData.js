@@ -73,6 +73,10 @@ export function getFeedCardData(event) {
       const text = truncate(event.content, 120);
       return { title: text || 'Note', typeKey: 'note', tags };
     }
+    case 1068: {
+      const question = truncate(event.content, 120);
+      return { title: question || 'Untitled Poll', typeKey: 'poll', tags };
+    }
     case 11: {
       const excerpt = truncate(event.content, 120);
       return {
@@ -115,10 +119,11 @@ export function getFeedCardData(event) {
     }
     case 1111: {
       const noteText = truncate(event.content, 120);
+      const isWeb = getTag('K') === 'web';
       return {
-        title: noteText || 'Note',
-        subtitle: getTag('K') === 'web' ? getTag('I') : getTag('r'),
-        typeKey: 'note',
+        title: noteText || (isWeb ? 'Page Note' : 'Reply'),
+        subtitle: isWeb ? getTag('I') : undefined,
+        typeKey: isWeb ? 'page-note' : 'reply',
         tags
       };
     }

@@ -18,6 +18,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {boolean} gatedMode
  * @property {boolean} includeClientTag
  * @property {'communities' | 'following'} dashboardFeedSource
+ * @property {boolean} linkPreviewsEnabled
  */
 
 /**
@@ -78,7 +79,11 @@ function parseThemeToSettings(theme) {
  */
 function getDefaultSettings() {
   // Get system theme preference
-  const prefersDark = browser && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const prefersDark =
+    browser &&
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches;
 
   // Use runtime config for default theme, falling back to hardcoded defaults
   const defaultTheme = /** @type {'light' | 'dark' | 'stil' | 'stil-dark'} */ (
@@ -95,7 +100,8 @@ function getDefaultSettings() {
     colorMode,
     gatedMode: runtimeConfig.gatedMode?.default ?? false,
     includeClientTag: true,
-    dashboardFeedSource: 'communities'
+    dashboardFeedSource: 'communities',
+    linkPreviewsEnabled: true
   };
 }
 
@@ -115,7 +121,8 @@ function migrateSettings(stored) {
       colorMode: stored.colorMode ?? defaults.colorMode,
       gatedMode: stored.gatedMode ?? defaults.gatedMode,
       includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
-      dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
+      dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource,
+      linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
     };
   }
 
@@ -153,7 +160,8 @@ function migrateSettings(stored) {
     colorMode,
     gatedMode: stored.gatedMode ?? defaults.gatedMode,
     includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
-    dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource
+    dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource,
+    linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
   };
 }
 
@@ -198,7 +206,7 @@ let settings = $state(loadSettings());
 /** @type {'light' | 'dark'} */
 let systemTheme = $state('light');
 
-if (browser) {
+if (browser && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   systemTheme = /** @type {'light' | 'dark'} */ (mediaQuery.matches ? 'dark' : 'light');
 
@@ -421,6 +429,23 @@ export const appSettings = {
    */
   set dashboardFeedSource(value) {
     settings.dashboardFeedSource = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get link previews enabled
+   * @returns {boolean}
+   */
+  get linkPreviewsEnabled() {
+    return settings.linkPreviewsEnabled;
+  },
+
+  /**
+   * Set link previews enabled
+   * @param {boolean} value
+   */
+  set linkPreviewsEnabled(value) {
+    settings.linkPreviewsEnabled = value;
     saveSettings(settings);
   },
 

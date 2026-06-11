@@ -64,4 +64,40 @@ test.describe('Calendar page', () => {
     await page.locator('dialog#event-details-modal button.btn-outline').click();
     await expect(page.locator('dialog#event-details-modal')).not.toBeVisible({ timeout: 5000 });
   });
+
+  test('view toggle buttons switch URL and render matching view', async ({ page }) => {
+    // Locks in Bug 1: clicking Grid used to strip `view` from the URL, which
+    // the loader then defaulted back to 'list'. All three buttons must set
+    // the URL param explicitly.
+    await page.goto('/calendar?view=calendar');
+    await waitForCalendarEvents(page);
+
+    const gridBtn = page.locator('button[title="Calendar Grid View"]:visible').first();
+    const listBtn = page.locator('button[title="List View"]:visible').first();
+    const mapBtn = page.locator('button[title="Map View"]:visible').first();
+
+    // Grid: URL carries ?view=calendar and event bars render.
+    await expect(page).toHaveURL(/view=calendar/);
+    await expect(page.locator('.calendar-event-bar').first()).toBeVisible({ timeout: 10_000 });
+
+    // Click List → URL updates, list cards render.
+    await listBtn.click();
+    await expect(page).toHaveURL(/view=list/, { timeout: 5000 });
+    await expect(page.locator('[data-testid="calendar-event-card"]').first()).toBeVisible({
+      timeout: 10_000
+    });
+
+    // Click Map → URL updates. The mock-relay test fixtures have no location
+    // data, so the map renders its empty-state card rather than a canvas; we
+    // only assert the URL switch here (Bug 1 scope). Canvas rendering and
+    // pin persistence are verified against real data via a dev-server probe.
+    await mapBtn.click();
+    await expect(page).toHaveURL(/view=map/, { timeout: 5000 });
+
+    // Click Grid → URL returns to calendar. This is the exact path that used
+    // to silently fall through to the 'list' default.
+    await gridBtn.click();
+    await expect(page).toHaveURL(/view=calendar/, { timeout: 5000 });
+    await expect(page.locator('.calendar-event-bar').first()).toBeVisible({ timeout: 10_000 });
+  });
 });

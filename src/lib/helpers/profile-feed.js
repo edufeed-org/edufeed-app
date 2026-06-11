@@ -14,7 +14,8 @@ export const FEED_CATEGORIES = [
   { id: 'calendar', kinds: [31922, 31923] },
   { id: 'resources', kinds: [30142] },
   { id: 'articles', kinds: [30023] },
-  { id: 'bookmarks', kinds: [39701, 9802, 1111] }
+  { id: 'bookmarks', kinds: [39701, 9802, 1111] },
+  { id: 'polls', kinds: [1068] }
 ];
 
 /** All kinds included in the profile feed */

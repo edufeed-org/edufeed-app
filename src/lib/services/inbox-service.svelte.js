@@ -16,10 +16,17 @@ import {
   getEducationalRelays,
   getAllLookupRelays
 } from '$lib/helpers/relay-helper.js';
-import { getNotificationType, isUnread, filterSelfNotifications } from '$lib/helpers/inbox.js';
+import {
+  getNotificationType,
+  isUnread,
+  filterSelfNotifications,
+  isMembershipApplication
+} from '$lib/helpers/inbox.js';
+import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
+import { hasNip44 } from '$lib/helpers/nip44.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
 const DEFAULT_LOOKBACK = 604800; // 7 days
@@ -128,11 +135,29 @@ function prefetchReferencedContent(notifications) {
 
 // --- Reactive service (Svelte 5 runes) ---
 
+/**
+ * Raw notifications from the event store, with only the self-filter applied.
+ * The membership-application filter is applied *reactively* in the derived
+ * `mainNotifications` below — needed because runtimeConfig.membership loads
+ * asynchronously after the inbox subscription fires its initial callback,
+ * so filtering inside the subscribe callback would silently miss everything
+ * received before config arrives.
+ *
+ * @type {import('nostr-tools').NostrEvent[]}
+ */
+let rawMainNotifications = $state.raw([]);
+
 /** @type {import('nostr-tools').NostrEvent[]} */
-let mainNotifications = $state.raw([]);
+let mainNotifications = $derived.by(() => {
+  const membershipFormAddress = runtimeConfig.membership?.formAddress;
+  return rawMainNotifications.filter((e) => !isMembershipApplication(e, membershipFormAddress));
+});
 
 /** @type {import('nostr-tools').NostrEvent[]} */
 let rsvpNotifications = $state.raw([]);
+
+/** @type {import('nostr-tools').NostrEvent[]} */
+let pollResponseNotifications = $state.raw([]);
 
 /** @type {Record<string, number> | null} */
 let readMarkers = $state(null);
@@ -147,9 +172,11 @@ let readItemIds = $state.raw(new Set());
 /** @type {import('rxjs').Subscription[]} */
 let subscriptions = [];
 
-// Merge main + RSVPs, sorted by time (newest first)
+// Merge main + RSVPs + poll responses, sorted by time (newest first)
 let notifications = $derived.by(() => {
-  return [...mainNotifications, ...rsvpNotifications].sort((a, b) => b.created_at - a.created_at);
+  return [...mainNotifications, ...rsvpNotifications, ...pollResponseNotifications].sort(
+    (a, b) => b.created_at - a.created_at
+  );
 });
 
 /**
@@ -235,7 +262,7 @@ export function initializeInbox(pubkey) {
       let content = event.content;
       // Try NIP-44 decrypt (read markers may be encrypted to self)
       try {
-        if (manager.active?.signer?.nip44?.decrypt) {
+        if (manager.active && hasNip44(manager.active.signer)) {
           content = await manager.active.signer.nip44.decrypt(pubkey, event.content);
         }
       } catch {
@@ -268,7 +295,7 @@ export function initializeInbox(pubkey) {
     ])
     .subscribe((events) => {
       const filtered = filterSelfNotifications(events || [], pubkey);
-      mainNotifications = filtered;
+      rawMainNotifications = filtered;
       prefetchReferencedContent(filtered);
     });
   subscriptions.push(modelSub);
@@ -304,6 +331,35 @@ export function initializeInbox(pubkey) {
     }
   });
   subscriptions.push(calSub);
+
+  // Poll response loading: load user's polls (kind 1068), then responses (kind 1018) on those.
+  const pollLoader = createTimelineLoader(
+    timedPool,
+    getCommunikeyRelays(),
+    /** @type {any} */ ({
+      kinds: [1068],
+      authors: [pubkey],
+      since: Math.floor(Date.now() / 1000) - 15552000
+    }),
+    { eventStore, limit: 100 }
+  );
+
+  const pollSub = pollLoader().subscribe({
+    complete: () => {
+      const pollModel = eventStore.model(TimelineModel, {
+        kinds: [1068],
+        authors: [pubkey]
+      });
+      const idsSub = pollModel.subscribe((events) => {
+        if (!events?.length) return;
+        const ids = events.map((e) => e.id);
+        loadPollResponseNotifications(ids);
+        idsSub.unsubscribe();
+      });
+      subscriptions.push(idsSub);
+    }
+  });
+  subscriptions.push(pollSub);
 }
 
 /**
@@ -337,6 +393,36 @@ export function loadRsvpNotifications(calendarEventCoords) {
 }
 
 /**
+ * Load poll response notifications (kind 1018) for the given poll IDs.
+ * @param {string[]} pollIds
+ */
+export function loadPollResponseNotifications(pollIds) {
+  if (!pollIds.length || !activePubkey) return;
+
+  const since = Math.floor(Date.now() / 1000) - DEFAULT_LOOKBACK;
+
+  const responseLoader = createTimelineLoader(
+    timedPool,
+    getCommunikeyRelays(),
+    /** @type {any} */ ({ kinds: [1018], '#e': pollIds, since }),
+    { eventStore, limit: 100 }
+  );
+
+  const sub = responseLoader().subscribe();
+  subscriptions.push(sub);
+
+  const pubkey = activePubkey;
+  const modelSub = eventStore
+    .model(TimelineModel, { kinds: [1018], '#e': pollIds })
+    .subscribe((events) => {
+      const filtered = filterSelfNotifications(events || [], pubkey);
+      pollResponseNotifications = filtered;
+      prefetchReferencedContent(filtered);
+    });
+  subscriptions.push(modelSub);
+}
+
+/**
  * Mark notifications as read.
  * @param {string} [type] - Specific type, or omit for all
  */
@@ -358,7 +444,8 @@ export async function markAsRead(type) {
       'wave',
       'comment',
       'mention',
-      'rsvp'
+      'rsvp',
+      'pollVote'
     ]) {
       updated[t] = now;
     }
@@ -396,6 +483,7 @@ export function cleanup() {
   subscriptions = [];
   mainNotifications = [];
   rsvpNotifications = [];
+  pollResponseNotifications = [];
   readMarkers = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
   readItemIds = new Set();

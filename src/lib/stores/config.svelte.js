@@ -58,14 +58,12 @@ const defaultConfig = {
   calendar: {
     weekStartDay: 1,
     locale: 'de-DE',
-    timeFormat: '24h'
+    timeFormat: '24h',
+    featuredAuthors: /** @type {string[]} */ ([])
   },
   signup: {
-    suggestedUsers: [
-      'npub1f7jar3qnu269uyx5p0e4v24hqxjnxysxudvujza2ur5ehltvdeqsly2fx9',
-      'npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma',
-      'npub1tgftg8kptdrxxg0g3sm3hckuglv3j0uu3way4vylc5qyt0f44m0s3gun6e'
-    ]
+    /** @type {string[]} */
+    suggestedCommunities: []
   },
   blossom: {
     maxFileSize: 5 * 1024 * 1024 // 5MB
@@ -131,7 +129,22 @@ const defaultConfig = {
       learningResourceType: 'hcrt',
       about: 'hochschulfaechersystematik',
       audience: 'intendedEndUserRole'
+    },
+    schemeNaddrs: {
+      schulfaecher: '',
+      hochschulfaecher: '',
+      educationalLevel: '',
+      hcrt: '',
+      newLrt: '',
+      lrmiAudience: '',
+      interactivityType: '',
+      conditionsOfAccess: ''
     }
+  },
+  // Resource form variants (AMB vs EKW, etc.). Order defines picker order + default.
+  resourceFormVariants: {
+    /** @type {string[]} */
+    enabled: ['amb']
   },
   ui: {
     defaultLightTheme: 'light',
@@ -145,6 +158,13 @@ const defaultConfig = {
     svg: '/favicon.svg',
     png32: '/favicon-32x32.png',
     png16: '/favicon-16x16.png'
+  },
+  // Membership application (NIP-05 handle request flow)
+  membership: {
+    enabled: false,
+    handleDomain: '',
+    formAddress: '',
+    adminPubkeys: /** @type {string[]} */ ([])
   }
 };
 
@@ -265,7 +285,15 @@ export function initializeConfig(runtimeConfig) {
       vocabularies: {
         ...defaultConfig.educational.vocabularies,
         ...runtimeConfig.educational?.vocabularies
+      },
+      schemeNaddrs: {
+        ...defaultConfig.educational.schemeNaddrs,
+        ...runtimeConfig.educational?.schemeNaddrs
       }
+    },
+    resourceFormVariants: {
+      enabled:
+        runtimeConfig.resourceFormVariants?.enabled || defaultConfig.resourceFormVariants.enabled
     },
     ui: {
       ...defaultConfig.ui,
@@ -274,6 +302,10 @@ export function initializeConfig(runtimeConfig) {
     favicon: {
       ...defaultConfig.favicon,
       ...runtimeConfig.favicon
+    },
+    membership: {
+      ...defaultConfig.membership,
+      ...runtimeConfig.membership
     }
   };
 
@@ -358,5 +390,11 @@ export const runtimeConfig = {
   },
   get favicon() {
     return config.favicon;
+  },
+  get resourceFormVariants() {
+    return config.resourceFormVariants;
+  },
+  get membership() {
+    return config.membership;
   }
 };

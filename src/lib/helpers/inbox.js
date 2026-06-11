@@ -13,7 +13,8 @@ const KIND_TO_TYPE = {
   7: 'reaction',
   1111: 'comment',
   9: 'mention',
-  31925: 'rsvp'
+  31925: 'rsvp',
+  1018: 'pollVote'
 };
 
 /**
@@ -47,6 +48,21 @@ export function filterSelfNotifications(events, userPubkey) {
 }
 
 /**
+ * Membership applications are kind 1069 form responses targeting the
+ * deployment-configured membership form. They are processed in the dedicated
+ * admin panel, not the general inbox.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string | null | undefined} membershipFormAddress
+ * @returns {boolean}
+ */
+export function isMembershipApplication(event, membershipFormAddress) {
+  if (!membershipFormAddress) return false;
+  if (event.kind !== 1069) return false;
+  return event.tags.some((t) => t[0] === 'a' && t[1] === membershipFormAddress);
+}
+
+/**
  * @param {import('nostr-tools').NostrEvent} event
  * @returns {string | null}
  */
@@ -72,7 +88,7 @@ export function getNotificationUrl(event) {
 
   // Waves — link to waver's profile
   if (type === 'wave') {
-    return `/p/${event.pubkey}`;
+    return `/p/${nip19.npubEncode(event.pubkey)}`;
   }
 
   // Reactions — use last e/a tag per NIP-25
@@ -94,6 +110,13 @@ export function getNotificationUrl(event) {
     const addr = getRSVPAddressPointer(event);
     if (addr) return `/${encodePointer(addr)}`;
     return null;
+  }
+
+  // Poll votes (kind 1018) — link to the poll's nevent via the e-tag
+  if (type === 'pollVote') {
+    const eTag = event.tags?.find((t) => t[0] === 'e');
+    if (!eTag || !eTag[1]) return null;
+    return `/${encodePointer({ id: eTag[1], relays: eTag[2] ? [eTag[2]] : [] })}`;
   }
 
   return null;

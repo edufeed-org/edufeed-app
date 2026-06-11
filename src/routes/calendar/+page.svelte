@@ -11,6 +11,6 @@
   />
 </svelte:head>
 
-<div class="container mx-auto w-full max-w-full overflow-hidden px-4 py-8">
+<div class="bg-base-100">
   <CalendarView globalMode={true} />
 </div>

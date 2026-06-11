@@ -30,6 +30,9 @@
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
   import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
+  import LocalCachePanel from '$lib/components/settings/LocalCachePanel.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
+  import MembershipCard from '$lib/components/membership/MembershipCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
@@ -571,7 +574,7 @@
   <title>{m.common_settings()} - {runtimeConfig.appName}</title>
 </svelte:head>
 
-<div class="min-h-screen px-4 py-8">
+<div class="px-4 py-8">
   <div class="mx-auto max-w-2xl">
     <!-- Header -->
     <div class="mb-8 text-center">
@@ -589,6 +592,18 @@
         <ThemeSwitcher />
       </div>
     </div>
+
+    <!-- Local Cache Panel (visible to all users) -->
+    <div class="mb-6">
+      <LocalCachePanel />
+    </div>
+
+    <!-- Membership Card (only when membership feature is enabled and user is logged in) -->
+    {#if activeAccount}
+      <div class="mb-6">
+        <MembershipCard />
+      </div>
+    {/if}
 
     {#if !activeAccount}
       <div class="alert alert-warning shadow-lg">
@@ -1061,6 +1076,34 @@
         </div>
       {/if}
 
+      <!-- Link Previews Card -->
+      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <h2 class="mb-2 card-title text-2xl">
+            <span class="text-2xl">{m.settings_link_previews_title()}</span>
+          </h2>
+          <p class="mb-6 text-base-content/70">
+            {m.settings_link_previews_description()}
+          </p>
+
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="checkbox"
+                class="toggle toggle-primary"
+                checked={appSettings.linkPreviewsEnabled}
+                onchange={(e) => {
+                  appSettings.linkPreviewsEnabled = /** @type {HTMLInputElement} */ (
+                    e.currentTarget
+                  ).checked;
+                }}
+              />
+              <span class="label-text font-medium">{m.settings_link_previews_label()}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Gated Mode Card -->
       <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">
@@ -1174,6 +1217,30 @@
           <DmRelaySettings />
         </div>
       </div>
+
+      <!-- Recovery File Card (only for nsec accounts — extension/bunker
+           accounts don't have a recoverable secret in this app) -->
+      {#if activeAccount?.type === 'nsec'}
+        <div
+          class="card mt-6 bg-base-200 shadow-xl"
+          data-testid="settings-recovery-card"
+          transition:fade={{ duration: 200 }}
+        >
+          <div class="card-body">
+            <h2 class="mb-2 card-title text-2xl">
+              <span class="text-2xl">{m.settings_recovery_title()}</span>
+            </h2>
+            <p class="mb-6 text-base-content/70">{m.settings_recovery_description()}</p>
+            <button
+              class="btn btn-primary"
+              data-testid="settings-recovery-download"
+              onclick={() => modalStore.openModal('recovery-download')}
+            >
+              {m.settings_recovery_download_cta()}
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <!-- Developer Settings Card -->
       <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>

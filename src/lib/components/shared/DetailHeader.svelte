@@ -15,6 +15,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import EventContextMenu from './EventContextMenu.svelte';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @typedef {Object} Props
@@ -61,8 +62,10 @@
 </script>
 
 <div class="mb-4">
-  <!-- Toolbar: back + author + metadata + spacer + actions + menu -->
-  <div class="flex items-center gap-2 border-b border-base-300 pb-2">
+  <!-- Toolbar: wraps to two rows on mobile, single row on sm:+ -->
+  <div
+    class="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-base-300 pb-2 sm:flex-nowrap"
+  >
     <button
       onclick={() => {
         if (getHasHistory()) {
@@ -71,44 +74,56 @@
           goto(getFallbackRoute(event));
         }
       }}
-      class="btn btn-circle flex-shrink-0 btn-ghost btn-sm"
+      class="btn order-1 btn-circle flex-shrink-0 btn-ghost btn-sm"
       aria-label={m.common_back()}
     >
       <ChevronLeftIcon class_="w-5 h-5" />
     </button>
 
     {#if authorPubkey}
-      <ProfileAvatar pubkey={authorPubkey} size="xs" linkToProfile />
-      <span class="truncate text-xs">
-        <a href={resolve(`/p/${authorPubkey}`)} class="font-medium hover:underline">
-          {authorName}
-        </a>
-        {#if date}
-          <span class="opacity-50">
-            {#if dateLabel}
-              &middot; {dateLabel} {date}
-            {:else}
-              &middot; {date}
-            {/if}
-          </span>
-        {/if}
-        {#if stats}
-          <span class="opacity-50">&middot; {stats}</span>
-        {/if}
-      </span>
+      <div class="order-2 flex min-w-0 flex-1 items-center gap-2 sm:flex-initial">
+        <ProfileAvatar pubkey={authorPubkey} size="xs" linkToProfile />
+        <span class="truncate text-xs">
+          <a href={resolve(profileLink(authorPubkey))} class="font-medium hover:underline">
+            {authorName}
+          </a>
+          {#if date}
+            <span class="opacity-50">
+              {#if dateLabel}
+                &middot; {dateLabel} {date}
+              {:else}
+                &middot; {date}
+              {/if}
+            </span>
+          {/if}
+          {#if stats}
+            <span class="opacity-50">&middot; {stats}</span>
+          {/if}
+        </span>
+      </div>
     {/if}
+
+    <!-- Mobile-only line break: forces metadata + actions onto row 2 -->
+    <div class="order-4 basis-full sm:hidden" aria-hidden="true"></div>
 
     {#if metadata}
-      {@render metadata()}
+      <div class="order-5 sm:order-3">
+        {@render metadata()}
+      </div>
     {/if}
 
-    <div class="flex-1"></div>
+    <!-- Spacer: pushes actions/menu right on mobile, fills space on desktop -->
+    <div class="order-6 ml-auto sm:order-4 sm:ml-0 sm:flex-1"></div>
 
     {#if actions}
-      {@render actions()}
+      <div class="order-7 sm:order-5">
+        {@render actions()}
+      </div>
     {/if}
 
-    <EventContextMenu {event} {onEdit} {onDelete} {deleteTitle} {deleteItemName} />
+    <div class="order-3 sm:order-last">
+      <EventContextMenu {event} {onEdit} {onDelete} {deleteTitle} {deleteItemName} />
+    </div>
   </div>
 
   <!-- Title + subtitle: full width, no truncation -->

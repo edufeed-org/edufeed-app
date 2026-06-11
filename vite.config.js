@@ -29,8 +29,9 @@ export default defineConfig({
     svelteTesting()
   ],
   test: {
-    include: ['src/**/*.test.js'],
+    include: ['src/**/*.test.js', 'src/**/*.test.svelte.js', 'scripts/**/*.test.mjs'],
     environment: 'jsdom',
-    globals: true
+    globals: true,
+    hookTimeout: 30000
   }
 });

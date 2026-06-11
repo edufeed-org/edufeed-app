@@ -73,6 +73,19 @@ export function npubToHex(npub) {
 }
 
 /**
+ * Build a profile route path (`/p/<npub>`) for a pubkey.
+ * Accepts hex or npub; falls back to the original value if npub encoding fails
+ * so the route's hex/npub-tolerant param matcher can still resolve it.
+ * @param {string} pubkey - hex pubkey or npub
+ * @returns {`/p/${string}`}
+ */
+export function profileLink(pubkey) {
+  if (pubkey.startsWith('npub1')) return `/p/${pubkey}`;
+  const npub = hexToNpub(pubkey);
+  return `/p/${npub || pubkey}`;
+}
+
+/**
  * Normalize pubkey identifier to hex format
  * Accepts both hex and npub, returns hex
  * @param {string} identifier - hex pubkey or npub
@@ -176,6 +189,24 @@ export function isCalendarIdentifier(decoded) {
  */
 export function isWikiIdentifier(decoded) {
   return decoded.success && decoded.type === 'naddr' && decoded.data.kind === 30818;
+}
+
+/**
+ * Check if identifier points to a long-form article (NIP-23)
+ * @param {ReturnType<typeof decodeNostrIdentifier>} decoded - Decoded identifier
+ * @returns {boolean}
+ */
+export function isArticleIdentifier(decoded) {
+  return decoded.success && decoded.type === 'naddr' && decoded.data.kind === 30023;
+}
+
+/**
+ * Check if identifier points to an AMB educational resource
+ * @param {ReturnType<typeof decodeNostrIdentifier>} decoded - Decoded identifier
+ * @returns {boolean}
+ */
+export function isAMBResourceIdentifier(decoded) {
+  return decoded.success && decoded.type === 'naddr' && decoded.data.kind === 30142;
 }
 
 /**
@@ -479,6 +510,41 @@ export const encodeEventToNaddr = (event, relays = []) => {
     return nip19.naddrEncode(naddrData);
   } catch (error) {
     console.error('Error encoding event to naddr:', error);
+    return '';
+  }
+};
+
+/**
+ * Encode an event into the right NIP-19 bech32 form:
+ *   - addressable kinds (30000–39999) → naddr
+ *   - everything else (regular, replaceable) → nevent
+ *
+ * Use this for shareable links / copy-id actions that need to work for any kind.
+ *
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {string[]} [relays]
+ * @returns {string}
+ */
+export const encodeEventBech32 = (event, relays = []) => {
+  const isAddressable = event.kind >= 30000 && event.kind < 40000;
+  if (isAddressable) return encodeEventToNaddr(event, relays);
+
+  try {
+    let relayHints = relays;
+    if (!relayHints || relayHints.length === 0) {
+      const seenRelays = getSeenRelays(event);
+      if (seenRelays && seenRelays.size > 0) {
+        relayHints = Array.from(seenRelays).slice(0, 3);
+      }
+    }
+    return nip19.neventEncode({
+      id: event.id,
+      kind: event.kind,
+      author: event.pubkey,
+      relays: relayHints && relayHints.length > 0 ? relayHints : undefined
+    });
+  } catch (error) {
+    console.error('Error encoding event to nevent:', error);
     return '';
   }
 };

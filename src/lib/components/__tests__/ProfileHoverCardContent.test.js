@@ -13,7 +13,8 @@ vi.mock('applesauce-core/helpers', () => ({
 
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
   hexToNpub: (/** @type {string} */ hex) => (hex ? `npub1${hex.slice(0, 59)}` : null),
-  generateAuthorColor: (/** @type {string} */ _hex) => `rgb(128,64,32)`
+  generateAuthorColor: (/** @type {string} */ _hex) => `rgb(128,64,32)`,
+  profileLink: (/** @type {string} */ hex) => (hex ? `/p/npub1${hex.slice(0, 59)}` : '#')
 }));
 
 vi.mock('$app/paths', () => ({
@@ -68,7 +69,7 @@ vi.mock('applesauce-core/models', () => ({
 }));
 
 vi.mock('$lib/stores/badge-awards.svelte.js', () => ({
-  useBadgeAwards: () => ({
+  useProfileBadges: () => ({
     getBadges: () => [],
     isLoading: false
   })
@@ -158,6 +159,6 @@ describe('ProfileHoverCardContent', () => {
     });
     const link = container.querySelector('a');
     expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toBe(`/p/${TEST_PUBKEY}`);
+    expect(link?.getAttribute('href')).toBe(`/p/npub1${TEST_PUBKEY.slice(0, 59)}`);
   });
 });

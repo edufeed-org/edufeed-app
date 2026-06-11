@@ -12,6 +12,7 @@
   import ImageWithFallback from './ImageWithFallback.svelte';
   import HoverCard from './HoverCard.svelte';
   import ProfileHoverCardContent from './ProfileHoverCardContent.svelte';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @typedef {Object} Props
@@ -130,7 +131,7 @@
 {/snippet}
 
 {#if effectiveShowHoverCard && pubkey}
-  <HoverCard>
+  <HoverCard fixed>
     {#snippet trigger()}
       <div class="avatar {className}">
         {@render avatarContent()}
@@ -141,7 +142,7 @@
     {/snippet}
   </HoverCard>
 {:else if linkToProfile && pubkey}
-  <a href={resolve(`/p/${pubkey}`)} class="avatar {className}">
+  <a href={resolve(profileLink(pubkey))} class="avatar {className}">
     {@render avatarContent()}
   </a>
 {:else}

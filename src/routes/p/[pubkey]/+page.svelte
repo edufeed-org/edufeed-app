@@ -16,7 +16,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { showToast } from '$lib/helpers/toast';
-  import { useBadgeAwards } from '$lib/stores/badge-awards.svelte.js';
+  import { useProfileBadges } from '$lib/stores/badge-awards.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import ProfileFeedView from '$lib/components/profile/ProfileFeedView.svelte';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
@@ -35,6 +35,7 @@
     UserIcon,
     MessageSquareIcon
   } from '$lib/components/icons';
+  import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {import('./$types').PageProps} */
@@ -55,9 +56,9 @@
   let communityPubkeys = $state(/** @type {string[]} */ ([]));
   let communitiesLoading = $state(true);
 
-  // Badge awards
-  const badgeAwards = useBadgeAwards(() => data.pubkey);
-  const getBadges = badgeAwards.getBadges;
+  // Accepted badges (NIP-58 profile_badges)
+  const profileBadges = useProfileBadges(() => data.pubkey);
+  const getBadges = profileBadges.getBadges;
   const getIssuerProfiles = useProfileMap(() => getBadges().map((b) => b.issuerPubkey));
 
   const getActiveUser = useActiveUser();
@@ -237,7 +238,7 @@
 </script>
 
 {#if loadingState === 'loading'}
-  <div class="flex min-h-screen items-center justify-center bg-base-200">
+  <div class="flex min-h-full items-center justify-center bg-base-200">
     <div class="text-center">
       <span class="loading loading-lg loading-spinner text-primary"></span>
       <p class="mt-4 text-base-content/60">{m.profile_loading()}</p>
@@ -245,7 +246,7 @@
   </div>
 {:else if loadingState === 'notFound' && isOwnProfile}
   <!-- Own profile not found — CTA to create -->
-  <div class="flex min-h-screen items-center justify-center bg-base-200 px-4">
+  <div class="flex min-h-full items-center justify-center bg-base-200 px-4">
     <div class="w-full max-w-md rounded-2xl bg-base-100 p-8 text-center shadow-2xl">
       <div class="mb-6">
         <div
@@ -273,7 +274,7 @@
   </div>
 {:else if loadingState === 'notFound' && !isOwnProfile}
   <!-- Other user's profile not found -->
-  <div class="flex min-h-screen items-center justify-center bg-base-200 px-4">
+  <div class="flex min-h-full items-center justify-center bg-base-200 px-4">
     <div class="max-w-md text-center">
       <div class="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-base-300">
         <UserIcon class_="w-12 h-12 text-base-content/40" />
@@ -288,7 +289,7 @@
     </div>
   </div>
 {:else if profile}
-  <div class="min-h-screen bg-base-200">
+  <div class="min-h-full bg-base-200">
     <!-- Banner -->
     <div class="relative">
       {#if bannerUrl && !bannerError}
@@ -361,9 +362,8 @@
 
           <!-- NIP-05 -->
           {#if profile?.nip05}
-            <div class="mt-0.5 flex items-center gap-1 text-sm text-primary">
-              <CheckIcon class_="w-3.5 h-3.5" />
-              <span>{profile.nip05}</span>
+            <div class="mt-0.5 text-sm text-primary">
+              <Nip05VerifiedBadge pubkey={data.pubkey} nip05={profile.nip05} />
             </div>
           {/if}
 
@@ -491,7 +491,7 @@
         <div class:hidden={activeTab !== 'badges'}>
           {#if activatedTabs.has('badges')}
             <div class="py-4">
-              {#if badgeAwards.isLoading}
+              {#if profileBadges.isLoading}
                 <div class="flex flex-col items-center justify-center py-16">
                   <span class="loading loading-lg loading-spinner text-primary"></span>
                   <p class="mt-4 text-base-content/60">{m.profile_content_loading()}</p>

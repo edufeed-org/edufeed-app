@@ -1,6 +1,9 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
+import { extractMetadataFromHtml } from '$lib/server/metadataExtraction.js';
+import { isHedgedocPage, extractHedgedocArticle } from '$lib/helpers/hedgedocExtractor.js';
+import { parseHttpUrl } from '$lib/server/httpUrl.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
@@ -26,21 +29,18 @@ function isPrivateIp(parsedUrl) {
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function GET({ url }) {
   const articleUrl = url.searchParams.get('url');
+  const mode = url.searchParams.get('mode'); // 'metadata' for AMB/OG extraction; default = full Readability
 
   if (!articleUrl) {
     return Response.json({ success: false, error: 'Missing url parameter' }, { status: 400 });
   }
 
-  /** @type {URL} */
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(articleUrl);
-  } catch {
-    return Response.json({ success: false, error: 'Invalid url parameter' }, { status: 400 });
-  }
-
-  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    return Response.json({ success: false, error: 'URL must be http or https' }, { status: 400 });
+  const parsedUrl = parseHttpUrl(articleUrl);
+  if (!parsedUrl) {
+    return Response.json(
+      { success: false, error: 'URL must be a valid http or https URL' },
+      { status: 400 }
+    );
   }
 
   if (isPrivateIp(parsedUrl)) {
@@ -68,6 +68,18 @@ export async function GET({ url }) {
       return Response.json(
         { success: false, error: `Fetch failed with status ${response.status}` },
         { status: 502 }
+      );
+    }
+
+    // Metadata mode + PDF: short-circuit. PDFs carry no AMB JSON-LD or Open
+    // Graph (those live in HTML <head>), so there's nothing to extract here —
+    // and the size cap below would otherwise reject any PDF >5MB before the
+    // wizard could fall through to the AI-enrich path that knows how to
+    // handle large PDFs.
+    if (mode === 'metadata' && isPdfResponse(response.headers, articleUrl)) {
+      return Response.json(
+        { success: true, metadata: { source: 'none' } },
+        { headers: { 'Cache-Control': 'public, max-age=3600' } }
       );
     }
 
@@ -117,7 +129,30 @@ export async function GET({ url }) {
       return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
     }
 
+    // Metadata-only branch: skip Readability, extract AMB JSON-LD or Open Graph
+    if (mode === 'metadata') {
+      const metadata = extractMetadataFromHtml(html);
+      return Response.json(
+        { success: true, metadata },
+        { headers: { 'Cache-Control': 'public, max-age=3600' } }
+      );
+    }
+
     const { document } = parseHTML(html);
+
+    // HedgeDoc serves raw markdown as text inside #doc.markdown-body and
+    // relies on client-side JS to render it. Detect that and render the
+    // markdown ourselves before falling through to Readability.
+    if (isHedgedocPage(document)) {
+      const hedgedocArticle = extractHedgedocArticle(document, parsedUrl);
+      if (hedgedocArticle) {
+        return Response.json(
+          { success: true, article: hedgedocArticle },
+          { headers: { 'Cache-Control': 'public, max-age=3600' } }
+        );
+      }
+    }
+
     const reader = new Readability(document);
     const article = reader.parse();
 

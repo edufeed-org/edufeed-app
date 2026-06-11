@@ -8,12 +8,14 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkIcon,
-    FilesIcon
+    ReplyIcon,
+    FilesIcon,
+    PollIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
-  import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
+  import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -64,7 +66,10 @@
     bookmark: { label: () => m.feed_badge_bookmark(), icon: BookmarkIcon },
     highlight: { label: () => m.feed_badge_highlight(), icon: BookmarkIcon },
     note: { label: () => m.feed_badge_note(), icon: BookmarkIcon },
-    form: { label: () => m.feed_badge_form(), icon: FilesIcon }
+    'page-note': { label: () => m.feed_badge_page_note(), icon: BookmarkIcon },
+    reply: { label: () => m.feed_badge_reply(), icon: ReplyIcon },
+    form: { label: () => m.feed_badge_form(), icon: FilesIcon },
+    poll: { label: () => m.feed_badge_poll(), icon: PollIcon }
   };
 
   let meta = $derived(typeMeta[typeKey]);
@@ -166,7 +171,7 @@
         {/if}
         {#if communityPubkey}
           <a
-            href={resolve(`/c/${communityPubkey}`)}
+            href={resolve(`/c/${hexToNpub(communityPubkey) || communityPubkey}`)}
             class="truncate text-xs text-base-content/60 hover:text-primary"
             onclick={(e) => e.stopPropagation()}
           >

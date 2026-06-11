@@ -4,6 +4,7 @@
 -->
 
 <script>
+  import { page } from '$app/stores';
   import { useKanbanCommunityLoader } from '$lib/loaders/kanban-community.js';
   import { CommunityBoardModel } from '$lib/models/community-content.js';
   import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
@@ -13,6 +14,8 @@
 
   /** @type {{ communityPubkey: string, communityProfile?: any }} */
   let { communityPubkey, communityProfile = null } = $props();
+
+  const communityNpub = $derived($page.data.npub);
 </script>
 
 <CommunityContentView
@@ -39,6 +42,7 @@
             {board}
             authorProfile={authorProfiles.get(board.pubkey) || null}
             compact={false}
+            {communityNpub}
           />
         </div>
       {/each}

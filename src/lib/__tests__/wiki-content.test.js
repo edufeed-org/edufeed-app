@@ -56,10 +56,22 @@ describe('renderWikiContent', () => {
     expect(html).toContain('Hello');
   });
 
-  it('renders Djot headings', async () => {
+  it('renders Djot headings with anchor ids', async () => {
     const html = await renderWikiContent('## Section Title');
-    expect(html).toContain('<h2>');
+    expect(html).toContain('<h2 id="section-title">');
+    expect(html).toContain('href="#section-title"');
     expect(html).toContain('Section Title');
+  });
+
+  it('dedupes repeated djot headings', async () => {
+    const html = await renderWikiContent('## Foo\n\n## Foo');
+    expect(html).toContain('id="foo"');
+    expect(html).toContain('id="foo-1"');
+  });
+
+  it('emits ids on AsciiDoc section headings', async () => {
+    const html = await renderWikiContent('= Doc\n\n== Section One\n\nHello.');
+    expect(html).toMatch(/id="[^"]*section[^"]*"/i);
   });
 
   it('renders Djot links', async () => {

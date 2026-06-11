@@ -23,7 +23,7 @@ export const FORM_REQUEST_KIND = 1070;
 /**
  * @typedef {Object} FormField
  * @property {string} id
- * @property {string} type - text|textarea|number|email|url|select|checkbox|radio|date
+ * @property {string} type - text|textarea|number|email|url|select|checkbox|radio|date|text-array
  * @property {string} label
  * @property {string} [defaultValue]
  * @property {Record<string, any>} [options] - { required, min, max, options, placeholder }
@@ -175,7 +175,7 @@ export function generateFieldId(label, existingIds) {
 /**
  * Validate a field value against its constraints.
  * @param {FormField} field
- * @param {string} value
+ * @param {string | string[]} value
  * @returns {string | null} Error message or null if valid
  */
 export function validateField(field, value) {
@@ -185,31 +185,45 @@ export function validateField(field, value) {
   // Required check
   if (options.required) {
     if (field.type === 'checkbox' && value !== 'true') return `${label} is required`;
-    if (field.type !== 'checkbox' && !value) return `${label} is required`;
+    if (field.type === 'text-array') {
+      const arr = Array.isArray(value) ? value : [];
+      if (!arr.some((v) => typeof v === 'string' && v.trim().length > 0)) {
+        return `${label} is required`;
+      }
+    } else if (field.vocab) {
+      const arr = Array.isArray(value) ? value : [];
+      if (arr.length === 0) return `${label} is required`;
+    } else if (field.type !== 'checkbox' && !value) {
+      return `${label} is required`;
+    }
   }
 
   // Skip further checks if empty and not required
+  if (field.type === 'text-array') return null;
+  if (field.vocab) return null;
   if (!value) return null;
+  // After this point, only scalar field types remain; treat value as string.
+  const str = /** @type {string} */ (value);
 
   // Min/max for text types (character length)
   if (
     (field.type === 'text' || field.type === 'textarea') &&
     options.min &&
-    value.length < options.min
+    str.length < options.min
   ) {
     return `${label} must be at least ${options.min} characters`;
   }
   if (
     (field.type === 'text' || field.type === 'textarea') &&
     options.max &&
-    value.length > options.max
+    str.length > options.max
   ) {
     return `${label} must be at most ${options.max} characters`;
   }
 
   // Min/max for number type (numeric value)
   if (field.type === 'number') {
-    const num = Number(value);
+    const num = Number(str);
     if (options.min !== undefined && num < options.min)
       return `${label} must be at least ${options.min}`;
     if (options.max !== undefined && num > options.max)
@@ -217,14 +231,14 @@ export function validateField(field, value) {
   }
 
   // Email format
-  if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+  if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str)) {
     return `${label} must be a valid email address`;
   }
 
   // URL format
   if (field.type === 'url') {
     try {
-      new URL(value);
+      new URL(str);
     } catch {
       return `${label} must be a valid URL`;
     }
@@ -337,6 +351,71 @@ export function getDefaultMembershipForm() {
  */
 export async function createDefaultMembershipForm(signer) {
   const { dTag, name, fields } = getDefaultMembershipForm();
+  const tags = buildFormTemplateTags(dTag, fields, { name });
+  const factory = createAppEventFactory({ signer });
+  const template = await factory.build({ kind: FORM_TEMPLATE_KIND, tags, content: '' });
+  return factory.sign(template);
+}
+
+/**
+ * Returns the edufeed.org membership application form definition.
+ * Separate from getDefaultMembershipForm() because that one is used by
+ * per-community join templates (EditCommunityModal/CreateCommunityModal).
+ * @returns {{ dTag: string, name: string, fields: FormField[] }}
+ */
+export function getEdufeedMembershipForm() {
+  return {
+    dTag: 'edufeed-membership',
+    name: m.edufeed_membership_form_name(),
+    fields: [
+      {
+        id: 'wished_handle',
+        type: 'text',
+        label: m.edufeed_membership_field_wished_handle_label(),
+        options: {
+          required: true,
+          min: 2,
+          max: 30,
+          pattern: '^[a-z0-9._-]+$',
+          placeholder: m.edufeed_membership_field_wished_handle_placeholder()
+        }
+      },
+      {
+        id: 'full_name',
+        type: 'text',
+        label: m.edufeed_membership_field_full_name_label(),
+        options: { required: true }
+      },
+      {
+        id: 'affiliation',
+        type: 'text',
+        label: m.edufeed_membership_field_affiliation_label(),
+        options: {}
+      },
+      {
+        id: 'role',
+        type: 'text',
+        label: m.edufeed_membership_field_role_label(),
+        options: { placeholder: m.edufeed_membership_field_role_placeholder() }
+      },
+      {
+        id: 'motivation',
+        type: 'textarea',
+        label: m.edufeed_membership_field_motivation_label(),
+        options: { required: true }
+      }
+    ]
+  };
+}
+
+/**
+ * Create and sign the edufeed.org membership form template event (kind 30168).
+ * Published once by admin via scripts/publish-membership-form.js.
+ * @param {import('applesauce-signers').ISigner} signer
+ * @returns {Promise<import('nostr-tools').NostrEvent>}
+ */
+export async function createEdufeedMembershipForm(signer) {
+  const { dTag, name, fields } = getEdufeedMembershipForm();
   const tags = buildFormTemplateTags(dTag, fields, { name });
   const factory = createAppEventFactory({ signer });
   const template = await factory.build({ kind: FORM_TEMPLATE_KIND, tags, content: '' });

@@ -6,6 +6,7 @@
   import CommentInput from './CommentInput.svelte';
   import { ChatIcon, TrashIcon, CopyIcon } from '$lib/components/icons';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { getPlainTextExcerpt } from '$lib/helpers/commentThreading.js';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -14,6 +15,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { nip19 } from 'nostr-tools';
   import { getSeenRelays } from 'applesauce-core/helpers';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -158,7 +160,7 @@
       <!-- Author & Timestamp -->
       <div class="flex-1">
         <div class="flex items-baseline gap-2">
-          <a href={resolve(`/p/${comment.pubkey}`)} class="font-semibold hover:underline">
+          <a href={resolve(profileLink(comment.pubkey))} class="font-semibold hover:underline">
             {getDisplayName(authorProfile) ||
               `${comment.pubkey.slice(0, 8)}...${comment.pubkey.slice(-4)}`}
           </a>
@@ -172,6 +174,8 @@
           event={comment}
           class="prose-sm mt-2 max-w-none text-base-content/80"
         />
+
+        <LinkPreviewList event={comment} />
 
         <!-- Actions -->
         <div class="mt-3 flex flex-wrap items-center gap-1">

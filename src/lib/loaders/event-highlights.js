@@ -2,9 +2,7 @@
  * Highlight loader for addressable events (kind 30023, 30818, etc.).
  * Loads kind 9802 highlights that reference an event via #a tag.
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
-import { timedPool } from './base.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { createCachedTimelineLoader } from './base.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
 /**
@@ -27,10 +25,7 @@ export function loadEventHighlights(pointer, communityPubkey) {
   }
 
   const relays = getAllLookupRelays();
-  const loader = createTimelineLoader(timedPool, relays, filter, {
-    eventStore,
-    limit: 100
-  });
+  const loader = createCachedTimelineLoader(relays, filter, { limit: 100 });
 
   /** @type {import('rxjs').Subscription | undefined} */
   let sub;
