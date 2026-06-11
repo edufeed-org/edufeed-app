@@ -14,6 +14,8 @@
     url = '',
     mime = '',
     size = 0,
+    /** Name of the file being licensed — shown so the user knows which file the modal refers to (important in multi-file flows). */
+    fileName = '',
     activeUserDisplayName = '',
     defaultSelfCreator = false,
     existingLicense = /** @type {any} */ (null),
@@ -27,7 +29,9 @@
     /** @type {(license: any) => void} */
     onsave = () => {},
     /** @type {() => void} */
-    oncancel = () => {}
+    oncancel = () => {},
+    /** @type {(() => Promise<{ url: string, hash: string, mime: string, size: number }>) | null} */
+    beforeAttest = null
   } = $props();
 
   let modalLicense = $state('https://creativecommons.org/licenses/by/4.0/');
@@ -38,6 +42,7 @@
   let modalDescription = $state('');
   let modalSaving = $state(false);
   let modalError = $state('');
+  let modalDisclosureChecked = $state(false);
 
   // Two-state modal:
   //   - 'existing': showing the existing license event with Accept / Create-my-own
@@ -46,6 +51,10 @@
   let view = $state(/** @type {'existing' | 'form'} */ ('form'));
 
   const licenseOptions = $derived(getLicenseOptions(modalLicense));
+
+  // Image vs generic file wording. An empty mime (e.g. avatar/banner uploaders
+  // that only ever handle images) keeps the image wording.
+  const isImage = $derived(!mime || mime.startsWith('image/'));
 
   // Existing-license tag readers
   const existingLicenseUrl = $derived(
@@ -73,6 +82,7 @@
       modalSource = '';
       modalDescription = '';
       modalError = '';
+      modalDisclosureChecked = false;
       view = existingLicense ? 'existing' : 'form';
     }
   });
@@ -84,10 +94,22 @@
     }
   }
 
-  function acceptExisting() {
+  async function acceptExisting() {
     if (!existingLicense) return;
-    open = false;
-    onsave(existingLicense);
+    modalError = '';
+    modalSaving = true;
+    try {
+      if (beforeAttest) {
+        await beforeAttest();
+      }
+      open = false;
+      onsave(existingLicense);
+    } catch (e) {
+      console.error('Accept-existing upload failed', e);
+      modalError = m.license_modal_upload_failed();
+    } finally {
+      modalSaving = false;
+    }
   }
 
   function switchToForm() {
@@ -97,23 +119,51 @@
 
   async function handleSave() {
     modalError = '';
-    if (!hash || !url) {
-      modalError = m.license_modal_error_missing_hash();
-      return;
-    }
     if (!modalLicense || !modalCredit) {
       modalError = m.amb_form_validation_image_license_missing();
+      return;
+    }
+    if (!modalDisclosureChecked) {
+      modalError = m.license_modal_disclosure_required_error();
       return;
     }
     modalSaving = true;
     try {
       const effectiveSigner = signer ?? manager.active;
       if (!effectiveSigner) throw new Error('No active account');
+
+      // If a beforeAttest hook is provided, run it now. Its return value supplies
+      // the (possibly freshly-uploaded) url/hash/mime/size we use for the kind 1063
+      // tags. When no hook is provided, fall back to the props passed by the parent.
+      let attestUrl = url;
+      let attestHash = hash;
+      let attestMime = mime;
+      let attestSize = size;
+      if (beforeAttest) {
+        let out;
+        try {
+          out = await beforeAttest();
+        } catch (e) {
+          console.error('Deferred upload failed', e);
+          modalError = m.license_modal_upload_failed();
+          return;
+        }
+        attestUrl = out.url;
+        attestHash = out.hash;
+        attestMime = out.mime;
+        attestSize = out.size;
+      }
+
+      if (!attestHash || !attestUrl) {
+        modalError = m.license_modal_error_missing_hash();
+        return;
+      }
+
       const template = buildLicenseTemplate({
-        hash,
-        url,
-        mime,
-        size,
+        hash: attestHash,
+        url: attestUrl,
+        mime: attestMime,
+        size: attestSize,
         license: modalLicense,
         credit: modalCredit,
         title: modalTitle || undefined,
@@ -142,13 +192,31 @@
   }
 </script>
 
+{#snippet fileNameChip()}
+  {#if fileName}
+    <div
+      class="mb-4 flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm"
+      data-testid="license-modal-filename"
+    >
+      <span class="shrink-0 font-medium opacity-70">{m.license_modal_file_label()}:</span>
+      <span class="min-w-0 truncate" title={fileName}>{fileName}</span>
+    </div>
+  {/if}
+{/snippet}
+
 {#if open}
   <div class="modal-open modal" data-testid="license-modal">
     <div class="modal-box max-w-2xl">
       {#if view === 'existing' && existingLicense}
         <!-- State A: existing license found, ask user to accept or create their own -->
         <h3 class="mb-2 text-lg font-bold">{m.license_modal_existing_title()}</h3>
-        <p class="mb-4 text-sm opacity-70">{m.license_modal_existing_description()}</p>
+        <p class="mb-4 text-sm opacity-70">
+          {isImage
+            ? m.license_modal_existing_description()
+            : m.license_modal_existing_description_file()}
+        </p>
+
+        {@render fileNameChip()}
 
         <div class="mb-4 rounded-lg border border-base-300 bg-base-200 p-4 text-sm">
           <dl class="space-y-2">
@@ -208,36 +276,43 @@
             class="btn btn-primary"
             data-testid="license-modal-accept-existing"
             onclick={acceptExisting}
+            disabled={modalSaving}
           >
             {m.license_modal_accept_existing()}
           </button>
         </div>
       {:else}
         <!-- State B: create a new license event -->
-        <h3 class="mb-2 text-lg font-bold">{m.license_modal_title()}</h3>
-        <p class="mb-4 text-sm opacity-70">{m.license_modal_description()}</p>
+        <h3 class="mb-2 text-lg font-bold">
+          {isImage ? m.license_modal_title() : m.license_modal_title_file()}
+        </h3>
+        <p class="mb-4 text-sm opacity-70">
+          {isImage ? m.license_modal_description() : m.license_modal_description_file()}
+        </p>
+
+        {@render fileNameChip()}
 
         <!-- Title (TULLU: Titel — the work's title, distinct from description/alt) -->
-        <div class="form-control mb-3">
-          <label class="label" for="license-modal-title">
-            <span class="label-text">{m.license_modal_title_field_label()}</span>
+        <div class="mb-3">
+          <label class="mb-1 block text-sm font-medium" for="license-modal-title">
+            {m.license_modal_title_field_label()}
           </label>
           <input
             id="license-modal-title"
             type="text"
-            class="input-bordered input"
+            class="input-bordered input w-full"
             placeholder={m.license_modal_title_field_placeholder()}
             bind:value={modalTitle}
           />
         </div>
 
-        <div class="form-control mb-3">
-          <label class="label" for="license-modal-license">
-            <span class="label-text">{m.license_modal_license_label()}</span>
+        <div class="mb-3">
+          <label class="mb-1 block text-sm font-medium" for="license-modal-license">
+            {m.license_modal_license_label()}
           </label>
           <select
             id="license-modal-license"
-            class="select-bordered select"
+            class="select-bordered select w-full"
             bind:value={modalLicense}
           >
             {#each licenseOptions as opt (opt.id)}
@@ -246,52 +321,68 @@
           </select>
         </div>
 
-        <div class="form-control mb-3">
-          <label class="label cursor-pointer justify-start gap-2">
+        <div class="mb-3">
+          <label class="flex cursor-pointer items-start gap-2 text-sm">
             <input
               type="checkbox"
-              class="checkbox"
+              class="checkbox mt-0.5 checkbox-sm"
               checked={modalSelfCreator}
               onchange={toggleSelfCreator}
             />
-            <span class="label-text">{m.license_modal_self_creator()}</span>
+            <span
+              >{isImage
+                ? m.license_modal_self_creator()
+                : m.license_modal_self_creator_file()}</span
+            >
           </label>
         </div>
 
-        <div class="form-control mb-3">
-          <label class="label" for="license-modal-credit">
-            <span class="label-text">{m.license_modal_credit_label()}</span>
+        <div class="mb-3">
+          <label class="mb-1 block text-sm font-medium" for="license-modal-credit">
+            {m.license_modal_credit_label()}
           </label>
           <input
             id="license-modal-credit"
             type="text"
-            class="input-bordered input"
+            class="input-bordered input w-full"
             placeholder={m.license_modal_credit_placeholder()}
             bind:value={modalCredit}
           />
         </div>
 
-        <div class="form-control mb-3">
-          <label class="label" for="license-modal-source">
-            <span class="label-text">{m.license_modal_source_label()}</span>
+        <div class="mb-3">
+          <label class="mb-1 block text-sm font-medium" for="license-modal-source">
+            {m.license_modal_source_label()}
           </label>
           <input
             id="license-modal-source"
             type="url"
-            class="input-bordered input"
+            class="input-bordered input w-full"
             bind:value={modalSource}
           />
         </div>
 
-        <div class="form-control mb-3">
-          <label class="label" for="license-modal-desc">
-            <span class="label-text">{m.license_modal_description_label()}</span>
+        <div class="mb-3">
+          <label class="mb-1 block text-sm font-medium" for="license-modal-desc">
+            {m.license_modal_description_label()}
           </label>
           <textarea
             id="license-modal-desc"
-            class="textarea-bordered textarea"
+            class="textarea-bordered textarea w-full"
             bind:value={modalDescription}
           ></textarea>
+        </div>
+
+        <div class="mt-4 mb-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
+          <label class="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              class="checkbox mt-0.5 checkbox-sm"
+              data-testid="license-modal-disclosure"
+              bind:checked={modalDisclosureChecked}
+            />
+            <span class="whitespace-normal">{m.license_modal_disclosure_label()}</span>
+          </label>
         </div>
 
         {#if modalError}
@@ -307,7 +398,7 @@
             class="btn btn-primary"
             data-testid="license-modal-save"
             onclick={handleSave}
-            disabled={modalSaving}
+            disabled={modalSaving || !modalDisclosureChecked}
           >
             {#if modalSaving}<span class="loading loading-sm loading-spinner"></span>{/if}
             {m.license_modal_save()}

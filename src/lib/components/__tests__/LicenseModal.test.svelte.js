@@ -61,7 +61,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_cancel: () => 'Cancel',
   license_modal_publish_failed: () => 'Publish failed',
   license_modal_error_missing_hash: () => 'Missing hash',
-  amb_form_validation_image_license_missing: () => 'License missing'
+  amb_form_validation_image_license_missing: () => 'License missing',
+  license_modal_disclosure_label: () => 'I confirm responsibility',
+  license_modal_disclosure_required_error: () => 'Please confirm'
 }));
 
 /**

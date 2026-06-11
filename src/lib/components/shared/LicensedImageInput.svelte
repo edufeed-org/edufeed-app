@@ -7,6 +7,7 @@
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { findExistingLicense } from '$lib/helpers/image-license.js';
   import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
+  import { sha256Hex } from '$lib/helpers/sha256.js';
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
   import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
@@ -38,6 +39,10 @@
   // Upload-side ephemeral error (invalid file type, too large, upload failed).
   // Kept separate from `errors` prop which is owned by the wizard's $derived validator.
   let uploadError = $state('');
+
+  /** @type {File | null} */
+  let pendingFile = $state(null);
+  let pickToken = 0;
 
   // Reactive license event from EventStore.
   const getLicense = useLicenseForHash(() => currentHash);
@@ -90,35 +95,60 @@
       return;
     }
 
-    uploading = true;
     uploadError = '';
+    const myToken = ++pickToken;
+    uploading = true;
+
     try {
-      const signer = manager.active;
-      if (!signer) throw new Error('No active account');
-      const signerFn = async (/** @type {any} */ template) => signer.signEvent(template);
-      const serverUrl = getActiveBlossomServer(signer.pubkey || '', eventStore);
-      const client = new BlossomClient(serverUrl, signerFn);
-      const blob = await client.uploadBlob(file);
+      const hash = await sha256Hex(file);
+      if (myToken !== pickToken) return; // a newer pick superseded us
 
-      imageUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
-      currentHash = blob.sha256;
-      modalMime = blob.type || file.type;
-      modalSize = blob.size ?? file.size;
-      imageWasUploaded = true;
+      pendingFile = file;
+      currentHash = hash;
+      modalMime = file.type;
+      modalSize = file.size;
 
-      // Always open the modal for explicit user consent. If an existing
-      // license event is found, the modal shows it in "Accept / Create my own"
-      // mode; if not, it shows the standard create-license form.
-      pendingExistingLicense = await findExistingLicense(blob.sha256);
+      pendingExistingLicense = await findExistingLicense(hash);
+      if (myToken !== pickToken) return;
+
       modalOpen = true;
     } catch (e) {
-      console.error('Image upload failed', e);
+      console.error('File preparation failed', e);
       uploadError = m.licensed_image_input_error_upload_failed();
-      pendingExistingLicense = null;
+      pendingFile = null;
     } finally {
-      uploading = false;
       if (fileInputRef) fileInputRef.value = '';
+      uploading = false;
     }
+  }
+
+  /**
+   * Upload the stashed pendingFile to Blossom. Called from the LicenseModal's
+   * beforeAttest hook, so it runs only after the user has filled out the
+   * licence form and ticked the disclosure.
+   * @returns {Promise<{ url: string, hash: string, mime: string, size: number }>}
+   */
+  async function performUpload() {
+    if (!pendingFile) {
+      throw new Error('performUpload: no pendingFile');
+    }
+    const signer = manager.active;
+    if (!signer) throw new Error('No active account');
+    const signerFn = async (/** @type {any} */ template) => signer.signEvent(template);
+    const serverUrl = getActiveBlossomServer(signer.pubkey || '', eventStore);
+    const client = new BlossomClient(serverUrl, signerFn);
+    const blob = await client.uploadBlob(pendingFile);
+
+    const finalUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
+    imageUrl = finalUrl;
+    imageWasUploaded = true;
+    currentHash = blob.sha256;
+    return {
+      url: finalUrl,
+      hash: blob.sha256,
+      mime: blob.type || pendingFile.type,
+      size: blob.size ?? pendingFile.size
+    };
   }
 
   function handleUrlBlur() {
@@ -193,19 +223,25 @@
   url={imageUrl}
   mime={modalMime}
   size={modalSize ?? 0}
+  fileName={pendingFile?.name ?? ''}
   {activeUserDisplayName}
   existingLicense={pendingExistingLicense}
+  beforeAttest={pendingFile ? performUpload : null}
   onsave={(/** @type {any} */ license) => {
     licenseEvent = license;
     pendingExistingLicense = null;
+    pendingFile = null;
   }}
   oncancel={() => {
-    // Mandatory mode: cancel discards the upload entirely.
+    // Cancel discards the pending upload entirely. No bytes have been
+    // sent to Blossom yet (performUpload runs only from beforeAttest),
+    // so there is no orphan to clean up.
     imageUrl = '';
     currentHash = null;
     imageWasUploaded = false;
     licenseEvent = null;
     pendingExistingLicense = null;
+    pendingFile = null;
   }}
 />
 
