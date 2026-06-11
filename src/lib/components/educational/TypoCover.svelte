@@ -206,8 +206,11 @@
     /* break-word (not 'anywhere') so attached punctuation like "Verantwortung:"
        stays glued to the word it follows. Long German compounds in the SHORT
        layout shrink via clamp(); pathological cases route to the long-title
-       layout instead. */
+       layout instead. hyphens: auto lets the browser break "Menschenhandeln"
+       at "Menschen-handeln" instead of mid-character when wrapping is
+       unavoidable (requires the page lang attribute to be set on <html>). */
     overflow-wrap: break-word;
+    hyphens: auto;
     line-height: 0.95;
   }
 

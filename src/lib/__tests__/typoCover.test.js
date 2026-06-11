@@ -62,6 +62,30 @@ describe('splitTitle', () => {
       trailing: []
     });
   });
+
+  it('strips trailing punctuation from the script word', () => {
+    // "Menschen tragen Verantwortung: Teil 2" → script picks index 2.
+    // Without stripping, ":" would wrap to its own line in the cover.
+    expect(splitTitle('Menschen tragen Verantwortung: Teil 2')).toEqual({
+      leading: ['Menschen', 'tragen'],
+      script: 'Verantwortung',
+      trailing: ['Teil', '2']
+    });
+  });
+
+  it('strips any of : ; , . ! ? … from the script word', () => {
+    expect(splitTitle('a hello.').script).toBe('hello');
+    expect(splitTitle('a what?').script).toBe('what');
+    expect(splitTitle('a wow!').script).toBe('wow');
+    expect(splitTitle('a etc...').script).toBe('etc');
+    expect(splitTitle('a oh…').script).toBe('oh');
+  });
+
+  it('does NOT strip punctuation from leading/trailing words', () => {
+    const { leading, trailing } = splitTitle('Hello, world! Goodbye.');
+    expect(leading).toEqual(['Hello,']);
+    expect(trailing).toEqual(['Goodbye.']);
+  });
 });
 
 describe('stringColorHue', () => {

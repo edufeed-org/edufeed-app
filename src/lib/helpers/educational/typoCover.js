@@ -27,6 +27,11 @@ export function titleLayout(title) {
   return 'short';
 }
 
+/** Punctuation that gets stripped from the END of the script word so it
+ *  doesn't trigger a stranded-character wrap (e.g. "Verantwortung:" → "Verantwortung").
+ *  Leading/trailing words keep their punctuation. */
+const SCRIPT_TRAILING_PUNCT = /[:;,.!?…]+$/u;
+
 /**
  * Split a short title into three parts for the cover's title stack:
  * leading words, one highlighted (script) word, trailing words.
@@ -35,6 +40,11 @@ export function titleLayout(title) {
  * Accepted tradeoff: longer titles can highlight a preposition or
  * article ("für", "und", "der"). The mockup's "Morgen / bestimme /
  * ich" pattern is the canonical case.
+ *
+ * The script word has trailing punctuation stripped — a stranded ":"
+ * after a Caveat-italic word wraps onto its own line and reads as a
+ * typesetting bug. The punctuation is purely visual sugar; the title
+ * still reads correctly with it dropped.
  *
  * Only meaningful for titles where `titleLayout(title) === 'short'`.
  * Callers should branch on the layout and use this only for short
@@ -46,11 +56,11 @@ export function titleLayout(title) {
 export function splitTitle(title) {
   const words = (title ?? '').trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return { leading: [], script: '', trailing: [] };
-  if (words.length === 1) return { leading: [], script: words[0], trailing: [] };
-  const scriptIdx = Math.floor(words.length / 2);
+  const scriptIdx = words.length === 1 ? 0 : Math.floor(words.length / 2);
+  const script = words[scriptIdx].replace(SCRIPT_TRAILING_PUNCT, '');
   return {
     leading: words.slice(0, scriptIdx),
-    script: words[scriptIdx],
+    script,
     trailing: words.slice(scriptIdx + 1)
   };
 }
