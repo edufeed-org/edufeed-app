@@ -17,6 +17,8 @@
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
   import { findExistingLicense } from '$lib/helpers/image-license.js';
   import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
+  import { sha256Hex } from '$lib/helpers/sha256.js';
+  import { SvelteMap } from 'svelte/reactivity';
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -93,6 +95,10 @@
   // every notifyModalClosed() — guarantees a fresh listener per upload, no leaks.
   /** @type {Array<(value?: unknown) => void>} */
   let modalCloseListeners = [];
+
+  /** Stashed File objects waiting for modal Save (mandatory upload-loop flow). */
+  /** @type {SvelteMap<number, File>} */
+  let pendingFilesByIndex = new SvelteMap();
 
   function notifyModalClosed() {
     const listeners = modalCloseListeners;
@@ -194,37 +200,38 @@
   // ---------------------------------------------------------------------------
 
   /**
-   * Upload a single file via Blossom.
+   * Compute the file's SHA-256 client-side, look up any prior kind 1063
+   * attestation, and return a pre-upload descriptor. No bytes leave the
+   * browser yet — the upload happens later, from the modal's beforeAttest hook.
    * @param {File} file
-   * @returns {Promise<UploadedFileWithLicense>}
+   * @returns {Promise<{ descriptor: UploadedFileWithLicense, existingLicense: any }>}
    */
-  async function uploadFile(file) {
+  async function prepareFile(file) {
     if (file.size > maxSize) {
       throw new Error(`File "${file.name}" exceeds maximum size of ${formatFileSize(maxSize)}`);
     }
-    if (!activeUser?.signer) {
-      throw new Error('No signer available. Please log in.');
-    }
-    const signerFn = async (/** @type {any} */ ev) => {
-      if (!activeUser) throw new Error('User not available');
-      return await activeUser.signEvent(ev);
-    };
-    const serverUrl = getActiveBlossomServer(activeUser.pubkey, eventStore);
-    const client = new BlossomClient(serverUrl, signerFn);
-    const blob = await client.uploadBlob(file);
+    const hash = await sha256Hex(file);
+    const existingLicense = await findExistingLicense(hash);
     return {
-      url: reconcileBlobUrlScheme(blob.url, serverUrl),
-      name: file.name,
-      type: file.type || 'application/octet-stream',
-      size: file.size,
-      sha256: blob.sha256,
-      licenseEvent: null
+      descriptor: {
+        url: '',
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        sha256: hash,
+        licenseEvent: null
+      },
+      existingLicense
     };
   }
 
   /**
-   * Handle a FileList from input or drop. Uploads each file in turn and opens
-   * the license modal for each — awaiting close before processing the next.
+   * Process picked or dropped files one at a time. For each file:
+   *   1. Prepare a descriptor (sha256 + existing-licence lookup), no upload.
+   *   2. Stash the File against the slot index it will occupy.
+   *   3. Open the modal; the modal's beforeAttest hook performs the upload
+   *      from `makeBeforeAttest(index)` when the user clicks Save.
+   *   4. On modal close, drop the File from the stash and move to the next.
    * @param {FileList | null} fileList
    */
   async function handleFiles(fileList) {
@@ -240,40 +247,28 @@
 
     const filesToUpload = Array.from(fileList);
     const totalFiles = filesToUpload.length;
-    let uploadedCount = 0;
+    let preparedCount = 0;
 
     try {
       for (const file of filesToUpload) {
-        const uploaded = await uploadFile(file);
+        const { descriptor, existingLicense } = await prepareFile(file);
 
-        // Snapshot files BEFORE the append/replace. If the user cancels the
-        // mandatory license modal, we revert to this exact state — which both
-        // (a) restores the previously-selected file in single-file mode, and
-        // (b) drops only this latest append in multi-file mode.
         const snapshot = files;
-
-        // Determine the index this file will occupy *after* the append.
         let targetIndex;
         if (multiple) {
           targetIndex = files.length;
-          files = [...files, uploaded];
+          files = [...files, descriptor];
         } else {
           targetIndex = 0;
-          files = [uploaded];
+          files = [descriptor];
         }
 
-        uploadedCount++;
-        uploadProgress = Math.round((uploadedCount / totalFiles) * 100);
+        pendingFilesByIndex.set(targetIndex, file);
 
-        // Always open the modal for explicit user consent. If an existing
-        // license event exists for this hash, LicenseModal shows it in
-        // Accept / Create-my-own mode; otherwise the standard form.
-        pendingExistingLicense = uploaded.sha256
-          ? await findExistingLicense(uploaded.sha256)
-          : null;
-        // Mandatory case: openModalFor() clears the snapshot, so set it
-        // AFTER the call (the modal handlers read preFileSnapshot when it
-        // closes). This is the signal the cancel handler uses to revert.
+        preparedCount++;
+        uploadProgress = Math.round((preparedCount / totalFiles) * 100);
+
+        pendingExistingLicense = existingLicense;
         openModalFor(targetIndex);
         preFileSnapshot = snapshot;
         await new Promise((resolve) => {
@@ -287,6 +282,49 @@
       isUploading = false;
       uploadProgress = 0;
     }
+  }
+
+  /**
+   * Returns a beforeAttest callback bound to the given slot index. The modal
+   * calls this on Save; it performs the deferred Blossom upload and writes the
+   * resulting URL+metadata back into the slot, then returns the values for the
+   * modal to use when building the kind 1063 tags.
+   * @param {number} index
+   */
+  function makeBeforeAttest(index) {
+    return async () => {
+      const file = pendingFilesByIndex.get(index);
+      if (!file) throw new Error('makeBeforeAttest: no pending file at index ' + index);
+      if (!activeUser?.pubkey) throw new Error('No active user');
+
+      const signerFn = async (/** @type {any} */ ev) => {
+        if (!activeUser) throw new Error('User not available');
+        return await activeUser.signEvent(ev);
+      };
+      const serverUrl = getActiveBlossomServer(activeUser.pubkey, eventStore);
+      const client = new BlossomClient(serverUrl, signerFn);
+      const blob = await client.uploadBlob(file);
+      const finalUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
+
+      files = files.map((f, i) =>
+        i === index
+          ? {
+              ...f,
+              url: finalUrl,
+              sha256: blob.sha256,
+              size: blob.size ?? f.size,
+              type: blob.type || f.type
+            }
+          : f
+      );
+
+      return {
+        url: finalUrl,
+        hash: blob.sha256,
+        mime: blob.type || file.type || 'application/octet-stream',
+        size: blob.size ?? file.size
+      };
+    };
   }
 
   function removeFile(/** @type {number} */ index) {
@@ -507,10 +545,14 @@
   size={modalTargetFile?.size ?? 0}
   {activeUserDisplayName}
   existingLicense={pendingExistingLicense}
+  beforeAttest={modalTargetIndex !== null && pendingFilesByIndex.has(modalTargetIndex)
+    ? makeBeforeAttest(modalTargetIndex)
+    : null}
   onsave={(/** @type {any} */ license) => {
     if (modalTargetIndex !== null) {
       const idx = modalTargetIndex;
       files = files.map((f, i) => (i === idx ? { ...f, licenseEvent: license } : f));
+      pendingFilesByIndex.delete(idx);
     }
     pendingExistingLicense = null;
     preFileSnapshot = null;
@@ -522,6 +564,9 @@
     // both single-file replace (restores the previous file) and multi-file
     // append (drops only this latest append). Optional row-button cancel
     // leaves preFileSnapshot null so files stays untouched.
+    if (modalTargetIndex !== null) {
+      pendingFilesByIndex.delete(modalTargetIndex);
+    }
     if (preFileSnapshot !== null) {
       files = preFileSnapshot;
     }

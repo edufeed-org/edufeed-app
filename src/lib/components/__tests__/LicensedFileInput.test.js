@@ -5,7 +5,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 
 const mocks = vi.hoisted(() => ({
   uploadBlob: vi.fn(async () => ({
@@ -178,5 +178,22 @@ describe('LicensedFileInput — display name', () => {
     });
 
     expect(getByText('scan_0034.pdf')).toBeTruthy();
+  });
+});
+
+describe('LicensedFileInput — defer upload', () => {
+  it('picking a file does not call BlossomClient.uploadBlob', async () => {
+    const { container } = render(LicensedFileInput, { props: { files: [] } });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    expect(fileInput).toBeTruthy();
+
+    const file = new File(['payload'], 'doc.pdf', { type: 'application/pdf' });
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
+    expect(mocks.findExistingLicense).toHaveBeenCalledTimes(1);
+    expect(mocks.uploadBlob).not.toHaveBeenCalled();
   });
 });
