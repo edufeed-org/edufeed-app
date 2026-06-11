@@ -14,6 +14,19 @@ vi.mock('blossom-client-sdk', () => ({
   }
 }));
 
+const mockSha256Hex = vi.fn(async () => 'a'.repeat(64));
+vi.mock('$lib/helpers/sha256.js', () => ({
+  sha256Hex: (/** @type {any} */ blob) => mockSha256Hex(blob)
+}));
+
+vi.mock('$lib/helpers/image-license.js', async () => {
+  const actual = /** @type {any} */ (await vi.importActual('$lib/helpers/image-license.js'));
+  return {
+    ...actual,
+    findExistingLicense: vi.fn(async () => null)
+  };
+});
+
 const mockSignEvent = vi.fn(async (template) => ({
   ...template,
   id: 'signed-id',
@@ -70,6 +83,7 @@ describe('LicensedImageInput', () => {
     mockUploadBlob.mockReset();
     mockSignEvent.mockClear();
     mockPublish.mockReset();
+    mockSha256Hex.mockClear();
     mockLicenseForHash = null;
   });
 
@@ -108,9 +122,9 @@ describe('LicensedImageInput', () => {
     const fileInput = getByTestId('licensed-image-file-input');
     await fireEvent.change(fileInput, { target: { files: [makeFile()] } });
 
-    await waitFor(() => expect(state.imageWasUploaded).toBe(true));
-    expect(state.imageUrl).toContain(hash);
-    expect(getByTestId('license-modal')).toBeTruthy();
+    // Modal opens AFTER hash + existing-license lookup but BEFORE any upload.
+    await waitFor(() => expect(getByTestId('license-modal')).toBeTruthy());
+    expect(state.imageWasUploaded).toBe(false); // upload deferred
 
     const licenseSelect = getByLabelText(/License/);
     await fireEvent.change(licenseSelect, {
@@ -119,10 +133,15 @@ describe('LicensedImageInput', () => {
     const creditInput = getByLabelText(/Credit/);
     await fireEvent.input(creditInput, { target: { value: 'Jane Doe' } });
 
+    // The Save button is disabled until the disclosure checkbox is ticked.
+    await fireEvent.click(getByTestId('license-modal-disclosure'));
     const saveBtn = getByTestId('license-modal-save');
     await fireEvent.click(saveBtn);
 
     await waitFor(() => expect(mockPublish).toHaveBeenCalled());
+    // Upload runs from beforeAttest → after Save the upload state should be set.
+    expect(state.imageWasUploaded).toBe(true);
+    expect(state.imageUrl).toContain(hash);
     const [signedEvent] = mockPublish.mock.calls[0];
     expect(signedEvent.kind).toBe(1063);
     expect(signedEvent.tags).toEqual(
@@ -235,10 +254,10 @@ describe('LicensedImageInput', () => {
     const fileInput = getByTestId('licensed-image-file-input');
     await fireEvent.change(fileInput, { target: { files: [makeFile()] } });
 
-    // Wait for upload to complete and the mandatory modal to appear.
-    await waitFor(() => expect(state.imageWasUploaded).toBe(true));
+    // Modal opens AFTER hash + existing-license lookup but BEFORE any upload.
+    await waitFor(() => expect(getByTestId('license-modal')).toBeTruthy());
     const modal = getByTestId('license-modal');
-    expect(modal).toBeTruthy();
+    expect(state.imageWasUploaded).toBe(false); // upload deferred
 
     // Cancel button is the first button in .modal-action (Save has the testid).
     const modalActionButtons = modal.querySelectorAll('.modal-action button');
@@ -246,7 +265,9 @@ describe('LicensedImageInput', () => {
     expect(cancelBtn).toBeTruthy();
     await fireEvent.click(cancelBtn);
 
-    // Cancel must wipe the upload state and not publish/sign anything.
+    // User cancels. Bytes never uploaded.
+    expect(mockUploadBlob).not.toHaveBeenCalled();
+    // State reset.
     await waitFor(() => {
       expect(state.imageUrl).toBe('');
       expect(state.imageWasUploaded).toBe(false);
@@ -292,7 +313,9 @@ describe('LicensedImageInput', () => {
     await fireEvent.change(getByTestId('licensed-image-file-input'), {
       target: { files: [makeFile()] }
     });
+    // Modal opens AFTER hash + existing-license lookup but BEFORE any upload.
     await waitFor(() => expect(getByTestId('license-modal')).toBeTruthy());
+    expect(state.imageWasUploaded).toBe(false); // upload deferred
 
     await fireEvent.click(getByLabelText(/I am the creator/));
     const creditInput = /** @type {HTMLInputElement} */ (getByLabelText(/Credit/));
@@ -301,9 +324,13 @@ describe('LicensedImageInput', () => {
     await fireEvent.change(getByLabelText(/License/), {
       target: { value: 'https://creativecommons.org/licenses/by/4.0/' }
     });
+    // Disclosure required before Save is enabled.
+    await fireEvent.click(getByTestId('license-modal-disclosure'));
     await fireEvent.click(getByTestId('license-modal-save'));
 
     await waitFor(() => expect(mockPublish).toHaveBeenCalled());
+    // Upload runs from beforeAttest → after Save the upload state should be set.
+    expect(state.imageWasUploaded).toBe(true);
     const [signedEvent] = mockPublish.mock.calls[0];
     expect(signedEvent.tags).toEqual(
       expect.arrayContaining([
