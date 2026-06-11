@@ -202,7 +202,10 @@ describe('AMBResourceCard', () => {
         props: { resource: mockResource, authorProfile: mockAuthorProfile, variant: 'list' }
       });
 
-      const thumbnail = container.querySelector('.amb-card-list .list-thumbnail');
+      // ResourceCover renders either resource-cover-image (has image) or resource-cover-typo (no image)
+      const thumbnail =
+        container.querySelector('[data-testid="resource-cover-image"]') ||
+        container.querySelector('[data-testid="resource-cover-typo"]');
       expect(thumbnail).toBeTruthy();
     });
 

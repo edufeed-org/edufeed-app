@@ -29,6 +29,7 @@
   import { ChatIcon } from '$lib/components/icons';
   import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import ResourceCover from './ResourceCover.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -194,29 +195,12 @@
         <BookmarkButton event={resource.rawEvent} />
       </div>
     {/if}
-    <div
-      class="list-thumbnail relative h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
-    >
-      {#if resource.image}
-        <ImageWithFallback
-          src={resource.image}
-          alt={resource.name}
-          fallbackType="generic"
-          size="thumbnail"
-          class="h-full w-full object-cover"
-        />
-        {#if getImageLicense()}
-          <LicenseBadge
-            licenseEvent={getImageLicense()}
-            class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
-          />
-        {/if}
-      {:else}
-        <div class="flex h-full w-full items-center justify-center text-2xl text-base-content/30">
-          📚
-        </div>
-      {/if}
-    </div>
+    <ResourceCover
+      {resource}
+      size="thumbnail"
+      aspect="square"
+      class="h-16 w-16 flex-shrink-0 sm:h-20 sm:w-20"
+    />
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
         <span class="truncate font-semibold text-base-content">{resource.name}</span>
