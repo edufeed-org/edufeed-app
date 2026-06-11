@@ -12,7 +12,7 @@
   Per docs/superpowers/specs/2026-06-11-typo-cover-design.md.
 -->
 <script>
-  import { splitTitle, stringColorHue } from '$lib/helpers/educational/typoCover.js';
+  import { splitTitle, stringColorHue, titleLayout } from '$lib/helpers/educational/typoCover.js';
 
   /**
    * @typedef {Object} Props
@@ -34,6 +34,7 @@
     class: className = ''
   } = $props();
 
+  const layout = $derived(titleLayout(title));
   const parts = $derived(splitTitle(title));
   const hue = $derived(stringColorHue(paletteId));
 
@@ -58,32 +59,39 @@
       {/if}
 
       {#if size === 'full'}
-        <div class="typo-cover-title-stack" data-testid="typo-cover-title-stack">
-          {#if parts.leading.length > 0}
-            <div
-              class="typo-cover-title-line typo-cover-title-leading"
-              data-testid="typo-cover-title-leading"
-            >
-              {parts.leading.join(' ')}
-            </div>
-          {/if}
-          {#if parts.script}
-            <div
-              class="typo-cover-title-line typo-cover-title-script"
-              data-testid="typo-cover-title-script"
-            >
-              {parts.script}
-            </div>
-          {/if}
-          {#if parts.trailing.length > 0}
-            <div
-              class="typo-cover-title-line typo-cover-title-trailing"
-              data-testid="typo-cover-title-trailing"
-            >
-              {parts.trailing.join(' ')}
-            </div>
-          {/if}
-        </div>
+        {#if layout === 'short'}
+          <div class="typo-cover-title-stack" data-testid="typo-cover-title-stack">
+            {#if parts.leading.length > 0}
+              <div
+                class="typo-cover-title-line typo-cover-title-leading"
+                data-testid="typo-cover-title-leading"
+              >
+                {parts.leading.join(' ')}
+              </div>
+            {/if}
+            {#if parts.script}
+              <div
+                class="typo-cover-title-line typo-cover-title-script"
+                data-testid="typo-cover-title-script"
+              >
+                {parts.script}
+              </div>
+            {/if}
+            {#if parts.trailing.length > 0}
+              <div
+                class="typo-cover-title-line typo-cover-title-trailing"
+                data-testid="typo-cover-title-trailing"
+              >
+                {parts.trailing.join(' ')}
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <!-- Long title: plain headline with line-clamp + ellipsis. No script word. -->
+          <div class="typo-cover-title-headline" data-testid="typo-cover-title-headline">
+            {title}
+          </div>
+        {/if}
 
         <div class="typo-cover-footer" data-testid="typo-cover-footer">
           <hr class="typo-cover-rule" />
@@ -214,6 +222,28 @@
     transform: rotate(-4deg);
     text-shadow: 0 2px 8px oklch(0% 0 0 / 0.15);
     line-height: 1;
+  }
+
+  /* Long-title fallback: plain headline, line-clamped so it can't overflow
+     the cover. Falls back from the playful split that only reads well for
+     short mockup-style titles. */
+  .typo-cover-title-headline {
+    margin: auto 0;
+    font-family: 'Outfit', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(1rem, 7cqi, 1.8rem);
+    line-height: 1.15;
+    color: white;
+    text-align: center;
+    padding: 0 4%;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
   }
 
   /* Footer: hairline rule + meta + credit. */

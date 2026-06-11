@@ -3,7 +3,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { splitTitle, stringColorHue } from '$lib/helpers/educational/typoCover.js';
+import { splitTitle, stringColorHue, titleLayout } from '$lib/helpers/educational/typoCover.js';
 
 describe('splitTitle', () => {
   it('returns empty result for null / undefined / empty / whitespace-only input', () => {
@@ -102,5 +102,46 @@ describe('stringColorHue', () => {
   it('does not throw on long input (BigInt path is safe)', () => {
     const long = 'a'.repeat(500);
     expect(() => stringColorHue(long)).not.toThrow();
+  });
+});
+
+describe('titleLayout', () => {
+  it('returns "short" for empty / null / whitespace input', () => {
+    expect(titleLayout(null)).toBe('short');
+    expect(titleLayout(undefined)).toBe('short');
+    expect(titleLayout('')).toBe('short');
+    expect(titleLayout('   ')).toBe('short');
+  });
+
+  it('returns "short" for the mockup three-word title', () => {
+    expect(titleLayout('Morgen bestimme ich')).toBe('short');
+  });
+
+  it('returns "short" for a single word', () => {
+    expect(titleLayout('Reformation')).toBe('short');
+  });
+
+  it('returns "short" for a 6-word ≤50-char title (at the boundary)', () => {
+    // exactly 6 words, ~36 chars
+    expect(titleLayout('Eine kleine Idee zum Thema Liebe')).toBe('short');
+  });
+
+  it('returns "long" when word count exceeds the threshold', () => {
+    // 7 words triggers long even if short
+    expect(titleLayout('a b c d e f g')).toBe('long');
+  });
+
+  it('returns "long" when character count exceeds the threshold', () => {
+    // 5 words but the long German compound pushes us over 50 chars
+    expect(titleLayout('Bildungsplattform Religionspaedagogik fuer Lehrkraefte schule')).toBe(
+      'long'
+    );
+  });
+
+  it('returns "long" for the real-world overflow case', () => {
+    const title =
+      '"Anders sein" heißt einmalig sein – und doch als Klasse zusammenzugehören. ' +
+      'Eine Unterrichtsidee mit dem Wendebuch "Ich bin anders als du – ich bin wie du"';
+    expect(titleLayout(title)).toBe('long');
   });
 });

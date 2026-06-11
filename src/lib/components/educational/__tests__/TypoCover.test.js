@@ -94,4 +94,26 @@ describe('TypoCover', () => {
     // Neutral grey uses hue 250 in our fallback — see TypoCover.svelte.
     expect(frame?.getAttribute('style') ?? '').toMatch(/--c-hero:\s*oklch\(45% 0\.01 250\)/);
   });
+
+  it('long titles render as a plain headline (no script word) at size=full', () => {
+    const longTitle =
+      '"Anders sein" heißt einmalig sein – und doch als Klasse zusammenzugehören. ' +
+      'Eine Unterrichtsidee mit dem Wendebuch';
+    const { container, getByTestId } = render(TypoCover, {
+      props: defaultProps({ title: longTitle, size: 'full' })
+    });
+    expect(getByTestId('typo-cover-title-headline').textContent).toContain('Anders sein');
+    expect(getByTestId('typo-cover-title-headline').textContent).toContain('Wendebuch');
+    // Short-layout slots must not render.
+    expect(container.querySelector('[data-testid="typo-cover-title-stack"]')).toBeNull();
+    expect(container.querySelector('[data-testid="typo-cover-title-script"]')).toBeNull();
+  });
+
+  it('short titles still use the split layout (regression guard)', () => {
+    const { container, getByTestId } = render(TypoCover, {
+      props: defaultProps({ title: 'Morgen bestimme ich' })
+    });
+    expect(getByTestId('typo-cover-title-script').textContent).toContain('bestimme');
+    expect(container.querySelector('[data-testid="typo-cover-title-headline"]')).toBeNull();
+  });
 });

@@ -6,14 +6,39 @@
  * pulling Svelte runes into a non-component context.
  */
 
+/** Titles longer than this (in either words or characters) drop the
+ *  script-word treatment and render as a plain headline. The mockup's
+ *  playful split only reads well for short titles. */
+const SHORT_TITLE_MAX_WORDS = 6;
+const SHORT_TITLE_MAX_CHARS = 50;
+
 /**
- * Split a title into three parts for the cover's title stack:
+ * Decide which layout a title should use.
+ *
+ * @param {string | null | undefined} title
+ * @returns {'short' | 'long'}
+ */
+export function titleLayout(title) {
+  const s = (title ?? '').trim();
+  if (!s) return 'short';
+  const wordCount = s.split(/\s+/).filter(Boolean).length;
+  if (wordCount > SHORT_TITLE_MAX_WORDS) return 'long';
+  if (s.length > SHORT_TITLE_MAX_CHARS) return 'long';
+  return 'short';
+}
+
+/**
+ * Split a short title into three parts for the cover's title stack:
  * leading words, one highlighted (script) word, trailing words.
  *
  * The highlighted word is at `Math.floor(n / 2)` of the word list.
  * Accepted tradeoff: longer titles can highlight a preposition or
  * article ("für", "und", "der"). The mockup's "Morgen / bestimme /
  * ich" pattern is the canonical case.
+ *
+ * Only meaningful for titles where `titleLayout(title) === 'short'`.
+ * Callers should branch on the layout and use this only for short
+ * titles; long titles render as a plain headline instead.
  *
  * @param {string | null | undefined} title
  * @returns {{ leading: string[], script: string, trailing: string[] }}
