@@ -169,7 +169,9 @@
   {#if isOpen}
     <div
       bind:this={popupEl}
-      class="not-prose z-50 rounded-lg border border-base-300 bg-base-100 shadow-xl"
+      class="not-prose rounded-lg border border-base-300 bg-base-100 shadow-xl"
+      class:z-50={!fixed}
+      class:z-[1000]={fixed}
       class:absolute={!fixed}
       class:fixed
       class:bottom-full={!fixed && position === 'top'}
