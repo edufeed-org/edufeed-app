@@ -10,10 +10,18 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_open_pdf_inline_fallback: () => 'Open PDF in a new tab'
 }));
 
+// PdfInlineViewer lazy-imports pdfjs-dist + a worker — neither runs cleanly
+// in jsdom. Mock it with a tiny stub that exposes the props as data-attrs
+// so we can assert the right URL was passed through.
+vi.mock('../educational/PdfInlineViewer.svelte', async () => {
+  const Stub = (await import('./fixtures/PdfInlineViewerStub.svelte')).default;
+  return { default: Stub };
+});
+
 import EncodingPreview from '../educational/EncodingPreview.svelte';
 
 describe('EncodingPreview', () => {
-  it('renders an <object> for application/pdf', () => {
+  it('mounts PdfInlineViewer for application/pdf', () => {
     const { container } = render(EncodingPreview, {
       props: {
         url: 'https://example.com/doc.pdf',
@@ -21,9 +29,10 @@ describe('EncodingPreview', () => {
         name: 'doc.pdf'
       }
     });
-    const obj = container.querySelector('object[type="application/pdf"]');
-    expect(obj).toBeTruthy();
-    expect(obj?.getAttribute('data')).toBe('https://example.com/doc.pdf');
+    const stub = container.querySelector('[data-testid="pdf-viewer-stub"]');
+    expect(stub).toBeTruthy();
+    expect(stub?.getAttribute('data-src')).toBe('https://example.com/doc.pdf');
+    expect(stub?.getAttribute('data-name')).toBe('doc.pdf');
   });
 
   it('renders a lazy <img> for image mime types', () => {
@@ -49,7 +58,7 @@ describe('EncodingPreview', () => {
         name: 'archive.zip'
       }
     });
-    expect(container.querySelector('object')).toBeNull();
+    expect(container.querySelector('[data-testid="pdf-viewer-stub"]')).toBeNull();
     expect(container.querySelector('img')).toBeNull();
   });
 
@@ -61,7 +70,7 @@ describe('EncodingPreview', () => {
         name: 'doc.pdf'
       }
     });
-    expect(container.querySelector('object[type="application/pdf"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="pdf-viewer-stub"]')).toBeTruthy();
   });
 
   it('uses an image extension when mime is generic', () => {
@@ -83,9 +92,8 @@ describe('EncodingPreview', () => {
         name: 'doc.pdf'
       }
     });
-    const obj = container.querySelector('object[type="application/pdf"]');
-    expect(obj).toBeTruthy();
-    expect(obj?.getAttribute('data')).toBe('https://blossom.example.com/doc.pdf');
+    const stub = container.querySelector('[data-testid="pdf-viewer-stub"]');
+    expect(stub?.getAttribute('data-src')).toBe('https://blossom.example.com/doc.pdf');
   });
 
   it('upgrades http:// to https:// in the image src', () => {
@@ -108,24 +116,11 @@ describe('EncodingPreview', () => {
         name: 'doc.pdf'
       }
     });
-    expect(container.querySelector('object')).toBeNull();
+    expect(container.querySelector('[data-testid="pdf-viewer-stub"]')).toBeNull();
     const link = container.querySelector('a[href="ftp://example.com/doc.pdf"]');
     expect(link).toBeTruthy();
     expect(link?.getAttribute('target')).toBe('_blank');
     expect(link?.getAttribute('rel')).toContain('noopener');
     expect(link?.textContent).toContain('Open PDF in a new tab');
-  });
-
-  it('does not render the inline fallback link inside the <object> on the happy path', () => {
-    const { container } = render(EncodingPreview, {
-      props: {
-        url: 'https://example.com/doc.pdf',
-        mimeType: 'application/pdf',
-        name: 'doc.pdf'
-      }
-    });
-    // The 80vh viewer renders cleanly; the row's existing View/Download buttons
-    // handle the fallback affordance, so no link inside the <object>.
-    expect(container.querySelector('object a')).toBeNull();
   });
 });

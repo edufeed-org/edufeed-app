@@ -172,6 +172,14 @@ vi.mock('$lib/components/icons', async (importOriginal) => {
   return { ...actual };
 });
 
+// PdfInlineViewer lazy-imports pdfjs-dist + a worker — neither runs cleanly
+// in jsdom. Stub it so EncodingPreview's PDF branch is testable without a
+// real Web Worker / canvas; the stub exposes props as data-attrs.
+vi.mock('$lib/components/educational/PdfInlineViewer.svelte', async () => {
+  const Stub = (await import('./fixtures/PdfInlineViewerStub.svelte')).default;
+  return { default: Stub };
+});
+
 const mockEvent = {
   id: 'a'.repeat(64),
   pubkey: 'b'.repeat(64),
@@ -291,14 +299,14 @@ describe('AMBResourceView', () => {
     }
   });
 
-  it('renders an inline PDF preview <object> for PDF encodings', () => {
+  it('mounts the PDF inline viewer for PDF encodings', () => {
     const { container } = render(AMBResourceView, {
       props: { event: mockEvent, resource: mockResource }
     });
 
-    const obj = container.querySelector('object[type="application/pdf"]');
-    expect(obj).toBeTruthy();
-    expect(obj?.getAttribute('data')).toBe('https://example.com/file.pdf');
+    const stub = container.querySelector('[data-testid="pdf-viewer-stub"]');
+    expect(stub).toBeTruthy();
+    expect(stub?.getAttribute('data-src')).toBe('https://example.com/file.pdf');
   });
 });
 
