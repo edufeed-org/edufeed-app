@@ -106,9 +106,10 @@
     for (const l of listeners) l();
   }
 
+  // Caller is responsible for assigning preFileSnapshot before opening:
+  // - Upload loop (mandatory): set to the pre-append array (so cancel reverts).
+  // - Row-button (optional): set to null (cancel must not mutate files).
   function openModalFor(/** @type {number} */ index) {
-    // Optional case (row-button trigger): never revert files on cancel.
-    preFileSnapshot = null;
     modalTargetIndex = index;
     modalOpen = true;
   }
@@ -336,7 +337,11 @@
   }
 
   function handleAddLicense(/** @type {number} */ index) {
-    return () => openModalFor(index);
+    return () => {
+      // Row-button trigger: cancel must NOT mutate files.
+      preFileSnapshot = null;
+      openModalFor(index);
+    };
   }
 
   /** @param {DragEvent} e */
