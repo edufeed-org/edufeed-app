@@ -114,3 +114,41 @@ describe('LicensedImageInput — defer upload', () => {
     expect(mocks.uploadBlob).not.toHaveBeenCalled();
   });
 });
+
+describe('LicensedImageInput — stale re-pick', () => {
+  it('ignores a slow sha256 completion when a newer file has been picked', async () => {
+    // First sha256 call resolves AFTER the second one. We use deferred
+    // promises to control ordering.
+    /** @type {(v: string) => void} */
+    let resolveFirst;
+    const firstPromise = new Promise((res) => {
+      resolveFirst = res;
+    });
+    mocks.sha256Hex.mockImplementationOnce(() => firstPromise);
+    mocks.sha256Hex.mockResolvedValueOnce('b'.repeat(64));
+
+    const { getByTestId } = render(LicensedImageInput, {
+      props: { imageUrl: '', imageWasUploaded: false, licenseEvent: null }
+    });
+
+    const fileInput = getByTestId('licensed-image-file-input');
+    const fileA = new File(['a'], 'a.jpg', { type: 'image/jpeg' });
+    const fileB = new File(['b'], 'b.jpg', { type: 'image/jpeg' });
+
+    // Pick A (sha256 hangs), then pick B (sha256 resolves immediately).
+    await fireEvent.change(fileInput, { target: { files: [fileA] } });
+    await fireEvent.change(fileInput, { target: { files: [fileB] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Now resolve A's sha256 — it should be ignored because B superseded it.
+    resolveFirst('a'.repeat(64));
+    await new Promise((r) => setTimeout(r, 0));
+
+    // findExistingLicense should have been called for B but NOT for A's late
+    // completion: at most twice in total (A's first half before B picked,
+    // then B's full path).
+    const callHashes = mocks.findExistingLicense.mock.calls.map((c) => c[0]);
+    // The final state should reflect B's hash, not A's.
+    expect(callHashes.at(-1)).toBe('b'.repeat(64));
+  });
+});
