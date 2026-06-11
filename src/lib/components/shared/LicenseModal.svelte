@@ -38,6 +38,7 @@
   let modalDescription = $state('');
   let modalSaving = $state(false);
   let modalError = $state('');
+  let modalDisclosureChecked = $state(false);
 
   // Two-state modal:
   //   - 'existing': showing the existing license event with Accept / Create-my-own
@@ -73,6 +74,7 @@
       modalSource = '';
       modalDescription = '';
       modalError = '';
+      modalDisclosureChecked = false;
       view = existingLicense ? 'existing' : 'form';
     }
   });
@@ -103,6 +105,10 @@
     }
     if (!modalLicense || !modalCredit) {
       modalError = m.amb_form_validation_image_license_missing();
+      return;
+    }
+    if (!modalDisclosureChecked) {
+      modalError = m.license_modal_disclosure_required_error();
       return;
     }
     modalSaving = true;
@@ -294,6 +300,18 @@
           ></textarea>
         </div>
 
+        <div class="form-control mb-3">
+          <label class="label cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              class="checkbox mt-1"
+              data-testid="license-modal-disclosure"
+              bind:checked={modalDisclosureChecked}
+            />
+            <span class="label-text">{m.license_modal_disclosure_label()}</span>
+          </label>
+        </div>
+
         {#if modalError}
           <p class="mb-2 text-xs text-error">{modalError}</p>
         {/if}
@@ -307,7 +325,7 @@
             class="btn btn-primary"
             data-testid="license-modal-save"
             onclick={handleSave}
-            disabled={modalSaving}
+            disabled={modalSaving || !modalDisclosureChecked}
           >
             {#if modalSaving}<span class="loading loading-sm loading-spinner"></span>{/if}
             {m.license_modal_save()}

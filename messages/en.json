@@ -2305,6 +2305,8 @@
   "license_modal_description_label": "Description / alt text (optional)",
   "license_modal_save": "Save license",
   "license_modal_cancel": "Cancel",
+  "license_modal_disclosure_label": "I have provided all licence details correctly, I am allowed to upload this material here, and I understand I am responsible for it.",
+  "license_modal_disclosure_required_error": "Please confirm the responsibility statement before saving.",
   "license_modal_publish_failed": "Failed to publish license attestation.",
   "license_modal_error_missing_hash": "Missing image hash. Re-upload the file.",
   "license_modal_existing_title": "License already attested",

@@ -2305,6 +2305,8 @@
   "license_modal_description_label": "Beschreibung / Alt-Text (optional)",
   "license_modal_save": "Lizenz speichern",
   "license_modal_cancel": "Abbrechen",
+  "license_modal_disclosure_label": "Ich habe alle Lizenzhinweise korrekt angegeben, ich darf dieses Material hier hochladen und weiß, dass ich verantwortlich dafür bin.",
+  "license_modal_disclosure_required_error": "Bitte bestätige die Erklärung, bevor du das Material veröffentlichst.",
   "license_modal_publish_failed": "Lizenz-Attestierung konnte nicht veröffentlicht werden.",
   "license_modal_error_missing_hash": "Bild-Hash fehlt. Bitte erneut hochladen.",
   "license_modal_existing_title": "Lizenz bereits angegeben",
