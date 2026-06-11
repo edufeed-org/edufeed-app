@@ -203,7 +203,11 @@
   }
 
   .typo-cover-title-line {
-    overflow-wrap: anywhere;
+    /* break-word (not 'anywhere') so attached punctuation like "Verantwortung:"
+       stays glued to the word it follows. Long German compounds in the SHORT
+       layout shrink via clamp(); pathological cases route to the long-title
+       layout instead. */
+    overflow-wrap: break-word;
     line-height: 0.95;
   }
 
