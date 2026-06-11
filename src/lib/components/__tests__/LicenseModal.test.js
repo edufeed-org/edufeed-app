@@ -170,6 +170,57 @@ describe('LicenseModal — beforeAttest hook', () => {
     expect(onsave).toHaveBeenCalledTimes(1);
   });
 
+  it('awaits beforeAttest when accepting an existing license', async () => {
+    const order = [];
+    const beforeAttest = vi.fn(async () => {
+      order.push('beforeAttest');
+      return {
+        url: 'https://blossom.example/new.jpg',
+        hash: 'b'.repeat(64),
+        mime: 'image/jpeg',
+        size: 2222
+      };
+    });
+    const onsave = vi.fn((license) => {
+      order.push('onsave');
+      return license;
+    });
+
+    const existingLicense = {
+      pubkey: 'p2',
+      tags: [
+        ['url', 'https://blossom.example/x.jpg'],
+        ['x', 'a'.repeat(64)],
+        ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+        ['credit', 'Jane']
+      ],
+      content: ''
+    };
+
+    const { getByTestId } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: '',
+        url: '',
+        mime: '',
+        size: 0,
+        existingLicense,
+        beforeAttest,
+        onsave
+      }
+    });
+
+    await fireEvent.click(getByTestId('license-modal-accept-existing'));
+    // Wait a tick for the async chain.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(beforeAttest).toHaveBeenCalledTimes(1);
+    expect(onsave).toHaveBeenCalledTimes(1);
+    expect(onsave).toHaveBeenCalledWith(existingLicense);
+    expect(order[0]).toBe('beforeAttest');
+    expect(order[1]).toBe('onsave');
+  });
+
   it('blocks the publish when beforeAttest rejects', async () => {
     const beforeAttest = vi.fn(async () => {
       throw new Error('upload-failed');

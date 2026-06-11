@@ -88,10 +88,22 @@
     }
   }
 
-  function acceptExisting() {
+  async function acceptExisting() {
     if (!existingLicense) return;
-    open = false;
-    onsave(existingLicense);
+    modalError = '';
+    modalSaving = true;
+    try {
+      if (beforeAttest) {
+        await beforeAttest();
+      }
+      open = false;
+      onsave(existingLicense);
+    } catch (e) {
+      console.error('Accept-existing upload failed', e);
+      modalError = m.license_modal_publish_failed();
+    } finally {
+      modalSaving = false;
+    }
   }
 
   function switchToForm() {
@@ -233,6 +245,7 @@
             class="btn btn-primary"
             data-testid="license-modal-accept-existing"
             onclick={acceptExisting}
+            disabled={modalSaving}
           >
             {m.license_modal_accept_existing()}
           </button>

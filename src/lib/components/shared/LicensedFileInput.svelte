@@ -475,7 +475,7 @@
       <div class="text-sm font-medium text-base-content/70">
         {m.blossom_uploaded_files({ count: String(files.length) })}
       </div>
-      {#each files as file, index (file.url)}
+      {#each files as file, index (file.sha256)}
         <div class="flex flex-wrap items-center gap-3 rounded-lg bg-base-200 p-3">
           <span class="text-2xl">{getFileIcon(file.type)}</span>
           <div class="min-w-0 flex-1">
@@ -507,17 +507,19 @@
             </button>
           {/if}
 
-          <!-- eslint-disable svelte/no-navigation-without-resolve -- external: blossom file URL -->
-          <a
-            href={file.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-ghost btn-xs"
-            onclick={stopPropagation}
-          >
-            {m.blossom_view()}
-          </a>
-          <!-- eslint-enable svelte/no-navigation-without-resolve -->
+          {#if file.url}
+            <!-- eslint-disable svelte/no-navigation-without-resolve -- external: blossom file URL -->
+            <a
+              href={file.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-ghost btn-xs"
+              onclick={stopPropagation}
+            >
+              {m.blossom_view()}
+            </a>
+            <!-- eslint-enable svelte/no-navigation-without-resolve -->
+          {/if}
           <button
             type="button"
             class="btn text-error btn-ghost btn-xs"
