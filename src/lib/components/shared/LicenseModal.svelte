@@ -27,7 +27,9 @@
     /** @type {(license: any) => void} */
     onsave = () => {},
     /** @type {() => void} */
-    oncancel = () => {}
+    oncancel = () => {},
+    /** @type {(() => Promise<{ url: string, hash: string, mime: string, size: number }>) | null} */
+    beforeAttest = null
   } = $props();
 
   let modalLicense = $state('https://creativecommons.org/licenses/by/4.0/');
@@ -99,10 +101,6 @@
 
   async function handleSave() {
     modalError = '';
-    if (!hash || !url) {
-      modalError = m.license_modal_error_missing_hash();
-      return;
-    }
     if (!modalLicense || !modalCredit) {
       modalError = m.amb_form_validation_image_license_missing();
       return;
@@ -115,11 +113,32 @@
     try {
       const effectiveSigner = signer ?? manager.active;
       if (!effectiveSigner) throw new Error('No active account');
+
+      // If a beforeAttest hook is provided, run it now. Its return value supplies
+      // the (possibly freshly-uploaded) url/hash/mime/size we use for the kind 1063
+      // tags. When no hook is provided, fall back to the props passed by the parent.
+      let attestUrl = url;
+      let attestHash = hash;
+      let attestMime = mime;
+      let attestSize = size;
+      if (beforeAttest) {
+        const out = await beforeAttest();
+        attestUrl = out.url;
+        attestHash = out.hash;
+        attestMime = out.mime;
+        attestSize = out.size;
+      }
+
+      if (!attestHash || !attestUrl) {
+        modalError = m.license_modal_error_missing_hash();
+        return;
+      }
+
       const template = buildLicenseTemplate({
-        hash,
-        url,
-        mime,
-        size,
+        hash: attestHash,
+        url: attestUrl,
+        mime: attestMime,
+        size: attestSize,
         license: modalLicense,
         credit: modalCredit,
         title: modalTitle || undefined,

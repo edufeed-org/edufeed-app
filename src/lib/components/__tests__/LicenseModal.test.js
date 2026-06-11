@@ -26,7 +26,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_create_own: () => 'Create my own',
   license_modal_attested_by: () => 'Attested by',
   license_modal_disclosure_label: () => 'I confirm responsibility',
-  license_modal_disclosure_required_error: () => 'Please confirm'
+  license_modal_disclosure_required_error: () => 'Please confirm',
+  license_modal_publish_failed: () => 'publish failed'
 }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
@@ -123,5 +124,78 @@ describe('LicenseModal — disclosure gate', () => {
       }
     });
     expect(queryByTestId('license-modal-disclosure')).toBeNull();
+  });
+});
+
+describe('LicenseModal — beforeAttest hook', () => {
+  it('awaits beforeAttest before building the kind 1063 template', async () => {
+    const order = [];
+    const beforeAttest = vi.fn(async () => {
+      order.push('beforeAttest');
+      return {
+        url: 'https://blossom.example/new.jpg',
+        hash: 'b'.repeat(64),
+        mime: 'image/jpeg',
+        size: 2222
+      };
+    });
+
+    const onsave = vi.fn(() => {
+      order.push('onsave');
+    });
+
+    const { getByTestId, getByLabelText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: '',
+        url: '',
+        mime: '',
+        size: 0,
+        existingLicense: null,
+        beforeAttest,
+        onsave
+      }
+    });
+
+    await fireEvent.input(getByLabelText('Credit'), { target: { value: 'Jane' } });
+    await fireEvent.click(getByTestId('license-modal-disclosure'));
+    await fireEvent.click(getByTestId('license-modal-save'));
+
+    // Wait a tick for the async chain.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(beforeAttest).toHaveBeenCalledTimes(1);
+    expect(order[0]).toBe('beforeAttest');
+    expect(onsave).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks the publish when beforeAttest rejects', async () => {
+    const beforeAttest = vi.fn(async () => {
+      throw new Error('upload-failed');
+    });
+    const onsave = vi.fn();
+
+    const { getByTestId, getByLabelText, findByText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: '',
+        url: '',
+        mime: '',
+        size: 0,
+        existingLicense: null,
+        beforeAttest,
+        onsave
+      }
+    });
+
+    await fireEvent.input(getByLabelText('Credit'), { target: { value: 'Jane' } });
+    await fireEvent.click(getByTestId('license-modal-disclosure'));
+    await fireEvent.click(getByTestId('license-modal-save'));
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(beforeAttest).toHaveBeenCalledTimes(1);
+    expect(onsave).not.toHaveBeenCalled();
+    await findByText('publish failed');
   });
 });
