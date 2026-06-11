@@ -169,7 +169,7 @@
                     profile={getProfiles().get(attestation.pubkey)}
                     size="xs"
                     fallbackType="robohash"
-                    showHoverCard={false}
+                    showHoverCard
                   />
                   <span class="font-medium" title={attestation.pubkey}>
                     {getDisplayName(getProfiles().get(attestation.pubkey), attestation.pubkey)}
