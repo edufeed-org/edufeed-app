@@ -26,10 +26,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_create_own: () => 'Create my own',
   license_modal_attested_by: () => 'Attested by',
   license_modal_disclosure_label: () => 'I confirm responsibility',
-  license_modal_disclosure_required_error: () => 'Please confirm',
-  license_modal_error_missing_hash: () => 'missing hash',
-  amb_form_validation_image_license_missing: () => 'license missing',
-  license_modal_publish_failed: () => 'publish failed'
+  license_modal_disclosure_required_error: () => 'Please confirm'
 }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
