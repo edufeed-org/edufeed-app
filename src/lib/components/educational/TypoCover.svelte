@@ -38,12 +38,13 @@
   const hue = $derived(stringColorHue(paletteId));
 
   // CSS custom properties set inline so each cover gets its own palette.
-  // Theme variants (dark) are swapped via :where([data-theme="dark"]) below.
+  // --cover-hue feeds the script-word color tint (see .typo-cover-title-script).
+  // Dot-pattern opacity is theme-swapped via :where([data-theme="dark"]) below.
   const inlineStyle = $derived.by(() => {
     if (hue === null) {
-      return '--c-hero: oklch(45% 0.01 250); --c-hero-2: oklch(40% 0.01 250);';
+      return '--c-hero: oklch(45% 0.01 250); --c-hero-2: oklch(40% 0.01 250); --cover-hue: 250;';
     }
-    return `--c-hero: oklch(55% 0.10 ${hue}); --c-hero-2: oklch(48% 0.11 ${hue});`;
+    return `--c-hero: oklch(55% 0.10 ${hue}); --c-hero-2: oklch(48% 0.11 ${hue}); --cover-hue: ${hue};`;
   });
 </script>
 
@@ -273,12 +274,8 @@
     letter-spacing: 0.08em;
   }
 
-  /* Dark-theme tweaks: darker tones and lighter dot pattern. */
-  :where([data-theme='dark'], [data-theme='stil-dark'], [data-theme='rpi-dark']) .typo-cover {
-    --c-hero-l: 45%;
-    --c-hero-c: 0.08;
-  }
-
+  /* Dark theme: lighter dot pattern so it doesn't fight the gradient.
+     Gradient tones themselves stay mid-range OKLCH and read fine on both themes. */
   :where([data-theme='dark'], [data-theme='stil-dark'], [data-theme='rpi-dark'])
     .typo-cover-inner::before {
     background-image: radial-gradient(circle at 1px 1px, oklch(100% 0 0 / 0.12) 1px, transparent 0),
