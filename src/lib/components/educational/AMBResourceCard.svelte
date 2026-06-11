@@ -22,13 +22,10 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
-  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
-  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
-  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import ResourceCover from './ResourceCover.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
@@ -70,12 +67,6 @@
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
-
-  // Thumbnail license attestation (kind 1063 keyed by x-tag SHA-256)
-  const imageHash = $derived(
-    resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
-  );
-  const getImageLicense = useLicenseForHash(() => imageHash);
 
   // Reactive SKOS concepts for URI-to-label resolution
   const resourceTypeConcepts = $derived(getCachedConcepts('learningResourceType'));
@@ -302,28 +293,10 @@
       {/if}
     </div>
 
-    <!-- Resource Image — always shown for consistent card height -->
+    <!-- Resource cover — image at 2:1 when present, typo cover at 3:4 (capped) when absent. -->
     {#if !compact}
       <div class="mb-3">
-        <div class="relative aspect-[2/1] w-full overflow-hidden rounded-lg bg-base-200">
-          {#if resource.image}
-            <ImageWithFallback
-              src={resource.image}
-              alt={resource.name}
-              fallbackType="generic"
-              size="card"
-              class="h-full w-full object-cover"
-            />
-            {#if getImageLicense()}
-              <LicenseBadge
-                licenseEvent={getImageLicense()}
-                class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
-              />
-            {/if}
-          {:else}
-            <div class="flex h-full w-full items-center justify-center text-5xl">📚</div>
-          {/if}
-        </div>
+        <ResourceCover {resource} size="full" aspect="wide" />
       </div>
     {/if}
 
