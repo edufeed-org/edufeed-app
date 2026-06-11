@@ -17,10 +17,7 @@
   import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
   import TypoCover from './TypoCover.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
-  import {
-    getLabelsWithFallback,
-    getLanguageDisplayName as _getLanguageDisplayName
-  } from '$lib/helpers/educational/ambTransform.js';
+  import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
 
@@ -55,6 +52,7 @@
     resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
   );
   const getImageLicense = useLicenseForHash(() => imageHash);
+  const licenseEvent = $derived(getImageLicense());
 
   // Locale-aware label derivation for the typo branch. Same paths used by
   // AMBResourceCard for consistency.
@@ -101,11 +99,8 @@
       size={size === 'thumbnail' ? 'thumbnail' : 'card'}
       class="h-full w-full object-cover"
     />
-    {#if getImageLicense()}
-      <LicenseBadge
-        licenseEvent={getImageLicense()}
-        class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
-      />
+    {#if licenseEvent}
+      <LicenseBadge {licenseEvent} class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur" />
     {/if}
   </div>
 {:else}
