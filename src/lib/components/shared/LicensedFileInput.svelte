@@ -550,6 +550,7 @@
   url={modalTargetFile?.url ?? ''}
   mime={modalTargetFile?.type ?? ''}
   size={modalTargetFile?.size ?? 0}
+  fileName={modalTargetFile?.name ?? ''}
   {activeUserDisplayName}
   existingLicense={pendingExistingLicense}
   beforeAttest={modalTargetIndex !== null && pendingFilesByIndex.has(modalTargetIndex)

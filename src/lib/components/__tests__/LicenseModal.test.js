@@ -27,7 +27,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_attested_by: () => 'Attested by',
   license_modal_disclosure_label: () => 'I confirm responsibility',
   license_modal_disclosure_required_error: () => 'Please confirm',
-  license_modal_publish_failed: () => 'publish failed'
+  license_modal_publish_failed: () => 'publish failed',
+  license_modal_title_file: () => 'License this file',
+  license_modal_description_file: () => 'file desc',
+  license_modal_self_creator_file: () => 'I am the creator of this file',
+  license_modal_existing_description_file: () => 'existing file desc',
+  license_modal_file_label: () => 'File'
 }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
@@ -124,6 +129,97 @@ describe('LicenseModal — disclosure gate', () => {
       }
     });
     expect(queryByTestId('license-modal-disclosure')).toBeNull();
+  });
+});
+
+describe('LicenseModal — file-aware wording + file name', () => {
+  it('uses image wording for image MIME types', () => {
+    const { getByText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: 'https://blossom.example/x.jpg',
+        mime: 'image/jpeg',
+        size: 1234,
+        existingLicense: null
+      }
+    });
+    expect(getByText('License this image')).toBeTruthy();
+    expect(getByText('I am the creator')).toBeTruthy();
+  });
+
+  it('uses generic file wording for non-image MIME types (e.g. PDF)', () => {
+    const { getByText, queryByText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: 'https://blossom.example/x.pdf',
+        mime: 'application/pdf',
+        size: 1234,
+        existingLicense: null
+      }
+    });
+    expect(getByText('License this file')).toBeTruthy();
+    expect(getByText('I am the creator of this file')).toBeTruthy();
+    expect(queryByText('License this image')).toBeNull();
+  });
+
+  it('shows the file name on the Create view so the user knows which file is being licensed', () => {
+    const { getByTestId } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: '',
+        mime: 'application/pdf',
+        size: 1234,
+        existingLicense: null,
+        fileName: 'arbeitsblatt-photosynthese.pdf'
+      }
+    });
+    expect(getByTestId('license-modal-filename').textContent).toContain(
+      'arbeitsblatt-photosynthese.pdf'
+    );
+  });
+
+  it('shows the file name on the Accept-existing view', () => {
+    const existingLicense = {
+      pubkey: 'p2',
+      tags: [
+        ['url', 'https://blossom.example/x.pdf'],
+        ['x', 'a'.repeat(64)],
+        ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+        ['credit', 'Jane']
+      ],
+      content: ''
+    };
+    const { getByTestId } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: '',
+        mime: 'application/pdf',
+        size: 1234,
+        existingLicense,
+        fileName: 'arbeitsblatt-photosynthese.pdf'
+      }
+    });
+    expect(getByTestId('license-modal-filename').textContent).toContain(
+      'arbeitsblatt-photosynthese.pdf'
+    );
+  });
+
+  it('renders no file name chip when fileName is empty', () => {
+    const { queryByTestId } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: '',
+        mime: 'image/jpeg',
+        size: 1234,
+        existingLicense: null
+      }
+    });
+    expect(queryByTestId('license-modal-filename')).toBeNull();
   });
 });
 

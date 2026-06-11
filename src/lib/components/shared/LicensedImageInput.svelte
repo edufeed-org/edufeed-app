@@ -223,6 +223,7 @@
   url={imageUrl}
   mime={modalMime}
   size={modalSize ?? 0}
+  fileName={pendingFile?.name ?? ''}
   {activeUserDisplayName}
   existingLicense={pendingExistingLicense}
   beforeAttest={pendingFile ? performUpload : null}
