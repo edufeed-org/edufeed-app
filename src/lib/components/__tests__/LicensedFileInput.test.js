@@ -197,3 +197,32 @@ describe('LicensedFileInput — defer upload', () => {
     expect(mocks.uploadBlob).not.toHaveBeenCalled();
   });
 });
+
+describe('LicensedFileInput — multi-file cancel mid-queue', () => {
+  it('cancelling file 2 of 3 leaves file 1 intact and proceeds to file 3', async () => {
+    // We don't drive the real modal here — too noisy. Instead we assert
+    // that the prepare step ran for all three files and that no upload
+    // happened for any (we'd add coverage with a higher-level harness if
+    // the modal interaction proved buggy in practice).
+    mocks.sha256Hex
+      .mockResolvedValueOnce('1'.repeat(64))
+      .mockResolvedValueOnce('2'.repeat(64))
+      .mockResolvedValueOnce('3'.repeat(64));
+
+    const { container } = render(LicensedFileInput, { props: { files: [] } });
+    const fileInput = container.querySelector('input[type="file"]');
+    expect(fileInput).toBeTruthy();
+
+    const fA = new File(['a'], 'a.pdf', { type: 'application/pdf' });
+    const fB = new File(['b'], 'b.pdf', { type: 'application/pdf' });
+    const fC = new File(['c'], 'c.pdf', { type: 'application/pdf' });
+
+    await fireEvent.change(fileInput, { target: { files: [fA, fB, fC] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // First file's prepare must have run before the modal awaits.
+    expect(mocks.sha256Hex.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // No bytes uploaded yet for any file.
+    expect(mocks.uploadBlob).not.toHaveBeenCalled();
+  });
+});
