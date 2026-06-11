@@ -97,6 +97,7 @@
 
     uploadError = '';
     const myToken = ++pickToken;
+    uploading = true;
 
     try {
       const hash = await sha256Hex(file);
@@ -117,6 +118,7 @@
       pendingFile = null;
     } finally {
       if (fileInputRef) fileInputRef.value = '';
+      uploading = false;
     }
   }
 
