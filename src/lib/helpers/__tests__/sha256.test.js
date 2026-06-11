@@ -1,3 +1,5 @@
+// jsdom 27 lacks Blob.prototype.arrayBuffer and crypto.subtle, so this test
+// runs in node where both Web Crypto and Blob are natively available.
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { sha256Hex } from '../sha256.js';
