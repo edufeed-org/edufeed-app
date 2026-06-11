@@ -41,7 +41,7 @@
   /** @type {HTMLDivElement | undefined} */
   let triggerEl;
   /** @type {HTMLDivElement | undefined} */
-  let popupEl;
+  let popupEl = $state();
 
   function clearTimers() {
     if (enterTimer) clearTimeout(enterTimer);
