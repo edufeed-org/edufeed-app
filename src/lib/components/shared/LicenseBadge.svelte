@@ -30,10 +30,14 @@
 </script>
 
 {#if licenseEvent && label}
-  <span class="badge gap-1 badge-ghost text-xs {klass}" {title} data-testid="license-badge">
-    <span class="font-medium">{label}</span>
+  <span
+    class="badge inline-flex max-w-full items-center gap-1 badge-ghost text-xs {klass}"
+    {title}
+    data-testid="license-badge"
+  >
+    <span class="shrink-0 font-medium">{label}</span>
     {#if credit}
-      <span class="opacity-70">· {credit}</span>
+      <span class="min-w-0 truncate opacity-70">· {credit}</span>
     {/if}
   </span>
 {/if}

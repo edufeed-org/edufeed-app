@@ -478,59 +478,65 @@
       </div>
       <!-- Index in the key guards against duplicate hashes in legacy/edit-flow data. -->
       {#each files as file, index (`${file.sha256}-${index}`)}
-        <div class="flex flex-wrap items-center gap-3 rounded-lg bg-base-200 p-3">
-          <span class="text-2xl">{getFileIcon(file.type)}</span>
+        <div class="flex items-start gap-3 rounded-lg bg-base-200 p-3">
+          <span class="shrink-0 text-2xl leading-tight">{getFileIcon(file.type)}</span>
           <div class="min-w-0 flex-1">
             <div class="truncate font-medium text-base-content">{getDisplayName(file)}</div>
-            <div class="text-xs text-base-content/60">
+            <div class="truncate text-xs text-base-content/60">
               {file.type} • {formatFileSize(file.size)}
             </div>
+            {#if file.licenseEvent}
+              <div class="mt-1 flex">
+                <LicenseBadge licenseEvent={file.licenseEvent} />
+              </div>
+            {/if}
           </div>
 
-          {#if file.licenseEvent}
-            <LicenseBadge licenseEvent={file.licenseEvent} />
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs"
-              onclick={handleAddLicense(index)}
-              disabled={isUploading}
-            >
-              {m.licensed_image_input_replace_license()}
-            </button>
-          {:else}
-            <button
-              type="button"
-              class="btn btn-xs btn-warning"
-              onclick={handleAddLicense(index)}
-              disabled={isUploading}
-              data-testid="licensed-file-add-license"
-            >
-              {m.licensed_file_input_add_license()}
-            </button>
-          {/if}
+          <div class="flex shrink-0 items-center gap-1">
+            {#if file.licenseEvent}
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onclick={handleAddLicense(index)}
+                disabled={isUploading}
+              >
+                {m.licensed_image_input_replace_license()}
+              </button>
+            {:else}
+              <button
+                type="button"
+                class="btn btn-xs btn-warning"
+                onclick={handleAddLicense(index)}
+                disabled={isUploading}
+                data-testid="licensed-file-add-license"
+              >
+                {m.licensed_file_input_add_license()}
+              </button>
+            {/if}
 
-          {#if file.url}
-            <!-- eslint-disable svelte/no-navigation-without-resolve -- external: blossom file URL -->
-            <a
-              href={file.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="btn btn-ghost btn-xs"
-              onclick={stopPropagation}
+            {#if file.url}
+              <!-- eslint-disable svelte/no-navigation-without-resolve -- external: blossom file URL -->
+              <a
+                href={file.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn btn-ghost btn-xs"
+                onclick={stopPropagation}
+              >
+                {m.blossom_view()}
+              </a>
+              <!-- eslint-enable svelte/no-navigation-without-resolve -->
+            {/if}
+            <button
+              type="button"
+              class="btn text-error btn-ghost btn-xs"
+              onclick={handleRemoveFile(index)}
+              disabled={isUploading}
+              aria-label={m.aria_remove_file()}
             >
-              {m.blossom_view()}
-            </a>
-            <!-- eslint-enable svelte/no-navigation-without-resolve -->
-          {/if}
-          <button
-            type="button"
-            class="btn text-error btn-ghost btn-xs"
-            onclick={handleRemoveFile(index)}
-            disabled={isUploading}
-            aria-label={m.aria_remove_file()}
-          >
-            <CloseIcon class_="w-4 h-4" />
-          </button>
+              <CloseIcon class_="w-4 h-4" />
+            </button>
+          </div>
         </div>
       {/each}
     </div>
