@@ -12,15 +12,20 @@
   Per docs/superpowers/specs/2026-06-11-typo-cover-design.md.
 -->
 <script>
-  import { splitTitle, stringColorHue, titleLayout } from '$lib/helpers/educational/typoCover.js';
+  import {
+    formatAuthors,
+    splitTitle,
+    stringColorHue,
+    titleLayout
+  } from '$lib/helpers/educational/typoCover.js';
 
   /**
    * @typedef {Object} Props
    * @property {string} title
    * @property {string | null} contentTypeLabel
    * @property {string | null} metaLabel
-   * @property {string | null} [creditPrimary] - Footer-right top line (e.g. author display name). Defaults to "edufeed".
-   * @property {string | null} [creditSecondary] - Footer-right bottom line (e.g. license shorthand). Defaults to "cc by 4.0".
+   * @property {string[]} [authors] - Author list (used as CC BY attribution). 1 → full name. 2 → "A & B". 3+ → "A, B et al.".
+   * @property {string | null} [licenseLabel] - Bottom-right license tag, e.g. "CC BY 4.0".
    * @property {string} paletteId
    * @property {'thumbnail' | 'full'} [size]
    * @property {string} [class]
@@ -31,12 +36,14 @@
     title,
     contentTypeLabel,
     metaLabel,
-    creditPrimary = 'edufeed',
-    creditSecondary = 'cc by 4.0',
+    authors = [],
+    licenseLabel = 'CC BY 4.0',
     paletteId,
     size = 'full',
     class: className = ''
   } = $props();
+
+  const attribution = $derived(formatAuthors(authors));
 
   const layout = $derived(titleLayout(title));
   const parts = $derived(splitTitle(title));
@@ -99,23 +106,19 @@
 
         <div class="typo-cover-footer" data-testid="typo-cover-footer">
           <hr class="typo-cover-rule" />
+          {#if attribution}
+            <div class="typo-cover-author" data-testid="typo-cover-author">{attribution}</div>
+          {/if}
           <div class="typo-cover-footer-row">
             {#if metaLabel}
               <span class="typo-cover-meta" data-testid="typo-cover-meta">{metaLabel}</span>
             {:else}
               <span class="typo-cover-meta typo-cover-meta-empty" aria-hidden="true"></span>
             {/if}
-            <span class="typo-cover-credit" data-testid="typo-cover-credit">
-              {#if creditPrimary}
-                <span class="typo-cover-credit-line typo-cover-credit-primary">{creditPrimary}</span
-                >
-              {/if}
-              {#if creditSecondary}
-                <span class="typo-cover-credit-line typo-cover-credit-secondary"
-                  >{creditSecondary}</span
-                >
-              {/if}
-            </span>
+            {#if licenseLabel}
+              <span class="typo-cover-license" data-testid="typo-cover-license">{licenseLabel}</span
+              >
+            {/if}
           </div>
         </div>
       {/if}
@@ -203,14 +206,12 @@
   }
 
   .typo-cover-title-line {
-    /* break-word (not 'anywhere') so attached punctuation like "Verantwortung:"
-       stays glued to the word it follows. Long German compounds in the SHORT
-       layout shrink via clamp(); pathological cases route to the long-title
-       layout instead. hyphens: auto lets the browser break "Menschenhandeln"
-       at "Menschen-handeln" instead of mid-character when wrapping is
-       unavoidable (requires the page lang attribute to be set on <html>). */
-    overflow-wrap: break-word;
-    hyphens: auto;
+    /* Spec: word boundaries only, never break inside a word, never hyphenate
+       or cut. clamp() shrinks the font on narrow containers; pathological
+       super-long titles are routed to the long-headline layout by titleLayout. */
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: manual;
     line-height: 0.95;
   }
 
@@ -218,7 +219,9 @@
   .typo-cover-title-trailing {
     font-family: 'Outfit', system-ui, sans-serif;
     font-weight: 800;
-    font-size: clamp(1.4rem, 12cqi, 3rem);
+    /* Lower clamp min so German compounds (Menschenhandeln, 15 chars) fit
+       at narrow card widths without needing to break the word. */
+    font-size: clamp(0.95rem, 11cqi, 3rem);
     color: white;
   }
 
@@ -300,34 +303,30 @@
     min-width: 1px;
   }
 
-  .typo-cover-credit {
+  /* Full-width attribution line above the meta row. Holds the CC BY author(s).
+     Clamps to 2 lines so even long org names ("KPH Wien/NÖ – Zentrum Fortbildung
+     Religion") fit. text-wrap: balance keeps the line lengths visually even. */
+  .typo-cover-author {
+    position: relative;
+    z-index: 1;
+    font-family: 'Outfit', system-ui, sans-serif;
+    font-weight: 500;
+    font-size: clamp(0.7rem, 3.3cqi, 0.95rem);
+    line-height: 1.35;
+    color: oklch(100% 0 0 / 0.95);
+    text-wrap: balance;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .typo-cover-license {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: clamp(0.45rem, 2.2cqi, 0.7rem);
     color: oklch(100% 0 0 / 0.75);
-    display: inline-flex;
-    flex-direction: column;
-    align-items: flex-end;
-    line-height: 1.2;
-    max-width: 60%;
-    text-align: right;
-  }
-
-  .typo-cover-credit-line {
-    display: inline-block;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .typo-cover-credit-primary {
-    color: oklch(100% 0 0 / 0.92);
-    font-weight: 500;
-  }
-
-  .typo-cover-credit-secondary {
-    color: oklch(100% 0 0 / 0.7);
-    font-size: 0.85em;
   }
 
   /* Thumbnail variant: drop title stack + footer entirely. */

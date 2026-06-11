@@ -88,11 +88,11 @@
   const paletteId = $derived(resource?.identifier ?? '');
   const title = $derived(resource?.name ?? '');
 
-  // Footer credit derivation.
-  // creditPrimary prefers the AMB resource's own creator:name tags
-  // (the *actual* author of the metadata, e.g. "Constanze von Kitzing")
-  // over the publisher's Nostr pubkey. Falls back to the publisher's
-  // profile display name, then to a shortened pubkey.
+  // Author attribution for the CC BY footer line.
+  // Prefers the resource's own creator:name tags (the *actual* author of the
+  // metadata, e.g. "Constanze von Kitzing") over the Nostr publisher.
+  // Falls back to the publisher profile's display name, then a shortened pubkey.
+  // The display order matters: the first author is the primary attribution.
   const creatorNames = $derived(
     (resource?.tags ?? [])
       .filter((/** @type {string[]} */ t) => t[0] === 'creator:name')
@@ -100,16 +100,17 @@
       .filter(Boolean)
   );
   const publisherProfile = useUserProfile(() => resource?.pubkey);
-  const creditPrimary = $derived.by(() => {
-    if (creatorNames.length > 0) return creatorNames.join(', ');
+  const authors = $derived.by(() => {
+    if (creatorNames.length > 0) return creatorNames;
     const profile = publisherProfile();
-    if (profile) return getDisplayName(profile, '');
-    if (resource?.pubkey) return resource.pubkey.slice(0, 8) + '…';
-    return null;
+    if (profile) {
+      const name = getDisplayName(profile, '');
+      if (name) return [name];
+    }
+    if (resource?.pubkey) return [resource.pubkey.slice(0, 8) + '…'];
+    return [];
   });
-  const creditSecondary = $derived(
-    resource?.license?.label ? resource.license.label.toLowerCase() : null
-  );
+  const licenseLabel = $derived(resource?.license?.label ?? null);
 </script>
 
 {#if resource?.image}
@@ -135,14 +136,6 @@
       : 'w-full'} {className}"
     data-testid="resource-cover-typo"
   >
-    <TypoCover
-      {title}
-      {contentTypeLabel}
-      {metaLabel}
-      {creditPrimary}
-      {creditSecondary}
-      {paletteId}
-      {size}
-    />
+    <TypoCover {title} {contentTypeLabel} {metaLabel} {authors} {licenseLabel} {paletteId} {size} />
   </div>
 {/if}

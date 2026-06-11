@@ -47,12 +47,12 @@ describe('TypoCover', () => {
     expect(container.querySelector('[data-testid="typo-cover-footer"]')).not.toBeNull();
   });
 
-  it('single-word title renders only the script word; leading/trailing absent', () => {
+  it('single-word title renders plain on the leading line; no script word', () => {
     const { container, getByTestId } = render(TypoCover, {
       props: defaultProps({ title: 'Reformation' })
     });
-    expect(getByTestId('typo-cover-title-script').textContent).toContain('Reformation');
-    expect(container.querySelector('[data-testid="typo-cover-title-leading"]')).toBeNull();
+    expect(getByTestId('typo-cover-title-leading').textContent).toContain('Reformation');
+    expect(container.querySelector('[data-testid="typo-cover-title-script"]')).toBeNull();
     expect(container.querySelector('[data-testid="typo-cover-title-trailing"]')).toBeNull();
   });
 
@@ -68,12 +68,12 @@ describe('TypoCover', () => {
     expect(container.querySelector('[data-testid="typo-cover-pill"]')).toBeNull();
   });
 
-  it('metaLabel=null hides the footer-left text but keeps the credit', () => {
+  it('metaLabel=null hides the footer-left text but keeps the license tag', () => {
     const { container, getByTestId } = render(TypoCover, {
       props: defaultProps({ metaLabel: null })
     });
     expect(container.querySelector('[data-testid="typo-cover-meta"]')).toBeNull();
-    expect(getByTestId('typo-cover-credit').textContent).toContain('edufeed');
+    expect(getByTestId('typo-cover-license').textContent).toContain('CC BY 4.0');
   });
 
   it('applies --c-hero / --c-hero-2 inline styles derived from paletteId', () => {
@@ -117,39 +117,46 @@ describe('TypoCover', () => {
     expect(container.querySelector('[data-testid="typo-cover-title-headline"]')).toBeNull();
   });
 
-  it('defaults credit lines to "edufeed" / "cc by 4.0" when not provided', () => {
+  it('renders no attribution line when authors is empty', () => {
+    const { container } = render(TypoCover, { props: defaultProps({ authors: [] }) });
+    expect(container.querySelector('[data-testid="typo-cover-author"]')).toBeNull();
+  });
+
+  it('defaults licenseLabel to "CC BY 4.0" when not provided', () => {
     const { getByTestId } = render(TypoCover, { props: defaultProps() });
-    const credit = getByTestId('typo-cover-credit');
-    expect(credit.textContent).toContain('edufeed');
-    expect(credit.textContent).toContain('cc by 4.0');
+    expect(getByTestId('typo-cover-license').textContent).toContain('CC BY 4.0');
   });
 
-  it('renders custom creditPrimary + creditSecondary as two lines', () => {
+  it('renders a custom licenseLabel verbatim', () => {
     const { getByTestId } = render(TypoCover, {
-      props: defaultProps({
-        creditPrimary: 'Constanze von Kitzing',
-        creditSecondary: 'cc by-sa 4.0'
-      })
+      props: defaultProps({ licenseLabel: 'CC BY-SA 4.0' })
     });
-    const credit = getByTestId('typo-cover-credit');
-    expect(credit.textContent).toContain('Constanze von Kitzing');
-    expect(credit.textContent).toContain('cc by-sa 4.0');
+    expect(getByTestId('typo-cover-license').textContent).toContain('CC BY-SA 4.0');
   });
 
-  it('omits creditSecondary line when null but keeps primary', () => {
-    const { container, getByTestId } = render(TypoCover, {
-      props: defaultProps({ creditPrimary: '@fortbildner', creditSecondary: null })
-    });
-    expect(getByTestId('typo-cover-credit').textContent).toContain('@fortbildner');
-    // The .typo-cover-credit-secondary span should not be present.
-    expect(container.querySelector('.typo-cover-credit-secondary')).toBeNull();
+  it('omits the license tag when licenseLabel is null', () => {
+    const { container } = render(TypoCover, { props: defaultProps({ licenseLabel: null }) });
+    expect(container.querySelector('[data-testid="typo-cover-license"]')).toBeNull();
   });
 
-  it('omits creditPrimary line when null but keeps secondary', () => {
-    const { container, getByTestId } = render(TypoCover, {
-      props: defaultProps({ creditPrimary: null, creditSecondary: 'cc 0' })
+  it('renders the single author full name as the attribution', () => {
+    const { getByTestId } = render(TypoCover, {
+      props: defaultProps({ authors: ['Constanze von Kitzing'] })
     });
-    expect(getByTestId('typo-cover-credit').textContent).toContain('cc 0');
-    expect(container.querySelector('.typo-cover-credit-primary')).toBeNull();
+    expect(getByTestId('typo-cover-author').textContent).toContain('Constanze von Kitzing');
+  });
+
+  it('joins two authors with " & "', () => {
+    const { getByTestId } = render(TypoCover, {
+      props: defaultProps({ authors: ['Alice', 'Bob'] })
+    });
+    expect(getByTestId('typo-cover-author').textContent).toContain('Alice & Bob');
+  });
+
+  it('renders "A, B et al." for 3+ authors', () => {
+    const { getByTestId } = render(TypoCover, {
+      props: defaultProps({ authors: ['Alice', 'Bob', 'Carol', 'Dan'] })
+    });
+    expect(getByTestId('typo-cover-author').textContent).toContain('Alice, Bob et al.');
   });
 });

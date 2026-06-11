@@ -36,19 +36,19 @@ const SCRIPT_TRAILING_PUNCT = /[:;,.!?…]+$/u;
  * Split a short title into three parts for the cover's title stack:
  * leading words, one highlighted (script) word, trailing words.
  *
- * The highlighted word is at `Math.floor(n / 2)` of the word list.
- * Accepted tradeoff: longer titles can highlight a preposition or
- * article ("für", "und", "der"). The mockup's "Morgen / bestimme /
- * ich" pattern is the canonical case.
+ * Split happens on whitespace only — never inside a word. Rules:
+ * - 0 words → all empty
+ * - 1 word → renders plain on the leading line (no script accent)
+ * - 2 words → first leading, second script, no trailing
+ * - 3+ words → script = longest INNER word (excludes first and last).
+ *   Ties broken by first occurrence. Picking the longest content word
+ *   avoids highlighting prepositions/articles like "für", "und", "der".
  *
- * The script word has trailing punctuation stripped — a stranded ":"
- * after a Caveat-italic word wraps onto its own line and reads as a
- * typesetting bug. The punctuation is purely visual sugar; the title
- * still reads correctly with it dropped.
+ * Trailing punctuation ([:;,.!?…]) is stripped from the script word so a
+ * stranded character doesn't wrap onto its own Caveat-italic line.
  *
  * Only meaningful for titles where `titleLayout(title) === 'short'`.
- * Callers should branch on the layout and use this only for short
- * titles; long titles render as a plain headline instead.
+ * Callers branch on the layout and use this for short titles only.
  *
  * @param {string | null | undefined} title
  * @returns {{ leading: string[], script: string, trailing: string[] }}
@@ -56,13 +56,53 @@ const SCRIPT_TRAILING_PUNCT = /[:;,.!?…]+$/u;
 export function splitTitle(title) {
   const words = (title ?? '').trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return { leading: [], script: '', trailing: [] };
-  const scriptIdx = words.length === 1 ? 0 : Math.floor(words.length / 2);
-  const script = words[scriptIdx].replace(SCRIPT_TRAILING_PUNCT, '');
+  if (words.length === 1) return { leading: [words[0]], script: '', trailing: [] };
+  if (words.length === 2) {
+    return {
+      leading: [words[0]],
+      script: words[1].replace(SCRIPT_TRAILING_PUNCT, ''),
+      trailing: []
+    };
+  }
+  // 3+ words: pick the longest inner word as the script accent.
+  let scriptIdx = 1;
+  let longest = words[1].length;
+  for (let i = 2; i < words.length - 1; i++) {
+    if (words[i].length > longest) {
+      longest = words[i].length;
+      scriptIdx = i;
+    }
+  }
   return {
     leading: words.slice(0, scriptIdx),
-    script,
+    script: words[scriptIdx].replace(SCRIPT_TRAILING_PUNCT, ''),
     trailing: words.slice(scriptIdx + 1)
   };
+}
+
+/**
+ * Format a list of authors for the cover attribution line.
+ *
+ * | count | output                |
+ * |-------|-----------------------|
+ * |   0   | `null`                |
+ * |   1   | full name             |
+ * |   2   | `A & B`               |
+ * |   3+  | `A, B et al.`         |
+ *
+ * Order matches the input order (first author = primary). Single names
+ * are never abbreviated — the attribution line clamps at 2 full-width
+ * lines, which absorbs even long org names.
+ *
+ * @param {string[]} authors
+ * @returns {string | null}
+ */
+export function formatAuthors(authors) {
+  const cleaned = (authors ?? []).map((a) => (a ?? '').trim()).filter(Boolean);
+  if (cleaned.length === 0) return null;
+  if (cleaned.length === 1) return cleaned[0];
+  if (cleaned.length === 2) return `${cleaned[0]} & ${cleaned[1]}`;
+  return `${cleaned[0]}, ${cleaned[1]} et al.`;
 }
 
 /**

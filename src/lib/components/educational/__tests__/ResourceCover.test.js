@@ -169,7 +169,7 @@ describe('ResourceCover — credit derivation', () => {
     profileState.current = null;
   });
 
-  it('uses creator:name tag(s) as creditPrimary when present', () => {
+  it('uses a single creator:name tag as the attribution', () => {
     const tags = [
       ['d', 'r-with-creators'],
       ['creator:name', 'Constanze von Kitzing'],
@@ -182,14 +182,33 @@ describe('ResourceCover — credit derivation', () => {
         aspect: 'wide'
       }
     });
-    expect(getByTestId('typo-cover-credit').textContent).toContain('Constanze von Kitzing');
+    expect(getByTestId('typo-cover-author').textContent).toContain('Constanze von Kitzing');
   });
 
-  it('joins multiple creator:name tags with comma', () => {
+  it('joins two creator:name tags with " & "', () => {
+    const tags = [
+      ['d', 'r-two'],
+      ['creator:name', 'Alice'],
+      ['creator:name', 'Bob'],
+      ['learningResourceType:prefLabel:en', 'Worksheet']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: null, tags, identifier: 'r-two' }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-author').textContent).toContain('Alice & Bob');
+  });
+
+  it('renders "A, B et al." when three or more creator:name tags are present', () => {
     const tags = [
       ['d', 'r-multi'],
       ['creator:name', 'Alice'],
       ['creator:name', 'Bob'],
+      ['creator:name', 'Carol'],
+      ['creator:name', 'Dan'],
       ['learningResourceType:prefLabel:en', 'Worksheet']
     ];
     const { getByTestId } = render(ResourceCover, {
@@ -199,7 +218,7 @@ describe('ResourceCover — credit derivation', () => {
         aspect: 'wide'
       }
     });
-    expect(getByTestId('typo-cover-credit').textContent).toContain('Alice, Bob');
+    expect(getByTestId('typo-cover-author').textContent).toContain('Alice, Bob et al.');
   });
 
   it('falls back to publisher profile display name when no creator:name tags', () => {
@@ -211,7 +230,7 @@ describe('ResourceCover — credit derivation', () => {
         aspect: 'wide'
       }
     });
-    expect(getByTestId('typo-cover-credit').textContent).toContain('@Fortbild');
+    expect(getByTestId('typo-cover-author').textContent).toContain('@Fortbild');
   });
 
   it('falls back to shortened pubkey when no creator:name and no profile', () => {
@@ -224,10 +243,10 @@ describe('ResourceCover — credit derivation', () => {
         aspect: 'wide'
       }
     });
-    expect(getByTestId('typo-cover-credit').textContent).toContain('00000000…');
+    expect(getByTestId('typo-cover-author').textContent).toContain('00000000…');
   });
 
-  it('uses resource.license.label (lowercased) as creditSecondary', () => {
+  it('uses resource.license.label verbatim as the license tag', () => {
     const { getByTestId } = render(ResourceCover, {
       props: {
         resource: {
@@ -238,7 +257,7 @@ describe('ResourceCover — credit derivation', () => {
         aspect: 'wide'
       }
     });
-    expect(getByTestId('typo-cover-credit').textContent).toContain('cc by-sa 4.0');
+    expect(getByTestId('typo-cover-license').textContent).toContain('CC BY-SA 4.0');
   });
 });
 

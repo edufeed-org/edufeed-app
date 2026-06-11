@@ -3,7 +3,12 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { splitTitle, stringColorHue, titleLayout } from '$lib/helpers/educational/typoCover.js';
+import {
+  formatAuthors,
+  splitTitle,
+  stringColorHue,
+  titleLayout
+} from '$lib/helpers/educational/typoCover.js';
 
 describe('splitTitle', () => {
   it('returns empty result for null / undefined / empty / whitespace-only input', () => {
@@ -14,15 +19,15 @@ describe('splitTitle', () => {
     expect(splitTitle('   ')).toEqual(expected);
   });
 
-  it('returns single word as script, no leading/trailing', () => {
+  it('1-word title renders plain on the leading line, no script accent', () => {
     expect(splitTitle('Reformation')).toEqual({
-      leading: [],
-      script: 'Reformation',
+      leading: ['Reformation'],
+      script: '',
       trailing: []
     });
   });
 
-  it('puts first word as leading, second as script when n=2', () => {
+  it('2-word title: word 1 leading, word 2 script, no trailing', () => {
     expect(splitTitle('Hello World')).toEqual({
       leading: ['Hello'],
       script: 'World',
@@ -30,7 +35,7 @@ describe('splitTitle', () => {
     });
   });
 
-  it('splits a 3-word title at floor(n/2) — the mockup case', () => {
+  it('3-word title: only inner word is script (mockup case)', () => {
     expect(splitTitle('Morgen bestimme ich')).toEqual({
       leading: ['Morgen'],
       script: 'bestimme',
@@ -38,11 +43,35 @@ describe('splitTitle', () => {
     });
   });
 
-  it('splits a 5-word title at floor(n/2)', () => {
+  it('5-word title: picks longest inner word as script', () => {
+    // inner = ['Grundlagen', 'für', 'Klasse'] → longest is 'Grundlagen'
     expect(splitTitle('Mathematische Grundlagen für Klasse 5')).toEqual({
-      leading: ['Mathematische', 'Grundlagen'],
-      script: 'für',
-      trailing: ['Klasse', '5']
+      leading: ['Mathematische'],
+      script: 'Grundlagen',
+      trailing: ['für', 'Klasse', '5']
+    });
+  });
+
+  it('avoids prepositions in 5-word titles (regression: was picking "für")', () => {
+    const { script } = splitTitle('Mathematische Grundlagen für Klasse 5');
+    expect(script).not.toBe('für');
+  });
+
+  it('4-word title: picks the longer of two inner words', () => {
+    // inner = ['Menschen', 'verantwortlich'] → longest is 'verantwortlich'
+    expect(splitTitle('Wofür Menschen verantwortlich sind')).toEqual({
+      leading: ['Wofür', 'Menschen'],
+      script: 'verantwortlich',
+      trailing: ['sind']
+    });
+  });
+
+  it('ties broken by first occurrence', () => {
+    // inner = ['ab', 'cd'] both 2 chars → 'ab' (first) wins
+    expect(splitTitle('x ab cd y')).toEqual({
+      leading: ['x'],
+      script: 'ab',
+      trailing: ['cd', 'y']
     });
   });
 
@@ -54,18 +83,18 @@ describe('splitTitle', () => {
     });
   });
 
-  it('keeps a single very long word as the script word', () => {
+  it('keeps a single very long word as plain (1-word path)', () => {
     const long = 'Beziehungsgeschehen';
     expect(splitTitle(long)).toEqual({
-      leading: [],
-      script: long,
+      leading: [long],
+      script: '',
       trailing: []
     });
   });
 
   it('strips trailing punctuation from the script word', () => {
-    // "Menschen tragen Verantwortung: Teil 2" → script picks index 2.
-    // Without stripping, ":" would wrap to its own line in the cover.
+    // 5 words. inner = ['tragen', 'Verantwortung:', 'Teil']
+    // longest inner: 'Verantwortung:' (14 chars). Strip the colon.
     expect(splitTitle('Menschen tragen Verantwortung: Teil 2')).toEqual({
       leading: ['Menschen', 'tragen'],
       script: 'Verantwortung',
@@ -82,9 +111,47 @@ describe('splitTitle', () => {
   });
 
   it('does NOT strip punctuation from leading/trailing words', () => {
-    const { leading, trailing } = splitTitle('Hello, world! Goodbye.');
+    // 3 words, inner = ['world!'] (the only inner word)
+    const { leading, script, trailing } = splitTitle('Hello, world! Goodbye.');
     expect(leading).toEqual(['Hello,']);
+    expect(script).toBe('world');
     expect(trailing).toEqual(['Goodbye.']);
+  });
+});
+
+describe('formatAuthors', () => {
+  it('returns null for empty / null / all-blank input', () => {
+    expect(formatAuthors([])).toBeNull();
+    // @ts-expect-error — passing null intentionally
+    expect(formatAuthors(null)).toBeNull();
+    // @ts-expect-error — passing undefined intentionally
+    expect(formatAuthors(undefined)).toBeNull();
+    expect(formatAuthors(['  ', ''])).toBeNull();
+  });
+
+  it('returns the single name unchanged (no abbreviation)', () => {
+    expect(formatAuthors(['laoc42'])).toBe('laoc42');
+    expect(formatAuthors(['KPH Wien/NÖ – Zentrum Fortbildung Religion'])).toBe(
+      'KPH Wien/NÖ – Zentrum Fortbildung Religion'
+    );
+  });
+
+  it('joins two names with ampersand', () => {
+    expect(formatAuthors(['Alice', 'Bob'])).toBe('Alice & Bob');
+  });
+
+  it('shows first two names plus "et al." for 3 or more', () => {
+    expect(formatAuthors(['Alice', 'Bob', 'Carol'])).toBe('Alice, Bob et al.');
+    expect(formatAuthors(['Alice', 'Bob', 'Carol', 'Dan', 'Eve'])).toBe('Alice, Bob et al.');
+  });
+
+  it('preserves input order (first author = primary)', () => {
+    expect(formatAuthors(['Zeta', 'Alpha'])).toBe('Zeta & Alpha');
+    expect(formatAuthors(['Zeta', 'Alpha', 'Mu'])).toBe('Zeta, Alpha et al.');
+  });
+
+  it('trims and filters blank entries before counting', () => {
+    expect(formatAuthors([' Alice ', '', ' Bob '])).toBe('Alice & Bob');
   });
 });
 
