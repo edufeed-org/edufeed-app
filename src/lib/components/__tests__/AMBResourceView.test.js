@@ -42,6 +42,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_open_content: () => 'Open Content',
   amb_resource_educational_details: () => 'Educational Details',
   amb_resource_educational_level: () => 'Educational Level',
+  amb_resource_target_audience: () => 'Target Audience',
   amb_resource_subjects: () => 'Subjects',
   amb_resource_available_languages: () => 'Languages',
   amb_resource_access: () => 'Access',

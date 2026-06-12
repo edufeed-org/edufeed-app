@@ -83,6 +83,8 @@
     "ws": "^8.20.0"
   },
   "dependencies": {
+    "@fontsource-variable/caveat": "^5.2.8",
+    "@fontsource-variable/outfit": "^5.2.8",
     "@mozilla/readability": "^0.6.0",
     "applesauce-common": "^5.2.0",
     "bible-passage-reference-parser": "^3.2.0",

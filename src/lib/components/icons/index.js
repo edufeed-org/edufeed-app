@@ -19,6 +19,7 @@ export { default as FilterIcon } from './ui/FilterIcon.svelte';
 export { default as AlertIcon } from './ui/AlertIcon.svelte';
 export { default as UserIcon } from './ui/UserIcon.svelte';
 export { default as GlobeIcon } from './ui/GlobeIcon.svelte';
+export { default as TranslateIcon } from './ui/TranslateIcon.svelte';
 export { default as SettingsIcon } from './ui/SettingsIcon.svelte';
 export { default as LockIcon } from './ui/LockIcon.svelte';
 export { default as LockOpenIcon } from './ui/LockOpenIcon.svelte';
@@ -32,6 +33,7 @@ export { default as RelayIcon } from './ui/RelayIcon.svelte';
 export { default as SearchIcon } from './ui/SearchIcon.svelte';
 export { default as TagIcon } from './ui/TagIcon.svelte';
 export { default as BookIcon } from './ui/BookIcon.svelte';
+export { default as BookClosedIcon } from './ui/BookClosedIcon.svelte';
 export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
 export { default as InfoIcon } from './ui/InfoIcon.svelte';
@@ -43,6 +45,10 @@ export { default as BadgeIcon } from './ui/BadgeIcon.svelte';
 export { default as BookOpenIcon } from './ui/BookOpenIcon.svelte';
 export { default as ChatTextIcon } from './ui/ChatTextIcon.svelte';
 export { default as VolumeUpIcon } from './ui/VolumeUpIcon.svelte';
+export { default as SchoolIcon } from './ui/SchoolIcon.svelte';
+export { default as LightbulbIcon } from './ui/LightbulbIcon.svelte';
+export { default as SparkleIcon } from './ui/SparkleIcon.svelte';
+export { default as BibleIcon } from './ui/BibleIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';

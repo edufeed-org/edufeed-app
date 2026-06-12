@@ -19,7 +19,7 @@
 
   /**
    * @typedef {Object} Props
-   * @property {string} title - Main title text
+   * @property {string} [title] - Main title text (omit for toolbar-only mode)
    * @property {string} [subtitle] - Optional subtitle
    * @property {import('nostr-tools').NostrEvent} event - For context menu
    * @property {string} authorPubkey - For avatar + name in toolbar
@@ -37,7 +37,7 @@
 
   /** @type {Props} */
   let {
-    title,
+    title = undefined,
     subtitle = undefined,
     event,
     authorPubkey,
