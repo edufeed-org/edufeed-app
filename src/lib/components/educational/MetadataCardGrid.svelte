@@ -101,11 +101,21 @@
 <style>
   .mcg-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
     gap: 18px;
     background: var(--c-olive);
     border-radius: 18px;
     padding: clamp(20px, 3vw, 30px);
+  }
+  /* On narrow screens collapse to one column. A `span 2` wide card would
+     otherwise force a two-column track that overflows the viewport. */
+  @media (max-width: 560px) {
+    .mcg-grid {
+      grid-template-columns: 1fr;
+    }
+    .mcg-wide {
+      grid-column: auto;
+    }
   }
   .mcg-card {
     position: relative;

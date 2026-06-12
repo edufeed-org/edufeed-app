@@ -570,7 +570,7 @@
   <!-- HERO — editorial banner: script-accented title + key facts + cover. -->
   <section class="ed-hero" class:no-cover={false}>
     <div class="ed-hero-grid">
-      <div class="ed-cover-card">
+      <div class="ed-cover-card" class:ed-cover-framed={!!resource.image}>
         <ResourceCover {resource} size="full" aspect="portrait" />
       </div>
 
@@ -906,9 +906,14 @@
       gap: 24px;
     }
   }
+  /* Bare wrapper by default — the typographic cover renders its own white
+     frame, so wrapping it again would produce a visible double border. */
   .ed-cover-card {
-    background: #fff;
     border-radius: 22px;
+  }
+  /* Real image thumbnails have no frame of their own, so they get one here. */
+  .ed-cover-framed {
+    background: #fff;
     padding: 12px;
     box-shadow:
       0 30px 60px -28px rgba(0, 0, 0, 0.5),
