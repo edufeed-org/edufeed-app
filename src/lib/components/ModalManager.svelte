@@ -14,6 +14,7 @@
   import CommunityMigrationModal from './CommunityMigrationModal.svelte';
   import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
   import ShareByNaddrModal from './shared/ShareByNaddrModal.svelte';
+  import ReportMetadataModal from './shared/ReportMetadataModal.svelte';
   import CreateRoomModal from './meet/CreateRoomModal.svelte';
   import PollCreateModal from './polls/PollCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
@@ -46,6 +47,7 @@
   const communityMigrationModalId = 'community-migration-modal';
   const addBookmarkModalId = 'add-bookmark-modal';
   const shareByNaddrModalId = 'share-by-naddr-modal';
+  const reportMetadataModalId = 'report-metadata-modal';
   const createRoomModalId = 'create-room-modal';
   const recoveryDownloadModalId = 'recovery-download-modal';
 
@@ -112,6 +114,12 @@
       );
       if (shareByNaddrModal && shareByNaddrModal.open) {
         shareByNaddrModal.close();
+      }
+      const reportMetadataModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(reportMetadataModalId)
+      );
+      if (reportMetadataModal && reportMetadataModal.open) {
+        reportMetadataModal.close();
       }
       const createRoomModal = /** @type {HTMLDialogElement} */ (
         document.getElementById(createRoomModalId)
@@ -195,6 +203,13 @@
       );
       if (shareByNaddrModal && !shareByNaddrModal.open) {
         shareByNaddrModal.showModal();
+      }
+    } else if (currentModal === 'reportMetadata') {
+      const reportMetadataModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(reportMetadataModalId)
+      );
+      if (reportMetadataModal && !reportMetadataModal.open) {
+        reportMetadataModal.showModal();
       }
     } else if (currentModal === 'createRoom') {
       const createRoomModal = /** @type {HTMLDialogElement} */ (
@@ -283,6 +298,8 @@
   <AddBookmarkModal modalId={addBookmarkModalId} />
 {:else if modal.activeModal === 'shareByNaddr'}
   <ShareByNaddrModal modalId={shareByNaddrModalId} />
+{:else if modal.activeModal === 'reportMetadata'}
+  <ReportMetadataModal modalId={reportMetadataModalId} />
 {:else if modal.activeModal === 'createRoom'}
   <CreateRoomModal modalId={createRoomModalId} />
 {:else if modal.activeModal === 'createPoll'}

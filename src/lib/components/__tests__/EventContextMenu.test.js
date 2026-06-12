@@ -33,6 +33,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   event_menu_remove_from_homepage: () => 'Remove from homepage',
   event_menu_featured_toast: () => 'Featured on homepage!',
   event_menu_unfeatured_toast: () => 'Removed from homepage',
+  report_metadata_menu_item: () => 'Report metadata issue',
   common_copy: () => 'Copy',
   common_copied: () => 'Copied',
   common_close: () => 'Close',
@@ -42,6 +43,13 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   delete_confirm_cannot_undo: () => 'This cannot be undone.',
   delete_confirm_deleting: () => 'Deleting...',
   common_cancel: () => 'Cancel'
+}));
+
+const mockOpenModal = vi.fn();
+vi.mock('$lib/stores/modal.svelte.js', () => ({
+  modalStore: {
+    openModal: (/** @type {any[]} */ ...args) => mockOpenModal(...args)
+  }
 }));
 
 vi.mock('$lib/services/pin-list-service.js', () => ({
@@ -317,6 +325,54 @@ describe('EventContextMenu', () => {
       render(EventContextMenu, { props: { event: mockEvent } });
 
       expect(mockReplaceable).toHaveBeenCalledWith(10222, ACTIVE_USER_PUBKEY);
+    });
+  });
+
+  describe('report metadata issue (kind 30142)', () => {
+    const resourceEvent = {
+      id: 'res1',
+      kind: 30142,
+      pubkey: 'bb'.repeat(32),
+      tags: [
+        ['d', 'res-1'],
+        ['title', 'Intro to Algebra']
+      ],
+      created_at: 1700000000,
+      content: ''
+    };
+
+    function findReportBtn() {
+      const dropdown = document.querySelector('.dropdown-content');
+      const buttons = Array.from(dropdown?.querySelectorAll('button') || []);
+      return buttons.find((btn) => btn.textContent?.includes('Report metadata issue'));
+    }
+
+    it('shows the item for a kind 30142 event when logged in and viewer is not the author', () => {
+      render(EventContextMenu, { props: { event: resourceEvent } });
+      expect(findReportBtn()).toBeTruthy();
+    });
+
+    it('hides the item when not logged in', () => {
+      mockActiveUser = null;
+      render(EventContextMenu, { props: { event: resourceEvent } });
+      expect(findReportBtn()).toBeUndefined();
+    });
+
+    it('hides the item when the viewer is the author', () => {
+      mockActiveUser = { pubkey: resourceEvent.pubkey };
+      render(EventContextMenu, { props: { event: resourceEvent } });
+      expect(findReportBtn()).toBeUndefined();
+    });
+
+    it('hides the item for non-30142 events', () => {
+      render(EventContextMenu, { props: { event: mockEvent } });
+      expect(findReportBtn()).toBeUndefined();
+    });
+
+    it('opens the reportMetadata modal with the event on click', async () => {
+      render(EventContextMenu, { props: { event: resourceEvent } });
+      await fireEvent.click(findReportBtn());
+      expect(mockOpenModal).toHaveBeenCalledWith('reportMetadata', { event: resourceEvent });
     });
   });
 });

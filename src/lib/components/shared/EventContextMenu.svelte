@@ -20,6 +20,7 @@
   import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import CommunityShare from './CommunityShare.svelte';
   import DeleteConfirmModal from './DeleteConfirmModal.svelte';
 
@@ -54,6 +55,10 @@
     });
     return () => sub.unsubscribe();
   });
+
+  let canReportMetadata = $derived(
+    !!activeUser && activeUser.pubkey !== event.pubkey && event.kind === 30142
+  );
 
   let showPinOption = $derived(!!isCommunityAdmin);
   let eventIsPinned = $derived(
@@ -144,6 +149,11 @@
     rawEventDialog?.showModal();
   }
 
+  function handleReportMetadata() {
+    closeDropdown();
+    modalStore.openModal('reportMetadata', { event });
+  }
+
   async function copyRawJson() {
     try {
       await navigator.clipboard.writeText(JSON.stringify(event, null, 2));
@@ -203,6 +213,14 @@
         <button onclick={togglePin}>
           <BookmarkIcon class_="w-4 h-4" />
           {eventIsPinned ? m.event_menu_remove_from_homepage() : m.event_menu_feature_on_homepage()}
+        </button>
+      </li>
+    {/if}
+    {#if canReportMetadata}
+      <li>
+        <button onclick={handleReportMetadata}>
+          <InfoIcon class_="w-4 h-4" />
+          {m.report_metadata_menu_item()}
         </button>
       </li>
     {/if}
