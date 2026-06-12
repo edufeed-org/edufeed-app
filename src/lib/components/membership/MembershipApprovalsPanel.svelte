@@ -23,6 +23,7 @@
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import { SendWrappedMessage } from 'applesauce-actions/actions';
+  import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -249,6 +250,7 @@
           const dmBody = m.admin_membership_notify_dm({
             address: `${name}@${handleDomain}`
           });
+          await ensureDmRelayList();
           await actionRunnerOptimistic.run(SendWrappedMessage, response.pubkey, dmBody);
         } catch (notifyErr) {
           console.warn('Failed to send approval notification DM', notifyErr);

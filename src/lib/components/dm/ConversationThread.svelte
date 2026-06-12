@@ -9,6 +9,7 @@
   import { SendWrappedMessage, ReplyToWrappedMessage } from 'applesauce-actions/actions';
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import { markConversationAsRead } from '$lib/services/dm-service.svelte.js';
+  import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
   import {
     formatMessageTimestamp,
     getUserDisplayName as getDisplayName,
@@ -138,6 +139,9 @@
     isSending = true;
 
     try {
+      // Backfill the sender's kind 10050 DM relay list if they predate the
+      // signup-time default, so replies can reach them.
+      await ensureDmRelayList();
       // actionRunnerOptimistic returns as soon as the gift wrap is signed and
       // added to EventStore — WrappedMessagesGroup picks it up immediately via
       // the synchronous rumor symbol, giving the user instant feedback without

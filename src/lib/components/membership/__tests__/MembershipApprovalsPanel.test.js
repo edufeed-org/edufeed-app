@@ -78,6 +78,10 @@ vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   }
 }));
 
+vi.mock('$lib/services/dm-relay-backfill.js', () => ({
+  ensureDmRelayList: vi.fn().mockResolvedValue(undefined)
+}));
+
 vi.mock('applesauce-actions/actions', () => ({
   SendWrappedMessage: hoisted.sendWrappedMessageMock
 }));
