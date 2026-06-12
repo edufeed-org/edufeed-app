@@ -17,7 +17,7 @@
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
-  import { warmIdentity } from '$lib/stores/event-cache.svelte.js';
+  import { warmIdentity, hydrateDeletions } from '$lib/stores/event-cache.svelte.js';
   import {
     initializeAllCuratedAuthors,
     initializeAllWotAuthors
@@ -261,6 +261,14 @@
         checkCommunityMigration();
       }
     );
+  });
+
+  // Replay cached NIP-09 deletions into the event store once on boot so
+  // deleted events stay filtered after a reload (the cache itself has no
+  // deletion semantics). Runs for anonymous + logged-in users.
+  $effect(() => {
+    if (!browser) return;
+    hydrateDeletions();
   });
 
   // Initialize inbox + wave toasts on login, cleanup on logout

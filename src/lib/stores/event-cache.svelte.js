@@ -100,6 +100,32 @@ export async function cacheRequest(filters) {
 }
 
 /**
+ * Replay cached NIP-09 deletion events (kind 5) into the event store on boot.
+ *
+ * nostr-idb has no deletion semantics — it stores events blindly, so the
+ * deleted content event survives in IDB. The applesauce EventStore filters
+ * deleted events only for deletions it knows about (its DeleteManager). On a
+ * fresh reload the store starts empty, so without replaying the cached kind 5
+ * events the content loaders read deleted events back from cache and they
+ * reappear. Loading the deletions first means any deleted event subsequently
+ * added (from cache or network) is rejected / removed by the store.
+ *
+ * @returns {Promise<void>}
+ */
+export async function hydrateDeletions() {
+  if (!nostrIDB) return;
+  try {
+    await dbReady;
+    const deletions = await nostrIDB.query([{ kinds: [5] }]);
+    for (const event of deletions) {
+      eventStore.add(event);
+    }
+  } catch (err) {
+    console.warn('[event-cache] hydrateDeletions failed', err);
+  }
+}
+
+/**
  * Total number of events currently in the cache.
  *
  * nostr-idb's getIdsForFilter throws on a fully-empty filter `{}`, so we

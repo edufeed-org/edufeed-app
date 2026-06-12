@@ -188,6 +188,99 @@ describe('event-cache read / count / clear', () => {
   });
 });
 
+describe('hydrateDeletions', () => {
+  beforeEach(async () => {
+    mockEventStore = new EventStore();
+    mockEventStore.verifyEvent = () => true;
+    const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
+    globalThis.indexedDB = /** @type {IDBFactory} */ (/** @type {unknown} */ (new FDBFactory()));
+    vi.resetModules();
+  });
+
+  it('replays a cached regular-event deletion so the deleted event stays filtered', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      hydrateDeletions
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const pubkey = 'a'.repeat(64);
+    const deletedId = '1'.repeat(64);
+    const content = {
+      id: deletedId,
+      kind: 1,
+      pubkey,
+      created_at: 1000,
+      tags: [],
+      content: 'hello',
+      sig: 's'.repeat(128)
+    };
+    const deletion = {
+      id: 'd'.repeat(64),
+      kind: 5,
+      pubkey,
+      created_at: 1001,
+      tags: [['e', deletedId]],
+      content: '',
+      sig: 's'.repeat(128)
+    };
+    await nostrIDB.add(deletion);
+    await nostrIDB.writeQueue?.flush();
+
+    // Replay the cached deletion into the (empty) store, then simulate a content
+    // loader pulling the deleted event back from cache.
+    await hydrateDeletions();
+    mockEventStore.add(content);
+
+    expect(mockEventStore.getEvent(deletedId)).toBeUndefined();
+  });
+
+  it('replays a cached addressable deletion so the deleted resource stays filtered', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      hydrateDeletions
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const pubkey = 'a'.repeat(64);
+    const content = {
+      id: '2'.repeat(64),
+      kind: 30142,
+      pubkey,
+      created_at: 1000,
+      tags: [['d', 'resource-abc']],
+      content: '',
+      sig: 's'.repeat(128)
+    };
+    const deletion = {
+      id: 'e'.repeat(64),
+      kind: 5,
+      pubkey,
+      created_at: 1001,
+      tags: [['a', `30142:${pubkey}:resource-abc`]],
+      content: '',
+      sig: 's'.repeat(128)
+    };
+    await nostrIDB.add(deletion);
+    await nostrIDB.writeQueue?.flush();
+
+    await hydrateDeletions();
+    mockEventStore.add(content);
+
+    expect(mockEventStore.getReplaceable(30142, pubkey, 'resource-abc')).toBeUndefined();
+  });
+
+  it('is a graceful no-op when there are no cached deletions', async () => {
+    const { dbReady, hydrateDeletions } = await import('$lib/stores/event-cache.svelte.js');
+    await dbReady;
+    await expect(hydrateDeletions()).resolves.toBeUndefined();
+  });
+});
+
 describe('warmIdentity', () => {
   beforeEach(async () => {
     mockEventStore = new EventStore();

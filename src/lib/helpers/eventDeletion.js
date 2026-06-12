@@ -59,7 +59,10 @@ export async function deleteEvent(event, activeUser) {
     const deleteTemplate = await factory.delete([eventToDelete]);
     const signedDelete = await factory.sign(deleteTemplate);
 
-    // OPTIMISTIC UI: Add to EventStore IMMEDIATELY
+    // OPTIMISTIC UI: Add to EventStore IMMEDIATELY. The deletion is also
+    // persisted to the IDB cache (kind 5 is cacheable) and replayed into the
+    // event store on the next boot via hydrateDeletions(), so the deleted
+    // event stays filtered across reloads.
     eventStore.add(signedDelete);
 
     // Determine additional relays based on event kind
