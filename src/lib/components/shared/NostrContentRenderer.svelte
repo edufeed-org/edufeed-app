@@ -6,6 +6,7 @@
 <script>
   import { parseEventContent } from '$lib/helpers/nostrContent.js';
   import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
+  import { nostrIdFromUrl, truncateMiddle, splitNostrIds } from '$lib/helpers/link-render.js';
   import NostrIdentifier from './NostrIdentifier.svelte';
 
   let { event, class: className = '', depth = 0 } = $props();
@@ -38,7 +39,13 @@
   {#if tree}
     {#each tree.children as node, i (i)}
       {#if node.type === 'text'}
-        {node.value}
+        {#each splitNostrIds(node.value) as seg, j (j)}
+          {#if 'id' in seg}
+            <NostrIdentifier identifier={seg.id} inline={false} {depth} />
+          {:else}
+            {seg.text}
+          {/if}
+        {/each}
       {:else if node.type === 'emoji'}
         <img
           src={getProxiedImageUrl(node.url, 'emoji') || node.url}
@@ -65,9 +72,15 @@
             <!-- svelte-ignore a11y_media_has_caption -->
             <video src={node.href} controls preload="none" class="h-full w-full"></video>
           </div>
+        {:else if nostrIdFromUrl(node.href)}
+          <NostrIdentifier identifier={nostrIdFromUrl(node.href)} inline={false} {depth} />
         {:else}
-          <a href={node.href} target="_blank" rel="noopener noreferrer" class="link link-primary"
-            >{node.value}</a
+          <a
+            href={node.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="link link-primary"
+            title={node.value}>{truncateMiddle(node.value)}</a
           >
         {/if}
       {:else if node.type === 'hashtag'}
