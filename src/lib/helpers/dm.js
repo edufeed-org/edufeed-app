@@ -18,6 +18,22 @@ export function getDmRelaysFromEvent(event) {
 }
 
 /**
+ * Build an unsigned kind 10050 DM relay list event (NIP-17).
+ * @param {string} pubkey
+ * @param {string[]} relays
+ * @returns {{kind: number, created_at: number, tags: string[][], content: string, pubkey: string}}
+ */
+export function buildDmRelayListEvent(pubkey, relays) {
+  return {
+    kind: 10050,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: relays.map((url) => ['relay', url]),
+    content: '',
+    pubkey
+  };
+}
+
+/**
  * Load per-conversation read timestamps from localStorage.
  * @param {string} pubkey
  * @returns {Record<string, number>}

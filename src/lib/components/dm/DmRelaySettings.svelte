@@ -5,7 +5,9 @@
     RemoveDirectMessageRelay,
     NewDirectMessageRelays
   } from 'applesauce-actions/actions';
-  import { getDmRelays } from '$lib/services/dm-service.svelte.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { getDmRelaysFromEvent } from '$lib/helpers/dm.js';
   import { TrashIcon, PlusIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -13,7 +15,28 @@
   let error = $state('');
   let saving = $state(false);
 
-  let relays = $derived(getDmRelays());
+  const getActiveUser = useActiveUser();
+
+  // Show the user's actual kind 10050 list (what they publish + what the
+  // add/remove buttons mutate), not the dm-service's broader gift-wrap
+  // listening union (NIP-65 write + fallback + 10050).
+  let dmRelayListEvent = $state.raw(/** @type {any} */ (undefined));
+  /** @type {import('rxjs').Subscription | undefined} */
+  let relayListSub;
+  $effect(() => {
+    const pubkey = getActiveUser()?.pubkey;
+    relayListSub?.unsubscribe();
+    if (!pubkey) {
+      dmRelayListEvent = undefined;
+      return;
+    }
+    relayListSub = eventStore.replaceable(10050, pubkey).subscribe((event) => {
+      dmRelayListEvent = event;
+    });
+    return () => relayListSub?.unsubscribe();
+  });
+
+  let relays = $derived(getDmRelaysFromEvent(dmRelayListEvent));
 
   async function addRelay() {
     error = '';

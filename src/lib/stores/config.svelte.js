@@ -22,6 +22,8 @@ const defaultConfig = {
   indexerRelays: [],
   // Fallback relays for users without kind 10002
   fallbackRelays: [],
+  // Default NIP-17 DM relays (kind 10050) published for new users at signup
+  dmRelays: [],
   // App-specific relays (content goes here IN ADDITION to user's outbox)
   appRelays: {
     calendar: [], // kinds 31922-31925
@@ -212,6 +214,7 @@ export function initializeConfig(runtimeConfig) {
       runtimeConfig.relayListLookupRelays || defaultConfig.relayListLookupRelays,
     indexerRelays: runtimeConfig.indexerRelays || defaultConfig.indexerRelays,
     fallbackRelays: runtimeConfig.fallbackRelays || defaultConfig.fallbackRelays,
+    dmRelays: runtimeConfig.dmRelays || defaultConfig.dmRelays,
     appRelays: {
       calendar: runtimeConfig.calendarRelays || defaultConfig.appRelays.calendar,
       communikey: runtimeConfig.communikeyRelays || defaultConfig.appRelays.communikey,
@@ -348,6 +351,9 @@ export const runtimeConfig = {
   },
   get fallbackRelays() {
     return config.fallbackRelays;
+  },
+  get dmRelays() {
+    return config.dmRelays;
   },
   get appRelays() {
     return config.appRelays;

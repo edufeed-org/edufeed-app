@@ -31,6 +31,16 @@ export function getFallbackRelays() {
 }
 
 /**
+ * Get the default NIP-17 DM relay list a new user should publish (kind 10050).
+ * Prefers configured DM_RELAYS; falls back to general fallback relays.
+ * @returns {string[]}
+ */
+export function getDefaultDmRelays() {
+  const configured = /** @type {string[] | undefined} */ (runtimeConfig.dmRelays);
+  return configured?.length ? configured : getFallbackRelays();
+}
+
+/**
  * Get calendar relays with optional fallback
  * @returns {string[]}
  */

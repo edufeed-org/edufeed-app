@@ -161,6 +161,9 @@ export function GET() {
     // Relays - Fallback for users without kind 10002
     fallbackRelays: parseArray(env.FALLBACK_RELAYS),
 
+    // NIP-17 DM relays (kind 10050) published as a default for new users
+    dmRelays: parseArray(env.DM_RELAYS),
+
     // App-specific relays (content goes here IN ADDITION to user's outbox)
     calendarRelays: parseArray(env.CALENDAR_RELAYS),
     communikeyRelays: parseArray(env.COMMUNIKEY_RELAYS),

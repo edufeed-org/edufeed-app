@@ -123,6 +123,11 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: mockPublishEvent
 }));
 
+const mockGetDefaultDmRelays = vi.hoisted(() => vi.fn(() => ['wss://dm.edufeed.org/']));
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getDefaultDmRelays: mockGetDefaultDmRelays
+}));
+
 vi.mock('$lib/helpers/profile.js', () => ({
   fetchProfileData: vi.fn()
 }));
@@ -329,7 +334,7 @@ describe('SignupModal — Step 3 (Communities)', () => {
     expect(getByTestId('signup-community-picker-mock')).toBeTruthy();
   });
 
-  it('Step 3 Skip publishes only kind 0', async () => {
+  it('Step 3 Skip publishes kind 0 + kind 10050', async () => {
     const { getByPlaceholderText, getByText } = render(SignupModal, {
       props: { modalId: 'signup-modal' }
     });
@@ -341,12 +346,14 @@ describe('SignupModal — Step 3 (Communities)', () => {
 
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(mockPublishEvent).toHaveBeenCalledTimes(1);
-    const [signedKind0] = mockPublishEvent.mock.calls[0];
-    expect(signedKind0.kind).toBe(0);
+    expect(mockPublishEvent).toHaveBeenCalledTimes(2);
+    const kinds = mockPublishEvent.mock.calls.map((c) => c[0].kind).sort((a, b) => a - b);
+    expect(kinds).toEqual([0, 10050]);
+    const dmCall = mockPublishEvent.mock.calls.find((c) => c[0].kind === 10050);
+    expect(dmCall?.[0].tags).toEqual([['relay', 'wss://dm.edufeed.org/']]);
   });
 
-  it('Step 3 Done with empty selection publishes only kind 0', async () => {
+  it('Step 3 Done with empty selection publishes kind 0 + kind 10050', async () => {
     const { getByPlaceholderText, getByText } = render(SignupModal, {
       props: { modalId: 'signup-modal' }
     });
@@ -357,11 +364,28 @@ describe('SignupModal — Step 3 (Communities)', () => {
     await fireEvent.click(getByText('auth_signup_modal_step3_done'));
 
     await new Promise((r) => setTimeout(r, 0));
+    expect(mockPublishEvent).toHaveBeenCalledTimes(2);
+    const kinds = mockPublishEvent.mock.calls.map((c) => c[0].kind).sort((a, b) => a - b);
+    expect(kinds).toEqual([0, 10050]);
+  });
+
+  it('Step 3 Skip does not publish kind 10050 when no DM relays configured', async () => {
+    mockGetDefaultDmRelays.mockReturnValueOnce([]);
+    const { getByPlaceholderText, getByText } = render(SignupModal, {
+      props: { modalId: 'signup-modal' }
+    });
+    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_continue'));
+    await fireEvent.click(getByText('auth_signup_modal_step3_skip'));
+
+    await new Promise((r) => setTimeout(r, 0));
     expect(mockPublishEvent).toHaveBeenCalledTimes(1);
     expect(mockPublishEvent.mock.calls[0][0].kind).toBe(0);
   });
 
-  it('Step 3 Done with seeded selection publishes kind 0 + kind 30000', async () => {
+  it('Step 3 Done with seeded selection publishes kind 0 + kind 30000 + kind 10050', async () => {
     // Stub buildCommunityFollowSet to return a signed event so the modal calls publishEvent twice.
     const fakeKind30000 = {
       kind: 30000,
@@ -395,9 +419,9 @@ describe('SignupModal — Step 3 (Communities)', () => {
     await fireEvent.click(getByText('auth_signup_modal_step3_done'));
 
     await new Promise((r) => setTimeout(r, 0));
-    expect(mockPublishEvent).toHaveBeenCalledTimes(2);
-    const kinds = mockPublishEvent.mock.calls.map((c) => c[0].kind).sort();
-    expect(kinds).toEqual([0, 30000]);
+    expect(mockPublishEvent).toHaveBeenCalledTimes(3);
+    const kinds = mockPublishEvent.mock.calls.map((c) => c[0].kind).sort((a, b) => a - b);
+    expect(kinds).toEqual([0, 10050, 30000]);
 
     // Reset for other tests.
     /** @type {any} */ (config).runtimeConfig.signup.suggestedCommunities = [];

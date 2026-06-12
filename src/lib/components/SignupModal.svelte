@@ -4,6 +4,8 @@
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { generateSignupKeypair } from '$lib/helpers/signupKeypair.js';
   import { buildCommunityFollowSet } from '$lib/helpers/communityFollowSet.js';
+  import { buildDmRelayListEvent } from '$lib/helpers/dm.js';
+  import { getDefaultDmRelays } from '$lib/helpers/relay-helper.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
@@ -249,9 +251,15 @@
         ? await buildCommunityFollowSet(/** @type {any} */ (_signer), userData.publicKey, pubkeys)
         : { signed: null, targetPubkeys: [] };
 
+      const dmRelays = getDefaultDmRelays();
+      const signedDmRelayList = dmRelays.length
+        ? await _signer.signEvent(buildDmRelayListEvent(userData.publicKey, dmRelays))
+        : null;
+
       // Optimistic local apply.
       eventStore.add(signedMetadata);
       if (signedFollowSet) eventStore.add(signedFollowSet);
+      if (signedDmRelayList) eventStore.add(signedDmRelayList);
 
       isPublishing = false;
       closeModal();
@@ -261,6 +269,11 @@
       if (signedFollowSet) {
         publishEvent(signedFollowSet, targetPubkeys).catch((err) =>
           console.warn('kind 30000 publish failed:', err)
+        );
+      }
+      if (signedDmRelayList) {
+        publishEvent(signedDmRelayList).catch((err) =>
+          console.warn('kind 10050 publish failed:', err)
         );
       }
     } catch (err) {

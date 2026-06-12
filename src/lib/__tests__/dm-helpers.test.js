@@ -16,6 +16,7 @@ vi.mock('$lib/services/relay-service.svelte.js', () => ({
 
 import {
   getDmRelaysFromEvent,
+  buildDmRelayListEvent,
   DM_READ_TIMESTAMPS_KEY,
   loadReadTimestamps,
   saveReadTimestamps,
@@ -44,6 +45,29 @@ describe('getDmRelaysFromEvent', () => {
   it('returns empty array for event with no relay tags', () => {
     const event = { kind: 10050, tags: [['p', 'somepubkey']] };
     expect(getDmRelaysFromEvent(event)).toEqual([]);
+  });
+});
+
+describe('buildDmRelayListEvent', () => {
+  it('builds a kind 10050 event with one relay tag per relay', () => {
+    const pubkey = 'abc123';
+    const relays = ['wss://dm.edufeed.org/', 'wss://inbox.nostr.wine/'];
+    const event = buildDmRelayListEvent(pubkey, relays);
+
+    expect(event.kind).toBe(10050);
+    expect(event.pubkey).toBe(pubkey);
+    expect(event.content).toBe('');
+    expect(event.tags).toEqual([
+      ['relay', 'wss://dm.edufeed.org/'],
+      ['relay', 'wss://inbox.nostr.wine/']
+    ]);
+    expect(typeof event.created_at).toBe('number');
+  });
+
+  it('builds an event with no relay tags when given an empty list', () => {
+    const event = buildDmRelayListEvent('abc123', []);
+    expect(event.kind).toBe(10050);
+    expect(event.tags).toEqual([]);
   });
 });
 
