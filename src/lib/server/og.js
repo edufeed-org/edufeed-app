@@ -190,6 +190,7 @@ const IMAGE_URL_RE = /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?\S*)?/i;
  * @property {string} description
  * @property {string} [image]
  * @property {'article' | 'event' | 'website'} type
+ * @property {string} [publishedAt] - ISO 8601 publication timestamp (articles only)
  */
 
 /**
@@ -215,7 +216,12 @@ export function extractMetadata(event) {
     const summary = getArticleSummary(event);
     const description = summary || truncate(event.content, 200);
     const image = getArticleImage(event);
-    return { title, description, image, type: 'article' };
+    const publishedAtTag = getTagValue(event.tags, 'published_at');
+    const publishedAtSeconds = publishedAtTag ? parseInt(publishedAtTag, 10) : NaN;
+    const publishedAt = Number.isFinite(publishedAtSeconds)
+      ? new Date(publishedAtSeconds * 1000).toISOString()
+      : undefined;
+    return { title, description, image, type: 'article', publishedAt };
   }
 
   // Educational resources (AMB - kind 30142)
@@ -272,7 +278,10 @@ function escapeHtml(str) {
 function proxyImageUrl(imageUrl, requestUrl) {
   const base = new URL(requestUrl);
   const encoded = encodeURIComponent(imageUrl);
-  return `${base.origin}/api/image?url=${encoded}&w=1200&h=630`;
+  // Cover-crop to an exact 1200x630 JPEG: webp link previews fail on several
+  // platforms (WhatsApp, some Matrix/Synapse setups), and declaring truthful
+  // dimensions requires a fixed size rather than the proxy's default aspect-fit.
+  return `${base.origin}/api/image?url=${encoded}&w=1200&h=630&fit=cover&fmt=jpeg`;
 }
 
 /**
@@ -297,12 +306,23 @@ export function renderOgTags(meta, url) {
   ];
 
   if (hasImage) {
-    const proxied = proxyImageUrl(/** @type {string} */ (meta.image), url);
-    tags.push(`<meta property="og:image" content="${escapeHtml(proxied)}" />`);
+    const proxied = escapeHtml(proxyImageUrl(/** @type {string} */ (meta.image), url));
+    tags.push(`<meta property="og:image" content="${proxied}" />`);
+    tags.push(`<meta property="og:image:secure_url" content="${proxied}" />`);
+    tags.push(`<meta property="og:image:type" content="image/jpeg" />`);
+    tags.push(`<meta property="og:image:width" content="1200" />`);
+    tags.push(`<meta property="og:image:height" content="630" />`);
+    tags.push(`<meta property="og:image:alt" content="${title}" />`);
     tags.push(`<meta name="twitter:card" content="summary_large_image" />`);
-    tags.push(`<meta name="twitter:image" content="${escapeHtml(proxied)}" />`);
+    tags.push(`<meta name="twitter:image" content="${proxied}" />`);
   } else {
     tags.push(`<meta name="twitter:card" content="summary" />`);
+  }
+
+  if (meta.type === 'article' && meta.publishedAt) {
+    tags.push(
+      `<meta property="article:published_time" content="${escapeHtml(meta.publishedAt)}" />`
+    );
   }
 
   tags.push(`<meta name="twitter:title" content="${title}" />`);

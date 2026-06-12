@@ -30,6 +30,13 @@ export async function GET({ url }) {
   const w = parseInt(url.searchParams.get('w') || '0', 10);
   const h = parseInt(url.searchParams.get('h') || '0', 10);
   const q = parseInt(url.searchParams.get('q') || String(DEFAULT_QUALITY), 10);
+  const fitParam = url.searchParams.get('fit') === 'cover' ? 'cover' : 'inside';
+  const fmtParam = (() => {
+    const f = url.searchParams.get('fmt');
+    if (f === 'jpeg' || f === 'jpg') return 'jpeg';
+    if (f === 'png') return 'png';
+    return 'webp';
+  })();
 
   if (!imageUrl) {
     return new Response('Missing url parameter', { status: 400 });
@@ -94,17 +101,34 @@ export async function GET({ url }) {
       return new Response('Upstream image too large', { status: 502 });
     }
 
-    const resized = await sharp(buffer)
+    // 'cover' fills the exact w×h box (used for link-preview images that must
+    // declare fixed dimensions); 'inside' preserves aspect ratio without upscaling.
+    const pipeline = sharp(buffer)
       .rotate()
-      .resize(width, height, { fit: 'inside', withoutEnlargement: true })
-      .webp({ quality })
-      .toBuffer();
+      .resize(width, height, {
+        fit: fitParam,
+        withoutEnlargement: fitParam !== 'cover'
+      });
 
-    return new Response(new Uint8Array(resized), {
+    let outBuffer;
+    /** @type {string} */
+    let outContentType;
+    if (fmtParam === 'jpeg') {
+      outBuffer = await pipeline.jpeg({ quality }).toBuffer();
+      outContentType = 'image/jpeg';
+    } else if (fmtParam === 'png') {
+      outBuffer = await pipeline.png().toBuffer();
+      outContentType = 'image/png';
+    } else {
+      outBuffer = await pipeline.webp({ quality }).toBuffer();
+      outContentType = 'image/webp';
+    }
+
+    return new Response(new Uint8Array(outBuffer), {
       headers: {
-        'Content-Type': 'image/webp',
+        'Content-Type': outContentType,
         'Cache-Control': 'public, max-age=86400, s-maxage=604800',
-        'Content-Length': String(resized.length)
+        'Content-Length': String(outBuffer.length)
       }
     });
   } catch (err) {

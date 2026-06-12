@@ -124,6 +124,28 @@ describe('OG Meta Tags', () => {
       expect(meta.type).toBe('article');
     });
 
+    it('captures publishedAt for an article from the published_at tag', () => {
+      getArticleTitle.mockReturnValue('Dated Article');
+      getArticleSummary.mockReturnValue('summary');
+      getArticleImage.mockReturnValue(undefined);
+
+      const event = {
+        kind: 30023,
+        pubkey: 'abc',
+        content: 'body',
+        tags: [
+          ['d', 'dated-article'],
+          ['published_at', '1780444800']
+        ],
+        created_at: 1700000000,
+        id: 'event-dated'
+      };
+
+      const meta = extractMetadata(event);
+
+      expect(meta.publishedAt).toBe(new Date(1780444800 * 1000).toISOString());
+    });
+
     it('extracts educational resource (30142) metadata from tags', () => {
       const event = {
         kind: 30142,
@@ -298,6 +320,69 @@ describe('OG Meta Tags', () => {
       expect(html).toContain('/api/image?url=');
       expect(html).toContain('w=1200');
       expect(html).toContain('h=630');
+    });
+
+    it('requests a cover-cropped jpeg for the OG image (webp breaks some crawlers)', () => {
+      const html = renderOgTags(
+        {
+          title: 'Test',
+          description: 'Test',
+          image: 'https://example.com/photo.jpg',
+          type: 'article'
+        },
+        'https://myapp.com/event/naddr1abc'
+      );
+
+      expect(html).toContain('fit=cover');
+      expect(html).toContain('fmt=jpeg');
+    });
+
+    it('declares image dimensions, type, alt and secure_url when image present', () => {
+      const html = renderOgTags(
+        {
+          title: 'My Event',
+          description: 'A great event',
+          image: 'https://example.com/image.jpg',
+          type: 'article'
+        },
+        'https://example.com/event/naddr1abc'
+      );
+
+      expect(html).toContain('<meta property="og:image:width" content="1200" />');
+      expect(html).toContain('<meta property="og:image:height" content="630" />');
+      expect(html).toContain('<meta property="og:image:type" content="image/jpeg" />');
+      expect(html).toContain('<meta property="og:image:alt" content="My Event" />');
+      expect(html).toContain('<meta property="og:image:secure_url"');
+    });
+
+    it('emits article:published_time when an article has publishedAt', () => {
+      const html = renderOgTags(
+        {
+          title: 'My Article',
+          description: 'desc',
+          type: 'article',
+          publishedAt: '2026-06-03T12:00:00.000Z'
+        },
+        'https://example.com/article/naddr1abc'
+      );
+
+      expect(html).toContain(
+        '<meta property="article:published_time" content="2026-06-03T12:00:00.000Z" />'
+      );
+    });
+
+    it('does not emit article:published_time for non-article types', () => {
+      const html = renderOgTags(
+        {
+          title: 'An Event',
+          description: 'desc',
+          type: 'event',
+          publishedAt: '2026-06-03T12:00:00.000Z'
+        },
+        'https://example.com/event/naddr1abc'
+      );
+
+      expect(html).not.toContain('article:published_time');
     });
   });
 
