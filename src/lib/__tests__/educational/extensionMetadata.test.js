@@ -10,10 +10,8 @@ import {
 /**
  * @param {string[][]} tags
  * @param {any} [formEvent]
- * @param {string} [locale]
  */
-const sectionsFrom = (tags, formEvent = null, locale = 'en') =>
-  buildExtensionSections({ tags }, formEvent, locale);
+const sectionsFrom = (tags, formEvent = null) => buildExtensionSections({ tags }, formEvent);
 
 /**
  * @param {string[][]} tags
@@ -21,7 +19,7 @@ const sectionsFrom = (tags, formEvent = null, locale = 'en') =>
  * @param {string} [locale]
  */
 const cardsFrom = (tags, formEvent = null, locale = 'en') =>
-  buildExtensionCards(sectionsFrom(tags, formEvent, locale), locale);
+  buildExtensionCards(sectionsFrom(tags, formEvent), locale);
 
 describe('extensionFacetIconKey', () => {
   it('maps known facets to semantic icon keys', () => {
@@ -115,7 +113,7 @@ describe('buildExtensionSections', () => {
         ['field', 'kompetenzen', 'concept', 'Kompetenzbereiche', '']
       ]
     };
-    const sections = buildExtensionSections(event, formEvent, 'de');
+    const sections = buildExtensionSections(event, formEvent);
     expect(sections[0].sectionLabel).toBe('Mein Lehrplan');
     expect(sections[0].facets[0].label).toBe('Kompetenzbereiche');
   });

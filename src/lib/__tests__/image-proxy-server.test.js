@@ -12,14 +12,19 @@ async function makeSourcePng(width = 800, height = 800) {
     .toBuffer();
 }
 
-/** Stub global.fetch to return the given image buffer as an upstream image. */
+/**
+ * Stub global.fetch to return the given image buffer as an upstream image.
+ * @param {Buffer} buffer
+ * @param {string} [contentType]
+ */
 function stubUpstream(buffer, contentType = 'image/png') {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({
       ok: true,
       headers: {
-        get: (name) => (name.toLowerCase() === 'content-type' ? contentType : null)
+        get: (/** @type {string} */ name) =>
+          name.toLowerCase() === 'content-type' ? contentType : null
       },
       arrayBuffer: async () =>
         buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
@@ -27,9 +32,10 @@ function stubUpstream(buffer, contentType = 'image/png') {
   );
 }
 
+/** @param {string} query */
 function callGET(query) {
   const url = new URL(`http://localhost/api/image?${query}`);
-  return GET({ url });
+  return GET(/** @type {any} */ ({ url }));
 }
 
 describe('image proxy /api/image', () => {
