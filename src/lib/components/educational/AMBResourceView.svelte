@@ -54,6 +54,7 @@
     BookIcon,
     BookClosedIcon,
     GlobeIcon,
+    LinkIcon,
     TranslateIcon,
     PeopleIcon,
     LightningIcon,
@@ -794,7 +795,7 @@
       <div class="ed-ref-list">
         {#each resource.externalUrls as url (url)}
           <div class="ed-ref">
-            <GlobeIcon class_="ed-ref-ico" />
+            <LinkIcon class_="ed-ref-ico" />
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: reference URL -->
             <a href={url} target="_blank" rel="noopener noreferrer" class="ed-ref-link">{url}</a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
