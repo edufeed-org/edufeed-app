@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { buildLicenseTemplate } from '$lib/helpers/image-license.js';
+import { buildLicenseTemplate, getLicenseUrl } from '$lib/helpers/image-license.js';
 
 const required = {
   hash: 'a'.repeat(64),
@@ -70,5 +70,25 @@ describe('buildLicenseTemplate', () => {
     expect(() => buildLicenseTemplate({ ...required, hash: '' })).toThrow(/hash/);
     expect(() => buildLicenseTemplate({ ...required, license: '' })).toThrow(/license/);
     expect(() => buildLicenseTemplate({ ...required, credit: '' })).toThrow(/credit/);
+  });
+});
+
+describe('getLicenseUrl', () => {
+  const ev = (/** @type {string[][]} */ tags) => ({ tags, content: '' });
+
+  it('returns the url tag value of a license event', () => {
+    expect(getLicenseUrl(ev([['url', 'https://blossom.example/x.pdf']]))).toBe(
+      'https://blossom.example/x.pdf'
+    );
+  });
+
+  it('returns null when there is no url tag', () => {
+    expect(getLicenseUrl(ev([['x', 'a'.repeat(64)]]))).toBeNull();
+  });
+
+  it('returns null for null/undefined/tagless input', () => {
+    expect(getLicenseUrl(null)).toBeNull();
+    expect(getLicenseUrl(undefined)).toBeNull();
+    expect(getLicenseUrl({})).toBeNull();
   });
 });

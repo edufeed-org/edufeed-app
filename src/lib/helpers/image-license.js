@@ -55,6 +55,16 @@ export function buildLicenseTemplate(input) {
   };
 }
 
+/**
+ * Reads the `url` tag from a kind 1063 license event — the location of the
+ * already-uploaded blob it attests. Returns null when absent.
+ * @param {{ tags?: string[][] } | null | undefined} event
+ * @returns {string | null}
+ */
+export function getLicenseUrl(event) {
+  return event?.tags?.find((t) => t[0] === 'url')?.[1] ?? null;
+}
+
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { firstValueFrom, take, timeout, catchError, of } from 'rxjs';

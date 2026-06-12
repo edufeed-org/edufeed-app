@@ -57,6 +57,9 @@
   const isImage = $derived(!mime || mime.startsWith('image/'));
 
   // Existing-license tag readers
+  const existingTitle = $derived(
+    existingLicense?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'title')?.[1] ?? null
+  );
   const existingLicenseUrl = $derived(
     existingLicense?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'license')?.[1] ?? null
   );
@@ -220,6 +223,12 @@
 
         <div class="mb-4 rounded-lg border border-base-300 bg-base-200 p-4 text-sm">
           <dl class="space-y-2">
+            {#if existingTitle}
+              <div class="flex gap-2">
+                <dt class="w-24 font-medium">{m.license_modal_title_label()}</dt>
+                <dd class="min-w-0 break-words">{existingTitle}</dd>
+              </div>
+            {/if}
             {#if existingLicenseLabel}
               <div class="flex gap-2">
                 <dt class="w-24 font-medium">{m.license_modal_license_label()}</dt>

@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
     type: 'application/pdf'
   })),
   findExistingLicense: vi.fn(async () => null),
-  sha256Hex: vi.fn(async () => 'a'.repeat(64))
+  sha256Hex: vi.fn(async () => 'a'.repeat(64)),
+  // Captures the props the LicenseModal stub was mounted with, so tests can
+  // assert what the parent wired up (e.g. whether an upload hook was passed).
+  modalProps: /** @type {any} */ (null)
 }));
 
 vi.mock('blossom-client-sdk', () => ({
@@ -93,7 +96,9 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 vi.mock('../shared/LicenseModal.svelte', () => ({
-  default: () => ({})
+  default: function (_anchor, props) {
+    mocks.modalProps = props;
+  }
 }));
 vi.mock('../shared/LicenseBadge.svelte', () => ({
   default: () => ({})
@@ -105,6 +110,7 @@ beforeEach(() => {
   mocks.uploadBlob.mockClear();
   mocks.findExistingLicense.mockClear();
   mocks.sha256Hex.mockClear();
+  mocks.modalProps = null;
 });
 
 function makeLicenseEvent(title) {
@@ -195,6 +201,36 @@ describe('LicensedFileInput — defer upload', () => {
 
     expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
     expect(mocks.findExistingLicense).toHaveBeenCalledTimes(1);
+    expect(mocks.uploadBlob).not.toHaveBeenCalled();
+  });
+
+  it('passes a beforeAttest upload hook to the modal for a genuinely new file', async () => {
+    mocks.findExistingLicense.mockResolvedValueOnce(null);
+    const { container } = render(LicensedFileInput, { props: { files: [] } });
+    const fileInput = container.querySelector('input[type="file"]');
+
+    const file = new File(['payload'], 'doc.pdf', { type: 'application/pdf' });
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(typeof mocks.modalProps.beforeAttest).toBe('function');
+  });
+
+  it('reuses the existing blob URL and passes NO upload hook when a license already exists', async () => {
+    // A prior attestation means the blob is already on Blossom — the modal must
+    // not be handed a beforeAttest hook (which would re-upload and 401/hang).
+    mocks.findExistingLicense.mockResolvedValueOnce(makeLicenseEvent('Existing title'));
+    const { container } = render(LicensedFileInput, { props: { files: [] } });
+    const fileInput = container.querySelector('input[type="file"]');
+
+    const file = new File(['payload'], 'doc.pdf', { type: 'application/pdf' });
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mocks.modalProps.beforeAttest).toBeNull();
+    // The descriptor adopts the attested URL so the modal can build/accept a
+    // license without uploading.
+    expect(mocks.modalProps.url).toBe('https://blossom.example/abc.pdf');
     expect(mocks.uploadBlob).not.toHaveBeenCalled();
   });
 });

@@ -33,7 +33,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_description_file: () => 'file desc',
   license_modal_self_creator_file: () => 'I am the creator of this file',
   license_modal_existing_description_file: () => 'existing file desc',
-  license_modal_file_label: () => 'File'
+  license_modal_file_label: () => 'File',
+  license_modal_title_label: () => 'Title'
 }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
@@ -180,6 +181,32 @@ describe('LicenseModal — file-aware wording + file name', () => {
     expect(getByTestId('license-modal-filename').textContent).toContain(
       'arbeitsblatt-photosynthese.pdf'
     );
+  });
+
+  it('shows the title tag of the existing license on the Accept-existing view', () => {
+    const existingLicense = {
+      pubkey: 'p2',
+      tags: [
+        ['url', 'https://blossom.example/x.pdf'],
+        ['x', 'a'.repeat(64)],
+        ['title', 'Arbeitsblatt Photosynthese'],
+        ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+        ['credit', 'Jane']
+      ],
+      content: ''
+    };
+    const { getByText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: '',
+        mime: 'application/pdf',
+        size: 1234,
+        existingLicense,
+        fileName: 'scan.pdf'
+      }
+    });
+    expect(getByText('Arbeitsblatt Photosynthese')).toBeTruthy();
   });
 
   it('shows the file name on the Accept-existing view', () => {

@@ -2300,6 +2300,7 @@
   "license_modal_description_file": "Vor dem Veröffentlichen einer hochgeladenen Datei benötigen wir eine Lizenz. Dies erzeugt eine öffentliche Attestierung auf Nostr.",
   "license_modal_file_label": "Datei",
   "license_modal_license_label": "Lizenz",
+  "license_modal_title_label": "Titel",
   "license_modal_title_field_label": "Titel des Werks (optional)",
   "license_modal_title_field_placeholder": "z. B. Mona Lisa, Berliner Skyline, Periodensystem",
   "license_modal_credit_label": "Urheber (Attribution)",

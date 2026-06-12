@@ -2300,6 +2300,7 @@
   "license_modal_description_file": "We need a license before publishing an uploaded file. This creates a public attestation on Nostr.",
   "license_modal_file_label": "File",
   "license_modal_license_label": "License",
+  "license_modal_title_label": "Title",
   "license_modal_title_field_label": "Title of the work (optional)",
   "license_modal_title_field_placeholder": "e.g. Mona Lisa, Berlin skyline, Periodic Table",
   "license_modal_credit_label": "Credit (attribution)",

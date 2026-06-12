@@ -15,7 +15,7 @@
   import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
   import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
-  import { findExistingLicense } from '$lib/helpers/image-license.js';
+  import { findExistingLicense, getLicenseUrl } from '$lib/helpers/image-license.js';
   import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
   import { sha256Hex } from '$lib/helpers/sha256.js';
   import { SvelteMap } from 'svelte/reactivity';
@@ -240,9 +240,14 @@
           continue;
         }
         const existingLicense = await findExistingLicense(hash);
+        // A prior license attests the blob already lives on Blossom — reuse its
+        // url instead of re-uploading. Re-uploading is wasteful and forces a
+        // kind-24242 auth round-trip that 401s/hangs for the accept-existing and
+        // create-own flows. Only genuinely new files (no attestation) upload.
+        const reuseUrl = getLicenseUrl(existingLicense);
         /** @type {UploadedFileWithLicense} */
         const descriptor = {
-          url: '',
+          url: reuseUrl ?? '',
           name: file.name,
           type: file.type || 'application/octet-stream',
           size: file.size,
@@ -260,7 +265,12 @@
           files = [descriptor];
         }
 
-        pendingFilesByIndex.set(targetIndex, file);
+        // Stash the File for deferred upload only when there's no existing blob
+        // to reuse. With no stash, the modal's beforeAttest prop stays null and
+        // neither Save path uploads.
+        if (!reuseUrl) {
+          pendingFilesByIndex.set(targetIndex, file);
+        }
 
         preparedCount++;
         uploadProgress = Math.round((preparedCount / totalFiles) * 100);
