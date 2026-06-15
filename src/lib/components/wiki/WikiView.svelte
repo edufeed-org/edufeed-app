@@ -5,7 +5,10 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
+  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
@@ -129,6 +132,13 @@
       throw new Error(result.error || 'Delete failed');
     }
   }
+
+  function handleEdit() {
+    const naddr = encodeEventToNaddr(event);
+    if (naddr) {
+      goto(resolve(`/create/wiki?edit=${naddr}`));
+    }
+  }
 </script>
 
 <article class="wiki-view mx-auto max-w-4xl">
@@ -139,6 +149,7 @@
     {event}
     authorPubkey={event.pubkey}
     date={formatCalendarDate(publishedAt, 'short')}
+    onEdit={isAuthor ? handleEdit : undefined}
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.wiki_view_delete_confirm_title()}
     deleteItemName={title}
