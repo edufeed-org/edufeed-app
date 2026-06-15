@@ -16,6 +16,8 @@
   import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
   import { BookOpenIcon, ChatTextIcon } from '$lib/components/icons';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { deleteEvent } from '$lib/helpers/eventDeletion.js';
+  import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
   const getActiveUser = useActiveUser();
@@ -121,10 +123,38 @@
     const hash = $page.url.hash;
     return hash.startsWith('#highlight-') ? hash.slice('#highlight-'.length) : null;
   });
+
+  // The active user's own bookmark for this URL (delete is scoped to their event)
+  const myBookmark = $derived.by(() => {
+    const user = getActiveUser();
+    return user ? bookmarks.find((b) => b.pubkey === user.pubkey) : undefined;
+  });
+
+  async function handleDeleteBookmark() {
+    const user = getActiveUser();
+    if (!myBookmark || !user) return;
+
+    const result = await deleteEvent(myBookmark, user);
+    if (result.success) {
+      showToast(m.event_delete_success(), 'success');
+      history.back();
+    } else {
+      showToast(result.error || m.event_delete_error(), 'error');
+      throw new Error(result.error || 'Delete failed');
+    }
+  }
 </script>
 
 <div class="mx-auto w-full max-w-3xl p-4">
-  <DetailHeader {title} subtitle={domain} event={representativeEvent} authorPubkey="">
+  <DetailHeader
+    {title}
+    subtitle={domain}
+    event={representativeEvent}
+    authorPubkey=""
+    onDelete={myBookmark ? handleDeleteBookmark : undefined}
+    deleteTitle={m.social_bookmarks_delete_confirm_title()}
+    deleteItemName={title}
+  >
     {#snippet actions()}
       {#if showReaderToggle && !isLoading}
         <label class="btn swap swap-rotate btn-ghost btn-sm">

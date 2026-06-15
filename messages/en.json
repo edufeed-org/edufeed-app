@@ -1361,6 +1361,7 @@
   "social_bookmarks_page_notes": "Page Notes",
   "social_bookmarks_add_page_note": "Add a Note",
   "social_bookmarks_page_note_placeholder": "Write a note about this page...",
+  "social_bookmarks_delete_confirm_title": "Remove bookmark?",
   "reader_view": "Reader",
   "reader_cards_view": "Cards",
   "reader_loading": "Loading article...",
