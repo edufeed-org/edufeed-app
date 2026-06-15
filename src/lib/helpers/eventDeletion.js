@@ -1,3 +1,4 @@
+import { getSeenRelays } from 'applesauce-core/helpers';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -67,7 +68,15 @@ export async function deleteEvent(event, activeUser) {
 
     // Determine additional relays based on event kind
     const category = kindToAppRelayCategory(kind);
-    const additionalRelays = category ? getAppRelaysForCategory(category) : [];
+    const categoryRelays = category ? getAppRelaysForCategory(category) : [];
+
+    // NIP-09: the deletion request must reach every relay that still holds the
+    // original event, otherwise those relays keep serving it. Relay provenance
+    // (seen-relays) captures where the event was actually fetched from — e.g. a
+    // community relay an event was h-tagged to — which the author's NIP-65 write
+    // relays alone would miss.
+    const seenRelays = getSeenRelays(eventToDelete);
+    const additionalRelays = [...categoryRelays, ...(seenRelays ? Array.from(seenRelays) : [])];
 
     // Publish in background
     publishEventOptimistic(signedDelete, [], {
