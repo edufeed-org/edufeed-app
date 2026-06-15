@@ -48,6 +48,26 @@ let initialFetchInProgress = $state(false);
 let initialFetchDeadlineTimer = null;
 /** Grace period for a freshly initialized DM service before we declare "no DMs". */
 const INITIAL_FETCH_DEADLINE_MS = 8000;
+
+/**
+ * Settle-aware status of the user's own kind 10050 DM relay list lookup.
+ * - 'idle'     : not checked (logged out, or nowhere to query)
+ * - 'checking' : loaders fired, awaiting a 10050 or the settle deadline
+ * - 'present'  : a kind 10050 exists for the user
+ * - 'absent'   : settle deadline elapsed with no 10050 found
+ *
+ * Drives DmRelayBanner. We only conclude 'absent' after querying the user's
+ * own NIP-65 write relays + identity indexers (both gate-bypassing) and giving
+ * them time to respond — so we never prompt over a custom list we just hadn't
+ * fetched yet. Keyed off getReplaceable(10050) to stay consistent with
+ * ensureDmRelayList (otherwise "use recommended" could no-op and never hide).
+ * @type {'idle' | 'checking' | 'present' | 'absent'}
+ */
+let dmRelayCheckStatus = $state('idle');
+/** @type {ReturnType<typeof setTimeout> | null} */
+let dmRelayCheckTimer = null;
+/** How long to wait for the user's 10050 before declaring it absent. */
+const DM_RELAY_CHECK_SETTLE_MS = 5000;
 let unreadCount = $derived.by(() => {
   let count = 0;
   for (const conv of dmConversations) {
@@ -144,6 +164,28 @@ export function hasDmRelayList() {
   return hasDedicatedDmRelays;
 }
 
+/**
+ * @returns {'idle' | 'checking' | 'present' | 'absent'} Settle-aware status of
+ * the active user's own kind 10050 lookup. Only 'absent' should trigger a
+ * prompt — it means we queried the user's outbox + indexers and gave them time.
+ */
+export function getDmRelayCheckStatus() {
+  return dmRelayCheckStatus;
+}
+
+/**
+ * Conclude the DM-relay check after the settle window: 'present' if a kind
+ * 10050 landed in the store, otherwise 'absent'. Guarded against stale fires
+ * from a session that has since switched.
+ * @param {string} pubkey
+ */
+function settleDmRelayCheck(pubkey) {
+  dmRelayCheckTimer = null;
+  if (activePubkey !== pubkey) return;
+  if (dmRelayCheckStatus !== 'checking') return;
+  dmRelayCheckStatus = eventStore.getReplaceable(10050, pubkey) ? 'present' : 'absent';
+}
+
 /** @returns {{ id: string, participants: string[], lastMessage: any }[]} */
 export function getDmConversations() {
   return dmConversations;
@@ -232,6 +274,14 @@ export function initializeDMs(pubkey, signer) {
     initialFetchDeadlineTimer = null;
   }, INITIAL_FETCH_DEADLINE_MS);
 
+  // Begin the DM-relay self-check. Settles to 'present'/'absent' once a 10050
+  // arrives (2c) or the deadline elapses (armed in 2b once relays resolve).
+  dmRelayCheckStatus = 'checking';
+  if (dmRelayCheckTimer) {
+    clearTimeout(dmRelayCheckTimer);
+    dmRelayCheckTimer = null;
+  }
+
   // 1. Set up encrypted content persistence (survives page reloads)
   const storage = {
     /** @param {string} key */
@@ -283,10 +333,43 @@ export function initializeDMs(pubkey, signer) {
       });
       addRelaysToGiftWrapSub(pubkey, baseRelays);
     }
+
+    // Also query the user's own outbox for their kind 10050 — block 2a only
+    // hits the identity indexers, but a user may have published their DM relay
+    // list solely to their personal write relays. Without this we could wrongly
+    // declare the list absent and prompt over a real one.
+    if (writeRelays.length > 0) {
+      const writeRelay10050Sub = addressLoader({
+        kind: 10050,
+        pubkey,
+        relays: writeRelays
+      }).subscribe();
+      subscriptions.push(writeRelay10050Sub);
+    }
+
+    // Arm the settle deadline only once we know we actually queried somewhere.
+    // If neither write relays nor indexers are available, we can't conclude
+    // absence — leave status 'checking' so the banner stays hidden.
+    if (
+      dmRelayCheckStatus === 'checking' &&
+      !dmRelayCheckTimer &&
+      (writeRelays.length > 0 || lookupRelays.length > 0)
+    ) {
+      dmRelayCheckTimer = setTimeout(() => settleDmRelayCheck(pubkey), DM_RELAY_CHECK_SETTLE_MS);
+    }
   })();
 
   // 2c. Watch kind 10050; merge any additional relays into the gift-wrap union.
   const relayListSub = eventStore.replaceable(10050, pubkey).subscribe((event) => {
+    if (!event) return; // replaceable() emits undefined before anything loads
+    // A 10050 exists → the self-check is conclusively satisfied. Keyed off the
+    // event's existence (not its relay count) to match settleDmRelayCheck and
+    // ensureDmRelayList, which both gate on getReplaceable(10050).
+    dmRelayCheckStatus = 'present';
+    if (dmRelayCheckTimer) {
+      clearTimeout(dmRelayCheckTimer);
+      dmRelayCheckTimer = null;
+    }
     const newRelays = getDmRelaysFromEvent(event);
     if (newRelays.length > 0) {
       hasDedicatedDmRelays = true;
@@ -365,6 +448,11 @@ export function cleanup() {
     initialFetchDeadlineTimer = null;
   }
   initialFetchInProgress = false;
+  if (dmRelayCheckTimer) {
+    clearTimeout(dmRelayCheckTimer);
+    dmRelayCheckTimer = null;
+  }
+  dmRelayCheckStatus = 'idle';
   failedUnlockIds = new SvelteSet();
   subscribedRelays = new SvelteSet();
 }

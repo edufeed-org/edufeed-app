@@ -1212,7 +1212,11 @@
       </div>
 
       <!-- DM Relay Settings Card -->
-      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+      <div
+        id="dm-relay-settings"
+        class="card mt-6 scroll-mt-20 bg-base-200 shadow-xl"
+        transition:fade={{ duration: 200 }}
+      >
         <div class="card-body">
           <DmRelaySettings />
         </div>
