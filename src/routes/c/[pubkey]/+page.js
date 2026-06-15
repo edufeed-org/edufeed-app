@@ -14,8 +14,10 @@ export async function load({ url }) {
     'articles',
     'forum',
     'polls',
+    'wikis',
     'social-bookmarks',
     'meet',
+    'members',
     'settings'
   ]);
 
