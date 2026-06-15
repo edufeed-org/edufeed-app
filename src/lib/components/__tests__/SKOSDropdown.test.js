@@ -603,6 +603,197 @@ describe('SKOSDropdown', () => {
     });
   });
 
+  describe('Aligned checkbox column (reserved disclosure lane)', () => {
+    /** Mix of a top-level leaf and a top-level parent with children. */
+    const mixedConcepts = [
+      { id: 'https://example.com/leaf-top', prefLabel: { en: 'TopLeaf' }, level: 0 },
+      { id: 'https://example.com/parent', prefLabel: { en: 'Parent' }, level: 0 },
+      {
+        id: 'https://example.com/parent/c1',
+        prefLabel: { en: 'Child1' },
+        level: 1,
+        parentId: 'https://example.com/parent'
+      },
+      {
+        id: 'https://example.com/parent/c2',
+        prefLabel: { en: 'Child2' },
+        level: 1,
+        parentId: 'https://example.com/parent'
+      }
+    ];
+
+    /**
+     * Open the dropdown and return the option row whose text contains `label`.
+     * @param {HTMLElement} container
+     * @param {string} label
+     */
+    function rowWithText(container, label) {
+      return /** @type {HTMLElement} */ (
+        Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+          o.textContent?.includes(label)
+        )
+      );
+    }
+
+    it('reserves a disclosure lane on top-level leaf rows so checkboxes align with parents', async () => {
+      fetchVocabularyMock.mockResolvedValue(mixedConcepts);
+
+      const { container } = render(SKOSDropdown, {
+        props: { vocabularyKey: 'about', multiple: true }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      // Both a parent and a top-level leaf must reserve a disclosure lane,
+      // otherwise the leaf's checkbox sits flush-left and the column is ragged.
+      const parentRow = rowWithText(container, 'Parent');
+      const leafRow = rowWithText(container, 'TopLeaf');
+      expect(parentRow.querySelector('[data-disclosure-lane]')).toBeTruthy();
+      expect(leafRow.querySelector('[data-disclosure-lane]')).toBeTruthy();
+    });
+  });
+
+  describe('Tri-state parent checkbox + rollup count', () => {
+    const partialFixture = [
+      { id: 'https://example.com/parent', prefLabel: { en: 'Parent' }, level: 0 },
+      {
+        id: 'https://example.com/parent/c1',
+        prefLabel: { en: 'Child1' },
+        level: 1,
+        parentId: 'https://example.com/parent'
+      },
+      {
+        id: 'https://example.com/parent/c2',
+        prefLabel: { en: 'Child2' },
+        level: 1,
+        parentId: 'https://example.com/parent'
+      }
+    ];
+
+    /**
+     * @param {HTMLElement} container
+     * @param {string} label
+     */
+    function rowWithText(container, label) {
+      return /** @type {HTMLElement} */ (
+        Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+          o.textContent?.includes(label)
+        )
+      );
+    }
+
+    it('shows an indeterminate checkbox on a parent with some (not all) children selected', async () => {
+      fetchVocabularyMock.mockResolvedValue(partialFixture);
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          vocabularyKey: 'about',
+          multiple: true,
+          selected: [{ id: 'https://example.com/parent/c1', label: 'Child1' }]
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      const parentRow = rowWithText(container, 'Parent');
+      const parentCheckbox = /** @type {HTMLInputElement} */ (
+        parentRow.querySelector('input[type="checkbox"]')
+      );
+      expect(parentCheckbox.indeterminate).toBe(true);
+      expect(parentCheckbox.checked).toBe(false);
+    });
+
+    it('shows a checked (not indeterminate) parent checkbox when the parent itself is selected', async () => {
+      fetchVocabularyMock.mockResolvedValue(partialFixture);
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          vocabularyKey: 'about',
+          multiple: true,
+          selected: [{ id: 'https://example.com/parent', label: 'Parent' }]
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      const parentRow = rowWithText(container, 'Parent');
+      const parentCheckbox = /** @type {HTMLInputElement} */ (
+        parentRow.querySelector('input[type="checkbox"]')
+      );
+      expect(parentCheckbox.checked).toBe(true);
+      expect(parentCheckbox.indeterminate).toBe(false);
+    });
+
+    it('renders the child count as a selected/total ratio when some children are selected', async () => {
+      fetchVocabularyMock.mockResolvedValue(partialFixture);
+
+      const { container } = render(SKOSDropdown, {
+        props: {
+          vocabularyKey: 'about',
+          multiple: true,
+          selected: [{ id: 'https://example.com/parent/c1', label: 'Child1' }]
+        }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      const parentRow = rowWithText(container, 'Parent');
+      const badge = /** @type {HTMLElement} */ (parentRow.querySelector('[data-rollup-count]'));
+      expect(badge).toBeTruthy();
+      expect(badge.textContent?.replace(/\s/g, '')).toBe('1/2');
+    });
+
+    it('renders the child count as the plain total when no children are selected', async () => {
+      fetchVocabularyMock.mockResolvedValue(partialFixture);
+
+      const { container } = render(SKOSDropdown, {
+        props: { vocabularyKey: 'about', multiple: true }
+      });
+
+      await waitFor(() => {
+        const trigger = /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'));
+        expect(trigger.textContent).not.toContain('Loading');
+      });
+
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[role="combobox"]'))
+      );
+
+      const parentRow = rowWithText(container, 'Parent');
+      const badge = /** @type {HTMLElement} */ (parentRow.querySelector('[data-rollup-count]'));
+      expect(badge).toBeTruthy();
+      expect(badge.textContent?.replace(/\s/g, '')).toBe('2');
+    });
+  });
+
   describe('Keyboard navigation', () => {
     it('opens dropdown on Enter key', async () => {
       const { container } = render(SKOSDropdown, {

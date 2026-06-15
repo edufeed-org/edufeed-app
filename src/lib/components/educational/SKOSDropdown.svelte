@@ -459,36 +459,56 @@
                 {@const hasChildren = parentIds.has(concept.id)}
                 {@const isCollapsed = collapsedCategories.has(concept.id)}
                 {@const isActive = index === activeIndex}
+                {@const childConcepts = hasChildren
+                  ? concepts.filter((c) => c.parentId === concept.id)
+                  : []}
+                {@const selectedChildCount = childConcepts.filter((c) => isSelected(c.id)).length}
+                {@const isIndeterminate = hasChildren && !conceptSelected && selectedChildCount > 0}
+                {@const showLane = !searchTerm.trim()}
 
                 <div
                   data-option-index={index}
                   id="skos-option-{instanceId}-{index}"
                   role="option"
                   aria-selected={conceptSelected}
-                  class="flex min-h-[2.75rem] w-full items-center transition-colors hover:bg-base-200 {conceptSelected
+                  class="relative flex min-h-[2.75rem] w-full items-center transition-colors hover:bg-base-200 {conceptSelected
                     ? 'bg-primary/10'
                     : ''} {isActive
                     ? 'bg-base-200 outline outline-2 -outline-offset-2 outline-primary/30'
                     : ''}"
                   style="padding-left: {8 + indentLevel * 20}px; padding-right: 8px;"
                 >
-                  <!-- Collapse/expand toggle for parent concepts -->
-                  {#if hasChildren && !searchTerm.trim()}
-                    <button
-                      type="button"
-                      class="flex-shrink-0 rounded p-1 transition-transform hover:bg-base-300"
-                      class:rotate-90={!isCollapsed}
-                      onclick={(e) => toggleCategory(concept.id, e)}
-                      aria-label={isCollapsed
-                        ? m.skos_dropdown_expand()
-                        : m.skos_dropdown_collapse()}
-                      tabindex="-1"
+                  <!-- Connector guide tying a child row to its parent -->
+                  {#if showLane && indentLevel > 0}
+                    <span
+                      class="pointer-events-none absolute top-0 bottom-0 border-l border-base-300"
+                      style="left: {8 + (indentLevel - 1) * 20 + 11}px;"
+                      aria-hidden="true"
+                    ></span>
+                  {/if}
+
+                  <!-- Disclosure lane: always reserved (in browse mode) so the
+                       checkbox column stays aligned whether or not a row expands. -->
+                  {#if showLane}
+                    <span
+                      class="flex h-6 w-6 flex-shrink-0 items-center justify-center"
+                      data-disclosure-lane
                     >
-                      <ChevronRightIcon class_="w-3.5 h-3.5 text-base-content/50" />
-                    </button>
-                  {:else if indentLevel > 0 && !searchTerm.trim()}
-                    <!-- Spacer for leaf nodes to align with parents that have toggles -->
-                    <span class="w-[1.625rem] flex-shrink-0"></span>
+                      {#if hasChildren}
+                        <button
+                          type="button"
+                          class="flex h-6 w-6 items-center justify-center rounded transition-transform hover:bg-base-300"
+                          class:rotate-90={!isCollapsed}
+                          onclick={(e) => toggleCategory(concept.id, e)}
+                          aria-label={isCollapsed
+                            ? m.skos_dropdown_expand()
+                            : m.skos_dropdown_collapse()}
+                          tabindex="-1"
+                        >
+                          <ChevronRightIcon class_="w-3.5 h-3.5 text-base-content/50" />
+                        </button>
+                      {/if}
+                    </span>
                   {/if}
 
                   <!-- Label/selection button. The whole row label selects (parents
@@ -505,6 +525,7 @@
                         type="checkbox"
                         class="checkbox flex-shrink-0 checkbox-sm checkbox-primary"
                         checked={conceptSelected}
+                        indeterminate={isIndeterminate}
                         readonly
                         tabindex="-1"
                       />
@@ -529,10 +550,20 @@
                         {conceptLabel}
                       {/if}
                     </span>
-                    <!-- Child count badge for collapsed parents -->
-                    {#if hasChildren && isCollapsed && !searchTerm.trim()}
-                      {@const childCount = concepts.filter((c) => c.parentId === concept.id).length}
-                      <span class="badge flex-shrink-0 badge-ghost badge-xs">{childCount}</span>
+                    <!-- Rollup count: total children, or selected/total when some
+                         children are chosen — keeps the selection legible even when
+                         the parent is collapsed. -->
+                    {#if hasChildren && showLane}
+                      <span
+                        data-rollup-count
+                        class="badge flex-shrink-0 badge-xs {selectedChildCount > 0
+                          ? 'badge-outline badge-primary'
+                          : 'badge-ghost'}"
+                      >
+                        {selectedChildCount > 0
+                          ? `${selectedChildCount}/${childConcepts.length}`
+                          : childConcepts.length}
+                      </span>
                     {/if}
                     {#if conceptSelected && !multiple}
                       <svg
