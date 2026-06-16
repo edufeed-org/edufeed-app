@@ -32,6 +32,7 @@ export default defineConfig({
     include: ['src/**/*.test.js', 'src/**/*.test.svelte.js', 'scripts/**/*.test.mjs'],
     environment: 'jsdom',
     globals: true,
+    setupFiles: ['./vitest.setup.js'],
     hookTimeout: 30000
   }
 });
