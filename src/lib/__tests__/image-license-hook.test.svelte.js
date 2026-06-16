@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 import { EventStore } from 'applesauce-core';
-import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+import { useLicenseForHash, useLicenseStatus } from '$lib/stores/image-license.svelte.js';
 
 // Hoisted mocks (vi.mock is hoisted; reference must be inside the factory)
 vi.mock('$lib/loaders/base.js', () => ({
@@ -111,5 +111,71 @@ describe('useLicenseForHash', () => {
     flushSync();
     expect(getter()).not.toBeNull();
     cleanup();
+  });
+});
+
+describe('useLicenseStatus', () => {
+  it('is "missing" immediately when getHash returns null (no loader)', () => {
+    vi.useFakeTimers();
+    /** @type {() => any} */ let getter = () => null;
+    /** @type {() => void} */ let cleanup = () => {};
+    cleanup = $effect.root(() => {
+      getter = useLicenseStatus(() => null);
+    });
+    flushSync();
+    expect(getter().status).toBe('missing');
+    expect(getter().event).toBeNull();
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('is "found" immediately when an event is already in the store', () => {
+    const hash = '7'.repeat(64);
+    // Unique id to avoid EventStore id-dedup collisions with other tests' events.
+    sharedStore.add(makeLicenseEvent(hash, 1000, 'found7'));
+    /** @type {() => any} */ let getter = () => null;
+    /** @type {() => void} */ let cleanup = () => {};
+    cleanup = $effect.root(() => {
+      getter = useLicenseStatus(() => hash);
+    });
+    flushSync();
+    expect(getter().status).toBe('found');
+    expect(getter().event?.id).toBeTruthy();
+    cleanup();
+  });
+
+  it('stays "loading" before settle, then "missing" after the 2.5s timeout when store stays empty', () => {
+    vi.useFakeTimers();
+    const hash = '8'.repeat(64);
+    /** @type {() => any} */ let getter = () => null;
+    /** @type {() => void} */ let cleanup = () => {};
+    cleanup = $effect.root(() => {
+      getter = useLicenseStatus(() => hash);
+    });
+    flushSync();
+    expect(getter().status).toBe('loading');
+    vi.advanceTimersByTime(2500);
+    flushSync();
+    expect(getter().status).toBe('missing');
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('flips to "found" if an event arrives during the loading window', () => {
+    vi.useFakeTimers();
+    const hash = '9'.repeat(64);
+    /** @type {() => any} */ let getter = () => null;
+    /** @type {() => void} */ let cleanup = () => {};
+    cleanup = $effect.root(() => {
+      getter = useLicenseStatus(() => hash);
+    });
+    flushSync();
+    expect(getter().status).toBe('loading');
+    // Unique id to avoid EventStore id-dedup collisions with other tests' events.
+    sharedStore.add(makeLicenseEvent(hash, 5000, 'flip9'));
+    flushSync();
+    expect(getter().status).toBe('found');
+    cleanup();
+    vi.useRealTimers();
   });
 });
