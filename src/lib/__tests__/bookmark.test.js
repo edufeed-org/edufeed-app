@@ -23,6 +23,7 @@ import {
   stripSchemeForDTag,
   updateBookmarkContent,
   getBookmarkEventRefRedirect,
+  getInternalBookmarkRedirectTarget,
   BOOKMARK_KIND
 } from '../helpers/bookmark.js';
 
@@ -48,6 +49,56 @@ describe('getBookmarkEventRefRedirect', () => {
   it('returns null for genuine web URLs', () => {
     expect(getBookmarkEventRefRedirect(encodeURIComponent('https://example.com/post'))).toBeNull();
     expect(getBookmarkEventRefRedirect(encodeURIComponent('alice.blog/post'))).toBeNull();
+  });
+});
+
+describe('getInternalBookmarkRedirectTarget', () => {
+  const origin = 'https://dev.edufeed.org';
+  const npub = 'npub14esenw6rt4c2pmxwvyey4jqw0sjdahetq6qvh5lffxp7w4thg63ql480z2';
+
+  it('unwraps a community bookmark page that points at another bookmark page', () => {
+    const inner = `${origin}/c/${npub}/bookmarks/https://relilab.org`;
+    const param = encodeURIComponent(inner);
+    expect(getInternalBookmarkRedirectTarget(param, origin)).toBe('https://relilab.org');
+  });
+
+  it('unwraps when the inner URL is percent-encoded inside the path', () => {
+    const inner = `${origin}/c/${npub}/bookmarks/${encodeURIComponent('https://relilab.org')}`;
+    const param = encodeURIComponent(inner);
+    expect(getInternalBookmarkRedirectTarget(param, origin)).toBe('https://relilab.org');
+  });
+
+  it('unwraps a personal bookmark page (no community segment)', () => {
+    const inner = `${origin}/bookmarks/https://relilab.org`;
+    expect(getInternalBookmarkRedirectTarget(encodeURIComponent(inner), origin)).toBe(
+      'https://relilab.org'
+    );
+  });
+
+  it('unwraps repeatedly through multiple nested bookmark pages', () => {
+    const innermost = 'https://relilab.org';
+    const level1 = `${origin}/c/${npub}/bookmarks/${innermost}`;
+    const level2 = `${origin}/c/${npub}/bookmarks/${encodeURIComponent(level1)}`;
+    expect(getInternalBookmarkRedirectTarget(encodeURIComponent(level2), origin)).toBe(innermost);
+  });
+
+  it('returns null for a genuine external article URL', () => {
+    expect(
+      getInternalBookmarkRedirectTarget(encodeURIComponent('https://relilab.org'), origin)
+    ).toBeNull();
+    expect(
+      getInternalBookmarkRedirectTarget(encodeURIComponent('https://example.com/post'), origin)
+    ).toBeNull();
+  });
+
+  it('returns null when the URL is on a different origin', () => {
+    const other = `https://evil.example/c/${npub}/bookmarks/https://relilab.org`;
+    expect(getInternalBookmarkRedirectTarget(encodeURIComponent(other), origin)).toBeNull();
+  });
+
+  it('returns null for a non-bookmark edufeed page on the same origin', () => {
+    const other = `${origin}/c/${npub}/calendar`;
+    expect(getInternalBookmarkRedirectTarget(encodeURIComponent(other), origin)).toBeNull();
   });
 });
 

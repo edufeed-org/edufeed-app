@@ -39,6 +39,64 @@ export function getBookmarkEventRefRedirect(encodedUrlParam) {
 }
 
 /**
+ * If `urlStr` is an edufeed bookmark-detail page on `currentOrigin`
+ * (`/c/<pubkey>/bookmarks/<inner>` or `/bookmarks/<inner>`), return the decoded
+ * inner URL. Otherwise null.
+ * @param {string} urlStr
+ * @param {string} currentOrigin
+ * @returns {string | null}
+ */
+function extractInnerBookmarkUrl(urlStr, currentOrigin) {
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== currentOrigin) return null;
+  const match = parsed.pathname.match(/^\/(?:c\/[^/]+\/)?bookmarks\/(.+)$/);
+  if (!match) return null;
+  let inner = match[1];
+  try {
+    inner = decodeURIComponent(inner);
+  } catch {
+    // keep raw if it isn't valid percent-encoding
+  }
+  return inner;
+}
+
+/**
+ * Detect a self-referential bookmark whose `[url]` is itself an edufeed
+ * bookmark-detail page (e.g. someone bookmarked the bookmark page instead of
+ * the article). Such a "URL" can't be read as an article and roots comments at
+ * an internal app URL, so we unwrap to the innermost real target and redirect
+ * there. Returns the decoded innermost URL, or null when the param is a genuine
+ * external URL.
+ * @param {string} encodedUrlParam - The raw `[url]` route param (URI-encoded)
+ * @param {string} currentOrigin - The app's own origin (e.g. https://dev.edufeed.org)
+ * @returns {string | null}
+ */
+export function getInternalBookmarkRedirectTarget(encodedUrlParam, currentOrigin) {
+  let target;
+  try {
+    target = decodeURIComponent(encodedUrlParam);
+  } catch {
+    target = encodedUrlParam;
+  }
+
+  let unwrapped = false;
+  // Cap iterations to guard against pathological deep nesting.
+  for (let i = 0; i < 10; i++) {
+    const inner = extractInnerBookmarkUrl(target, currentOrigin);
+    if (!inner) break;
+    target = inner;
+    unwrapped = true;
+  }
+
+  return unwrapped ? target : null;
+}
+
+/**
  * Detect whether input is a URL, naddr, or invalid.
  * @param {string} input
  * @returns {'url' | 'naddr' | 'invalid'}
