@@ -6,6 +6,10 @@ import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getCalendarEventStart } from 'applesauce-common/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { parseCalendarTimestamp } from '$lib/helpers/calendar.js';
+import { hexToNpub } from '$lib/helpers/pubkey.js';
+
+// Re-export pure pubkey codec helper for backwards compatibility.
+export { hexToNpub };
 
 /**
  * Parse a Nostr 'a' tag value into an AddressPointer
@@ -31,24 +35,6 @@ export function parseAddressPointerFromATag(aTag) {
     pubkey: value.substring(firstColon + 1, secondColon),
     identifier: value.substring(secondColon + 1) // Everything after second colon
   };
-}
-
-/**
- * Convert hex pubkey to npub format
- * @param {string} hex - 64-character hex pubkey
- * @returns {string|null} npub string or null if invalid
- */
-export function hexToNpub(hex) {
-  if (!hex || typeof hex !== 'string') return null;
-  // Validate hex format (64 chars, hex only)
-  if (!/^[0-9a-f]{64}$/i.test(hex)) return null;
-
-  try {
-    return nip19.npubEncode(hex);
-  } catch (error) {
-    console.error('Error encoding npub:', error);
-    return null;
-  }
 }
 
 /**

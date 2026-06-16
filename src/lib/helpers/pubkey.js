@@ -30,3 +30,20 @@ export function normalizePubkey(input) {
   }
   return null;
 }
+
+/**
+ * Convert a 64-char hex pubkey to npub form.
+ * Returns null for any input that is not a valid hex pubkey.
+ *
+ * @param {unknown} hex
+ * @returns {string | null}
+ */
+export function hexToNpub(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  if (!/^[0-9a-f]{64}$/i.test(hex)) return null;
+  try {
+    return nip19.npubEncode(hex.toLowerCase());
+  } catch {
+    return null;
+  }
+}
