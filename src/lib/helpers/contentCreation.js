@@ -17,7 +17,8 @@ export const CONTENT_CREATION = {
   article: { type: 'route', path: '/create/article' },
   wiki: { type: 'route', path: '/create/wiki' },
   form: { type: 'route', path: '/forms/new' },
-  poll: { type: 'modal', modal: 'createPoll' }
+  poll: { type: 'modal', modal: 'createPoll' },
+  bookmark: { type: 'modal', modal: 'addBookmark' }
 };
 
 /**

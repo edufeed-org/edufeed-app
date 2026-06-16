@@ -38,7 +38,8 @@
     article: { label: () => m.feed_badge_article(), kinds: [30023], ctaKey: 'article' },
     wiki: { label: () => m.feed_badge_wiki(), kinds: [30818], ctaKey: 'wiki' },
     form: { label: () => m.dashboard_content_forms(), kinds: [30168], ctaKey: 'form' },
-    poll: { label: () => m.dashboard_content_polls(), kinds: [1068], ctaKey: 'poll' }
+    poll: { label: () => m.dashboard_content_polls(), kinds: [1068], ctaKey: 'poll' },
+    bookmark: { label: () => m.feed_badge_bookmark(), kinds: [39701], ctaKey: 'bookmark' }
   };
 
   /** @type {Record<string, () => string>} */
@@ -48,7 +49,8 @@
     article: () => m.article_fab_write(),
     wiki: () => m.wiki_fab_write(),
     form: () => m.fab_create_form(),
-    poll: () => m.fab_create_poll()
+    poll: () => m.fab_create_poll(),
+    bookmark: () => m.fab_add_bookmark()
   };
 
   let activeFilter = $state('all');
@@ -56,7 +58,7 @@
   let isLoading = $state(true);
 
   // All content kinds we load
-  const ALL_KINDS = [31922, 31923, 30142, 30023, 30818, 30168, 1068];
+  const ALL_KINDS = [31922, 31923, 30142, 30023, 30818, 30168, 1068, 39701];
 
   const getProfiles = useProfileMap(() => items.map((i) => i.pubkey));
   let profiles = $derived(getProfiles());
@@ -86,7 +88,7 @@
       { relays: getCalendarRelays(), kinds: [31922, 31923] },
       { relays: getEducationalRelays(), kinds: [30142] },
       { relays: getArticleRelays(), kinds: [30023] },
-      { relays: getAllLookupRelays(), kinds: [30818, 30168] },
+      { relays: getAllLookupRelays(), kinds: [30818, 30168, 39701] },
       { relays: getPollRelays(), kinds: [1068] }
     ];
 

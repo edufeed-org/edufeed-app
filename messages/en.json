@@ -1397,7 +1397,7 @@
   "wiki_editor_validation_title": "Title is required",
   "wiki_editor_validation_content": "Wiki content is required",
   "wiki_editor_validation_topic": "Topic is required",
-  "feed_badge_calendar": "Calendar",
+  "feed_badge_calendar": "Events",
   "feed_badge_learning": "Learning",
   "feed_badge_article": "Article",
   "feed_badge_board": "Board",

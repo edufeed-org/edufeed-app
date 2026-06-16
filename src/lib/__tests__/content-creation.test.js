@@ -27,20 +27,22 @@ beforeEach(() => {
 });
 
 describe('CONTENT_CREATION', () => {
-  it('has entries for calendar, learning, article, wiki, form, poll', () => {
+  it('has entries for calendar, learning, article, wiki, form, poll, bookmark', () => {
     expect(Object.keys(CONTENT_CREATION)).toEqual([
       'calendar',
       'learning',
       'article',
       'wiki',
       'form',
-      'poll'
+      'poll',
+      'bookmark'
     ]);
   });
 
-  it('calendar and poll are modal targets', () => {
+  it('calendar, poll, and bookmark are modal targets', () => {
     expect(CONTENT_CREATION.calendar.type).toBe('modal');
     expect(CONTENT_CREATION.poll.type).toBe('modal');
+    expect(CONTENT_CREATION.bookmark.type).toBe('modal');
   });
 
   it('learning, article, wiki, form are route targets', () => {
@@ -87,6 +89,15 @@ describe('navigateToCreate', () => {
   it('appends community query param when communityPubkey provided', () => {
     navigateToCreate('learning', { communityPubkey: 'abc123' });
     expect(goto).toHaveBeenCalledWith('/create/resource?community=abc123');
+  });
+
+  it('opens modal for bookmark', () => {
+    navigateToCreate('bookmark');
+    expect(modalStore.openModal).toHaveBeenCalledWith(
+      'addBookmark',
+      expect.objectContaining({ communityPubkey: '' })
+    );
+    expect(goto).not.toHaveBeenCalled();
   });
 
   it('passes communityPubkey to modal for calendar', () => {
