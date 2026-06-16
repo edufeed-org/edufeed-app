@@ -109,12 +109,31 @@
   });
 
   /**
-   * Mount the popover into document.body when active so that ancestor
+   * Find the Svelte app root: the element directly under <body> that contains
+   * `node`. Portaling here (instead of <body>) escapes ancestor `overflow`
+   * clipping just the same — the app root is `display: contents` with no box —
+   * while keeping the node inside Svelte 5's event-delegation root. A plain
+   * document.body.appendChild moves the node OUT of the app root, which
+   * silently kills delegated onclick handlers on portaled content.
+   *
+   * @param {HTMLElement} node
+   * @returns {HTMLElement}
+   */
+  function getPortalTarget(node) {
+    let el = node.parentElement;
+    while (el && el.parentElement && el.parentElement !== document.body) {
+      el = el.parentElement;
+    }
+    return el && el.parentElement === document.body ? el : document.body;
+  }
+
+  /**
+   * Mount the popover into the app root when active so that ancestor
    * `overflow: auto` (e.g. inside a modal-box) does not clip it or, in
    * modern browsers, capture it as the containing block for `position:
    * fixed`. The position math already uses viewport coordinates via
-   * getBoundingClientRect, so a body-portaled fixed popover lands at
-   * the correct viewport-relative location.
+   * getBoundingClientRect, so a portaled fixed popover lands at the
+   * correct viewport-relative location.
    *
    * @param {HTMLElement} node
    * @param {boolean} active
@@ -125,10 +144,11 @@
     /** @type {Node | null} */
     let originalNext = null;
     function mount() {
-      if (node.parentElement === document.body) return;
+      const target = getPortalTarget(node);
+      if (node.parentElement === target) return;
       originalParent = node.parentElement;
       originalNext = node.nextSibling;
-      document.body.appendChild(node);
+      target.appendChild(node);
     }
     function unmount() {
       if (originalParent && document.body.contains(node)) {
@@ -140,8 +160,8 @@
     return {
       /** @param {boolean} next */
       update(next) {
-        if (next && node.parentElement !== document.body) mount();
-        else if (!next && originalParent) unmount();
+        if (next) mount();
+        else if (originalParent) unmount();
       },
       destroy() {
         unmount();
