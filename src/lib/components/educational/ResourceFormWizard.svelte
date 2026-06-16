@@ -407,6 +407,13 @@
     const draft = loadDraft(variantId);
     if (draft && draft.formData) {
       formData = { ...formData, ...draft.formData };
+      // Sibling state lives outside formData; restore it from the draft's
+      // `extras` bag (empty for legacy drafts).
+      const extras = draft.extras || {};
+      if (extras.aboutByVocab) aboutByVocab = extras.aboutByVocab;
+      if (Array.isArray(extras.selectedCommunityPubkeys))
+        selectedCommunityPubkeys = extras.selectedCommunityPubkeys;
+      if (typeof extras.hasNoUrl === 'boolean') hasNoUrl = extras.hasNoUrl;
       draftRestoredAt = draft.savedAt || Date.now();
     }
     draftRestoreDone = true;
@@ -415,10 +422,17 @@
   $effect(() => {
     // $state.snapshot reads every property → effect re-runs on any change.
     const snapshot = $state.snapshot(formData);
+    // Reading these registers them as dependencies so the autosave also fires
+    // when subject/community/no-URL state (which lives outside formData) changes.
+    const extras = {
+      aboutByVocab: $state.snapshot(aboutByVocab),
+      selectedCommunityPubkeys: $state.snapshot(selectedCommunityPubkeys),
+      hasNoUrl
+    };
     if (isEditMode || !draftRestoreDone) return;
     clearTimeout(draftSaveTimer);
     draftSaveTimer = setTimeout(() => {
-      saveDraft(variantId, snapshot);
+      saveDraft(variantId, snapshot, extras);
     }, 500);
     return () => clearTimeout(draftSaveTimer);
   });

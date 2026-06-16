@@ -37,9 +37,13 @@ function defaultStorage() {
 /**
  * Load a previously-saved draft for the given variant.
  *
+ * The `extras` object carries wizard state that lives outside `formData`
+ * (e.g. per-vocab subject selections, target communities, the "no URL"
+ * toggle). Legacy drafts written before extras existed load as `extras: {}`.
+ *
  * @param {string} variantId
  * @param {Storage | undefined} [storage]
- * @returns {{ formData: any, savedAt: number } | null}
+ * @returns {{ formData: any, extras: any, savedAt: number } | null}
  */
 export function loadDraft(variantId, storage = defaultStorage()) {
   if (!storage) return null;
@@ -55,6 +59,7 @@ export function loadDraft(variantId, storage = defaultStorage()) {
     if (!parsed || typeof parsed !== 'object' || !parsed.formData) return null;
     return {
       formData: parsed.formData,
+      extras: parsed.extras && typeof parsed.extras === 'object' ? parsed.extras : {},
       savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : 0
     };
   } catch {
@@ -67,12 +72,13 @@ export function loadDraft(variantId, storage = defaultStorage()) {
  *
  * @param {string} variantId
  * @param {any} formData
+ * @param {any} [extras] wizard state stored outside formData (defaults to {})
  * @param {Storage | undefined} [storage]
  * @returns {void}
  */
-export function saveDraft(variantId, formData, storage = defaultStorage()) {
+export function saveDraft(variantId, formData, extras = {}, storage = defaultStorage()) {
   if (!storage) return;
-  const payload = JSON.stringify({ formData, savedAt: Date.now() });
+  const payload = JSON.stringify({ formData, extras: extras ?? {}, savedAt: Date.now() });
   try {
     storage.setItem(keyFor(variantId), payload);
   } catch {

@@ -53,7 +53,7 @@ describe('draftStore', () => {
 
   it('saveDraft then loadDraft round-trips formData and includes savedAt', () => {
     const formData = { name: 'Bruchrechnen', description: 'Eine Einführung' };
-    saveDraft('amb', formData, storage);
+    saveDraft('amb', formData, {}, storage);
 
     const loaded = loadDraft('amb', storage);
     expect(loaded).not.toBeNull();
@@ -63,14 +63,14 @@ describe('draftStore', () => {
   });
 
   it('clearDraft removes the draft so subsequent loadDraft returns null', () => {
-    saveDraft('amb', { name: 'X' }, storage);
+    saveDraft('amb', { name: 'X' }, {}, storage);
     clearDraft('amb', storage);
     expect(loadDraft('amb', storage)).toBeNull();
   });
 
   it('keeps drafts for different variantIds in separate slots', () => {
-    saveDraft('amb', { name: 'AMB resource' }, storage);
-    saveDraft('ekw', { name: 'EKW resource' }, storage);
+    saveDraft('amb', { name: 'AMB resource' }, {}, storage);
+    saveDraft('ekw', { name: 'EKW resource' }, {}, storage);
 
     expect(loadDraft('amb', storage).formData.name).toBe('AMB resource');
     expect(loadDraft('ekw', storage).formData.name).toBe('EKW resource');
@@ -93,18 +93,48 @@ describe('draftStore', () => {
 
   it('saveDraft swallows storage errors (quota, private mode) without throwing', () => {
     const broken = makeBrokenStorage();
-    expect(() => saveDraft('amb', { name: 'X' }, broken)).not.toThrow();
+    expect(() => saveDraft('amb', { name: 'X' }, {}, broken)).not.toThrow();
   });
 
   it('returns null and does not throw when storage is undefined (SSR / no window)', () => {
     expect(loadDraft('amb', undefined)).toBeNull();
-    expect(() => saveDraft('amb', { name: 'X' }, undefined)).not.toThrow();
+    expect(() => saveDraft('amb', { name: 'X' }, {}, undefined)).not.toThrow();
     expect(() => clearDraft('amb', undefined)).not.toThrow();
   });
 
   it('overwrites an older draft when saveDraft is called again for the same variant', () => {
-    saveDraft('amb', { name: 'first' }, storage);
-    saveDraft('amb', { name: 'second' }, storage);
+    saveDraft('amb', { name: 'first' }, {}, storage);
+    saveDraft('amb', { name: 'second' }, {}, storage);
     expect(loadDraft('amb', storage).formData.name).toBe('second');
+  });
+
+  it('round-trips extras (sibling state stored outside formData)', () => {
+    const formData = { name: 'Bruchrechnen' };
+    const extras = {
+      aboutByVocab: { schulfaecher: [{ id: 'urn:subj:math', label: 'Mathematik' }] },
+      selectedCommunityPubkeys: ['abc123', 'def456'],
+      hasNoUrl: true
+    };
+    saveDraft('amb', formData, extras, storage);
+
+    const loaded = loadDraft('amb', storage);
+    expect(loaded.formData).toEqual(formData);
+    expect(loaded.extras).toEqual(extras);
+  });
+
+  it('loadDraft returns an empty extras object for legacy drafts saved without extras', () => {
+    // Simulate a draft written by an older app version (no extras key).
+    storage.setItem(
+      'comcal.resourceDraft.amb',
+      JSON.stringify({ formData: { name: 'X' }, savedAt: 123 })
+    );
+    const loaded = loadDraft('amb', storage);
+    expect(loaded.formData).toEqual({ name: 'X' });
+    expect(loaded.extras).toEqual({});
+  });
+
+  it('saveDraft tolerates a missing extras argument (defaults to empty object)', () => {
+    saveDraft('amb', { name: 'X' }, undefined, storage);
+    expect(loadDraft('amb', storage).extras).toEqual({});
   });
 });
