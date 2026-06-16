@@ -178,4 +178,23 @@ describe('useLicenseStatus', () => {
     cleanup();
     vi.useRealTimers();
   });
+
+  it('stays "found" (does not regress to "missing") if the store later emits empty', () => {
+    const hash = 'a'.repeat(64);
+    const event = makeLicenseEvent(hash, 1000, 'sticky');
+    sharedStore.add(event);
+    /** @type {() => any} */ let getter = () => null;
+    /** @type {() => void} */ let cleanup = () => {};
+    cleanup = $effect.root(() => {
+      getter = useLicenseStatus(() => hash);
+    });
+    flushSync();
+    expect(getter().status).toBe('found');
+    // A later empty emission (e.g. the event removed from the store) must not
+    // flip a found license back to a caution.
+    sharedStore.remove(event);
+    flushSync();
+    expect(getter().status).toBe('found');
+    cleanup();
+  });
 });

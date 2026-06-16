@@ -12,9 +12,17 @@
   The `position` prop carries the tailwind positioning/background classes from
   the caller (e.g. "absolute right-1 bottom-1 bg-base-100/80 backdrop-blur").
 -->
+<script module>
+  // Per-instance id so each caution popover can be associated with its trigger
+  // via aria-describedby (multiple overlays can coexist on one page).
+  let popoverCounter = 0;
+</script>
+
 <script>
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import * as m from '$lib/paraglide/messages';
+
+  const tooltipId = `license-caution-tip-${popoverCounter++}`;
 
   /**
    * @typedef {Object} Props
@@ -84,6 +92,7 @@
     role="note"
     tabindex="0"
     aria-label={m.image_license_caution_aria()}
+    aria-describedby={open ? tooltipId : undefined}
     onmouseenter={() => (open = true)}
     onmouseleave={() => (open = false)}
     onfocus={() => (open = true)}
@@ -116,6 +125,7 @@
 
     {#if open}
       <span
+        id={tooltipId}
         class="absolute right-0 bottom-full z-20 mb-1 block w-64 rounded-box border border-base-300 bg-base-100 p-3 text-left shadow-lg"
         role="tooltip"
         data-testid="license-caution-popover"

@@ -35,6 +35,7 @@ export function useLicenseStatus(getHash) {
 
     state = { event: null, status: 'loading' };
     let settled = false;
+    let found = false;
     /** @type {import('nostr-tools').NostrEvent | null} */
     let latest = null;
 
@@ -59,9 +60,10 @@ export function useLicenseStatus(getHash) {
           return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
         });
         latest = sorted[0];
+        found = true; // sticky: a found license never regresses to 'missing'
         settled = true; // a hit wins immediately, regardless of loader timing
         state = { event: latest, status: 'found' };
-      } else {
+      } else if (!found) {
         latest = null;
         if (settled) state = { event: null, status: 'missing' };
       }
