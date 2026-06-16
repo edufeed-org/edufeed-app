@@ -149,4 +149,33 @@ describe('HoverCard', () => {
     const card = container.querySelector('[role="tooltip"]');
     expect(card.className).toContain('top-full');
   });
+
+  // Regression guard: when fixed=true the popup is portaled out of its normal
+  // DOM position. It MUST stay inside Svelte's event-delegation root (the mount
+  // container) so delegated onclick handlers on its content still fire. A naive
+  // document.body.appendChild moves it outside that root and silently kills all
+  // clicks inside portaled hover cards (e.g. the profile wave button, which then
+  // lets its wrapping <a href> navigate away). See HoverCard.svelte portal().
+  it('fires click handlers on portaled (fixed) content', async () => {
+    const onAction = vi.fn();
+    const { container } = render(HoverCardTestWrapper, {
+      props: { fixed: true, onAction }
+    });
+    const wrapper = container.querySelector('[aria-haspopup]');
+
+    // Open via click (handleClick toggles immediately, no timer needed)
+    await fireEvent.click(wrapper);
+    await tick();
+
+    // Content is portaled out of `container`, so query the whole document.
+    const button = document.querySelector('[data-testid="content-button"]');
+    expect(button).not.toBeNull();
+
+    // The portaled node must remain within the mount container (delegation root),
+    // not be reparented directly under <body>.
+    expect(container.contains(button)).toBe(true);
+
+    await fireEvent.click(button);
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
 });

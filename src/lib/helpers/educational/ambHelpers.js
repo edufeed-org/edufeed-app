@@ -11,6 +11,7 @@ import {
   getNestedTagValues,
   getLabelsWithFallback
 } from './ambTransform.js';
+import { formatLicenseUrl } from './licenseLabel.js';
 
 /**
  * Extracts the resource name from an AMB event
@@ -90,17 +91,7 @@ export function getAMBLicense(event) {
   const licenseId = getTagValue(event.tags, 'license:id');
   if (!licenseId) return null;
 
-  // Extract license name from URL
-  // Handles /licenses/by/4.0 → "BY 4.0" and /publicdomain/zero/1.0 → "CC0 1.0"
-  const licenseMatch = licenseId.match(/licenses\/([^/]+)\/([^/]+)/);
-  const pdMatch = !licenseMatch && licenseId.match(/publicdomain\/([^/]+)\/([^/]+)/);
-  const label = licenseMatch
-    ? `${licenseMatch[1].toUpperCase()} ${licenseMatch[2]}`
-    : pdMatch
-      ? `CC0 ${pdMatch[2]}`
-      : licenseId;
-
-  return { id: licenseId, label };
+  return { id: licenseId, label: formatLicenseUrl(licenseId) };
 }
 
 /**

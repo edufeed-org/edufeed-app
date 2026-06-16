@@ -14,7 +14,7 @@
 import { mapEventsToStore } from 'applesauce-core/observable';
 import { filter, tap } from 'rxjs';
 import { GiftWrapsModel } from 'applesauce-common/models';
-import { WrappedMessagesGroups, LegacyMessagesGroups } from 'applesauce-common/models';
+import { WrappedMessagesGroups } from 'applesauce-common/models';
 import { unlockGiftWrap, isGiftWrapUnlocked } from 'applesauce-common/helpers/gift-wrap';
 import {
   unlockLegacyMessage,
@@ -31,6 +31,7 @@ import {
   saveReadTimestamps,
   isConversationUnread,
   normalizeLegacyConversation,
+  groupLegacyConversations,
   mergeDmConversations
 } from '$lib/helpers/dm.js';
 import { getRelayListLookupRelays, getWriteRelays } from '$lib/services/relay-service.svelte.js';
@@ -271,26 +272,81 @@ export function isDmConversationUnread(conversationId, lastMessageTimestamp) {
  * signer (kept in this service so components don't need signer access). The
  * plaintext is cached on each event and written back to the EventStore, which
  * re-emits the LegacyMessagesGroup model so the thread re-renders decrypted.
- * Fire-and-forget; already-unlocked and previously-failed messages are skipped.
+ * Already-unlocked and previously-failed messages are skipped.
+ *
+ * Resolves with the set of message ids that could not be decrypted (failed this
+ * call or in a prior one), so the caller can render a "couldn't decrypt"
+ * placeholder rather than a silent blank bubble. The underlying decrypt error
+ * is logged so the actual failure cause (malformed ciphertext, key mismatch,
+ * non-standard kind-4 content) is diagnosable.
  * @param {import('nostr-tools').NostrEvent[]} messages
- * @returns {Promise<void>}
+ * @returns {Promise<Set<string>>}
  */
 export async function ensureLegacyMessagesUnlocked(messages) {
-  if (!activeSigner || !activePubkey) return;
+  /** @type {Set<string>} */
+  const failedIds = new SvelteSet();
+  if (!activeSigner || !activePubkey) return failedIds;
   const pubkey = activePubkey;
-  let failed = false;
+  let savedNew = false;
   for (const msg of messages) {
-    if (activePubkey !== pubkey) return;
-    if (isLegacyMessageUnlocked(msg) || failedUnlockIds.has(msg.id)) continue;
+    if (activePubkey !== pubkey) return failedIds;
+    if (isLegacyMessageUnlocked(msg)) continue;
+    if (failedUnlockIds.has(msg.id)) {
+      failedIds.add(msg.id);
+      continue;
+    }
     try {
       await unlockLegacyMessage(msg, pubkey, /** @type {any} */ (activeSigner));
     } catch (err) {
       console.warn('[dm] failed to unlock legacy message:', msg.id, err);
       failedUnlockIds.add(msg.id);
-      failed = true;
+      failedIds.add(msg.id);
+      savedNew = true;
     }
   }
-  if (failed) saveFailedUnlockIds(pubkey);
+  if (savedNew) saveFailedUnlockIds(pubkey);
+  return failedIds;
+}
+
+/**
+ * Backfill a legacy (NIP-04) thread's history from the correspondent's relays.
+ *
+ * The standing gift-wrap subscription requests kind-4 DMs only on the *user's*
+ * own DM/NIP-65 relays. A NIP-04-only peer (e.g. Primal) publishes their
+ * messages to *their* write relays, which the user may not subscribe to — so
+ * the peer's inbound kind-4 events never reach the EventStore and the thread
+ * shows only the user's own outbound messages. This one-shot fetch pulls both
+ * directions of the 1:1 kind-4 history from the correspondent's write relays
+ * (plus the user's DM relays and fallback) into the store, where the
+ * LegacyMessagesGroup model picks them up.
+ * @param {string} self
+ * @param {string} correspondent
+ * @returns {Promise<void>}
+ */
+export async function fetchLegacyConversationHistory(self, correspondent) {
+  if (!self || !correspondent) return;
+  const correspondentRelays = await getWriteRelays(correspondent).catch(() => []);
+  const relays = [
+    ...correspondentRelays,
+    ...dmRelays,
+    ...(runtimeConfig.fallbackRelays || [])
+  ].filter((r, i, arr) => arr.indexOf(r) === i);
+  if (relays.length === 0) return;
+  await new Promise((resolve) => {
+    const sub = pool
+      .request(relays, [
+        { kinds: [4], '#p': [self], authors: [correspondent] },
+        { kinds: [4], '#p': [correspondent], authors: [self] }
+      ])
+      .pipe(mapEventsToStore(eventStore))
+      .subscribe({ complete: () => resolve(undefined), error: () => resolve(undefined) });
+    // Safety net: pool.request completes on EOSE (3s synthetic timeout per
+    // relay), but bound the wait so a stuck relay can't hang the backfill.
+    setTimeout(() => {
+      sub.unsubscribe();
+      resolve(undefined);
+    }, 6000);
+  });
 }
 
 // --- Lifecycle ---
@@ -463,31 +519,44 @@ export function initializeDMs(pubkey, signer) {
   });
   subscriptions.push(convSub);
 
-  // 6. Watch legacy NIP-04 (kind 4) conversations. These come from other
-  //    clients (e.g. Primal) that never adopted NIP-17. We surface them
-  //    read-only and clearly marked as insecure. The kind-4 events are pulled
-  //    into the store by the same gift-wrap subscription (which also requests
-  //    kind 4 — see subscribeToGiftWraps). Each lastMessage must be NIP-04
-  //    decrypted before we can show a preview, so we unlock locked ones and
-  //    rebuild on the next emission once the plaintext is cached.
-  const legacySub = eventStore.model(LegacyMessagesGroups, pubkey).subscribe((groups) => {
-    const list = groups || [];
-    legacyConversations = list.map((conv) =>
-      normalizeLegacyConversation(conv, getEncryptedContent(conv.lastMessage) ?? '')
-    );
-    closeInitialFetchWindowIfReady();
+  // 6. Watch legacy NIP-04 (kind 4) conversations. These come from clients
+  //    (e.g. Primal) that never adopted NIP-17 — marked insecure but writable.
+  //    The kind-4 events are pulled into the store by the same gift-wrap
+  //    subscription (which also requests kind 4 in both directions — see
+  //    subscribeToGiftWraps). We group both inbound and outbound here (the
+  //    applesauce LegacyMessagesGroups model indexes inbound only, so the list
+  //    wouldn't reflect threads you started or your own latest reply). Each
+  //    lastMessage must be NIP-04 decrypted before we can show a preview, so we
+  //    unlock locked ones and rebuild on the next emission once cached.
+  const legacySub = eventStore
+    .timeline([
+      { kinds: [4], '#p': [pubkey] },
+      { kinds: [4], authors: [pubkey] }
+    ])
+    .subscribe((/** @type {any[]} */ messages) => {
+      /** @type {{ id: string, participants: string[], lastMessage: any }[]} */
+      const list = groupLegacyConversations(messages || []);
+      legacyConversations = list.map((conv) =>
+        normalizeLegacyConversation(conv, getEncryptedContent(conv.lastMessage) ?? '')
+      );
+      closeInitialFetchWindowIfReady();
 
-    const lockedLast = list
-      .map((c) => c.lastMessage)
-      .filter((msg) => msg && !isLegacyMessageUnlocked(msg) && !failedUnlockIds.has(msg.id));
-    if (lockedLast.length > 0 && !unlockingLegacy) {
-      batchUnlockLegacy(pubkey, lockedLast);
-    }
-    console.debug('[dm] LegacyMessagesGroups emission', {
-      conversationCount: legacyConversations.length,
-      lockedPreviews: lockedLast.length
+      const lockedLast = list
+        .map((c) => c.lastMessage)
+        .filter(
+          (msg) =>
+            msg &&
+            !isLegacyMessageUnlocked(msg) &&
+            !failedUnlockIds.has(/** @type {any} */ (msg).id)
+        );
+      if (lockedLast.length > 0 && !unlockingLegacy) {
+        batchUnlockLegacy(pubkey, lockedLast);
+      }
+      console.debug('[dm] legacy conversations emission', {
+        conversationCount: legacyConversations.length,
+        lockedPreviews: lockedLast.length
+      });
     });
-  });
   subscriptions.push(legacySub);
 }
 

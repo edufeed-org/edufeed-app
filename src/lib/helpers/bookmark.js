@@ -34,6 +34,78 @@ export function parseBookmarkUrlParam(encodedUrlParam) {
 }
 
 /**
+ * True for an edufeed community pubkey path segment (npub or 64-char hex). Used
+ * to avoid mistaking an unrelated site's `/c/.../bookmarks/` path for an
+ * edufeed bookmark page.
+ * @param {string} seg
+ * @returns {boolean}
+ */
+function isPubkeySegment(seg) {
+  return /^npub1[023456789acdefghjklmnpqrstuvwxyz]{58}$/.test(seg) || /^[0-9a-f]{64}$/i.test(seg);
+}
+
+/**
+ * If `urlStr` is an edufeed bookmark-detail page (`/c/<pubkey>/bookmarks/<inner>`
+ * or `/bookmarks/<inner>`) whose `<inner>` is itself a wrapped http(s) URL,
+ * return the decoded inner URL. Host-independent: the same bad data must unwrap
+ * whether viewed on localhost, dev.edufeed.org, or any deployment. Otherwise null.
+ * @param {string} urlStr
+ * @returns {string | null}
+ */
+function extractInnerBookmarkUrl(urlStr) {
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return null;
+  }
+  const match = parsed.pathname.match(/^\/(?:c\/([^/]+)\/)?bookmarks\/(.+)$/);
+  if (!match) return null;
+  const communitySegment = match[1];
+  if (communitySegment && !isPubkeySegment(communitySegment)) return null;
+  let inner = match[2];
+  try {
+    inner = decodeURIComponent(inner);
+  } catch {
+    // keep raw if it isn't valid percent-encoding
+  }
+  // The pathology is a wrapped absolute URL; a normal /bookmarks/<slug> page
+  // never carries an http(s) target embedded in its path.
+  if (!/^https?:\/\//i.test(inner)) return null;
+  return inner;
+}
+
+/**
+ * Detect a self-referential bookmark whose `[url]` is itself an edufeed
+ * bookmark-detail page (e.g. someone bookmarked the bookmark page instead of
+ * the article). Such a "URL" can't be read as an article and roots comments at
+ * an internal app URL, so we unwrap to the innermost real target and redirect
+ * there. Returns the decoded innermost URL, or null when the param is a genuine
+ * external URL.
+ * @param {string} encodedUrlParam - The raw `[url]` route param (URI-encoded)
+ * @returns {string | null}
+ */
+export function getInternalBookmarkRedirectTarget(encodedUrlParam) {
+  let target;
+  try {
+    target = decodeURIComponent(encodedUrlParam);
+  } catch {
+    target = encodedUrlParam;
+  }
+
+  let unwrapped = false;
+  // Cap iterations to guard against pathological deep nesting.
+  for (let i = 0; i < 10; i++) {
+    const inner = extractInnerBookmarkUrl(target);
+    if (!inner) break;
+    target = inner;
+    unwrapped = true;
+  }
+
+  return unwrapped ? target : null;
+}
+
+/**
  * Detect whether input is a URL, naddr, or invalid.
  * @param {string} input
  * @returns {'url' | 'naddr' | 'invalid'}

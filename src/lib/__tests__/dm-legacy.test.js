@@ -7,8 +7,22 @@ import {
   stripLegacyConversationId,
   normalizeLegacyConversation,
   normalizeLegacyMessage,
-  mergeDmConversations
+  groupLegacyConversations,
+  mergeDmConversations,
+  looksLikeNip04Ciphertext
 } from '$lib/helpers/dm.js';
+
+/** @param {{id: string, from: string, to: string, at: number}} o */
+function kind4(o) {
+  return {
+    id: o.id,
+    kind: 4,
+    pubkey: o.from,
+    created_at: o.at,
+    content: 'CIPHER',
+    tags: [['p', o.to]]
+  };
+}
 
 describe('legacy conversation id helpers', () => {
   it('prefixes a base id', () => {
@@ -62,6 +76,126 @@ describe('normalizeLegacyMessage', () => {
     expect(out.content).toBe('plain');
     expect(out.kind).toBe(4);
     expect(ev.content).toBe('CIPHER');
+  });
+
+  it('defaults decryptFailed to false', () => {
+    const ev = { id: 'e1', kind: 4, content: 'CIPHER', created_at: 5, tags: [] };
+    expect(normalizeLegacyMessage(ev, 'plain').decryptFailed).toBe(false);
+  });
+
+  it('flags decryptFailed when the message could not be decrypted', () => {
+    const ev = { id: 'e1', kind: 4, content: 'CIPHER', created_at: 5, tags: [] };
+    const out = normalizeLegacyMessage(ev, '', true);
+    expect(out.content).toBe('');
+    expect(out.decryptFailed).toBe(true);
+  });
+
+  it('preserves the plain wire fields', () => {
+    const ev = {
+      id: 'e1',
+      kind: 4,
+      pubkey: 'pk',
+      created_at: 5,
+      tags: [['p', 'other']],
+      sig: 'sig',
+      content: 'CIPHER'
+    };
+    const out = normalizeLegacyMessage(ev, 'plain');
+    expect(out).toEqual({
+      id: 'e1',
+      kind: 4,
+      pubkey: 'pk',
+      created_at: 5,
+      tags: [['p', 'other']],
+      sig: 'sig',
+      content: 'plain',
+      decryptFailed: false
+    });
+  });
+
+  it('does not copy symbol-keyed caches from the source (stale parse/encrypted-content)', () => {
+    // Simulate applesauce caches living on the source event as symbol props.
+    const parseCache = Symbol.for('text-note-content');
+    const encCache = Symbol.for('encrypted-content');
+    const ev = { id: 'e1', kind: 4, pubkey: 'pk', created_at: 5, tags: [], content: 'CIPHER' };
+    // @ts-ignore - intentionally attaching symbol caches for the test
+    ev[parseCache] = { stale: 'tree' };
+    // @ts-ignore
+    ev[encCache] = 'CIPHER';
+    const out = normalizeLegacyMessage(ev, 'plain');
+    expect(Reflect.has(out, parseCache)).toBe(false);
+    expect(Reflect.has(out, encCache)).toBe(false);
+  });
+});
+
+describe('groupLegacyConversations', () => {
+  const ME = 'me';
+  const A = 'alice';
+  const B = 'bob';
+
+  it('groups inbound and outbound messages of one thread into a single conversation', () => {
+    const msgs = [
+      kind4({ id: 'in1', from: A, to: ME, at: 10 }),
+      kind4({ id: 'out1', from: ME, to: A, at: 20 })
+    ];
+    const groups = groupLegacyConversations(msgs);
+    expect(groups).toHaveLength(1);
+    expect([...groups[0].participants].sort()).toEqual([A, ME].sort());
+  });
+
+  it('picks the newest message overall as lastMessage (including an outbound one)', () => {
+    const msgs = [
+      kind4({ id: 'in1', from: A, to: ME, at: 10 }),
+      kind4({ id: 'out1', from: ME, to: A, at: 99 })
+    ];
+    const groups = groupLegacyConversations(msgs);
+    expect(groups[0].lastMessage.id).toBe('out1');
+    expect(groups[0].lastMessage.created_at).toBe(99);
+  });
+
+  it('surfaces a thread that only has outbound messages (one you started, no reply yet)', () => {
+    const msgs = [kind4({ id: 'out1', from: ME, to: B, at: 5 })];
+    const groups = groupLegacyConversations(msgs);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].lastMessage.id).toBe('out1');
+    expect([...groups[0].participants].sort()).toEqual([B, ME].sort());
+  });
+
+  it('keeps separate correspondents in separate conversations', () => {
+    const msgs = [
+      kind4({ id: 'a1', from: A, to: ME, at: 10 }),
+      kind4({ id: 'b1', from: ME, to: B, at: 20 })
+    ];
+    const groups = groupLegacyConversations(msgs);
+    expect(groups).toHaveLength(2);
+  });
+
+  it('tolerates empty/undefined input', () => {
+    expect(groupLegacyConversations([])).toEqual([]);
+    expect(groupLegacyConversations(undefined)).toEqual([]);
+  });
+});
+
+describe('looksLikeNip04Ciphertext', () => {
+  it('detects NIP-04 ciphertext (base64?iv=base64)', () => {
+    expect(looksLikeNip04Ciphertext('CnPQKNF4HvawM35Z1aMh3Q==?iv=G4U8OrUiU4XqAx1ovpgOGQ==')).toBe(
+      true
+    );
+    expect(looksLikeNip04Ciphertext('abc123?iv=def456')).toBe(true);
+  });
+
+  it('treats decrypted plaintext as not-ciphertext', () => {
+    expect(looksLikeNip04Ciphertext('hello world')).toBe(false);
+    expect(looksLikeNip04Ciphertext('will contact you soon')).toBe(false);
+    // plaintext that merely mentions iv must not trip the guard
+    expect(looksLikeNip04Ciphertext('the iv= value is set')).toBe(false);
+  });
+
+  it('tolerates non-strings and empty input', () => {
+    expect(looksLikeNip04Ciphertext('')).toBe(false);
+    expect(looksLikeNip04Ciphertext(undefined)).toBe(false);
+    expect(looksLikeNip04Ciphertext(null)).toBe(false);
+    expect(looksLikeNip04Ciphertext(42)).toBe(false);
   });
 });
 
