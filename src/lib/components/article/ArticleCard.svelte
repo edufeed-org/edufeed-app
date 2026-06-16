@@ -11,8 +11,8 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
-  import LicenseBadge from '../shared/LicenseBadge.svelte';
-  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
+  import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { getSha256FromURL } from 'applesauce-common/helpers';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventTags from '../calendar/EventTags.svelte';
@@ -53,8 +53,8 @@
     return image ? (getSha256FromURL(image) ?? null) : null;
   });
 
-  const getCoverLicense = useLicenseForHash(() => imageHash);
-  const coverLicense = $derived(getCoverLicense());
+  const getCoverStatus = useLicenseStatus(() => imageHash);
+  const coverStatus = $derived(getCoverStatus());
 
   // Get summary from tags or truncate content
   const summary = $derived.by(() => {
@@ -237,12 +237,12 @@
             size="card"
             class="h-full w-full object-cover"
           />
-          {#if coverLicense}
-            <LicenseBadge
-              licenseEvent={coverLicense}
-              class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
-            />
-          {/if}
+          <ImageLicenseOverlay
+            licenseEvent={coverStatus.event}
+            status={coverStatus.status}
+            variant="dot"
+            position="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+          />
         </div>
       </div>
     {/if}
