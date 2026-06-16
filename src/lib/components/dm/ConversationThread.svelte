@@ -10,6 +10,7 @@
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import { markConversationAsRead } from '$lib/services/dm-service.svelte.js';
   import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
+  import { ensureRecipientDmRelays } from '$lib/services/dm-recipient-relays.js';
   import {
     formatMessageTimestamp,
     getUserDisplayName as getDisplayName,
@@ -85,6 +86,19 @@
     return () => sub.unsubscribe();
   });
 
+  // Prefetch recipients' kind 10050 DM relays into the EventStore as soon as the
+  // conversation opens, so by send time SendWrappedMessage can route gift wraps
+  // to the recipient's chosen relays (it resolves relays from the store only).
+  $effect(() => {
+    const user = getActiveUser();
+    if (!user) return;
+    const recipients = participants.filter((p) => p !== user.pubkey);
+    if (recipients.length === 0) return;
+    ensureRecipientDmRelays(recipients).catch((err) =>
+      console.warn('[dm] recipient relay prefetch failed', err)
+    );
+  });
+
   // Mark conversation as read when messages load or update
   $effect(() => {
     if (messages.length > 0 && conversationId) {
@@ -142,6 +156,9 @@
       // Backfill the sender's kind 10050 DM relay list if they predate the
       // signup-time default, so replies can reach them.
       await ensureDmRelayList();
+      // Ensure recipient DM relays are in the EventStore so the action can route
+      // the gift wrap per NIP-17 (the prefetch effect may not have settled yet).
+      await ensureRecipientDmRelays(participants.filter((p) => p !== user.pubkey));
       // actionRunnerOptimistic returns as soon as the gift wrap is signed and
       // added to EventStore — WrappedMessagesGroup picks it up immediately via
       // the synchronous rumor symbol, giving the user instant feedback without

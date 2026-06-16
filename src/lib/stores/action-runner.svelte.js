@@ -20,6 +20,7 @@ import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from './nostr-infrastructure.svelte';
 import { manager } from './accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
+import { publishGiftWrap, GIFT_WRAP_KIND } from '$lib/services/gift-wrap-publish.js';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
@@ -27,10 +28,17 @@ export const factory = createAppEventFactory({ signer: manager.signer });
 
 /**
  * Publish wrapper adapting our publishEvent to applesauce's PublishMethod signature.
+ * Kind 1059 gift wraps bypass the generic outbox model and go only to the
+ * recipient's DM relays (see gift-wrap-publish.js / NIP-17).
  * @param {import('nostr-tools').NostrEvent} event
  * @param {string[]} [relays]
  */
 const publish = async (event, relays) => {
+  if (event.kind === GIFT_WRAP_KIND) {
+    const result = await publishGiftWrap(event, relays);
+    if (!result.success) throw new Error('Failed to publish gift wrap to any relay');
+    return;
+  }
   const result = await publishEvent(event, [], { additionalRelays: relays || [] });
   if (!result.success) throw new Error('Failed to publish event to any relay');
 };
@@ -44,6 +52,12 @@ const publish = async (event, relays) => {
  * @param {string[]} [relays]
  */
 const publishOptimistic = async (event, relays) => {
+  if (event.kind === GIFT_WRAP_KIND) {
+    publishGiftWrap(event, relays).catch((err) =>
+      console.error('Background gift-wrap publish failed', err)
+    );
+    return;
+  }
   publishEvent(event, [], { additionalRelays: relays || [] }).catch((err) => {
     console.error('Background publish failed', err);
   });
