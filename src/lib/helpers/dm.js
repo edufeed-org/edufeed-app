@@ -127,12 +127,68 @@ export function normalizeLegacyConversation(conv, decryptedContent) {
 /**
  * Normalize a legacy kind-4 event into a message object whose `content` is the
  * decrypted plaintext, so content renderers (which read `.content`) work.
+ * `decryptFailed` distinguishes a message whose NIP-04 decrypt threw (render a
+ * placeholder) from one still pending or genuinely empty (render nothing).
  * @param {any} event
  * @param {string} decryptedContent
+ * @param {boolean} [decryptFailed]
  * @returns {any}
  */
-export function normalizeLegacyMessage(event, decryptedContent) {
-  return { ...event, content: decryptedContent };
+export function normalizeLegacyMessage(event, decryptedContent, decryptFailed = false) {
+  return { ...event, content: decryptedContent, decryptFailed };
+}
+
+/**
+ * Participants of a legacy (kind-4) message: the author plus every p-tagged
+ * pubkey, deduped. Mirrors applesauce `getConversationParticipants` for kind 4.
+ * @param {any} message
+ * @returns {string[]}
+ */
+function legacyMessageParticipants(message) {
+  const list = [
+    message.pubkey,
+    ...(message.tags || [])
+      .filter((/** @type {string[]} */ t) => t[0] === 'p')
+      .map((/** @type {string[]} */ t) => t[1])
+  ];
+  return [...new Set(list)];
+}
+
+/**
+ * Conversation identifier for a legacy message: sorted unique participants
+ * joined by ':'. Inbound and outbound messages of the same 1:1 thread produce
+ * the same id. Mirrors applesauce `getConversationIdentifierFromMessage`.
+ * @param {any} message
+ * @returns {string}
+ */
+function legacyConversationIdentifier(message) {
+  return [...legacyMessageParticipants(message)].sort().join(':');
+}
+
+/**
+ * Group a flat list of legacy (kind-4) events — both inbound (`#p=self`) and
+ * outbound (authored by self) — into 1:1 conversations, keyed by sorted
+ * participant identifier, with the newest event as `lastMessage`.
+ *
+ * The applesauce `LegacyMessagesGroups` model only indexes inbound messages, so
+ * on its own the conversation list neither shows threads you started nor
+ * reflects your own latest reply. Grouping both directions here keeps the
+ * preview text, timestamp, and ordering correct for sent messages.
+ * @param {any[]} [messages]
+ * @returns {{ id: string, participants: string[], lastMessage: any }[]}
+ */
+export function groupLegacyConversations(messages) {
+  /** @type {Record<string, any>} */
+  const groups = {};
+  for (const message of messages || []) {
+    const id = legacyConversationIdentifier(message);
+    if (!groups[id] || groups[id].created_at < message.created_at) groups[id] = message;
+  }
+  return Object.values(groups).map((message) => ({
+    id: legacyConversationIdentifier(message),
+    participants: legacyMessageParticipants(message),
+    lastMessage: message
+  }));
 }
 
 /**

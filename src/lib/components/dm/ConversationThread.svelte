@@ -8,7 +8,12 @@
   import { getWrappedMessageParent } from 'applesauce-common/helpers/wrapped-messages';
   import { getLegacyMessageParent } from 'applesauce-common/helpers/legacy-messages';
   import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
-  import { SendWrappedMessage, ReplyToWrappedMessage } from 'applesauce-actions/actions';
+  import {
+    SendWrappedMessage,
+    ReplyToWrappedMessage,
+    SendLegacyMessage,
+    ReplyToLegacyMessage
+  } from 'applesauce-actions/actions';
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import {
     markConversationAsRead,
@@ -48,14 +53,22 @@
 
   const getActiveUser = useActiveUser();
 
-  // Legacy (NIP-04) conversations are surfaced read-only and marked insecure.
+  // Legacy (NIP-04) conversations are marked insecure and use the kind-4
+  // send/decrypt path (still writable, so NIP-04-only peers can be answered).
   // The `legacy:`-prefixed conversation id is the single signal the page passes
   // through, so we derive the mode from it here.
   let isLegacy = $derived(isLegacyConversationId(conversationId));
 
-  // Message state
+  // Message state.
+  // `rawMessages` holds the events as they come from the applesauce model:
+  // decrypted rumors for NIP-17, or raw kind-4 events for legacy (whose
+  // plaintext lives on a cached symbol, resolved in the `messages` derivation).
   /** @type {any[]} */
-  let messages = $state.raw([]);
+  let rawMessages = $state.raw([]);
+  // Legacy-only: ids whose NIP-04 decrypt threw, so the thread renders a
+  // placeholder instead of a blank bubble. Reset on conversation switch.
+  /** @type {Set<string>} */
+  let failedLegacyIds = $state.raw(new Set());
   let newMessage = $state('');
   let isSending = $state(false);
   let showEmojiPicker = $state(false);
@@ -84,23 +97,25 @@
     if (!user || !conversationId) return;
 
     lastMarkedTimestamp = 0; // Reset on conversation switch
+    failedLegacyIds = new Set();
 
     if (isLegacy) {
       // Legacy NIP-04 thread: subscribe to the kind-4 group for the single
-      // correspondent, NIP-04 decrypt each message (the service holds the
-      // signer), then expose plaintext to the renderer. Unlock writes back to
-      // the EventStore and re-emits, so locked messages resolve on a later tick.
+      // correspondent and store the raw events. The service NIP-04-decrypts
+      // each one (it holds the signer); unlock writes plaintext back to the
+      // EventStore and re-emits, so locked messages resolve on a later tick.
+      // Ids that fail to decrypt are tracked so the derivation can flag them.
       const correspondent = participants.find((p) => p !== user.pubkey) ?? participants[0];
       const sub = eventStore
         .model(LegacyMessagesGroup, user.pubkey, correspondent)
         .subscribe((msgs) => {
-          const list = msgs || [];
-          ensureLegacyMessagesUnlocked(list);
           // timeline is newest-first; reverse to oldest-first for display
-          const next = list
-            .map((ev) => normalizeLegacyMessage(ev, getEncryptedContent(ev) ?? ''))
-            .reverse();
-          messages = next;
+          const list = (msgs || []).toReversed();
+          rawMessages = list;
+          ensureLegacyMessagesUnlocked(list).then((failed) => {
+            if (failed.size === 0) return;
+            failedLegacyIds = new Set([...failedLegacyIds, ...failed]);
+          });
         });
       return () => sub.unsubscribe();
     }
@@ -110,18 +125,31 @@
       .subscribe((msgs) => {
         // WrappedMessagesGroup returns newest-first, we need oldest-first
         const next = (msgs || []).toReversed();
-        // Log the local `next.length` rather than `messages.length` —
-        // reading `messages` here would make it a tracked dep of the
-        // outer $effect, which would loop because the next line writes it.
         console.debug('[dm] ConversationThread emission', {
           conversationId,
           count: next.length
         });
-        messages = next;
+        rawMessages = next;
       });
 
     return () => sub.unsubscribe();
   });
+
+  // Resolve the rendered message list. For legacy threads the plaintext lives on
+  // a cached symbol set asynchronously by the unlock flow, so we read it here and
+  // mark messages that failed to decrypt; a successful unlock re-emits the model
+  // (reassigning `rawMessages`) and a failure reassigns `failedLegacyIds` — both
+  // retrigger this derivation. NIP-17 rumors are already plaintext, passed through.
+  /** @type {any[]} */
+  let messages = $derived(
+    isLegacy
+      ? rawMessages.map((ev) => {
+          const plaintext = getEncryptedContent(ev);
+          const decryptFailed = plaintext === undefined && failedLegacyIds.has(ev.id);
+          return normalizeLegacyMessage(ev, plaintext ?? '', decryptFailed);
+        })
+      : rawMessages
+  );
 
   // Prefetch recipients' kind 10050 DM relays into the EventStore as soon as the
   // conversation opens, so by send time SendWrappedMessage can route gift wraps
@@ -190,20 +218,36 @@
     isSending = true;
 
     try {
-      // Backfill the sender's kind 10050 DM relay list if they predate the
-      // signup-time default, so replies can reach them.
-      await ensureDmRelayList();
-      // Ensure recipient DM relays are in the EventStore so the action can route
-      // the gift wrap per NIP-17 (the prefetch effect may not have settled yet).
-      await ensureRecipientDmRelays(participants.filter((p) => p !== user.pubkey));
-      // actionRunnerOptimistic returns as soon as the gift wrap is signed and
-      // added to EventStore — WrappedMessagesGroup picks it up immediately via
-      // the synchronous rumor symbol, giving the user instant feedback without
-      // a parallel pending state. Relay publish runs in the background.
-      if (replyingTo) {
-        await actionRunnerOptimistic.run(ReplyToWrappedMessage, replyingTo, content);
+      if (isLegacy) {
+        // Legacy NIP-04 reply: send a kind-4 back to the correspondent so their
+        // (NIP-04-only) client can read it. ensureRecipientDmRelays loads the
+        // correspondent's kind 10002/10050 into the store so SendLegacyMessage
+        // can route to their inbox relays. The signed kind-4 is added to the
+        // EventStore by the action runner; the service decrypts our own outgoing
+        // message on the next tick so it renders.
+        const correspondent = participants.find((p) => p !== user.pubkey) ?? participants[0];
+        await ensureRecipientDmRelays([correspondent]);
+        if (replyingTo) {
+          await actionRunnerOptimistic.run(ReplyToLegacyMessage, replyingTo, content);
+        } else {
+          await actionRunnerOptimistic.run(SendLegacyMessage, correspondent, content);
+        }
       } else {
-        await actionRunnerOptimistic.run(SendWrappedMessage, participants, content);
+        // Backfill the sender's kind 10050 DM relay list if they predate the
+        // signup-time default, so replies can reach them.
+        await ensureDmRelayList();
+        // Ensure recipient DM relays are in the EventStore so the action can route
+        // the gift wrap per NIP-17 (the prefetch effect may not have settled yet).
+        await ensureRecipientDmRelays(participants.filter((p) => p !== user.pubkey));
+        // actionRunnerOptimistic returns as soon as the gift wrap is signed and
+        // added to EventStore — WrappedMessagesGroup picks it up immediately via
+        // the synchronous rumor symbol, giving the user instant feedback without
+        // a parallel pending state. Relay publish runs in the background.
+        if (replyingTo) {
+          await actionRunnerOptimistic.run(ReplyToWrappedMessage, replyingTo, content);
+        } else {
+          await actionRunnerOptimistic.run(SendWrappedMessage, participants, content);
+        }
       }
       replyingTo = null;
       usedCustomEmojis = {};
@@ -368,7 +412,11 @@
                   </div>
                 {/if}
               {/if}
-              <NostrContentRenderer event={message} />
+              {#if message.decryptFailed}
+                <span class="text-sm text-base-content/50 italic">{m.dm_decrypt_failed()}</span>
+              {:else}
+                <NostrContentRenderer event={message} />
+              {/if}
             </div>
           </div>
         {/if}
@@ -376,89 +424,77 @@
     {/if}
   </div>
 
-  {#if isLegacy}
-    <!-- Legacy NIP-04 threads are read-only: we cannot reply over insecure DMs. -->
-    <div
-      class="border-t border-base-300 px-4 py-3 text-center text-sm text-base-content/60"
-      role="note"
-    >
-      {m.dm_legacy_readonly_notice()}
-    </div>
-  {:else}
-    <!-- Spacer for fixed input on mobile -->
-    <div class="h-28 shrink-0 lg:hidden"></div>
+  <!-- Legacy (NIP-04) replies are allowed too: we send a kind-4 back so the
+       correspondent's client (e.g. Primal, which only reads NIP-04) can see it.
+       The insecure banner above keeps the metadata trade-off explicit. -->
+  <!-- Spacer for fixed input on mobile -->
+  <div class="h-28 shrink-0 lg:hidden"></div>
 
-    <!-- Input: fixed on mobile (above tab bar), relative on desktop -->
-    <div
-      class="fixed right-0 bottom-[4.5rem] left-0 z-40 bg-base-100 px-4 pt-2 pb-2 lg:relative lg:bottom-auto lg:z-auto lg:bg-transparent lg:pb-4"
-    >
-      {#if showEmojiPicker}
-        <div
-          class="absolute bottom-full left-4 z-10 mb-2 flex max-h-80 w-72 flex-col rounded-lg bg-base-200 shadow-xl"
-        >
-          <EmojiPicker
-            onSelect={insertEmoji}
-            {customEmojiSets}
-            onSelectCustom={insertCustomEmoji}
-          />
-        </div>
-      {/if}
-
-      {#if replyingTo}
-        <div class="flex items-center gap-2 rounded-t-2xl bg-base-200 px-4 py-2 text-sm shadow-md">
-          <ReplyIcon class="h-4 w-4 shrink-0 text-base-content/60" />
-          <span class="font-medium text-base-content/60"
-            >{getUserDisplayName(replyingTo.pubkey)}</span
-          >
-          <span class="min-w-0 flex-1 truncate text-base-content/80">{replyingTo.content}</span>
-          <button type="button" onclick={() => (replyingTo = null)} class="btn btn-ghost btn-xs">
-            ✕
-          </button>
-        </div>
-      {/if}
-
-      <form
-        onsubmit={sendMessage}
-        class="flex items-end gap-2 {replyingTo
-          ? 'rounded-t-none rounded-b-3xl'
-          : 'rounded-3xl'} bg-base-200 px-2 py-1 shadow-md"
+  <!-- Input: fixed on mobile (above tab bar), relative on desktop -->
+  <div
+    class="fixed right-0 bottom-[4.5rem] left-0 z-40 bg-base-100 px-4 pt-2 pb-2 lg:relative lg:bottom-auto lg:z-auto lg:bg-transparent lg:pb-4"
+  >
+    {#if showEmojiPicker}
+      <div
+        class="absolute bottom-full left-4 z-10 mb-2 flex max-h-80 w-72 flex-col rounded-lg bg-base-200 shadow-xl"
       >
-        <button
-          type="button"
-          onclick={() => (showEmojiPicker = !showEmojiPicker)}
-          class="btn btn-circle shrink-0 btn-ghost btn-sm"
-          title="Emoji"
-        >
-          <SmilePlusIcon class="h-5 w-5" />
-        </button>
+        <EmojiPicker onSelect={insertEmoji} {customEmojiSets} onSelectCustom={insertCustomEmoji} />
+      </div>
+    {/if}
 
-        <textarea
-          bind:this={messageInput}
-          bind:value={newMessage}
-          rows="1"
-          placeholder={m.dm_input_placeholder()}
-          class="max-h-40 min-h-[2rem] min-w-0 flex-1 resize-none border-none bg-transparent py-1.5 leading-snug focus:outline-none"
-          style="field-sizing: content;"
-          disabled={isSending}
-          onfocus={() => (showEmojiPicker = false)}
-          onkeydown={handleKeydown}
-          required
-        ></textarea>
-
-        <button
-          type="submit"
-          class="btn btn-circle shrink-0 btn-sm btn-primary"
-          disabled={!newMessage.trim() || isSending}
+    {#if replyingTo}
+      <div class="flex items-center gap-2 rounded-t-2xl bg-base-200 px-4 py-2 text-sm shadow-md">
+        <ReplyIcon class="h-4 w-4 shrink-0 text-base-content/60" />
+        <span class="font-medium text-base-content/60">{getUserDisplayName(replyingTo.pubkey)}</span
         >
-          {#if isSending}
-            <span class="loading loading-sm loading-spinner"></span>
-          {:else}
-            <SendIcon class="h-4 w-4" />
-          {/if}
+        <span class="min-w-0 flex-1 truncate text-base-content/80">{replyingTo.content}</span>
+        <button type="button" onclick={() => (replyingTo = null)} class="btn btn-ghost btn-xs">
+          ✕
         </button>
-      </form>
-    </div>
-  {/if}
+      </div>
+    {/if}
+
+    <form
+      onsubmit={sendMessage}
+      class="flex items-end gap-2 {replyingTo
+        ? 'rounded-t-none rounded-b-3xl'
+        : 'rounded-3xl'} bg-base-200 px-2 py-1 shadow-md"
+    >
+      <button
+        type="button"
+        onclick={() => (showEmojiPicker = !showEmojiPicker)}
+        class="btn btn-circle shrink-0 btn-ghost btn-sm"
+        title="Emoji"
+      >
+        <SmilePlusIcon class="h-5 w-5" />
+      </button>
+
+      <textarea
+        bind:this={messageInput}
+        bind:value={newMessage}
+        rows="1"
+        placeholder={m.dm_input_placeholder()}
+        class="max-h-40 min-h-[2rem] min-w-0 flex-1 resize-none border-none bg-transparent py-1.5 leading-snug focus:outline-none"
+        style="field-sizing: content;"
+        disabled={isSending}
+        onfocus={() => (showEmojiPicker = false)}
+        onkeydown={handleKeydown}
+        required
+      ></textarea>
+
+      <button
+        type="submit"
+        class="btn btn-circle shrink-0 btn-sm btn-primary"
+        disabled={!newMessage.trim() || isSending}
+      >
+        {#if isSending}
+          <span class="loading loading-sm loading-spinner"></span>
+        {:else}
+          <SendIcon class="h-4 w-4" />
+        {/if}
+      </button>
+    </form>
+  </div>
 </div>
 
 {#if showEmojiPicker}
