@@ -8,7 +8,8 @@ import {
   normalizeLegacyConversation,
   normalizeLegacyMessage,
   groupLegacyConversations,
-  mergeDmConversations
+  mergeDmConversations,
+  looksLikeNip04Ciphertext
 } from '$lib/helpers/dm.js';
 
 /** @param {{id: string, from: string, to: string, at: number}} o */
@@ -88,6 +89,43 @@ describe('normalizeLegacyMessage', () => {
     expect(out.content).toBe('');
     expect(out.decryptFailed).toBe(true);
   });
+
+  it('preserves the plain wire fields', () => {
+    const ev = {
+      id: 'e1',
+      kind: 4,
+      pubkey: 'pk',
+      created_at: 5,
+      tags: [['p', 'other']],
+      sig: 'sig',
+      content: 'CIPHER'
+    };
+    const out = normalizeLegacyMessage(ev, 'plain');
+    expect(out).toEqual({
+      id: 'e1',
+      kind: 4,
+      pubkey: 'pk',
+      created_at: 5,
+      tags: [['p', 'other']],
+      sig: 'sig',
+      content: 'plain',
+      decryptFailed: false
+    });
+  });
+
+  it('does not copy symbol-keyed caches from the source (stale parse/encrypted-content)', () => {
+    // Simulate applesauce caches living on the source event as symbol props.
+    const parseCache = Symbol.for('text-note-content');
+    const encCache = Symbol.for('encrypted-content');
+    const ev = { id: 'e1', kind: 4, pubkey: 'pk', created_at: 5, tags: [], content: 'CIPHER' };
+    // @ts-ignore - intentionally attaching symbol caches for the test
+    ev[parseCache] = { stale: 'tree' };
+    // @ts-ignore
+    ev[encCache] = 'CIPHER';
+    const out = normalizeLegacyMessage(ev, 'plain');
+    expect(Reflect.has(out, parseCache)).toBe(false);
+    expect(Reflect.has(out, encCache)).toBe(false);
+  });
 });
 
 describe('groupLegacyConversations', () => {
@@ -135,6 +173,29 @@ describe('groupLegacyConversations', () => {
   it('tolerates empty/undefined input', () => {
     expect(groupLegacyConversations([])).toEqual([]);
     expect(groupLegacyConversations(undefined)).toEqual([]);
+  });
+});
+
+describe('looksLikeNip04Ciphertext', () => {
+  it('detects NIP-04 ciphertext (base64?iv=base64)', () => {
+    expect(looksLikeNip04Ciphertext('CnPQKNF4HvawM35Z1aMh3Q==?iv=G4U8OrUiU4XqAx1ovpgOGQ==')).toBe(
+      true
+    );
+    expect(looksLikeNip04Ciphertext('abc123?iv=def456')).toBe(true);
+  });
+
+  it('treats decrypted plaintext as not-ciphertext', () => {
+    expect(looksLikeNip04Ciphertext('hello world')).toBe(false);
+    expect(looksLikeNip04Ciphertext('will contact you soon')).toBe(false);
+    // plaintext that merely mentions iv must not trip the guard
+    expect(looksLikeNip04Ciphertext('the iv= value is set')).toBe(false);
+  });
+
+  it('tolerates non-strings and empty input', () => {
+    expect(looksLikeNip04Ciphertext('')).toBe(false);
+    expect(looksLikeNip04Ciphertext(undefined)).toBe(false);
+    expect(looksLikeNip04Ciphertext(null)).toBe(false);
+    expect(looksLikeNip04Ciphertext(42)).toBe(false);
   });
 });
 

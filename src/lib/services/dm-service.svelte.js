@@ -308,6 +308,47 @@ export async function ensureLegacyMessagesUnlocked(messages) {
   return failedIds;
 }
 
+/**
+ * Backfill a legacy (NIP-04) thread's history from the correspondent's relays.
+ *
+ * The standing gift-wrap subscription requests kind-4 DMs only on the *user's*
+ * own DM/NIP-65 relays. A NIP-04-only peer (e.g. Primal) publishes their
+ * messages to *their* write relays, which the user may not subscribe to — so
+ * the peer's inbound kind-4 events never reach the EventStore and the thread
+ * shows only the user's own outbound messages. This one-shot fetch pulls both
+ * directions of the 1:1 kind-4 history from the correspondent's write relays
+ * (plus the user's DM relays and fallback) into the store, where the
+ * LegacyMessagesGroup model picks them up.
+ * @param {string} self
+ * @param {string} correspondent
+ * @returns {Promise<void>}
+ */
+export async function fetchLegacyConversationHistory(self, correspondent) {
+  if (!self || !correspondent) return;
+  const correspondentRelays = await getWriteRelays(correspondent).catch(() => []);
+  const relays = [
+    ...correspondentRelays,
+    ...dmRelays,
+    ...(runtimeConfig.fallbackRelays || [])
+  ].filter((r, i, arr) => arr.indexOf(r) === i);
+  if (relays.length === 0) return;
+  await new Promise((resolve) => {
+    const sub = pool
+      .request(relays, [
+        { kinds: [4], '#p': [self], authors: [correspondent] },
+        { kinds: [4], '#p': [correspondent], authors: [self] }
+      ])
+      .pipe(mapEventsToStore(eventStore))
+      .subscribe({ complete: () => resolve(undefined), error: () => resolve(undefined) });
+    // Safety net: pool.request completes on EOSE (3s synthetic timeout per
+    // relay), but bound the wait so a stuck relay can't hang the backfill.
+    setTimeout(() => {
+      sub.unsubscribe();
+      resolve(undefined);
+    }, 6000);
+  });
+}
+
 // --- Lifecycle ---
 
 /**

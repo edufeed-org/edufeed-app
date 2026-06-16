@@ -125,17 +125,52 @@ export function normalizeLegacyConversation(conv, decryptedContent) {
 }
 
 /**
+ * Detect whether a string is still NIP-04 ciphertext (`<base64>?iv=<base64>`).
+ *
+ * The encrypted-content cache is populated from two sources: a real NIP-04
+ * decrypt, and `persistEncryptedContent`'s localStorage restore — which does no
+ * validation. A prior buggy session (or a signer that returns its input on a
+ * failed decrypt) can therefore leave raw ciphertext sitting in the cache as if
+ * it were plaintext. We must never render that, so the display layer screens
+ * cached content through this guard and falls back to the decrypt-failed
+ * placeholder instead of showing ciphertext.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function looksLikeNip04Ciphertext(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9+/]+={0,2}\?iv=[A-Za-z0-9+/]+={0,2}$/.test(value);
+}
+
+/**
  * Normalize a legacy kind-4 event into a message object whose `content` is the
  * decrypted plaintext, so content renderers (which read `.content`) work.
  * `decryptFailed` distinguishes a message whose NIP-04 decrypt threw (render a
  * placeholder) from one still pending or genuinely empty (render nothing).
+ *
+ * IMPORTANT: this builds a *clean* plain object rather than spreading `{...event}`.
+ * A spread copies the source event's enumerable symbol-keyed caches — notably
+ * applesauce's parsed-content cache (`getParsedContent` stores the NAST tree by
+ * symbol) and the `encrypted-content` cache. `getOrComputeCachedValue` returns a
+ * cached parse tree whenever its symbol is *present*, ignoring `.content` — so a
+ * copied stale tree (e.g. parsed while content was still ciphertext) would render
+ * ciphertext no matter what plaintext we set. Copying only the plain wire fields
+ * forces every renderer to parse fresh from `content`.
  * @param {any} event
  * @param {string} decryptedContent
  * @param {boolean} [decryptFailed]
  * @returns {any}
  */
 export function normalizeLegacyMessage(event, decryptedContent, decryptFailed = false) {
-  return { ...event, content: decryptedContent, decryptFailed };
+  return {
+    id: event.id,
+    kind: event.kind,
+    pubkey: event.pubkey,
+    created_at: event.created_at,
+    tags: event.tags,
+    sig: event.sig,
+    content: decryptedContent,
+    decryptFailed
+  };
 }
 
 /**

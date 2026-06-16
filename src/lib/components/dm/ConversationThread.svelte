@@ -17,9 +17,14 @@
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import {
     markConversationAsRead,
-    ensureLegacyMessagesUnlocked
+    ensureLegacyMessagesUnlocked,
+    fetchLegacyConversationHistory
   } from '$lib/services/dm-service.svelte.js';
-  import { isLegacyConversationId, normalizeLegacyMessage } from '$lib/helpers/dm.js';
+  import {
+    isLegacyConversationId,
+    normalizeLegacyMessage,
+    looksLikeNip04Ciphertext
+  } from '$lib/helpers/dm.js';
   import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
   import { ensureRecipientDmRelays } from '$lib/services/dm-recipient-relays.js';
   import {
@@ -69,6 +74,11 @@
   // placeholder instead of a blank bubble. Reset on conversation switch.
   /** @type {Set<string>} */
   let failedLegacyIds = $state.raw(new Set());
+  // Legacy-only: bumped after an async unlock resolves. unlockLegacyMessage
+  // writes plaintext to a non-reactive symbol cache without re-emitting the
+  // model, so the `messages` derivation must be retriggered explicitly or the
+  // freshly-decrypted bubbles stay blank until the next open.
+  let legacyDecryptTick = $state(0);
   let newMessage = $state('');
   let isSending = $state(false);
   let showEmojiPicker = $state(false);
@@ -106,15 +116,31 @@
       // EventStore and re-emits, so locked messages resolve on a later tick.
       // Ids that fail to decrypt are tracked so the derivation can flag them.
       const correspondent = participants.find((p) => p !== user.pubkey) ?? participants[0];
+      // Backfill the peer's inbound kind-4 history from *their* relays. The
+      // standing gift-wrap subscription only covers the user's own relays, so
+      // a NIP-04-only peer's messages (published to their write relays) would
+      // otherwise never reach the store. Fire-and-forget; the model emits again
+      // as events land.
+      fetchLegacyConversationHistory(user.pubkey, correspondent);
       const sub = eventStore
         .model(LegacyMessagesGroup, user.pubkey, correspondent)
         .subscribe((msgs) => {
           // timeline is newest-first; reverse to oldest-first for display
           const list = (msgs || []).toReversed();
+          console.debug('[dm] legacy thread emission', {
+            correspondent: correspondent?.slice(0, 8),
+            count: list.length,
+            // 'in' = authored by the correspondent, 'out' = authored by us. If
+            // the partner's messages never appear, the kind-4 inbound events
+            // aren't in the store (relay coverage), not a render bug.
+            directions: list.map((m) => (m.pubkey === user.pubkey ? 'out' : 'in'))
+          });
           rawMessages = list;
           ensureLegacyMessagesUnlocked(list).then((failed) => {
-            if (failed.size === 0) return;
-            failedLegacyIds = new Set([...failedLegacyIds, ...failed]);
+            if (failed.size > 0) failedLegacyIds = new Set([...failedLegacyIds, ...failed]);
+            // Retrigger the derivation so newly-cached plaintext is read, even
+            // when nothing failed (the unlock mutates a non-reactive cache).
+            legacyDecryptTick++;
           });
         });
       return () => sub.unsubscribe();
@@ -136,20 +162,26 @@
   });
 
   // Resolve the rendered message list. For legacy threads the plaintext lives on
-  // a cached symbol set asynchronously by the unlock flow, so we read it here and
-  // mark messages that failed to decrypt; a successful unlock re-emits the model
-  // (reassigning `rawMessages`) and a failure reassigns `failedLegacyIds` — both
-  // retrigger this derivation. NIP-17 rumors are already plaintext, passed through.
+  // a cached symbol set asynchronously by the unlock flow; the unlock re-emits
+  // the model via notifyEventUpdate, and `legacyDecryptTick` is a belt-and-braces
+  // retrigger for the case where the cached plaintext lands without a fresh
+  // emission. `failedLegacyIds` covers the decrypt-failure case. Cached content
+  // that still looks like NIP-04 ciphertext (a bad/stale cache entry) is treated
+  // as a failed decrypt so we never render raw ciphertext. NIP-17 rumors are
+  // already plaintext, passed through.
   /** @type {any[]} */
-  let messages = $derived(
-    isLegacy
-      ? rawMessages.map((ev) => {
-          const plaintext = getEncryptedContent(ev);
-          const decryptFailed = plaintext === undefined && failedLegacyIds.has(ev.id);
-          return normalizeLegacyMessage(ev, plaintext ?? '', decryptFailed);
-        })
-      : rawMessages
-  );
+  let messages = $derived.by(() => {
+    if (!isLegacy) return rawMessages;
+    void legacyDecryptTick; // dependency: retrigger after an async unlock resolves
+    return rawMessages.map((ev) => {
+      const cached = getEncryptedContent(ev);
+      const isStaleCiphertext = looksLikeNip04Ciphertext(cached);
+      const plaintext = isStaleCiphertext ? undefined : cached;
+      const decryptFailed =
+        isStaleCiphertext || (plaintext === undefined && failedLegacyIds.has(ev.id));
+      return normalizeLegacyMessage(ev, plaintext ?? '', decryptFailed);
+    });
+  });
 
   // Prefetch recipients' kind 10050 DM relays into the EventStore as soon as the
   // conversation opens, so by send time SendWrappedMessage can route gift wraps
