@@ -8,7 +8,8 @@ import { render } from '@testing-library/svelte';
 // Stub the license-hook before importing the component so the module-level
 // $effect doesn't try to spin up a real applesauce loader during tests.
 vi.mock('$lib/stores/image-license.svelte.js', () => ({
-  useLicenseForHash: () => () => null
+  useLicenseForHash: () => () => null,
+  useLicenseStatus: () => () => ({ event: null, status: 'loading' })
 }));
 
 // Stub the SKOS cache — concept-side label resolution isn't under test here.

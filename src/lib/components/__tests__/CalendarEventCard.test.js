@@ -14,6 +14,12 @@ import CalendarEventCard from '../calendar/CalendarEventCard.svelte';
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({
   appSettings: { debugMode: false, gatedMode: false }
 }));
+// Stub the license-hook so the overlay renders nothing (loading) and no real
+// applesauce loader spins up; license behavior is covered by its own tests.
+vi.mock('$lib/stores/image-license.svelte.js', () => ({
+  useLicenseForHash: () => () => null,
+  useLicenseStatus: () => () => ({ event: null, status: 'loading' })
+}));
 vi.mock('$lib/paraglide/messages', () => ({
   event_card_all_day: () => 'All Day',
   event_card_date_event: () => 'Date Event',
