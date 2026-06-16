@@ -76,6 +76,9 @@
     {/if}
   </span>
 {:else if status === 'missing'}
+  <!-- Deliberately focusable so keyboard users can open the popover; role="note"
+       keeps it out of the tab order's interactive semantics. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <span
     class="{position} z-10 inline-flex"
     role="note"
