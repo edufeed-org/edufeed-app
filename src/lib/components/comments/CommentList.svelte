@@ -1,10 +1,7 @@
 <script>
-  // Use regular Map for internal tracking - SvelteMap inside subscription callbacks
-  // can cause effect_update_depth_exceeded errors. UI updates driven by flatComments ($state).
-  /* eslint-disable svelte/prefer-svelte-reactivity -- Map used intentionally to avoid infinite loops */
   import { createCommentLoaderForEvent, createCommentLoaderForUrl } from '$lib/loaders/comments.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { RepliesModel } from 'applesauce-common/models';
+  import { TimelineModel } from 'applesauce-core/models';
   import {
     buildCommentTree,
     countComments,
@@ -39,16 +36,14 @@
     extraRelays = undefined
   } = $props();
 
-  let flatComments = $state(/** @type {any[]} */ ([]));
+  // $state.raw: comment events carry Symbol-based seen-relays metadata; deep
+  // proxying breaks it (see CLAUDE.md). The array is always replaced wholesale.
+  let flatComments = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let commentTree = $derived(buildCommentTree(flatComments));
   let totalCount = $derived(countComments(commentTree));
-  // Map to track loaded comments and prevent duplicates
-  let loadedComments = new Map();
   /** @type {import('rxjs').Subscription | undefined} */
   let loaderSubscription;
-  // Map to track model subscriptions for each comment (commentId -> subscription)
-  let modelSubscriptions = new Map();
 
   // Stack-based focus history: each entry is a commentId
   /** @type {string[]} */
@@ -102,103 +97,41 @@
     }
   });
 
-  /**
-   * Subscribe to CommentsModel for a specific comment to watch for replies
-   * @param {any} comment - The comment event to watch
-   */
-  function subscribeToCommentReplies(comment) {
-    // Don't subscribe if we already have a subscription for this comment
-    if (modelSubscriptions.has(comment.id)) return;
-
-    const subscription = eventStore.model(RepliesModel, comment).subscribe((replies) => {
-      let hasChanges = false;
-
-      // Process each reply
-      for (const reply of replies || []) {
-        if (!loadedComments.has(reply.id)) {
-          loadedComments.set(reply.id, reply);
-          hasChanges = true;
-
-          // Recursively subscribe to this reply's replies
-          subscribeToCommentReplies(reply);
-        }
-      }
-
-      // Check for deletions: if a reply we had is no longer in the list
-      const replyIds = new Set((replies || []).map((r) => r.id));
-      for (const [id, existingReply] of loadedComments) {
-        // Check if this comment was a reply to the current comment
-        // and is now missing from the replies list
-        if (
-          existingReply.tags?.some((/** @type {any[]} */ t) => t[0] === 'e' && t[1] === comment.id)
-        ) {
-          if (!replyIds.has(id)) {
-            loadedComments.delete(id);
-            hasChanges = true;
-          }
-        }
-      }
-
-      if (hasChanges) {
-        flatComments = Array.from(loadedComments.values());
-      }
-    });
-
-    modelSubscriptions.set(comment.id, subscription);
-  }
-
-  /** @type {import('rxjs').Subscription | undefined} */
-  let urlCacheSubscription;
-
-  // Load comments using loader + recursive model subscriptions.
-  // Model subscription starts immediately (shows cached comments from EventStore).
-  // Relay loader is deferred 300ms to avoid blocking content render on navigation.
+  // A single root-scope TimelineModel is the source of truth for the whole
+  // thread. NIP-22 replies at any depth carry the root scope (#I for URLs, #E
+  // for events); NIP-10 kind-1 replies carry the root id in an #e tag. One
+  // filter set therefore captures the entire tree, and TimelineModel handles
+  // dedup, ordering, and NIP-09 deletion filtering for us.
+  //
+  // The model subscription starts immediately (renders cached events from
+  // EventStore). The relay loader is deferred 300ms to avoid blocking content
+  // render on navigation; it writes into EventStore, which the model observes.
   $effect(() => {
     if (!rootEvent && !rootUrl) return;
 
     isLoading = true;
 
-    // Reset state
-    loadedComments.clear();
-    modelSubscriptions.forEach((sub) => sub.unsubscribe());
-    modelSubscriptions.clear();
-    urlCacheSubscription?.unsubscribe();
+    /** @type {import('rxjs').Subscription | undefined} */
+    let timelineSubscription;
 
     if (rootUrl) {
-      // URL-rooted: a single #I filter retrieves the entire conversation —
-      // NIP-22 replies inherit the root scope, so every reply down the tree
-      // also carries ["I", url]. No per-comment recursion needed.
-      urlCacheSubscription = eventStore
-        .timeline({ kinds: [1111], '#I': [rootUrl] })
+      timelineSubscription = eventStore
+        .model(TimelineModel, { kinds: [1111], '#I': [rootUrl] })
         .subscribe((/** @type {any[]} */ events) => {
-          let hasChanges = false;
-          const incomingIds = new Set();
-          for (const event of events || []) {
-            incomingIds.add(event.id);
-            if (!loadedComments.has(event.id)) {
-              loadedComments.set(event.id, event);
-              hasChanges = true;
-            }
-          }
-          // Detect deletions
-          for (const id of loadedComments.keys()) {
-            if (!incomingIds.has(id)) {
-              loadedComments.delete(id);
-              hasChanges = true;
-            }
-          }
-          if (hasChanges) {
-            flatComments = Array.from(loadedComments.values());
-          }
+          flatComments = events || [];
+          if (flatComments.length > 0) isLoading = false;
         });
     } else if (rootEvent) {
-      // Event-rooted: subscribe to the root event's direct comments (may populate from cache)
-      subscribeToCommentReplies(rootEvent);
-    }
-
-    // If cache already had comments, show them immediately (no spinner)
-    if (loadedComments.size > 0) {
-      isLoading = false;
+      /** @type {any[]} */
+      const filters = [{ kinds: [1111], '#E': [rootEvent.id] }];
+      // Kind-1 roots also accumulate NIP-10 kind-1 replies via lowercase #e.
+      if (rootEvent.kind === 1) filters.push({ kinds: [1], '#e': [rootEvent.id] });
+      timelineSubscription = eventStore
+        .model(TimelineModel, filters)
+        .subscribe((/** @type {any[]} */ events) => {
+          flatComments = events || [];
+          if (flatComments.length > 0) isLoading = false;
+        });
     }
 
     // Defer relay fetching to avoid blocking content render
@@ -207,29 +140,11 @@
         ? createCommentLoaderForUrl(rootUrl, extraRelays)
         : createCommentLoaderForEvent(rootEvent, extraRelays);
       loaderSubscription = commentLoader().subscribe({
-        next: (/** @type {any} */ comment) => {
-          // Add to our loaded comments map
-          if (!loadedComments.has(comment.id)) {
-            loadedComments.set(comment.id, comment);
-            flatComments = Array.from(loadedComments.values());
-
-            // For event-rooted threads, recurse via RepliesModel; for URL-rooted
-            // the #I filter already covers the whole tree.
-            if (!rootUrl) {
-              subscribeToCommentReplies(comment);
-            }
-          }
-          // Set loading to false once we have any data to display
-          if (isLoading) {
-            isLoading = false;
-          }
-        },
         error: (/** @type {any} */ err) => {
           console.error('CommentList: Error in comment loader:', err);
           isLoading = false;
         },
         complete: () => {
-          // Also set loading to false on complete (handles case of no comments)
           isLoading = false;
         }
       });
@@ -245,32 +160,17 @@
     return () => {
       clearTimeout(loaderTimer);
       clearTimeout(loadingTimeout);
+      timelineSubscription?.unsubscribe();
       loaderSubscription?.unsubscribe();
-      urlCacheSubscription?.unsubscribe();
-      // Unsubscribe from all comment model subscriptions
-      modelSubscriptions.forEach((sub) => sub.unsubscribe());
-      modelSubscriptions.clear();
     };
   });
 
   /**
-   * Handle new comment posted
-   * Immediately add to UI for instant feedback
+   * Handle new comment posted. CommentInput already calls eventStore.add(),
+   * which the TimelineModel subscription observes, so the new comment appears
+   * automatically. Nothing to do here.
    */
-  function handleCommentPosted(/** @type {any} */ event) {
-    // Add to map to deduplicate (in case relay echoes it back)
-    if (!loadedComments.has(event.id)) {
-      loadedComments.set(event.id, event);
-      // Update flatComments array to trigger reactive update
-      flatComments = Array.from(loadedComments.values());
-
-      // Subscribe to this comment's replies — only for event-rooted threads.
-      // URL-rooted uses a single #I subscription that covers the whole tree.
-      if (!rootUrl) {
-        subscribeToCommentReplies(event);
-      }
-    }
-  }
+  function handleCommentPosted() {}
 
   /**
    * Push a new focus level onto the stack
