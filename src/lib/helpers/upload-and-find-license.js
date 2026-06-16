@@ -11,7 +11,7 @@ import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
 
 /**
  * @typedef {Object} UploadAndFindOptions
- * @property {{ pubkey: string, signEvent: (e: any) => Promise<any> }} signer
+ * @property {{ getPublicKey: () => Promise<string>, signEvent: (e: any) => Promise<any> }} signer
  */
 
 /**
@@ -32,7 +32,11 @@ export async function uploadAndFindLicense(file, opts) {
   const { signer } = opts;
 
   const signerFn = async (/** @type {any} */ event) => signer.signEvent(event);
-  const serverUrl = getActiveBlossomServer(signer.pubkey, eventStore);
+  // Resolve the pubkey via getPublicKey() — applesauce signers (PrivateKeySigner,
+  // PasswordSigner) don't expose a synchronous `.pubkey`, so reading it directly
+  // would skip the user's kind 10063 blossom server and fall back to the default.
+  const userPubkey = await signer.getPublicKey();
+  const serverUrl = getActiveBlossomServer(userPubkey, eventStore);
   const client = new BlossomClient(serverUrl, signerFn);
   const blob = await client.uploadBlob(file);
 

@@ -143,8 +143,18 @@
       return;
     }
 
-    // Verify the signer can actually sign for the target entity.
-    if (signer.pubkey !== pubkey) {
+    // Verify the signer can actually sign for the target entity. Resolve the
+    // pubkey via getPublicKey() — applesauce signers (PrivateKeySigner,
+    // PasswordSigner, and ExtensionSigner before its first call) don't expose
+    // a synchronous `.pubkey`, so comparing `signer.pubkey` wrongly blocks edits.
+    let signerPubkey;
+    try {
+      signerPubkey = await signer.getPublicKey();
+    } catch {
+      submitError = m.profile_edit_modal_error_ownership();
+      return;
+    }
+    if (signerPubkey !== pubkey) {
       submitError = m.profile_edit_modal_error_ownership();
       return;
     }

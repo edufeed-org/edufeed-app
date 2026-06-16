@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
     sha256: 'a'.repeat(64),
     size: 1234,
     type: 'image/jpeg'
-  })
+  }),
+  getActiveBlossomServer: vi.fn(() => 'https://blossom.example')
 }));
 
 vi.mock('blossom-client-sdk', () => ({
@@ -31,7 +32,7 @@ vi.mock('blossom-client-sdk', () => ({
 }));
 
 vi.mock('$lib/services/blossom-settings-service.js', () => ({
-  getActiveBlossomServer: () => 'https://blossom.example'
+  getActiveBlossomServer: mocks.getActiveBlossomServer
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -53,8 +54,10 @@ vi.mock('$lib/helpers/image-license.js', async () => {
 
 const { uploadAndFindLicense } = await import('../upload-and-find-license.js');
 
+const PUB = 'a'.repeat(64);
+
 const signer = {
-  pubkey: 'a1b2c3d4e5f6',
+  getPublicKey: vi.fn(async () => PUB),
   signEvent: vi.fn(async (/** @type {any} */ template) => ({
     ...template,
     id: 'signed-id',
@@ -64,6 +67,9 @@ const signer = {
 
 beforeEach(() => {
   mocks.existingLicense = null;
+  mocks.getActiveBlossomServer.mockClear();
+  mocks.getActiveBlossomServer.mockReturnValue('https://blossom.example');
+  signer.getPublicKey.mockClear();
   signer.signEvent.mockClear();
 });
 
@@ -84,5 +90,14 @@ describe('uploadAndFindLicense', () => {
   it('never signs or publishes', async () => {
     await uploadAndFindLicense(/** @type {any} */ (new Blob(['x'])), { signer });
     expect(signer.signEvent).not.toHaveBeenCalled();
+  });
+
+  it('resolves the pubkey via getPublicKey() for blossom server selection', async () => {
+    // Signers like applesauce's PrivateKeySigner have no synchronous `.pubkey`,
+    // only async getPublicKey(). The helper must resolve it so the user's
+    // preferred blossom server (kind 10063) is honored instead of the default.
+    await uploadAndFindLicense(/** @type {any} */ (new Blob(['x'])), { signer });
+    expect(signer.getPublicKey).toHaveBeenCalled();
+    expect(mocks.getActiveBlossomServer).toHaveBeenCalledWith(PUB, expect.anything());
   });
 });
