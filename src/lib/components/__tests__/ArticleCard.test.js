@@ -46,9 +46,10 @@ vi.mock('applesauce-common/helpers', () => ({
   getSha256FromURL: () => null
 }));
 vi.mock('$lib/stores/image-license.svelte.js', () => ({
-  useLicenseForHash: () => () => null
+  useLicenseForHash: () => () => null,
+  useLicenseStatus: () => () => ({ event: null, status: 'loading' })
 }));
-vi.mock('../shared/LicenseBadge.svelte', () => ({ default: () => ({}) }));
+vi.mock('../shared/ImageLicenseOverlay.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: () => 'Jan 15'
 }));

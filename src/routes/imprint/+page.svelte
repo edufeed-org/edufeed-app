@@ -117,6 +117,20 @@
               {m.imprint_disclaimer_text()}
             </p>
           </div>
+
+          <!-- Image license notice -->
+          <div class="mt-6 border-t border-base-300 pt-6">
+            <h3 class="mb-2 font-semibold">{m.imprint_image_license_title()}</h3>
+            <p class="text-sm opacity-70">
+              {m.imprint_image_license_text()}
+            </p>
+            <p class="mt-2 text-sm opacity-70">
+              {m.imprint_image_license_takedown()}
+              <a href="mailto:{imprint.contact.email}" class="link link-primary">
+                {imprint.contact.email}
+              </a>
+            </p>
+          </div>
         {:else}
           <p class="text-lg">{m.imprint_not_available()}</p>
         {/if}

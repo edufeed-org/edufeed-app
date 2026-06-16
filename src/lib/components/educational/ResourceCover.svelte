@@ -14,9 +14,9 @@
 -->
 <script>
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
-  import LicenseBadge from '$lib/components/shared/LicenseBadge.svelte';
+  import ImageLicenseOverlay from '$lib/components/shared/ImageLicenseOverlay.svelte';
   import TypoCover from './TypoCover.svelte';
-  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
@@ -53,8 +53,9 @@
   const imageHash = $derived(
     resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
   );
-  const getImageLicense = useLicenseForHash(() => imageHash);
-  const licenseEvent = $derived(getImageLicense());
+  const getLicenseStatus = useLicenseStatus(() => imageHash);
+  const licenseStatus = $derived(getLicenseStatus());
+  const cautionVariant = $derived(size === 'thumbnail' ? 'dot' : 'pill');
 
   // Locale-aware label derivation for the typo branch. Same paths used by
   // AMBResourceCard for consistency.
@@ -125,9 +126,12 @@
       size={size === 'thumbnail' ? 'thumbnail' : 'card'}
       class="h-full w-full object-cover"
     />
-    {#if licenseEvent}
-      <LicenseBadge {licenseEvent} class="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur" />
-    {/if}
+    <ImageLicenseOverlay
+      licenseEvent={licenseStatus.event}
+      status={licenseStatus.status}
+      variant={cautionVariant}
+      position="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+    />
   </div>
 {:else}
   <div

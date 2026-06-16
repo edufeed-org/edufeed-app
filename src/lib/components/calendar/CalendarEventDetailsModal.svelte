@@ -33,6 +33,9 @@
   import EventManagementActions from './EventManagementActions.svelte';
   import EventContextMenu from '../shared/EventContextMenu.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+  import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
+  import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
+  import { getSha256FromURL } from 'applesauce-common/helpers';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
@@ -91,6 +94,17 @@
       ? /** @type {any} */ (modal.modalProps).event
       : null
   );
+
+  const imageHash = $derived.by(() => {
+    if (!event?.image) return null;
+    try {
+      return getSha256FromURL(event.image) ?? null;
+    } catch {
+      return null;
+    }
+  });
+  const getImageStatus = useLicenseStatus(() => imageHash);
+  const imageStatus = $derived(getImageStatus());
 
   // Format event data for display
   let startDate = $derived(event ? new Date(event.start * 1000) : null);
@@ -295,13 +309,19 @@
 
       <!-- Event Image -->
       {#if event.image}
-        <div class="mb-6">
+        <div class="relative mb-6">
           <ImageWithFallback
             src={event.image}
             alt={event.title}
             fallbackType="event"
             size="banner"
             class="h-48 w-full rounded-lg object-cover"
+          />
+          <ImageLicenseOverlay
+            licenseEvent={imageStatus.event}
+            status={imageStatus.status}
+            variant="pill"
+            position="absolute right-2 bottom-2 bg-base-100/80 backdrop-blur"
           />
         </div>
       {/if}

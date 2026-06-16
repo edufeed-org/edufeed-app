@@ -4,53 +4,89 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
 /**
- * Reactive lookup of the best kind 1063 license event for a SHA-256 hash.
+ * Reactive license-resolution status for an image, keyed by SHA-256 hash.
  *
- * Fires a `createTimelineLoader` to pull matching events into EventStore,
- * then subscribes to `eventStore.timeline(...)` for reactive updates. Returns
- * a getter that yields the newest event by `created_at`, ties broken by lex
- * order of `id`.
+ * Returns a getter yielding `{ event, status }`:
+ *   - status 'loading' — still resolving from relays (render nothing yet)
+ *   - status 'found'   — a kind-1063 license event exists (newest-wins)
+ *   - status 'missing' — no hash OR loader settled with no event
  *
- * Tolerates `getHash()` returning `null` or an empty string — in that case
- * the getter returns `null` and no loader is fired.
+ * No hash → 'missing' immediately (external/no-hash images can't be looked up).
+ * With a hash, we stay 'loading' until the loader completes OR a 2.5s timeout,
+ * whichever comes first. A store hit always wins immediately.
  *
  * @param {() => string | null | undefined} getHash
- * @returns {() => import('nostr-tools').NostrEvent | null}
+ * @returns {() => { event: import('nostr-tools').NostrEvent | null, status: 'loading' | 'found' | 'missing' }}
  */
-export function useLicenseForHash(getHash) {
-  let current = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+export function useLicenseStatus(getHash) {
+  let state = $state(
+    /** @type {{ event: import('nostr-tools').NostrEvent | null, status: 'loading' | 'found' | 'missing' }} */ ({
+      event: null,
+      status: 'loading'
+    })
+  );
 
   $effect(() => {
     const hash = getHash();
     if (!hash) {
-      current = null;
+      state = { event: null, status: 'missing' };
       return;
     }
+
+    state = { event: null, status: 'loading' };
+    let settled = false;
+    let found = false;
+    /** @type {import('nostr-tools').NostrEvent | null} */
+    let latest = null;
+
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      state = latest ? { event: latest, status: 'found' } : { event: null, status: 'missing' };
+    };
 
     const filter = { kinds: [1063], '#x': [hash], limit: 50 };
     const loader = createTimelineLoader(timedPool, getAllLookupRelays(), filter, {
       eventStore,
       limit: 50
     });
-    const loaderSub = loader().subscribe({ error: () => {} });
+    const loaderSub = loader().subscribe({ complete: settle, error: settle });
+
     const storeSub = eventStore.timeline(filter).subscribe((events) => {
-      if (!events || events.length === 0) {
-        current = null;
-        return;
+      if (events && events.length > 0) {
+        // Newest first by created_at; tie-break by id ascending for determinism.
+        const sorted = [...events].sort((a, b) => {
+          if (b.created_at !== a.created_at) return b.created_at - a.created_at;
+          return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+        });
+        latest = sorted[0];
+        found = true; // sticky: a found license never regresses to 'missing'
+        settled = true; // a hit wins immediately, regardless of loader timing
+        state = { event: latest, status: 'found' };
+      } else if (!found) {
+        latest = null;
+        if (settled) state = { event: null, status: 'missing' };
       }
-      // Newest first by created_at; tie-break by id ascending for determinism.
-      const sorted = [...events].sort((a, b) => {
-        if (b.created_at !== a.created_at) return b.created_at - a.created_at;
-        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-      });
-      current = sorted[0];
     });
 
+    const timeoutId = setTimeout(settle, 2500);
+
     return () => {
+      clearTimeout(timeoutId);
       loaderSub.unsubscribe();
       storeSub.unsubscribe();
     };
   });
 
-  return () => current;
+  return () => state;
+}
+
+/**
+ * Back-compat wrapper: yields just the license event (or null), ignoring status.
+ * @param {() => string | null | undefined} getHash
+ * @returns {() => import('nostr-tools').NostrEvent | null}
+ */
+export function useLicenseForHash(getHash) {
+  const getStatus = useLicenseStatus(getHash);
+  return () => getStatus().event;
 }

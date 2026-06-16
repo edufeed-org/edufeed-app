@@ -20,6 +20,12 @@ const { BookmarkButtonStub } = vi.hoisted(() => ({
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({
   appSettings: { debugMode: false, gatedMode: false }
 }));
+// Stub the license-hook (used transitively by ResourceCover) so the overlay
+// renders nothing (loading) and no real applesauce loader spins up.
+vi.mock('$lib/stores/image-license.svelte.js', () => ({
+  useLicenseForHash: () => () => null,
+  useLicenseStatus: () => () => ({ event: null, status: 'loading' })
+}));
 vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_free: () => 'Free',
   amb_resource_view_content: () => 'View Content',

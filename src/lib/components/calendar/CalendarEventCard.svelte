@@ -18,6 +18,9 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+  import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
+  import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
+  import { getSha256FromURL } from 'applesauce-common/helpers';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -40,6 +43,17 @@
   } = $props();
 
   const isList = $derived(variant === 'list');
+
+  const imageHash = $derived.by(() => {
+    if (!event.image) return null;
+    try {
+      return getSha256FromURL(event.image) ?? null;
+    } catch {
+      return null;
+    }
+  });
+  const getImageStatus = useLicenseStatus(() => imageHash);
+  const imageStatus = $derived(getImageStatus());
 
   // Author display name
   const authorName = $derived(
@@ -139,13 +153,21 @@
       class="list-thumbnail h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
     >
       {#if event.image}
-        <ImageWithFallback
-          src={event.image}
-          alt={event.title}
-          fallbackType="event"
-          size="thumbnail"
-          class="h-full w-full object-cover"
-        />
+        <div class="relative h-full w-full">
+          <ImageWithFallback
+            src={event.image}
+            alt={event.title}
+            fallbackType="event"
+            size="thumbnail"
+            class="h-full w-full object-cover"
+          />
+          <ImageLicenseOverlay
+            licenseEvent={imageStatus.event}
+            status={imageStatus.status}
+            variant="dot"
+            position="absolute right-0.5 bottom-0.5 bg-base-100/80 backdrop-blur"
+          />
+        </div>
       {:else}
         <div class="flex h-full w-full items-center justify-center text-2xl text-base-content/30">
           📅
@@ -215,13 +237,19 @@
       <!-- Event Image (full mode only) -->
       {#if event.image && !compact}
         <div class="w-full lg:w-auto lg:flex-shrink-0">
-          <div class="aspect-[5/2] w-full lg:aspect-square lg:w-20">
+          <div class="relative aspect-[5/2] w-full lg:aspect-square lg:w-20">
             <ImageWithFallback
               src={event.image}
               alt={event.title}
               fallbackType="event"
               size="card"
               class="h-full w-full max-w-full rounded-lg object-cover"
+            />
+            <ImageLicenseOverlay
+              licenseEvent={imageStatus.event}
+              status={imageStatus.status}
+              variant="dot"
+              position="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
             />
           </div>
         </div>
