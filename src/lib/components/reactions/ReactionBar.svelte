@@ -13,8 +13,8 @@
   import ReactionButton from './ReactionButton.svelte';
   import AddReactionButton from './AddReactionButton.svelte';
 
-  /** @type {{ event: any, relays?: string[], lazy?: boolean }} */
-  let { event, relays, lazy = false } = $props();
+  /** @type {{ event: any, relays?: string[], lazy?: boolean, addButtonOnHover?: boolean }} */
+  let { event, relays, lazy = false, addButtonOnHover = false } = $props();
 
   /** @type {import('rxjs').Subscription | undefined} */
   let loaderSubscription;
@@ -24,6 +24,8 @@
   let removeSubscription;
   /** @type {any[]} */
   let reactions = $state([]);
+  // Keeps the hover-gated add button revealed while its picker is open.
+  let pickerOpen = $state(false);
   // Map to track loaded reactions and prevent duplicates
   // Use regular Map - SvelteMap in subscription callbacks can cause effect_update_depth_exceeded
   let loadedReactions = new Map();
@@ -112,7 +114,7 @@
 {#if event?.id}
   <div
     bind:this={containerEl}
-    class="flex min-h-[32px] flex-wrap items-center gap-2"
+    class="flex flex-wrap items-center gap-2 {addButtonOnHover ? '' : 'min-h-[32px]'}"
     data-testid="reaction-bar"
   >
     <!-- Display reaction buttons -->
@@ -129,6 +131,17 @@
     {/each}
 
     <!-- Add reaction button -->
-    <AddReactionButton {event} />
+    {#if addButtonOnHover}
+      <span
+        class={pickerOpen
+          ? 'inline-flex'
+          : 'hidden group-focus-within:inline-flex group-hover:inline-flex'}
+        data-testid="add-reaction-wrapper"
+      >
+        <AddReactionButton {event} onOpenChange={(open) => (pickerOpen = open)} />
+      </span>
+    {:else}
+      <AddReactionButton {event} />
+    {/if}
   </div>
 {/if}

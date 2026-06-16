@@ -11,12 +11,17 @@
   /**
    * @type {{
    *   event?: any,
-   *   onPick?: (emoji: string | { shortcode: string, url: string }) => void
+   *   onPick?: (emoji: string | { shortcode: string, url: string }) => void,
+   *   onOpenChange?: (open: boolean) => void
    * }}
    */
-  let { event, onPick } = $props();
+  let { event, onPick, onOpenChange } = $props();
 
   let showPicker = $state(false);
+
+  // Surface open state so a hover-gated parent can stay revealed while the
+  // picker (which renders as a child of this button) is open.
+  $effect(() => onOpenChange?.(showPicker));
 
   // Track active user with direct subscription for proper reactivity
   let activeUser = $state(manager.active);

@@ -16,6 +16,7 @@
   import { TimelineModel } from 'applesauce-core/models';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
+  import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -343,6 +344,10 @@
               {/if}
               <NostrContentRenderer event={message} />
               <LinkPreviewList event={message} />
+            </div>
+
+            <div class="chat-footer mt-0.5">
+              <ReactionBar event={message} relays={chatRelays} lazy addButtonOnHover />
             </div>
           </div>
         {/if}

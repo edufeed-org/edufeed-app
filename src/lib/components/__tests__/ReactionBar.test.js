@@ -280,4 +280,39 @@ describe('ReactionBar', () => {
       expect(reactionsLoader).toHaveBeenCalledWith(mockEvent, ['wss://relay.test.com']);
     });
   });
+
+  describe('addButtonOnHover prop', () => {
+    it('wraps the add button in a hover-reveal element when addButtonOnHover=true', () => {
+      const { container } = render(ReactionBar, {
+        props: { event: mockEvent, relays: [], addButtonOnHover: true }
+      });
+
+      const wrapper = container.querySelector('[data-testid="add-reaction-wrapper"]');
+      expect(wrapper).toBeTruthy();
+      // Collapsed (display:none) until the parent .group is hovered or focused,
+      // so empty footers reserve no vertical space in dense chat lists.
+      expect(wrapper?.className).toContain('hidden');
+      expect(wrapper?.className).toContain('group-hover:inline-flex');
+      expect(wrapper?.className).toContain('group-focus-within:inline-flex');
+    });
+
+    it('does not reserve empty vertical space (no min-height) when addButtonOnHover=true', () => {
+      const { container } = render(ReactionBar, {
+        props: { event: mockEvent, relays: [], addButtonOnHover: true }
+      });
+
+      const reactionBar = container.querySelector('[data-testid="reaction-bar"]');
+      expect(reactionBar?.className).not.toContain('min-h-[32px]');
+    });
+
+    it('keeps the persistent min-height and no wrapper by default', () => {
+      const { container } = render(ReactionBar, {
+        props: { event: mockEvent, relays: [] }
+      });
+
+      const reactionBar = container.querySelector('[data-testid="reaction-bar"]');
+      expect(reactionBar?.className).toContain('min-h-[32px]');
+      expect(container.querySelector('[data-testid="add-reaction-wrapper"]')).toBeFalsy();
+    });
+  });
 });

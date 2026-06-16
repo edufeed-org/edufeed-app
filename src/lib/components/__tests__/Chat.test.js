@@ -115,6 +115,7 @@ vi.mock('$lib/helpers/message-utils.js', () => ({
 // Stub child components — we don't need their behavior to test isLoading.
 function Stub() {}
 vi.mock('$lib/components/shared/NostrContentRenderer.svelte', () => ({ default: Stub }));
+vi.mock('$lib/components/reactions/ReactionBar.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/EmojiPicker.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/icons', () => ({

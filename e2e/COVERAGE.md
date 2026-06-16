@@ -34,6 +34,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                |
 | `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                   |
 | `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
+| `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                          |
 | `signup-normie-path.test.js`         | 1     | No   | Normie 2-step signup happy path: primary CTA → name → skip → backup banner                                                        |
 | `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                                                                                         |
 | `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
@@ -971,6 +972,22 @@ unchanged. These tests cover the routing shape only.
 | no critical JavaScript errors during chat interaction | Error capture throughout flow |
 
 **Components exercised:** Chat, ChatInput, ChatBubble
+
+---
+
+### chat-reactions.test.js (2 tests)
+
+**Route:** `/c/[pubkey]` (community Chat tab)
+**Auth required:** Yes
+
+#### Authenticated (2 tests)
+
+| Test                                                | What it verifies                                                                  |
+| --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| add-reaction button is hidden until message hovered | `addButtonOnHover`: "+" button is display:none until the message group is hovered |
+| authenticated user can react to a chat message      | Hover → add → picker opens → pick emoji → reaction button appears on the message  |
+
+**Components exercised:** Chat, ReactionBar, AddReactionButton, ReactionPicker, EmojiPicker, ReactionButton
 
 ---
 
