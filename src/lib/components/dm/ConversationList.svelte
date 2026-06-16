@@ -126,10 +126,22 @@
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center justify-between">
-              <span
-                class="truncate font-medium {unread ? 'text-base-content' : 'text-base-content/80'}"
-              >
-                {getConversationName(conv.participants)}
+              <span class="flex min-w-0 items-center gap-1.5">
+                <span
+                  class="truncate font-medium {unread
+                    ? 'text-base-content'
+                    : 'text-base-content/80'}"
+                >
+                  {getConversationName(conv.participants)}
+                </span>
+                {#if conv.legacy}
+                  <span
+                    class="badge shrink-0 badge-xs badge-warning"
+                    title={m.dm_legacy_insecure_banner()}
+                  >
+                    {m.dm_legacy_badge()}
+                  </span>
+                {/if}
               </span>
               <span class="shrink-0 text-xs text-base-content/50">
                 {formatMessageTimestamp(conv.lastMessage.created_at)}
