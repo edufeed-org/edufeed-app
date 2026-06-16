@@ -4,7 +4,6 @@
  */
 import { SvelteMap } from 'svelte/reactivity';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
 import {
   validateEventForm,
@@ -346,11 +345,9 @@ export function createCalendarActions(_communityPubkey) {
         });
 
         const rsvpEvent = await currentAccount.signEvent(eventTemplate);
-        // Include event author in tagged pubkeys for outbox routing
-        await publishEvent(rsvpEvent, [eventPubkey]);
-
-        // Add to eventStore for immediate UI update
-        eventStore.add(rsvpEvent);
+        // Optimistic: adds to EventStore immediately, publishes in background.
+        // Include event author in tagged pubkeys for outbox routing.
+        publishEventOptimistic(rsvpEvent, [eventPubkey]);
         console.log('✅ RSVP created successfully:', rsvpEvent.id, 'Status:', status);
 
         return rsvpEvent;
