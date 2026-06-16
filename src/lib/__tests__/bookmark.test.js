@@ -16,38 +16,50 @@ vi.mock('$lib/helpers/event-factory.js', () => ({
   }))
 }));
 
-import { nip19 } from 'nostr-tools';
 import {
   detectInputType,
   buildBookmarkTags,
   stripSchemeForDTag,
   updateBookmarkContent,
-  getBookmarkEventRefRedirect,
+  parseBookmarkUrlParam,
   BOOKMARK_KIND
 } from '../helpers/bookmark.js';
 
-describe('getBookmarkEventRefRedirect', () => {
+describe('parseBookmarkUrlParam', () => {
   const hexPub = 'a'.repeat(64);
   const coord = `30023:${hexPub}:my-article`;
 
-  it('redirects a bare Nostr coordinate to the referenced naddr', () => {
-    const path = getBookmarkEventRefRedirect(encodeURIComponent(coord));
-    expect(path).not.toBeNull();
-    const decoded = nip19.decode(/** @type {string} */ (path).slice(1));
-    expect(decoded.type).toBe('naddr');
-    expect(decoded.data).toMatchObject({ kind: 30023, pubkey: hexPub, identifier: 'my-article' });
+  it('parses a bare Nostr coordinate into a pointer + a-tag value', () => {
+    const result = parseBookmarkUrlParam(encodeURIComponent(coord));
+    expect(result).not.toBeNull();
+    expect(result?.pointer).toMatchObject({
+      kind: 30023,
+      pubkey: hexPub,
+      identifier: 'my-article'
+    });
+    expect(result?.aTagValue).toBe(coord);
   });
 
   it('strips a leftover https:// prefix before parsing', () => {
-    const path = getBookmarkEventRefRedirect(encodeURIComponent(`https://${coord}`));
-    expect(path).not.toBeNull();
-    const decoded = nip19.decode(/** @type {string} */ (path).slice(1));
-    expect(decoded.data).toMatchObject({ kind: 30023, pubkey: hexPub, identifier: 'my-article' });
+    const result = parseBookmarkUrlParam(encodeURIComponent(`https://${coord}`));
+    expect(result?.pointer).toMatchObject({
+      kind: 30023,
+      pubkey: hexPub,
+      identifier: 'my-article'
+    });
+    expect(result?.aTagValue).toBe(coord);
+  });
+
+  it('keeps colons inside the identifier', () => {
+    const weird = `30023:${hexPub}:scope:slug`;
+    const result = parseBookmarkUrlParam(encodeURIComponent(weird));
+    expect(result?.pointer.identifier).toBe('scope:slug');
+    expect(result?.aTagValue).toBe(weird);
   });
 
   it('returns null for genuine web URLs', () => {
-    expect(getBookmarkEventRefRedirect(encodeURIComponent('https://example.com/post'))).toBeNull();
-    expect(getBookmarkEventRefRedirect(encodeURIComponent('alice.blog/post'))).toBeNull();
+    expect(parseBookmarkUrlParam(encodeURIComponent('https://example.com/post'))).toBeNull();
+    expect(parseBookmarkUrlParam(encodeURIComponent('alice.blog/post'))).toBeNull();
   });
 });
 

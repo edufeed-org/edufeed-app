@@ -41,9 +41,9 @@
   import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import UrlReactionBar from '$lib/components/reactions/UrlReactionBar.svelte';
+  import ShareMenu from '$lib/components/bookmarks/ShareMenu.svelte';
   import {
     BookmarkIcon,
-    BookmarkShareIcon,
     LinkIcon,
     ChevronLeftIcon,
     InfoCircleIcon,
@@ -504,66 +504,7 @@
   // EventContextMenu needs a Nostr event; use the user's own bookmark or any saver.
   const menuEvent = $derived(myBookmark || savers[0]);
 
-  // --- Share menu: native sheet on mobile, external network links otherwise ---
-  let shareMenuOpen = $state(false);
-  /** @type {HTMLDetailsElement | undefined} */
-  let shareMenuEl = $state();
-
-  $effect(() => {
-    if (!shareMenuOpen) return;
-    /** @param {MouseEvent} e */
-    const onPointerDown = (e) => {
-      if (shareMenuEl && !shareMenuEl.contains(/** @type {Node} */ (e.target))) {
-        shareMenuOpen = false;
-      }
-    };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onPointerDown, true);
-  });
-
-  /**
-   * Open the share UI. Uses the native share sheet when available (mobile),
-   * otherwise toggles the external-network dropdown.
-   */
-  async function share() {
-    if (typeof window === 'undefined') return;
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ title, url: window.location.href });
-      } catch {
-        // user cancelled share sheet — ignore
-      }
-      return;
-    }
-    shareMenuOpen = !shareMenuOpen;
-  }
-
-  /**
-   * Open an external social network share link in a new tab.
-   * @param {'linkedin'|'facebook'|'x'|'email'|'whatsapp'} network
-   */
-  function shareTo(network) {
-    if (typeof window === 'undefined') return;
-    const url = encodeURIComponent(window.location.href);
-    const text = encodeURIComponent(title);
-    /** @type {Record<string, string>} */
-    const targets = {
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}`,
-      x: `https://twitter.com/intent/tweet?url=${url}&text=${text}`,
-      email: `mailto:?subject=${text}&body=${url}`,
-      whatsapp: `https://wa.me/?text=${text}%20${url}`
-    };
-    const target = targets[network];
-    if (!target) return;
-    if (network === 'email') {
-      window.location.href = target;
-    } else {
-      window.open(target, '_blank', 'noopener,noreferrer');
-    }
-    shareMenuOpen = false;
-  }
-
+  // Standalone "copy link" button (separate from the ShareMenu dropdown).
   async function copyLink() {
     if (typeof window === 'undefined') return;
     try {
@@ -572,7 +513,6 @@
     } catch {
       // clipboard unavailable — ignore
     }
-    shareMenuOpen = false;
   }
 
   // --- Table of contents from rendered headings ---
@@ -844,61 +784,7 @@
               {/if}
             </ul>
           </details>
-          <details
-            bind:this={shareMenuEl}
-            class="dropdown dropdown-end w-full"
-            bind:open={shareMenuOpen}
-          >
-            <summary
-              onclick={(e) => {
-                if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-                  e.preventDefault();
-                  share();
-                }
-              }}
-              class="inline-flex w-full cursor-pointer items-center gap-2 rounded-full border border-base-300 px-3 py-2 text-sm font-semibold text-base-content/70 transition-colors hover:text-base-content"
-            >
-              <BookmarkShareIcon class_="h-4 w-4" />
-              {m.bookmark_detail_share()}
-            </summary>
-            <ul class="dropdown-content menu z-20 mt-1 w-56 rounded-box bg-base-200 p-2 shadow-lg">
-              <li>
-                <button type="button" onclick={copyLink}>
-                  <LinkIcon class_="h-4 w-4" />
-                  {m.bookmark_detail_copy_link()}
-                </button>
-              </li>
-              <div class="divider my-0"></div>
-              <li class="menu-title px-2 py-1 text-[11px] tracking-wide uppercase">
-                {m.bookmark_detail_share_to()}
-              </li>
-              <li>
-                <button type="button" onclick={() => shareTo('linkedin')}>
-                  {m.bookmark_detail_share_linkedin()}
-                </button>
-              </li>
-              <li>
-                <button type="button" onclick={() => shareTo('facebook')}>
-                  {m.bookmark_detail_share_facebook()}
-                </button>
-              </li>
-              <li>
-                <button type="button" onclick={() => shareTo('x')}>
-                  {m.bookmark_detail_share_x()}
-                </button>
-              </li>
-              <li>
-                <button type="button" onclick={() => shareTo('whatsapp')}>
-                  {m.bookmark_detail_share_whatsapp()}
-                </button>
-              </li>
-              <li>
-                <button type="button" onclick={() => shareTo('email')}>
-                  {m.bookmark_detail_share_email()}
-                </button>
-              </li>
-            </ul>
-          </details>
+          <ShareMenu {title} />
         </div>
       </div>
     </aside>

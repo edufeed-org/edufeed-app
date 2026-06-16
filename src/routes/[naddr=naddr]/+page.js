@@ -44,19 +44,35 @@ export async function load({ params, parent }) {
     }
 
     // Event-ref bookmarks (kind 39701 targeting a Nostr addressable event) render
-    // the referenced event, not a web page. Redirect to the target's naddr so it
-    // resolves through the normal canonical routing (e.g. an article view).
+    // the referenced event natively inside the unified social-bookmark detail
+    // view. Redirect to that view, keyed by the target event coordinate.
     if (event.kind === 39701) {
       const pointer = extractEventRefFromBookmark(event);
+      const communityHtag = event.tags?.find((t) => t[0] === 'h')?.[1];
       if (pointer) {
-        const relayHint = event.tags?.find((t) => t[0] === 'a')?.[2];
-        const targetNaddr = nip19.naddrEncode({
-          kind: pointer.kind,
-          pubkey: pointer.pubkey,
-          identifier: pointer.identifier,
-          relays: relayHint ? [relayHint] : []
-        });
-        redirect(307, `/${targetNaddr}`);
+        const coordinate = encodeURIComponent(
+          `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`
+        );
+        if (communityHtag) {
+          const npub = nip19.npubEncode(communityHtag);
+          redirect(307, `/c/${npub}/bookmarks/${coordinate}`);
+        }
+        redirect(307, `/bookmarks/${coordinate}`);
+      }
+
+      // Web-URL bookmark (no event-ref): redirect to the URL hub so it gets the
+      // full social context (savers, highlights, reactions, comments) instead of
+      // the bare reader.
+      const rTag = event.tags?.find((t) => t[0] === 'r')?.[1];
+      const dTag = event.tags?.find((t) => t[0] === 'd')?.[1];
+      const url = rTag || (dTag ? `https://${dTag}` : null);
+      if (url) {
+        const encodedUrl = encodeURIComponent(url);
+        if (communityHtag) {
+          const npub = nip19.npubEncode(communityHtag);
+          redirect(307, `/c/${npub}/bookmarks/${encodedUrl}`);
+        }
+        redirect(307, `/bookmarks/${encodedUrl}`);
       }
     }
 

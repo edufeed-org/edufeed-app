@@ -7,7 +7,6 @@
   import { resolve } from '$app/paths';
   import { getHighlightText } from 'applesauce-common/helpers';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { nip19 } from 'nostr-tools';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders';
@@ -52,7 +51,6 @@
   });
 
   const typeLabel = $derived(group.kind === 30818 ? 'Wiki' : 'Article');
-  const routePrefix = $derived(group.kind === 30818 ? 'wiki' : 'article');
 
   const title = $derived.by(() => {
     if (resolvedEvent) {
@@ -74,24 +72,15 @@
   }
 
   function handleClick() {
+    // Route to the unified social-bookmark detail view, keyed by the target
+    // event coordinate. The view renders the referenced article natively,
+    // wrapped in savers/highlights + a shared discussion.
+    const coordinate = encodeURIComponent(`${group.kind}:${group.pubkey}:${group.identifier}`);
     if (communityPubkey) {
       const npub = hexToNpub(communityPubkey);
-      const naddr = nip19.naddrEncode({
-        kind: group.kind,
-        pubkey: group.pubkey,
-        identifier: group.identifier,
-        relays: group.relayHints.slice(0, 3)
-      });
-      goto(resolve(`/c/${npub}/${routePrefix}/${naddr}`));
+      goto(resolve(`/c/${npub}/bookmarks/${coordinate}`));
     } else {
-      // No community context — navigate to the event directly
-      const naddr = nip19.naddrEncode({
-        kind: group.kind,
-        pubkey: group.pubkey,
-        identifier: group.identifier,
-        relays: group.relayHints.slice(0, 3)
-      });
-      goto(resolve(`/${naddr}`));
+      goto(resolve(`/bookmarks/${coordinate}`));
     }
   }
 </script>

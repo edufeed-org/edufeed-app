@@ -65,7 +65,7 @@ eventStore.eventLoader = unifiedLoader;
  * stays uniform across the codebase.
  *
  * @param {string[]} relays
- * @param {import('nostr-tools').Filter} filter
+ * @param {import('nostr-tools').Filter | import('nostr-tools').Filter[]} filter
  * @param {object} [opts] - extra options (e.g. limit) merged over defaults
  */
 export const createCachedTimelineLoader = (relays, filter, opts = {}) =>

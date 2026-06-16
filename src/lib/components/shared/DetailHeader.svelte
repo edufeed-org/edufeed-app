@@ -133,9 +133,9 @@
     </div>
   {:else if title}
     <div class="mt-3">
-      <h1 class="text-xl font-bold">{title}</h1>
+      <h1 class="text-xl font-bold [overflow-wrap:anywhere]">{title}</h1>
       {#if subtitle}
-        <p class="mt-1 text-sm opacity-70">{subtitle}</p>
+        <p class="mt-1 text-sm [overflow-wrap:anywhere] opacity-70">{subtitle}</p>
       {/if}
     </div>
   {/if}

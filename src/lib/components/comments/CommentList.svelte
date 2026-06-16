@@ -124,6 +124,16 @@
     } else if (rootEvent) {
       /** @type {any[]} */
       const filters = [{ kinds: [1111], '#E': [rootEvent.id] }];
+      // Addressable roots (kind 30000-39999) accumulate comments anchored to
+      // their coordinate via uppercase #A, which survives event replacement and
+      // is what some clients use instead of (or alongside) #E.
+      if (rootEvent.kind >= 30000 && rootEvent.kind < 40000) {
+        const dTag = rootEvent.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
+        filters.push({
+          kinds: [1111],
+          '#A': [`${rootEvent.kind}:${rootEvent.pubkey}:${dTag}`]
+        });
+      }
       // Kind-1 roots also accumulate NIP-10 kind-1 replies via lowercase #e.
       if (rootEvent.kind === 1) filters.push({ kinds: [1], '#e': [rootEvent.id] });
       timelineSubscription = eventStore

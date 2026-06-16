@@ -11,7 +11,13 @@
 import { isEventInList } from 'applesauce-common/helpers';
 import { createOptimisticState } from '$lib/helpers/optimistic-action.js';
 import { setTitle, setDescription } from 'applesauce-common/operations/list';
-import { addAnyKindBookmarkTag, removeAnyKindBookmarkTag } from '$lib/helpers/bookmark-tag.js';
+import {
+  addAnyKindBookmarkTag,
+  removeAnyKindBookmarkTag,
+  isUrlInList,
+  addUrlTag,
+  removeUrlTag
+} from '$lib/helpers/bookmark-tag.js';
 import { modifyPublicTags } from 'applesauce-core/operations';
 import { setSingletonTag } from 'applesauce-core/operations/tag/common';
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
@@ -178,6 +184,45 @@ export function isInBookmarkSet(event, setEvent) {
 }
 
 // ---------------------------------------------------------------------------
+// URL queries (NIP-51 `r` tags) — for web bookmarks that have no Nostr event.
+// Plain URLs can't be referenced via e/a tags, so they live as `r` entries.
+// The matching/tag helpers live in bookmark-tag.js (shared + unit-tested).
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a URL is in the default bookmark list (kind 10003).
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isUrlBookmarked(url) {
+  const key = optimisticKey(url);
+  if (optimistic.has(key)) return /** @type {boolean} */ (optimistic.get(key));
+  return isUrlInList(bookmarkListEvent, url);
+}
+
+/**
+ * Check if a URL is in a specific bookmark set (kind 30003).
+ * @param {string} url
+ * @param {import('nostr-tools').NostrEvent} setEvent
+ * @returns {boolean}
+ */
+export function isUrlInBookmarkSet(url, setEvent) {
+  const key = optimisticKey(url, getBookmarkSetIdentifier(setEvent));
+  if (optimistic.has(key)) return /** @type {boolean} */ (optimistic.get(key));
+  return isUrlInList(setEvent, url);
+}
+
+/**
+ * Whether a URL bookmark action is in-flight for a given list.
+ * @param {string} url
+ * @param {string} [identifier]
+ * @returns {boolean}
+ */
+export function isUrlBookmarkPending(url, identifier) {
+  return optimistic.isPending(optimisticKey(url, identifier));
+}
+
+// ---------------------------------------------------------------------------
 // Actions (optimistic via exec)
 // ---------------------------------------------------------------------------
 
@@ -191,6 +236,18 @@ export function isInBookmarkSet(event, setEvent) {
 function findListEvent(identifier) {
   if (identifier === undefined) return bookmarkListEvent;
   return bookmarkSets.find((s) => getBookmarkSetIdentifier(s) === identifier) ?? null;
+}
+
+/**
+ * Slugify a set title into a NIP-51 `d` tag identifier.
+ * @param {string} title
+ * @returns {string}
+ */
+function titleToDTag(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 /**
@@ -259,15 +316,75 @@ export async function unbookmark(event, identifier) {
  * @param {string} title - Display title for the new set
  */
 export async function createBookmarkSetAndBookmark(event, title) {
-  const dTag = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
   const draft = await factory.build(
     { kind: 30003 },
     setTitle(title),
-    modifyPublicTags(setSingletonTag(['d', dTag])),
+    modifyPublicTags(setSingletonTag(['d', titleToDTag(title)])),
     modifyPublicTags(addAnyKindBookmarkTag(event))
+  );
+  const signed = await factory.sign(draft);
+  eventStore.add(signed);
+  publishEvent(signed);
+}
+
+// ---------------------------------------------------------------------------
+// URL actions (NIP-51 `r` tags) — counterparts to the event actions above.
+// Tag operations (addUrlTag/removeUrlTag) live in bookmark-tag.js.
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a URL to a bookmark list or set via an `r` tag.
+ * @param {string} url
+ * @param {string} [identifier] - d-tag of a kind 30003 set, or undefined for default list
+ */
+export async function bookmarkUrl(url, identifier) {
+  const key = optimisticKey(url, identifier);
+  await optimistic.run(
+    key,
+    true,
+    async () => {
+      const existing = findListEvent(identifier);
+      const tagOp = modifyPublicTags(addUrlTag(url));
+      const draft = existing
+        ? await factory.modify(existing, tagOp)
+        : await factory.build({ kind: 10003 }, tagOp);
+      await signAndPublish(draft);
+    },
+    signerSlowOpts
+  );
+}
+
+/**
+ * Remove a URL from a bookmark list or set.
+ * @param {string} url
+ * @param {string} [identifier] - d-tag of a kind 30003 set, or undefined for default list
+ */
+export async function unbookmarkUrl(url, identifier) {
+  const key = optimisticKey(url, identifier);
+  await optimistic.run(
+    key,
+    false,
+    async () => {
+      const existing = findListEvent(identifier);
+      if (!existing) return;
+      const draft = await factory.modify(existing, modifyPublicTags(removeUrlTag(url)));
+      await signAndPublish(draft);
+    },
+    signerSlowOpts
+  );
+}
+
+/**
+ * Create a new bookmark set (kind 30003) and add a URL to it via an `r` tag.
+ * @param {string} url
+ * @param {string} title - Display title for the new set
+ */
+export async function createBookmarkSetAndBookmarkUrl(url, title) {
+  const draft = await factory.build(
+    { kind: 30003 },
+    setTitle(title),
+    modifyPublicTags(setSingletonTag(['d', titleToDTag(title)])),
+    modifyPublicTags(addUrlTag(url))
   );
   const signed = await factory.sign(draft);
   eventStore.add(signed);

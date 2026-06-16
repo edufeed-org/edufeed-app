@@ -59,6 +59,7 @@ export { default as EditIcon } from './actions/EditIcon.svelte';
 export { default as TrashIcon } from './actions/TrashIcon.svelte';
 export { default as ReplyIcon } from './actions/ReplyIcon.svelte';
 export { default as SendIcon } from './actions/SendIcon.svelte';
+export { default as EnvelopeIcon } from './actions/EnvelopeIcon.svelte';
 
 // Social Icons
 export { default as ChatIcon } from './social/ChatIcon.svelte';
@@ -73,3 +74,7 @@ export { default as BookmarkShareIcon } from './social/BookmarkShareIcon.svelte'
 export { default as MeetIcon } from './social/MeetIcon.svelte';
 export { default as MessageSquareIcon } from './social/MessageSquareIcon.svelte';
 export { default as PollIcon } from './social/PollIcon.svelte';
+export { default as LinkedinIcon } from './social/LinkedinIcon.svelte';
+export { default as FacebookIcon } from './social/FacebookIcon.svelte';
+export { default as TwitterXIcon } from './social/TwitterXIcon.svelte';
+export { default as WhatsappIcon } from './social/WhatsappIcon.svelte';

@@ -10,6 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { isEventInList } from 'applesauce-common/helpers';
+import { isUrlInList, addUrlTag, removeUrlTag } from '$lib/helpers/bookmark-tag.js';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -457,5 +458,115 @@ describe('isBookmarkedAnywhere - cross-list membership', () => {
 
   it('returns false when default list is null and sets array is empty', () => {
     expect(isBookmarkedAnywhere(null, [], bookmarkedNote)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// URL (r-tag) bookmark logic — web bookmarks have no Nostr event, so they are
+// stored in NIP-51 lists as `r` tags. isUrlInList / addUrlTag / removeUrlTag
+// are imported from the real bookmark-tag.js (not reimplemented), so these
+// tests exercise the actual store code path. All matching is keyed on
+// normalizeUrl() so it is scheme-, www-, and trailing-slash-insensitive.
+// addUrlTag/removeUrlTag are curried: addUrlTag(url)(tags) -> tags.
+// ---------------------------------------------------------------------------
+
+/** A kind 10003 bookmark list containing r-tags (web URLs) alongside e/a tags */
+const urlBookmarkList = {
+  id: 'list-urls',
+  pubkey: 'user1',
+  kind: 10003,
+  created_at: 1000,
+  tags: [
+    ['e', 'event-id-1'],
+    ['r', 'https://example.com/article'],
+    ['r', 'https://www.other.org/page/']
+  ],
+  content: '',
+  sig: 'sig-urls'
+};
+
+describe('isUrlInList - r-tag matching (web bookmarks)', () => {
+  it('returns true for an exact URL match', () => {
+    expect(isUrlInList(urlBookmarkList, 'https://example.com/article')).toBe(true);
+  });
+
+  it('matches regardless of scheme (http vs https)', () => {
+    expect(isUrlInList(urlBookmarkList, 'http://example.com/article')).toBe(true);
+  });
+
+  it('matches regardless of www. prefix', () => {
+    expect(isUrlInList(urlBookmarkList, 'https://www.example.com/article')).toBe(true);
+  });
+
+  it('matches regardless of trailing slash', () => {
+    expect(isUrlInList(urlBookmarkList, 'https://other.org/page')).toBe(true);
+  });
+
+  it('matches regardless of hostname casing', () => {
+    expect(isUrlInList(urlBookmarkList, 'https://EXAMPLE.com/article')).toBe(true);
+  });
+
+  it('returns false for a URL not in the list', () => {
+    expect(isUrlInList(urlBookmarkList, 'https://example.com/other')).toBe(false);
+  });
+
+  it('does not match a URL that only appears in a non-r tag', () => {
+    const listWithUrlInWrongTag = {
+      ...urlBookmarkList,
+      id: 'list-wrong-tag',
+      tags: [['t', 'https://example.com/article']]
+    };
+    expect(isUrlInList(listWithUrlInWrongTag, 'https://example.com/article')).toBe(false);
+  });
+
+  it('returns false for a null list or empty url', () => {
+    expect(isUrlInList(null, 'https://example.com/article')).toBe(false);
+    expect(isUrlInList(urlBookmarkList, '')).toBe(false);
+  });
+});
+
+describe('addUrlTag - adding web bookmarks', () => {
+  it('appends an r-tag for a new URL', () => {
+    const result = addUrlTag('https://example.com/new')(urlBookmarkList.tags);
+    expect(result).toContainEqual(['r', 'https://example.com/new']);
+    expect(result.length).toBe(urlBookmarkList.tags.length + 1);
+  });
+
+  it('is idempotent — does not duplicate an existing URL', () => {
+    const result = addUrlTag('https://example.com/article')(urlBookmarkList.tags);
+    expect(result).toBe(urlBookmarkList.tags);
+  });
+
+  it('treats normalized-equivalent URLs as already present', () => {
+    const result = addUrlTag('http://www.example.com/article/')(urlBookmarkList.tags);
+    expect(result).toBe(urlBookmarkList.tags);
+  });
+
+  it('preserves the original (display) URL form when adding', () => {
+    const result = addUrlTag('https://Example.com/Path/')([]);
+    expect(result).toContainEqual(['r', 'https://Example.com/Path/']);
+  });
+});
+
+describe('removeUrlTag - removing web bookmarks', () => {
+  it('removes a matching r-tag', () => {
+    const result = removeUrlTag('https://example.com/article')(urlBookmarkList.tags);
+    expect(result.some((t) => t[0] === 'r' && t[1] === 'https://example.com/article')).toBe(false);
+  });
+
+  it('removes by normalized equivalence (scheme/www/trailing slash)', () => {
+    const result = removeUrlTag('http://www.other.org/page')(urlBookmarkList.tags);
+    expect(result.some((t) => t[0] === 'r')).toBe(true); // example.com still present
+    expect(result.some((t) => t[1] === 'https://www.other.org/page/')).toBe(false);
+  });
+
+  it('leaves non-r tags untouched', () => {
+    const result = removeUrlTag('https://example.com/article')(urlBookmarkList.tags);
+    expect(result).toContainEqual(['e', 'event-id-1']);
+  });
+
+  it('is a no-op when the URL is not present', () => {
+    const result = removeUrlTag('https://example.com/absent')(urlBookmarkList.tags);
+    expect(result.length).toBe(urlBookmarkList.tags.length);
   });
 });

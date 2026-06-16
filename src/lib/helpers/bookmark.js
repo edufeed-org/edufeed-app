@@ -10,16 +10,17 @@ import { parseEventCoordinate } from '$lib/helpers/urlGrouping.js';
 export const BOOKMARK_KIND = 39701;
 
 /**
- * Resolve the redirect path for a bookmark-detail `[url]` route param.
+ * Parse a bookmark-detail `[url]` route param into its event-ref coordinate.
  * Event-ref bookmarks key the detail route by their Nostr coordinate
- * (`kind:pubkey:identifier`, sometimes carrying a leftover `https://` prefix).
- * Such a "URL" can't be fetched as a web page, so redirect to the referenced
- * event's naddr, which renders through normal canonical routing.
- * Returns null for genuine web URLs (which the detail page handles directly).
+ * (`kind:pubkey:identifier`, sometimes carrying a leftover `https://` prefix);
+ * such a "URL" isn't a web page but a reference to an addressable Nostr event
+ * (in practice a kind-30023 article). Returns the address pointer plus the
+ * canonical a-tag value so the detail page can render the unified social
+ * bookmark view. Returns null for genuine web URLs (handled by the web hub).
  * @param {string} encodedUrlParam - The raw `[url]` route param (URI-encoded)
- * @returns {string | null}
+ * @returns {{ pointer: import('nostr-tools/nip19').AddressPointer, aTagValue: string } | null}
  */
-export function getBookmarkEventRefRedirect(encodedUrlParam) {
+export function parseBookmarkUrlParam(encodedUrlParam) {
   let value;
   try {
     value = decodeURIComponent(encodedUrlParam);
@@ -29,13 +30,7 @@ export function getBookmarkEventRefRedirect(encodedUrlParam) {
   value = value.replace(/^https?:\/\//, '');
   const pointer = parseEventCoordinate(value);
   if (!pointer) return null;
-  const naddr = nip19.naddrEncode({
-    kind: pointer.kind,
-    pubkey: pointer.pubkey,
-    identifier: pointer.identifier,
-    relays: []
-  });
-  return `/${naddr}`;
+  return { pointer, aTagValue: `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}` };
 }
 
 /**
