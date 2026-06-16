@@ -4,9 +4,39 @@
 
 import { nip19 } from 'nostr-tools';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+import { parseEventCoordinate } from '$lib/helpers/urlGrouping.js';
 
 /** Kind number for social bookmarks */
 export const BOOKMARK_KIND = 39701;
+
+/**
+ * Resolve the redirect path for a bookmark-detail `[url]` route param.
+ * Event-ref bookmarks key the detail route by their Nostr coordinate
+ * (`kind:pubkey:identifier`, sometimes carrying a leftover `https://` prefix).
+ * Such a "URL" can't be fetched as a web page, so redirect to the referenced
+ * event's naddr, which renders through normal canonical routing.
+ * Returns null for genuine web URLs (which the detail page handles directly).
+ * @param {string} encodedUrlParam - The raw `[url]` route param (URI-encoded)
+ * @returns {string | null}
+ */
+export function getBookmarkEventRefRedirect(encodedUrlParam) {
+  let value;
+  try {
+    value = decodeURIComponent(encodedUrlParam);
+  } catch {
+    value = encodedUrlParam;
+  }
+  value = value.replace(/^https?:\/\//, '');
+  const pointer = parseEventCoordinate(value);
+  if (!pointer) return null;
+  const naddr = nip19.naddrEncode({
+    kind: pointer.kind,
+    pubkey: pointer.pubkey,
+    identifier: pointer.identifier,
+    relays: []
+  });
+  return `/${naddr}`;
+}
 
 /**
  * Detect whether input is a URL, naddr, or invalid.

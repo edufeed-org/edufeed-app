@@ -6,6 +6,8 @@ import {
   filterSocialBookmarks,
   groupByUrl,
   extractEventRefFromHighlight,
+  extractEventRefFromBookmark,
+  parseEventCoordinate,
   groupByEventRef
 } from '$lib/helpers/urlGrouping.js';
 
@@ -66,6 +68,19 @@ describe('extractUrlFromEvent', () => {
       created_at: 1000
     };
     expect(extractUrlFromEvent(event)).toBe('alice.blog/post');
+  });
+
+  it('returns undefined for kind 39701 event-ref bookmark (has a-tag)', () => {
+    const event = {
+      kind: 39701,
+      tags: [
+        ['d', `30023:${'a'.repeat(64)}:my-article`],
+        ['a', `30023:${'a'.repeat(64)}:my-article`, 'wss://relay.example.com']
+      ],
+      content: '',
+      created_at: 1000
+    };
+    expect(extractUrlFromEvent(event)).toBeUndefined();
   });
 
   it('extracts r-tag from kind 9802 highlight', () => {
@@ -370,6 +385,87 @@ describe('extractEventRefFromHighlight', () => {
   });
 });
 
+describe('parseEventCoordinate', () => {
+  const hexPub = 'a'.repeat(64);
+
+  it('parses a kind:pubkey:identifier coordinate', () => {
+    expect(parseEventCoordinate(`30023:${hexPub}:my-article`)).toEqual({
+      kind: 30023,
+      pubkey: hexPub,
+      identifier: 'my-article'
+    });
+  });
+
+  it('preserves colons in the identifier', () => {
+    expect(parseEventCoordinate(`30023:${hexPub}:a:b:c`)).toEqual({
+      kind: 30023,
+      pubkey: hexPub,
+      identifier: 'a:b:c'
+    });
+  });
+
+  it('tolerates an empty identifier', () => {
+    expect(parseEventCoordinate(`30000:${hexPub}:`)).toEqual({
+      kind: 30000,
+      pubkey: hexPub,
+      identifier: ''
+    });
+  });
+
+  it('returns undefined for plain URLs', () => {
+    expect(parseEventCoordinate('alice.blog/post')).toBeUndefined();
+    expect(parseEventCoordinate('https://example.com/x')).toBeUndefined();
+  });
+
+  it('returns undefined for malformed input', () => {
+    expect(parseEventCoordinate('30023:not-hex:id')).toBeUndefined();
+    expect(parseEventCoordinate('notakind:' + hexPub + ':id')).toBeUndefined();
+    expect(parseEventCoordinate('')).toBeUndefined();
+    expect(parseEventCoordinate(null)).toBeUndefined();
+  });
+});
+
+describe('extractEventRefFromBookmark', () => {
+  const hexPub = 'a'.repeat(64);
+
+  it('returns AddressPointer for kind 39701 with a-tag', () => {
+    const event = {
+      kind: 39701,
+      tags: [
+        ['d', `30023:${hexPub}:my-article`],
+        ['a', `30023:${hexPub}:my-article`, 'wss://relay.example.com']
+      ],
+      content: '',
+      created_at: 1000
+    };
+    expect(extractEventRefFromBookmark(event)).toMatchObject({
+      kind: 30023,
+      pubkey: hexPub,
+      identifier: 'my-article'
+    });
+  });
+
+  it('returns undefined for a kind 39701 web-URL bookmark (no a-tag)', () => {
+    const event = {
+      kind: 39701,
+      tags: [['d', 'alice.blog/post']],
+      content: '',
+      created_at: 1000
+    };
+    expect(extractEventRefFromBookmark(event)).toBeUndefined();
+  });
+
+  it('returns undefined for non-39701 kinds', () => {
+    const event = {
+      kind: 9802,
+      tags: [['a', `30023:${hexPub}:my-article`]],
+      content: '',
+      created_at: 1000
+    };
+    expect(extractEventRefFromBookmark(event)).toBeUndefined();
+  });
+});
+
 describe('groupByEventRef', () => {
   // Valid 64-char hex pubkeys for applesauce helpers
   const hexPub1 = 'a'.repeat(64);
@@ -430,7 +526,7 @@ describe('groupByEventRef', () => {
     expect(groups[0].highlights).toHaveLength(1);
   });
 
-  it('ignores non-9802 events', () => {
+  it('ignores web-URL bookmarks (kind 39701 without a-tag)', () => {
     const bookmark = {
       id: 'b1',
       kind: 39701,
@@ -441,6 +537,50 @@ describe('groupByEventRef', () => {
     };
     const groups = groupByEventRef([bookmark, articleHighlight1]);
     expect(groups).toHaveLength(1);
+    expect(groups[0].bookmarks).toHaveLength(0);
+  });
+
+  it('includes kind 39701 event-ref bookmarks', () => {
+    const bookmark = {
+      id: 'b1',
+      kind: 39701,
+      pubkey: hexPub1,
+      tags: [
+        ['d', `30023:${authorPub1}:my-article`],
+        ['a', `30023:${authorPub1}:my-article`, 'wss://relay.example.com'],
+        ['title', 'My Article']
+      ],
+      content: '',
+      created_at: 5000
+    };
+    const groups = groupByEventRef([bookmark]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].kind).toBe(30023);
+    expect(groups[0].pubkey).toBe(authorPub1);
+    expect(groups[0].identifier).toBe('my-article');
+    expect(groups[0].bookmarks).toHaveLength(1);
+    expect(groups[0].highlights).toHaveLength(0);
+    expect(groups[0].relayHints).toContain('wss://relay.example.com');
+  });
+
+  it('groups a bookmark and a highlight on the same coordinate together', () => {
+    const bookmark = {
+      id: 'b1',
+      kind: 39701,
+      pubkey: hexPub2,
+      tags: [
+        ['d', `30023:${authorPub1}:my-article`],
+        ['a', `30023:${authorPub1}:my-article`]
+      ],
+      content: '',
+      created_at: 5000
+    };
+    const groups = groupByEventRef([articleHighlight1, bookmark]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].highlights).toHaveLength(1);
+    expect(groups[0].bookmarks).toHaveLength(1);
+    expect(groups[0].contributors).toEqual(expect.arrayContaining([hexPub1, hexPub2]));
+    expect(groups[0].latestActivity).toBe(5000);
   });
 
   it('tracks latestActivity from most recent highlight', () => {

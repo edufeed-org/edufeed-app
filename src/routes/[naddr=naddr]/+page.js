@@ -2,6 +2,7 @@ import { nip19 } from 'nostr-tools';
 import { fetchEventById } from '$lib/helpers/nostrUtils';
 import { initializeConfig } from '$lib/stores/config.svelte.js';
 import { getCanonicalEventRoute } from '$lib/helpers/eventRouteRedirect.js';
+import { extractEventRefFromBookmark } from '$lib/helpers/urlGrouping.js';
 import { error, redirect } from '@sveltejs/kit';
 
 export const ssr = false;
@@ -39,6 +40,23 @@ export async function load({ params, parent }) {
       if (communityPubkey) {
         const npub = nip19.npubEncode(communityPubkey);
         redirect(307, `/c/${npub}?view=meet&room=${params.naddr}`);
+      }
+    }
+
+    // Event-ref bookmarks (kind 39701 targeting a Nostr addressable event) render
+    // the referenced event, not a web page. Redirect to the target's naddr so it
+    // resolves through the normal canonical routing (e.g. an article view).
+    if (event.kind === 39701) {
+      const pointer = extractEventRefFromBookmark(event);
+      if (pointer) {
+        const relayHint = event.tags?.find((t) => t[0] === 'a')?.[2];
+        const targetNaddr = nip19.naddrEncode({
+          kind: pointer.kind,
+          pubkey: pointer.pubkey,
+          identifier: pointer.identifier,
+          relays: relayHint ? [relayHint] : []
+        });
+        redirect(307, `/${targetNaddr}`);
       }
     }
 

@@ -151,6 +151,20 @@
 
     <!-- Stats row -->
     <div class="flex items-center gap-3 text-xs text-base-content/50">
+      {#if group.bookmarks?.length > 0}
+        <div class="flex items-center gap-1">
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          <span>{group.bookmarks.length}</span>
+        </div>
+      {/if}
       {#if group.highlights.length > 0}
         <div class="flex items-center gap-1">
           <svg

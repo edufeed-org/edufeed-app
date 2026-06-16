@@ -64,7 +64,10 @@ export function extractUrlFromEvent(event) {
   if (!event || !event.tags) return undefined;
 
   if (event.kind === 39701) {
-    // Bookmark: d-tag is the URL without scheme
+    // Event-ref bookmarks (target a Nostr addressable event) carry an a-tag and
+    // belong in event-ref groups, not URL groups.
+    if (event.tags.some((/** @type {string[]} */ t) => t[0] === 'a')) return undefined;
+    // Web bookmark: d-tag is the URL without scheme
     const dTag = event.tags.find((/** @type {string[]} */ t) => t[0] === 'd');
     return dTag?.[1] || undefined;
   }
@@ -189,9 +192,31 @@ export function groupByUrl(events) {
  * @property {string} identifier - d-tag identifier from the address pointer
  * @property {string[]} relayHints - Relay hints from a-tag position [2]
  * @property {any[]} highlights - Kind 9802 events referencing this event
+ * @property {any[]} bookmarks - Kind 39701 events referencing this event
  * @property {number} latestActivity - Most recent created_at
  * @property {string[]} contributors - Unique pubkeys
  */
+
+/**
+ * Parse a Nostr addressable coordinate string (`kind:pubkey:identifier`) into an
+ * AddressPointer. The identifier may itself contain colons. Returns undefined for
+ * plain URLs or malformed input. Manual parsing avoids applesauce's
+ * getOrComputeCachedValue mutation (causes state_unsafe_mutation in Svelte 5).
+ * @param {string | null | undefined} value
+ * @returns {import('nostr-tools/nip19').AddressPointer | undefined}
+ */
+export function parseEventCoordinate(value) {
+  if (!value || typeof value !== 'string') return undefined;
+  const firstColon = value.indexOf(':');
+  const secondColon = value.indexOf(':', firstColon + 1);
+  if (firstColon === -1 || secondColon === -1) return undefined;
+  const kindStr = value.substring(0, firstColon);
+  const pubkey = value.substring(firstColon + 1, secondColon);
+  const identifier = value.substring(secondColon + 1);
+  if (!/^\d+$/.test(kindStr)) return undefined;
+  if (!/^[0-9a-f]{64}$/i.test(pubkey)) return undefined;
+  return { kind: parseInt(kindStr, 10), pubkey, identifier };
+}
 
 /**
  * Extract an AddressPointer from a kind 9802 highlight that references
@@ -203,19 +228,20 @@ export function extractEventRefFromHighlight(event) {
   if (!event || event?.kind !== 9802) return undefined;
   // URL highlights have an r-tag — those belong in URL groups, not here
   if (getHighlightSourceUrl(event)) return undefined;
-  // Manual a-tag parsing to avoid getOrComputeCachedValue mutation
-  // (causes state_unsafe_mutation in Svelte 5 template expressions)
   const aTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'a');
-  if (!aTag?.[1]) return undefined;
-  const value = aTag[1];
-  const firstColon = value.indexOf(':');
-  const secondColon = value.indexOf(':', firstColon + 1);
-  if (firstColon === -1 || secondColon === -1) return undefined;
-  const kind = parseInt(value.substring(0, firstColon), 10);
-  const pubkey = value.substring(firstColon + 1, secondColon);
-  const identifier = value.substring(secondColon + 1);
-  if (isNaN(kind) || !pubkey) return undefined;
-  return { kind, pubkey, identifier };
+  return parseEventCoordinate(aTag?.[1]);
+}
+
+/**
+ * Extract an AddressPointer from a kind 39701 bookmark that targets a Nostr
+ * addressable event (via a-tag) rather than a web URL.
+ * @param {any} event
+ * @returns {import('nostr-tools/nip19').AddressPointer | undefined}
+ */
+export function extractEventRefFromBookmark(event) {
+  if (!event || event?.kind !== 39701) return undefined;
+  const aTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'a');
+  return parseEventCoordinate(aTag?.[1]);
 }
 
 /**
@@ -224,11 +250,14 @@ export function extractEventRefFromHighlight(event) {
  * @returns {EventRefGroup[]} Sorted by latestActivity descending
  */
 export function groupByEventRef(events) {
-  /** @type {Map<string, { kind: number, pubkey: string, identifier: string, highlights: any[], latestActivity: number, contributorSet: Set<string>, relayHintSet: Set<string> }>} */
+  /** @type {Map<string, { kind: number, pubkey: string, identifier: string, highlights: any[], bookmarks: any[], latestActivity: number, contributorSet: Set<string>, relayHintSet: Set<string> }>} */
   const groups = new Map();
 
   for (const event of events) {
-    const pointer = extractEventRefFromHighlight(event);
+    const isHighlight = event?.kind === 9802;
+    const pointer = isHighlight
+      ? extractEventRefFromHighlight(event)
+      : extractEventRefFromBookmark(event);
     if (!pointer) continue;
 
     const key = `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`;
@@ -239,6 +268,7 @@ export function groupByEventRef(events) {
         pubkey: pointer.pubkey,
         identifier: pointer.identifier,
         highlights: [],
+        bookmarks: [],
         latestActivity: 0,
         contributorSet: new Set(),
         relayHintSet: new Set()
@@ -246,7 +276,8 @@ export function groupByEventRef(events) {
     }
 
     const group = /** @type {NonNullable<ReturnType<typeof groups.get>>} */ (groups.get(key));
-    group.highlights.push(event);
+    if (isHighlight) group.highlights.push(event);
+    else group.bookmarks.push(event);
 
     // Collect relay hint from a-tag position [2]
     const aTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'a');
@@ -278,6 +309,7 @@ export function groupByEventRef(events) {
       identifier: data.identifier,
       relayHints: Array.from(data.relayHintSet),
       highlights: data.highlights,
+      bookmarks: data.bookmarks,
       latestActivity: data.latestActivity,
       contributors: Array.from(data.contributorSet)
     }))
