@@ -71,6 +71,7 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       if (formData.image && formData.imageWasUploaded && !formData.imageLicenseEvent) {
         errors.image = m.imageLicenseMissing();
       }
+      if (!formData.license) errors.license = m.license();
       break;
 
     case 4:
@@ -113,11 +114,7 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       break;
     }
 
-    case 7:
-      if (!formData.license) errors.license = m.license();
-      break;
-
-    // 6 (relations) and 8 (share) have no required fields.
+    // 6 (relations) and 7 (share) have no required fields.
   }
 
   return errors;

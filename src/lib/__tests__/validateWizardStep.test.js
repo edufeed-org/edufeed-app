@@ -63,7 +63,7 @@ function emptyFormData() {
     learningResourceType: [],
     encodings: [],
     externalUrls: [],
-    license: ''
+    license: 'https://creativecommons.org/licenses/by/4.0/'
   };
 }
 
@@ -182,6 +182,20 @@ describe('validateWizardStep', () => {
         };
         const errors = validateWizardStep(3, formData, ctx());
         expect(errors.image).toBeFalsy();
+      });
+    });
+
+    describe('content license', () => {
+      it('flags license when cleared', () => {
+        const formData = { ...emptyFormData(), name: 'T', description: 'D', license: '' };
+        const errors = validateWizardStep(3, formData, ctx());
+        expect(errors).toEqual({ license: 'ERR_LICENSE' });
+      });
+
+      it('passes when license is set', () => {
+        const formData = { ...emptyFormData(), name: 'T', description: 'D' };
+        const errors = validateWizardStep(3, formData, ctx());
+        expect(errors).toEqual({});
       });
     });
   });
@@ -305,29 +319,13 @@ describe('validateWizardStep', () => {
     });
   });
 
-  describe('step 7 — Rights', () => {
-    it('flags license when empty', () => {
-      const errors = validateWizardStep(7, emptyFormData(), ctx());
-      expect(errors).toEqual({ license: 'ERR_LICENSE' });
-    });
-
-    it('passes when license is set', () => {
-      const errors = validateWizardStep(
-        7,
-        { ...emptyFormData(), license: 'https://creativecommons.org/licenses/by/4.0/' },
-        ctx()
-      );
-      expect(errors).toEqual({});
-    });
-  });
-
-  describe('steps with no validation — 6 (relations) and 8 (share)', () => {
+  describe('steps with no validation — 6 (relations) and 7 (share)', () => {
     it('returns empty errors for step 6', () => {
       expect(validateWizardStep(6, emptyFormData(), ctx())).toEqual({});
     });
 
-    it('returns empty errors for step 8', () => {
-      expect(validateWizardStep(8, emptyFormData(), ctx())).toEqual({});
+    it('returns empty errors for step 7', () => {
+      expect(validateWizardStep(7, emptyFormData(), ctx())).toEqual({});
     });
   });
 });
