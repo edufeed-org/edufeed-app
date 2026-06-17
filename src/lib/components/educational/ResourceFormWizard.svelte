@@ -2024,6 +2024,11 @@
             />
           </div>
 
+          <!-- Cover color (greyed out once a thumbnail is set) -->
+          <CoverColorPicker bind:hue={formData.coverHue} disabled={!!formData.image} />
+
+          <div class="divider my-1 text-sm">{m.amb_form_cover_or?.() ?? 'or'}</div>
+
           <!-- Image (upload + URL paste, with NIP-94 license attestation) -->
           <div class="form-control">
             <label class="label flex items-center gap-2" for="amb-image">
@@ -2048,11 +2053,6 @@
               onapply={handleSuggestionAction}
             />
           </div>
-
-          <!-- Cover color (only meaningful without an uploaded image) -->
-          {#if !formData.image}
-            <CoverColorPicker bind:hue={formData.coverHue} />
-          {/if}
 
           <!-- Content license -->
           <div class="form-control">
