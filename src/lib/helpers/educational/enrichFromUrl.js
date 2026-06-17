@@ -24,20 +24,35 @@ function networkError() {
 }
 
 /**
+ * Single-source convenience wrapper. Delegates to {@link enrichFromUrls}.
+ *
  * @param {string} url
  * @param {'amb' | 'ekw' | 'konfi'} variant
  * @param {{fetchFn?: typeof fetch, timeoutMs?: number, bildungsbereich?: string}} [options]
  * @returns {Promise<EnrichResult>}
  */
 export async function enrichFromUrl(url, variant, options = {}) {
+  return enrichFromUrls([url], variant, options);
+}
+
+/**
+ * Multi-source enrichment. POSTs a `urls` array to /api/enrich, which grounds
+ * a single LLM call in all of them (Option A concatenation server-side).
+ *
+ * @param {string[]} urls
+ * @param {'amb' | 'ekw' | 'konfi'} variant
+ * @param {{fetchFn?: typeof fetch, timeoutMs?: number, bildungsbereich?: string}} [options]
+ * @returns {Promise<EnrichResult>}
+ */
+export async function enrichFromUrls(urls, variant, options = {}) {
   const fetchFn = options.fetchFn ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  /** @type {{url: string, variant: string, bildungsbereich?: string}} */
-  const body = { url, variant };
+  /** @type {{urls: string[], variant: string, bildungsbereich?: string}} */
+  const body = { urls, variant };
   if (options.bildungsbereich) body.bildungsbereich = options.bildungsbereich;
 
   try {

@@ -1,9 +1,9 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
-import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
+import { enrichFromUrl, enrichFromUrls } from '$lib/helpers/educational/enrichFromUrl.js';
 
 describe('enrichFromUrl', () => {
-  it('POSTs {url, variant} as JSON to /api/enrich', async () => {
+  it('POSTs {urls: [url], variant} as JSON to /api/enrich', async () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(
@@ -19,7 +19,7 @@ describe('enrichFromUrl', () => {
     expect(endpoint).toBe('/api/enrich');
     expect(init.method).toBe('POST');
     expect(init.headers['content-type']).toBe('application/json');
-    expect(JSON.parse(init.body)).toEqual({ url: 'https://example.org/x', variant: 'ekw' });
+    expect(JSON.parse(init.body)).toEqual({ urls: ['https://example.org/x'], variant: 'ekw' });
   });
 
   it('forwards bildungsbereich when provided so the API can pick the subject vocab', async () => {
@@ -35,7 +35,7 @@ describe('enrichFromUrl', () => {
 
     const [, init] = fetchFn.mock.calls[0];
     expect(JSON.parse(init.body)).toEqual({
-      url: 'https://example.org/x',
+      urls: ['https://example.org/x'],
       variant: 'amb',
       bildungsbereich: 'schule'
     });
@@ -109,5 +109,67 @@ describe('enrichFromUrl', () => {
     const result = await promise;
     expect(result).toEqual({ error: 'ai_unavailable', code: 'network' });
     expect(abortSignal?.aborted).toBe(true);
+  });
+});
+
+describe('enrichFromUrls', () => {
+  it('POSTs a urls array to /api/enrich', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ source: 'llm-enriched', payload: {}, evidence: {}, baseline: {} }),
+          { status: 200 }
+        )
+      );
+    await enrichFromUrls(['https://a.example/x.pdf', 'https://b.example/y.pdf'], 'amb', {
+      fetchFn
+    });
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const [endpoint, init] = fetchFn.mock.calls[0];
+    expect(endpoint).toBe('/api/enrich');
+    expect(JSON.parse(init.body)).toEqual({
+      urls: ['https://a.example/x.pdf', 'https://b.example/y.pdf'],
+      variant: 'amb'
+    });
+  });
+
+  it('forwards bildungsbereich alongside the urls array', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ source: 'llm-enriched', payload: {}, evidence: {}, baseline: {} }),
+          { status: 200 }
+        )
+      );
+    await enrichFromUrls(['https://a.example/x.pdf'], 'amb', {
+      fetchFn,
+      bildungsbereich: 'schule'
+    });
+
+    const [, init] = fetchFn.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({
+      urls: ['https://a.example/x.pdf'],
+      variant: 'amb',
+      bildungsbereich: 'schule'
+    });
+  });
+
+  it('returns the parsed result on 200', async () => {
+    const result = { source: 'llm-enriched', payload: { name: 'X' }, evidence: {}, baseline: {} };
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(result), { status: 200 }));
+    expect(await enrichFromUrls(['https://a.example/x.pdf'], 'amb', { fetchFn })).toEqual(result);
+  });
+
+  it('returns the network error envelope on non-200 (does not throw)', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response('nope', { status: 500 }));
+    expect(await enrichFromUrls(['https://a.example/x.pdf'], 'amb', { fetchFn })).toEqual({
+      error: 'ai_unavailable',
+      code: 'network'
+    });
   });
 });
