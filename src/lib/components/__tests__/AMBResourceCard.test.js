@@ -48,7 +48,9 @@ vi.mock('$app/paths', () => ({
 vi.mock('applesauce-core/helpers', () => ({
   getProfilePicture: (/** @type {any} */ profile) => profile?.picture || null,
   getDisplayName: (/** @type {any} */ profile, /** @type {any} */ fallback) =>
-    profile?.name || fallback
+    profile?.name || fallback,
+  getTagValue: (/** @type {any} */ event, /** @type {string} */ name) =>
+    event?.tags?.find((/** @type {string[]} */ t) => t[0] === name)?.[1]
 }));
 vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: () => 'Jan 15'
