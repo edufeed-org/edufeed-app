@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { oerToLicenseInput } from '$lib/helpers/oer/oerToLicenseInput.js';

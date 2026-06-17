@@ -24,7 +24,7 @@ export function oerToLicenseInput(item, asset) {
     system.attribution ||
     (Array.isArray(amb.creator)
       ? amb.creator
-          .map((c) => c?.name)
+          .map((/** @type {{ name?: string }} */ c) => c?.name)
           .filter(Boolean)
           .join(', ')
       : '') ||

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
 import { searchOer, fetchOerAsset } from '$lib/helpers/oer/searchOer.js';
