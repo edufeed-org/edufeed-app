@@ -87,7 +87,6 @@
   import { parseKonfiTagsToFormData } from '$lib/helpers/educational/parseKonfiTagsToFormData.js';
   import { formDataToKonfiTags } from '$lib/helpers/educational/formDataToKonfiTags.js';
   import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
-  import { buildKonfiSummaryRows } from '$lib/helpers/educational/konfiSummary.js';
   import {
     advanceStepOrSubStep,
     retreatStepOrSubStep,
@@ -134,7 +133,7 @@
   const isEkw = $derived(variantId === 'ekw');
 
   // Total step count — share step is skipped in edit mode.
-  const totalSteps = $derived(isEditMode ? 7 : 8);
+  const totalSteps = $derived(isEditMode ? 6 : 7);
 
   // Current wizard step (1..totalSteps)
   let currentStep = $state(1);
@@ -595,7 +594,6 @@
     m.amb_form_step_classification(),
     m.amb_form_step_content(),
     m.amb_form_step_relations?.() ?? 'Relations',
-    m.amb_form_step_license(),
     m.amb_form_step_share?.() ?? 'Share'
   ]);
 
@@ -2046,6 +2044,63 @@
               onapply={handleSuggestionAction}
             />
           </div>
+
+          <!-- Content license -->
+          <div class="form-control">
+            <label class="label" for="amb-license">
+              <span class="label-text font-medium"
+                >{m.amb_form_label_license()} <span class="text-error">*</span></span
+              >
+            </label>
+            <select
+              id="amb-license"
+              class="select-bordered select w-full"
+              class:select-error={showError('license')}
+              aria-invalid={showError('license')}
+              aria-describedby={showError('license') ? 'amb-license-error' : undefined}
+              bind:value={formData.license}
+              onblur={() => markTouched('license')}
+            >
+              {#each licenseOptions as license (license.id)}
+                <option value={license.id}>{license.label}</option>
+              {/each}
+            </select>
+            <FieldAiSuggestionBadge
+              field="license"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
+            {#if showError('license')}
+              <p id="amb-license-error" class="mt-1 text-xs text-error">{fieldErrors.license}</p>
+            {/if}
+            <div class="label">
+              <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
+              <a
+                href={formData.license}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="label-text-alt link link-primary"
+              >
+                {m.amb_form_link_license_details()}
+              </a>
+              <!-- eslint-enable svelte/no-navigation-without-resolve -->
+            </div>
+          </div>
+
+          <!-- Free access -->
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-primary"
+                bind:checked={formData.isAccessibleForFree}
+              />
+              <span class="label-text">{m.amb_form_checkbox_free_access()}</span>
+            </label>
+          </div>
         </div>
       {/if}
 
@@ -2750,316 +2805,8 @@
         </div>
       {/if}
 
-      <!-- Step 7: License & (in edit mode) Publish -->
-      {#if currentStep === 7}
-        <div class="space-y-4">
-          <!-- License -->
-          <div class="form-control">
-            <label class="label" for="amb-license">
-              <span class="label-text font-medium"
-                >{m.amb_form_label_license()} <span class="text-error">*</span></span
-              >
-            </label>
-            <select
-              id="amb-license"
-              class="select-bordered select w-full"
-              class:select-error={showError('license')}
-              aria-invalid={showError('license')}
-              aria-describedby={showError('license') ? 'amb-license-error' : undefined}
-              bind:value={formData.license}
-              onblur={() => markTouched('license')}
-            >
-              {#each licenseOptions as license (license.id)}
-                <option value={license.id}>{license.label}</option>
-              {/each}
-            </select>
-            <FieldAiSuggestionBadge
-              field="license"
-              {formData}
-              {aboutByVocab}
-              {aiSuggestions}
-              dismissedFields={dismissedSuggestionFields}
-              onapply={handleSuggestionAction}
-            />
-            {#if showError('license')}
-              <p id="amb-license-error" class="mt-1 text-xs text-error">{fieldErrors.license}</p>
-            {/if}
-            <div class="label">
-              <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
-              <a
-                href={formData.license}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="label-text-alt link link-primary"
-              >
-                {m.amb_form_link_license_details()}
-              </a>
-              <!-- eslint-enable svelte/no-navigation-without-resolve -->
-            </div>
-          </div>
-
-          <!-- Free Access -->
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-3">
-              <input
-                type="checkbox"
-                class="checkbox checkbox-primary"
-                bind:checked={formData.isAccessibleForFree}
-              />
-              <span class="label-text">{m.amb_form_checkbox_free_access()}</span>
-            </label>
-          </div>
-
-          <!-- Preview Summary -->
-          <div class="rounded-lg bg-base-200 p-4">
-            <h3 class="mb-3 font-medium">{m.amb_form_label_summary()}</h3>
-            <dl class="space-y-2 text-sm">
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_title()}</dt>
-                <dd class="flex-1 font-medium">{formData.name || '—'}</dd>
-              </div>
-              {#if formData.identifier}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_url?.() ?? 'URL:'}
-                  </dt>
-                  <dd class="flex-1 truncate font-mono text-xs">{formData.identifier}</dd>
-                </div>
-              {/if}
-              {#if formData.description}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_description?.() ?? 'Description:'}
-                  </dt>
-                  <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.description}</dd>
-                </div>
-              {/if}
-              {#if formData.bildungsbereich}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Bildungsbereich:</dt>
-                  <dd class="flex-1">
-                    {BILDUNGSBEREICHE[formData.bildungsbereich]?.label?.de ??
-                      formData.bildungsbereich}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.image}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">Vorschaubild:</dt>
-                  <dd class="flex-1 truncate font-mono text-xs">{formData.image}</dd>
-                </div>
-              {/if}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_language()}</dt>
-                <dd class="flex-1">
-                  {languageOptions.find((l) => l.code === formData.inLanguage)?.label}
-                </dd>
-              </div>
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_type()}</dt>
-                <dd class="flex-1">
-                  {formData.learningResourceType.map((t) => t.label).join(', ') || '—'}
-                </dd>
-              </div>
-              {#if formData.educationalLevels.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_educational_level?.() ?? 'Level:'}
-                  </dt>
-                  <dd class="flex-1">
-                    {formData.educationalLevels.map((e) => e.label || e.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if mergedAbout().length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_subject()}</dt>
-                  <dd class="flex-1">
-                    {mergedAbout()
-                      .map((s) => s.label || s.id)
-                      .join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.keywords.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_keywords?.() ?? 'Keywords:'}
-                  </dt>
-                  <dd class="flex-1">{formData.keywords.join(', ')}</dd>
-                </div>
-              {/if}
-              {#if isEkw}
-                {#if formData.gradeLevelLabels.length > 0}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">
-                      {m.amb_form_summary_ekw_klassenstufe()}
-                    </dt>
-                    <dd class="flex-1">
-                      {formData.gradeLevelLabels.map((c) => c.label || c.id).join(', ')}
-                    </dd>
-                  </div>
-                {/if}
-                {#if formData.schoolTypeLabels.length > 0}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">
-                      {m.amb_form_summary_ekw_schulart()}
-                    </dt>
-                    <dd class="flex-1">
-                      {formData.schoolTypeLabels.map((c) => c.label || c.id).join(', ')}
-                    </dd>
-                  </div>
-                {/if}
-                {#if formData.didacticConceptLabels.length > 0}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">
-                      {m.amb_form_summary_ekw_didactic_concept()}
-                    </dt>
-                    <dd class="flex-1">
-                      {formData.didacticConceptLabels.map((c) => c.label || c.id).join(', ')}
-                    </dd>
-                  </div>
-                {/if}
-                {#if formData.methodLabels.length > 0}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">
-                      {m.amb_form_summary_ekw_method()}
-                    </dt>
-                    <dd class="flex-1">
-                      {formData.methodLabels.map((c) => c.label || c.id).join(', ')}
-                    </dd>
-                  </div>
-                {/if}
-                {#if formData.methodOther?.trim()}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">
-                      {m.amb_form_summary_ekw_method_free()}
-                    </dt>
-                    <dd class="line-clamp-3 flex-1 text-base-content/80">{formData.methodOther}</dd>
-                  </div>
-                {/if}
-                {@const bibleRefs = formData.bibleReferences
-                  .map((/** @type {string} */ s) => s.trim())
-                  .filter(Boolean)}
-                {#if bibleRefs.length > 0}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">
-                      {m.amb_form_summary_ekw_bible_reference()}
-                    </dt>
-                    <dd class="flex-1">{bibleRefs.join(', ')}</dd>
-                  </div>
-                {/if}
-              {/if}
-              {#if isEkw && formData.bildungsbereich === 'konfi'}
-                {@const konfiSummaryRows = buildKonfiSummaryRows(formData, {
-                  yes: m.common_yes(),
-                  no: m.common_no()
-                })}
-                {#each konfiSummaryRows as row (row.labelKey)}
-                  {@const labelFn = /** @type {Record<string, any>} */ (m)[row.labelKey]}
-                  {@const label = typeof labelFn === 'function' ? labelFn() : row.labelKey}
-                  <div class="flex">
-                    <dt class="w-32 shrink-0 text-base-content/60">{label}</dt>
-                    <dd class="flex-1 {row.multiline ? 'line-clamp-3 text-base-content/80' : ''}">
-                      {row.value}
-                    </dd>
-                  </div>
-                {/each}
-              {/if}
-              {#if formData.creators.some((c) => c.name)}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_creators()}
-                  </dt>
-                  <dd class="flex-1">
-                    {formData.creators
-                      .map((c) => c.name)
-                      .filter(Boolean)
-                      .join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.encodings.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_files()}</dt>
-                  <dd class="flex-1">{formData.encodings.length} file(s)</dd>
-                </div>
-              {/if}
-              {#if formData.externalUrls.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_external_urls()}
-                  </dt>
-                  <dd class="flex-1">{formData.externalUrls.length} link(s)</dd>
-                </div>
-              {/if}
-              {#if formData.isPartOf.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_is_part_of?.() ?? 'Part of:'}
-                  </dt>
-                  <dd class="flex-1">
-                    {formData.isPartOf
-                      .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
-                      .join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.hasPart.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.amb_form_summary_has_part?.() ?? 'Contains:'}
-                  </dt>
-                  <dd class="flex-1">
-                    {formData.hasPart
-                      .map((r) => r.event?.tags?.find((t) => t[0] === 'name')?.[1] ?? r.coordinate)
-                      .join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.teaches?.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.curriculum_picker_section_teaches()}:
-                  </dt>
-                  <dd class="flex-1">
-                    {formData.teaches.map((c) => c.prefLabel?.de ?? c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.assesses?.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.curriculum_picker_section_assesses()}:
-                  </dt>
-                  <dd class="flex-1">
-                    {formData.assesses.map((c) => c.prefLabel?.de ?? c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              {#if formData.competencyRequired?.length > 0}
-                <div class="flex">
-                  <dt class="w-32 shrink-0 text-base-content/60">
-                    {m.curriculum_picker_section_competency_required()}:
-                  </dt>
-                  <dd class="flex-1">
-                    {formData.competencyRequired.map((c) => c.prefLabel?.de ?? c.id).join(', ')}
-                  </dd>
-                </div>
-              {/if}
-              <div class="flex">
-                <dt class="w-32 shrink-0 text-base-content/60">{m.amb_form_summary_license()}</dt>
-                <dd class="flex-1">
-                  {licenseOptions.find((l) => l.id === formData.license)?.label}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      {/if}
-
-      <!-- Step 8: Share to communities (create mode only) -->
-      {#if currentStep === 8 && !isEditMode}
+      <!-- Step 7: Share to communities (create mode only) -->
+      {#if currentStep === 7 && !isEditMode}
         <div class="space-y-3">
           <p class="text-sm text-base-content/70">
             {m.amb_form_help_share?.() ??
