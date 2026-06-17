@@ -32,3 +32,28 @@ export function validateSparqlIri(val) {
   if (/[<>"\\\s]/.test(val)) return null;
   return parseHttpUrl(val) ? val : null;
 }
+
+/**
+ * Reject hostnames that resolve to loopback / private / link-local ranges, to
+ * block SSRF when fetching user- or search-result-supplied URLs server-side.
+ * Shared by /api/image and /api/oer/asset. Hostname-string heuristic (not a
+ * full IP-range parse) — paired with an upstream `ASSET_PROXY_ALLOWED_DOMAINS`
+ * allowlist / imgproxy network isolation on the homelab for defence in depth.
+ *
+ * @param {URL} parsedUrl
+ * @returns {boolean}
+ */
+export function isPrivateIp(parsedUrl) {
+  const hostname = parsedUrl.hostname;
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('172.') ||
+    hostname === '0.0.0.0' ||
+    hostname.endsWith('.local')
+  );
+}
