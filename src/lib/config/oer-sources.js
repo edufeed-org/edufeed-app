@@ -12,6 +12,7 @@
 /** @type {OerSource[]} */
 export const OER_SOURCES = [
   { id: 'openverse', label: 'Openverse', checked: true },
+  { id: 'unsplash', label: 'Unsplash', checked: true },
   { id: 'wikimedia', label: 'Wikimedia Commons', checked: true },
   { id: 'arasaac', label: 'ARASAAC', checked: false },
   { id: 'rpi-virtuell', label: 'RPI-Virtuell', checked: false },

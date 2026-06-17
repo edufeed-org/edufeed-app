@@ -18,6 +18,7 @@ describe('oer-sources config', () => {
 
   it('allowlist contains every source id and rejects unknowns', () => {
     expect(ALLOWED_OER_SOURCE_IDS.has('openverse')).toBe(true);
+    expect(ALLOWED_OER_SOURCE_IDS.has('unsplash')).toBe(true);
     expect(ALLOWED_OER_SOURCE_IDS.has('evil-source')).toBe(false);
   });
 
