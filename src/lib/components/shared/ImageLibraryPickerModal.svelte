@@ -13,6 +13,10 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { normalizeServerUrl, urlIsOnTrustedServer } from '$lib/helpers/blossom-trust.js';
   import * as m from '$lib/paraglide/messages';
+  import { searchOer, fetchOerAsset } from '$lib/helpers/oer/searchOer.js';
+  import { oerToLicenseInput } from '$lib/helpers/oer/oerToLicenseInput.js';
+  import { findExistingLicense, publishLicenseAttestation } from '$lib/helpers/image-license.js';
+  import { OER_SOURCES } from '$lib/config/oer-sources.js';
   import LicenseBadge from './LicenseBadge.svelte';
   import ImageLibraryDetailModal from './ImageLibraryDetailModal.svelte';
 
@@ -30,6 +34,97 @@
   let events = $state.raw(/** @type {any[]} */ ([]));
   let userServerList = $state.raw(/** @type {any} */ (undefined));
   let loading = $state(false);
+
+  const oerEnabled = $derived(Boolean(runtimeConfig.oer?.enabled));
+
+  let oerQuery = $state('');
+  let oerSelectedSources = $state(OER_SOURCES.filter((s) => s.checked).map((s) => s.id));
+  // OerItem[] carry no Symbol metadata, but they're replaced wholesale — keep raw for parity.
+  let oerResults = $state.raw(/** @type {any[]} */ ([]));
+  let oerPage = $state(1);
+  let oerHasMore = $state(false);
+  let oerLoading = $state(false);
+  let oerError = $state('');
+  let oerPicking = $state(false);
+
+  /** @param {string} id */
+  function toggleOerSource(id) {
+    oerSelectedSources = oerSelectedSources.includes(id)
+      ? oerSelectedSources.filter((s) => s !== id)
+      : [...oerSelectedSources, id];
+  }
+
+  async function runOerSearch(page = 1) {
+    const term = oerQuery.trim();
+    if (!term || oerSelectedSources.length === 0) return;
+    oerLoading = true;
+    oerError = '';
+    try {
+      const { data, meta } = await searchOer({
+        searchTerm: term,
+        sources: oerSelectedSources,
+        page
+      });
+      // Dedupe by amb.id across pages; first occurrence wins.
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup inside async fn, never stored in reactive state
+      const seen = new Set(page === 1 ? [] : oerResults.map((i) => i.amb?.id ?? i.id));
+      const merged = page === 1 ? [] : [...oerResults];
+      for (const item of data) {
+        const key = item.amb?.id ?? item.id;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(item);
+      }
+      oerResults = merged;
+      oerPage = page;
+      oerHasMore = Boolean(meta?.hasMore);
+    } catch (e) {
+      console.error('OER search failed', e);
+      oerError = m.image_library_picker_oer_error();
+    } finally {
+      oerLoading = false;
+    }
+  }
+
+  /** @param {SubmitEvent} e */
+  function onOerSubmit(e) {
+    e.preventDefault();
+    runOerSearch(1);
+  }
+
+  /** @param {any} item */
+  async function pickOer(item) {
+    if (oerPicking) return;
+    oerPicking = true;
+    oerError = '';
+    try {
+      const originalUrl = item.amb?.id;
+      if (!originalUrl) throw new Error('OER item missing amb.id');
+      const asset = await fetchOerAsset(originalUrl);
+      const existing = await findExistingLicense(asset.sha256);
+      let licenseEvent = existing;
+      if (!licenseEvent) {
+        const input = oerToLicenseInput(item, asset);
+        if (!input) throw new Error('Cannot resolve license for OER item');
+        licenseEvent = await publishLicenseAttestation(input, manager.active);
+      }
+      open = false;
+      onpick({ url: originalUrl, hash: asset.sha256, licenseEvent });
+    } catch (e) {
+      console.error('OER pick failed', e);
+      oerError = m.image_library_picker_oer_pick_failed();
+    } finally {
+      oerPicking = false;
+    }
+  }
+
+  /**
+   * Proxied thumbnail for an OER tile (privacy: browser hits source only on pick).
+   * @param {any} item
+   */
+  function oerThumb(item) {
+    return item.extensions?.images?.small ?? item.extensions?.images?.medium ?? item.amb?.id;
+  }
 
   /** @type {import('rxjs').Subscription | undefined} */
   let timelineSub;
@@ -175,6 +270,84 @@
   <dialog class="modal-open modal">
     <div class="modal-box w-11/12 max-w-4xl">
       <h3 class="text-lg font-semibold">{m.image_library_picker_title()}</h3>
+
+      {#if oerEnabled}
+        <section class="mt-4 rounded-lg border border-base-300 p-3" data-testid="oer-section">
+          <h4 class="mb-2 text-sm font-semibold">{m.image_library_picker_oer_section_title()}</h4>
+          <form class="flex gap-2" onsubmit={onOerSubmit} data-testid="oer-search-form">
+            <input
+              type="search"
+              class="input-bordered input input-sm w-full"
+              placeholder={m.image_library_picker_oer_search_placeholder()}
+              bind:value={oerQuery}
+              data-testid="oer-search-input"
+            />
+            <button type="submit" class="btn btn-sm btn-primary" disabled={oerLoading}>
+              {m.image_library_picker_oer_search_button()}
+            </button>
+          </form>
+
+          <div class="mt-2 flex flex-wrap gap-3">
+            {#each OER_SOURCES as src (src.id)}
+              <label class="flex cursor-pointer items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  checked={oerSelectedSources.includes(src.id)}
+                  onchange={() => toggleOerSource(src.id)}
+                />
+                <span>{src.label}</span>
+              </label>
+            {/each}
+          </div>
+
+          {#if oerError}
+            <p class="mt-2 text-xs text-error" data-testid="oer-error">{oerError}</p>
+          {/if}
+
+          {#if oerLoading && oerResults.length === 0}
+            <div class="py-6 text-center" data-testid="oer-loading">
+              <span class="loading loading-sm loading-spinner"></span>
+              <p class="mt-1 text-xs opacity-70">{m.image_library_picker_oer_loading()}</p>
+            </div>
+          {:else if oerResults.length > 0}
+            <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {#each oerResults as item (item.amb?.id ?? item.id)}
+                <button
+                  type="button"
+                  class="flex flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary disabled:opacity-50"
+                  onclick={() => pickOer(item)}
+                  disabled={oerPicking}
+                  data-testid="oer-tile"
+                >
+                  <div class="aspect-square overflow-hidden rounded bg-base-200">
+                    <img
+                      src={oerThumb(item)}
+                      alt={item.amb?.name ?? m.image_library_picker_thumbnail_alt()}
+                      loading="lazy"
+                      onerror={swapPlaceholder}
+                      class="h-full w-full object-cover"
+                    />
+                  </div>
+                  <span class="truncate text-xs opacity-70">{item.amb?.name ?? ''}</span>
+                </button>
+              {/each}
+            </div>
+            {#if oerHasMore}
+              <div class="mt-3 text-center">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  onclick={() => runOerSearch(oerPage + 1)}
+                  disabled={oerLoading}
+                >
+                  {m.image_library_picker_oer_load_more()}
+                </button>
+              </div>
+            {/if}
+          {/if}
+        </section>
+      {/if}
 
       {#if loading && tiles.length === 0}
         <div class="py-12 text-center" data-testid="library-loading">
