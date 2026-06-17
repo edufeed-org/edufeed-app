@@ -103,9 +103,8 @@ describe('AccountMenuSection', () => {
     expect(await findByText('Alice')).toBeTruthy();
   });
 
-  it('renders all five action rows when only one account exists', async () => {
+  it('renders all action rows when only one account exists', async () => {
     const { findByText, queryByText } = render(AccountMenuSection, { onClose: vi.fn() });
-    expect(await findByText('Profil')).toBeTruthy();
     expect(await findByText('Einstellungen')).toBeTruthy();
     expect(await findByText('Konto wechseln')).toBeTruthy();
     expect(await findByText('Impressum')).toBeTruthy();
@@ -136,11 +135,11 @@ describe('AccountMenuSection', () => {
     expect(container.querySelector('[data-testid="account-count-badge"]')).toBeNull();
   });
 
-  it('Profil link points at the active user profile route', async () => {
+  it('identity header links to the active user profile route', async () => {
     const { findByText } = render(AccountMenuSection, { onClose: vi.fn() });
-    const profilLink = /** @type {HTMLAnchorElement} */ (await findByText('Profil'));
-    // findByText returns the inner text node's closest interactive element
-    const href = profilLink.closest('a')?.getAttribute('href');
+    // The display name now lives inside the profile link (merged header).
+    const nameNode = await findByText('Alice');
+    const href = nameNode.closest('a')?.getAttribute('href');
     expect(href).toBe(`/p/${PUBKEY_A}`);
   });
 

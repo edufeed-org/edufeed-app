@@ -20,13 +20,7 @@
   import { useMembershipPendingCount } from '$lib/stores/membership-pending.svelte.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
-  import {
-    PersonIcon,
-    GearIcon,
-    ArrowLeftRightIcon,
-    InfoCircleIcon,
-    CheckIcon
-  } from '$lib/components/icons';
+  import { GearIcon, ArrowLeftRightIcon, InfoCircleIcon, CheckIcon } from '$lib/components/icons';
 
   /** @type {{ onClose?: () => void }} */
   let { onClose = () => {} } = $props();
@@ -85,32 +79,30 @@
 </script>
 
 {#if activeAccount}
-  <!-- Identity header (display only).
+  <!-- Identity header — links to the active account's profile.
        NOTE: `min-w-0 w-full` on the <li> is required because DaisyUI's `.menu > li`
        defaults to content-sized width and would otherwise overflow the narrow
        w-56 dropdown when the display name is long. The line-clamp-2 + break-words
        on the span lets long names wrap onto a second line (with ellipsis after
        line 2 for the truly enormous ones) — the dropdown is opened on mobile
        too, where there's no hover tooltip to fall back on. -->
-  <li class="menu-disabled pointer-events-none w-full min-w-0">
-    <div class="flex w-full min-w-0 items-start gap-3 py-2">
+  <li class="w-full min-w-0">
+    <a
+      href={resolve(profileLink(activeAccount.pubkey))}
+      onclick={onClose}
+      class="flex w-full min-w-0 items-start gap-3 py-2"
+    >
       <ProfileAvatar pubkey={activeAccount.pubkey} size="sm" fallbackType="robohash" />
       <span
         class="line-clamp-2 min-w-0 flex-1 leading-snug font-medium break-words text-base-content"
         title={displayName}>{displayName}</span
       >
-    </div>
+    </a>
   </li>
 
   <li class="menu-disabled"><hr class="my-1 border-base-300" /></li>
 
   <!-- Group 1: personal actions -->
-  <li>
-    <a href={resolve(profileLink(activeAccount.pubkey))} onclick={onClose}>
-      <PersonIcon class_="w-4 h-4" />
-      {m.common_profile()}
-    </a>
-  </li>
   <li>
     <a href={resolve('/settings')} onclick={onClose}>
       <GearIcon class_="w-4 h-4" />
