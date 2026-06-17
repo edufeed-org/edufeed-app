@@ -68,7 +68,22 @@ vi.mock('$lib/helpers/image-license.js', () => ({
       ['license', input.license],
       ['credit', input.credit]
     ]
-  })
+  }),
+  publishLicenseAttestation: async (input, signer) => {
+    const template = {
+      kind: 1063,
+      content: input.description || '',
+      tags: [
+        ['url', input.url],
+        ['x', input.hash],
+        ['m', input.mime],
+        ['license', input.license],
+        ['credit', input.credit]
+      ]
+    };
+    const eventTemplate = { ...template, created_at: 1, pubkey: signer.pubkey };
+    return signer.signEvent(eventTemplate);
+  }
 }));
 
 vi.mock('$lib/helpers/educational/licenseOptions.js', () => ({
