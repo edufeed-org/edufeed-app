@@ -20,6 +20,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
+  import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
 
@@ -87,6 +88,7 @@
   );
 
   const paletteId = $derived(resource?.identifier ?? '');
+  const coverHue = $derived(getCoverHue(resource));
   const title = $derived(resource?.name ?? '');
 
   // Author attribution for the CC BY footer line.
@@ -140,6 +142,15 @@
       : 'w-full'} {className}"
     data-testid="resource-cover-typo"
   >
-    <TypoCover {title} {contentTypeLabel} {metaLabel} {authors} {licenseLabel} {paletteId} {size} />
+    <TypoCover
+      {title}
+      {contentTypeLabel}
+      {metaLabel}
+      {authors}
+      {licenseLabel}
+      {paletteId}
+      hueOverride={coverHue}
+      {size}
+    />
   </div>
 {/if}
