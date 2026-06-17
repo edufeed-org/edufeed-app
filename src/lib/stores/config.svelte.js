@@ -167,6 +167,10 @@ const defaultConfig = {
     handleDomain: '',
     formAddress: '',
     adminPubkeys: /** @type {string[]} */ ([])
+  },
+  // OER media-library search availability (proxy URL stays server-side)
+  oer: {
+    enabled: false
   }
 };
 
@@ -309,6 +313,10 @@ export function initializeConfig(runtimeConfig) {
     membership: {
       ...defaultConfig.membership,
       ...runtimeConfig.membership
+    },
+    oer: {
+      ...defaultConfig.oer,
+      ...runtimeConfig.oer
     }
   };
 
@@ -402,5 +410,8 @@ export const runtimeConfig = {
   },
   get membership() {
     return config.membership;
+  },
+  get oer() {
+    return config.oer;
   }
 };
