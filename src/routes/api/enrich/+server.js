@@ -18,6 +18,9 @@ import { parseHttpUrl } from '$lib/server/httpUrl.js';
 const VARIANTS = new Set(['amb', 'ekw', 'konfi']);
 const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
 
+/** Upper bound on sources per extraction — mirrors amb-mcp's MAX_SOURCE_URLS. */
+const MAX_SOURCE_URLS = 10;
+
 /**
  * Map a Bildungsbereich key to the `SCHEME_NADDR_*` env var that holds the
  * corresponding subject vocabulary. Mirrors `BILDUNGSBEREICHE.subjectVocabKeys`
@@ -118,7 +121,7 @@ function buildSkosSchemes(variant, bildungsbereich) {
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request }) {
-  /** @type {{ url?: string, variant?: string, bildungsbereich?: string }} */
+  /** @type {{ url?: string, urls?: unknown, variant?: string, bildungsbereich?: string }} */
   let body;
   try {
     body = await request.json();
@@ -126,12 +129,24 @@ export async function POST({ request }) {
     return json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const url = typeof body.url === 'string' ? body.url.trim() : '';
-  if (!url) {
-    return json({ error: 'Missing url' }, { status: 400 });
+  // Accept either a single `url` or a `urls` array (multi-source extraction).
+  // Normalize to an array; the `urls` form falls back to `[url]` when absent.
+  const rawUrls = Array.isArray(body.urls)
+    ? body.urls
+    : typeof body.url === 'string'
+      ? [body.url]
+      : [];
+  const urls = rawUrls
+    .map((u) => (typeof u === 'string' ? u.trim() : ''))
+    .filter((u) => u.length > 0);
+  if (urls.length === 0) {
+    return json({ error: 'Missing url(s)' }, { status: 400 });
   }
-  if (!parseHttpUrl(url)) {
-    return json({ error: 'URL must be a valid http or https URL' }, { status: 400 });
+  if (urls.length > MAX_SOURCE_URLS) {
+    return json({ error: `Too many URLs (max ${MAX_SOURCE_URLS})` }, { status: 400 });
+  }
+  if (!urls.every((u) => parseHttpUrl(u))) {
+    return json({ error: 'Each URL must be a valid http or https URL' }, { status: 400 });
   }
 
   const variantRaw = body.variant ?? 'amb';
@@ -179,7 +194,7 @@ export async function POST({ request }) {
         const result = await callExtractMetadata({
           mcpUrl,
           bearerToken: env.AMB_MCP_BEARER_TOKEN,
-          url,
+          urls,
           variant,
           skosSchemes: buildSkosSchemes(variant, bildungsbereich)
         });

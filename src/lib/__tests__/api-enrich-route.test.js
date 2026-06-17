@@ -73,6 +73,48 @@ describe('POST /api/enrich', () => {
     );
   });
 
+  it('accepts a urls array of valid http(s) URLs and forwards it', async () => {
+    callExtractMetadataMock.mockResolvedValueOnce({
+      source: 'llm-enriched',
+      payload: {},
+      evidence: {},
+      baseline: {}
+    });
+    const res = await POST(
+      ev(
+        makeRequest({
+          urls: ['https://a.example/x.pdf', 'https://b.example/y.pdf'],
+          variant: 'amb'
+        })
+      )
+    );
+    expect(res.status).toBe(200);
+    expect(callExtractMetadataMock).toHaveBeenCalledWith(
+      expect.objectContaining({ urls: ['https://a.example/x.pdf', 'https://b.example/y.pdf'] })
+    );
+  });
+
+  it('rejects a urls array containing an invalid URL', async () => {
+    const res = await POST(
+      ev(makeRequest({ urls: ['https://a.example/x.pdf', 'javascript:alert(1)'], variant: 'amb' }))
+    );
+    expect(res.status).toBe(400);
+    expect(callExtractMetadataMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty urls array', async () => {
+    const res = await POST(ev(makeRequest({ urls: [], variant: 'amb' })));
+    expect(res.status).toBe(400);
+    expect(callExtractMetadataMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a urls array exceeding the source cap', async () => {
+    const tooMany = Array.from({ length: 11 }, (_, i) => `https://e.example/${i}.pdf`);
+    const res = await POST(ev(makeRequest({ urls: tooMany, variant: 'amb' })));
+    expect(res.status).toBe(400);
+    expect(callExtractMetadataMock).not.toHaveBeenCalled();
+  });
+
   it('forwards the result from callExtractMetadata as JSON', async () => {
     const result = {
       source: 'llm-enriched',
