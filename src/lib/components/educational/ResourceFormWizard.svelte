@@ -196,6 +196,20 @@
   // sources once their license modals have completed each upload.
   const uploadedSourceUrls = $derived(selectUploadedSourceUrls(formData.encodings));
 
+  // Cover-color picker is greyed out once a thumbnail URL is set. This MUST be
+  // an $effect-backed $state, not a $derived: the value is consumed only as the
+  // `disabled` prop of <CoverColorPicker>, and `formData.image` is written
+  // through LicensedImageInput's two-hop $bindable. A lazy $derived (and an
+  // inline `disabled={!!formData.image}`) is never re-read on that write, so the
+  // picker only greys out on the next unrelated re-render (e.g. a swatch click).
+  // The $effect is eagerly scheduled on the dependency change, so the prop
+  // updates the moment a URL is typed or pasted. Verified by hand on the wizard.
+  // eslint-disable-next-line svelte/prefer-writable-derived
+  let coverPickerDisabled = $state(false);
+  $effect(() => {
+    coverPickerDisabled = !!formData.image;
+  });
+
   // Konfi sub-step state and config (must come after formData is declared).
   const bildungsbereichConfig = $derived(
     /** @type {any} */ (BILDUNGSBEREICHE)[formData.bildungsbereich]
@@ -2066,7 +2080,7 @@
           </div>
 
           <!-- Cover color (greyed out once a thumbnail is set) -->
-          <CoverColorPicker bind:hue={formData.coverHue} disabled={!!formData.image} />
+          <CoverColorPicker bind:hue={formData.coverHue} disabled={coverPickerDisabled} />
 
           <div class="divider my-1 text-sm">{m.amb_form_cover_or?.() ?? 'or'}</div>
 
