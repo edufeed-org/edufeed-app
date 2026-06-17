@@ -27,6 +27,7 @@
    * @property {string[]} [authors] - Author list (used as CC BY attribution). 1 → full name. 2 → "A & B". 3+ → "A, B et al.".
    * @property {string | null} [licenseLabel] - Bottom-right license tag, e.g. "CC BY 4.0".
    * @property {string} paletteId
+   * @property {number | null} [hueOverride] - User-chosen hue; overrides the hash-derived hue.
    * @property {'thumbnail' | 'full'} [size]
    * @property {string} [class]
    */
@@ -39,6 +40,7 @@
     authors = [],
     licenseLabel = 'CC BY 4.0',
     paletteId,
+    hueOverride = null,
     size = 'full',
     class: className = ''
   } = $props();
@@ -47,7 +49,7 @@
 
   const layout = $derived(titleLayout(title));
   const parts = $derived(splitTitle(title));
-  const hue = $derived(stringColorHue(paletteId));
+  const hue = $derived(hueOverride ?? stringColorHue(paletteId));
 
   // CSS custom properties set inline so each cover gets its own palette.
   // --cover-hue feeds the script-word color tint (see .typo-cover-title-script).
