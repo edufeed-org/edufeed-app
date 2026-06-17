@@ -14,6 +14,7 @@ import { ambToNostr } from 'amb-nostr-converter';
 import { convertFormDataToAMB } from './formDataToAmb.js';
 import { formatAMBResource } from './ambHelpers.js';
 import { getSha256FromURL } from 'applesauce-common/helpers';
+import { appendCoverColorTag } from './coverColor.js';
 
 const AMB_RESOURCE_KIND = 30142;
 const PLACEHOLDER_PUBKEY = '0'.repeat(64);
@@ -139,6 +140,9 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
     const hash = fromLicense ?? fromUrl;
     if (hash) tags.push(['x', hash]);
   }
+
+  // Cover color (app-specific tag, mirrors production publish path).
+  if (formData) appendCoverColorTag(tags, formData.coverHue);
 
   /** @type {any} */
   const event = {

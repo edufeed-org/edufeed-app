@@ -206,4 +206,23 @@ describe('buildPreviewResource — x tag', () => {
     const xTag = r?.tags?.find((t) => t[0] === 'x');
     expect(xTag).toBeUndefined();
   });
+
+  it('emits a cover_color tag when coverHue is set', () => {
+    const resource = buildPreviewResource(
+      { name: 'Title', description: 'Desc', coverHue: 210 },
+      '0'.repeat(64),
+      'en'
+    );
+    const tag = resource.tags.find((t) => t[0] === 'cover_color');
+    expect(tag).toEqual(['cover_color', '210']);
+  });
+
+  it('omits cover_color when coverHue is null', () => {
+    const resource = buildPreviewResource(
+      { name: 'Title', description: 'Desc', coverHue: null },
+      '0'.repeat(64),
+      'en'
+    );
+    expect(resource.tags.some((t) => t[0] === 'cover_color')).toBe(false);
+  });
 });

@@ -68,6 +68,8 @@
   } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
+  import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
+  import CoverColorPicker from './CoverColorPicker.svelte';
   import SmartFillBadge from './SmartFillBadge.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
@@ -773,7 +775,8 @@
       hasPart: /** @type {AMBRelationRef[]} */ (getAMBHasPart(editEvent)),
       isPartOf: /** @type {AMBRelationRef[]} */ (getAMBIsPartOf(editEvent)),
       license: getAMBLicense(editEvent)?.id || 'https://creativecommons.org/licenses/by/4.0/',
-      isAccessibleForFree: isAMBFree(editEvent)
+      isAccessibleForFree: isAMBFree(editEvent),
+      coverHue: getCoverHue(editEvent)
     };
 
     // Merge EKW fields parsed from ekw:* tags (no-op for non-EKW events).
@@ -1237,6 +1240,7 @@
         })),
         inLanguage: formData.inLanguage,
         license: formData.license,
+        coverHue: formData.coverHue,
         creators: formData.creators,
         keywords: formData.keywords,
         files: formData.encodings,
@@ -2044,6 +2048,11 @@
               onapply={handleSuggestionAction}
             />
           </div>
+
+          <!-- Cover color (only meaningful without an uploaded image) -->
+          {#if !formData.image}
+            <CoverColorPicker bind:hue={formData.coverHue} />
+          {/if}
 
           <!-- Content license -->
           <div class="form-control">

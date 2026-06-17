@@ -18,7 +18,8 @@ describe('CoverColorPicker', () => {
     const { getAllByTestId, getByTestId } = render(CoverColorPicker, { props: { hue: null } });
     await fireEvent.click(getAllByTestId('cover-color-swatch')[0]);
     await tick();
-    expect(Number(getByTestId('cover-color-slider').value)).toBe(COVER_HUE_PRESETS[0]);
+    const slider = /** @type {HTMLInputElement} */ (getByTestId('cover-color-slider'));
+    expect(Number(slider.value)).toBe(COVER_HUE_PRESETS[0]);
   });
 
   it('Auto marks itself pressed (hue reset to auto)', async () => {

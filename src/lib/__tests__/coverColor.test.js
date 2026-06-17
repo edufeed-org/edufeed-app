@@ -11,6 +11,7 @@ import {
   appendCoverColorTag
 } from '$lib/helpers/educational/coverColor.js';
 
+/** @param {string[][]} tags */
 const evt = (tags) => ({ kind: 30142, tags, content: '' });
 
 describe('clampHue', () => {
@@ -47,12 +48,12 @@ describe('getCoverHue', () => {
 
 describe('appendCoverColorTag', () => {
   it('pushes one cover_color tag for a valid hue', () => {
-    const tags = [];
+    const tags = /** @type {string[][]} */ ([]);
     appendCoverColorTag(tags, 210);
     expect(tags).toEqual([['cover_color', '210']]);
   });
   it('is a no-op for null / invalid hue', () => {
-    const tags = [];
+    const tags = /** @type {string[][]} */ ([]);
     appendCoverColorTag(tags, null);
     appendCoverColorTag(tags, 999);
     expect(tags).toEqual([]);

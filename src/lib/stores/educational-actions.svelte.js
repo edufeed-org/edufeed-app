@@ -17,6 +17,7 @@ import {
   appendExternalUrlTags,
   appendVariantLabelTags
 } from '$lib/helpers/educational/eventTags.js';
+import { appendCoverColorTag } from '$lib/helpers/educational/coverColor.js';
 import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js';
 
 /**
@@ -48,6 +49,7 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {{id: string, label: string}[]} aboutLabels - Array of {id, label} objects
  * @property {string} inLanguage - ISO 639-1 language code
  * @property {string} license - License URI
+ * @property {number | null} [coverHue] - User-chosen cover hue (null = auto)
  * @property {Creator[]} creators - Array of creators
  * @property {string[]} keywords - Array of keywords/tags
  * @property {UploadedFile[]} files - Array of uploaded files
@@ -224,6 +226,7 @@ export function createEducationalActions() {
         await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
         appendExternalUrlTags(tags, formData.externalUrls);
         appendVariantLabelTags(tags, variantId);
+        appendCoverColorTag(tags, formData.coverHue);
 
         const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
         for (const t of ekwTags) tags.push(t);
@@ -312,6 +315,7 @@ export function createEducationalActions() {
         await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
         appendExternalUrlTags(tags, formData.externalUrls);
         appendVariantLabelTags(tags, variantId);
+        appendCoverColorTag(tags, formData.coverHue);
 
         const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
         for (const t of ekwTags) tags.push(t);
