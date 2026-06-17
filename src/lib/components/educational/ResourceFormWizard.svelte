@@ -61,7 +61,11 @@
   import { useSchemeConcepts } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { ekwKeywordsFromConcepts } from '$lib/helpers/educational/ekwKeywordsFromConcepts.js';
-  import { enrichFromUrl } from '$lib/helpers/educational/enrichFromUrl.js';
+  import { enrichFromUrls } from '$lib/helpers/educational/enrichFromUrl.js';
+  import {
+    dedupeKeyFor,
+    selectUploadedSourceUrls
+  } from '$lib/helpers/educational/enrichSources.js';
   import {
     applyEnrichedPayload,
     dropUnlabeled
@@ -154,8 +158,9 @@
 
   // AI metadata helper — Step 2 button-driven enrichment.
   // The "✨ Mit KI ergänzen" button on step 2 is the ONLY way to trigger an
-  // LLM call. We dedup against `enrichedForUrl` so navigating back/forth or
-  // re-clicking on the same URL never pays the LLM cost twice.
+  // LLM call. We dedup against `enrichedForKey` (the joined source URLs) so
+  // navigating back/forth or re-clicking the same source set never pays the
+  // LLM cost twice — works for both a single pasted URL and uploaded files.
   /** @type {'idle' | 'pending' | 'success' | 'error' | 'skipped-amb'} */
   let enrichmentStatus = $state('idle');
   /**
@@ -167,8 +172,8 @@
    * @type {'' | 'overloaded' | 'page_too_large' | 'tool_error' | 'network' | 'unknown'}
    */
   let enrichmentErrorCode = $state('');
-  /** Stores the URL we last enriched, so re-clicking the button is a no-op. */
-  let enrichedForUrl = $state('');
+  /** Stores the source-set key we last enriched, so re-clicking is a no-op. */
+  let enrichedForKey = $state('');
   /** Source of the most recent metadata fetch; gates the enrichment button. */
   /** @type {'amb-jsonld' | 'opengraph' | 'none' | ''} */
   let metadataFetchSource = $state('');
@@ -177,11 +182,19 @@
   // Surfaced from the child via its `onbusychange` callback.
   let metadataFetchBusy = $state(false);
 
+  // Accepted upload types for the no-URL Step-2 uploader: PDF, slides, docs.
+  // These are the document formats the AI extractor can ground on.
+  const NO_URL_UPLOAD_ACCEPT = '.pdf,.ppt,.pptx,.odp,.key,.doc,.docx,.odt,application/pdf';
+
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
 
   // Form data state
   let formData = $state(createInitialFormData());
+
+  // Blossom URLs of files uploaded in the no-URL branch — the AI enrichment
+  // sources once their license modals have completed each upload.
+  const uploadedSourceUrls = $derived(selectUploadedSourceUrls(formData.encodings));
 
   // Konfi sub-step state and config (must come after formData is declared).
   const bildungsbereichConfig = $derived(
@@ -455,7 +468,7 @@
     hasNoUrl = false;
     enrichmentStatus = 'idle';
     enrichmentErrorCode = '';
-    enrichedForUrl = '';
+    enrichedForKey = '';
     metadataFetchSource = '';
     imagePreviewError = false;
     aiSuggestions = null;
@@ -857,7 +870,7 @@
           metadataFetchSource = 'none';
         }
         // Reset enrichment status when a *new* URL is loaded.
-        if (enrichedForUrl !== result.url) {
+        if (enrichedForKey !== dedupeKeyFor([result.url])) {
           enrichmentStatus = 'idle';
           aiSuggestions = null;
           dismissedSuggestionFields = new Set();
@@ -873,10 +886,12 @@
    * the LLM cost). Only meaningful on step 2 after a URL has been fetched
    * with non-AMB metadata; the wizard renders the trigger button only then.
    */
-  async function runEnrichment() {
-    const url = formData.identifier;
-    if (!url) return;
-    if (enrichedForUrl === url && enrichmentStatus === 'success') return;
+  async function runEnrichment(
+    /** @type {string[]} */ sourceUrls = formData.identifier ? [formData.identifier] : []
+  ) {
+    if (sourceUrls.length === 0) return;
+    const key = dedupeKeyFor(sourceUrls);
+    if (enrichedForKey === key && enrichmentStatus === 'success') return;
     if (enrichmentStatus === 'pending') return;
 
     enrichmentStatus = 'pending';
@@ -891,7 +906,7 @@
           : isEkw
             ? /** @type {const} */ ('ekw')
             : /** @type {const} */ ('amb');
-      const enriched = await enrichFromUrl(url, enrichVariant, {
+      const enriched = await enrichFromUrls(sourceUrls, enrichVariant, {
         bildungsbereich: formData.bildungsbereich
       });
       if (!enriched) {
@@ -970,7 +985,7 @@
           };
         }
       }
-      enrichedForUrl = url;
+      enrichedForKey = key;
       enrichmentStatus = 'success';
       enrichmentErrorCode = '';
     } catch {
@@ -1773,6 +1788,62 @@
       <!-- Step 2: URL / naddr -->
       {#if currentStep === 2}
         <div class="space-y-3">
+          <!-- Shared enrich control: rendered for a pasted URL ([identifier])
+               and for uploaded files (their Blossom URLs). `sourceUrls` is the
+               set that gets sent to /api/enrich as one grounded LLM call. -->
+          {#snippet enrichBlock(/** @type {string[]} */ sourceUrls)}
+            <div class="mt-3">
+              {#if enrichmentStatus === 'success' && enrichedForKey === dedupeKeyFor(sourceUrls)}
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <p class="flex items-center gap-2 text-success">
+                    <span aria-hidden="true">✓</span>
+                    {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
+                  </p>
+                </div>
+              {:else if enrichmentStatus === 'pending'}
+                <button type="button" class="btn btn-sm btn-primary" disabled>
+                  <span class="loading loading-xs loading-spinner"></span>
+                  {m.amb_form_enrich_running?.() ?? 'KI ergänzt Felder…'}
+                </button>
+              {:else}
+                <!-- Button + hint on a single horizontal row (wraps on
+                     narrow viewports). Keeps the call-to-action visually
+                     paired with its explanation instead of stacking them. -->
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={() => runEnrichment(sourceUrls)}
+                  >
+                    {#if enrichmentStatus === 'error'}
+                      {m.amb_form_enrich_retry?.() ?? '✨ Erneut mit KI ergänzen'}
+                    {:else}
+                      {m.amb_form_enrich_button?.() ?? '✨ Mit KI ergänzen'}
+                    {/if}
+                  </button>
+                  {#if enrichmentStatus === 'error'}
+                    <p class="text-sm text-error">
+                      {#if enrichmentErrorCode === 'overloaded'}
+                        {m.amb_form_enrich_error_overloaded?.() ??
+                          'KI-Dienst gerade überlastet — bitte gleich nochmal versuchen.'}
+                      {:else if enrichmentErrorCode === 'page_too_large'}
+                        {m.amb_form_enrich_error_page_too_large?.() ??
+                          'Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen.'}
+                      {:else}
+                        {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
+                      {/if}
+                    </p>
+                  {:else}
+                    <p class="text-sm text-base-content/60">
+                      {m.amb_form_enrich_hint?.() ??
+                        'Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.'}
+                    </p>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/snippet}
+
           {#if hasNoUrl}
             <div
               class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
@@ -1793,6 +1864,21 @@
                 </button>
               {/if}
             </div>
+            {#if !isEditMode}
+              <LicensedFileInput
+                bind:files={formData.encodings}
+                multiple={true}
+                accept={NO_URL_UPLOAD_ACCEPT}
+                label={m.amb_form_step2_upload_label()}
+                helpText={m.amb_form_step2_upload_help()}
+                activeUserDisplayName={previewAuthorProfile?.display_name ??
+                  previewAuthorProfile?.name ??
+                  ''}
+              />
+              {#if uploadedSourceUrls.length > 0}
+                {@render enrichBlock(uploadedSourceUrls)}
+              {/if}
+            {/if}
           {:else}
             <MetadataFetchStep
               bind:value={formData.urlInput}
@@ -1802,52 +1888,7 @@
               onbusychange={(busy) => (metadataFetchBusy = busy)}
             />
             {#if !isEditMode && metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
-              <div class="mt-3">
-                {#if enrichmentStatus === 'success' && enrichedForUrl === formData.identifier}
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <p class="flex items-center gap-2 text-success">
-                      <span aria-hidden="true">✓</span>
-                      {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
-                    </p>
-                  </div>
-                {:else if enrichmentStatus === 'pending'}
-                  <button type="button" class="btn btn-sm btn-primary" disabled>
-                    <span class="loading loading-xs loading-spinner"></span>
-                    {m.amb_form_enrich_running?.() ?? 'KI ergänzt Felder…'}
-                  </button>
-                {:else}
-                  <!-- Button + hint on a single horizontal row (wraps on
-                     narrow viewports). Keeps the call-to-action visually
-                     paired with its explanation instead of stacking them. -->
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <button type="button" class="btn btn-sm btn-primary" onclick={runEnrichment}>
-                      {#if enrichmentStatus === 'error'}
-                        {m.amb_form_enrich_retry?.() ?? '✨ Erneut mit KI ergänzen'}
-                      {:else}
-                        {m.amb_form_enrich_button?.() ?? '✨ Mit KI ergänzen'}
-                      {/if}
-                    </button>
-                    {#if enrichmentStatus === 'error'}
-                      <p class="text-sm text-error">
-                        {#if enrichmentErrorCode === 'overloaded'}
-                          {m.amb_form_enrich_error_overloaded?.() ??
-                            'KI-Dienst gerade überlastet — bitte gleich nochmal versuchen.'}
-                        {:else if enrichmentErrorCode === 'page_too_large'}
-                          {m.amb_form_enrich_error_page_too_large?.() ??
-                            'Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen.'}
-                        {:else}
-                          {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
-                        {/if}
-                      </p>
-                    {:else}
-                      <p class="text-sm text-base-content/60">
-                        {m.amb_form_enrich_hint?.() ??
-                          'Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.'}
-                      </p>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
+              {@render enrichBlock([formData.identifier])}
             {/if}
             {#if !isEditMode}
               <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
@@ -1864,9 +1905,9 @@
                   formData.urlInput = '';
                   formData.identifier = '';
                   // Hide any prior step-2 advance error; the user just
-                  // resolved the "URL required" branch by opting out.
+                  // resolved the "URL required" branch by opting out. Stay on
+                  // Step 2 so they can upload files before advancing manually.
                   advanceAttempted = false;
-                  setTimeout(() => nextStep(), 200);
                 }}
               >
                 <span class="flex-1">

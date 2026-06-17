@@ -3,7 +3,8 @@
  *
  * Covers the escape-hatch card on step 2 of the resource wizard that lets
  * users skip URL/naddr entry and create a Nostr-native resource directly.
- * Clicking the card auto-advances to step 3.
+ * Clicking the card reveals a multi-file uploader and keeps the user on step
+ * 2; they advance to step 3 manually via "Next".
  */
 import { test, expect } from './fixtures.js';
 
@@ -18,8 +19,11 @@ test.describe('Resource form — no-URL option', () => {
     // Auto-advances after 200ms — step 2 shows up.
     await expect(page.getByText('Resource URL or naddr')).toBeVisible({ timeout: 5000 });
 
-    // Step 2: click the no-URL card — auto-advances to step 3 after 200ms.
+    // Step 2: click the no-URL card — reveals the uploader, stays on step 2.
     await page.getByTestId('no-url-button').click();
+    // The multi-file uploader appears; the user advances manually.
+    await expect(page.getByText('Upload files (PDF, slides, documents)')).toBeVisible();
+    await page.getByRole('button', { name: /Next/i }).click();
 
     // Step 3: URL field must be absent; fill required fields and advance.
     await expect(page.locator('#amb-identifier')).toHaveCount(0);
@@ -47,7 +51,8 @@ test.describe('Resource form — no-URL option', () => {
     await page.locator('input[name="bildungsbereich"]').first().check();
     await expect(page.getByText('Resource URL or naddr')).toBeVisible({ timeout: 5000 });
     await page.getByTestId('no-url-button').click();
-    // Auto-advance lands us on step 3 directly.
+    // Uploader is revealed; advance to step 3 manually.
+    await page.getByRole('button', { name: /Next/i }).click();
     await page.locator('#amb-title').fill('Edit Round-Trip Fixture');
     await page.locator('#amb-description').fill('Fixture for edit test.');
     await page.getByRole('button', { name: /Next/i }).click();

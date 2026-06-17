@@ -1727,6 +1727,8 @@
   "amb_form_no_url_or_divider": "oder",
   "amb_form_no_url_cancel": "Doch eine URL eingeben",
   "amb_form_no_url_state_card": "Diese Ressource wird direkt auf Nostr erstellt — du hängst Inhalte (Dateien oder externe Verweise) in Schritt 5 an.",
+  "amb_form_step2_upload_label": "Dateien hochladen (PDF, Folien, Dokumente)",
+  "amb_form_step2_upload_help": "Lade eine oder mehrere Dateien hoch. Nach dem Hochladen kann die KI passende Metadaten aus ihren Inhalten vorschlagen.",
   "amb_form_link_license_details": "Lizenzdetails anzeigen →",
   "amb_form_checkbox_free_access": "Diese Ressource ist frei zugänglich",
   "amb_form_label_cover_color": "Titelbild-Farbe",
