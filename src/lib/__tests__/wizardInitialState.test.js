@@ -37,6 +37,10 @@ describe('createInitialFormData', () => {
     expect(fd.isAccessibleForFree).toBe(true);
   });
 
+  it('defaults coverHue to null (auto)', () => {
+    expect(createInitialFormData().coverHue).toBeNull();
+  });
+
   it('returns a fresh independent object on each call', () => {
     const a = createInitialFormData();
     const b = createInitialFormData();

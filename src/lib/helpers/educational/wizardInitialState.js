@@ -41,6 +41,8 @@ export function createInitialFormData() {
     imageWasUploaded: false,
     imageLicenseEvent: /** @type {import('nostr-tools').NostrEvent | null} */ (null),
     identifier: '',
+    // null = auto (hash-derived) cover color; number = user-chosen hue
+    coverHue: /** @type {number | null} */ (null),
 
     // Step 4: Classification
     learningResourceType: /** @type {CompactConcept[]} */ ([]),
