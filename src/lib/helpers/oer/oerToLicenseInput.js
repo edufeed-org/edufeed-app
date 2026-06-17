@@ -36,12 +36,12 @@ export function oerToLicenseInput(item, asset) {
     url,
     hash: asset.sha256,
     mime: asset.mime,
+    ...(typeof asset.size === 'number' && { size: asset.size }),
     license,
     credit,
-    source: system.foreignLandingUrl || url
+    source: system.foreignLandingUrl || url,
+    ...(amb.name && { title: amb.name }),
+    ...(fileMetadata.fileDim && { dim: fileMetadata.fileDim })
   };
-  if (typeof asset.size === 'number') input.size = asset.size;
-  if (amb.name) input.title = amb.name;
-  if (fileMetadata.fileDim) input.dim = fileMetadata.fileDim;
   return input;
 }
