@@ -300,6 +300,27 @@ describe('AMBResourceView', () => {
     }
   });
 
+  it('renders contributor placeholders without broken robohash images', () => {
+    // Anti-regression: name-only contributors used to point <img> at
+    // robohash.org, which left a broken-image icon when robohash failed.
+    const { container } = render(AMBResourceView, {
+      props: {
+        event: mockEvent,
+        resource: { ...mockResource, creatorNames: ['John Sankey', 'Bernd Ost'] }
+      }
+    });
+
+    // No contributor avatar should rely on robohash.
+    const robohashImgs = container.querySelectorAll('img[src*="robohash"]');
+    expect(robohashImgs.length).toBe(0);
+
+    // Each name-only contributor renders an initial-letter placeholder.
+    const fallbacks = container.querySelectorAll('.av-fallback');
+    expect(fallbacks.length).toBe(2);
+    expect(fallbacks[0].textContent?.trim()).toBe('J');
+    expect(fallbacks[1].textContent?.trim()).toBe('B');
+  });
+
   it('mounts the PDF inline viewer for PDF encodings', () => {
     const { container } = render(AMBResourceView, {
       props: { event: mockEvent, resource: mockResource }

@@ -693,29 +693,30 @@
   {#if creators.length > 1 || resource.creatorNames.length > 1}
     <section class="ed-sect-plain">
       <h3 class="ed-block-head">{m.amb_resource_all_contributors()}</h3>
+      {#snippet initialAvatar(/** @type {string} */ name)}
+        <div class="av av-fallback" aria-hidden="true">
+          {(name?.trim()?.charAt(0) || '?').toUpperCase()}
+        </div>
+      {/snippet}
       <div class="ed-contrib-grid">
         {#each creators as creator (creator.pubkey)}
           {@const getCreatorProfile = useUserProfile(creator.pubkey)}
           {@const creatorProfile = getCreatorProfile()}
+          {@const picture = getProfilePicture(creatorProfile)}
+          {@const name = getDisplayName(creatorProfile, creator.pubkey.slice(0, 8) + '...')}
           <div class="ed-contrib">
-            <img
-              class="av"
-              src={getProfilePicture(creatorProfile) || `https://robohash.org/${creator.pubkey}`}
-              alt={m.amb_resource_creator_alt()}
-            />
-            <span class="name"
-              >{getDisplayName(creatorProfile, creator.pubkey.slice(0, 8) + '...')}</span
-            >
+            {#if picture}
+              <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
+            {:else}
+              {@render initialAvatar(name)}
+            {/if}
+            <span class="name">{name}</span>
           </div>
         {/each}
 
         {#each resource.creatorNames as name (name)}
           <div class="ed-contrib">
-            <img
-              class="av"
-              src={`https://robohash.org/${encodeURIComponent(name)}`}
-              alt="Creator"
-            />
+            {@render initialAvatar(name)}
             <span class="name">{name}</span>
           </div>
         {/each}
@@ -1216,6 +1217,14 @@
     border-radius: 999px;
     object-fit: cover;
     background: var(--c-bg);
+  }
+  .ed-contrib .av-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c-ink);
   }
   .ed-contrib .name {
     font-size: 14px;
