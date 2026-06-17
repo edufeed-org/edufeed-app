@@ -90,7 +90,7 @@
     <a
       href={resolve(profileLink(activeAccount.pubkey))}
       onclick={onClose}
-      class="flex w-full min-w-0 items-start gap-3 py-2"
+      class="flex w-full min-w-0 items-center gap-3 py-2"
     >
       <ProfileAvatar pubkey={activeAccount.pubkey} size="sm" fallbackType="robohash" />
       <span
