@@ -52,7 +52,7 @@ export function isPrivateIp(parsedUrl) {
     hostname === '[::1]' ||
     hostname.startsWith('10.') ||
     hostname.startsWith('192.168.') ||
-    hostname.startsWith('172.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
     hostname === '0.0.0.0' ||
     hostname.endsWith('.local')
   );
