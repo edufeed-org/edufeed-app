@@ -101,6 +101,38 @@ describe('callExtractMetadata', () => {
     expect(fetchMock.mock.calls[2][1].headers['Mcp-Session-Id']).toBe('sess-abc');
   });
 
+  it('forwards a urls array (multi-source) in the tools/call arguments', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: { content: [{ type: 'text', text: '{}' }] }
+          },
+          'sess'
+        )
+      );
+
+    await callExtractMetadata({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      urls: ['https://a.example/x.pdf', 'https://b.example/y.pdf'],
+      variant: 'amb',
+      skosSchemes: {}
+    });
+
+    const callBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(callBody.params.arguments).toEqual({
+      urls: ['https://a.example/x.pdf', 'https://b.example/y.pdf'],
+      variant: 'amb',
+      skosSchemes: {}
+    });
+    expect(callBody.params.arguments.url).toBeUndefined();
+  });
+
   it('omits Authorization header when no token is configured', async () => {
     fetchMock
       .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-1'))

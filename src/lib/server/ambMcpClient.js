@@ -54,12 +54,31 @@ function parseSseJsonRpc(body) {
  * @param {object} params
  * @param {string} params.mcpUrl - Full `/mcp` endpoint URL.
  * @param {string | undefined} params.bearerToken - If set, sent as `Authorization: Bearer <token>`.
- * @param {string} params.url - Public http(s) page to extract.
+ * @param {string} [params.url] - Single public http(s) page to extract.
+ * @param {string[]} [params.urls] - Multiple http(s) pages to extract together (multi-source).
  * @param {'amb' | 'ekw' | 'konfi'} params.variant
  * @param {Record<string, string>} params.skosSchemes - form-field → scheme naddr.
  * @returns {Promise<{ source: string, payload: object, evidence: object, baseline: object }>}
  */
-export async function callExtractMetadata({ mcpUrl, bearerToken, url, variant, skosSchemes }) {
+export async function callExtractMetadata({
+  mcpUrl,
+  bearerToken,
+  url,
+  urls,
+  variant,
+  skosSchemes
+}) {
+  const sourceUrls = urls ?? (url ? [url] : []);
+  if (sourceUrls.length === 0) {
+    throw new Error('callExtractMetadata requires `url` or a non-empty `urls` array.');
+  }
+  // Send the single-URL shape when there is exactly one source so the call
+  // still works against an amb-mcp server that predates the `urls` array.
+  // Multi-source extractions require the newer server (deploy it first).
+  const toolArguments =
+    sourceUrls.length === 1
+      ? { url: sourceUrls[0], variant, skosSchemes }
+      : { urls: sourceUrls, variant, skosSchemes };
   // 1. initialize — capture session id from response header
   const initRes = await fetch(mcpUrl, {
     method: 'POST',
@@ -109,7 +128,7 @@ export async function callExtractMetadata({ mcpUrl, bearerToken, url, variant, s
       method: 'tools/call',
       params: {
         name: 'extract_metadata',
-        arguments: { url, variant, skosSchemes }
+        arguments: toolArguments
       }
     })
   });
