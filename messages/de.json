@@ -1729,6 +1729,8 @@
   "amb_form_no_url_state_card": "Diese Ressource wird direkt auf Nostr erstellt — du hängst Inhalte (Dateien oder externe Verweise) in Schritt 5 an.",
   "amb_form_link_license_details": "Lizenzdetails anzeigen →",
   "amb_form_checkbox_free_access": "Diese Ressource ist frei zugänglich",
+  "amb_form_label_cover_color": "Titelbild-Farbe",
+  "amb_form_cover_color_auto": "Automatisch",
   "amb_form_summary_title": "Titel:",
   "amb_form_summary_language": "Sprache:",
   "amb_form_summary_type": "Typ:",
