@@ -2,7 +2,8 @@ import { nip19 } from 'nostr-tools';
 import { eventLoader, addressLoader } from '$lib/loaders';
 import { firstValueFrom, timeout, catchError, of } from 'rxjs';
 import { getSeenRelays } from 'applesauce-core/helpers';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getAllLookupRelays, getAppManagedRelays } from '$lib/helpers/relay-helper.js';
+import { prioritizeRelayHints } from '$lib/helpers/relayHints.js';
 import { getCalendarEventStart } from 'applesauce-common/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { parseCalendarTimestamp } from '$lib/helpers/calendar.js';
@@ -201,6 +202,11 @@ export function isAMBResourceIdentifier(decoded) {
  * @param identifier {string} - Can be an event ID, naddr, or other identifier
  * @returns Promise that resolves to the event or null if not found
  */
+// Cold WebSocket connect + REQ + response for a thinly-replicated event can
+// take several seconds, especially when the only holder is a slow relay. Keep
+// this generous so the loader's batching buffer doesn't eat the whole window.
+const EVENT_FETCH_TIMEOUT_MS = 8000;
+
 export const fetchEventById = async (identifier) => {
   try {
     // Handle different identifier types using applesauce loaders
@@ -237,7 +243,7 @@ export const fetchEventById = async (identifier) => {
 
           // Use addressLoader for addressable events (fetches from relays)
           const event$ = addressLoader(addressPointer).pipe(
-            timeout(3000),
+            timeout(EVENT_FETCH_TIMEOUT_MS),
             catchError(() => of(null))
           );
           const event = await firstValueFrom(event$, { defaultValue: null });
@@ -265,7 +271,7 @@ export const fetchEventById = async (identifier) => {
           const lookupRelays = getAllLookupRelays();
           const relays = [...new Set([...hintRelays, ...lookupRelays])];
           const event$ = eventLoader({ id: data.id, relays }).pipe(
-            timeout(3000),
+            timeout(EVENT_FETCH_TIMEOUT_MS),
             catchError(() => of(null))
           );
           const event = await firstValueFrom(event$, { defaultValue: null });
@@ -284,7 +290,7 @@ export const fetchEventById = async (identifier) => {
         if (decoded.type === 'note') {
           // Use eventLoader for event IDs
           const event$ = eventLoader({ id: decoded.data }).pipe(
-            timeout(3000),
+            timeout(EVENT_FETCH_TIMEOUT_MS),
             catchError(() => of(null))
           );
           const event = await firstValueFrom(event$, { defaultValue: null });
@@ -300,7 +306,7 @@ export const fetchEventById = async (identifier) => {
       // Assume it's a raw event ID - use eventLoader
       try {
         const event$ = eventLoader({ id: identifier }).pipe(
-          timeout(3000),
+          timeout(EVENT_FETCH_TIMEOUT_MS),
           catchError(() => of(null))
         );
         const event = await firstValueFrom(event$, { defaultValue: null });
@@ -470,14 +476,11 @@ export const encodeEventToNaddr = (event, relays = []) => {
     // Extract d tag for the identifier
     const dTag = event.tags.find((t) => t[0] === 'd')?.[1] || '';
 
-    // Get relay hints from seen relays if not explicitly provided
+    // Get relay hints from seen relays if not explicitly provided.
+    // Durable (app-managed) relays go first so hints favor holders that persist.
     let relayHints = relays;
     if (!relayHints || relayHints.length === 0) {
-      const seenRelays = getSeenRelays(event);
-      if (seenRelays && seenRelays.size > 0) {
-        // Convert Set to Array and limit to 3 relays (NIP-19 recommendation)
-        relayHints = Array.from(seenRelays).slice(0, 3);
-      }
+      relayHints = prioritizeRelayHints(getSeenRelays(event), getAppManagedRelays());
     }
 
     // Build naddr data with optional relays
@@ -518,10 +521,7 @@ export const encodeEventBech32 = (event, relays = []) => {
   try {
     let relayHints = relays;
     if (!relayHints || relayHints.length === 0) {
-      const seenRelays = getSeenRelays(event);
-      if (seenRelays && seenRelays.size > 0) {
-        relayHints = Array.from(seenRelays).slice(0, 3);
-      }
+      relayHints = prioritizeRelayHints(getSeenRelays(event), getAppManagedRelays());
     }
     return nip19.neventEncode({
       id: event.id,

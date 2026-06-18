@@ -1,4 +1,7 @@
 import { nip19 } from 'nostr-tools';
+import { getSeenRelays } from 'applesauce-core/helpers';
+import { getAppManagedRelays } from '$lib/helpers/relay-helper.js';
+import { prioritizeRelayHints } from '$lib/helpers/relayHints.js';
 
 /**
  * Encode a hex pubkey as npub. Returns null for malformed input so callers
@@ -86,8 +89,12 @@ function encodeNaddr(event) {
  */
 function encodeNevent(event) {
   if (!event?.id) return null;
+  // Carry the relays we actually saw the event on so the redirect target can
+  // refetch it — re-encoding with empty hints leaves the community route
+  // dependent solely on lookup relays, which may not hold the event.
+  const relays = prioritizeRelayHints(getSeenRelays(event), getAppManagedRelays());
   try {
-    return nip19.neventEncode({ id: event.id, relays: [] });
+    return nip19.neventEncode({ id: event.id, relays });
   } catch {
     return null;
   }

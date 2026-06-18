@@ -110,6 +110,26 @@ export function getAllLookupRelays() {
 }
 
 /**
+ * Get the app-managed (durable) relays — every app category, no public fallback.
+ *
+ * Used to prioritize relay hints: among the relays an event was actually seen
+ * on, these outlive transient public relays, so a hint pointing at one is more
+ * likely to still resolve later. This intentionally omits fallbackRelays.
+ * @returns {string[]}
+ */
+export function getAppManagedRelays() {
+  return [
+    ...new Set([
+      ...getAppRelaysForCategory('calendar'),
+      ...getAppRelaysForCategory('communikey'),
+      ...getAppRelaysForCategory('educational'),
+      ...getAppRelaysForCategory('longform'),
+      ...getAppRelaysForCategory('kanban')
+    ])
+  ];
+}
+
+/**
  * Get lookup relays for the EventStore auto-load path (applesauce's
  * `lookupRelays` option on the unified/address loaders).
  *
