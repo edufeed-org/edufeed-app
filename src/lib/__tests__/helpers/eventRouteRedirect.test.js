@@ -2,6 +2,7 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { nip19 } from 'nostr-tools';
+import { addSeenRelay } from 'applesauce-core/helpers';
 import { getCanonicalEventRoute } from '$lib/helpers/eventRouteRedirect.js';
 
 const AUTHOR_HEX = 'a'.repeat(64);
@@ -125,6 +126,21 @@ describe('getCanonicalEventRoute', () => {
     it('routes h-tagged kind 11 (forum) to /c/<npub>/<nevent>', () => {
       const event = makeEvent({ kind: 11, hTag: COMMUNITY_HEX });
       expect(getCanonicalEventRoute(event)).toBe(`/c/${COMMUNITY_NPUB}/${expectedNevent()}`);
+    });
+
+    it('preserves the event seen-relays as nevent hints', () => {
+      const event = makeEvent({ kind: 1111, hTag: COMMUNITY_HEX });
+      addSeenRelay(event, 'wss://relay-rpi.edufeed.org');
+      addSeenRelay(event, 'wss://nos.lol');
+
+      const route = getCanonicalEventRoute(event);
+      const nevent = route.split('/').pop();
+      const decoded = nip19.decode(nevent);
+
+      expect(decoded.type).toBe('nevent');
+      expect(decoded.data.relays).toEqual(
+        expect.arrayContaining(['wss://relay-rpi.edufeed.org', 'wss://nos.lol'])
+      );
     });
   });
 

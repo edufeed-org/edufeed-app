@@ -41,10 +41,14 @@ export const addressLoader = createAddressLoader(pool, {
   }
 });
 
-// Standalone event-by-ID loader for direct use
+// Standalone event-by-ID loader for direct use.
+// bufferTime: 0 dispatches the relay request on the next microtask instead of
+// waiting the default 1s — same-tick calls still batch, but a single detail-page
+// fetch no longer burns a full second of its timeout budget before connecting.
 export const eventLoader = createEventLoader(pool, {
   eventStore,
-  cacheRequest
+  cacheRequest,
+  bufferTime: 0
 });
 
 // Unified loader for EventStore - handles both EventPointer and AddressPointer.

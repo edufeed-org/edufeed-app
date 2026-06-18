@@ -3,6 +3,8 @@ import { getSeenRelays } from 'applesauce-core/helpers';
 import { getCommentRootPointer, isCommentExternalPointer } from 'applesauce-common/helpers';
 import { extractUrlFromEvent, extractEventRefFromHighlight } from '$lib/helpers/urlGrouping.js';
 import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils.js';
+import { getAppManagedRelays } from '$lib/helpers/relay-helper.js';
+import { prioritizeRelayHints } from '$lib/helpers/relayHints.js';
 
 /**
  * A kind 1111 (NIP-22 Comment) acts as a bookmark only when it's a page note —
@@ -85,10 +87,9 @@ export function getContentEventRoute(event, options = {}) {
 
   // Non-addressable events: encode as nevent (kind 11, kind 1, kind 1068, etc.)
   if (event.id) {
-    const relays = getSeenRelays(event);
     const nevent = nip19.neventEncode({
       id: event.id,
-      relays: relays ? Array.from(relays).slice(0, 3) : []
+      relays: prioritizeRelayHints(getSeenRelays(event), getAppManagedRelays())
     });
     // Polls (kind 1068) need a community-scoped detail route so the community
     // sidebar stays visible. Other non-addressable kinds (1, 11, 1111, …) use
