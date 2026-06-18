@@ -68,6 +68,8 @@ export function getLicenseUrl(event) {
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { firstValueFrom, take, timeout, catchError, of } from 'rxjs';
+import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 
 /**
  * One-shot relay lookup for an existing NIP-94 kind 1063 license event
@@ -112,4 +114,25 @@ export async function findExistingLicense(hash) {
   }
 
   return event;
+}
+
+/**
+ * Build → sign → add-to-store → publish a kind-1063 license attestation.
+ * The single publish path shared by the LicenseModal create-flow and the OER
+ * picker's mint-on-pick. Optimistic: adds to EventStore before the relay round
+ * trip so reactive `useLicenseForHash` subscribers see the badge immediately.
+ *
+ * @param {Parameters<typeof buildLicenseTemplate>[0]} input
+ * @param {{ pubkey: string, signEvent: (e: any) => Promise<any> } | null | undefined} signer
+ * @returns {Promise<import('nostr-tools').NostrEvent>}
+ */
+export async function publishLicenseAttestation(input, signer) {
+  if (!signer) throw new Error('publishLicenseAttestation: no signer');
+  const template = buildLicenseTemplate(input);
+  const factory = createAppEventFactory();
+  const eventTemplate = await factory.build(template);
+  const signed = await signer.signEvent(eventTemplate);
+  eventStore.add(signed);
+  publishEventOptimistic(signed, [], {});
+  return signed;
 }

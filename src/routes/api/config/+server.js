@@ -363,6 +363,12 @@ export function GET() {
       handleDomain: env.NIP05_HANDLE_DOMAIN || '',
       formAddress: env.MEMBERSHIP_FORM_ADDRESS || '',
       adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
+    },
+
+    // OER media-library search (proxied via the homelab oer-finder-plugin).
+    // Only exposes whether it's enabled — the proxy URL stays server-side.
+    oer: {
+      enabled: Boolean(env.OER_PROXY_URL)
     }
   };
 

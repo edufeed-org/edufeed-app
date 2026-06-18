@@ -1,28 +1,11 @@
 import sharp from 'sharp';
+import { isPrivateIp } from '$lib/server/httpUrl.js';
 
 const MAX_UPSTREAM_SIZE = 25 * 1024 * 1024; // 25MB
 const MAX_WIDTH = 1920;
 const MAX_HEIGHT = 1080;
 const DEFAULT_QUALITY = 80;
 const FETCH_TIMEOUT = 10_000;
-
-/**
- * @param {URL} parsedUrl
- * @returns {boolean}
- */
-function isPrivateIp(parsedUrl) {
-  const hostname = parsedUrl.hostname;
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '::1' ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('172.') ||
-    hostname === '0.0.0.0' ||
-    hostname.endsWith('.local')
-  );
-}
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function GET({ url }) {

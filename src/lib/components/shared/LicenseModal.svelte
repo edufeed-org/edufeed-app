@@ -1,10 +1,7 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { publishEventOptimistic } from '$lib/services/publish-service.js';
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-  import { buildLicenseTemplate } from '$lib/helpers/image-license.js';
+  import { publishLicenseAttestation } from '$lib/helpers/image-license.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
 
@@ -162,23 +159,21 @@
         return;
       }
 
-      const template = buildLicenseTemplate({
-        hash: attestHash,
-        url: attestUrl,
-        mime: attestMime,
-        size: attestSize,
-        license: modalLicense,
-        credit: modalCredit,
-        title: modalTitle || undefined,
-        source: modalSource || undefined,
-        creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
-        description: modalDescription || undefined
-      });
-      const factory = createAppEventFactory();
-      const eventTemplate = await factory.build(template);
-      const signed = await effectiveSigner.signEvent(eventTemplate);
-      eventStore.add(signed);
-      publishEventOptimistic(signed, [], {});
+      const signed = await publishLicenseAttestation(
+        {
+          hash: attestHash,
+          url: attestUrl,
+          mime: attestMime,
+          size: attestSize,
+          license: modalLicense,
+          credit: modalCredit,
+          title: modalTitle || undefined,
+          source: modalSource || undefined,
+          creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
+          description: modalDescription || undefined
+        },
+        effectiveSigner
+      );
       open = false;
       onsave(signed);
     } catch (e) {
