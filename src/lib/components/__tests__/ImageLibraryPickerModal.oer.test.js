@@ -84,7 +84,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   image_library_picker_oer_error: () => 'image_library_picker_oer_error',
   image_library_picker_oer_loading: () => 'image_library_picker_oer_loading',
   image_library_picker_oer_load_more: () => 'image_library_picker_oer_load_more',
-  image_library_picker_oer_pick_failed: () => 'image_library_picker_oer_pick_failed'
+  image_library_picker_oer_pick_failed: () => 'image_library_picker_oer_pick_failed',
+  image_library_picker_tab_library: () => 'image_library_picker_tab_library',
+  image_library_picker_tab_search: () => 'image_library_picker_tab_search'
 }));
 
 import ImageLibraryPickerModal from '../shared/ImageLibraryPickerModal.svelte';
@@ -108,9 +110,18 @@ beforeEach(() => {
 });
 
 describe('ImageLibraryPickerModal — OER search', () => {
-  it('renders the OER search section when oer.enabled', () => {
+  it('renders the OER search section when oer.enabled', async () => {
     const { getByTestId } = render(ImageLibraryPickerModal, { props: { open: true } });
+    await fireEvent.click(getByTestId('tab-search'));
     expect(getByTestId('oer-search-input')).toBeTruthy();
+  });
+
+  it('defaults to the library tab; OER section is hidden until the search tab is selected', () => {
+    const { getByTestId, queryByTestId } = render(ImageLibraryPickerModal, {
+      props: { open: true }
+    });
+    expect(getByTestId('picker-tabs')).toBeTruthy();
+    expect(queryByTestId('oer-search-input')).toBeNull();
   });
 
   it('searches and renders OER tiles with the proxied thumbnail', async () => {
@@ -118,6 +129,7 @@ describe('ImageLibraryPickerModal — OER search', () => {
     const { getByTestId, getAllByTestId } = render(ImageLibraryPickerModal, {
       props: { open: true }
     });
+    await fireEvent.click(getByTestId('tab-search'));
     await fireEvent.input(getByTestId('oer-search-input'), { target: { value: 'tree' } });
     await fireEvent.submit(getByTestId('oer-search-form'));
     await new Promise((r) => setTimeout(r, 10));
@@ -139,6 +151,7 @@ describe('ImageLibraryPickerModal — OER search', () => {
 
     const onpick = vi.fn();
     const { getByTestId } = render(ImageLibraryPickerModal, { props: { open: true, onpick } });
+    await fireEvent.click(getByTestId('tab-search'));
     await fireEvent.input(getByTestId('oer-search-input'), { target: { value: 'tree' } });
     await fireEvent.submit(getByTestId('oer-search-form'));
     await new Promise((r) => setTimeout(r, 10));
@@ -168,6 +181,7 @@ describe('ImageLibraryPickerModal — OER search', () => {
 
     const onpick = vi.fn();
     const { getByTestId } = render(ImageLibraryPickerModal, { props: { open: true, onpick } });
+    await fireEvent.click(getByTestId('tab-search'));
     await fireEvent.input(getByTestId('oer-search-input'), { target: { value: 'tree' } });
     await fireEvent.submit(getByTestId('oer-search-form'));
     await new Promise((r) => setTimeout(r, 10));

@@ -37,6 +37,9 @@
 
   const oerEnabled = $derived(Boolean(runtimeConfig.oer?.enabled));
 
+  /** @type {'library' | 'search'} */
+  let activeTab = $state('library');
+
   let oerQuery = $state('');
   let oerSelectedSources = $state(OER_SOURCES.filter((s) => s.checked).map((s) => s.id));
   // OerItem[] carry no Symbol metadata, but they're replaced wholesale — keep raw for parity.
@@ -136,6 +139,7 @@
   $effect(() => {
     if (!open) return;
 
+    activeTab = 'library';
     loading = true;
 
     // Timeline subscription: reactive view of all kind 1063 events in the store.
@@ -272,6 +276,34 @@
       <h3 class="text-lg font-semibold">{m.image_library_picker_title()}</h3>
 
       {#if oerEnabled}
+        <div role="tablist" class="tabs-boxed mt-4 tabs" data-testid="picker-tabs">
+          <button
+            type="button"
+            role="tab"
+            class="tab {activeTab === 'library' ? 'tab-active' : ''}"
+            aria-selected={activeTab === 'library'}
+            onclick={() => (activeTab = 'library')}
+            data-testid="tab-library"
+          >
+            {m.image_library_picker_tab_library()}
+            {#if tiles.length > 0}
+              <span class="ml-2 badge badge-sm">{tiles.length}</span>
+            {/if}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="tab {activeTab === 'search' ? 'tab-active' : ''}"
+            aria-selected={activeTab === 'search'}
+            onclick={() => (activeTab = 'search')}
+            data-testid="tab-search"
+          >
+            {m.image_library_picker_tab_search()}
+          </button>
+        </div>
+      {/if}
+
+      {#if oerEnabled && activeTab === 'search'}
         <section class="mt-4 rounded-lg border border-base-300 p-3" data-testid="oer-section">
           <h4 class="mb-2 text-sm font-semibold">{m.image_library_picker_oer_section_title()}</h4>
           <form class="flex gap-2" onsubmit={onOerSubmit} data-testid="oer-search-form">
@@ -349,42 +381,44 @@
         </section>
       {/if}
 
-      {#if loading && tiles.length === 0}
-        <div class="py-12 text-center" data-testid="library-loading">
-          <span class="loading loading-md loading-spinner"></span>
-          <p class="mt-2 text-sm opacity-70">{m.image_library_picker_loading()}</p>
-        </div>
-      {:else if tiles.length === 0}
-        <div class="py-12 text-center">
-          <p class="font-medium">{m.image_library_picker_empty_title()}</p>
-          <p class="mt-1 text-sm opacity-70">{m.image_library_picker_empty_desc()}</p>
-          <button type="button" class="btn mt-4 btn-primary" onclick={handleUpload}>
-            {m.image_library_picker_empty_cta()}
-          </button>
-        </div>
-      {:else}
-        <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {#each tiles as tile (tile.event.id)}
-            <button
-              type="button"
-              class="flex flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary"
-              onclick={() => showDetails(tile)}
-              data-testid="library-tile"
-              data-event-id={tile.event.id}
-            >
-              <div class="aspect-square overflow-hidden rounded bg-base-200">
-                <img
-                  src={tile.meta.url}
-                  alt={m.image_library_picker_thumbnail_alt()}
-                  loading="lazy"
-                  onerror={swapPlaceholder}
-                  class="h-full w-full object-cover"
-                />
-              </div>
-              <LicenseBadge licenseEvent={tile.event} class="self-start" />
+      {#if !oerEnabled || activeTab === 'library'}
+        {#if loading && tiles.length === 0}
+          <div class="py-12 text-center" data-testid="library-loading">
+            <span class="loading loading-md loading-spinner"></span>
+            <p class="mt-2 text-sm opacity-70">{m.image_library_picker_loading()}</p>
+          </div>
+        {:else if tiles.length === 0}
+          <div class="py-12 text-center">
+            <p class="font-medium">{m.image_library_picker_empty_title()}</p>
+            <p class="mt-1 text-sm opacity-70">{m.image_library_picker_empty_desc()}</p>
+            <button type="button" class="btn mt-4 btn-primary" onclick={handleUpload}>
+              {m.image_library_picker_empty_cta()}
             </button>
-          {/each}
-        </div>
+          </div>
+        {:else}
+          <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {#each tiles as tile (tile.event.id)}
+              <button
+                type="button"
+                class="flex flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary"
+                onclick={() => showDetails(tile)}
+                data-testid="library-tile"
+                data-event-id={tile.event.id}
+              >
+                <div class="aspect-square overflow-hidden rounded bg-base-200">
+                  <img
+                    src={tile.meta.url}
+                    alt={m.image_library_picker_thumbnail_alt()}
+                    loading="lazy"
+                    onerror={swapPlaceholder}
+                    class="h-full w-full object-cover"
+                  />
+                </div>
+                <LicenseBadge licenseEvent={tile.event} class="self-start" />
+              </button>
+            {/each}
+          </div>
+        {/if}
       {/if}
 
       <div class="modal-action">

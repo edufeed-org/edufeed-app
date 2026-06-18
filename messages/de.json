@@ -2445,6 +2445,8 @@
   "image_library_picker_oer_error": "Suche fehlgeschlagen. Bitte erneut versuchen.",
   "image_library_picker_oer_load_more": "Mehr laden",
   "image_library_picker_oer_pick_failed": "Bild konnte nicht übernommen werden.",
+  "image_library_picker_tab_library": "Deine Bibliothek",
+  "image_library_picker_tab_search": "Bibliotheken durchsuchen",
   "image_library_detail_title": "Bilddetails",
   "image_library_detail_use": "Dieses Bild verwenden",
   "image_library_detail_type": "Typ",

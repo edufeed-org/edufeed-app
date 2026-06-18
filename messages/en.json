@@ -2445,6 +2445,8 @@
   "image_library_picker_oer_error": "Search failed. Please try again.",
   "image_library_picker_oer_load_more": "Load more",
   "image_library_picker_oer_pick_failed": "Could not use that image.",
+  "image_library_picker_tab_library": "Your library",
+  "image_library_picker_tab_search": "Search libraries",
   "image_library_detail_title": "Image details",
   "image_library_detail_use": "Use this image",
   "image_library_detail_type": "Type",
