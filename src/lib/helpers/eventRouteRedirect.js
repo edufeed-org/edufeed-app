@@ -92,7 +92,10 @@ function encodeNevent(event) {
   // Carry the relays we actually saw the event on so the redirect target can
   // refetch it — re-encoding with empty hints leaves the community route
   // dependent solely on lookup relays, which may not hold the event.
-  const relays = prioritizeRelayHints(getSeenRelays(event), getAppManagedRelays());
+  const relays = prioritizeRelayHints(
+    getSeenRelays(/** @type {any} */ (event)),
+    getAppManagedRelays()
+  );
   try {
     return nip19.neventEncode({ id: event.id, relays });
   } catch {

@@ -40,7 +40,15 @@ describe('fetchEventById timeout', () => {
   });
 
   it('resolves an event that arrives ~4s after the request', async () => {
-    const event = { id: EVENT_ID, kind: 1, pubkey: 'a'.repeat(64), tags: [], content: '', sig: '' };
+    const event = {
+      id: EVENT_ID,
+      kind: 1,
+      pubkey: 'a'.repeat(64),
+      tags: [],
+      content: '',
+      sig: '',
+      created_at: 0
+    };
     // Relay answers 4s in — past the old 3s window, within a sane one.
     vi.mocked(eventLoader).mockReturnValue(of(event).pipe(delay(4000)));
 

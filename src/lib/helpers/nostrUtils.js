@@ -196,17 +196,17 @@ export function isAMBResourceIdentifier(decoded) {
   return decoded.success && decoded.type === 'naddr' && decoded.data.kind === 30142;
 }
 
-/**
- * Fetches a Nostr event using various identifier types
- *
- * @param identifier {string} - Can be an event ID, naddr, or other identifier
- * @returns Promise that resolves to the event or null if not found
- */
 // Cold WebSocket connect + REQ + response for a thinly-replicated event can
 // take several seconds, especially when the only holder is a slow relay. Keep
 // this generous so the loader's batching buffer doesn't eat the whole window.
 const EVENT_FETCH_TIMEOUT_MS = 8000;
 
+/**
+ * Fetches a Nostr event using various identifier types
+ *
+ * @param {string} identifier - Can be an event ID, naddr, or other identifier
+ * @returns Promise that resolves to the event or null if not found
+ */
 export const fetchEventById = async (identifier) => {
   try {
     // Handle different identifier types using applesauce loaders

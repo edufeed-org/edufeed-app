@@ -9,6 +9,7 @@
  * pointing at one is more likely to still resolve later.
  */
 
+/** @param {string} relay */
 const norm = (relay) => relay.replace(/\/+$/, '');
 
 /**
