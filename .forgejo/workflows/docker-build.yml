@@ -35,7 +35,10 @@ jobs:
           docker rm -f edufeed-smoke 2>/dev/null || true
           docker run -d --name edufeed-smoke -p 3009:3000 edufeed-app:ci-${{ github.sha }}
           ok=0
-          for i in $(seq 1 30); do
+          # Poll for up to 120s. The runner is CPU/disk-saturated right after the
+          # no-cache build, so the node server can take ~a minute to start listening;
+          # a 60s window was racing startup and failing on a healthy image.
+          for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3009/ || true)
             echo "attempt $i: HTTP $code"
             if [ "$code" = "200" ]; then ok=1; break; fi
