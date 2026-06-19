@@ -146,6 +146,27 @@ export function getAMBPublishedDate(event) {
 }
 
 /**
+ * Reads the raw `datePublished` tag value (schema.org/AMB), or '' if absent.
+ * Unlike `getAMBPublishedDate`, this does NOT fall back to dateCreated or
+ * created_at — it reflects exactly what the form captured, suitable for
+ * prefilling a date input.
+ * @param {any} event - AMB event (kind 30142)
+ * @returns {string} ISO date string, or '' if no datePublished tag
+ */
+export function getAMBDatePublished(event) {
+  return getTagValue(event.tags, 'datePublished') || '';
+}
+
+/**
+ * Reads the raw `dateCreated` tag value (schema.org/AMB), or '' if absent.
+ * @param {any} event - AMB event (kind 30142)
+ * @returns {string} ISO date string, or '' if no dateCreated tag
+ */
+export function getAMBDateCreated(event) {
+  return getTagValue(event.tags, 'dateCreated') || '';
+}
+
+/**
  * Extracts creator names from an AMB event
  * @param {any} event - AMB event (kind 30142)
  * @returns {string[]} Array of creator names

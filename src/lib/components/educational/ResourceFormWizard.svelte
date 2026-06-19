@@ -75,6 +75,7 @@
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
   import CoverColorPicker from './CoverColorPicker.svelte';
   import SmartFillBadge from './SmartFillBadge.svelte';
+  import EuropeanDateInput from '$lib/components/shared/EuropeanDateInput.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
   import { fly } from 'svelte/transition';
@@ -322,6 +323,8 @@
       case 'description':
       case 'image':
       case 'methodOther':
+      case 'datePublished':
+      case 'dateCreated':
         formData[field] = '';
         break;
       case 'inLanguage':
@@ -633,6 +636,8 @@
     getAMBImage,
     getAMBIdentifier,
     getAMBLanguages,
+    getAMBDatePublished,
+    getAMBDateCreated,
     getAMBLearningResourceTypes,
     getAMBSubjects,
     getAMBEducationalLevels,
@@ -701,6 +706,19 @@
       id: rich.id,
       label: labels[locale] || labels.de || labels.en || Object.values(labels)[0] || ''
     };
+  }
+
+  /**
+   * Coerce an AMB date string to the `YYYY-MM-DD` shape an `<input type="date">`
+   * accepts. AMB/schema.org dates may be date-only (`2018-05-03`) or full
+   * datetimes (`2018-05-03T00:00:00Z`); the date input only renders the former,
+   * so we keep the leading date portion. Returns '' for anything unparseable.
+   * @param {string} value
+   * @returns {string}
+   */
+  function toDateInputValue(value) {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec((value ?? '').trim());
+    return m ? m[1] : '';
   }
 
   /**
@@ -803,7 +821,9 @@
       isPartOf: /** @type {AMBRelationRef[]} */ (getAMBIsPartOf(editEvent)),
       license: getAMBLicense(editEvent)?.id || 'https://creativecommons.org/licenses/by/4.0/',
       isAccessibleForFree: isAMBFree(editEvent),
-      coverHue: getCoverHue(editEvent)
+      coverHue: getCoverHue(editEvent),
+      datePublished: toDateInputValue(getAMBDatePublished(editEvent)),
+      dateCreated: toDateInputValue(getAMBDateCreated(editEvent))
     };
 
     // Merge EKW fields parsed from ekw:* tags (no-op for non-EKW events).
@@ -1075,6 +1095,17 @@
     if (license) {
       formData.license = license.id;
       mark('license');
+    }
+
+    const datePublished = toDateInputValue(getAMBDatePublished(prefillEvent));
+    if (datePublished) {
+      formData.datePublished = datePublished;
+      mark('datePublished');
+    }
+    const dateCreated = toDateInputValue(getAMBDateCreated(prefillEvent));
+    if (dateCreated) {
+      formData.dateCreated = dateCreated;
+      mark('dateCreated');
     }
 
     provenance = { ...provenance, ...ambProv };
@@ -2077,6 +2108,35 @@
               dismissedFields={dismissedSuggestionFields}
               onapply={handleSuggestionAction}
             />
+          </div>
+
+          <!-- Dates (schema.org/AMB). Optional; auto-filled from fetched
+               metadata when available. datePublished is what the relay indexes. -->
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="form-control">
+              <label class="label flex items-center gap-2" for="amb-date-published">
+                <span class="label-text font-medium"
+                  >{m.amb_form_label_date_published?.() ?? 'Published date'}</span
+                >
+                <SmartFillBadge
+                  provenance={provenance.datePublished}
+                  onclear={() => clearField('datePublished')}
+                />
+              </label>
+              <EuropeanDateInput id="amb-date-published" bind:value={formData.datePublished} />
+            </div>
+            <div class="form-control">
+              <label class="label flex items-center gap-2" for="amb-date-created">
+                <span class="label-text font-medium"
+                  >{m.amb_form_label_date_created?.() ?? 'Created date'}</span
+                >
+                <SmartFillBadge
+                  provenance={provenance.dateCreated}
+                  onclear={() => clearField('dateCreated')}
+                />
+              </label>
+              <EuropeanDateInput id="amb-date-created" bind:value={formData.dateCreated} />
+            </div>
           </div>
 
           <!-- Cover color (greyed out once a thumbnail is set) -->

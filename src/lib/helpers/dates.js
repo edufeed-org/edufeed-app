@@ -19,7 +19,7 @@ const FALLBACK_LOCALE = 'de-DE';
 /**
  * @returns {string} A BCP-47 locale tag for European date formatting.
  */
-function activeDateLocale() {
+export function activeDateLocale() {
   try {
     const tag = getLocale();
     return LOCALE_MAP[tag] || FALLBACK_LOCALE;
@@ -49,4 +49,41 @@ export function formatDate(date, options) {
  */
 export function formatTimestamp(seconds, options) {
   return formatDate(new Date(seconds * 1000), options);
+}
+
+/**
+ * Convert an ISO date (`YYYY-MM-DD`) to the German display form `DD.MM.YYYY`.
+ * Returns '' for empty/unparseable input. The leading date portion of a full
+ * datetime is accepted (`2018-05-03T...` → `03.05.2018`).
+ *
+ * @param {string | null | undefined} iso
+ * @returns {string}
+ */
+export function isoToGermanDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((iso ?? '').trim());
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
+}
+
+/**
+ * Parse a German date string (`DD.MM.YYYY`, single-digit day/month tolerated)
+ * into an ISO `YYYY-MM-DD` string. Returns '' when the input is incomplete or
+ * not a real calendar date (e.g. 31.02.2018), so callers can treat '' as
+ * "no valid date yet".
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function germanDateToIso(value) {
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec((value ?? '').trim());
+  if (!m) return '';
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  const dt = new Date(year, month - 1, day);
+  // Reject overflow dates (JS rolls 31.02 over into March).
+  if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) {
+    return '';
+  }
+  const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  return `${year}-${pad(month)}-${pad(day)}`;
 }

@@ -1672,6 +1672,8 @@
   "amb_form_label_description": "Description",
   "amb_form_label_language": "Language",
   "amb_form_label_image": "Thumbnail Image URL (optional)",
+  "amb_form_label_date_published": "Published date (optional)",
+  "amb_form_label_date_created": "Created date (optional)",
   "amb_form_label_resource_type": "Resource Type",
   "amb_form_label_subject": "Subject / Topic",
   "amb_form_label_keywords": "Keywords (optional)",
