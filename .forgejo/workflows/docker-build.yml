@@ -33,13 +33,15 @@ jobs:
       - name: Smoke test (must render / with HTTP 200 before publishing)
         run: |
           docker rm -f edufeed-smoke 2>/dev/null || true
-          docker run -d --name edufeed-smoke -p 3009:3000 edufeed-app:ci-${{ github.sha }}
+          docker run -d --name edufeed-smoke edufeed-app:ci-${{ github.sha }}
           ok=0
-          # Poll for up to 120s. The runner is CPU/disk-saturated right after the
-          # no-cache build, so the node server can take ~a minute to start listening;
-          # a 60s window was racing startup and failing on a healthy image.
-          for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3009/ || true)
+          # Probe from INSIDE the container with node (the image has no curl, and a
+          # published -p port is not reachable from this step's network namespace on
+          # the docker-out-of-docker runner — curl localhost always got HTTP 000).
+          # node is guaranteed present (it runs the server); localhost:3000 here is
+          # the server's own namespace. Mirrors the Dockerfile HEALTHCHECK.
+          for i in $(seq 1 45); do
+            code=$(docker exec edufeed-smoke node -e "require('http').get('http://localhost:3000/',r=>{console.log(r.statusCode);process.exit(0)}).on('error',()=>{console.log('000');process.exit(0)})" 2>/dev/null || echo 000)
             echo "attempt $i: HTTP $code"
             if [ "$code" = "200" ]; then ok=1; break; fi
             sleep 2
