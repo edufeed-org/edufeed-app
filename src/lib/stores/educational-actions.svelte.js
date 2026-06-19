@@ -50,6 +50,8 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {string} inLanguage - ISO 639-1 language code
  * @property {string} license - License URI
  * @property {number | null} [coverHue] - User-chosen cover hue (null = auto)
+ * @property {string} [datePublished] - schema.org datePublished (YYYY-MM-DD); emitted as a `datePublished` tag
+ * @property {string} [dateCreated] - schema.org dateCreated (YYYY-MM-DD); emitted as a `dateCreated` tag
  * @property {Creator[]} creators - Array of creators
  * @property {string[]} keywords - Array of keywords/tags
  * @property {UploadedFile[]} files - Array of uploaded files

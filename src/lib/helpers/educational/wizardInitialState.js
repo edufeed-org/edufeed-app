@@ -44,6 +44,11 @@ export function createInitialFormData() {
     // null = auto (hash-derived) cover color; number = user-chosen hue
     coverHue: /** @type {number | null} */ (null),
 
+    // schema.org/AMB dates (date-only, YYYY-MM-DD). Optional; auto-filled from
+    // fetched AMB JSON-LD when present, otherwise left blank.
+    datePublished: '',
+    dateCreated: '',
+
     // Step 4: Classification
     learningResourceType: /** @type {CompactConcept[]} */ ([]),
     educationalLevels: /** @type {CompactConcept[]} */ ([]),

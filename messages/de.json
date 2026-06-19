@@ -1672,6 +1672,8 @@
   "amb_form_label_description": "Beschreibung",
   "amb_form_label_language": "Sprache",
   "amb_form_label_image": "Vorschaubild-URL (optional)",
+  "amb_form_label_date_published": "Veröffentlichungsdatum (optional)",
+  "amb_form_label_date_created": "Erstellungsdatum (optional)",
   "amb_form_label_resource_type": "Ressourcentyp",
   "amb_form_label_subject": "Fach / Thema",
   "amb_form_label_keywords": "Schlagwörter (optional)",

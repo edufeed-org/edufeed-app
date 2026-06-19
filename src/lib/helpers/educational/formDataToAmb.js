@@ -113,6 +113,15 @@ export function convertFormDataToAMB(formData) {
     amb.isAccessibleForFree = formData.isAccessibleForFree;
   }
 
+  // schema.org/AMB dates. Emitted as flat `["datePublished", ...]` /
+  // `["dateCreated", ...]` tags by ambToNostr so the relay can index them.
+  if (formData.datePublished?.trim()) {
+    amb.datePublished = formData.datePublished.trim();
+  }
+  if (formData.dateCreated?.trim()) {
+    amb.dateCreated = formData.dateCreated.trim();
+  }
+
   // Pedagogical Concept fields. Each is an array of SKOS Concept objects
   // emitted by the curriculum picker; we round-trip the picker's compact
   // shape (`id`, `type: 'Concept'`, `prefLabel: { <lang>: label }`) verbatim.
