@@ -85,4 +85,25 @@ describe('fanOutOerSearch', () => {
     const out = await fanOutOerSearch({ ...base, sources: ['openverse', 'wikimedia'], fetchImpl });
     expect(out.data.map((i) => i.id)).toEqual(['b']);
   });
+
+  it('aggregates per-source warnings (e.g. rate limit) from upstream meta', async () => {
+    const fetchImpl = makeFetch({
+      unsplash: {
+        data: [],
+        meta: { hasMore: false, warnings: [{ source: 'unsplash', code: 'rate_limited' }] }
+      },
+      wikimedia: { data: [item('b')], meta: { hasMore: false } }
+    });
+    const out = await fanOutOerSearch({ ...base, sources: ['unsplash', 'wikimedia'], fetchImpl });
+    expect(out.data.map((i) => i.id)).toEqual(['b']);
+    expect(out.meta.warnings).toEqual([{ source: 'unsplash', code: 'rate_limited' }]);
+  });
+
+  it('omits the warnings key when no source reports one', async () => {
+    const fetchImpl = makeFetch({
+      openverse: { data: [item('a')], meta: { hasMore: false } }
+    });
+    const out = await fanOutOerSearch({ ...base, sources: ['openverse'], fetchImpl });
+    expect(out.meta.warnings).toBeUndefined();
+  });
 });

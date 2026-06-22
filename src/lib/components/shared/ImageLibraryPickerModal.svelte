@@ -49,6 +49,15 @@
   let oerLoading = $state(false);
   let oerError = $state('');
   let oerPicking = $state(false);
+  // Per-source warnings (e.g. rate limit) from the last search. Replaced wholesale.
+  let oerWarnings = $state.raw(/** @type {Array<{ source: string, code: string }>} */ ([]));
+
+  // Human-readable labels of sources that hit their rate limit in the last search.
+  const oerRateLimitedLabels = $derived(
+    oerWarnings
+      .filter((w) => w.code === 'rate_limited')
+      .map((w) => OER_SOURCES.find((s) => s.id === w.source)?.label ?? w.source)
+  );
 
   /** @param {string} id */
   function toggleOerSource(id) {
@@ -62,6 +71,7 @@
     if (!term || oerSelectedSources.length === 0) return;
     oerLoading = true;
     oerError = '';
+    oerWarnings = [];
     try {
       const { data, meta } = await searchOer({
         searchTerm: term,
@@ -81,6 +91,7 @@
       oerResults = merged;
       oerPage = page;
       oerHasMore = Boolean(meta?.hasMore);
+      oerWarnings = Array.isArray(meta?.warnings) ? meta.warnings : [];
     } catch (e) {
       console.error('OER search failed', e);
       oerError = m.image_library_picker_oer_error();
@@ -335,6 +346,18 @@
 
           {#if oerError}
             <p class="mt-2 text-xs text-error" data-testid="oer-error">{oerError}</p>
+          {/if}
+
+          {#if oerRateLimitedLabels.length > 0}
+            <div
+              role="status"
+              class="mt-2 alert px-3 py-2 text-xs alert-warning"
+              data-testid="oer-rate-limit-notice"
+            >
+              {m.image_library_picker_oer_rate_limited({
+                sources: oerRateLimitedLabels.join(', ')
+              })}
+            </div>
           {/if}
 
           {#if oerLoading && oerResults.length === 0}
