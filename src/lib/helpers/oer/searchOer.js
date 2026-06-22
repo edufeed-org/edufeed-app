@@ -7,7 +7,7 @@
  * Query `/api/oer` for image search hits across the given sources.
  * @param {{ searchTerm: string, sources: string[], page?: number, pageSize?: number, language?: 'en' | 'de' }} params
  * @param {typeof fetch} [fetchImpl]
- * @returns {Promise<{ data: any[], meta: { hasMore: boolean } }>}
+ * @returns {Promise<{ data: any[], meta: { hasMore: boolean, warnings?: Array<{ source: string, code: string }> } }>}
  */
 export async function searchOer(
   { searchTerm, sources, page = 1, pageSize, language },

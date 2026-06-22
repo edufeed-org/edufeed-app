@@ -85,6 +85,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   image_library_picker_oer_loading: () => 'image_library_picker_oer_loading',
   image_library_picker_oer_load_more: () => 'image_library_picker_oer_load_more',
   image_library_picker_oer_pick_failed: () => 'image_library_picker_oer_pick_failed',
+  image_library_picker_oer_rate_limited: ({ sources }) => `rate_limited:${sources}`,
   image_library_picker_tab_library: () => 'image_library_picker_tab_library',
   image_library_picker_tab_search: () => 'image_library_picker_tab_search'
 }));
@@ -136,6 +137,33 @@ describe('ImageLibraryPickerModal — OER search', () => {
     const tiles = getAllByTestId('oer-tile');
     expect(tiles).toHaveLength(1);
     expect(tiles[0].querySelector('img')?.getAttribute('src')).toBe('https://proxy/thumb.jpg');
+  });
+
+  it('shows a rate-limit notice naming the source when a source reports it', async () => {
+    mocks.searchOer.mockResolvedValueOnce({
+      data: [],
+      meta: { hasMore: false, warnings: [{ source: 'unsplash', code: 'rate_limited' }] }
+    });
+    const { getByTestId } = render(ImageLibraryPickerModal, { props: { open: true } });
+    await fireEvent.click(getByTestId('tab-search'));
+    await fireEvent.input(getByTestId('oer-search-input'), { target: { value: 'tree' } });
+    await fireEvent.submit(getByTestId('oer-search-form'));
+    await new Promise((r) => setTimeout(r, 10));
+    const notice = getByTestId('oer-rate-limit-notice');
+    expect(notice).toBeTruthy();
+    expect(notice.textContent).toContain('Unsplash');
+  });
+
+  it('shows no rate-limit notice when no source reports one', async () => {
+    mocks.searchOer.mockResolvedValueOnce({ data: [oerItem], meta: { hasMore: false } });
+    const { getByTestId, queryByTestId } = render(ImageLibraryPickerModal, {
+      props: { open: true }
+    });
+    await fireEvent.click(getByTestId('tab-search'));
+    await fireEvent.input(getByTestId('oer-search-input'), { target: { value: 'tree' } });
+    await fireEvent.submit(getByTestId('oer-search-form'));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(queryByTestId('oer-rate-limit-notice')).toBeNull();
   });
 
   it('on pick: hashes bytes, mints a 1063 (no existing), and calls onpick with url+hash+event', async () => {
