@@ -6,6 +6,7 @@
   import { buildCommunityFollowSet } from '$lib/helpers/communityFollowSet.js';
   import { buildDmRelayListEvent } from '$lib/helpers/dm.js';
   import { getDefaultDmRelays } from '$lib/helpers/relay-helper.js';
+  import { buildSignedDefaultRelayList } from '$lib/services/relay-list-backfill.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
@@ -256,10 +257,13 @@
         ? await _signer.signEvent(buildDmRelayListEvent(userData.publicKey, dmRelays))
         : null;
 
+      const signedRelayList = await buildSignedDefaultRelayList(_signer);
+
       // Optimistic local apply.
       eventStore.add(signedMetadata);
       if (signedFollowSet) eventStore.add(signedFollowSet);
       if (signedDmRelayList) eventStore.add(signedDmRelayList);
+      if (signedRelayList) eventStore.add(signedRelayList);
 
       isPublishing = false;
       closeModal();
@@ -274,6 +278,11 @@
       if (signedDmRelayList) {
         publishEvent(signedDmRelayList).catch((err) =>
           console.warn('kind 10050 publish failed:', err)
+        );
+      }
+      if (signedRelayList) {
+        publishEvent(signedRelayList).catch((err) =>
+          console.warn('kind 10002 publish failed:', err)
         );
       }
     } catch (err) {
