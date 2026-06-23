@@ -34,6 +34,37 @@ function buildRenderer({ headingAnchors }) {
 }
 
 /**
+ * Strip markdown syntax down to a plain-text snippet.
+ * Used for compact previews (e.g. calendar cards) where rendered markdown
+ * would be visually noisy. Links/images collapse to their text/alt, and all
+ * structural markers are removed. Not a security boundary — for display of
+ * untrusted content as HTML use {@link renderMarkdown} instead.
+ *
+ * @param {string | null | undefined} content - Raw markdown content
+ * @returns {string} Plain text with markdown markers removed
+ */
+export function stripMarkdown(content) {
+  if (!content || typeof content !== 'string') return '';
+
+  return (
+    content
+      // images ![alt](url) -> alt (before links, since syntax overlaps)
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      // links [text](url) -> text
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      // inline code `code` -> code
+      .replace(/`([^`]*)`/g, '$1')
+      // bold/italic/strikethrough markers
+      .replace(/(\*\*|__|~~|\*|_)/g, '')
+      // leading heading / blockquote / list markers per line
+      .replace(/^[ \t]*(#{1,6}|>|[-*+]|\d+\.)[ \t]+/gm, '')
+      // collapse all whitespace (incl. newlines) to single spaces
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+/**
  * Render markdown content to sanitized HTML string.
  * @param {string | null | undefined} content - Raw markdown content
  * @param {{ headingAnchors?: boolean }} [options]

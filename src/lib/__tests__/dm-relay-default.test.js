@@ -53,4 +53,17 @@ describe('getDefaultDmRelays', () => {
       'wss://fallback2.example.com'
     ]);
   });
+
+  it('still returns fallback relays in gated mode (DM relays are an inbox, not a content source)', () => {
+    // Gated mode strips fallback relays for *content* fetching, but DM relays
+    // are where the user RECEIVES personal messages — blinding the inbox would
+    // hide the "no DM relay" nudge and break delivery. Default must survive
+    // gated mode even when DM_RELAYS is unset.
+    mockAppSettings.gatedMode = true;
+    mockConfig.dmRelays = undefined;
+    expect(getDefaultDmRelays()).toEqual([
+      'wss://fallback1.example.com',
+      'wss://fallback2.example.com'
+    ]);
+  });
 });

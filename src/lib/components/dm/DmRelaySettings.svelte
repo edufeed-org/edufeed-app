@@ -1,10 +1,6 @@
 <script>
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-  import {
-    AddDirectMessageRelay,
-    RemoveDirectMessageRelay,
-    NewDirectMessageRelays
-  } from 'applesauce-actions/actions';
+  import { AddDirectMessageRelay, RemoveDirectMessageRelay } from 'applesauce-actions/actions';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { getDmRelaysFromEvent } from '$lib/helpers/dm.js';
@@ -50,12 +46,11 @@
 
     saving = true;
     try {
-      if (relays.length === 0) {
-        // Create new DM relay list
-        await actionRunner.run(NewDirectMessageRelays, [url]);
-      } else {
-        await actionRunner.run(AddDirectMessageRelay, url);
-      }
+      // AddDirectMessageRelay modifies the existing kind 10050 or builds a fresh
+      // one when none exists. We must NOT branch to NewDirectMessageRelays on an
+      // empty list: an empty-but-present 10050 (e.g. after removing the last
+      // relay) makes NewDirectMessageRelays throw "DM relays event already exists".
+      await actionRunner.run(AddDirectMessageRelay, url);
       newRelayUrl = '';
     } catch (err) {
       console.error('Failed to add DM relay:', err);

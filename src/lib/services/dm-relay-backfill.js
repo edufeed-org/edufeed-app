@@ -7,7 +7,7 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { getDefaultDmRelays } from '$lib/helpers/relay-helper.js';
-import { buildDmRelayListEvent } from '$lib/helpers/dm.js';
+import { buildDmRelayListEvent, getDmRelaysFromEvent } from '$lib/helpers/dm.js';
 
 /**
  * Ensure the active user has a published kind 10050 DM relay list. No-op when
@@ -22,7 +22,11 @@ export async function ensureDmRelayList() {
   const signer = account?.signer;
   if (!pubkey || !signer) return;
 
-  if (eventStore.getReplaceable(10050, pubkey)) return;
+  // Backfill when there is no 10050 OR the existing one is empty (e.g. the user
+  // removed their last relay). An empty list leaves them unreachable, so an
+  // existence-only guard would wrongly skip them.
+  const existing = eventStore.getReplaceable(10050, pubkey);
+  if (existing && getDmRelaysFromEvent(existing).length > 0) return;
 
   const relays = getDefaultDmRelays();
   if (!relays.length) return;

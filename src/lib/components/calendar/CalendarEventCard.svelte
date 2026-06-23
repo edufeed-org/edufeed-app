@@ -21,7 +21,7 @@
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { getSha256FromURL } from 'applesauce-common/helpers';
-  import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import { stripMarkdown } from '$lib/helpers/markdown.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
@@ -43,6 +43,10 @@
   } = $props();
 
   const isList = $derived(variant === 'list');
+
+  // Event descriptions sometimes contain markdown; show a clean plain-text
+  // snippet in compact card/list previews rather than rendering it.
+  const summaryText = $derived(stripMarkdown(event.summary));
 
   const imageHash = $derived.by(() => {
     if (!event.image) return null;
@@ -194,8 +198,8 @@
         <div class="truncate text-sm text-base-content/50">
           📍 {event.locations[0].name || event.locations[0].address || ''}
         </div>
-      {:else if event.summary}
-        <div class="truncate text-sm text-base-content/50">{event.summary}</div>
+      {:else if summaryText}
+        <div class="truncate text-sm text-base-content/50">{summaryText}</div>
       {/if}
     </div>
   </div>
@@ -363,11 +367,8 @@
         {/if}
 
         <!-- Event Summary (full mode only) -->
-        {#if event.summary && !compact}
-          <MarkdownRenderer
-            content={event.summary}
-            class="mb-3 line-clamp-2 text-sm break-words text-base-content/80"
-          />
+        {#if summaryText && !compact}
+          <p class="mb-3 line-clamp-2 text-sm break-words text-base-content/80">{summaryText}</p>
         {/if}
 
         <!-- Event Type Badge and Creation Date (full mode only) -->

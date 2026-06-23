@@ -17,11 +17,39 @@ vi.mock('$lib/services/relay-service.svelte.js', () => ({
 import {
   getDmRelaysFromEvent,
   buildDmRelayListEvent,
+  computeBaseGiftWrapRelays,
   DM_READ_TIMESTAMPS_KEY,
   loadReadTimestamps,
   saveReadTimestamps,
   isConversationUnread
 } from '$lib/helpers/dm.js';
+
+describe('computeBaseGiftWrapRelays', () => {
+  it('includes read relays so wraps routed to the inbox are caught', () => {
+    const result = computeBaseGiftWrapRelays(
+      ['wss://write.example/'],
+      ['wss://read.example/'],
+      ['wss://fallback.example/']
+    );
+    expect(result).toContain('wss://read.example/');
+    expect(result).toContain('wss://write.example/');
+    expect(result).toContain('wss://fallback.example/');
+  });
+
+  it('dedupes overlapping write/read/fallback relays', () => {
+    const result = computeBaseGiftWrapRelays(
+      ['wss://a/', 'wss://b/'],
+      ['wss://b/', 'wss://c/'],
+      ['wss://a/']
+    );
+    expect(result).toEqual(['wss://a/', 'wss://b/', 'wss://c/']);
+  });
+
+  it('tolerates undefined inputs and drops empties', () => {
+    expect(computeBaseGiftWrapRelays(undefined, undefined, undefined)).toEqual([]);
+    expect(computeBaseGiftWrapRelays(['wss://a/'], undefined, [''])).toEqual(['wss://a/']);
+  });
+});
 
 describe('getDmRelaysFromEvent', () => {
   it('extracts relay URLs from kind 10050 event tags', () => {

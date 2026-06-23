@@ -27,6 +27,7 @@ import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import {
   getDmRelaysFromEvent,
+  computeBaseGiftWrapRelays,
   loadReadTimestamps,
   saveReadTimestamps,
   isConversationUnread,
@@ -34,7 +35,11 @@ import {
   groupLegacyConversations,
   mergeDmConversations
 } from '$lib/helpers/dm.js';
-import { getRelayListLookupRelays, getWriteRelays } from '$lib/services/relay-service.svelte.js';
+import {
+  getRelayListLookupRelays,
+  getWriteRelays,
+  getReadRelays
+} from '$lib/services/relay-service.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
 // --- Module-level reactive state ---
@@ -204,7 +209,10 @@ function settleDmRelayCheck(pubkey) {
   dmRelayCheckTimer = null;
   if (activePubkey !== pubkey) return;
   if (dmRelayCheckStatus !== 'checking') return;
-  dmRelayCheckStatus = eventStore.getReplaceable(10050, pubkey) ? 'present' : 'absent';
+  // Gate on relay COUNT, not mere existence: an empty 10050 (e.g. after removing
+  // the last relay) leaves the user unreachable and must still prompt the nudge.
+  const event = eventStore.getReplaceable(10050, pubkey);
+  dmRelayCheckStatus = event && getDmRelaysFromEvent(event).length > 0 ? 'present' : 'absent';
 }
 
 /** @returns {{ id: string, participants: string[], lastMessage: any, legacy?: boolean }[]} */
@@ -418,20 +426,29 @@ export function initializeDMs(pubkey, signer) {
     subscriptions.push(relayLoadSub);
   }
 
-  // 2b. Subscribe immediately to NIP-65 write + app fallback relays. This is
-  //     where most wraps actually live because senders publish to their own
-  //     preferred relays. Doesn't wait for kind 10050.
+  // 2b. Subscribe immediately to NIP-65 read + write + app fallback relays —
+  //     where wraps land before a kind 10050 exists (senders route to the
+  //     recipient's inbox/read relays). Doesn't wait for kind 10050. A standing
+  //     REQ replays stored events, so this also recovers already-sent wraps.
   (async () => {
     if (activePubkey !== pubkey) return; // session switched while awaiting
-    const writeRelays = await getWriteRelays(pubkey);
+    // Read relays matter as much as write: NIP-17 senders route wraps to the
+    // recipient's kind 10050 OR their NIP-65 *inbox* (read) relays. Listening on
+    // write-only would miss every wrap delivered to read relays — notably DMs
+    // sent before the user published a 10050. See computeBaseGiftWrapRelays.
+    const [writeRelays, readRelays] = await Promise.all([
+      getWriteRelays(pubkey),
+      getReadRelays(pubkey)
+    ]);
     if (activePubkey !== pubkey) return;
     /** @type {string[]} */
     const fallback = runtimeConfig.fallbackRelays || [];
-    const baseRelays = [...writeRelays, ...fallback].filter((r, i, a) => a.indexOf(r) === i);
+    const baseRelays = computeBaseGiftWrapRelays(writeRelays, readRelays, fallback);
     if (baseRelays.length > 0) {
       console.debug('[dm] base relays → subscribing gift wraps', {
         relayCount: baseRelays.length,
         writeRelayCount: writeRelays.length,
+        readRelayCount: readRelays.length,
         fallbackCount: fallback.length
       });
       addRelaysToGiftWrapSub(pubkey, baseRelays);
@@ -465,25 +482,25 @@ export function initializeDMs(pubkey, signer) {
   // 2c. Watch kind 10050; merge any additional relays into the gift-wrap union.
   const relayListSub = eventStore.replaceable(10050, pubkey).subscribe((event) => {
     if (!event) return; // replaceable() emits undefined before anything loads
-    // A 10050 exists → the self-check is conclusively satisfied. Keyed off the
-    // event's existence (not its relay count) to match settleDmRelayCheck and
-    // ensureDmRelayList, which both gate on getReplaceable(10050).
+    const newRelays = getDmRelaysFromEvent(event);
+    // Only a 10050 that actually lists relays satisfies the self-check. An empty
+    // one leaves the user unreachable, so we leave the status 'checking' and let
+    // the settle timer conclude 'absent' (matches settleDmRelayCheck and
+    // ensureDmRelayList, which now both gate on relay count, not existence).
+    if (newRelays.length === 0) return;
     dmRelayCheckStatus = 'present';
     if (dmRelayCheckTimer) {
       clearTimeout(dmRelayCheckTimer);
       dmRelayCheckTimer = null;
     }
-    const newRelays = getDmRelaysFromEvent(event);
-    if (newRelays.length > 0) {
-      hasDedicatedDmRelays = true;
-      const additions = newRelays.filter((r) => !subscribedRelays.has(r));
-      console.debug('[dm] kind 10050 → merging into gift-wrap union', {
-        listed: newRelays.length,
-        additions: additions.length
-      });
-      if (additions.length > 0) {
-        addRelaysToGiftWrapSub(pubkey, additions);
-      }
+    hasDedicatedDmRelays = true;
+    const additions = newRelays.filter((r) => !subscribedRelays.has(r));
+    console.debug('[dm] kind 10050 → merging into gift-wrap union', {
+      listed: newRelays.length,
+      additions: additions.length
+    });
+    if (additions.length > 0) {
+      addRelaysToGiftWrapSub(pubkey, additions);
     }
   });
   subscriptions.push(relayListSub);
