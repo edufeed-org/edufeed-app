@@ -82,4 +82,13 @@ describe('relay-list-backfill', () => {
     expect(mockAdd).not.toHaveBeenCalled();
     expect(mockPublishEvent).not.toHaveBeenCalled();
   });
+
+  it('publishDefaultRelayList swallows a signer rejection (e.g. user declines) and returns null', async () => {
+    const rejectingSigner = { signEvent: vi.fn().mockRejectedValue(new Error('user declined')) };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await publishDefaultRelayList(rejectingSigner)).toBeNull();
+    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockPublishEvent).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

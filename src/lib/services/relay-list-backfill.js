@@ -39,7 +39,13 @@ export async function buildSignedDefaultRelayList(signer) {
  * @returns {Promise<any | null>}
  */
 export async function publishDefaultRelayList(signer) {
-  const signed = await buildSignedDefaultRelayList(signer);
+  let signed;
+  try {
+    signed = await buildSignedDefaultRelayList(signer);
+  } catch (err) {
+    console.warn('[relays] kind 10002 default sign failed:', err);
+    return null;
+  }
   if (!signed) return null;
   eventStore.add(signed);
   publishEvent(signed).catch((err) =>
