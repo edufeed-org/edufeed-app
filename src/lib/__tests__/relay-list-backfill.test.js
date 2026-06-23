@@ -50,13 +50,13 @@ describe('relay-list-backfill', () => {
   it('buildSignedDefaultRelayList builds a kind 10002 with bare r tags for each relay', async () => {
     const signed = await buildSignedDefaultRelayList(signer);
     expect(signed.kind).toBe(10002);
-    const rTags = signed.tags.filter((t) => t[0] === 'r');
+    const rTags = signed.tags.filter((/** @type {string[]} */ t) => t[0] === 'r');
     expect(rTags).toHaveLength(2);
-    const urls = rTags.map((t) => t[1]);
+    const urls = rTags.map((/** @type {string[]} */ t) => t[1]);
     expect(urls).toContain('wss://a.example/');
     expect(urls).toContain('wss://b.example/');
     // bare (read+write) — no marker
-    expect(rTags.every((t) => t[2] === undefined)).toBe(true);
+    expect(rTags.every((/** @type {string[]} */ t) => t[2] === undefined)).toBe(true);
     expect(mockAdd).not.toHaveBeenCalled();
     expect(mockPublishEvent).not.toHaveBeenCalled();
   });

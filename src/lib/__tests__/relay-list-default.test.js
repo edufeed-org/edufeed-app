@@ -8,7 +8,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockConfig = vi.hoisted(() => ({ runtimeConfig: { fallbackRelays: [] } }));
+const mockConfig = vi.hoisted(() => ({
+  runtimeConfig: { fallbackRelays: /** @type {string[] | undefined} */ ([]) }
+}));
 vi.mock('$lib/stores/config.svelte.js', () => mockConfig);
 
 const mockAppSettings = vi.hoisted(() => ({ appSettings: { gatedMode: false } }));

@@ -394,7 +394,7 @@ describe('SignupModal — Step 3 (Communities)', () => {
   });
 
   it('Step 3 Skip does not publish kind 10002 when no default relays configured', async () => {
-    mockBuildSignedRelayList.mockResolvedValueOnce(null);
+    mockBuildSignedRelayList.mockResolvedValueOnce(/** @type {any} */ (null));
     const { getByPlaceholderText, getByText } = render(SignupModal, {
       props: { modalId: 'signup-modal' }
     });

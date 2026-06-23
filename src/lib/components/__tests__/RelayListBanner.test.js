@@ -53,7 +53,7 @@ vi.mock('$lib/services/relay-service.svelte.js', () => ({
 
 const mockGetDefaultRelayList = vi.hoisted(() => vi.fn(() => ['wss://a.example/']));
 const mockHasMailboxRelays = vi.hoisted(() =>
-  vi.fn((e) => !!e && (e.tags || []).some((t) => t[0] === 'r'))
+  vi.fn((e) => !!e && (e.tags || []).some((/** @type {string[]} */ t) => t[0] === 'r'))
 );
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getDefaultRelayList: mockGetDefaultRelayList,
