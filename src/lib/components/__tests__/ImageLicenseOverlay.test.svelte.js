@@ -39,6 +39,20 @@ describe('ImageLicenseOverlay', () => {
     expect(getByText(/Jane Doe/)).toBeTruthy();
   });
 
+  it('renders a readable label for the Unsplash license (not the raw URL)', () => {
+    const ev = licenseEvent();
+    ev.tags = ev.tags.map((t) =>
+      t[0] === 'license' ? ['license', 'https://unsplash.com/license'] : t
+    );
+    const { getByTestId, getByText, queryByText } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: ev
+    });
+    expect(getByTestId('license-badge')).toBeTruthy();
+    expect(getByText('Unsplash License')).toBeTruthy();
+    expect(queryByText('https://unsplash.com/license')).toBeNull();
+  });
+
   it('renders the caution pill with text when missing (variant=pill)', () => {
     const { getByTestId } = render(ImageLicenseOverlay, { status: 'missing', variant: 'pill' });
     const caution = getByTestId('license-caution');

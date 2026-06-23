@@ -59,6 +59,16 @@ describe('formatLicenseUrl', () => {
     );
   });
 
+  it('formats Unsplash', () => {
+    expect(formatLicenseUrl('https://unsplash.com/license')).toBe('Unsplash License');
+  });
+
+  it('formats CC Public Domain Mark', () => {
+    expect(formatLicenseUrl('https://creativecommons.org/publicdomain/mark/1.0/')).toBe(
+      'Public Domain'
+    );
+  });
+
   it('returns the URL itself for unknown licenses', () => {
     expect(formatLicenseUrl('https://example.org/custom-license')).toBe(
       'https://example.org/custom-license'

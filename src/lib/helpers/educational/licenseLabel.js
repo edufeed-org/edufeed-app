@@ -27,6 +27,16 @@ export function formatLicenseUrl(url) {
     return 'CC0 (Public Domain)';
   }
 
+  // CC Public Domain Mark (emitted by Openverse/Wikimedia for PD works)
+  if (/creativecommons\.org\/publicdomain\/mark\/1\.0/i.test(trimmed)) {
+    return 'Public Domain';
+  }
+
+  // Unsplash
+  if (/unsplash\.com\/license/i.test(trimmed)) {
+    return 'Unsplash License';
+  }
+
   // Pixabay
   if (/pixabay\.com\/service\/license/i.test(trimmed)) {
     return 'Pixabay License';
