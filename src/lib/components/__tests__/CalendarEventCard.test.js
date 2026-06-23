@@ -60,7 +60,6 @@ vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/AttendeeIndicator.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/LocationLink.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
-vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 
 const mockTimeEvent = {
@@ -107,6 +106,21 @@ describe('CalendarEventCard', () => {
       });
 
       expect(container.textContent).toContain('Test Conference Talk');
+    });
+
+    it('renders a markdown summary as stripped plain text', () => {
+      const { container } = render(CalendarEventCard, {
+        props: {
+          event: {
+            ...mockTimeEvent,
+            summary: '**Modul 1:** [Handout](https://example.com/h) zum Nachlesen'
+          }
+        }
+      });
+
+      expect(container.textContent).toContain('Modul 1: Handout zum Nachlesen');
+      expect(container.textContent).not.toContain('**');
+      expect(container.textContent).not.toContain('](');
     });
   });
 

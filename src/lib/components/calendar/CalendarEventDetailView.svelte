@@ -23,6 +23,7 @@
     ExternalLinkIcon
   } from '$lib/components/icons';
   import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
+  import MarkdownRenderer from '$lib/components/shared/MarkdownRenderer.svelte';
   import AddToCalendarDropdown from '$lib/components/calendar/AddToCalendarDropdown.svelte';
   import { showToast } from '$lib/helpers/toast.js';
   import { deleteCalendarEvent } from '$lib/helpers/eventDeletion.js';
@@ -183,7 +184,6 @@
 {#if event}
   <DetailHeader
     title={event.title || ''}
-    subtitle={event.summary || undefined}
     event={rawEvent || {
       id: '',
       kind: event.kind || 31923,
@@ -218,6 +218,16 @@
         class="h-64 w-full rounded-lg object-cover shadow-lg"
         loading="lazy"
       />
+    </div>
+  {/if}
+
+  <!-- Description -->
+  {#if event.summary}
+    <div class="card mb-8 bg-base-200 shadow-lg">
+      <div class="card-body">
+        <h2 class="card-title text-2xl">{m.calendar_event_description()}</h2>
+        <MarkdownRenderer content={event.summary} class="prose mt-2 max-w-none" />
+      </div>
     </div>
   {/if}
 
