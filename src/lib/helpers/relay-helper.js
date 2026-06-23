@@ -10,6 +10,7 @@
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
+import { getInboxes, getOutboxes } from 'applesauce-core/helpers';
 
 /**
  * Check if gated mode is currently active
@@ -38,6 +39,33 @@ export function getFallbackRelays() {
 export function getDefaultDmRelays() {
   const configured = /** @type {string[] | undefined} */ (runtimeConfig.dmRelays);
   return configured?.length ? configured : getFallbackRelays();
+}
+
+/**
+ * Get the default NIP-65 relay list a user should publish if they have none
+ * (kind 10002). Intentionally NOT gated: a relay list is identity infrastructure
+ * (where the user reads/writes their content), not a content source.
+ * getFallbackRelays() returns [] in gated mode, which would leave new users with
+ * no relay list at all, so read the raw fallback list.
+ * @returns {string[]}
+ */
+export function getDefaultRelayList() {
+  return runtimeConfig.fallbackRelays || [];
+}
+
+/**
+ * True when a kind 10002 event advertises at least one inbox or outbox relay.
+ * Used to treat an empty 10002 as "no relay list".
+ *
+ * NOTE: getInboxes/getOutboxes cache via a Symbol on the event, mutating it.
+ * Never call this inside a $derived over reactive state — call it in a plain
+ * subscription callback and store the boolean result in $state.
+ * @param {any} event
+ * @returns {boolean}
+ */
+export function hasMailboxRelays(event) {
+  if (!event) return false;
+  return getInboxes(event).length > 0 || getOutboxes(event).length > 0;
 }
 
 /**
