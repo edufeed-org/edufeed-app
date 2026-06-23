@@ -53,13 +53,30 @@ describe('ensureDmRelayList', () => {
     expect(mockPublishEvent).toHaveBeenCalledTimes(1);
   });
 
-  it('is a no-op when the user already has a kind 10050', async () => {
-    mockGetReplaceable.mockReturnValue({ kind: 10050, pubkey: 'me_hex', tags: [] });
+  it('is a no-op when the user already has a kind 10050 with relays', async () => {
+    mockGetReplaceable.mockReturnValue({
+      kind: 10050,
+      pubkey: 'me_hex',
+      tags: [['relay', 'wss://existing.example/']]
+    });
     await ensureDmRelayList();
 
     expect(mockSignEvent).not.toHaveBeenCalled();
     expect(mockAdd).not.toHaveBeenCalled();
     expect(mockPublishEvent).not.toHaveBeenCalled();
+  });
+
+  it('backfills when the existing kind 10050 is empty (no relay tags)', async () => {
+    // An empty 10050 (e.g. after removing the last relay) leaves the user
+    // unreachable. "Use recommended" must replace it, so the check can settle
+    // 'present' and the banner hides — gating on existence alone would no-op.
+    mockGetReplaceable.mockReturnValue({ kind: 10050, pubkey: 'me_hex', tags: [] });
+    await ensureDmRelayList();
+
+    expect(mockSignEvent).toHaveBeenCalledTimes(1);
+    expect(mockSignEvent.mock.calls[0][0].tags).toEqual([['relay', 'wss://dm.edufeed.org']]);
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+    expect(mockPublishEvent).toHaveBeenCalledTimes(1);
   });
 
   it('is a no-op when no default DM relays are configured', async () => {

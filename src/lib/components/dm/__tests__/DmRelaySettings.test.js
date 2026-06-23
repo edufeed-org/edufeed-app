@@ -8,7 +8,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import { of } from 'rxjs';
 
 vi.mock('$lib/paraglide/messages', () =>
@@ -34,8 +34,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { replaceable: mockReplaceable }
 }));
 
+const mockRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
-  actionRunner: { run: vi.fn().mockResolvedValue(undefined) }
+  actionRunner: { run: mockRun }
 }));
 
 vi.mock('applesauce-actions/actions', () => ({
@@ -50,6 +51,41 @@ describe('DmRelaySettings', () => {
   beforeEach(() => {
     mockActiveUser.value = { pubkey: 'abc123' };
     mockReplaceable.mockReset();
+    mockRun.mockClear();
+  });
+
+  /** @param {HTMLElement} container */
+  async function addRelayViaUi(container) {
+    const input = /** @type {HTMLInputElement} */ (container.querySelector('input[type="text"]'));
+    await fireEvent.input(input, { target: { value: 'wss://dm.edufeed.org' } });
+    const addButton = /** @type {HTMLButtonElement} */ (
+      [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('dm_relay_add'))
+    );
+    await fireEvent.click(addButton);
+  }
+
+  it('uses AddDirectMessageRelay when an empty kind 10050 already exists (no "already exists" error)', async () => {
+    // An empty 10050 (e.g. after removing the last relay) exists in the store
+    // but renders as "no relays". Adding must MODIFY that event, never call
+    // NewDirectMessageRelays — which throws "DM relays event already exists".
+    mockReplaceable.mockReturnValue(of({ kind: 10050, pubkey: 'abc123', tags: [] }));
+
+    const { container } = render(DmRelaySettings);
+    await addRelayViaUi(container);
+
+    expect(mockRun).toHaveBeenCalledWith('AddDirectMessageRelay', 'wss://dm.edufeed.org');
+    expect(mockRun).not.toHaveBeenCalledWith('NewDirectMessageRelays', expect.anything());
+  });
+
+  it('uses AddDirectMessageRelay when the user has no kind 10050 event at all', async () => {
+    // AddDirectMessageRelay builds a fresh 10050 when none exists, so the
+    // component no longer needs a separate create branch.
+    mockReplaceable.mockReturnValue(of(undefined));
+
+    const { container } = render(DmRelaySettings);
+    await addRelayViaUi(container);
+
+    expect(mockRun).toHaveBeenCalledWith('AddDirectMessageRelay', 'wss://dm.edufeed.org');
   });
 
   it('shows exactly the relays in the kind 10050 event, not the listening union', () => {

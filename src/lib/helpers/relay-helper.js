@@ -37,7 +37,11 @@ export function getFallbackRelays() {
  */
 export function getDefaultDmRelays() {
   const configured = /** @type {string[] | undefined} */ (runtimeConfig.dmRelays);
-  return configured?.length ? configured : getFallbackRelays();
+  // Intentionally NOT gated: DM relays are the user's message inbox, not a
+  // content source. getFallbackRelays() returns [] in gated mode, which would
+  // hide the "no DM relay" nudge and leave the user unreachable. Read the raw
+  // fallback list so a DM default always exists when DM_RELAYS is unset.
+  return configured?.length ? configured : runtimeConfig.fallbackRelays || [];
 }
 
 /**

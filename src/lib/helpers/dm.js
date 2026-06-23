@@ -18,6 +18,26 @@ export function getDmRelaysFromEvent(event) {
 }
 
 /**
+ * Compute the relay set the gift-wrap listener should subscribe to, given the
+ * user's NIP-65 write + read relays and the app fallback relays.
+ *
+ * CRITICAL: read relays must be included. Per NIP-17, a sender routes a gift
+ * wrap to the recipient's kind 10050 DM relays OR, absent those, the recipient's
+ * NIP-65 *inbox* (read) relays (applesauce `inboxes$`). A listener that only
+ * subscribes on the user's *write* relays therefore misses every wrap delivered
+ * to their read relays — e.g. all DMs sent before they published a 10050.
+ * @param {string[]} [writeRelays]
+ * @param {string[]} [readRelays]
+ * @param {string[]} [fallbackRelays]
+ * @returns {string[]}
+ */
+export function computeBaseGiftWrapRelays(writeRelays, readRelays, fallbackRelays) {
+  return [...(writeRelays || []), ...(readRelays || []), ...(fallbackRelays || [])].filter(
+    (r, i, a) => r && a.indexOf(r) === i
+  );
+}
+
+/**
  * Build an unsigned kind 10050 DM relay list event (NIP-17).
  * @param {string} pubkey
  * @param {string[]} relays
