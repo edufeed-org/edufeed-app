@@ -14,7 +14,7 @@
   import { normalizeServerUrl, urlIsOnTrustedServer } from '$lib/helpers/blossom-trust.js';
   import * as m from '$lib/paraglide/messages';
   import { searchOer, fetchOerAsset } from '$lib/helpers/oer/searchOer.js';
-  import { oerToLicenseInput } from '$lib/helpers/oer/oerToLicenseInput.js';
+  import { oerToLicenseInput, isOerItemLicensable } from '$lib/helpers/oer/oerToLicenseInput.js';
   import { findExistingLicense, publishLicenseAttestation } from '$lib/helpers/image-license.js';
   import { OER_SOURCES } from '$lib/config/oer-sources.js';
   import LicenseBadge from './LicenseBadge.svelte';
@@ -85,6 +85,9 @@
       for (const item of data) {
         const key = item.amb?.id ?? item.id;
         if (!key || seen.has(key)) continue;
+        // Drop items we can't honestly attest (no license/credit) — picking one
+        // would throw "Cannot resolve license for OER item".
+        if (!isOerItemLicensable(item)) continue;
         seen.add(key);
         merged.push(item);
       }

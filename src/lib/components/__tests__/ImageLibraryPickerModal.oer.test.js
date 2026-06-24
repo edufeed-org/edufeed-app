@@ -139,6 +139,41 @@ describe('ImageLibraryPickerModal — OER search', () => {
     expect(tiles[0].querySelector('img')?.getAttribute('src')).toBe('https://proxy/thumb.jpg');
   });
 
+  it('drops un-attestable tiles (no license / no credit) from the grid', async () => {
+    const noLicense = {
+      id: 'openverse:2',
+      amb: {
+        id: 'https://img.example/nolicense.jpg',
+        name: 'No License',
+        creator: [{ name: 'X' }]
+      },
+      extensions: { images: { small: 'https://proxy/no-license.jpg' } }
+    };
+    const noCredit = {
+      id: 'openverse:3',
+      amb: {
+        id: 'https://img.example/nocredit.jpg',
+        name: 'No Credit',
+        license: { id: 'https://creativecommons.org/licenses/by/4.0/' }
+      },
+      extensions: { images: { small: 'https://proxy/no-credit.jpg' } }
+    };
+    mocks.searchOer.mockResolvedValueOnce({
+      data: [oerItem, noLicense, noCredit],
+      meta: { hasMore: false }
+    });
+    const { getByTestId, getAllByTestId } = render(ImageLibraryPickerModal, {
+      props: { open: true }
+    });
+    await fireEvent.click(getByTestId('tab-search'));
+    await fireEvent.input(getByTestId('oer-search-input'), { target: { value: 'tree' } });
+    await fireEvent.submit(getByTestId('oer-search-form'));
+    await new Promise((r) => setTimeout(r, 10));
+    const tiles = getAllByTestId('oer-tile');
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].querySelector('img')?.getAttribute('src')).toBe('https://proxy/thumb.jpg');
+  });
+
   it('shows a rate-limit notice naming the source when a source reports it', async () => {
     mocks.searchOer.mockResolvedValueOnce({
       data: [],

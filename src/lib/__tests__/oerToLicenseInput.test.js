@@ -1,7 +1,11 @@
 // @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { oerToLicenseInput } from '$lib/helpers/oer/oerToLicenseInput.js';
+import {
+  oerToLicenseInput,
+  isOerItemLicensable,
+  deriveOerCredit
+} from '$lib/helpers/oer/oerToLicenseInput.js';
 
 const asset = { sha256: 'abc123', mime: 'image/jpeg', size: 4242 };
 
@@ -66,5 +70,54 @@ describe('oerToLicenseInput', () => {
     delete item.extensions.system.attribution;
     delete item.amb.creator;
     expect(oerToLicenseInput(item, asset)).toBeNull();
+  });
+});
+
+describe('deriveOerCredit', () => {
+  it('prefers system.attribution', () => {
+    expect(deriveOerCredit(baseItem())).toBe('"A Tree" by Jane, CC BY 4.0');
+  });
+
+  it('falls back to composed creator names', () => {
+    const item = baseItem();
+    delete item.extensions.system.attribution;
+    expect(deriveOerCredit(item)).toBe('Jane Photographer');
+  });
+
+  it('returns empty string when neither is present', () => {
+    const item = baseItem();
+    delete item.extensions.system.attribution;
+    delete item.amb.creator;
+    expect(deriveOerCredit(item)).toBe('');
+  });
+});
+
+describe('isOerItemLicensable', () => {
+  it('is true for a fully-populated item', () => {
+    expect(isOerItemLicensable(baseItem())).toBe(true);
+  });
+
+  it('is false without a license id', () => {
+    const item = baseItem();
+    delete item.amb.license;
+    expect(isOerItemLicensable(item)).toBe(false);
+  });
+
+  it('is false without a resolvable credit', () => {
+    const item = baseItem();
+    delete item.extensions.system.attribution;
+    delete item.amb.creator;
+    expect(isOerItemLicensable(item)).toBe(false);
+  });
+
+  it('is false without a url (amb.id)', () => {
+    const item = baseItem();
+    delete item.amb.id;
+    expect(isOerItemLicensable(item)).toBe(false);
+  });
+
+  it('is false for null/undefined', () => {
+    expect(isOerItemLicensable(null)).toBe(false);
+    expect(isOerItemLicensable(undefined)).toBe(false);
   });
 });

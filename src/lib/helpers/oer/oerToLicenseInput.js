@@ -1,4 +1,37 @@
 /**
+ * Derive a human-readable credit string from an OER item, or '' if none.
+ * Prefers the proxy's pre-composed attribution, falling back to creator names.
+ * @param {any} item - OerItem
+ * @returns {string}
+ */
+export function deriveOerCredit(item) {
+  const amb = item?.amb ?? {};
+  const system = item?.extensions?.system ?? {};
+  return (
+    system.attribution ||
+    (Array.isArray(amb.creator)
+      ? amb.creator
+          .map((/** @type {{ name?: string }} */ c) => c?.name)
+          .filter(Boolean)
+          .join(', ')
+      : '') ||
+    ''
+  );
+}
+
+/**
+ * Whether a kind-1063 attestation can be honestly built for this item: it needs
+ * a resolvable URL, a license URI, and a credit. Items failing this are excluded
+ * from the picker grid so the user never clicks an un-attestable tile.
+ * @param {any} item - OerItem
+ * @returns {boolean}
+ */
+export function isOerItemLicensable(item) {
+  const amb = item?.amb ?? {};
+  return Boolean(amb.id && amb.license?.id && deriveOerCredit(item));
+}
+
+/**
  * Map an OER search hit (`OerItem`) + the asset endpoint's `{ sha256, mime,
  * size }` into the input object `buildLicenseTemplate` expects. Pure.
  *
@@ -20,15 +53,7 @@ export function oerToLicenseInput(item, asset) {
   const license = amb.license?.id;
   if (!url || !license) return null;
 
-  const credit =
-    system.attribution ||
-    (Array.isArray(amb.creator)
-      ? amb.creator
-          .map((/** @type {{ name?: string }} */ c) => c?.name)
-          .filter(Boolean)
-          .join(', ')
-      : '') ||
-    '';
+  const credit = deriveOerCredit(item);
   if (!credit) return null;
 
   /** @type {{ url: string, hash: string, mime: string, size?: number, license: string, credit: string, source?: string, title?: string, dim?: string }} */
