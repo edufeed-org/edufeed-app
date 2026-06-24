@@ -10,6 +10,87 @@ import { NostrConnectSigner } from 'applesauce-signers';
 export const manager = $state(new AccountManager());
 registerCommonAccountTypes(manager);
 
+/**
+ * How long to wait for a NIP-07 extension to respond before treating the request
+ * as failed. Some extensions never settle `signEvent()` when the user dismisses the
+ * popup (instead of explicitly rejecting); without a bound the calling UI would spin
+ * forever. Long enough to comfortably cover a deliberate human approval.
+ */
+export const EXTENSION_SIGNER_TIMEOUT_MS = 60_000;
+
+/** Marks a signer that has already been wrapped, so re-runs don't double-wrap. */
+const TIMEOUT_WRAPPED = Symbol('timeout-wrapped-signer');
+
+/**
+ * Reject `promise` if it has not settled within `ms`, clearing the timer either way.
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @param {string} label
+ * @returns {Promise<T>}
+ */
+function rejectAfter(promise, ms, label) {
+  /** @type {ReturnType<typeof setTimeout>} */
+  let timer;
+  const timeout = new Promise((_resolve, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(new Error(`${label} timed out after ${ms / 1000}s — the signer did not respond`)),
+      ms
+    );
+  });
+  return Promise.race([promise, /** @type {Promise<T>} */ (timeout)]).finally(() =>
+    clearTimeout(timer)
+  );
+}
+
+/**
+ * Wrap a signer so `signEvent` rejects after `ms` instead of hanging forever.
+ * Everything else (getPublicKey, nip04/nip44, pubkey) passes through unchanged, so
+ * encryption and key lookups behave exactly as before.
+ *
+ * @template {object} T
+ * @param {T} signer
+ * @param {number} ms
+ * @returns {T}
+ */
+export function wrapSignerWithTimeout(signer, ms) {
+  return new Proxy(signer, {
+    get(target, prop) {
+      if (prop === TIMEOUT_WRAPPED) return true;
+      if (prop === 'signEvent') {
+        return (/** @type {any} */ template) =>
+          rejectAfter(/** @type {any} */ (target).signEvent(template), ms, 'Signing the event');
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+}
+
+/**
+ * Harden NIP-07 extension accounts against a dismissed/never-settling signer popup:
+ *
+ * 1. Disable applesauce's per-account signing queue. Otherwise one never-settling
+ *    request poisons the account's shared lock and blocks ALL subsequent signing
+ *    until a hard reload. Extensions serialize prompts themselves, so this is safe
+ *    for them (unlike NIP-46/bunker, which benefits from serialization).
+ * 2. Wrap the signer with a timeout so the originating request itself eventually
+ *    rejects, letting the calling UI clear its loading state instead of spinning
+ *    forever. Idempotent — re-running won't double-wrap. See accounts.queue.test.js.
+ *
+ * @param {Array<{ type?: string, disableQueue?: boolean, signer?: any }>} accounts
+ */
+export function hardenExtensionAccounts(accounts) {
+  for (const account of accounts) {
+    if (account.type !== 'extension') continue;
+    account.disableQueue = true;
+    if (account.signer && !account.signer[TIMEOUT_WRAPPED]) {
+      account.signer = wrapSignerWithTimeout(account.signer, EXTENSION_SIGNER_TIMEOUT_MS);
+    }
+  }
+}
+
 // Initialize account persistence
 async function initializeAccountPersistence() {
   if (typeof window === 'undefined') return; // Only run on client side
@@ -46,7 +127,9 @@ async function initializeAccountPersistence() {
   }
 
   // Step 4: Subscribe to account changes and persist to localStorage
-  manager.accounts$.subscribe((_accounts) => {
+  manager.accounts$.subscribe((accounts) => {
+    // Prevent a dismissed extension popup from deadlocking / hanging signing.
+    hardenExtensionAccounts(accounts);
     try {
       const json = manager.toJSON();
       localStorage.setItem('accounts', JSON.stringify(json));
