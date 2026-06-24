@@ -10,6 +10,8 @@
   import { buildTulluCaption } from '$lib/helpers/tullu-caption.js';
   import LicenseModal from './LicenseModal.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
+  import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
+  import ImageLibraryPickerModal from './ImageLibraryPickerModal.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -38,6 +40,8 @@
   /** @type {any} */
   let pendingExistingLicense = $state(null);
   let modalOpen = $state(false);
+  let chooserOpen = $state(false);
+  let libraryOpen = $state(false);
 
   /**
    * Insert markdown syntax at cursor position in textarea
@@ -88,7 +92,21 @@
   }
 
   function toolbarImage() {
-    imageInputRef?.click();
+    chooserOpen = true;
+  }
+
+  /**
+   * Insert a library-picked image as markdown. The picked event already carries
+   * a license attestation, so we skip the upload + LicenseModal gate and insert
+   * the image plus its TULLU caption directly.
+   * @param {{ url: string, hash: string, licenseEvent: any }} picked
+   */
+  function handleLibraryPick(picked) {
+    const alt =
+      picked.licenseEvent?.tags?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1] ?? '';
+    const caption = buildTulluCaption(picked.licenseEvent, { alt });
+    const tail = caption ? `)\n\n${caption}\n\n` : ')';
+    insertMarkdown(`![${alt}](`, tail, picked.url);
   }
 
   /**
@@ -242,4 +260,18 @@
     pendingUpload = null;
     pendingExistingLicense = null;
   }}
+/>
+
+<ImageSourceChooserModal
+  bind:open={chooserOpen}
+  onupload={() => imageInputRef?.click()}
+  onlibrary={() => {
+    libraryOpen = true;
+  }}
+/>
+
+<ImageLibraryPickerModal
+  bind:open={libraryOpen}
+  onpick={handleLibraryPick}
+  onupload={() => imageInputRef?.click()}
 />

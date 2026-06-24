@@ -251,6 +251,9 @@
     </div>
   </div>
 {:else}
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- tabindex and role='button' are both applied only when !preview, so the
+       tabindex is never present without the interactive role. -->
   <div
     class="amb-card rounded-lg border border-base-300 bg-base-100 shadow-sm {preview
       ? ''

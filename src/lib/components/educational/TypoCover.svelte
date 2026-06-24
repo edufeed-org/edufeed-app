@@ -345,7 +345,7 @@
 
   /* Dark theme: lighter dot pattern so it doesn't fight the gradient.
      Gradient tones themselves stay mid-range OKLCH and read fine on both themes. */
-  :where([data-theme='dark'], [data-theme='stil-dark'], [data-theme='rpi-dark'])
+  :global(:where([data-theme='dark'], [data-theme='stil-dark'], [data-theme='rpi-dark']))
     .typo-cover-inner::before {
     background-image: radial-gradient(circle at 1px 1px, oklch(100% 0 0 / 0.12) 1px, transparent 0),
       radial-gradient(circle at 1px 1px, oklch(100% 0 0 / 0.12) 1px, transparent 0);
