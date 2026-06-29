@@ -1132,6 +1132,7 @@
   const validationContext = $derived({
     isEkw,
     hasNoUrl,
+    isEditMode,
     hasSubjectVocab: subjectVocabFields.length > 0,
     subjectsCount: Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0),
     isValidUrl,
@@ -1146,9 +1147,9 @@
       description: m.amb_form_validation_description,
       resourceType: m.amb_form_validation_resource_type,
       subject: m.amb_form_validation_subject,
-      noUrlNeedsAttachment: () =>
-        m.amb_form_validation_no_url_needs_attachment?.() ??
-        'Pure Nostr resources must have at least one file or external reference.',
+      noUrlNeedsFile: () =>
+        m.amb_form_validation_no_url_needs_file?.() ??
+        'Upload at least one file — this resource has no external URL.',
       license: m.amb_form_validation_license,
       imageLicenseMissing: m.amb_form_validation_image_license_missing,
       encodingLicenseMissing: m.amb_form_validation_encoding_license_missing
@@ -1920,6 +1921,9 @@
                   previewAuthorProfile?.name ??
                   ''}
               />
+              {#if showError('attachments')}
+                <p class="text-xs text-error">{fieldErrors.attachments}</p>
+              {/if}
               {#if uploadedSourceUrls.length > 0}
                 {@render enrichBlock(uploadedSourceUrls)}
               {/if}
@@ -2735,14 +2739,6 @@
       <!-- Step 5: Content & Creators -->
       {#if currentStep === 5}
         <div class="space-y-4">
-          {#if hasNoUrl}
-            <div class="alert text-sm alert-info">
-              {m.amb_form_help_step_5_no_url()}
-            </div>
-          {/if}
-          {#if showError('attachments')}
-            <p class="text-xs text-error">{fieldErrors.attachments}</p>
-          {/if}
           <CreatorInput
             bind:creators={formData.creators}
             label={m.amb_form_label_creators()}

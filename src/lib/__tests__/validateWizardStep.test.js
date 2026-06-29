@@ -34,7 +34,7 @@ const messages = {
   description: () => 'ERR_DESCRIPTION',
   resourceType: () => 'ERR_RESOURCE_TYPE',
   subject: () => 'ERR_SUBJECT',
-  noUrlNeedsAttachment: () => 'ERR_NO_URL_NEEDS_ATTACHMENT',
+  noUrlNeedsFile: () => 'ERR_NO_URL_NEEDS_FILE',
   license: () => 'ERR_LICENSE',
   imageLicenseMissing: () => 'ERR_IMAGE_LICENSE_MISSING',
   encodingLicenseMissing: () => 'ERR_ENCODING_LICENSE_MISSING'
@@ -46,6 +46,7 @@ function ctx(overrides = {}) {
   return {
     isEkw: false,
     hasNoUrl: false,
+    isEditMode: false,
     hasSubjectVocab: true,
     subjectsCount: 0,
     isValidUrl,
@@ -99,8 +100,23 @@ describe('validateWizardStep', () => {
       expect(errors).toEqual({});
     });
 
-    it('passes with no identifier when the user explicitly opted out (hasNoUrl)', () => {
+    it('flags attachments when the user opted out of a URL but uploaded no file (create mode)', () => {
       const errors = validateWizardStep(2, emptyFormData(), ctx({ hasNoUrl: true }));
+      expect(errors).toEqual({ attachments: 'ERR_NO_URL_NEEDS_FILE' });
+    });
+
+    it('passes when hasNoUrl and at least one file has been uploaded', () => {
+      const formData = { ...emptyFormData(), encodings: [{ url: 'x', name: 'y' }] };
+      const errors = validateWizardStep(2, formData, ctx({ hasNoUrl: true }));
+      expect(errors).toEqual({});
+    });
+
+    it('does not require a file in edit mode (step-2 uploader is hidden there)', () => {
+      const errors = validateWizardStep(
+        2,
+        emptyFormData(),
+        ctx({ hasNoUrl: true, isEditMode: true })
+      );
       expect(errors).toEqual({});
     });
   });
@@ -260,26 +276,9 @@ describe('validateWizardStep', () => {
   });
 
   describe('step 5 — Content & Creators', () => {
-    it('flags attachments when hasNoUrl and neither encodings nor externalUrls exist', () => {
+    it('no longer gates on attachments — the file requirement now lives on step 2', () => {
       const errors = validateWizardStep(5, emptyFormData(), ctx({ hasNoUrl: true }));
-      expect(errors).toEqual({ attachments: 'ERR_NO_URL_NEEDS_ATTACHMENT' });
-    });
-
-    it('passes with at least one encoding when hasNoUrl', () => {
-      const formData = { ...emptyFormData(), encodings: [{ url: 'x', name: 'y' }] };
-      const errors = validateWizardStep(5, formData, ctx({ hasNoUrl: true }));
-      expect(errors).toEqual({});
-    });
-
-    it('passes with at least one external URL when hasNoUrl', () => {
-      const formData = { ...emptyFormData(), externalUrls: ['https://example.org'] };
-      const errors = validateWizardStep(5, formData, ctx({ hasNoUrl: true }));
-      expect(errors).toEqual({});
-    });
-
-    it('passes with no attachments when there IS a URL on step 2', () => {
-      const errors = validateWizardStep(5, emptyFormData(), ctx({ hasNoUrl: false }));
-      expect(errors).toEqual({});
+      expect(errors.attachments).toBeUndefined();
     });
 
     it('step 5: blocks publish when an encoding has sha256 but no licenseEvent', () => {

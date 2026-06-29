@@ -76,6 +76,7 @@ const STEP_4C = {
 const baseCtx = {
   isEkw: true,
   hasNoUrl: false,
+  isEditMode: false,
   hasSubjectVocab: false,
   subjectsCount: 0,
   isValidUrl: () => true,
@@ -87,7 +88,7 @@ const baseCtx = {
     description: () => 'd',
     resourceType: () => 'r',
     subject: () => 's',
-    noUrlNeedsAttachment: () => 'a',
+    noUrlNeedsFile: () => 'a',
     license: () => 'l',
     imageLicenseMissing: () => 'il',
     encodingLicenseMissing: () => 'el'

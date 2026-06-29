@@ -20,7 +20,7 @@ import { subStepToFormFields, validateKonfiTopicOrDimension } from './konfiStep4
  *   description: () => string,
  *   resourceType: () => string,
  *   subject: () => string,
- *   noUrlNeedsAttachment: () => string,
+ *   noUrlNeedsFile: () => string,
  *   license: () => string,
  *   imageLicenseMissing: () => string,
  *   encodingLicenseMissing: () => string,
@@ -29,6 +29,7 @@ import { subStepToFormFields, validateKonfiTopicOrDimension } from './konfiStep4
  * @typedef {{
  *   isEkw: boolean,
  *   hasNoUrl: boolean,
+ *   isEditMode: boolean,
  *   hasSubjectVocab: boolean,
  *   subjectsCount: number,
  *   isValidUrl: (s: string) => boolean,
@@ -54,8 +55,15 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       break;
 
     case 2:
-      if (!ctx.hasNoUrl && !formData.identifier?.trim()) {
-        errors.identifier = m.urlRequired();
+      if (!ctx.hasNoUrl) {
+        if (!formData.identifier?.trim()) errors.identifier = m.urlRequired();
+      } else if (!ctx.isEditMode && (formData.encodings?.length ?? 0) === 0) {
+        // No-URL resources carry their content as an uploaded file. The
+        // uploader lives on this step, so enforce "at least one file" here —
+        // not on step 5, where the error would surface far from the action.
+        // Edit mode hides the step-2 uploader (d-tag is immutable), so the
+        // requirement is satisfied by the already-published encodings.
+        errors.attachments = m.noUrlNeedsFile();
       }
       break;
 
@@ -99,11 +107,6 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       break;
 
     case 5: {
-      const encodings = formData.encodings?.length ?? 0;
-      const urls = formData.externalUrls?.length ?? 0;
-      if (ctx.hasNoUrl && encodings === 0 && urls === 0) {
-        errors.attachments = m.noUrlNeedsAttachment();
-      }
       // License gate: any encoding with a sha256 but no license event blocks publish.
       const missing = (formData.encodings ?? []).some(
         (/** @type {any} */ e) => e?.sha256 && !e?.licenseEvent
