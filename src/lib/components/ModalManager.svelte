@@ -18,6 +18,7 @@
   import CreateRoomModal from './meet/CreateRoomModal.svelte';
   import PollCreateModal from './polls/PollCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
+  import DeleteCommunityModal from './community/DeleteCommunityModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -50,6 +51,7 @@
   const reportMetadataModalId = 'report-metadata-modal';
   const createRoomModalId = 'create-room-modal';
   const recoveryDownloadModalId = 'recovery-download-modal';
+  const deleteCommunityModalId = 'delete-community-modal';
 
   /**
    * Reactive effect to handle modal opening/closing based on store state
@@ -132,6 +134,12 @@
       );
       if (recoveryDownloadModal && recoveryDownloadModal.open) {
         recoveryDownloadModal.close();
+      }
+      const deleteCommunityModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(deleteCommunityModalId)
+      );
+      if (deleteCommunityModal && deleteCommunityModal.open) {
+        deleteCommunityModal.close();
       }
     } else if (currentModal === 'login') {
       // Open login modal
@@ -225,6 +233,13 @@
       if (recoveryDownloadModal && !recoveryDownloadModal.open) {
         recoveryDownloadModal.showModal();
       }
+    } else if (currentModal === 'deleteCommunity') {
+      const deleteCommunityModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(deleteCommunityModalId)
+      );
+      if (deleteCommunityModal && !deleteCommunityModal.open) {
+        deleteCommunityModal.showModal();
+      }
     }
   });
 
@@ -306,4 +321,6 @@
   <PollCreateModal communityPubkey={pollCommunityPubkey} />
 {:else if modal.activeModal === 'recovery-download'}
   <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
+{:else if modal.activeModal === 'deleteCommunity'}
+  <DeleteCommunityModal modalId={deleteCommunityModalId} />
 {/if}

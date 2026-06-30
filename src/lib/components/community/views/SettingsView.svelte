@@ -28,6 +28,13 @@
     modalStore.openModal('editCommunity', { communityEvent: communikeyEvent });
   }
 
+  function handleDeleteCommunity() {
+    modalStore.openModal('deleteCommunity', {
+      communityEvent: communikeyEvent,
+      profileEvent
+    });
+  }
+
   let isLeaving = $state(false);
 
   async function handleLeaveClick() {
@@ -101,6 +108,21 @@
           <!-- Form Link Manager -->
           <div class="mt-6">
             <FormLinkManager communityEvent={communikeyEvent} communityPubkey={communityId} />
+          </div>
+
+          <!-- Danger Zone -->
+          <div class="card mt-6 border border-error/40 bg-base-200 shadow-xl">
+            <div class="card-body">
+              <h2 class="mb-2 card-title text-error">
+                {m.community_views_settings_danger_title()}
+              </h2>
+              <p class="mb-4 text-sm text-base-content/70">
+                {m.community_views_settings_danger_description()}
+              </p>
+              <button onclick={handleDeleteCommunity} class="btn w-full btn-outline btn-error">
+                {m.community_views_settings_delete_button()}
+              </button>
+            </div>
           </div>
         {/if}
 
