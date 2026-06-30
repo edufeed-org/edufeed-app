@@ -12,10 +12,10 @@ import RelayFilterDropdown from '../feed/RelayFilterDropdown.svelte';
 
 // Mock paraglide messages
 vi.mock('$lib/paraglide/messages', () => ({
-  discover_relay_label: () => 'Relay:',
-  discover_relay_all: () => 'All relays',
+  discover_relay_label: () => 'Source:',
+  discover_relay_all: () => 'All',
   discover_relay_edit: () => 'Edit',
-  discover_relay_edit_title: () => 'Edit relay configuration in settings'
+  discover_relay_edit_title: () => 'Edit source configuration in settings'
 }));
 
 const relays = ['wss://relay.example.com/', 'wss://nostr.land/', 'wss://edu.relay.io/'];
@@ -56,7 +56,7 @@ describe('RelayFilterDropdown', () => {
     expect(select.classList.contains('select-sm')).toBe(false);
   });
 
-  it('renders "All relays" as default option', () => {
+  it('renders "All" as default option', () => {
     const { container } = render(RelayFilterDropdown, {
       props: {
         relays,
@@ -67,7 +67,7 @@ describe('RelayFilterDropdown', () => {
     });
 
     const options = container.querySelectorAll('option');
-    expect(options[0].textContent).toContain('All relays');
+    expect(options[0].textContent).toContain('All');
     expect(options[0].value).toBe('');
   });
 
@@ -82,7 +82,7 @@ describe('RelayFilterDropdown', () => {
     });
 
     const options = Array.from(container.querySelectorAll('option'));
-    // Skip the first "All relays" option
+    // Skip the first "All" option
     const relayOptions = options.slice(1);
     expect(relayOptions.length).toBe(3);
     expect(relayOptions[0].textContent.trim()).toBe('relay.example.com');
