@@ -145,7 +145,7 @@ export async function collectCommunityEvents({ pubkey, scope, relays }) {
  *
  * @param {object} opts
  * @param {any[]} opts.events - Events to delete (already filtered/selected).
- * @param {{ signEvent: (t: any) => Promise<any> }} opts.signer - The community signer.
+ * @param {any} opts.signer - The community signer (EventSigner held by the account manager).
  * @param {number} [opts.batchSize] - Max events per deletion request (default 100).
  * @returns {Promise<{ success: boolean, deleted: number, error?: string }>}
  */
