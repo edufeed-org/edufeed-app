@@ -281,6 +281,105 @@ describe('hydrateDeletions', () => {
   });
 });
 
+describe('cacheDeletion', () => {
+  beforeEach(async () => {
+    mockEventStore = new EventStore();
+    mockEventStore.verifyEvent = () => true;
+    const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
+    globalThis.indexedDB = /** @type {IDBFactory} */ (/** @type {unknown} */ (new FDBFactory()));
+    vi.resetModules();
+  });
+
+  it('persists a deletion to IDB so it survives a reload', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      cacheDeletion
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const pubkey = 'a'.repeat(64);
+    const deletion = {
+      id: 'd'.repeat(64),
+      kind: 5,
+      pubkey,
+      created_at: 1001,
+      tags: [['a', `10222:${pubkey}:`]],
+      content: '',
+      sig: 's'.repeat(128)
+    };
+
+    await cacheDeletion(deletion);
+    await nostrIDB.writeQueue?.flush?.();
+
+    const cached = await nostrIDB.query([{ kinds: [5] }]);
+    expect(cached.map((/** @type {any} */ e) => e.id)).toContain(deletion.id);
+  });
+
+  it('is the write path hydrateDeletions replays on the next boot to keep the original filtered', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      cacheDeletion,
+      hydrateDeletions
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const pubkey = 'a'.repeat(64);
+    // A replaceable community definition (kind 10222 → empty d identifier).
+    const community = {
+      id: 'c'.repeat(64),
+      kind: 10222,
+      pubkey,
+      created_at: 1000,
+      tags: [],
+      content: '',
+      sig: 's'.repeat(128)
+    };
+    const deletion = {
+      id: 'e'.repeat(64),
+      kind: 5,
+      pubkey,
+      created_at: 1001,
+      tags: [['a', `10222:${pubkey}:`]],
+      content: '',
+      sig: 's'.repeat(128)
+    };
+
+    // Write side: what the deletion helpers do at delete time.
+    await cacheDeletion(deletion);
+    await nostrIDB.writeQueue?.flush?.();
+
+    // Read side on next boot: replay cached deletions, then a loader pulls the
+    // now-deleted community back from cache.
+    await hydrateDeletions();
+    mockEventStore.add(community);
+
+    expect(mockEventStore.getReplaceable(10222, pubkey, '')).toBeUndefined();
+  });
+
+  it('persists a deletion with no recognisable target (kind 5 is always cacheable)', async () => {
+    const { dbReady, cacheDeletion } = await import('$lib/stores/event-cache.svelte.js');
+    await dbReady;
+
+    // Even a deletion object with no recognisable target is stored — kind 5 is
+    // correctness-critical and cheap, we don't parse tags to decide.
+    await expect(
+      cacheDeletion({
+        id: 'f'.repeat(64),
+        kind: 5,
+        pubkey: 'a'.repeat(64),
+        created_at: 1,
+        tags: [],
+        content: '',
+        sig: 's'.repeat(128)
+      })
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('warmIdentity', () => {
   beforeEach(async () => {
     mockEventStore = new EventStore();

@@ -17,6 +17,7 @@ import { canHaveHiddenTags } from 'applesauce-core/helpers/hidden-tags';
 import { modifyPublicTags, modifyHiddenTags } from 'applesauce-core/operations/tags';
 import { addNameValueTag, removeNameValueTag } from 'applesauce-core/operations/tag/common';
 import * as List from 'applesauce-common/operations/list';
+import { cacheDeletion } from '$lib/stores/event-cache.svelte.js';
 
 /** Crude but sufficient d-tag generator — 12 random hex chars. */
 function randomDTag() {
@@ -133,6 +134,10 @@ export function DeleteList(listEvent) {
     }
     const draft = await factory.delete([listEvent]);
     const signed = await sign(draft);
+    // Persist the deletion to IDB so it survives a reload. Kind 5 is never
+    // emitted on the EventStore's insert$, so the cache write pipeline misses
+    // it and the deleted list would reappear from cache on the next boot.
+    cacheDeletion(signed);
     const outboxes = await user.outboxes$.$first(1000, undefined);
     await publish(signed, outboxes);
   };

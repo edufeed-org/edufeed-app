@@ -2,6 +2,7 @@ import { getSeenRelays } from 'applesauce-core/helpers';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { cacheDeletion } from '$lib/stores/event-cache.svelte.js';
 import {
   kindToAppRelayCategory,
   getAppRelaysForCategory
@@ -60,11 +61,13 @@ export async function deleteEvent(event, activeUser) {
     const deleteTemplate = await factory.delete([eventToDelete]);
     const signedDelete = await factory.sign(deleteTemplate);
 
-    // OPTIMISTIC UI: Add to EventStore IMMEDIATELY. The deletion is also
-    // persisted to the IDB cache (kind 5 is cacheable) and replayed into the
-    // event store on the next boot via hydrateDeletions(), so the deleted
-    // event stays filtered across reloads.
+    // OPTIMISTIC UI: filter the original out of the in-memory store immediately.
     eventStore.add(signedDelete);
+    // Persist the deletion to IDB so hydrateDeletions() replays it on the next
+    // boot. The EventStore routes kind 5 to its DeleteManager and never emits it
+    // on insert$, so the cache write pipeline misses it — without this the
+    // deleted event is read back from cache and reappears across reloads.
+    cacheDeletion(signedDelete);
 
     // Determine additional relays based on event kind
     const category = kindToAppRelayCategory(kind);

@@ -23,6 +23,7 @@ import { timedPool } from '$lib/loaders/base.js';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { cacheDeletion } from '$lib/stores/event-cache.svelte.js';
 import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 
 /**
@@ -164,6 +165,10 @@ export async function deleteCommunityEvents({ events, signer, batchSize = 100 })
 
       // Optimistic: filter the originals out of the UI immediately.
       eventStore.add(signedDelete);
+      // Persist the deletion so it survives a reload — the EventStore never
+      // emits kind 5 on insert$, so the cache write pipeline would miss it and
+      // the deleted community would reappear from IDB on the next boot.
+      cacheDeletion(signedDelete);
 
       // Reach every relay that still holds an original event in this batch.
       const seen = new Set(communikeyRelays);

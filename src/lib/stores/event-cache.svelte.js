@@ -100,6 +100,30 @@ export async function cacheRequest(filters) {
 }
 
 /**
+ * Persist a NIP-09 deletion (kind 5) event to IDB.
+ *
+ * The EventStore routes kind 5 events straight to its DeleteManager and never
+ * emits them on `insert$`, so the `persistEventsToCache` write pipeline (which
+ * only listens to `insert$`) never sees them. Without this, a deletion filters
+ * its target in-memory but is gone on the next reload — the still-cached
+ * original is read back and the "deleted" content reappears. Deletion helpers
+ * call this right after `eventStore.add(deletion)` so `hydrateDeletions()` can
+ * replay it on the next boot. Degrades to a no-op on any failure.
+ *
+ * @param {import('nostr-tools').Event} event - A signed kind 5 deletion event.
+ * @returns {Promise<void>}
+ */
+export async function cacheDeletion(event) {
+  if (!nostrIDB) return;
+  try {
+    await dbReady;
+    await nostrIDB.add(event);
+  } catch (err) {
+    console.warn('[event-cache] cacheDeletion failed', err);
+  }
+}
+
+/**
  * Replay cached NIP-09 deletion events (kind 5) into the event store on boot.
  *
  * nostr-idb has no deletion semantics — it stores events blindly, so the
