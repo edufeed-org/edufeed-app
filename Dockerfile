@@ -16,8 +16,10 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Build the application
-RUN pnpm run build
+# Build the application. Raise Node's heap: the CI runner OOM-flakes the
+# Vite/SvelteKit build at the default ~2GB limit (same commit passed on one
+# run and failed on another purely from memory pressure).
+RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
 
 # Production stage
 FROM node:22-alpine
