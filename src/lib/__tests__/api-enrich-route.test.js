@@ -9,11 +9,15 @@ vi.mock('$lib/server/ambMcpClient.js', () => ({
   callExtractMetadata: (input) => callExtractMetadataMock(input)
 }));
 
+// Mock the token provider so the route doesn't attempt a real Keycloak fetch.
+vi.mock('$lib/server/ambMcpToken.js', () => ({
+  getAmbMcpToken: () => Promise.resolve('test-token')
+}));
+
 // Mock $env/dynamic/private — SvelteKit's env-import path.
 vi.mock('$env/dynamic/private', () => ({
   env: {
     AMB_MCP_URL: 'https://mcp.example/mcp',
-    AMB_MCP_BEARER_TOKEN: 'test-token',
     SCHEME_NADDR_HCRT: 'naddr1hcrt',
     SCHEME_NADDR_EKW_LRT: 'naddr1ekwlrt',
     SCHEME_NADDR_KLASSENSTUFEN: 'naddr1klassen',
@@ -269,6 +273,9 @@ describe('POST /api/enrich without AMB_MCP_URL configured', () => {
     vi.doMock('$env/dynamic/private', () => ({ env: {} }));
     vi.doMock('$lib/server/ambMcpClient.js', () => ({
       callExtractMetadata: callExtractMetadataMock
+    }));
+    vi.doMock('$lib/server/ambMcpToken.js', () => ({
+      getAmbMcpToken: () => Promise.resolve('test-token')
     }));
     const { POST: PostNoEnv } = await import('../../routes/api/enrich/+server.js');
     const res = await PostNoEnv(ev(makeRequest({ url: 'https://example.org' })));

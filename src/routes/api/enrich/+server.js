@@ -13,6 +13,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { callExtractMetadata } from '$lib/server/ambMcpClient.js';
+import { getAmbMcpToken } from '$lib/server/ambMcpToken.js';
 import { parseHttpUrl } from '$lib/server/httpUrl.js';
 
 const VARIANTS = new Set(['amb', 'ekw', 'konfi']);
@@ -193,7 +194,7 @@ export async function POST({ request }) {
       try {
         const result = await callExtractMetadata({
           mcpUrl,
-          bearerToken: env.AMB_MCP_BEARER_TOKEN,
+          bearerToken: await getAmbMcpToken(),
           urls,
           variant,
           skosSchemes: buildSkosSchemes(variant, bildungsbereich)
