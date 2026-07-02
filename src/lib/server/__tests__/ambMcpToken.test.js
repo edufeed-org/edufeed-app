@@ -2,7 +2,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createTokenProvider } from '../ambMcpToken.js';
 
-/** Build a Keycloak-shaped token response. */
+/**
+ * Build a Keycloak-shaped token response.
+ * @param {string} accessToken
+ * @param {number} [expiresIn]
+ * @param {number} [status]
+ */
 function tokenResponse(accessToken, expiresIn = 3600, status = 200) {
   return new Response(JSON.stringify({ access_token: accessToken, expires_in: expiresIn }), {
     status,
@@ -73,7 +78,8 @@ describe('createTokenProvider', () => {
   });
 
   it('shares a single in-flight fetch under concurrent callers', async () => {
-    let resolveFetch;
+    /** @type {() => void} */
+    let resolveFetch = () => {};
     fetchMock.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveFetch = () => resolve(tokenResponse('tok-1'));

@@ -83,9 +83,9 @@ let singleton = null;
 export function getAmbMcpToken() {
   if (!singleton) {
     singleton = createTokenProvider({
-      tokenUrl: env.AMB_MCP_TOKEN_URL,
-      clientId: env.AMB_MCP_CLIENT_ID,
-      clientSecret: env.AMB_MCP_CLIENT_SECRET,
+      tokenUrl: env.AMB_MCP_TOKEN_URL ?? '',
+      clientId: env.AMB_MCP_CLIENT_ID ?? '',
+      clientSecret: env.AMB_MCP_CLIENT_SECRET ?? '',
       scope: env.AMB_MCP_SCOPE || undefined
     });
   }
