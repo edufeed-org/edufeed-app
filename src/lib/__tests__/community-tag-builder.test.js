@@ -7,7 +7,10 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { buildCommunityDefinitionTags } from '../helpers/communityTagBuilder.js';
+import {
+  buildCommunityDefinitionTags,
+  createDefaultContentTypes
+} from '../helpers/communityTagBuilder.js';
 
 /** Helper to build minimal form data
  * @param {Partial<import('../helpers/communityTagBuilder.js').CommunityFormData>} [overrides]
@@ -138,6 +141,38 @@ describe('buildCommunityDefinitionTags — old-spec (no communityPubkey)', () =>
     expect(tags).toContainEqual(['k', '11']);
     // Wikis: 30818
     expect(tags).toContainEqual(['k', '30818']);
+    // Calendar also declares collections (31924) so calendar creation is allowed
+    expect(tags).toContainEqual(['k', '31924']);
+  });
+
+  it('produces kinds for learning, polls, and bookmarks content types', () => {
+    const data = makeFormData();
+    data.contentTypes.learning = {
+      name: 'Learning',
+      enabled: true,
+      badges: { read: null, write: null },
+      relays: []
+    };
+    data.contentTypes.polls = {
+      name: 'Polls',
+      enabled: true,
+      badges: { read: null, write: null },
+      relays: []
+    };
+    data.contentTypes.bookmarks = {
+      name: 'Social Bookmarks',
+      enabled: true,
+      badges: { read: null, write: null },
+      relays: []
+    };
+    const tags = buildCommunityDefinitionTags(data);
+
+    expect(tags).toContainEqual(['content', 'Learning']);
+    expect(tags).toContainEqual(['k', '30142']);
+    expect(tags).toContainEqual(['content', 'Polls']);
+    expect(tags).toContainEqual(['k', '1068']);
+    expect(tags).toContainEqual(['content', 'Social Bookmarks']);
+    expect(tags).toContainEqual(['k', '39701']);
   });
 
   it('preserves tag ordering: globals before content sections', () => {
@@ -301,5 +336,47 @@ describe('buildCommunityDefinitionTags — relay format handling', () => {
     // New-spec: enforced flag written
     const tagsNew = buildCommunityDefinitionTags(data, { communityPubkey: 'abc' });
     expect(tagsNew).toContainEqual(['r', 'wss://enforced.relay', 'enforced']);
+  });
+});
+
+// ─── DEFAULT CONTENT TYPE STATE FACTORY ──────────────────────────────────────
+
+describe('createDefaultContentTypes', () => {
+  it('returns all known content type keys, disabled by default', () => {
+    const types = createDefaultContentTypes();
+    expect(Object.keys(types)).toEqual([
+      'calendar',
+      'chat',
+      'articles',
+      'posts',
+      'wikis',
+      'learning',
+      'polls',
+      'bookmarks',
+      'meet'
+    ]);
+    for (const ct of Object.values(types)) {
+      expect(ct.enabled).toBe(false);
+      expect(ct.badges).toEqual({ read: null, write: null });
+      expect(ct.relays).toEqual([]);
+      expect(ct.formRef).toBe('');
+      expect(typeof ct.name).toBe('string');
+    }
+  });
+
+  it('enables the requested keys', () => {
+    const types = createDefaultContentTypes(['chat', 'learning']);
+    expect(types.chat.enabled).toBe(true);
+    expect(types.learning.enabled).toBe(true);
+    expect(types.calendar.enabled).toBe(false);
+  });
+
+  it('returns fresh objects on each call (no shared state)', () => {
+    const a = createDefaultContentTypes();
+    const b = createDefaultContentTypes();
+    a.chat.enabled = true;
+    a.chat.relays.push('wss://x');
+    expect(b.chat.enabled).toBe(false);
+    expect(b.chat.relays).toEqual([]);
   });
 });

@@ -69,7 +69,9 @@ export const CREATE_ACTIONS = [
   {
     id: 'calendar',
     section: 'create',
-    kinds: [31924],
+    // 31922/31923 included so legacy communities that declare only event
+    // kinds (never 31924) still offer calendar creation
+    kinds: [31924, 31922, 31923],
     label: m.fab_create_calendar,
     ariaLabel: m.fab_create_calendar_aria,
     description: m.fab_create_calendar_desc,

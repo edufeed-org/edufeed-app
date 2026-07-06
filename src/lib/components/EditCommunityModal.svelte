@@ -8,7 +8,10 @@
   import LocationInput from './shared/LocationInput.svelte';
   import ContentTypesAndACL from './shared/ContentTypesAndACL.svelte';
   import { deriveDefaultFormRef } from '$lib/helpers/communityFormDefaults.js';
-  import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
+  import {
+    buildCommunityDefinitionTags,
+    createDefaultContentTypes
+  } from '$lib/helpers/communityTagBuilder.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import {
     parseCommunityContentTypes,
@@ -32,51 +35,7 @@
     location: '',
     description: '',
     livekitUrl: '',
-    contentTypes:
-      /** @type {Record<string, { name: string, enabled: boolean, badges: { read: string|null, write: string|null }, relays: string[], formRef: string }>} */ ({
-        calendar: {
-          name: 'Calendar',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        chat: {
-          name: 'Chat',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        articles: {
-          name: 'Articles',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        posts: {
-          name: 'Forum',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        wikis: {
-          name: 'Wikis',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        meet: {
-          name: 'Meet',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        }
-      })
+    contentTypes: createDefaultContentTypes()
   });
 
   // Toggle for access control configuration
@@ -102,11 +61,17 @@
   const kindToKey = {
     31922: 'calendar',
     31923: 'calendar',
+    31924: 'calendar',
+    31925: 'calendar',
     9: 'chat',
     30023: 'articles',
     1: 'posts',
     11: 'posts',
     30818: 'wikis',
+    30142: 'learning',
+    1068: 'polls',
+    39701: 'bookmarks',
+    9802: 'bookmarks',
     30312: 'meet',
     30313: 'meet'
   };
@@ -136,51 +101,7 @@
     const description = descriptionTag ? descriptionTag[1] : '';
 
     // Parse content types with badges, relays, and formRef
-    /** @type {Record<string, { name: string, enabled: boolean, badges: { read: string|null, write: string|null }, relays: string[], formRef: string }>} */
-    const contentTypes = {
-      calendar: {
-        name: 'Calendar',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      chat: {
-        name: 'Chat',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      articles: {
-        name: 'Articles',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      posts: {
-        name: 'Forum',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      wikis: {
-        name: 'Wikis',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      meet: {
-        name: 'Meet',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      }
-    };
+    const contentTypes = createDefaultContentTypes();
 
     // Parse livekitUrl from global metadata
     const metadata = parseCommunityMetadata(communityEvent);
@@ -332,50 +253,7 @@
       location: '',
       description: '',
       livekitUrl: '',
-      contentTypes: {
-        calendar: {
-          name: 'Calendar',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        chat: {
-          name: 'Chat',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        articles: {
-          name: 'Articles',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        posts: {
-          name: 'Forum',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        wikis: {
-          name: 'Wikis',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        meet: {
-          name: 'Meet',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        }
-      }
+      contentTypes: createDefaultContentTypes()
     };
     showAccessConfig = false;
     defaultFormRef = '';

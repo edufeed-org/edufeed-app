@@ -137,7 +137,9 @@ describe('CREATE_ACTIONS shape', () => {
 
   it('maps content kinds correctly', () => {
     expect(action('event').kinds).toEqual([31922, 31923]);
-    expect(action('calendar').kinds).toEqual([31924]);
+    // 31922/31923 included so legacy communities that never declared 31924
+    // still offer calendar creation
+    expect(action('calendar').kinds).toEqual([31924, 31922, 31923]);
     expect(action('resource').kinds).toEqual([30142]);
     expect(action('article').kinds).toEqual([30023]);
     expect(action('wiki').kinds).toEqual([30818]);
