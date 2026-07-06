@@ -175,6 +175,16 @@ describe('buildCommunityDefinitionTags — old-spec (no communityPubkey)', () =>
     expect(tags).toContainEqual(['k', '39701']);
   });
 
+  it('always writes the ["strict", "content"] marker', () => {
+    const data = makeFormData();
+    data.contentTypes.chat.enabled = true;
+    expect(buildCommunityDefinitionTags(data)).toContainEqual(['strict', 'content']);
+    expect(buildCommunityDefinitionTags(data, { communityPubkey: 'abc123' })).toContainEqual([
+      'strict',
+      'content'
+    ]);
+  });
+
   it('preserves tag ordering: globals before content sections', () => {
     const data = makeFormData({
       relays: ['wss://relay.example.com'],

@@ -1,6 +1,10 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { parseCommunityContentTypes, getPreferredFormForKind } from '../helpers/communityRelays.js';
+import {
+  parseCommunityContentTypes,
+  getPreferredFormForKind,
+  hasStrictContentMarker
+} from '../helpers/communityRelays.js';
 
 /**
  * Minimal community event fixture with a single content section that
@@ -81,5 +85,33 @@ describe('getPreferredFormForKind', () => {
 
   it('returns null when the community event is null', () => {
     expect(getPreferredFormForKind(null, 30142)).toBeNull();
+  });
+});
+
+describe('hasStrictContentMarker', () => {
+  it('returns true when the event carries ["strict", "content"]', () => {
+    const event = { kind: 10222, tags: [['strict', 'content']] };
+    expect(hasStrictContentMarker(event)).toBe(true);
+  });
+
+  it('returns false for legacy events without the marker', () => {
+    const event = {
+      kind: 10222,
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9']
+      ]
+    };
+    expect(hasStrictContentMarker(event)).toBe(false);
+  });
+
+  it('returns false for other strict scopes', () => {
+    const event = { kind: 10222, tags: [['strict', 'relays']] };
+    expect(hasStrictContentMarker(event)).toBe(false);
+  });
+
+  it('returns false for null/undefined events', () => {
+    expect(hasStrictContentMarker(null)).toBe(false);
+    expect(hasStrictContentMarker(undefined)).toBe(false);
   });
 });

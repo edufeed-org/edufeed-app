@@ -5,7 +5,10 @@
  * context so entries stay unit-testable outside Svelte.
  */
 import * as m from '$lib/paraglide/messages';
-import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
+import {
+  parseCommunityContentTypes,
+  hasStrictContentMarker
+} from '$lib/helpers/communityRelays.js';
 import {
   CalendarIcon,
   Calendar3Icon,
@@ -171,14 +174,15 @@ export const CREATE_ACTIONS = [
 
 /**
  * Filter actions by a community's allowed content kinds (kind 10222 content sections).
- * Fails open: with no community event or no declared content sections, everything is shown.
+ * Fails open: with no community event, no declared content sections, or a legacy
+ * definition lacking the ["strict", "content"] marker, everything is shown.
  * Entries with kinds === null are context-independent and never filtered.
  * @param {CreateAction[]} actions
  * @param {import('nostr-tools').Event | null | undefined} communityEvent
  * @returns {CreateAction[]}
  */
 export function filterActionsForCommunity(actions, communityEvent) {
-  if (!communityEvent) return actions;
+  if (!communityEvent || !hasStrictContentMarker(communityEvent)) return actions;
 
   const allowed = new Set();
   for (const section of parseCommunityContentTypes(communityEvent)) {

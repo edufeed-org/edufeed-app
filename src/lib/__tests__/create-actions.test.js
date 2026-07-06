@@ -65,8 +65,9 @@ import {
  * Fabricate a kind 10222 community event with content sections.
  * @param {Array<{name: string, kinds: number[]}>} sections
  */
-function makeCommunityEvent(sections) {
+function makeCommunityEvent(sections, { strict = true } = {}) {
   const tags = [];
+  if (strict) tags.push(['strict', 'content']);
   for (const section of sections) {
     tags.push(['content', section.name]);
     for (const kind of section.kinds) tags.push(['k', String(kind)]);
@@ -241,6 +242,13 @@ describe('filterActionsForCommunity', () => {
 
   it('returns all actions when the community declares no content sections (fail open)', () => {
     const event = makeCommunityEvent([]);
+    expect(filterActionsForCommunity(CREATE_ACTIONS, event)).toEqual(CREATE_ACTIONS);
+  });
+
+  it('returns all actions for legacy definitions without the strict marker (fail open)', () => {
+    const event = makeCommunityEvent([{ name: 'Calendar', kinds: [31922, 31923] }], {
+      strict: false
+    });
     expect(filterActionsForCommunity(CREATE_ACTIONS, event)).toEqual(CREATE_ACTIONS);
   });
 

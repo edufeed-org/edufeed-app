@@ -378,9 +378,21 @@ describe('getCommunityTabs', () => {
     );
   });
 
-  it('keeps only declared content tabs plus home and settings', () => {
+  it('fails open for legacy definitions with sections but no strict marker', () => {
     const event = {
       tags: [
+        ['content', 'Calendar'],
+        ['k', '31922'],
+        ['k', '31923']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(getDefaultCommunityTabs());
+  });
+
+  it('keeps only declared content tabs plus home and settings (strict)', () => {
+    const event = {
+      tags: [
+        ['strict', 'content'],
         ['content', 'Calendar'],
         ['k', '31922'],
         ['k', '31923'],
@@ -391,9 +403,10 @@ describe('getCommunityTabs', () => {
     expect(getCommunityTabs(event)).toEqual(['home', 'learning', 'calendar', 'settings']);
   });
 
-  it('excludes chat when the community declares sections without kind 9', () => {
+  it('excludes chat when a strict community declares sections without kind 9', () => {
     const event = {
       tags: [
+        ['strict', 'content'],
         ['content', 'Polls'],
         ['k', '1068']
       ]
@@ -405,9 +418,10 @@ describe('getCommunityTabs', () => {
     expect(tabs).not.toContain('boards');
   });
 
-  it('includes chat when declared', () => {
+  it('includes chat when declared (strict)', () => {
     const event = {
       tags: [
+        ['strict', 'content'],
         ['content', 'Chat'],
         ['k', '9']
       ]
@@ -418,6 +432,7 @@ describe('getCommunityTabs', () => {
   it('preserves the default tab ordering', () => {
     const event = {
       tags: [
+        ['strict', 'content'],
         ['content', 'Wikis'],
         ['k', '30818'],
         ['content', 'Articles'],
@@ -432,6 +447,7 @@ describe('getCommunityTabs', () => {
   it('ignores declared kinds without a tab mapping', () => {
     const event = {
       tags: [
+        ['strict', 'content'],
         ['content', 'Custom'],
         ['k', '77777'],
         ['content', 'Forum'],

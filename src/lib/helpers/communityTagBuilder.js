@@ -134,6 +134,11 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
     tags.push(['livekit', data.livekitUrl.trim()]);
   }
 
+  // Strict content marker: the modals present the full content-type
+  // vocabulary, so the sections below are an exhaustive, owner-reviewed
+  // choice. Clients only filter navigation/creation UIs when this is present.
+  tags.push(['strict', 'content']);
+
   // ── Content sections ──
 
   for (const [key, ct] of Object.entries(data.contentTypes)) {

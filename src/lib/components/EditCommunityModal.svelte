@@ -16,7 +16,8 @@
   import {
     parseCommunityContentTypes,
     parseCommunityMetadata,
-    getCommunityGlobalRelays
+    getCommunityGlobalRelays,
+    hasStrictContentMarker
   } from '$lib/helpers/communityRelays.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -153,6 +154,19 @@
             contentTypes[key].badges.write = tag[1];
           }
         }
+      }
+    }
+
+    // Legacy definitions (no ["strict","content"] marker) were written by UIs
+    // that displayed all content types regardless of declarations — the app
+    // fails open and shows every tab for them. Pre-enable everything so that
+    // saving preserves the status quo; the owner unchecks deliberately.
+    // Meet stays as-is unless a LiveKit URL exists: enabling it would trip the
+    // livekitUrl validation and block saving for communities that never had one.
+    if (!hasStrictContentMarker(communityEvent)) {
+      for (const [key, ct] of Object.entries(contentTypes)) {
+        if (key === 'meet' && !livekitUrl && !ct.enabled) continue;
+        ct.enabled = true;
       }
     }
 

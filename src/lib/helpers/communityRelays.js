@@ -31,6 +31,20 @@
  */
 
 /**
+ * Whether a community definition marks its content sections as exhaustive
+ * via the ["strict", "content"] marker tag. Legacy definitions (written by
+ * clients that displayed all content types regardless of declarations) lack
+ * the marker, and their declarations are advisory only — clients fail open.
+ * @param {any} event - The kind 10222 community event
+ * @returns {boolean}
+ */
+export function hasStrictContentMarker(event) {
+  return !!event?.tags?.some(
+    (/** @type {string[]} */ t) => t[0] === 'strict' && t[1] === 'content'
+  );
+}
+
+/**
  * Parse content types from a community event.
  * Supports both old-spec tags (badges, exclusive, fee, roles, per-section relays)
  * and new-spec tags (profile list a-tags).
