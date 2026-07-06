@@ -36,6 +36,7 @@ A community is created when a keypair publishes a kind 10222 event. The pubkey b
     ["r", "<relay-url>"],
     ["blossom", "<blossom-url>"],
     ["mint", "<mint-url>", "cashu"],
+    ["strict", "content"],
 
     ["content", "Chat"],
     ["k", "9"],
@@ -65,12 +66,28 @@ A community is created when a keypair publishes a kind 10222 event. The pubkey b
 | `mint` | Cashu mint URL |
 | `content` | Content type section name |
 | `k` | Event kind (within content section) |
+| `strict` | `["strict", "content"]` — content sections are exhaustive (see below) |
 | `fee` | `[kind, amount, "sat"]` admission fee |
 | `exclusive` | `"true"` if content ONLY for this community |
 | `a` | Badge requirement `30009:<pubkey>:<badge-id>` |
 | `location` | Community location |
 | `g` | Geohash |
 | `description` | Override profile description |
+
+### Strict Content Declarations
+
+The bare marker tag `["strict", "content"]` declares that the event's content sections are an exhaustive, owner-reviewed list. Clients then filter navigation tabs and content-creation UIs down to the declared kinds.
+
+Read rules (clients MUST fail open):
+
+- No community event loaded → show everything
+- No `["strict", "content"]` marker → legacy definition; declarations are advisory only, show everything
+- Marker present but zero `content` sections → show everything
+- Marker present + content sections → filter tabs/actions to the declared kinds
+
+Write rule: clients whose editing UI presents the full content-type vocabulary (so a save is a deliberate, exhaustive choice) always write the marker. When editing a legacy definition, pre-enable all content types so saving preserves the status quo and the owner unchecks deliberately.
+
+Rationale: legacy definitions were written by clients that displayed all content types regardless of declarations. Filtering on their section lists would silently hide existing community content after an app update.
 
 ---
 
