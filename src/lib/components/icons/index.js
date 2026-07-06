@@ -3,6 +3,7 @@ export { default as Icon } from './Icon.svelte';
 
 // Calendar Icons
 export { default as CalendarIcon } from './calendar/CalendarIcon.svelte';
+export { default as CalendarPlusIcon } from './calendar/CalendarPlusIcon.svelte';
 export { default as ClockIcon } from './calendar/ClockIcon.svelte';
 
 // UI Icons
@@ -28,6 +29,7 @@ export { default as HomeIcon } from './ui/HomeIcon.svelte';
 export { default as BellIcon } from './ui/BellIcon.svelte';
 export { default as FilesIcon } from './ui/FilesIcon.svelte';
 export { default as ScrollTextIcon } from './ui/ScrollTextIcon.svelte';
+export { default as ArticleIcon } from './ui/ArticleIcon.svelte';
 export { default as MoreIcon } from './ui/MoreIcon.svelte';
 export { default as MapIcon } from './ui/MapIcon.svelte';
 export { default as RelayIcon } from './ui/RelayIcon.svelte';

@@ -1990,6 +1990,7 @@
   "fab_share_existing_aria": "Share existing content with community",
   "fab_create_poll": "Create poll",
   "fab_create_poll_aria": "Create poll",
+  "fab_section_suggested": "Suggested",
   "fab_section_create": "Create",
   "fab_section_add": "Add",
   "fab_section_share": "Share",
