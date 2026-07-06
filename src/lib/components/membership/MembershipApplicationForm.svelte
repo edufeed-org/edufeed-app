@@ -53,6 +53,13 @@
   let wishedHandle = $state('');
   /** @type {'idle' | 'checking' | 'available' | 'taken' | 'invalid'} */
   let handleStatus = $state('idle');
+  /**
+   * Wrapper around FormRenderer, bound so the DOM-syncing effects below get a
+   * reactive "the form is actually in the DOM now" signal and stay scoped to
+   * this component instance.
+   * @type {HTMLElement | undefined}
+   */
+  let formContainer = $state();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let debounceTimer;
   /** @type {AbortController | undefined} */
@@ -227,19 +234,17 @@
     }
   }
 
-  // True once FormRenderer is in the DOM. Used to retrigger the listener-
-  // attaching effect after the spinner-gated update flow swaps in the form.
-  const formRendered = $derived(!!formEvent && (!existingResponse || prefilledValues !== null));
-
   // The membership-specific live availability/format checks live next to a
   // generic FormRenderer field, so we sync into the DOM directly:
   //   1) listen for input events on `#wished_handle`,
   //   2) toggle `input-error` + `aria-invalid` on the input itself,
   //   3) insert a sibling status element right below the input so the feedback
   //      appears next to the field rather than at the bottom of the form.
+  // Both effects key off `formContainer` (bound when FormRenderer mounts) —
+  // an unkeyed getElementById lookup can run before the form's DOM exists and,
+  // via the early return, capture no dependencies and never re-run.
   $effect(() => {
-    if (!formRendered) return;
-    const el = document.getElementById('wished_handle');
+    const el = formContainer?.querySelector('#wished_handle');
     if (!el) return;
     const handler = /** @type {EventListener} */ (
       (ev) => onWishedHandleInput(/** @type {Event} */ (ev))
@@ -260,10 +265,14 @@
   });
 
   // Reactively reflect handleStatus / wishedHandle into the input's error
-  // styling and the sibling status element's text. Reads handleStatus +
-  // wishedHandle so Svelte re-runs whenever either changes.
+  // styling and the sibling status element's text. Reads its reactive deps
+  // before the early return so the effect re-runs once the form is in the DOM.
   $effect(() => {
-    const el = /** @type {HTMLInputElement | null} */ (document.getElementById('wished_handle'));
+    const status = handleStatus;
+    const handle = wishedHandle;
+    const el = /** @type {HTMLInputElement | null} */ (
+      formContainer?.querySelector('#wished_handle') ?? null
+    );
     if (!el) return;
     const statusEl = /** @type {HTMLElement | null} */ (
       el.nextElementSibling instanceof HTMLElement &&
@@ -272,27 +281,27 @@
         : null
     );
 
-    const isError = handleStatus === 'invalid' || handleStatus === 'taken';
+    const isError = status === 'invalid' || status === 'taken';
     el.classList.toggle('input-error', isError);
     if (isError) el.setAttribute('aria-invalid', 'true');
     else el.removeAttribute('aria-invalid');
 
     if (!statusEl) return;
-    if (!wishedHandle) {
+    if (!handle) {
       statusEl.textContent = '';
       statusEl.className = 'mt-1 text-sm';
       return;
     }
-    if (handleStatus === 'checking') {
+    if (status === 'checking') {
       statusEl.textContent = m.membership_handle_checking();
       statusEl.className = 'mt-1 text-sm text-base-content/60';
-    } else if (handleStatus === 'available') {
-      statusEl.textContent = `✓ ${m.membership_handle_available()} — ${m.membership_handle_preview({ handle: wishedHandle, domain: handleDomain })}`;
+    } else if (status === 'available') {
+      statusEl.textContent = `✓ ${m.membership_handle_available()} — ${m.membership_handle_preview({ handle, domain: handleDomain })}`;
       statusEl.className = 'mt-1 text-sm text-success';
-    } else if (handleStatus === 'taken') {
+    } else if (status === 'taken') {
       statusEl.textContent = `✗ ${m.membership_handle_taken()}`;
       statusEl.className = 'mt-1 text-sm text-error';
-    } else if (handleStatus === 'invalid') {
+    } else if (status === 'invalid') {
       statusEl.textContent = m.membership_handle_invalid();
       statusEl.className = 'mt-1 text-sm text-error';
     } else {
@@ -326,11 +335,13 @@
       <span class="loading loading-spinner"></span>
     </div>
   {:else}
-    <FormRenderer
-      {formEvent}
-      onsubmit={handleSubmit}
-      initialValues={prefilledValues ?? undefined}
-    />
+    <div bind:this={formContainer}>
+      <FormRenderer
+        {formEvent}
+        onsubmit={handleSubmit}
+        initialValues={prefilledValues ?? undefined}
+      />
+    </div>
   {/if}
 
   {#if error}

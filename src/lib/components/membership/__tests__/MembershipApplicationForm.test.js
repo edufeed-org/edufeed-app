@@ -20,6 +20,9 @@ const eventStoreAddSpy = vi.hoisted(() => vi.fn());
 const nip44EncryptSpy = vi.hoisted(() =>
   vi.fn(async (_pub, plaintext) => `encrypted:${plaintext}`)
 );
+// When true, the eventStore mock delivers the form event via setTimeout —
+// like a first-time relay load (signup wizard) instead of a warm cache hit.
+const formEventDelivery = vi.hoisted(() => ({ async: false }));
 
 const ADMIN_PUBKEY = 'a'.repeat(64);
 const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
@@ -77,6 +80,10 @@ vi.mock('$lib/services/publish-service.js', () => ({
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
   const replaceable = vi.fn(() => ({
     subscribe(/** @type {(e: any) => void} */ cb) {
+      if (formEventDelivery.async) {
+        const timer = setTimeout(() => cb(formEvent), 0);
+        return { unsubscribe: () => clearTimeout(timer) };
+      }
       cb(formEvent);
       return { unsubscribe: () => {} };
     }
@@ -138,6 +145,7 @@ describe('MembershipApplicationForm', () => {
   let fetchSpy;
 
   beforeEach(() => {
+    formEventDelivery.async = false;
     buildSpy.mockClear();
     signSpy.mockClear();
     publishEventSpy.mockClear();
@@ -209,6 +217,21 @@ describe('MembershipApplicationForm', () => {
     const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
 
     await fireEvent.input(handleInput, { target: { value: 'unique-name' } });
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    expect(await findByText(/verfügbar|available/i)).toBeTruthy();
+  });
+
+  it('shows availability status when the form event arrives asynchronously (signup wizard first load)', async () => {
+    formEventDelivery.async = true;
+    const { findByLabelText, findByText } = render(MembershipApplicationForm);
+
+    // Deliver the kind 30168 form event after mount, like a relay would.
+    await vi.advanceTimersByTimeAsync(10);
+
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
     await vi.advanceTimersByTimeAsync(500);
     await vi.runAllTimersAsync();
 
