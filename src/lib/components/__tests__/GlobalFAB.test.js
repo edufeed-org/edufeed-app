@@ -131,10 +131,14 @@ function setPage(routeId, params = {}, urlPath = '/settings') {
 
 /**
  * Fabricate a kind 10222 community event with content sections.
+ * Writes the ["strict", "content"] marker by default; pass strict: false to
+ * fabricate a legacy definition (fails open — no filtering).
  * @param {Array<{name: string, kinds: number[]}>} sections
+ * @param {{ strict?: boolean }} [opts]
  */
-function makeCommunityEvent(sections) {
+function makeCommunityEvent(sections, { strict = true } = {}) {
   const tags = [];
+  if (strict) tags.push(['strict', 'content']);
   for (const section of sections) {
     tags.push(['content', section.name]);
     for (const kind of section.kinds) tags.push(['k', String(kind)]);
@@ -412,6 +416,16 @@ describe('GlobalFAB — community filtering', () => {
     expect(container.querySelector('[aria-label="Write Article"]')).toBeFalsy();
     expect(container.querySelector('[aria-label="Write Wiki"]')).toBeFalsy();
     expect(container.querySelector('[aria-label="Create new learning content"]')).toBeFalsy();
+  });
+
+  it('shows all actions for legacy definitions without the strict marker (fail open)', async () => {
+    communityState.event = makeCommunityEvent(
+      [{ name: 'Calendar', kinds: [31922, 31923, 31924, 31925] }],
+      { strict: false }
+    );
+    setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}`);
+    const { container } = await renderOpen();
+    expect(actionTiles(container).length).toBe(9);
   });
 
   it('shows all actions when the community has no content sections (fail open)', async () => {

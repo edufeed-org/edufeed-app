@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
   import BottomTabBar from '$lib/components/community/layout/BottomTabBar.svelte';
+  import LegacyContentTypesBanner from '$lib/components/community/LegacyContentTypesBanner.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { ProfileModel } from 'applesauce-core/models';
   import { profileLoader } from '$lib/loaders/profile.js';
@@ -215,6 +216,10 @@
     }
   }
 </script>
+
+<div class="px-4 pt-3 empty:hidden">
+  <LegacyContentTypesBanner communityEvent={communikeyEvent} />
+</div>
 
 {@render children()}
 
