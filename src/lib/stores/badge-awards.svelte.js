@@ -232,11 +232,13 @@ export function useProfileBadges(getPubkey) {
       recompute();
     }
 
-    // Kick off network fetches for both spec kinds
+    // Kick off network fetches for both spec kinds.
+    // Kind 10008 is a plain replaceable event with NO d tag — an identifier
+    // here would poison the batched relay filter with #d for every other
+    // replaceable kind loaded in the same second (10015, 10050, 10222, ...).
     const pbLoaderNew = addressLoader({
       kind: PROFILE_BADGES_KIND,
       pubkey,
-      identifier: PROFILE_BADGES_IDENTIFIER,
       relays
     }).subscribe();
     const pbLoaderLegacy = addressLoader({
@@ -248,7 +250,7 @@ export function useProfileBadges(getPubkey) {
 
     // Subscribe to store for whichever lands first / is newer
     const pbStoreNew = eventStore
-      .replaceable(PROFILE_BADGES_KIND, pubkey, PROFILE_BADGES_IDENTIFIER)
+      .replaceable(PROFILE_BADGES_KIND, pubkey)
       .subscribe(applyCandidate);
     const pbStoreLegacy = eventStore
       .replaceable(LEGACY_PROFILE_BADGES_KIND, pubkey, PROFILE_BADGES_IDENTIFIER)
