@@ -35,7 +35,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                   |
 | `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
 | `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                          |
-| `signup-normie-path.test.js`         | 1     | No   | Normie 2-step signup happy path: primary CTA → name → skip → backup banner                                                        |
+| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → backup banner               |
 | `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                                                                                         |
 | `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
@@ -43,7 +43,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                            |
 | `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
 | `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                     |
-| `membership-application.test.js`     | 2     | No   | Default-disabled regression: signup wizard 4 steps, admin route                                                                   |
+| `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                 |
 
 ## Detailed Coverage
 
@@ -998,9 +998,9 @@ unchanged. These tests cover the routing shape only.
 
 #### Normie Happy Path (1 test)
 
-| Test                                                  | What it verifies                                                                                                                                                                                         |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| user can create an account in 2 steps and sees banner | Login modal shows prominent `[data-testid="signup-primary-cta"]` and a collapsed `[data-testid="other-signin-methods"]` `<details>`; primary CTA opens 2-step signup; name + Skip lands on backup banner |
+| Test                                                                | What it verifies                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| user can create an account via the wizard skip path and sees banner | Login modal shows prominent `[data-testid="signup-primary-cta"]` and visible `[data-testid="other-signin-methods"]`; wizard skip path: name (Enter submit) → profile → educator context (`#educator-levels`) → communities Skip → optional handle step (only when membership enabled, per `/api/config` branch) → backup banner |
 
 Field-level signup behavior (validation, kind 0 publish, account-type
 detection, banner show/hide flags) is covered by Vitest component tests:
@@ -1398,18 +1398,14 @@ level — handle availability checks, NIP-44 encryption, response publishing,
 admin authorization — see `src/lib/__tests__/` and
 `src/lib/components/membership/__tests__/`. The runtime config flag
 (`runtimeConfig.membership.enabled`) is loaded SSR-time via `/api/config`
-and cannot be flipped per-test from Playwright. This file exists as a
-regression boundary against unintended config bleed-through.
+and cannot be flipped per-test from Playwright, so the wizard test branches
+on the deployed config. This file exists as a regression boundary against
+unintended config bleed-through.
 
-**Note:** SignupModal integration is deferred — upstream `dev` refactored
-the signup wizard to 3 steps after this branch was forked. The membership
-step needs to be re-integrated against the new wizard structure. Until
-then, the Settings page `MembershipCard` is the primary entry point.
-
-| Test                                                               | What it verifies                                           |
-| ------------------------------------------------------------------ | ---------------------------------------------------------- |
-| signup wizard renders without membership step by default           | Default-disabled env keeps wizard at upstream step count   |
-| /admin/membership shows login-required when membership is disabled | Route renders, login alert shown for unauthenticated visit |
+| Test                                                                | What it verifies                                                        |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| signup wizard shows the handle step only when membership is enabled | 4 steps + no membership/handle text when disabled; 5 steps when enabled |
+| /admin/membership shows login-required when membership is disabled  | Route renders, login alert shown for unauthenticated visit              |
 
 ## Maintenance Guidelines
 

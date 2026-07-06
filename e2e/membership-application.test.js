@@ -11,31 +11,34 @@
  *
  * The runtime config (`runtimeConfig.membership.enabled`) is loaded SSR-time
  * via /api/config and cannot be flipped per-test with Playwright route
- * interception. To avoid changing global E2E env (which would affect all other
- * tests), this single E2E asserts the **default-disabled deployment regression
- * boundary**: in the standard test env, signup wizard does not show a
- * membership step and /admin/membership renders without auth.
- *
- * Note: SignupModal integration is deferred — upstream `dev` refactored the
- * signup wizard to 3 steps after this branch was forked. Until the membership
- * step is re-integrated against the new wizard, the Settings page
- * `MembershipCard` is the primary entry point.
+ * interception. This E2E therefore branches on the deployed config: with
+ * membership disabled the signup wizard has 4 steps and no handle step; with
+ * it enabled the wizard grows the optional step 5 handle application (the
+ * happy path through it is covered in signup-normie-path.test.js).
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Membership Application — Default-disabled regression boundary', () => {
-  test('signup wizard renders without membership step by default', async ({ page }) => {
+test.describe('Membership Application — deployment gate', () => {
+  test('signup wizard shows the handle step only when membership is enabled', async ({ page }) => {
     await page.goto('/');
     await page.waitForTimeout(2000);
+
+    const config = await (await page.request.get('/api/config')).json();
+    const membershipEnabled = !!config?.membership?.enabled;
 
     await page.locator('button:has-text("Login")').first().click();
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
     await page.locator('#global-login-modal button:has-text("Sign Up")').click();
     await expect(page.locator('#global-signup-modal')).toBeVisible({ timeout: 5000 });
 
-    // Should NOT contain any membership-related step content
-    const modalText = await page.locator('#global-signup-modal').textContent();
-    expect(modalText).not.toMatch(/Mitgliedschaft|Wunsch-Adresse|membership/i);
+    await expect(page.locator('#global-signup-modal .steps .step')).toHaveCount(
+      membershipEnabled ? 5 : 4
+    );
+    if (!membershipEnabled) {
+      // Disabled deployments must not leak any membership/handle step content.
+      const modalText = await page.locator('#global-signup-modal').textContent();
+      expect(modalText).not.toMatch(/Mitgliedschaft|Wunsch-Adresse|membership|Handle/i);
+    }
   });
 
   test('/admin/membership shows login-required when membership is disabled', async ({ page }) => {

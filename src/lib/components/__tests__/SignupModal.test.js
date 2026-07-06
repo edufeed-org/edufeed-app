@@ -1,24 +1,28 @@
 /**
- * SignupModal — new 3-step normie-friendly flow.
+ * SignupModal — educator-friendly wizard.
  *
  * Step 1 = name only → creates a SimpleAccount and activates it (user is logged
  *   in as soon as they leave step 1; backup is offered as a post-login banner).
- * Step 2 = optional avatar + bio → advances to Step 3.
- * Step 3 = community picker → publishes kind 0 (and optionally kind 30000).
+ * Step 2 = optional avatar + bio.
+ * Step 3 = optional educator context (EducatorContextFields → kind-0 `edufeed`).
+ * Step 4 = community picker → finishSignup publishes kind 0 (and optionally
+ *   kind 30000 / 10050 / 10002).
+ * Step 5 = optional edufeed-handle application (MembershipApplicationForm);
+ *   only rendered when runtimeConfig.membership.enabled — otherwise the modal
+ *   closes right after finishSignup like before.
  *
  * Tests exercise the load-bearing wiring:
  *  - AvatarUploader on step 2 receives a working signer (preserves prior invariant)
  *  - Empty name does not create an account and does not advance
  *  - Valid name creates SimpleAccount, calls manager.addAccount + setActive
- *  - Step 1 → Step 2 advances without publishing
- *  - Step 2 → Step 3 advances without publishing
- *  - "Skip" on step 3 publishes only kind 0
- *  - "Done" on step 3 with empty selection publishes only kind 0
- *  - "Done" on step 3 with seeded selection publishes kind 0 + kind 30000
+ *  - Steps advance without publishing until step 4
+ *  - Educator context edits land as the `edufeed` object in the kind 0
+ *  - "Skip"/"Done" on step 4 publish kind 0 (+30000/10050/10002 as configured)
+ *  - Membership gate: step 5 shows after finish only when enabled
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 
 // jsdom doesn't implement HTMLDialogElement.showModal/close. Provide stubs so
@@ -47,6 +51,17 @@ vi.mock('../SignupCommunityPicker.svelte', async () => {
   return { default: mock.default };
 });
 
+// Heavy import graphs (vocab resolvers, loaders/base → IndexedDB) — replace
+// with light mocks that expose the onchange/onsubmitted wiring.
+vi.mock('../shared/EducatorContextFields.svelte', async () => {
+  const mock = await import('./__mocks__/EducatorContextFieldsMock.svelte');
+  return { default: mock.default };
+});
+vi.mock('../membership/MembershipApplicationForm.svelte', async () => {
+  const mock = await import('./__mocks__/MembershipApplicationFormMock.svelte');
+  return { default: mock.default };
+});
+
 vi.mock('$lib/paraglide/messages', () =>
   Object.fromEntries(
     [
@@ -60,6 +75,11 @@ vi.mock('$lib/paraglide/messages', () =>
       'auth_signup_modal_step3_no_matches',
       'auth_signup_modal_step3_done',
       'auth_signup_modal_step3_skip',
+      'auth_signup_modal_step_context',
+      'auth_signup_modal_context_subtitle',
+      'auth_signup_modal_step_handle',
+      'auth_signup_modal_handle_subtitle',
+      'auth_signup_modal_membership_skip',
       'auth_signup_modal_step1_subtitle',
       'auth_signup_modal_step2_subtitle',
       'auth_signup_modal_name_label',
@@ -83,7 +103,8 @@ vi.mock('$lib/paraglide/messages', () =>
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     signup: { suggestedCommunities: [] },
-    blossom: { maxFileSize: 5 * 1024 * 1024 }
+    blossom: { maxFileSize: 5 * 1024 * 1024 },
+    membership: { enabled: false }
   },
   configReady: { subscribe: () => () => {} }
 }));
@@ -314,42 +335,87 @@ describe('SignupModal — Step 2 (Profile)', () => {
   });
 });
 
-describe('SignupModal — Step 3 (Communities)', () => {
-  it('Step 1 → Step 2 advances without publishing', async () => {
-    const { getByPlaceholderText, getByText, queryByTestId } = render(SignupModal, {
-      props: { modalId: 'signup-modal' }
-    });
-    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
-    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
+/**
+ * Fill the name and click Continue through steps 2 and 3, landing on the
+ * community picker (step 4).
+ *
+ * @param {any} utils - result of render()
+ */
+async function advanceToCommunities(utils) {
+  const nameInput = utils.getByPlaceholderText('auth_signup_modal_name_placeholder');
+  await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+  await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 2 (profile)
+  await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 3 (context)
+  await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 4 (communities)
+}
 
-    expect(mockPublishEvent).not.toHaveBeenCalled();
-    // Step 2 visible; picker mock not yet (it's step 3)
-    expect(queryByTestId('signup-community-picker-mock')).toBeNull();
+describe('SignupModal — Step 3 (Educator context)', () => {
+  it('shows the step indicator with 4 steps when membership is disabled', async () => {
+    const { container } = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    expect(container.querySelectorAll('.steps .step')).toHaveLength(4);
   });
 
-  it('Step 2 → Step 3 advances without publishing', async () => {
-    const { getByPlaceholderText, getByText, getByTestId } = render(SignupModal, {
-      props: { modalId: 'signup-modal' }
-    });
-    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+  it('Step 2 → Step 3 shows EducatorContextFields without publishing', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    const nameInput = utils.getByPlaceholderText('auth_signup_modal_name_placeholder');
     await fireEvent.input(nameInput, { target: { value: 'Alice' } });
-    await fireEvent.click(getByText('auth_signup_modal_continue')); // → step 2
-    await fireEvent.click(getByText('auth_signup_modal_continue')); // → step 3
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 2
+    expect(utils.queryByTestId('educator-context-fields-mock')).toBeNull();
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 3
 
     expect(mockPublishEvent).not.toHaveBeenCalled();
-    expect(getByTestId('signup-community-picker-mock')).toBeTruthy();
+    expect(utils.getByTestId('educator-context-fields-mock')).toBeTruthy();
+    expect(utils.queryByTestId('signup-community-picker-mock')).toBeNull();
   });
 
-  it('Step 3 Skip publishes kind 0 + kind 10002 + kind 10050', async () => {
-    const { getByPlaceholderText, getByText } = render(SignupModal, {
-      props: { modalId: 'signup-modal' }
-    });
-    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
+  it('Step 3 → Step 4 shows the community picker without publishing', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+
+    expect(mockPublishEvent).not.toHaveBeenCalled();
+    expect(utils.getByTestId('signup-community-picker-mock')).toBeTruthy();
+  });
+
+  it('includes edited educator context as the edufeed object in the kind 0', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    const nameInput = utils.getByPlaceholderText('auth_signup_modal_name_placeholder');
     await fireEvent.input(nameInput, { target: { value: 'Alice' } });
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_step3_skip'));
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 2
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 3
+    await fireEvent.click(utils.getByTestId('educator-context-set-sample'));
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 4
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    const kind0 = mockPublishEvent.mock.calls.find((c) => c[0].kind === 0)?.[0];
+    expect(kind0).toBeTruthy();
+    const content = JSON.parse(kind0.content);
+    expect(content.edufeed).toEqual({
+      interests: ['Klettern'],
+      educationalLevels: [
+        { id: 'https://edufeed.org/ns/bildungsbereich#schule', prefLabel: { de: 'Schule' } }
+      ],
+      subjects: []
+    });
+  });
+
+  it('omits the edufeed key entirely when the user entered nothing', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    const kind0 = mockPublishEvent.mock.calls.find((c) => c[0].kind === 0)?.[0];
+    expect(kind0).toBeTruthy();
+    expect(JSON.parse(kind0.content)).not.toHaveProperty('edufeed');
+  });
+});
+
+describe('SignupModal — Step 4 (Communities)', () => {
+  it('Skip publishes kind 0 + kind 10002 + kind 10050 and closes the modal', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
 
     await new Promise((r) => setTimeout(r, 0));
 
@@ -358,17 +424,14 @@ describe('SignupModal — Step 3 (Communities)', () => {
     expect(kinds).toEqual([0, 10002, 10050]);
     const dmCall = mockPublishEvent.mock.calls.find((c) => c[0].kind === 10050);
     expect(dmCall?.[0].tags).toEqual([['relay', 'wss://dm.edufeed.org/']]);
+    // Membership disabled → modal closes right after finish.
+    expect(mockModalStore.closeModal).toHaveBeenCalled();
   });
 
-  it('Step 3 Done with empty selection publishes kind 0 + kind 10002 + kind 10050', async () => {
-    const { getByPlaceholderText, getByText } = render(SignupModal, {
-      props: { modalId: 'signup-modal' }
-    });
-    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
-    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_step3_done'));
+  it('Done with empty selection publishes kind 0 + kind 10002 + kind 10050', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_done'));
 
     await new Promise((r) => setTimeout(r, 0));
     expect(mockPublishEvent).toHaveBeenCalledTimes(3);
@@ -376,16 +439,11 @@ describe('SignupModal — Step 3 (Communities)', () => {
     expect(kinds).toEqual([0, 10002, 10050]);
   });
 
-  it('Step 3 Skip still publishes kind 0 + kind 10002 when no DM relays configured', async () => {
+  it('Skip still publishes kind 0 + kind 10002 when no DM relays configured', async () => {
     mockGetDefaultDmRelays.mockReturnValueOnce([]);
-    const { getByPlaceholderText, getByText } = render(SignupModal, {
-      props: { modalId: 'signup-modal' }
-    });
-    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
-    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_step3_skip'));
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
 
     await new Promise((r) => setTimeout(r, 0));
     expect(mockPublishEvent).toHaveBeenCalledTimes(2);
@@ -393,16 +451,11 @@ describe('SignupModal — Step 3 (Communities)', () => {
     expect(kinds).toEqual([0, 10002]);
   });
 
-  it('Step 3 Skip does not publish kind 10002 when no default relays configured', async () => {
+  it('Skip does not publish kind 10002 when no default relays configured', async () => {
     mockBuildSignedRelayList.mockResolvedValueOnce(/** @type {any} */ (null));
-    const { getByPlaceholderText, getByText } = render(SignupModal, {
-      props: { modalId: 'signup-modal' }
-    });
-    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
-    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_step3_skip'));
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
 
     await new Promise((r) => setTimeout(r, 0));
     const kinds = mockPublishEvent.mock.calls.map((c) => c[0].kind);
@@ -410,7 +463,7 @@ describe('SignupModal — Step 3 (Communities)', () => {
     expect(kinds).toContain(0);
   });
 
-  it('Step 3 Done with seeded selection publishes kind 0 + kind 10002 + kind 30000 + kind 10050', async () => {
+  it('Done with seeded selection publishes kind 0 + kind 10002 + kind 30000 + kind 10050', async () => {
     // Stub buildCommunityFollowSet to return a signed event so the modal calls publishEvent twice.
     const fakeKind30000 = {
       kind: 30000,
@@ -434,14 +487,9 @@ describe('SignupModal — Step 3 (Communities)', () => {
     const config = await import('$lib/stores/config.svelte.js');
     /** @type {any} */ (config).runtimeConfig.signup.suggestedCommunities = ['a'.repeat(64)];
 
-    const { getByPlaceholderText, getByText } = render(SignupModal, {
-      props: { modalId: 'signup-modal' }
-    });
-    const nameInput = getByPlaceholderText('auth_signup_modal_name_placeholder');
-    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_continue'));
-    await fireEvent.click(getByText('auth_signup_modal_step3_done'));
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_done'));
 
     await new Promise((r) => setTimeout(r, 0));
     expect(mockPublishEvent).toHaveBeenCalledTimes(4);
@@ -450,5 +498,53 @@ describe('SignupModal — Step 3 (Communities)', () => {
 
     // Reset for other tests.
     /** @type {any} */ (config).runtimeConfig.signup.suggestedCommunities = [];
+  });
+});
+
+describe('SignupModal — Step 5 (edufeed handle, membership-gated)', () => {
+  /** @type {any} */
+  let config;
+
+  beforeEach(async () => {
+    config = await import('$lib/stores/config.svelte.js');
+    config.runtimeConfig.membership.enabled = true;
+  });
+
+  afterEach(() => {
+    config.runtimeConfig.membership.enabled = false;
+  });
+
+  it('shows 5 steps in the indicator when membership is enabled', async () => {
+    const { container } = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    expect(container.querySelectorAll('.steps .step')).toHaveLength(5);
+  });
+
+  it('finishing communities advances to the handle step instead of closing', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+    await new Promise((r) => setTimeout(r, 0));
+
+    // kind 0 still published at finish, but the modal stays open on step 5.
+    expect(mockPublishEvent.mock.calls.some((c) => c[0].kind === 0)).toBe(true);
+    expect(mockModalStore.closeModal).not.toHaveBeenCalled();
+    expect(await utils.findByTestId('membership-application-form-mock')).toBeTruthy();
+
+    // "Später beantragen" closes the modal.
+    await fireEvent.click(utils.getByText('auth_signup_modal_membership_skip'));
+    expect(mockModalStore.closeModal).toHaveBeenCalled();
+  });
+
+  it('after submitting the application the close button reads Done', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+    await new Promise((r) => setTimeout(r, 0));
+
+    await fireEvent.click(await utils.findByTestId('membership-form-submit'));
+
+    expect(utils.queryByText('auth_signup_modal_membership_skip')).toBeNull();
+    await fireEvent.click(utils.getByText('auth_signup_modal_done'));
+    expect(mockModalStore.closeModal).toHaveBeenCalled();
   });
 });

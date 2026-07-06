@@ -17,15 +17,22 @@
   import ChevronRightIcon from './icons/ui/ChevronRightIcon.svelte';
   import AvatarUploader from './shared/AvatarUploader.svelte';
   import SignupCommunityPicker from './SignupCommunityPicker.svelte';
+  import EducatorContextFields from './shared/EducatorContextFields.svelte';
+  import MembershipApplicationForm from './membership/MembershipApplicationForm.svelte';
 
   let { modalId } = $props();
 
-  // 3-step wizard:
+  // Educator-friendly wizard:
   //   Step 1 = name → creates SimpleAccount and activates it (user is logged in)
-  //   Step 2 = optional profile polish → advances to Step 3
-  //   Step 3 = community picker → publishes kind 0 (and optionally kind 30000)
+  //   Step 2 = optional profile polish (avatar + bio)
+  //   Step 3 = optional educator context (kind-0 `edufeed` object)
+  //   Step 4 = community picker → finishSignup publishes kind 0 (+ optional 30000)
+  //   Step 5 = optional edufeed-handle application; only when membership is
+  //            enabled — otherwise the modal closes right after finishSignup.
   // Backup file + suggested follows are deferred to post-login banners.
   let currentStep = $state(1);
+
+  const membershipEnabled = $derived(!!runtimeConfig.membership?.enabled);
 
   let userData = $state({
     name: '',
@@ -50,6 +57,12 @@
   let isPublishing = $state(false);
   let errors = $state(/** @type {Record<string, string>} */ ({}));
 
+  /** @type {import('$lib/helpers/educational/educatorProfile.js').EdufeedProfile} */
+  let edufeed = $state({ interests: [], educationalLevels: [], subjects: [] });
+
+  /** True once the user submitted the handle application on step 5. */
+  let handleApplied = $state(false);
+
   /** Selected community pubkeys (hex). Lives here so finishSignup can read it. */
   let selected = $state.raw(new SvelteSet());
 
@@ -58,13 +71,13 @@
   let prewarmSub;
 
   /**
-   * One-shot guard for the step-3 seed effect. If a user lands on step 3 we
-   * pre-check the configured suggested communities, but if they then untick
-   * everything, `selected.size` returns to 0 — without this flag the seed
-   * effect would re-trigger and silently put the suggestions back. Reset in
-   * `resetState()` so re-opening the modal seeds again.
+   * One-shot guard for the community-seed effect. If a user lands on the
+   * communities step we pre-check the configured suggested communities, but if
+   * they then untick everything, `selected.size` returns to 0 — without this
+   * flag the seed effect would re-trigger and silently put the suggestions
+   * back. Reset in `resetState()` so re-opening the modal seeds again.
    */
-  let hasSeededStep3 = false;
+  let hasSeededCommunities = false;
 
   /**
    * Sync modal close with store state. Reset state on close so a re-opened
@@ -109,7 +122,7 @@
   });
 
   // Pre-warm the kind 10222 timeline as soon as the user is on step 2 so the
-  // picker (mounted on step 3) finds events already populated. Normal teardown
+  // picker (mounted on step 4) finds events already populated. Normal teardown
   // happens via `resetState()` on close; the empty-deps effect below handles
   // the unmount-without-close path (e.g. parent route navigates away).
   $effect(() => {
@@ -130,13 +143,13 @@
 
   // Pre-check suggested communities for the user. They can untick anything
   // before submitting; the network discovery in the picker still updates
-  // `selected` via two-way bind. The `hasSeededStep3` guard ensures we seed
-  // only once per modal lifetime — without it, ticking everything off would
-  // re-trigger this effect and silently re-seed.
+  // `selected` via two-way bind. The `hasSeededCommunities` guard ensures we
+  // seed only once per modal lifetime — without it, ticking everything off
+  // would re-trigger this effect and silently re-seed.
   $effect(() => {
-    if (currentStep === 3 && !hasSeededStep3) {
+    if (currentStep === 4 && !hasSeededCommunities) {
       for (const pk of suggestedCommunityPubkeys()) selected.add(pk);
-      hasSeededStep3 = true;
+      hasSeededCommunities = true;
     }
   });
 
@@ -154,7 +167,9 @@
     privateKey = null;
     _signer = null;
     selected = new SvelteSet();
-    hasSeededStep3 = false;
+    hasSeededCommunities = false;
+    edufeed = { interests: [], educationalLevels: [], subjects: [] };
+    handleApplied = false;
     prewarmSub?.unsubscribe();
     prewarmSub = undefined;
   }
@@ -201,6 +216,15 @@
     currentStep = 3;
   }
 
+  /**
+   * Step 3 → Step 4: advance without publishing. All context fields are
+   * optional, so Continue works with everything left empty.
+   */
+  function continueFromStep3() {
+    errors = {};
+    currentStep = 4;
+  }
+
   /** @param {string} id */
   function normalizeIdToHex(id) {
     if (!id || typeof id !== 'string') return null;
@@ -220,8 +244,10 @@
   }
 
   /**
-   * Step 3: build + sign kind 0 (and optionally kind 30000), apply optimistically
-   * to EventStore, fire-and-forget publish. Publish happens here for the first time.
+   * Step 4: build + sign kind 0 (and optionally kind 30000), apply optimistically
+   * to EventStore, fire-and-forget publish. Publish happens here for the first
+   * time. Afterwards the modal either closes or — when membership is enabled —
+   * advances to the optional handle-application step.
    *
    * @param {{ skipCommunities?: boolean }} [opts]
    */
@@ -233,10 +259,13 @@
     try {
       isPublishing = true;
 
-      const profileContent = /** @type {Record<string, string>} */ ({});
+      const profileContent = /** @type {Record<string, unknown>} */ ({});
       if (userData.name) profileContent.name = userData.name;
       if (userData.about) profileContent.about = userData.about;
       if (userData.picture) profileContent.picture = userData.picture;
+      if (edufeed.interests.length || edufeed.educationalLevels.length || edufeed.subjects.length) {
+        profileContent.edufeed = edufeed;
+      }
 
       const metadataEvent = {
         kind: 0,
@@ -266,7 +295,13 @@
       if (signedRelayList) eventStore.add(signedRelayList);
 
       isPublishing = false;
-      closeModal();
+      if (membershipEnabled) {
+        // Signup is complete; offer the optional handle application while the
+        // user is still in the flow. Closing at any point is fine.
+        currentStep = 5;
+      } else {
+        closeModal();
+      }
 
       // Background publish.
       publishEvent(signedMetadata).catch((err) => console.warn('kind 0 publish failed:', err));
@@ -312,8 +347,16 @@
           {m.auth_signup_modal_step2_profile()}
         </li>
         <li class="step {currentStep >= 3 ? 'step-primary' : ''}">
+          {m.auth_signup_modal_step_context()}
+        </li>
+        <li class="step {currentStep >= 4 ? 'step-primary' : ''}">
           {m.auth_signup_modal_step3_communities()}
         </li>
+        {#if membershipEnabled}
+          <li class="step {currentStep >= 5 ? 'step-primary' : ''}">
+            {m.auth_signup_modal_step_handle()}
+          </li>
+        {/if}
       </ul>
     </div>
 
@@ -415,7 +458,17 @@
           </div>
         </div>
       {:else if currentStep === 3}
+        <div class="space-y-4">
+          <p class="text-base opacity-80">{m.auth_signup_modal_context_subtitle()}</p>
+          <EducatorContextFields value={edufeed} compact onchange={(value) => (edufeed = value)} />
+        </div>
+      {:else if currentStep === 4}
         <SignupCommunityPicker bind:selected />
+      {:else if currentStep === 5}
+        <div class="space-y-4">
+          <p class="text-base opacity-80">{m.auth_signup_modal_handle_subtitle()}</p>
+          <MembershipApplicationForm onsubmitted={() => (handleApplied = true)} />
+        </div>
       {/if}
     </div>
 
@@ -438,9 +491,19 @@
             {m.auth_signup_modal_continue()}
             <ChevronRightIcon />
           </button>
-        {:else}
+        {:else if currentStep === 3}
+          <button
+            class="btn btn-primary"
+            data-testid="signup-context-continue"
+            onclick={continueFromStep3}
+          >
+            {m.auth_signup_modal_continue()}
+            <ChevronRightIcon />
+          </button>
+        {:else if currentStep === 4}
           <button
             class="btn btn-ghost"
+            data-testid="signup-skip-communities"
             onclick={() => finishSignup({ skipCommunities: true })}
             disabled={isPublishing}
           >
@@ -454,6 +517,19 @@
               {m.auth_signup_modal_step3_done()}
             {/if}
           </button>
+        {:else}
+          <!-- Step 5: account already exists and the kind 0 is published, so
+               the only action is leaving — either before applying ("Später
+               beantragen") or after ("Fertig"). -->
+          {#if handleApplied}
+            <button class="btn btn-primary" data-testid="signup-handle-done" onclick={closeModal}>
+              {m.auth_signup_modal_done()}
+            </button>
+          {:else}
+            <button class="btn btn-ghost" data-testid="signup-skip-handle" onclick={closeModal}>
+              {m.auth_signup_modal_membership_skip()}
+            </button>
+          {/if}
         {/if}
       </div>
 
