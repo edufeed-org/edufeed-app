@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import InterestsInput from '../shared/InterestsInput.svelte';
 
-/** @param {ReturnType<typeof render>} utils */
+/** @param {{ container: HTMLElement }} utils */
 function getInput(utils) {
   const input = utils.container.querySelector('input[type="text"]');
   expect(input).toBeTruthy();

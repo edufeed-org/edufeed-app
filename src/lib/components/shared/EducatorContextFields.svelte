@@ -15,7 +15,8 @@
     getBildungsbereichProfileConcepts,
     getSubjectVocabKeysForConcepts,
     subjectsToPickerValue,
-    mergeSubjectsForVocab
+    mergeSubjectsForVocab,
+    pickConceptLabel
   } from '$lib/helpers/educational/educatorProfile.js';
   import { getSubjectVocabLabel } from '$lib/helpers/educational/bildungsbereich.js';
   import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
@@ -46,14 +47,11 @@
     labels: c.prefLabel ?? {}
   }));
 
-  /** @param {Record<string, string> | undefined} prefLabel */
-  function pickLabel(prefLabel) {
-    if (!prefLabel) return '';
-    return prefLabel[locale] || prefLabel.de || prefLabel.en || '';
-  }
-
   const levelSelected = $derived(
-    value.educationalLevels.map((c) => ({ id: c.id, label: pickLabel(c.prefLabel) || c.id }))
+    value.educationalLevels.map((c) => ({
+      id: c.id,
+      label: pickConceptLabel(c.prefLabel, locale) || c.id
+    }))
   );
 
   /** @param {{ id: string, label: string }[]} arr */
@@ -69,9 +67,10 @@
   }
 
   const vocabFields = $derived(
-    getSubjectVocabKeysForConcepts(value.educationalLevels)
-      .map((key) => ({ key, field: resolveVocabField(key) }))
-      .filter((entry) => entry.field !== null)
+    getSubjectVocabKeysForConcepts(value.educationalLevels).flatMap((key) => {
+      const field = resolveVocabField(key);
+      return field ? [{ key, field }] : [];
+    })
   );
 
   /**

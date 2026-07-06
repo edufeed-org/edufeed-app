@@ -11,7 +11,8 @@ import {
   getSubjectVocabKeysForConcepts,
   parseEdufeedProfile,
   subjectsToPickerValue,
-  mergeSubjectsForVocab
+  mergeSubjectsForVocab,
+  pickConceptLabel
 } from '../helpers/educational/educatorProfile.js';
 import { BILDUNGSBEREICH_NAMESPACE_IRI } from '../helpers/educational/bildungsbereichNamespace.js';
 
@@ -22,8 +23,8 @@ describe('getBildungsbereichProfileConcepts', () => {
     expect(concepts.length).toBeGreaterThanOrEqual(4);
     const schule = concepts.find((c) => c.id === `${BILDUNGSBEREICH_NAMESPACE_IRI}schule`);
     expect(schule).toBeTruthy();
-    expect(schule.prefLabel.de).toBe('Schule');
-    expect(schule.prefLabel.en).toBe('School');
+    expect(schule?.prefLabel?.de).toBe('Schule');
+    expect(schule?.prefLabel?.en).toBe('School');
   });
 });
 
@@ -45,7 +46,7 @@ describe('bildungsbereichKeyFromConceptId', () => {
 });
 
 describe('getSubjectVocabKeysForConcepts', () => {
-  const concept = (key) => ({
+  const concept = (/** @type {string} */ key) => ({
     id: `${BILDUNGSBEREICH_NAMESPACE_IRI}${key}`,
     prefLabel: { de: key }
   });
@@ -109,6 +110,20 @@ describe('parseEdufeedProfile', () => {
     expect(result.interests).toEqual(['ok']);
     expect(result.educationalLevels).toEqual([{ id: 'https://ok' }]);
     expect(result.subjects).toEqual([{ id: 'https://also-ok', prefLabel: { de: 'X' } }]);
+  });
+});
+
+describe('pickConceptLabel', () => {
+  it('prefers the requested locale, then de, then en, then any available label', () => {
+    expect(pickConceptLabel({ de: 'Schule', en: 'School' }, 'en')).toBe('School');
+    expect(pickConceptLabel({ de: 'Schule' }, 'en')).toBe('Schule');
+    expect(pickConceptLabel({ en: 'School' }, 'fr')).toBe('School');
+    expect(pickConceptLabel({ fr: 'École' }, 'de')).toBe('École');
+  });
+
+  it('returns an empty string for missing or empty prefLabel', () => {
+    expect(pickConceptLabel(undefined, 'de')).toBe('');
+    expect(pickConceptLabel({}, 'de')).toBe('');
   });
 });
 

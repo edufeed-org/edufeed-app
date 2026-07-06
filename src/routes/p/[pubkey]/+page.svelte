@@ -36,6 +36,8 @@
     MessageSquareIcon
   } from '$lib/components/icons';
   import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
+  import EducatorContextDisplay from '$lib/components/shared/EducatorContextDisplay.svelte';
+  import { parseEdufeedProfile } from '$lib/helpers/educational/educatorProfile.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {import('./$types').PageProps} */
@@ -416,6 +418,9 @@
           {#if profile?.about}
             <p class="mt-3 text-sm leading-relaxed text-base-content/80">{profile.about}</p>
           {/if}
+
+          <!-- Educator context (edufeed object) -->
+          <EducatorContextDisplay value={parseEdufeedProfile(profile)} />
 
           <!-- Badges -->
           {#if getBadges().length > 0}

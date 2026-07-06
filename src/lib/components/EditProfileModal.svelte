@@ -1,11 +1,15 @@
 <script>
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte.js';
-  import ProfileForm from './shared/ProfileForm.svelte';
   import AvatarUploader from './shared/AvatarUploader.svelte';
   import BannerUploader from './shared/BannerUploader.svelte';
+  import EducatorContextFields from './shared/EducatorContextFields.svelte';
+  import MembershipCard from './membership/MembershipCard.svelte';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+  import { UpdateProfile } from 'applesauce-actions/actions';
+  import { parseEdufeedProfile } from '$lib/helpers/educational/educatorProfile.js';
   import * as m from '$lib/paraglide/messages';
 
   let { modalId = 'edit-profile-modal' } = $props();
@@ -25,15 +29,15 @@
   let userData = $state(
     /** @type {any} */ ({
       name: '',
-      display_name: '',
       about: '',
       picture: '',
       banner: '',
-      website: '',
-      nip05: '',
-      lud16: ''
+      website: ''
     })
   );
+
+  /** @type {import('$lib/helpers/educational/educatorProfile.js').EdufeedProfile} */
+  let edufeed = $state({ interests: [], educationalLevels: [], subjects: [] });
 
   // Sync form data when profile becomes available (modal opens with profile data)
   let initializedForProfile = $state(/** @type {string | null} */ (null));
@@ -42,14 +46,12 @@
     if (pubkey && initializedForProfile !== pubkey && profile) {
       userData = {
         name: profile.name || '',
-        display_name: profile.display_name || '',
         about: profile.about || '',
         picture: profile.picture || '',
         banner: profile.banner || '',
-        website: profile.website || '',
-        nip05: profile.nip05 || '',
-        lud16: profile.lud16 || ''
+        website: profile.website || ''
       };
+      edufeed = parseEdufeedProfile(profile);
       initializedForProfile = pubkey;
     }
   });
@@ -162,45 +164,55 @@
     isSubmitting = true;
 
     try {
-      // Create profile content object (only include non-empty fields)
-      const profileContent = {};
-      if (userData.name) profileContent.name = userData.name;
-      if (userData.display_name) profileContent.display_name = userData.display_name;
-      if (userData.about) profileContent.about = userData.about;
-      if (userData.picture) profileContent.picture = userData.picture;
-      if (userData.banner) profileContent.banner = userData.banner;
-      if (userData.website) profileContent.website = userData.website;
-      if (userData.nip05) profileContent.nip05 = userData.nip05;
-      if (userData.lud16) profileContent.lud16 = userData.lud16;
+      if (isOwn) {
+        // UpdateProfile shallow-merges into the existing kind 0, preserving
+        // nip05/lud16/display_name and any third-party keys. Cleared fields
+        // are submitted as "" (merge overwrites, never deletes). The edufeed
+        // object is replaced wholesale, so always send the full object.
+        await actionRunner.run(UpdateProfile, {
+          name: userData.name,
+          about: userData.about,
+          picture: userData.picture,
+          banner: userData.banner,
+          website: userData.website,
+          edufeed
+        });
+      } else {
+        // Community profile: sign with the caller-supplied community signer.
+        // Merge over the existing profile so unknown keys survive.
+        const profileContent = {
+          ...profile,
+          name: userData.name,
+          about: userData.about,
+          picture: userData.picture,
+          banner: userData.banner,
+          website: userData.website
+        };
 
-      // Create Kind 0 event (profile metadata)
-      const event = {
-        kind: 0,
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [],
-        content: JSON.stringify(profileContent),
-        pubkey
-      };
+        const event = {
+          kind: 0,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [],
+          content: JSON.stringify(profileContent),
+          pubkey
+        };
 
-      // Sign the event with the appropriate signer (own or community).
-      const signedEvent = await signer.signEvent(event);
-
-      // Publish using outbox model
-      const result = await publishEvent(signedEvent);
-
-      if (result.success) {
+        const signedEvent = await signer.signEvent(event);
+        const result = await publishEvent(signedEvent);
+        if (!result.success) {
+          throw new Error('Failed to publish profile update to any relay');
+        }
         // Add to EventStore for immediate UI updates
         eventStore.add(signedEvent);
-        console.log('Profile updated successfully');
-        submitSuccess = true;
-
-        // Close modal after a brief delay to show success message
-        setTimeout(() => {
-          modalStore.closeModal();
-        }, 1000);
-      } else {
-        throw new Error('Failed to publish profile update to any relay');
       }
+
+      console.log('Profile updated successfully');
+      submitSuccess = true;
+
+      // Close modal after a brief delay to show success message
+      setTimeout(() => {
+        modalStore.closeModal();
+      }, 1000);
     } catch (error) {
       console.error('Error updating profile:', error);
       submitError = error instanceof Error ? error.message : m.profile_edit_modal_error_failed();
@@ -276,26 +288,86 @@
       </div>
     {/if}
 
-    <!-- Profile Form -->
-    <div class="space-y-6">
-      <!-- Avatar Uploader (centered) -->
-      <div class="flex flex-col items-center">
-        <AvatarUploader bind:userData {signer} bind:errors />
-      </div>
+    <!-- Sectioned Profile Form -->
+    <div class="space-y-8">
+      <!-- Section: Wer bist du -->
+      <section class="space-y-4">
+        <h4 class="text-lg font-semibold">{m.profile_edit_section_who()}</h4>
 
-      <!-- Banner Uploader (centered with max-width) -->
-      <div class="flex w-full flex-col items-center">
-        <div class="w-full max-w-md">
-          <BannerUploader bind:userData {signer} bind:errors />
+        <div class="flex flex-col items-center">
+          <AvatarUploader bind:userData {signer} bind:errors />
         </div>
-      </div>
 
-      <!-- Form Fields (centered with max-width) -->
-      <div class="flex w-full flex-col items-center">
-        <div class="w-full max-w-md space-y-4">
-          <ProfileForm bind:userData bind:errors hideBanner />
+        <div class="flex w-full flex-col items-center">
+          <div class="w-full max-w-md">
+            <BannerUploader bind:userData {signer} bind:errors />
+          </div>
         </div>
-      </div>
+
+        <div class="form-control flex flex-col">
+          <label class="label" for="profile-name">
+            <span class="label-text">{m.profile_form_name_label()}</span>
+          </label>
+          <input
+            id="profile-name"
+            type="text"
+            bind:value={userData.name}
+            placeholder={m.profile_form_name_placeholder()}
+            class="input-bordered input w-full"
+            class:input-error={errors.name}
+          />
+          {#if errors.name}
+            <div class="label" aria-live="polite">
+              <span class="label-text-alt text-error">{errors.name}</span>
+            </div>
+          {/if}
+        </div>
+      </section>
+
+      <!-- Section: Beschreibung -->
+      <section class="space-y-2">
+        <h4 class="text-lg font-semibold">{m.profile_edit_section_about()}</h4>
+        <textarea
+          id="profile-about"
+          bind:value={userData.about}
+          placeholder={m.profile_form_about_placeholder()}
+          class="textarea-bordered textarea h-24 w-full"
+        ></textarea>
+      </section>
+
+      {#if isOwn}
+        <!-- Section: Pädagogischer Kontext -->
+        <section class="space-y-2">
+          <h4 class="text-lg font-semibold">{m.profile_edit_section_context()}</h4>
+          <EducatorContextFields value={edufeed} compact onchange={(value) => (edufeed = value)} />
+        </section>
+      {/if}
+
+      <!-- Section: Website -->
+      <section class="space-y-2">
+        <h4 class="text-lg font-semibold">{m.profile_edit_section_website()}</h4>
+        <input
+          id="profile-website"
+          type="url"
+          bind:value={userData.website}
+          placeholder={m.profile_form_website_placeholder()}
+          class="input-bordered input w-full"
+          class:input-error={errors.website}
+        />
+        {#if errors.website}
+          <div class="label" aria-live="polite">
+            <span class="label-text-alt text-error">{errors.website}</span>
+          </div>
+        {/if}
+      </section>
+
+      {#if isOwn}
+        <!-- Section: edufeed-Handle (status card + application form; renders
+             only when membership is enabled in runtime config) -->
+        <section class="space-y-2">
+          <MembershipCard />
+        </section>
+      {/if}
     </div>
 
     <!-- Modal Actions -->

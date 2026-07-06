@@ -23,7 +23,7 @@ import { BILDUNGSBEREICH_NAMESPACE_IRI } from './bildungsbereichNamespace.js';
  * @typedef {Object} EdufeedProfile
  * @property {string[]} interests
  * @property {ProfileConcept[]} educationalLevels
- * @property {ProfileConcept[]} subjects
+ * @property {SubjectConcept[]} subjects
  */
 
 /**
@@ -86,6 +86,18 @@ export function getSubjectVocabKeysForConcepts(concepts) {
  * @property {string} relay
  * @property {Record<string, string>} labels
  */
+
+/**
+ * Display label for a profile concept: requested locale → de → en → any.
+ *
+ * @param {Record<string, string> | undefined} prefLabel
+ * @param {string} locale
+ * @returns {string}
+ */
+export function pickConceptLabel(prefLabel, locale) {
+  if (!prefLabel) return '';
+  return prefLabel[locale] || prefLabel.de || prefLabel.en || Object.values(prefLabel)[0] || '';
+}
 
 /**
  * Profile subjects of one vocab, converted to `FormConceptPicker` values.

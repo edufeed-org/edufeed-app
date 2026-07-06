@@ -74,20 +74,6 @@
     {/if}
   </div>
 
-  <!-- Display Name -->
-  <div class="form-control flex flex-col">
-    <label class="label" for="profile-display-name">
-      <span class="label-text w-full text-center">{m.profile_form_display_name_label()}</span>
-    </label>
-    <input
-      id="profile-display-name"
-      type="text"
-      bind:value={userData.display_name}
-      placeholder={m.profile_form_display_name_placeholder()}
-      class="input-bordered input w-full"
-    />
-  </div>
-
   <!-- About -->
   <div class="form-control flex flex-col">
     <label class="label" for="profile-about">
@@ -161,38 +147,5 @@
         <span class="label-text-alt w-full text-center text-error">{errors.website}</span>
       </div>
     {/if}
-  </div>
-
-  <!-- NIP-05 Identifier -->
-  <div class="form-control flex flex-col">
-    <label class="label" for="profile-nip05">
-      <span class="label-text w-full text-center">{m.profile_form_nip05_label()}</span>
-    </label>
-    <input
-      id="profile-nip05"
-      type="text"
-      bind:value={userData.nip05}
-      placeholder={m.profile_form_nip05_placeholder()}
-      class="input-bordered input w-full"
-    />
-    <div class="label">
-      <span class="label-text-alt w-full text-center text-gray-400"
-        >{m.profile_form_nip05_hint()}</span
-      >
-    </div>
-  </div>
-
-  <!-- Lightning Address (LUD16) -->
-  <div class="form-control flex flex-col">
-    <label class="label" for="profile-lud16">
-      <span class="label-text w-full text-center">{m.profile_form_lightning_label()}</span>
-    </label>
-    <input
-      id="profile-lud16"
-      type="text"
-      bind:value={userData.lud16}
-      placeholder={m.profile_form_lightning_placeholder()}
-      class="input-bordered input w-full"
-    />
   </div>
 </div>
