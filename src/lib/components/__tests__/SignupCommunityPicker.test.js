@@ -304,6 +304,42 @@ describe('SignupCommunityPicker', () => {
     expect(checkbox.checked).toBe(false);
   });
 
+  it('browse list hides communities without a profile name', async () => {
+    mockProfileMap.set(PK_OTHER_1, { name: 'Charlie' });
+    // PK_OTHER_2 has no profile at all → nameless, must not render as hex
+    mockTimeline.mockReturnValue(
+      makeTimelineSubscribe([communityEvent(PK_OTHER_1, 2), communityEvent(PK_OTHER_2, 1)])
+    );
+
+    const selected = new SvelteSet();
+    const { container } = render(SignupCommunityPicker, { props: { selected } });
+
+    const rows = container.querySelectorAll('[data-testid="signup-community-row"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('Charlie');
+    expect(container.textContent).not.toContain(PK_OTHER_2.slice(0, 16));
+  });
+
+  it('search results hide communities whose about matches but that have no name', async () => {
+    mockProfileMap.set(PK_OTHER_1, { name: 'Charlie', about: 'pottery lovers' });
+    mockProfileMap.set(PK_OTHER_2, { about: 'pottery too, but nameless' });
+    mockTimeline.mockReturnValue(
+      makeTimelineSubscribe([communityEvent(PK_OTHER_1), communityEvent(PK_OTHER_2)])
+    );
+
+    const selected = new SvelteSet();
+    const { container } = render(SignupCommunityPicker, { props: { selected } });
+
+    const search = /** @type {HTMLInputElement} */ (
+      container.querySelector('[data-testid="signup-community-search"]')
+    );
+    await fireEvent.input(search, { target: { value: 'pottery' } });
+
+    const rows = container.querySelectorAll('[data-testid="signup-community-row"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('Charlie');
+  });
+
   it('caps "other" results at 20', async () => {
     const events = [];
     for (let i = 0; i < 30; i++) {

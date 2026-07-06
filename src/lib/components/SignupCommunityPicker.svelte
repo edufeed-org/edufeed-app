@@ -44,10 +44,21 @@
   const suggestedCommunities = $derived(communities.filter((c) => suggestedPubkeys.has(c.pubkey)));
   const otherCommunities = $derived(communities.filter((c) => !suggestedPubkeys.has(c.pubkey)));
 
+  /** @param {any} c */
+  function hasName(c) {
+    const p = getProfiles().get(c.pubkey);
+    return !!(p?.display_name || p?.name);
+  }
+
   // Browse list: shown when search is empty so users without a known community
-  // name still have something to discover. Newest first, capped at 12.
+  // name still have something to discover. Nameless communities (no profile
+  // yet, or profile without a name) would render as raw hex — hide them.
+  // Newest first, capped at 12.
   const browseOthers = $derived(
-    otherCommunities.toSorted((a, b) => (b.created_at || 0) - (a.created_at || 0)).slice(0, 12)
+    otherCommunities
+      .filter(hasName)
+      .toSorted((a, b) => (b.created_at || 0) - (a.created_at || 0))
+      .slice(0, 12)
   );
 
   /**
@@ -67,8 +78,9 @@
     return otherCommunities
       .filter((c) => {
         const p = profiles.get(c.pubkey);
-        const name = normalizeForSearch(p?.display_name || p?.name || '');
-        const about = normalizeForSearch(p?.about || '');
+        if (!p?.display_name && !p?.name) return false;
+        const name = normalizeForSearch(p.display_name || p.name || '');
+        const about = normalizeForSearch(p.about || '');
         return name.includes(q) || about.includes(q);
       })
       .slice(0, 20);
@@ -142,7 +154,6 @@
       <ul class="space-y-2">
         {#each browseOthers as c (c.pubkey)}
           {@const profile = getProfiles().get(c.pubkey)}
-          {@const name = profile?.display_name || profile?.name}
           <li data-testid="signup-community-row">
             <label class="flex cursor-pointer items-center gap-3">
               <input
@@ -160,13 +171,11 @@
                 </div>
               </div>
               <div class="min-w-0 flex-1">
-                {#if name}
-                  <div class="truncate text-sm font-medium">{name}</div>
-                  {#if profile?.about}
-                    <div class="truncate text-xs opacity-70">{profile.about}</div>
-                  {/if}
-                {:else}
-                  <code class="text-xs opacity-70">{c.pubkey.slice(0, 16)}…</code>
+                <div class="truncate text-sm font-medium">
+                  {profile?.display_name || profile?.name}
+                </div>
+                {#if profile?.about}
+                  <div class="truncate text-xs opacity-70">{profile.about}</div>
                 {/if}
               </div>
             </label>
@@ -182,7 +191,6 @@
         <ul class="mt-2 space-y-2">
           {#each filteredOthers as c (c.pubkey)}
             {@const profile = getProfiles().get(c.pubkey)}
-            {@const name = profile?.display_name || profile?.name}
             <li data-testid="signup-community-row">
               <label class="flex cursor-pointer items-center gap-3">
                 <input
@@ -200,13 +208,11 @@
                   </div>
                 </div>
                 <div class="min-w-0 flex-1">
-                  {#if name}
-                    <div class="truncate text-sm font-medium">{name}</div>
-                    {#if profile?.about}
-                      <div class="truncate text-xs opacity-70">{profile.about}</div>
-                    {/if}
-                  {:else}
-                    <code class="text-xs opacity-70">{c.pubkey.slice(0, 16)}…</code>
+                  <div class="truncate text-sm font-medium">
+                    {profile?.display_name || profile?.name}
+                  </div>
+                  {#if profile?.about}
+                    <div class="truncate text-xs opacity-70">{profile.about}</div>
                   {/if}
                 </div>
               </label>

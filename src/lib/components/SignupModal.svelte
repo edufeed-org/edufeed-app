@@ -467,6 +467,7 @@
       {:else if currentStep === 5}
         <div class="space-y-4">
           <p class="text-base opacity-80">{m.auth_signup_modal_handle_subtitle()}</p>
+          <p class="text-sm opacity-70">{m.auth_signup_modal_handle_optional_hint()}</p>
           <MembershipApplicationForm onsubmitted={() => (handleApplied = true)} />
         </div>
       {/if}

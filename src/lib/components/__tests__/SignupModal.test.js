@@ -79,6 +79,7 @@ vi.mock('$lib/paraglide/messages', () =>
       'auth_signup_modal_context_subtitle',
       'auth_signup_modal_step_handle',
       'auth_signup_modal_handle_subtitle',
+      'auth_signup_modal_handle_optional_hint',
       'auth_signup_modal_membership_skip',
       'auth_signup_modal_step1_subtitle',
       'auth_signup_modal_step2_subtitle',
@@ -533,6 +534,15 @@ describe('SignupModal — Step 5 (edufeed handle, membership-gated)', () => {
     // "Später beantragen" closes the modal.
     await fireEvent.click(utils.getByText('auth_signup_modal_membership_skip'));
     expect(mockModalStore.closeModal).toHaveBeenCalled();
+  });
+
+  it('shows the no-handle hint on the handle step', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(utils.getByText('auth_signup_modal_handle_optional_hint')).toBeTruthy();
   });
 
   it('after submitting the application the close button reads Done', async () => {
