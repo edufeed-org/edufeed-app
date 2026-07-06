@@ -37,7 +37,10 @@
   } from '$lib/components/icons';
   import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
   import EducatorContextDisplay from '$lib/components/shared/EducatorContextDisplay.svelte';
-  import { parseEdufeedProfile } from '$lib/helpers/educational/educatorProfile.js';
+  import {
+    parseEdufeedProfile,
+    resolveProfileInterests
+  } from '$lib/helpers/educational/educatorProfile.js';
   import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -58,6 +61,10 @@
   // Communities tab state
   let communityPubkeys = $state(/** @type {string[]} */ ([]));
   let communitiesLoading = $state(true);
+
+  // Kind 10015 interests list (authoritative for interests; legacy kind-0
+  // edufeed.interests is the fallback via resolveProfileInterests).
+  let interestsListEvent = $state(/** @type {any} */ (null));
 
   // Accepted badges (NIP-58 profile_badges)
   const profileBadges = useProfileBadges(() => data.pubkey);
@@ -178,6 +185,27 @@
       modelSub.unsubscribe();
       writeRelaySub?.unsubscribe();
       clearTimeout(commTimer);
+    };
+  });
+
+  // Interests list loader (kind 10015)
+  $effect(() => {
+    const targetPubkey = data.pubkey;
+    interestsListEvent = null;
+
+    const loaderSub = addressLoader({
+      kind: 10015,
+      pubkey: targetPubkey,
+      relays: untrack(() => getAllLookupRelays())
+    }).subscribe();
+
+    const modelSub = eventStore.replaceable(10015, targetPubkey).subscribe((event) => {
+      interestsListEvent = event || null;
+    });
+
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
     };
   });
 
@@ -430,8 +458,13 @@
             <p class="mt-3 text-sm leading-relaxed text-base-content/80">{profile.about}</p>
           {/if}
 
-          <!-- Educator context (edufeed object) -->
-          <EducatorContextDisplay value={parseEdufeedProfile(profile)} />
+          <!-- Educator context (kind-0 edufeed object + kind 10015 interests) -->
+          <EducatorContextDisplay
+            value={{
+              ...parseEdufeedProfile(profile),
+              interests: resolveProfileInterests(interestsListEvent, profile)
+            }}
+          />
 
           <!-- Badges -->
           {#if getBadges().length > 0}

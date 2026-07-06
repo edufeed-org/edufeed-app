@@ -377,7 +377,7 @@ describe('SignupModal — Step 3 (Educator context)', () => {
     expect(utils.getByTestId('signup-community-picker-mock')).toBeTruthy();
   });
 
-  it('includes edited educator context as the edufeed object in the kind 0', async () => {
+  it('splits educator context: levels/subjects in the kind-0 edufeed object, interests as a kind 10015 list', async () => {
     const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
     const nameInput = utils.getByPlaceholderText('auth_signup_modal_name_placeholder');
     await fireEvent.input(nameInput, { target: { value: 'Alice' } });
@@ -392,15 +392,41 @@ describe('SignupModal — Step 3 (Educator context)', () => {
     expect(kind0).toBeTruthy();
     const content = JSON.parse(kind0.content);
     expect(content.edufeed).toEqual({
-      interests: ['Klettern'],
       educationalLevels: [
         { id: 'https://edufeed.org/ns/bildungsbereich#schule', prefLabel: { de: 'Schule' } }
       ],
       subjects: []
     });
+
+    const interestsList = mockPublishEvent.mock.calls.find((c) => c[0].kind === 10015)?.[0];
+    expect(interestsList).toBeTruthy();
+    expect(interestsList.tags).toEqual([['t', 'Klettern']]);
   });
 
-  it('omits the edufeed key entirely when the user entered nothing', async () => {
+  it('publishes the kind 10015 list but omits the edufeed key when only interests were entered', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    const nameInput = utils.getByPlaceholderText('auth_signup_modal_name_placeholder');
+    await fireEvent.input(nameInput, { target: { value: 'Alice' } });
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 2
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 3
+    await fireEvent.click(utils.getByTestId('educator-context-set-interests-only'));
+    await fireEvent.click(utils.getByText('auth_signup_modal_continue')); // → step 4
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    const kind0 = mockPublishEvent.mock.calls.find((c) => c[0].kind === 0)?.[0];
+    expect(kind0).toBeTruthy();
+    expect(JSON.parse(kind0.content)).not.toHaveProperty('edufeed');
+
+    const interestsList = mockPublishEvent.mock.calls.find((c) => c[0].kind === 10015)?.[0];
+    expect(interestsList).toBeTruthy();
+    expect(interestsList.tags).toEqual([
+      ['t', 'Klettern'],
+      ['t', 'Podcasts']
+    ]);
+  });
+
+  it('omits the edufeed key and publishes no kind 10015 when the user entered nothing', async () => {
     const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
     await advanceToCommunities(utils);
     await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
@@ -409,6 +435,7 @@ describe('SignupModal — Step 3 (Educator context)', () => {
     const kind0 = mockPublishEvent.mock.calls.find((c) => c[0].kind === 0)?.[0];
     expect(kind0).toBeTruthy();
     expect(JSON.parse(kind0.content)).not.toHaveProperty('edufeed');
+    expect(mockPublishEvent.mock.calls.some((c) => c[0].kind === 10015)).toBe(false);
   });
 });
 

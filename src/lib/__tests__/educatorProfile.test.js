@@ -10,6 +10,8 @@ import {
   bildungsbereichKeyFromConceptId,
   getSubjectVocabKeysForConcepts,
   parseEdufeedProfile,
+  interestsFromListEvent,
+  resolveProfileInterests,
   subjectsToPickerValue,
   mergeSubjectsForVocab,
   pickConceptLabel
@@ -110,6 +112,56 @@ describe('parseEdufeedProfile', () => {
     expect(result.interests).toEqual(['ok']);
     expect(result.educationalLevels).toEqual([{ id: 'https://ok' }]);
     expect(result.subjects).toEqual([{ id: 'https://also-ok', prefLabel: { de: 'X' } }]);
+  });
+});
+
+describe('interestsFromListEvent', () => {
+  it('extracts t-tag values from a kind 10015 event', () => {
+    const event = /** @type {any} */ ({
+      kind: 10015,
+      tags: [
+        ['t', 'Klettern'],
+        ['t', 'Podcasts'],
+        ['a', '30015:pub:oer'],
+        ['alt', 'Interests']
+      ]
+    });
+    expect(interestsFromListEvent(event)).toEqual(['Klettern', 'Podcasts']);
+  });
+
+  it('trims, drops empties, and dedupes case-insensitively keeping first spelling', () => {
+    const event = /** @type {any} */ ({
+      kind: 10015,
+      tags: [['t', ' Klettern '], ['t', ''], ['t'], ['t', 'klettern'], ['t', 'OER']]
+    });
+    expect(interestsFromListEvent(event)).toEqual(['Klettern', 'OER']);
+  });
+
+  it('returns [] for null/undefined events or missing tags', () => {
+    expect(interestsFromListEvent(null)).toEqual([]);
+    expect(interestsFromListEvent(undefined)).toEqual([]);
+    expect(interestsFromListEvent(/** @type {any} */ ({ kind: 10015 }))).toEqual([]);
+  });
+});
+
+describe('resolveProfileInterests', () => {
+  const legacyContent = { edufeed: { interests: ['Legacy-A', 'Legacy-B'] } };
+
+  it('uses the kind 10015 list when present, even when empty', () => {
+    const listEvent = /** @type {any} */ ({ kind: 10015, tags: [['t', 'Klettern']] });
+    expect(resolveProfileInterests(listEvent, legacyContent)).toEqual(['Klettern']);
+
+    const emptyList = /** @type {any} */ ({ kind: 10015, tags: [] });
+    expect(resolveProfileInterests(emptyList, legacyContent)).toEqual([]);
+  });
+
+  it('falls back to legacy edufeed.interests when no list event exists', () => {
+    expect(resolveProfileInterests(null, legacyContent)).toEqual(['Legacy-A', 'Legacy-B']);
+  });
+
+  it('returns [] when neither source has interests', () => {
+    expect(resolveProfileInterests(null, {})).toEqual([]);
+    expect(resolveProfileInterests(null, null)).toEqual([]);
   });
 });
 

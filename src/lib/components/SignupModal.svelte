@@ -25,8 +25,8 @@
   // Educator-friendly wizard:
   //   Step 1 = name → creates SimpleAccount and activates it (user is logged in)
   //   Step 2 = optional profile polish (avatar + bio)
-  //   Step 3 = optional educator context (kind-0 `edufeed` object)
-  //   Step 4 = community picker → finishSignup publishes kind 0 (+ optional 30000)
+  //   Step 3 = optional educator context (kind-0 `edufeed` object + kind 10015 interests)
+  //   Step 4 = community picker → finishSignup publishes kind 0 (+ optional 10015/30000)
   //   Step 5 = optional edufeed-handle application; only when membership is
   //            enabled — otherwise the modal closes right after finishSignup.
   // Backup file + suggested follows are deferred to post-login banners.
@@ -263,8 +263,13 @@
       if (userData.name) profileContent.name = userData.name;
       if (userData.about) profileContent.about = userData.about;
       if (userData.picture) profileContent.picture = userData.picture;
-      if (edufeed.interests.length || edufeed.educationalLevels.length || edufeed.subjects.length) {
-        profileContent.edufeed = edufeed;
+      // Interests live in the NIP-51 kind 10015 list; the kind-0 edufeed
+      // object only carries the SKOS concepts that don't fit flat t tags.
+      if (edufeed.educationalLevels.length || edufeed.subjects.length) {
+        profileContent.edufeed = {
+          educationalLevels: edufeed.educationalLevels,
+          subjects: edufeed.subjects
+        };
       }
 
       const metadataEvent = {
@@ -275,6 +280,16 @@
         pubkey: userData.publicKey
       };
       const signedMetadata = await _signer.signEvent(metadataEvent);
+
+      const signedInterestsList = edufeed.interests.length
+        ? await _signer.signEvent({
+            kind: 10015,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: edufeed.interests.map((interest) => ['t', interest]),
+            content: '',
+            pubkey: userData.publicKey
+          })
+        : null;
 
       const pubkeys = skipCommunities ? [] : Array.from(selected);
       const { signed: signedFollowSet, targetPubkeys } = pubkeys.length
@@ -290,6 +305,7 @@
 
       // Optimistic local apply.
       eventStore.add(signedMetadata);
+      if (signedInterestsList) eventStore.add(signedInterestsList);
       if (signedFollowSet) eventStore.add(signedFollowSet);
       if (signedDmRelayList) eventStore.add(signedDmRelayList);
       if (signedRelayList) eventStore.add(signedRelayList);
@@ -305,6 +321,11 @@
 
       // Background publish.
       publishEvent(signedMetadata).catch((err) => console.warn('kind 0 publish failed:', err));
+      if (signedInterestsList) {
+        publishEvent(signedInterestsList).catch((err) =>
+          console.warn('kind 10015 publish failed:', err)
+        );
+      }
       if (signedFollowSet) {
         publishEvent(signedFollowSet, targetPubkeys).catch((err) =>
           console.warn('kind 30000 publish failed:', err)

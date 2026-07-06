@@ -167,3 +167,42 @@ export function parseEdufeedProfile(profileContent) {
     subjects: sanitizeConcepts(subjects)
   };
 }
+
+/**
+ * Extracts interest values from a NIP-51 kind 10015 interests list event:
+ * `t` tags, trimmed, empties dropped, deduped case-insensitively keeping the
+ * first spelling. Ignores other tags (`a` interest-set refs, `alt`, ...).
+ *
+ * @param {import('nostr-tools').NostrEvent | null | undefined} event
+ * @returns {string[]}
+ */
+export function interestsFromListEvent(event) {
+  if (!Array.isArray(event?.tags)) return [];
+  /** @type {string[]} */
+  const interests = [];
+  const seen = new Set();
+  for (const tag of event.tags) {
+    if (tag?.[0] !== 't' || typeof tag[1] !== 'string') continue;
+    const value = tag[1].trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    interests.push(value);
+  }
+  return interests;
+}
+
+/**
+ * Resolves a user's interests: the kind 10015 list is authoritative when it
+ * exists (even when empty), otherwise falls back to the legacy kind-0
+ * `edufeed.interests` array.
+ *
+ * @param {import('nostr-tools').NostrEvent | null | undefined} listEvent
+ * @param {Record<string, unknown> | null | undefined} profileContent - parsed kind-0 content
+ * @returns {string[]}
+ */
+export function resolveProfileInterests(listEvent, profileContent) {
+  if (listEvent) return interestsFromListEvent(listEvent);
+  return parseEdufeedProfile(profileContent).interests;
+}

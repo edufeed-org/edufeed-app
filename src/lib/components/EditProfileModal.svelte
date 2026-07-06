@@ -9,7 +9,14 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
   import { UpdateProfile } from 'applesauce-actions/actions';
-  import { parseEdufeedProfile } from '$lib/helpers/educational/educatorProfile.js';
+  import { ModifyListTags } from '$lib/actions/list-actions.js';
+  import {
+    parseEdufeedProfile,
+    interestsFromListEvent
+  } from '$lib/helpers/educational/educatorProfile.js';
+  import { addressLoader } from '$lib/loaders/base.js';
+  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { untrack } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { modalId = 'edit-profile-modal' } = $props();
@@ -39,6 +46,16 @@
   /** @type {import('$lib/helpers/educational/educatorProfile.js').EdufeedProfile} */
   let edufeed = $state({ interests: [], educationalLevels: [], subjects: [] });
 
+  /**
+   * The user's kind 10015 interests list. It is authoritative for interests;
+   * the legacy kind-0 `edufeed.interests` (seeded by the init effect below)
+   * only stays when no list exists.
+   * @type {import('nostr-tools').NostrEvent | null}
+   */
+  let interestsListEvent = $state(null);
+  // Once the user edits interests, stop syncing them from the incoming list.
+  let interestsTouched = false;
+
   // Sync form data when profile becomes available (modal opens with profile data)
   let initializedForProfile = $state(/** @type {string | null} */ (null));
   $effect(() => {
@@ -52,9 +69,55 @@
         website: profile.website || ''
       };
       edufeed = parseEdufeedProfile(profile);
+      // If the kind 10015 list already arrived, it wins over the legacy
+      // kind-0 interests just parsed (profile can arrive after the list).
+      untrack(() => {
+        if (interestsListEvent) {
+          edufeed = { ...edufeed, interests: interestsFromListEvent(interestsListEvent) };
+        }
+      });
       initializedForProfile = pubkey;
     }
   });
+
+  $effect(() => {
+    const targetPubkey = pubkey;
+    const own = isOwn;
+    if (!own || !targetPubkey) return;
+
+    const loaderSub = addressLoader({
+      kind: 10015,
+      pubkey: targetPubkey,
+      relays: untrack(() => getAllLookupRelays())
+    }).subscribe();
+
+    const modelSub = eventStore.replaceable(10015, targetPubkey).subscribe((event) => {
+      // The first emission is synchronous — untrack so state reads inside the
+      // callback don't become dependencies of this effect.
+      untrack(() => {
+        interestsListEvent = event || null;
+        if (event && !interestsTouched) {
+          edufeed = { ...edufeed, interests: interestsFromListEvent(event) };
+        }
+      });
+    });
+
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
+  });
+
+  /** @param {import('$lib/helpers/educational/educatorProfile.js').EdufeedProfile} value */
+  function handleContextChange(value) {
+    if (
+      value.interests.length !== edufeed.interests.length ||
+      value.interests.some((v, i) => v !== edufeed.interests[i])
+    ) {
+      interestsTouched = true;
+    }
+    edufeed = value;
+  }
 
   let errors = $state(/** @type {any} */ ({}));
   let isSubmitting = $state(false);
@@ -168,15 +231,29 @@
         // UpdateProfile shallow-merges into the existing kind 0, preserving
         // nip05/lud16/display_name and any third-party keys. Cleared fields
         // are submitted as "" (merge overwrites, never deletes). The edufeed
-        // object is replaced wholesale, so always send the full object.
+        // object is replaced wholesale — always the full object, minus
+        // interests, which live in the kind 10015 list (so legacy
+        // edufeed.interests are dropped from the kind 0 on save).
         await actionRunner.run(UpdateProfile, {
           name: userData.name,
           about: userData.about,
           picture: userData.picture,
           banner: userData.banner,
           website: userData.website,
-          edufeed
+          edufeed: {
+            educationalLevels: edufeed.educationalLevels,
+            subjects: edufeed.subjects
+          }
         });
+
+        // Diff interests against the current kind 10015 list (empty when none
+        // exists yet, so legacy kind-0 interests migrate in full as adds).
+        const baseline = interestsFromListEvent(interestsListEvent);
+        const add = edufeed.interests.filter((i) => !baseline.includes(i)).map((i) => ['t', i]);
+        const remove = baseline.filter((i) => !edufeed.interests.includes(i)).map((i) => ['t', i]);
+        if (add.length || remove.length) {
+          await actionRunner.run(ModifyListTags, { kind: 10015, add, remove });
+        }
       } else {
         // Community profile: sign with the caller-supplied community signer.
         // Merge over the existing profile so unknown keys survive.
@@ -339,7 +416,7 @@
         <!-- Section: Pädagogischer Kontext -->
         <section class="space-y-2">
           <h4 class="text-lg font-semibold">{m.profile_edit_section_context()}</h4>
-          <EducatorContextFields value={edufeed} compact onchange={(value) => (edufeed = value)} />
+          <EducatorContextFields value={edufeed} compact onchange={handleContextChange} />
         </section>
       {/if}
 

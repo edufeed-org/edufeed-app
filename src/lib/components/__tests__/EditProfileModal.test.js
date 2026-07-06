@@ -39,7 +39,10 @@ const h = vi.hoisted(() => {
       modalProps: /** @type {any} */ ({ profile: { name: 'Alice' }, pubkey: pub }),
       activeModal: 'profile',
       closeModal: vi.fn()
-    }
+    },
+    // The user's kind 10015 interests list as delivered by
+    // eventStore.replaceable(10015, pubkey); null = no list published yet.
+    interestsList: { event: /** @type {any} */ (null) }
   };
 });
 
@@ -72,7 +75,12 @@ vi.mock('$lib/services/publish-service.js', () => ({
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     add: vi.fn(),
-    replaceable: vi.fn(() => ({ subscribe: () => ({ unsubscribe() {} }) })),
+    replaceable: vi.fn((/** @type {number} */ kind) => ({
+      subscribe(/** @type {(e: any) => void} */ cb) {
+        if (kind === 10015) cb(h.interestsList.event);
+        return { unsubscribe() {} };
+      }
+    })),
     timeline: vi.fn(() => ({ subscribe: () => ({ unsubscribe() {} }) }))
   },
   pool: {}
@@ -84,6 +92,13 @@ vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunner: { run: h.runAction },
   actionRunnerOptimistic: { run: vi.fn() },
   factory: {}
+}));
+
+// event-cache opens IndexedDB at import time (pulled in via list-actions).
+vi.mock('$lib/stores/event-cache.svelte.js', () => ({
+  cacheDeletion: vi.fn(),
+  cacheRequest: vi.fn(async () => []),
+  isCacheableKind: () => false
 }));
 
 // loaders/base touches IndexedDB via event-cache at import time.
@@ -118,6 +133,7 @@ vi.mock('$lib/stores/accounts.svelte', () => ({ manager: h.managerMock }));
 vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: h.modalStoreMock }));
 
 import EditProfileModal from '../EditProfileModal.svelte';
+import { ModifyListTags } from '$lib/actions/list-actions.js';
 
 /**
  * @param {HTMLElement} container
@@ -155,15 +171,17 @@ beforeEach(() => {
   h.communitySigner.signEvent.mockClear();
   h.modalStoreMock.closeModal.mockClear();
   h.modalStoreMock.modalProps = { profile: { name: 'Alice' }, pubkey: h.pub };
+  h.interestsList.event = null;
 });
 
 describe('EditProfileModal save (own profile)', () => {
-  it('saves through the UpdateProfile action with the full edufeed object', async () => {
+  it('saves through the UpdateProfile action with an interests-free edufeed object', async () => {
     const { container } = render(EditProfileModal);
     await waitForNameInput(container, 'Alice');
 
     await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
 
+    // Nothing changed in interests → UpdateProfile only, no list write.
     await waitFor(() => {
       expect(h.runAction).toHaveBeenCalledTimes(1);
     });
@@ -176,7 +194,7 @@ describe('EditProfileModal save (own profile)', () => {
       picture: '',
       banner: '',
       website: '',
-      edufeed: { interests: [], educationalLevels: [], subjects: [] }
+      edufeed: { educationalLevels: [], subjects: [] }
     });
     // nip05/lud16/display_name are preserved by the merge, never submitted.
     expect(content).not.toHaveProperty('nip05');
@@ -192,7 +210,7 @@ describe('EditProfileModal save (own profile)', () => {
     expect(container.textContent).not.toContain('profile_edit_modal_error_ownership');
   });
 
-  it('initializes interests from the profile edufeed object and includes edits on save', async () => {
+  it('falls back to legacy edufeed.interests and migrates them all into the kind 10015 list on save', async () => {
     h.modalStoreMock.modalProps = {
       profile: {
         name: 'Alice',
@@ -214,11 +232,76 @@ describe('EditProfileModal save (own profile)', () => {
 
     await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
     await waitFor(() => {
-      expect(h.runAction).toHaveBeenCalledTimes(1);
+      expect(h.runAction).toHaveBeenCalledTimes(2);
     });
 
+    // Kind 0 no longer carries interests (wholesale replace drops the legacy key).
     const [, content] = /** @type {any[]} */ (h.runAction.mock.calls[0]);
-    expect(content.edufeed.interests).toEqual(['Klettern', 'Podcasts']);
+    expect(content.edufeed).toEqual({ educationalLevels: [], subjects: [] });
+
+    // No 10015 list yet → the full current set is written as adds.
+    const [listAction, listParams] = /** @type {any[]} */ (h.runAction.mock.calls[1]);
+    expect(listAction).toBe(ModifyListTags);
+    expect(listParams).toEqual({
+      kind: 10015,
+      add: [
+        ['t', 'Klettern'],
+        ['t', 'Podcasts']
+      ],
+      remove: []
+    });
+  });
+
+  it('prefers the kind 10015 list for prefill and saves only the diff', async () => {
+    h.modalStoreMock.modalProps = {
+      profile: {
+        name: 'Alice',
+        edufeed: { interests: ['Legacy'], educationalLevels: [], subjects: [] }
+      },
+      pubkey: h.pub
+    };
+    h.interestsList.event = {
+      kind: 10015,
+      pubkey: h.pub,
+      tags: [
+        ['t', 'Bergsteigen'],
+        ['t', 'Klettern'],
+        ['a', '30015:pub:oer']
+      ]
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Alice');
+
+    expect(container.textContent).toContain('Bergsteigen');
+    expect(container.textContent).not.toContain('Legacy');
+
+    // Remove the Bergsteigen chip, add Podcasts.
+    const bergChip = Array.from(container.querySelectorAll('button')).find(
+      (b) =>
+        b.getAttribute('aria-label') === 'interests_remove' &&
+        (b.closest('[class*="badge"], li, span')?.textContent || '').includes('Bergsteigen')
+    );
+    expect(bergChip).toBeTruthy();
+    await fireEvent.click(/** @type {HTMLButtonElement} */ (bergChip));
+
+    const interestsInput = /** @type {HTMLInputElement} */ (
+      container.querySelector('input[placeholder="interests_placeholder"]')
+    );
+    await fireEvent.input(interestsInput, { target: { value: 'Podcasts' } });
+    await fireEvent.keyDown(interestsInput, { key: 'Enter' });
+
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.runAction).toHaveBeenCalledTimes(2);
+    });
+
+    const [listAction, listParams] = /** @type {any[]} */ (h.runAction.mock.calls[1]);
+    expect(listAction).toBe(ModifyListTags);
+    expect(listParams).toEqual({
+      kind: 10015,
+      add: [['t', 'Podcasts']],
+      remove: [['t', 'Bergsteigen']]
+    });
   });
 
   it('renders sections but no nip05, lightning, or display-name inputs', async () => {
