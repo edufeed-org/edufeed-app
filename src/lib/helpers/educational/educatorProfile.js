@@ -76,6 +76,50 @@ export function getSubjectVocabKeysForConcepts(concepts) {
 }
 
 /**
+ * @typedef {ProfileConcept & { vocab?: string }} SubjectConcept
+ */
+
+/**
+ * @typedef {Object} PickerConcept - `FormConceptPicker`'s rich SelectedConcept shape
+ * @property {string} id
+ * @property {string} nostrCoord
+ * @property {string} relay
+ * @property {Record<string, string>} labels
+ */
+
+/**
+ * Profile subjects of one vocab, converted to `FormConceptPicker` values.
+ * `nostrCoord`/`relay` are unknown at profile level; the picker re-hydrates
+ * them from loaded concept events when needed.
+ *
+ * @param {SubjectConcept[]} subjects
+ * @param {string} vocabKey
+ * @returns {PickerConcept[]}
+ */
+export function subjectsToPickerValue(subjects, vocabKey) {
+  return subjects
+    .filter((s) => s.vocab === vocabKey)
+    .map((s) => ({ id: s.id, nostrCoord: '', relay: '', labels: { ...(s.prefLabel ?? {}) } }));
+}
+
+/**
+ * Merge one vocab picker's selection back into the full subjects array:
+ * subjects of other vocabs (and untagged/foreign ones) are kept, the given
+ * vocab's slice is replaced by the picked concepts.
+ *
+ * @param {SubjectConcept[]} subjects
+ * @param {string} vocabKey
+ * @param {PickerConcept[]} picked
+ * @returns {SubjectConcept[]}
+ */
+export function mergeSubjectsForVocab(subjects, vocabKey, picked) {
+  return [
+    ...subjects.filter((s) => s.vocab !== vocabKey),
+    ...picked.map((p) => ({ id: p.id, prefLabel: { ...p.labels }, vocab: vocabKey }))
+  ];
+}
+
+/**
  * @param {unknown} value
  * @returns {ProfileConcept[]}
  */

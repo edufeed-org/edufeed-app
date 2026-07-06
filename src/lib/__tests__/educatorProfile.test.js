@@ -9,7 +9,9 @@ import {
   getBildungsbereichProfileConcepts,
   bildungsbereichKeyFromConceptId,
   getSubjectVocabKeysForConcepts,
-  parseEdufeedProfile
+  parseEdufeedProfile,
+  subjectsToPickerValue,
+  mergeSubjectsForVocab
 } from '../helpers/educational/educatorProfile.js';
 import { BILDUNGSBEREICH_NAMESPACE_IRI } from '../helpers/educational/bildungsbereichNamespace.js';
 
@@ -107,5 +109,65 @@ describe('parseEdufeedProfile', () => {
     expect(result.interests).toEqual(['ok']);
     expect(result.educationalLevels).toEqual([{ id: 'https://ok' }]);
     expect(result.subjects).toEqual([{ id: 'https://also-ok', prefLabel: { de: 'X' } }]);
+  });
+});
+
+describe('subjects ↔ picker value conversion', () => {
+  const mathe = {
+    id: 'https://w3id.org/kim/schulfaecher/s1017',
+    prefLabel: { de: 'Mathematik', en: 'Mathematics' },
+    vocab: 'schulfaecher'
+  };
+  const theologie = {
+    id: 'https://example.org/hochschulfaecher/theologie',
+    prefLabel: { de: 'Theologie' },
+    vocab: 'hochschulfaecher'
+  };
+  const foreign = { id: 'https://example.org/foreign', prefLabel: { de: 'Fremd' } };
+
+  describe('subjectsToPickerValue', () => {
+    it('maps only subjects of the given vocab to the rich picker shape', () => {
+      expect(subjectsToPickerValue([mathe, theologie, foreign], 'schulfaecher')).toEqual([
+        {
+          id: mathe.id,
+          nostrCoord: '',
+          relay: '',
+          labels: { de: 'Mathematik', en: 'Mathematics' }
+        }
+      ]);
+    });
+
+    it('tolerates subjects without prefLabel', () => {
+      expect(
+        subjectsToPickerValue([{ id: 'https://x', vocab: 'schulfaecher' }], 'schulfaecher')
+      ).toEqual([{ id: 'https://x', nostrCoord: '', relay: '', labels: {} }]);
+    });
+  });
+
+  describe('mergeSubjectsForVocab', () => {
+    it('replaces the vocab slice and keeps other-vocab and untagged subjects', () => {
+      const picked = [
+        {
+          id: 'https://w3id.org/kim/schulfaecher/s1002',
+          nostrCoord: '39737:pub:s1002',
+          relay: 'wss://r.example',
+          labels: { de: 'Biologie' }
+        }
+      ];
+
+      expect(mergeSubjectsForVocab([mathe, theologie, foreign], 'schulfaecher', picked)).toEqual([
+        theologie,
+        foreign,
+        {
+          id: 'https://w3id.org/kim/schulfaecher/s1002',
+          prefLabel: { de: 'Biologie' },
+          vocab: 'schulfaecher'
+        }
+      ]);
+    });
+
+    it('clears the vocab slice when nothing is picked', () => {
+      expect(mergeSubjectsForVocab([mathe, theologie], 'schulfaecher', [])).toEqual([theologie]);
+    });
   });
 });
