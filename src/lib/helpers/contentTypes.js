@@ -442,6 +442,32 @@ export function getDefaultCommunityTabs() {
 }
 
 /**
+ * Get the community navigation tabs filtered by the community's declared content sections.
+ * Fails open (all default tabs) when the event is null or declares no content sections,
+ * mirroring the FAB's filterActionsForCommunity semantics.
+ * Home, chat, and settings are always included.
+ * @param {any} communityEvent - kind 10222 event (or null)
+ * @returns {string[]} Tab IDs in default display order
+ */
+export function getCommunityTabs(communityEvent) {
+  const all = getDefaultCommunityTabs();
+  if (!communityEvent) return all;
+
+  const sections = parseCommunityContentTypes(communityEvent);
+  if (sections.length === 0) return all;
+
+  const declared = new Set(['home', 'chat', 'settings']);
+  for (const section of sections) {
+    for (const kind of section.kinds) {
+      const tabId = kindToContentType(kind);
+      if (tabId) declared.add(tabId);
+    }
+  }
+
+  return all.filter((id) => declared.has(id));
+}
+
+/**
  * Get verified members from profile-list access data across all gated sections.
  * Returns a deduplicated union of members plus the community owner.
  * @param {{ getMembers: (name: string) => string[], isLoading: boolean }} profileAccess

@@ -176,7 +176,8 @@
     communityProfile,
     communityPubkey: data.pubkey,
     restrictedTabs,
-    accessibleTabs
+    accessibleTabs,
+    communityEvent: communikeyEvent
   }));
   $effect(() => () => setContentNavData?.(undefined));
 

@@ -14,7 +14,8 @@
  *   communityProfile: any,
  *   communityPubkey: string,
  *   restrictedTabs: Set<string>,
- *   accessibleTabs: Set<string>
+ *   accessibleTabs: Set<string>,
+ *   communityEvent: any
  * }} ContentNavData
  */
 
