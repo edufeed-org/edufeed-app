@@ -5,7 +5,7 @@
  *
  * @vitest-environment node
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('$lib/paraglide/messages', () => ({
   default: {},
@@ -41,20 +41,6 @@ vi.mock('$lib/components/icons', () => ({
   RepostIcon: {}
 }));
 
-vi.mock('$lib/config/resource-form-variants.js', () => {
-  /** @type {Array<{id: string}>} */
-  let variants = [{ id: 'amb' }];
-  return {
-    getEnabledVariants: () => variants,
-    getDefaultVariantId: () => variants[0]?.id ?? 'amb',
-    __setVariants(/** @type {typeof variants} */ list) {
-      variants = list;
-    }
-  };
-});
-
-// @ts-ignore — test-only helper exported from the mock
-import { __setVariants } from '$lib/config/resource-form-variants.js';
 import {
   CREATE_ACTIONS,
   filterActionsForCommunity,
@@ -82,7 +68,7 @@ function makeCtx(communityPubkey = '') {
     openModal: vi.fn(),
     goto: vi.fn(),
     resolve: vi.fn((/** @type {string} */ path) => path),
-    openVariantPicker: vi.fn()
+    startResourceCreation: vi.fn()
   };
 }
 
@@ -92,10 +78,6 @@ function action(id) {
   if (!found) throw new Error(`no action ${id}`);
   return found;
 }
-
-beforeEach(() => {
-  __setVariants([{ id: 'amb' }]);
-});
 
 describe('CREATE_ACTIONS shape', () => {
   it('has unique ids', () => {
@@ -168,25 +150,12 @@ describe('CREATE_ACTIONS run(ctx)', () => {
     expect(ctx.openModal).toHaveBeenCalledWith('createCalendar');
   });
 
-  it('resource navigates to the default variant in single-variant mode', () => {
+  it('resource delegates to the centralized startResourceCreation entry point', () => {
     const ctx = makeCtx();
     action('resource').run(ctx);
-    expect(ctx.goto).toHaveBeenCalledWith('/create/resource/amb');
-    expect(ctx.openVariantPicker).not.toHaveBeenCalled();
-  });
-
-  it('resource preserves the community param', () => {
-    const ctx = makeCtx('abc');
-    action('resource').run(ctx);
-    expect(ctx.goto).toHaveBeenCalledWith('/create/resource/amb?community=abc');
-  });
-
-  it('resource opens the variant picker (and does not navigate) in multi-variant mode', () => {
-    __setVariants([{ id: 'amb' }, { id: 'ekw' }]);
-    const ctx = makeCtx();
-    action('resource').run(ctx);
-    expect(ctx.openVariantPicker).toHaveBeenCalled();
+    expect(ctx.startResourceCreation).toHaveBeenCalled();
     expect(ctx.goto).not.toHaveBeenCalled();
+    expect(ctx.openModal).not.toHaveBeenCalled();
   });
 
   it('article navigates to /create/article, preserving community', () => {

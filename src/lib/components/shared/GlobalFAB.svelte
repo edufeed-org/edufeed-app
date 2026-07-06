@@ -9,17 +9,16 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import * as m from '$lib/paraglide/messages';
-  import ResourceVariantPickerModal from '$lib/components/educational/ResourceVariantPickerModal.svelte';
   import {
     CREATE_ACTIONS,
     filterActionsForCommunity,
     suggestedActionIds
   } from '$lib/config/create-actions.js';
+  import { startResourceCreation } from '$lib/helpers/contentCreation.js';
 
   let open = $state(false);
   /** @type {HTMLDivElement | undefined} */
   let fabRoot = $state(undefined);
-  let variantPickerOpen = $state(false);
 
   function close() {
     open = false;
@@ -126,29 +125,11 @@
         ),
       goto,
       resolve: (path) => resolve(/** @type {any} */ (path)),
-      openVariantPicker: () => (variantPickerOpen = true)
+      startResourceCreation: () => startResourceCreation({ communityPubkey })
     });
     close();
   }
-
-  /** Build the create URL for a given variant, preserving the community param. */
-  function resourceUrlFor(/** @type {string} */ variantId) {
-    const query = communityPubkey ? `?community=${communityPubkey}` : '';
-    return resolve(`/create/resource/${variantId}${query}`);
-  }
-
-  function handleVariantSelect(/** @type {string} */ variantId) {
-    variantPickerOpen = false;
-    goto(resourceUrlFor(variantId));
-    close();
-  }
 </script>
-
-<ResourceVariantPickerModal
-  open={variantPickerOpen}
-  onSelect={handleVariantSelect}
-  onClose={() => (variantPickerOpen = false)}
-/>
 
 {#if !isDetailPage}
   <!-- fabRoot wraps button + sheet so the click-outside listener doesn't dismiss

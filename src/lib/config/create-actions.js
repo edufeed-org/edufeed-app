@@ -20,15 +20,13 @@ import {
   BookmarkIcon,
   RepostIcon
 } from '$lib/components/icons';
-import { getEnabledVariants, getDefaultVariantId } from '$lib/config/resource-form-variants.js';
-
 /**
  * @typedef {Object} CreateActionContext
  * @property {string} communityPubkey - Hex pubkey of the current community, or '' outside community routes
  * @property {(name: string, props?: Object) => void} openModal
  * @property {(url: string) => void} goto
  * @property {(path: string) => string} resolve
- * @property {() => void} openVariantPicker - Opens the resource variant picker (multi-variant deployments)
+ * @property {() => void} startResourceCreation - Centralized "share learning resource" entry point (variant picker or direct navigation)
  */
 
 /**
@@ -91,12 +89,7 @@ export const CREATE_ACTIONS = [
     ariaLabel: m.fab_create_resource_aria,
     icon: GraduationCapIcon,
     run(ctx) {
-      // Single-variant deployments skip the picker and navigate directly.
-      if (getEnabledVariants().length <= 1) {
-        ctx.goto(ctx.resolve(withCommunity(`/create/resource/${getDefaultVariantId()}`, ctx)));
-        return;
-      }
-      ctx.openVariantPicker();
+      ctx.startResourceCreation();
     }
   },
   {
