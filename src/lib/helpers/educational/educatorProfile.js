@@ -1,0 +1,113 @@
+/**
+ * Educator profile helpers: the kind-0 `edufeed` object (interests,
+ * educationalLevels, subjects) and the Bildungsbereich ↔ profile concept
+ * mapping.
+ *
+ * Profile educationalLevels use edufeed-namespace Bildungsbereich concepts
+ * (`https://edufeed.org/ns/bildungsbereich#schule`) rather than KIM
+ * educationalLevel URIs, because one Bildungsbereich maps to several flat KIM
+ * concepts. The KIM mapping stays available via
+ * `BILDUNGSBEREICHE[key].educationalLevelMapping` for future resource matching.
+ */
+
+import { BILDUNGSBEREICHE, BILDUNGSBEREICH_KEYS } from './bildungsbereich.js';
+import { BILDUNGSBEREICH_NAMESPACE_IRI } from './bildungsbereichNamespace.js';
+
+/**
+ * @typedef {Object} ProfileConcept
+ * @property {string} id
+ * @property {Record<string, string>} [prefLabel]
+ */
+
+/**
+ * @typedef {Object} EdufeedProfile
+ * @property {string[]} interests
+ * @property {ProfileConcept[]} educationalLevels
+ * @property {ProfileConcept[]} subjects
+ */
+
+/**
+ * SKOS-shaped concepts for every Bildungsbereich, for use as the profile
+ * educational-level options.
+ *
+ * @returns {ProfileConcept[]}
+ */
+export function getBildungsbereichProfileConcepts() {
+  return BILDUNGSBEREICH_KEYS.map((key) => ({
+    id: `${BILDUNGSBEREICH_NAMESPACE_IRI}${key}`,
+    prefLabel: { ...BILDUNGSBEREICHE[key].label }
+  }));
+}
+
+/**
+ * Extract the Bildungsbereich key from a profile concept id.
+ *
+ * @param {string | undefined} conceptId
+ * @returns {import('./bildungsbereich.js').BildungsbereichKey | undefined}
+ */
+export function bildungsbereichKeyFromConceptId(conceptId) {
+  if (typeof conceptId !== 'string' || !conceptId.startsWith(BILDUNGSBEREICH_NAMESPACE_IRI)) {
+    return undefined;
+  }
+  const key = conceptId.slice(BILDUNGSBEREICH_NAMESPACE_IRI.length);
+  return BILDUNGSBEREICH_KEYS.includes(/** @type {any} */ (key))
+    ? /** @type {import('./bildungsbereich.js').BildungsbereichKey} */ (key)
+    : undefined;
+}
+
+/**
+ * Union of subject vocab keys for the selected Bildungsbereich concepts,
+ * deduped, in selection order. Unknown concepts are ignored.
+ *
+ * @param {ProfileConcept[]} concepts
+ * @returns {string[]}
+ */
+export function getSubjectVocabKeysForConcepts(concepts) {
+  /** @type {string[]} */
+  const out = [];
+  for (const concept of concepts) {
+    const key = bildungsbereichKeyFromConceptId(concept?.id);
+    if (!key) continue;
+    for (const vocabKey of BILDUNGSBEREICHE[key].subjectVocabKeys) {
+      if (!out.includes(vocabKey)) out.push(vocabKey);
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {ProfileConcept[]}
+ */
+function sanitizeConcepts(value) {
+  if (!Array.isArray(value)) return [];
+  return /** @type {ProfileConcept[]} */ (
+    value.filter(
+      (c) => typeof c === 'object' && c !== null && typeof (/** @type {any} */ (c).id) === 'string'
+    )
+  );
+}
+
+/**
+ * Defensive reader for the kind-0 `edufeed` object. Tolerates missing or
+ * malformed content and always returns arrays.
+ *
+ * @param {Record<string, unknown> | null | undefined} profileContent - parsed kind-0 content
+ * @returns {EdufeedProfile}
+ */
+export function parseEdufeedProfile(profileContent) {
+  const edufeed = profileContent?.edufeed;
+  if (typeof edufeed !== 'object' || edufeed === null || Array.isArray(edufeed)) {
+    return { interests: [], educationalLevels: [], subjects: [] };
+  }
+  const { interests, educationalLevels, subjects } = /** @type {Record<string, unknown>} */ (
+    edufeed
+  );
+  return {
+    interests: Array.isArray(interests)
+      ? interests.filter((i) => typeof i === 'string' && i.length > 0)
+      : [],
+    educationalLevels: sanitizeConcepts(educationalLevels),
+    subjects: sanitizeConcepts(subjects)
+  };
+}
