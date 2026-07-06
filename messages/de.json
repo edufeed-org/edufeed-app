@@ -212,7 +212,7 @@
   "auth_signup_modal_step3_skip": "Überspringen",
   "auth_signup_modal_continue": "Weiter",
   "auth_signup_modal_step_context": "Kontext",
-  "auth_signup_modal_context_subtitle": "Erz\u00e4hl uns von deinem p\u00e4dagogischen Kontext. Alles ist optional.",
+  "auth_signup_modal_context_subtitle": "Erzähl uns von deinem pädagogischen Kontext. Alles ist optional.",
   "auth_signup_modal_step_handle": "Handle",
   "auth_signup_modal_handle_subtitle": "Mit einem Handle (dein-name@edufeed.org) bekommst du Schreibzugriff auf die edufeed-Server.",
   "auth_signup_modal_done": "Fertig",
