@@ -16,8 +16,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
-  import ResourceVariantPickerModal from '$lib/components/educational/ResourceVariantPickerModal.svelte';
-  import { getEnabledVariants, getDefaultVariantId } from '$lib/config/resource-form-variants.js';
+  import { startResourceCreation } from '$lib/helpers/contentCreation.js';
 
   let open = $state(false);
   /** @type {HTMLDivElement | undefined} */
@@ -53,14 +52,6 @@
     };
   });
 
-  let variantPickerOpen = $state(false);
-
-  /** Build the create URL for a given variant, preserving the community param. */
-  function resourceUrlFor(/** @type {string} */ variantId) {
-    const query = communityPubkey ? `?community=${communityPubkey}` : '';
-    return resolve(`/create/resource/${variantId}${query}`);
-  }
-
   // Detect community context from route (convert npub param to hex for consistent matching)
   let communityPubkey = $derived(
     $page.route.id?.startsWith('/c/')
@@ -85,21 +76,7 @@
   }
 
   function handleCreateResource() {
-    // Single-variant deployments skip the picker and navigate directly.
-    // Multi-variant deployments open the step-0 picker modal.
-    const variants = getEnabledVariants();
-    if (variants.length <= 1) {
-      goto(resourceUrlFor(getDefaultVariantId()));
-      close();
-      return;
-    }
-    variantPickerOpen = true;
-    close();
-  }
-
-  function handleVariantSelect(/** @type {string} */ variantId) {
-    variantPickerOpen = false;
-    goto(resourceUrlFor(variantId));
+    startResourceCreation({ communityPubkey });
     close();
   }
 
@@ -241,12 +218,6 @@
     <RepostIcon class_="h-5 w-5" />
   {/if}
 {/snippet}
-
-<ResourceVariantPickerModal
-  open={variantPickerOpen}
-  onSelect={handleVariantSelect}
-  onClose={() => (variantPickerOpen = false)}
-/>
 
 {#if !isDetailPage}
   <!-- fabRoot wraps button + both menus so the click-outside listener doesn't dismiss

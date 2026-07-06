@@ -187,7 +187,7 @@ describe('GlobalFAB', () => {
     expect(mockGoto).toHaveBeenCalledWith('/create/resource/amb');
   });
 
-  it('does not navigate when multiple variants are enabled (opens picker instead)', async () => {
+  it('opens the global variant picker modal when multiple variants are enabled', async () => {
     __setVariants([
       {
         id: 'amb',
@@ -206,6 +206,10 @@ describe('GlobalFAB', () => {
     );
     await fireEvent.click(btn);
     expect(mockGoto).not.toHaveBeenCalled();
+    expect(mockOpenModal).toHaveBeenCalledWith(
+      'resourceVariantPicker',
+      expect.objectContaining({ communityPubkey: '' })
+    );
   });
 
   it('navigates to /create/article on article click', async () => {
