@@ -8,6 +8,7 @@
   import { ProfileModel } from 'applesauce-core/models';
   import { profileLoader } from '$lib/loaders/profile.js';
   import { addressLoader } from '$lib/loaders/base.js';
+  import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import {
@@ -75,9 +76,18 @@
         pubkey: data.pubkey
       };
 
+      // Stale-while-revalidate: paint instantly from the IDB cache, but always
+      // refresh from relays (cache: false) — the address loader stops at the
+      // first source that yields the address, so a cached 10222 would otherwise
+      // never be refreshed and edited content types would stay stale.
+      cacheRequest([{ kinds: [pointer.kind], authors: [pointer.pubkey] }]).then((events) => {
+        for (const event of events) eventStore.add(event);
+      });
+
       const loaderSub = addressLoader({
         ...pointer,
-        relays: getCommunikeyRelays()
+        relays: getCommunikeyRelays(),
+        cache: false
       }).subscribe({
         complete: () => {
           communikeyLoaded = true;

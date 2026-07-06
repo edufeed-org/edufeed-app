@@ -445,7 +445,7 @@ export function getDefaultCommunityTabs() {
  * Get the community navigation tabs filtered by the community's declared content sections.
  * Fails open (all default tabs) when the event is null or declares no content sections,
  * mirroring the FAB's filterActionsForCommunity semantics.
- * Home, chat, and settings are always included.
+ * Home and settings are always included; chat only when kind 9 is declared.
  * @param {any} communityEvent - kind 10222 event (or null)
  * @returns {string[]} Tab IDs in default display order
  */
@@ -456,7 +456,7 @@ export function getCommunityTabs(communityEvent) {
   const sections = parseCommunityContentTypes(communityEvent);
   if (sections.length === 0) return all;
 
-  const declared = new Set(['home', 'chat', 'settings']);
+  const declared = new Set(['home', 'settings']);
   for (const section of sections) {
     for (const kind of section.kinds) {
       const tabId = kindToContentType(kind);

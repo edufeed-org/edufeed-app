@@ -378,7 +378,7 @@ describe('getCommunityTabs', () => {
     );
   });
 
-  it('keeps only declared content tabs plus home, chat, and settings', () => {
+  it('keeps only declared content tabs plus home and settings', () => {
     const event = {
       tags: [
         ['content', 'Calendar'],
@@ -388,10 +388,10 @@ describe('getCommunityTabs', () => {
         ['k', '30142']
       ]
     };
-    expect(getCommunityTabs(event)).toEqual(['home', 'chat', 'learning', 'calendar', 'settings']);
+    expect(getCommunityTabs(event)).toEqual(['home', 'learning', 'calendar', 'settings']);
   });
 
-  it('always includes chat even when not declared', () => {
+  it('excludes chat when the community declares sections without kind 9', () => {
     const event = {
       tags: [
         ['content', 'Polls'],
@@ -399,10 +399,20 @@ describe('getCommunityTabs', () => {
       ]
     };
     const tabs = getCommunityTabs(event);
-    expect(tabs).toContain('chat');
+    expect(tabs).not.toContain('chat');
     expect(tabs).toContain('polls');
     expect(tabs).not.toContain('wikis');
     expect(tabs).not.toContain('boards');
+  });
+
+  it('includes chat when declared', () => {
+    const event = {
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'chat', 'settings']);
   });
 
   it('preserves the default tab ordering', () => {
@@ -428,7 +438,7 @@ describe('getCommunityTabs', () => {
         ['k', '11']
       ]
     };
-    expect(getCommunityTabs(event)).toEqual(['home', 'chat', 'forum', 'settings']);
+    expect(getCommunityTabs(event)).toEqual(['home', 'forum', 'settings']);
   });
 });
 
