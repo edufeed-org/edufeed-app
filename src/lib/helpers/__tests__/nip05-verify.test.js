@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { verifyNip05, _clearNip05Cache } from '../nip05-verify.js';
+import { verifyNip05, getProfileNip05s, _clearNip05Cache } from '../nip05-verify.js';
 
 const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
@@ -108,5 +108,60 @@ describe('verifyNip05', () => {
     await verifyNip05('Alice@Edufeed.org', ALICE, fetchMock);
     await verifyNip05('alice@edufeed.org', ALICE, fetchMock);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getProfileNip05s', () => {
+  /** Build a kind-0 event with the given content object and tags. */
+  function kind0(content, tags = []) {
+    return {
+      kind: 0,
+      pubkey: 'a'.repeat(64),
+      content: typeof content === 'string' ? content : JSON.stringify(content),
+      tags,
+      created_at: 0,
+      id: 'x',
+      sig: ''
+    };
+  }
+
+  it('returns the content nip05 as a single entry', () => {
+    const event = kind0({ nip05: 'alice@edufeed.org' });
+    expect(getProfileNip05s(event)).toEqual(['alice@edufeed.org']);
+  });
+
+  it('appends nip05 event tags after the content nip05 (Laeserin-style profiles)', () => {
+    const event = kind0({ nip05: 'laeserin@gitcitadel.com' }, [
+      ['nip05', 'laeserin@theforest.nostr1.com'],
+      ['nip05', 'laeserin@sovbit.host'],
+      ['website', 'https://example.org']
+    ]);
+    expect(getProfileNip05s(event)).toEqual([
+      'laeserin@gitcitadel.com',
+      'laeserin@theforest.nostr1.com',
+      'laeserin@sovbit.host'
+    ]);
+  });
+
+  it('dedupes case-insensitively between content and tags', () => {
+    const event = kind0({ nip05: 'Alice@Edufeed.org' }, [
+      ['nip05', 'alice@edufeed.org'],
+      ['nip05', 'alice@other.org']
+    ]);
+    expect(getProfileNip05s(event)).toEqual(['Alice@Edufeed.org', 'alice@other.org']);
+  });
+
+  it('works with only tags and no content nip05', () => {
+    const event = kind0({ name: 'Alice' }, [['nip05', 'alice@edufeed.org']]);
+    expect(getProfileNip05s(event)).toEqual(['alice@edufeed.org']);
+  });
+
+  it('tolerates malformed content, empty tag values and missing event', () => {
+    expect(getProfileNip05s(null)).toEqual([]);
+    expect(getProfileNip05s(undefined)).toEqual([]);
+    expect(getProfileNip05s(kind0('not json', [['nip05', ' alice@edufeed.org ']]))).toEqual([
+      'alice@edufeed.org'
+    ]);
+    expect(getProfileNip05s(kind0({ nip05: 42 }, [['nip05'], ['nip05', '']]))).toEqual([]);
   });
 });

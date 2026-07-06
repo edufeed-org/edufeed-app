@@ -38,6 +38,7 @@
   import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
   import EducatorContextDisplay from '$lib/components/shared/EducatorContextDisplay.svelte';
   import { parseEdufeedProfile } from '$lib/helpers/educational/educatorProfile.js';
+  import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {import('./$types').PageProps} */
@@ -67,6 +68,14 @@
   let activeUser = $derived(getActiveUser());
   let isOwnProfile = $derived(activeUser?.pubkey === data.pubkey);
   let isFollowing = $derived(contactsStore.contacts.includes(data.pubkey));
+
+  // All NIP-05 addresses: content nip05 first, then repeated nip05 event tags.
+  // Falls back to the parsed content while the raw kind 0 hasn't arrived yet.
+  const nip05s = $derived.by(() => {
+    const list = getProfileNip05s(profileEvent);
+    if (list.length === 0 && profile?.nip05) return [profile.nip05];
+    return list;
+  });
 
   // Profile loader + model
   $effect(() => {
@@ -362,10 +371,12 @@
             {profile?.name || profile?.display_name || 'Anonymous User'}
           </h1>
 
-          <!-- NIP-05 -->
-          {#if profile?.nip05}
-            <div class="mt-0.5 text-sm text-primary">
-              <Nip05VerifiedBadge pubkey={data.pubkey} nip05={profile.nip05} />
+          <!-- Handles (NIP-05) — content nip05 plus any repeated nip05 event tags -->
+          {#if nip05s.length > 0}
+            <div class="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-primary">
+              {#each nip05s as nip05 (nip05)}
+                <Nip05VerifiedBadge pubkey={data.pubkey} {nip05} />
+              {/each}
             </div>
           {/if}
 

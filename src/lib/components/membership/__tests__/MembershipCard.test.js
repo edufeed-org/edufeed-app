@@ -14,9 +14,12 @@ const profileState = { event: null };
 const decryptMock = vi.fn();
 const actionRunnerRunMock = vi.fn();
 // vi.hoisted lets us reference the mock from inside a (hoisted) vi.mock factory.
-const { updateProfileMock } = vi.hoisted(() => ({
+const { updateProfileMock, addProfileNip05TagMock } = vi.hoisted(() => ({
   updateProfileMock: vi.fn(
     /** @param {any} content */ (content) => ({ __action: 'UpdateProfile', content })
+  ),
+  addProfileNip05TagMock: vi.fn(
+    /** @param {any} address */ (address) => ({ __action: 'AddProfileNip05Tag', address })
   )
 }));
 
@@ -76,6 +79,10 @@ vi.mock('applesauce-actions/actions', () => ({
   UpdateProfile: updateProfileMock
 }));
 
+vi.mock('$lib/actions/profile-actions.js', () => ({
+  AddProfileNip05Tag: addProfileNip05TagMock
+}));
+
 vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
   timedPool: () => ({})
@@ -107,6 +114,7 @@ describe('MembershipCard', () => {
     decryptMock.mockReset();
     actionRunnerRunMock.mockReset();
     updateProfileMock.mockClear();
+    addProfileNip05TagMock.mockClear();
   });
 
   it('shows CTA when no application exists', () => {
@@ -264,6 +272,120 @@ describe('MembershipCard', () => {
       // The builder we passed is the mocked UpdateProfile.
       expect(builder).toBe(updateProfileMock);
       expect(content).toEqual({ nip05: 'maria@edufeed.org' });
+    });
+  });
+
+  describe('replace-or-add when a different nip05 already exists', () => {
+    const encryptedResponse = {
+      id: 'response-id',
+      kind: 1069,
+      pubkey: USER_PUBKEY,
+      created_at: 1700000000,
+      tags: [['a', FORM_ADDRESS], ['encrypted']],
+      content: 'encrypted-payload',
+      sig: 'sig'
+    };
+
+    /** @type {ReturnType<typeof vi.fn>} */
+    let fetchMock;
+    /** @type {typeof fetch | undefined} */
+    let originalFetch;
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+      fetchMock = vi.fn();
+      // @ts-expect-error — jsdom global
+      globalThis.fetch = fetchMock;
+      timelineState.events = [encryptedResponse];
+      decryptMock.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({ names: { maria: USER_PUBKEY } })
+      });
+    });
+
+    afterEach(() => {
+      // @ts-expect-error — jsdom global
+      globalThis.fetch = originalFetch;
+    });
+
+    async function settle() {
+      for (let i = 0; i < 5; i++) {
+        await tick();
+        await Promise.resolve();
+      }
+    }
+
+    it('offers Replace and Add buttons instead of a single CTA', async () => {
+      profileState.event = {
+        kind: 0,
+        pubkey: USER_PUBKEY,
+        content: JSON.stringify({ nip05: 'maria@other.org' }),
+        tags: []
+      };
+
+      const { findByRole, queryByRole } = render(MembershipCard);
+      await settle();
+
+      expect(await findByRole('button', { name: /Ersetzen|Replace/i })).toBeTruthy();
+      expect(await findByRole('button', { name: /zusätzlich|additional/i })).toBeTruthy();
+      expect(queryByRole('button', { name: /Add to (your )?profile|in dein Profil/i })).toBeNull();
+    });
+
+    it('Replace calls UpdateProfile with the new address', async () => {
+      profileState.event = {
+        kind: 0,
+        pubkey: USER_PUBKEY,
+        content: JSON.stringify({ nip05: 'maria@other.org' }),
+        tags: []
+      };
+      actionRunnerRunMock.mockResolvedValue(undefined);
+
+      const { findByRole } = render(MembershipCard);
+      await settle();
+      await fireEvent.click(await findByRole('button', { name: /Ersetzen|Replace/i }));
+      await settle();
+
+      expect(actionRunnerRunMock).toHaveBeenCalledTimes(1);
+      const [builder, content] = actionRunnerRunMock.mock.calls[0];
+      expect(builder).toBe(updateProfileMock);
+      expect(content).toEqual({ nip05: 'maria@edufeed.org' });
+    });
+
+    it('Add calls AddProfileNip05Tag with the new address', async () => {
+      profileState.event = {
+        kind: 0,
+        pubkey: USER_PUBKEY,
+        content: JSON.stringify({ nip05: 'maria@other.org' }),
+        tags: []
+      };
+      actionRunnerRunMock.mockResolvedValue(undefined);
+
+      const { findByRole } = render(MembershipCard);
+      await settle();
+      await fireEvent.click(await findByRole('button', { name: /zusätzlich|additional/i }));
+      await settle();
+
+      expect(actionRunnerRunMock).toHaveBeenCalledTimes(1);
+      const [builder, address] = actionRunnerRunMock.mock.calls[0];
+      expect(builder).toBe(addProfileNip05TagMock);
+      expect(address).toBe('maria@edufeed.org');
+    });
+
+    it('hides the CTA entirely when the address already exists as a nip05 tag', async () => {
+      profileState.event = {
+        kind: 0,
+        pubkey: USER_PUBKEY,
+        content: JSON.stringify({ nip05: 'maria@other.org' }),
+        tags: [['nip05', 'maria@edufeed.org']]
+      };
+
+      const { queryByRole } = render(MembershipCard);
+      await settle();
+
+      expect(queryByRole('button', { name: /Ersetzen|Replace/i })).toBeNull();
+      expect(queryByRole('button', { name: /zusätzlich|additional/i })).toBeNull();
+      expect(queryByRole('button', { name: /Add to (your )?profile|in dein Profil/i })).toBeNull();
     });
   });
 

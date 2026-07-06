@@ -83,6 +83,44 @@ export async function verifyNip05(nip05Address, expectedPubkey, fetchImpl = fetc
 }
 
 /**
+ * Collect all NIP-05 addresses from a kind-0 event: the `nip05` field in the
+ * content JSON first (the "primary" address most clients show), followed by
+ * any repeated `["nip05", <address>]` event tags — a wild-but-real pattern
+ * for profiles with multiple identifiers. Deduped case-insensitively.
+ *
+ * @param {{ content?: string, tags?: string[][] } | null | undefined} event - kind-0 event
+ * @returns {string[]}
+ */
+export function getProfileNip05s(event) {
+  if (!event) return [];
+
+  /** @type {string[]} */
+  const result = [];
+  const seen = new Set();
+
+  /** @param {unknown} value */
+  const push = (value) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(trimmed);
+  };
+
+  try {
+    push(JSON.parse(event.content || '{}')?.nip05);
+  } catch {
+    // Malformed content — fall through to tags.
+  }
+  for (const tag of event.tags || []) {
+    if (tag?.[0] === 'nip05') push(tag[1]);
+  }
+  return result;
+}
+
+/**
  * Test helper — clears the in-memory cache. Not exported as part of the
  * public API; only used by Vitest.
  */
