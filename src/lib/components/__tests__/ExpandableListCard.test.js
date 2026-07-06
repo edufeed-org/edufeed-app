@@ -25,20 +25,28 @@ describe('ExpandableListCard', () => {
     expect(getByText('8 people')).toBeTruthy();
   });
 
-  it('shows down arrow when collapsed', () => {
-    const { getByText } = render(ExpandableListCard, {
+  it('marks button collapsed and chevron unrotated when collapsed', () => {
+    const { container } = render(ExpandableListCard, {
       props: { title: 'Test', count: 0, expanded: false, toggle: vi.fn() }
     });
 
-    expect(getByText('▼')).toBeTruthy();
+    const button = container.querySelector('button');
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    const chevron = container.querySelector('button svg');
+    expect(chevron).toBeTruthy();
+    expect(chevron?.getAttribute('class') || '').not.toContain('rotate-180');
   });
 
-  it('shows up arrow when expanded', () => {
-    const { getByText } = render(ExpandableListCard, {
+  it('marks button expanded and rotates chevron when expanded', () => {
+    const { container } = render(ExpandableListCard, {
       props: { title: 'Test', count: 0, expanded: true, toggle: vi.fn() }
     });
 
-    expect(getByText('▲')).toBeTruthy();
+    const button = container.querySelector('button');
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('button svg')?.getAttribute('class') || '').toContain(
+      'rotate-180'
+    );
   });
 
   it('calls toggle when clicked', async () => {

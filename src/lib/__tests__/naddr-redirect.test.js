@@ -14,7 +14,9 @@ vi.mock('$lib/helpers/nostrUtils', () => ({
 
 // Mock config store — initializeConfig is called by the load function
 vi.mock('$lib/stores/config.svelte.js', () => ({
-  initializeConfig: vi.fn()
+  initializeConfig: vi.fn(),
+  runtimeConfig: {},
+  configReady: { subscribe: vi.fn(() => vi.fn()) }
 }));
 
 // Mock @sveltejs/kit — redirect throws, error throws
