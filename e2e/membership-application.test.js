@@ -28,7 +28,7 @@ test.describe('Membership Application — deployment gate', () => {
 
     await page.locator('button:has-text("Login")').first().click();
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
-    await page.locator('#global-login-modal button:has-text("Sign Up")').click();
+    await page.locator('[data-testid="signup-primary-cta"]').click();
     await expect(page.locator('#global-signup-modal')).toBeVisible({ timeout: 5000 });
 
     await expect(page.locator('#global-signup-modal .steps .step')).toHaveCount(

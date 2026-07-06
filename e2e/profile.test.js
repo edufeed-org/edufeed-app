@@ -11,8 +11,12 @@ test.describe('Profile page', () => {
     // Wait for profile to load (profile name appears in h1)
     await expect(page.locator('h1')).toContainText(TEST_AUTHOR.name, { timeout: 15_000 });
 
-    // Profile avatar should be visible (alt = display name from test data)
-    await expect(page.locator(`img[alt="${TEST_AUTHOR.name}"]`)).toBeVisible({ timeout: 15_000 });
+    // Profile avatar should be visible (alt = display name from test data).
+    // Feed cards streaming in below also carry the author avatar, so match
+    // only the first (header) instance to avoid a strict-mode violation.
+    await expect(page.locator(`img[alt="${TEST_AUTHOR.name}"]`).first()).toBeVisible({
+      timeout: 15_000
+    });
 
     // Bio should be visible
     await expect(page.getByText('Bio for test author 0')).toBeVisible();
