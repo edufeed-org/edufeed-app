@@ -216,7 +216,10 @@
                     type="button"
                     onclick={() => runAction(action)}
                     aria-label={action.ariaLabel()}
-                    class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300"
+                    data-tip={action.description?.()}
+                    class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300 {action.description
+                      ? 'tooltip'
+                      : ''}"
                   >
                     <span class="text-primary"><action.icon class_="h-5 w-5" /></span>
                     <span class="text-xs leading-tight">{action.label()}</span>

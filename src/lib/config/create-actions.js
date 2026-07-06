@@ -8,7 +8,7 @@ import * as m from '$lib/paraglide/messages';
 import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
 import {
   CalendarIcon,
-  CalendarPlusIcon,
+  Calendar3Icon,
   GraduationCapIcon,
   ArticleIcon,
   BookIcon,
@@ -35,6 +35,7 @@ import { getEnabledVariants, getDefaultVariantId } from '$lib/config/resource-fo
  * @property {number[]|null} kinds - Nostr kinds this action produces; null = context-independent (never filtered)
  * @property {() => string} label
  * @property {() => string} ariaLabel
+ * @property {(() => string) | undefined} [description] - Tooltip text disambiguating similar actions
  * @property {any} icon - Svelte icon component
  * @property {(ctx: CreateActionContext) => void} run
  */
@@ -55,6 +56,7 @@ export const CREATE_ACTIONS = [
     kinds: [31922, 31923],
     label: m.fab_create_event,
     ariaLabel: m.fab_create_event_aria,
+    description: m.fab_create_event_desc,
     icon: CalendarIcon,
     run(ctx) {
       ctx.openModal('calendarEvent', {
@@ -70,7 +72,8 @@ export const CREATE_ACTIONS = [
     kinds: [31924],
     label: m.fab_create_calendar,
     ariaLabel: m.fab_create_calendar_aria,
-    icon: CalendarPlusIcon,
+    description: m.fab_create_calendar_desc,
+    icon: Calendar3Icon,
     run(ctx) {
       ctx.openModal('createCalendar');
     }
@@ -144,6 +147,7 @@ export const CREATE_ACTIONS = [
     kinds: null,
     label: m.fab_add_bookmark,
     ariaLabel: m.fab_add_bookmark,
+    description: m.fab_add_bookmark_desc,
     icon: BookmarkIcon,
     run(ctx) {
       ctx.openModal('addBookmark', { communityPubkey: ctx.communityPubkey });
@@ -155,6 +159,7 @@ export const CREATE_ACTIONS = [
     kinds: null,
     label: m.fab_share_existing,
     ariaLabel: m.fab_share_existing_aria,
+    description: m.fab_share_existing_desc,
     icon: RepostIcon,
     run(ctx) {
       ctx.openModal('shareByNaddr', { communityPubkey: ctx.communityPubkey });

@@ -21,13 +21,17 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_create_poll: () => 'Create Poll',
   fab_create_poll_aria: () => 'Create new poll',
   fab_add_bookmark: () => 'Add Bookmark',
+  fab_add_bookmark_desc: () => 'Recommend a link as a bookmark',
   fab_share_existing: () => 'Share Existing Content',
-  fab_share_existing_aria: () => 'Share existing content with community'
+  fab_share_existing_aria: () => 'Share existing content with community',
+  fab_share_existing_desc: () => 'Repost existing content into a community',
+  fab_create_event_desc: () => 'Create a single public event',
+  fab_create_calendar_desc: () => 'Create a public calendar containing events'
 }));
 
 vi.mock('$lib/components/icons', () => ({
   CalendarIcon: {},
-  CalendarPlusIcon: {},
+  Calendar3Icon: {},
   GraduationCapIcon: {},
   ArticleIcon: {},
   BookIcon: {},
@@ -121,6 +125,14 @@ describe('CREATE_ACTIONS shape', () => {
       'bookmark',
       'share'
     ]);
+  });
+
+  it('carries a tooltip description on the confusable action pairs', () => {
+    for (const id of ['event', 'calendar', 'bookmark', 'share']) {
+      const desc = action(id).description;
+      expect(typeof desc, `${id} should have a description`).toBe('function');
+      expect(typeof desc?.()).toBe('string');
+    }
   });
 
   it('maps content kinds correctly', () => {

@@ -47,13 +47,17 @@ vi.mock('$lib/paraglide/messages', () => ({
   aria_close_modal: () => 'Close',
   fab_create_event: () => 'Create Event',
   fab_create_event_aria: () => 'Create new event',
+  fab_create_event_desc: () => 'Create a single public event',
   fab_create_calendar: () => 'Create Calendar',
   fab_create_calendar_aria: () => 'Create new calendar',
+  fab_create_calendar_desc: () => 'Create a public calendar containing events',
   fab_create_resource: () => 'Create Learning Content',
   fab_create_resource_aria: () => 'Create new learning content',
   fab_add_bookmark: () => 'Add Bookmark',
+  fab_add_bookmark_desc: () => 'Recommend a link as a bookmark',
   fab_share_existing: () => 'Share Existing Content',
   fab_share_existing_aria: () => 'Share existing content with community',
+  fab_share_existing_desc: () => 'Repost existing content into a community',
   article_fab_write: () => 'Write Article',
   wiki_fab_write: () => 'Write Wiki',
   fab_create_form: () => 'Create Form',
@@ -201,6 +205,35 @@ describe('GlobalFAB', () => {
   it('has create calendar button', async () => {
     const { container } = await renderOpen();
     expect(container.querySelector('[aria-label="Create new calendar"]')).toBeTruthy();
+  });
+
+  it('shows a disambiguating tooltip on event/calendar/bookmark/share tiles only', async () => {
+    const { container } = await renderOpen();
+    const tipFor = (/** @type {string} */ ariaLabel) => {
+      const tile = /** @type {HTMLElement} */ (
+        container.querySelector(`[aria-label="${ariaLabel}"]`)
+      );
+      return { tip: tile.getAttribute('data-tip'), hasClass: tile.classList.contains('tooltip') };
+    };
+
+    expect(tipFor('Create new event')).toEqual({
+      tip: 'Create a single public event',
+      hasClass: true
+    });
+    expect(tipFor('Create new calendar')).toEqual({
+      tip: 'Create a public calendar containing events',
+      hasClass: true
+    });
+    expect(tipFor('Add Bookmark')).toEqual({
+      tip: 'Recommend a link as a bookmark',
+      hasClass: true
+    });
+    expect(tipFor('Share existing content with community')).toEqual({
+      tip: 'Repost existing content into a community',
+      hasClass: true
+    });
+    // Tiles without a description get neither the class nor the attribute
+    expect(tipFor('Write Article')).toEqual({ tip: null, hasClass: false });
   });
 
   it('has create learning content button', async () => {

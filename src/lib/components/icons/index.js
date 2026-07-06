@@ -3,7 +3,7 @@ export { default as Icon } from './Icon.svelte';
 
 // Calendar Icons
 export { default as CalendarIcon } from './calendar/CalendarIcon.svelte';
-export { default as CalendarPlusIcon } from './calendar/CalendarPlusIcon.svelte';
+export { default as Calendar3Icon } from './calendar/Calendar3Icon.svelte';
 export { default as ClockIcon } from './calendar/ClockIcon.svelte';
 
 // UI Icons
