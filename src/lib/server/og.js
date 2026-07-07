@@ -201,7 +201,10 @@ export async function fetchEventFromRelays(identifier) {
 /** @type {RegExp} */
 const IMAGE_URL_RE = /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?\S*)?/i;
 
-/** Map feed-card typeKeys to OG types. Unlisted keys → 'website'. */
+/**
+ * Map feed-card typeKeys to OG types. Unlisted keys → 'website'.
+ * @type {Record<string, 'event' | 'article' | 'website'>}
+ */
 const TYPE_KEY_TO_OG_TYPE = {
   calendar: 'event',
   article: 'article',
