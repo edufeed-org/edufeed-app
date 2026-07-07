@@ -533,12 +533,54 @@ describe('OG Meta Tags', () => {
       const { env } = await import('$env/dynamic/private');
       const prev = env.OG_DEFAULT_IMAGE;
       env.OG_DEFAULT_IMAGE = 'https://cdn.example.com/brand.png';
+      try {
+        const html = renderOgTags(
+          { title: 'T', description: 'd', type: 'website' },
+          'https://app.example.com/x'
+        );
+        expect(html).toContain('https://cdn.example.com/brand.png');
+      } finally {
+        env.OG_DEFAULT_IMAGE = prev;
+      }
+    });
+
+    it('declares image/jpeg for a .jpg OG_DEFAULT_IMAGE override', async () => {
+      const { env } = await import('$env/dynamic/private');
+      const prev = env.OG_DEFAULT_IMAGE;
+      env.OG_DEFAULT_IMAGE = 'https://cdn.example.com/brand.jpg';
+      try {
+        const html = renderOgTags(
+          { title: 'T', description: 'd', type: 'website' },
+          'https://app.example.com/x'
+        );
+        expect(html).toContain('og:image:type" content="image/jpeg"');
+      } finally {
+        env.OG_DEFAULT_IMAGE = prev;
+      }
+    });
+
+    it('omits og:image:type for an extension-less OG_DEFAULT_IMAGE override', async () => {
+      const { env } = await import('$env/dynamic/private');
+      const prev = env.OG_DEFAULT_IMAGE;
+      env.OG_DEFAULT_IMAGE = 'https://cdn.example.com/brand';
+      try {
+        const html = renderOgTags(
+          { title: 'T', description: 'd', type: 'website' },
+          'https://app.example.com/x'
+        );
+        expect(html).toContain('og:image');
+        expect(html).not.toContain('og:image:type');
+      } finally {
+        env.OG_DEFAULT_IMAGE = prev;
+      }
+    });
+
+    it('declares image/png for the default /og-default.png', () => {
       const html = renderOgTags(
         { title: 'T', description: 'd', type: 'website' },
         'https://app.example.com/x'
       );
-      expect(html).toContain('https://cdn.example.com/brand.png');
-      env.OG_DEFAULT_IMAGE = prev;
+      expect(html).toContain('<meta property="og:image:type" content="image/png" />');
     });
   });
 

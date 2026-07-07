@@ -350,6 +350,20 @@ function proxyImageUrl(imageUrl, requestUrl) {
 }
 
 /**
+ * Infer the MIME type of the default OG image from its URL extension.
+ * Returns null when unknown (the og:image:type tag is then omitted).
+ * @param {string} url
+ * @returns {string | null}
+ */
+function imageMimeFromUrl(url) {
+  if (/\.jpe?g(\?|$)/i.test(url)) return 'image/jpeg';
+  if (/\.webp(\?|$)/i.test(url)) return 'image/webp';
+  if (/\.gif(\?|$)/i.test(url)) return 'image/gif';
+  if (/\.png(\?|$)/i.test(url)) return 'image/png';
+  return null;
+}
+
+/**
  * Absolute URL of the default brand OG image (1200x630, not proxied).
  * @param {string} requestUrl
  * @returns {string}
@@ -377,6 +391,9 @@ export function renderOgTags(meta, url) {
   // is already 1200x630 and served from our origin.
   const image = meta.image ? proxyImageUrl(meta.image, url) : defaultOgImageUrl(url);
   const imageEsc = escapeHtml(image);
+  // The proxy guarantees JPEG output; for the default image infer the type
+  // from its extension and omit the tag when unknown.
+  const imageMime = meta.image ? 'image/jpeg' : imageMimeFromUrl(image);
 
   /** @type {string[]} */
   const tags = [
@@ -387,7 +404,7 @@ export function renderOgTags(meta, url) {
     `<meta property="og:site_name" content="${escapeHtml(appName)}" />`,
     `<meta property="og:image" content="${imageEsc}" />`,
     `<meta property="og:image:secure_url" content="${imageEsc}" />`,
-    `<meta property="og:image:type" content="${meta.image ? 'image/jpeg' : 'image/png'}" />`,
+    ...(imageMime ? [`<meta property="og:image:type" content="${imageMime}" />`] : []),
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,
     `<meta property="og:image:alt" content="${title}" />`,
