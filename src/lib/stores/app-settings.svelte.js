@@ -78,26 +78,18 @@ function parseThemeToSettings(theme) {
  * @returns {AppSettings}
  */
 function getDefaultSettings() {
-  // Get system theme preference
-  const prefersDark =
-    browser &&
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-  // Use runtime config for default theme, falling back to hardcoded defaults
+  // Color mode is fixed to light — dark themes are retired for now, so the
+  // OS preference and THEME_DEFAULT_DARK are intentionally ignored.
   const defaultTheme = /** @type {'light' | 'dark' | 'stil' | 'stil-dark'} */ (
-    prefersDark
-      ? runtimeConfig.ui?.defaultDarkTheme || 'dark'
-      : runtimeConfig.ui?.defaultLightTheme || 'light'
+    runtimeConfig.ui?.defaultLightTheme || 'light'
   );
 
-  const { themeFamily, colorMode } = parseThemeToSettings(defaultTheme);
+  const { themeFamily } = parseThemeToSettings(defaultTheme);
 
   return {
     debugMode: false,
     themeFamily,
-    colorMode,
+    colorMode: 'light',
     gatedMode: runtimeConfig.gatedMode?.default ?? false,
     includeClientTag: true,
     dashboardFeedSource: 'communities',
@@ -202,20 +194,6 @@ function saveSettings(settings) {
 // Reactive settings state
 let settings = $state(loadSettings());
 
-// System theme preference detection
-/** @type {'light' | 'dark'} */
-let systemTheme = $state('light');
-
-if (browser && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  systemTheme = /** @type {'light' | 'dark'} */ (mediaQuery.matches ? 'dark' : 'light');
-
-  // Listen for system theme changes
-  mediaQuery.addEventListener('change', (e) => {
-    systemTheme = /** @type {'light' | 'dark'} */ (e.matches ? 'dark' : 'light');
-  });
-}
-
 /**
  * Track if app settings have been initialized to prevent re-initialization
  */
@@ -272,26 +250,17 @@ export function initializeAppSettings() {
 }
 
 /**
- * Compute effective theme reactively
- * Combines themeFamily + colorMode to produce the actual theme name
+ * Compute effective theme reactively.
+ * Color mode is fixed to light — dark themes are retired for now, so only the
+ * theme family matters. A persisted colorMode of 'dark'/'system' is inert.
  *
  * IMPORTANT: This logic is mirrored in src/app.html (inline script) to avoid
  * theme flash on initial load. Keep both in sync when adding/removing theme families.
  *
- * @type {'light' | 'dark' | 'stil' | 'stil-dark' | 'rpi' | 'rpi-dark'}
+ * @type {'light' | 'stil' | 'rpi'}
  */
 let effectiveTheme = $derived(
-  settings.colorMode === 'dark' || (settings.colorMode === 'system' && systemTheme === 'dark')
-    ? settings.themeFamily === 'stil'
-      ? 'stil-dark'
-      : settings.themeFamily === 'rpi'
-        ? 'rpi-dark'
-        : 'dark'
-    : settings.themeFamily === 'stil'
-      ? 'stil'
-      : settings.themeFamily === 'rpi'
-        ? 'rpi'
-        : 'light'
+  settings.themeFamily === 'stil' ? 'stil' : settings.themeFamily === 'rpi' ? 'rpi' : 'light'
 );
 
 /**

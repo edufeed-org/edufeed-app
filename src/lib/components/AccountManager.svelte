@@ -3,7 +3,6 @@
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { merge, Subject, Subscription } from 'rxjs';
   import { manager } from '$lib/stores/accounts.svelte';
-  import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {any[]} */
@@ -168,15 +167,4 @@
       {m.account_manager_empty_state()}
     </div>
   {/if}
-
-  <!-- Appearance Settings Section -->
-  <div class="divider mt-12"></div>
-  <div class="mb-6">
-    <h2 class="mb-4 text-xl font-bold">Appearance</h2>
-    <div class="card bg-base-100 shadow-xl">
-      <div class="card-body">
-        <ThemeSwitcher />
-      </div>
-    </div>
-  </div>
 </div>

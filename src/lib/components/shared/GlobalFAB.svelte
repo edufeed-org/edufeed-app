@@ -268,7 +268,7 @@
       <!-- Main FAB Button -->
       <button
         type="button"
-        class="btn btn-circle shadow-lg btn-lg btn-primary hover:shadow-xl"
+        class="btn btn-circle shadow-lg btn-lg btn-accent hover:shadow-xl"
         aria-label={m.fab_open_menu()}
         aria-expanded={open}
         aria-haspopup="menu"

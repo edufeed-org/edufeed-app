@@ -49,7 +49,7 @@
 
 <div
   data-testid="dashboard-nav-sidebar"
-  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
+  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
 >
   <nav class="menu space-y-1 p-4">
     {#each sections as section (section.id)}
@@ -59,7 +59,7 @@
         href={section.href}
         class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
           ? 'bg-primary text-primary-content'
-          : 'hover:bg-base-200'}"
+          : 'hover:bg-base-300/60'}"
       >
         <span class="relative">
           <Icon class_="w-5 h-5" />

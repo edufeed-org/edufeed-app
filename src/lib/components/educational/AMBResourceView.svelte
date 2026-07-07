@@ -831,46 +831,14 @@
 
 <style>
   /* ── Editorial detail view ─────────────────────────────────────────────
-     Light mode uses a fixed editorial palette that matches the magazine
-     mockup. Dark themes (any data-theme ending in "dark") degrade to the
-     app's DaisyUI tokens so the page stays legible. Fonts (Outfit display +
-     Caveat script) are self-hosted via @fontsource-variable, scoped here. */
+     Styled entirely against the global editorial aliases (--c-*, defined in
+     src/app.css on :root from the active DaisyUI theme) — the page follows
+     whichever theme a deployment ships. */
   .amb-detail {
-    --c-hero: oklch(56% 0.06 195);
-    --c-hero-2: oklch(48% 0.06 195);
-    --c-band: oklch(50% 0.12 5);
-    --c-olive: oklch(60% 0.1 105);
-    --c-olive-2: oklch(52% 0.1 105);
-    --c-bg: oklch(92% 0.018 80);
-    --c-paper: oklch(98% 0.008 80);
-    --c-ink: oklch(20% 0.02 80);
-    --c-ink-soft: oklch(38% 0.02 80);
-    --c-cta: oklch(74% 0.16 60);
-    --c-cta-ink: oklch(20% 0.02 80);
-    --c-rule: oklch(82% 0.02 80);
-    --c-on-dark: oklch(96% 0.01 80);
-
-    --ed-display: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
-    --ed-script: 'Caveat Variable', 'Caveat', ui-serif, cursive;
+    --ed-display: var(--font-display);
+    --ed-script: var(--font-script);
 
     color: var(--c-ink);
-  }
-
-  /* Dark-mode degrade — map editorial vars onto theme tokens. */
-  :global([data-theme$='dark']) .amb-detail {
-    --c-hero: var(--color-base-300);
-    --c-hero-2: var(--color-base-200);
-    --c-band: var(--color-primary);
-    --c-olive: var(--color-base-200);
-    --c-olive-2: var(--color-secondary);
-    --c-bg: var(--color-base-200);
-    --c-paper: var(--color-base-100);
-    --c-ink: var(--color-base-content);
-    --c-ink-soft: color-mix(in oklch, var(--color-base-content) 65%, transparent);
-    --c-cta: var(--color-accent);
-    --c-cta-ink: var(--color-accent-content);
-    --c-rule: color-mix(in oklch, var(--color-base-content) 16%, transparent);
-    --c-on-dark: var(--color-base-content);
   }
 
   /* Kicker badge in the toolbar (replaces page title there). */
@@ -1158,8 +1126,12 @@
     }
   }
   .ed-license-card {
-    background: linear-gradient(180deg, var(--c-paper), oklch(95% 0.02 195));
-    border: 1px solid oklch(80% 0.04 195);
+    background: linear-gradient(
+      180deg,
+      var(--c-paper),
+      color-mix(in oklch, var(--color-primary) 8%, var(--c-paper))
+    );
+    border: 1px solid color-mix(in oklch, var(--color-primary) 30%, transparent);
     border-radius: 18px;
     padding: 26px 28px;
     display: flex;
@@ -1167,30 +1139,23 @@
     align-items: flex-start;
     gap: 12px;
   }
-  :global([data-theme$='dark']) .amb-detail .ed-license-card {
-    background: var(--c-paper);
-    border-color: var(--c-rule);
-  }
   .ed-license-card .pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
     border-radius: 999px;
-    background: oklch(75% 0.13 195);
-    color: #fff;
+    background: var(--color-primary);
+    color: var(--color-primary-content);
     font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.04em;
   }
   .ed-license-link {
     font-size: 14px;
-    color: oklch(45% 0.12 195);
+    color: var(--color-primary);
     text-decoration: none;
     font-weight: 600;
-  }
-  :global([data-theme$='dark']) .amb-detail .ed-license-link {
-    color: var(--color-primary);
   }
   .ed-license-link:hover {
     text-decoration: underline;

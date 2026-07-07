@@ -14,85 +14,24 @@ import { setupErrorCapture } from './test-utils.js';
  */
 
 baseTest.describe('Settings page - Unauthenticated', () => {
-  baseTest.describe('Theme switching', () => {
-    baseTest('settings page loads and shows theme switcher', async ({ page }) => {
-      await page.goto('/settings');
+  baseTest.describe('Theme (single editorial theme, no picker)', () => {
+    baseTest(
+      'settings page loads on the default theme without a theme switcher',
+      async ({ page }) => {
+        await page.goto('/settings');
 
-      // Page should load with theme settings visible
-      await expect(page.locator('h1').filter({ hasText: /settings/i })).toBeVisible({
-        timeout: 10_000
-      });
+        await expect(page.locator('h1').filter({ hasText: /settings/i })).toBeVisible({
+          timeout: 10_000
+        });
 
-      // Theme switcher should be visible
-      const appearanceSection = page.locator('text=Appearance').first();
-      await expect(appearanceSection).toBeVisible();
-    });
+        // Color mode is fixed to light — the editorial theme is the default
+        const theme = await page.locator('html').getAttribute('data-theme');
+        expect(theme).toBe('light');
 
-    baseTest('can switch between light and dark color modes', async ({ page }) => {
-      await page.goto('/settings');
-
-      // Wait for page to load
-      await expect(page.locator('h1').filter({ hasText: /settings/i })).toBeVisible({
-        timeout: 10_000
-      });
-
-      // Find color mode buttons (Light, System, Dark)
-      const lightButton = page.locator('button:has-text("Light"):visible').first();
-      const darkButton = page.locator('button:has-text("Dark"):visible').first();
-
-      // Click dark mode
-      if (await darkButton.isVisible()) {
-        await darkButton.click();
-        await page.waitForTimeout(500);
-
-        // Verify theme attribute changed
-        const htmlElement = page.locator('html');
-        const theme = await htmlElement.getAttribute('data-theme');
-        expect(theme).toMatch(/dark/);
+        // The theme picker was removed (single theme for now)
+        await expect(page.locator('text=Appearance')).not.toBeVisible();
       }
-
-      // Click light mode
-      if (await lightButton.isVisible()) {
-        await lightButton.click();
-        await page.waitForTimeout(500);
-
-        const htmlElement = page.locator('html');
-        const theme = await htmlElement.getAttribute('data-theme');
-        expect(theme).toMatch(/light|stil|rpi$/);
-      }
-    });
-
-    baseTest('can switch between theme families', async ({ page }) => {
-      await page.goto('/settings');
-
-      await expect(page.locator('h1').filter({ hasText: /settings/i })).toBeVisible({
-        timeout: 10_000
-      });
-
-      // Find theme family buttons (Default, STIL)
-      const defaultButton = page.locator('button:has-text("Default"):visible').first();
-      const stilButton = page.locator('button:has-text("STIL"):visible').first();
-
-      // Switch to STIL if available
-      if (await stilButton.isVisible()) {
-        await stilButton.click();
-        await page.waitForTimeout(500);
-
-        const htmlElement = page.locator('html');
-        const theme = await htmlElement.getAttribute('data-theme');
-        expect(theme).toMatch(/stil/);
-      }
-
-      // Switch back to Default
-      if (await defaultButton.isVisible()) {
-        await defaultButton.click();
-        await page.waitForTimeout(500);
-
-        const htmlElement = page.locator('html');
-        const theme = await htmlElement.getAttribute('data-theme');
-        expect(theme).not.toMatch(/stil/);
-      }
-    });
+    );
   });
 
   baseTest.describe('Unauthenticated state', () => {

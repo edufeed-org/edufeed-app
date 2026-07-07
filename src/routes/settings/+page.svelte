@@ -28,7 +28,6 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
-  import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
   import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
   import LocalCachePanel from '$lib/components/settings/LocalCachePanel.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -580,17 +579,6 @@
     <div class="mb-8 text-center">
       <h1 class="mb-2 text-4xl font-bold">{m.common_settings()}</h1>
       <p class="text-base-content/70">{m.settings_subtitle()}</p>
-    </div>
-
-    <!-- Appearance Card (visible to all users) -->
-    <div class="card mb-6 bg-base-200 shadow-xl">
-      <div class="card-body">
-        <h2 class="mb-2 card-title text-2xl">
-          <span class="text-2xl">{m.settings_appearance_title()}</span>
-        </h2>
-        <p class="mb-6 text-base-content/70">{m.settings_appearance_description()}</p>
-        <ThemeSwitcher />
-      </div>
     </div>
 
     <!-- Local Cache Panel (visible to all users) -->

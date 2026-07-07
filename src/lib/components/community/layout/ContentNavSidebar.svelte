@@ -88,7 +88,7 @@
 <!-- Desktop: Flex sibling in chrome row -->
 <div
   data-testid="content-nav-sidebar"
-  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-100 lg:flex"
+  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
 >
   {#if !communitySelected}
     <div
@@ -120,7 +120,7 @@
           onclick={() => handleContentTypeClick(type.id)}
           class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
             ? 'bg-primary text-primary-content'
-            : 'hover:bg-base-200'}"
+            : 'hover:bg-base-300/60'}"
         >
           <Icon class_="w-5 h-5" />
           <span class="relative">
