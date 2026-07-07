@@ -36,20 +36,33 @@ function parseRelays(csv) {
 
 /**
  * Get relays to query for a given kind.
+ * Mirrors kindToAppRelayCategory in src/lib/services/app-relay-service.svelte.js,
+ * reading env directly (server context — no user 30002 overrides for crawlers).
  * @param {number} kind
  * @param {string[]} hintRelays
  * @returns {string[]}
  */
-function getRelaysForKind(kind, hintRelays) {
+export function getRelaysForKind(kind, hintRelays) {
   /** @type {string[]} */
   let appRelays = [];
 
-  if (kind === 31922 || kind === 31923 || kind === 31924 || kind === 31925) {
+  if (kind >= 31922 && kind <= 31925) {
     appRelays = parseRelays(env.CALENDAR_RELAYS);
   } else if (kind === 30142) {
     appRelays = parseRelays(env.AMB_RELAYS);
   } else if (kind === 30023) {
     appRelays = parseRelays(env.LONGFORM_CONTENT_RELAY);
+  } else if (kind === 30168 || kind === 10222 || kind === 11) {
+    appRelays = parseRelays(env.COMMUNIKEY_RELAYS);
+  } else if (kind === 30301) {
+    appRelays = parseRelays(env.KANBAN_RELAYS);
+  } else if (kind === 30818) {
+    appRelays = [
+      ...parseRelays(env.COMMUNIKEY_RELAYS),
+      ...parseRelays(env.RELAY_LIST_LOOKUP_RELAYS)
+    ];
+  } else if (kind === 0) {
+    appRelays = [...parseRelays(env.RELAY_LIST_LOOKUP_RELAYS), ...parseRelays(env.INDEXER_RELAYS)];
   }
 
   const fallback = parseRelays(env.FALLBACK_RELAYS);
@@ -89,33 +102,13 @@ export function decodeIdentifier(identifier) {
 }
 
 /**
- * Fetch a single event from Nostr relays server-side using WebSocket.
- * @param {string} identifier - naddr1... or nevent1... string
+ * Fetch the first event matching a filter from the given relays.
+ * Races all relays; resolves null after FETCH_TIMEOUT.
+ * @param {import('nostr-tools').Filter} filter
+ * @param {string[]} relays
  * @returns {Promise<import('nostr-tools').NostrEvent | null>}
  */
-export async function fetchEventFromRelays(identifier) {
-  const decoded = decodeIdentifier(identifier);
-  if (!decoded) return null;
-
-  /** @type {import('nostr-tools').Filter} */
-  let filter;
-  /** @type {string[]} */
-  let relays;
-
-  if (decoded.type === 'naddr') {
-    filter = {
-      kinds: [decoded.kind],
-      authors: [decoded.pubkey],
-      '#d': [decoded.identifier],
-      limit: 1
-    };
-    relays = getRelaysForKind(decoded.kind, decoded.relays);
-  } else {
-    filter = { ids: [decoded.id], limit: 1 };
-    relays = getRelaysForKind(decoded.kind || 1, decoded.relays);
-  }
-
-  // Race all relays — return first matching event
+export function fetchFirstEvent(filter, relays) {
   return new Promise((resolve) => {
     let resolved = false;
     const timeout = setTimeout(() => {
@@ -178,6 +171,27 @@ export async function fetchEventFromRelays(identifier) {
       }
     });
   });
+}
+
+/**
+ * Fetch a single event from Nostr relays server-side using WebSocket.
+ * @param {string} identifier - naddr1... or nevent1... string
+ * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ */
+export async function fetchEventFromRelays(identifier) {
+  const decoded = decodeIdentifier(identifier);
+  if (!decoded) return null;
+
+  if (decoded.type === 'naddr') {
+    return fetchFirstEvent(
+      { kinds: [decoded.kind], authors: [decoded.pubkey], '#d': [decoded.identifier], limit: 1 },
+      getRelaysForKind(decoded.kind, decoded.relays)
+    );
+  }
+  return fetchFirstEvent(
+    { ids: [decoded.id], limit: 1 },
+    getRelaysForKind(decoded.kind || 1, decoded.relays)
+  );
 }
 
 // ─── Metadata extraction ──────────────────────────────────────────────────────

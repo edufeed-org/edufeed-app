@@ -9,7 +9,11 @@ vi.mock('$env/dynamic/private', () => ({
     FALLBACK_RELAYS: 'wss://relay1.example.com,wss://relay2.example.com',
     CALENDAR_RELAYS: 'wss://cal.example.com',
     AMB_RELAYS: 'wss://amb.example.com',
-    LONGFORM_CONTENT_RELAY: 'wss://long.example.com'
+    LONGFORM_CONTENT_RELAY: 'wss://long.example.com',
+    COMMUNIKEY_RELAYS: 'wss://ck.example.com',
+    KANBAN_RELAYS: 'wss://kanban.example.com',
+    RELAY_LIST_LOOKUP_RELAYS: 'wss://lookup.example.com',
+    INDEXER_RELAYS: 'wss://indexer.example.com'
   }
 }));
 
@@ -29,7 +33,8 @@ import {
   ogCache,
   extractIdentifier,
   decodeIdentifier,
-  resolvePageTarget
+  resolvePageTarget,
+  getRelaysForKind
 } from '$lib/server/og.js';
 
 import {
@@ -549,6 +554,40 @@ describe('OG Meta Tags', () => {
       expect(resolvePageTarget('/c/%zz')).toEqual({ type: 'default' });
       expect(resolvePageTarget('/p/%zz')).toEqual({ type: 'default' });
       expect(resolvePageTarget('/calendar/author/%zz')).toEqual({ type: 'default' });
+    });
+  });
+
+  describe('getRelaysForKind', () => {
+    it('maps forms/community/thread kinds to communikey relays', () => {
+      for (const kind of [30168, 10222, 11]) {
+        expect(getRelaysForKind(kind, [])).toContain('wss://ck.example.com');
+      }
+    });
+
+    it('maps kanban boards to kanban relays', () => {
+      expect(getRelaysForKind(30301, [])).toContain('wss://kanban.example.com');
+    });
+
+    it('maps wiki pages to communikey + lookup relays', () => {
+      const relays = getRelaysForKind(30818, []);
+      expect(relays).toContain('wss://ck.example.com');
+      expect(relays).toContain('wss://lookup.example.com');
+    });
+
+    it('maps kind 0 profiles to lookup + indexer relays', () => {
+      const relays = getRelaysForKind(0, []);
+      expect(relays).toContain('wss://lookup.example.com');
+      expect(relays).toContain('wss://indexer.example.com');
+    });
+
+    it('always unions hint relays and fallback relays', () => {
+      const relays = getRelaysForKind(30301, ['wss://hint.example.com']);
+      expect(relays).toContain('wss://hint.example.com');
+      expect(relays).toContain('wss://relay1.example.com');
+    });
+
+    it('includes calendar relays for calendar collections (31924)', () => {
+      expect(getRelaysForKind(31924, [])).toContain('wss://cal.example.com');
     });
   });
 });
