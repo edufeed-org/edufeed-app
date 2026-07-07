@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Profile Feed Tests
  *
@@ -8,7 +9,13 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { kindToFeedCategory, filterFeedItems, FEED_CATEGORIES } from '$lib/helpers/profile-feed.js';
+import {
+  kindToFeedCategory,
+  filterFeedItems,
+  FEED_CATEGORIES,
+  pinnedPointersFromEvent,
+  isEntryPinned
+} from '$lib/helpers/profile-feed.js';
 
 describe('FEED_CATEGORIES', () => {
   it('contains all expected categories', () => {
@@ -118,5 +125,65 @@ describe('filterFeedItems', () => {
     const active = new Set(['notes', 'calendar', 'resources', 'articles', 'bookmarks']);
     const result = filterFeedItems(events, active);
     expect(result).toHaveLength(1);
+  });
+});
+
+describe('pinnedPointersFromEvent', () => {
+  it('extracts e and a pointers preserving order', () => {
+    const pinList = {
+      kind: 10001,
+      tags: [
+        ['e', 'e1'.padEnd(64, '0'), 'wss://relay.example'],
+        ['a', '30142:abc:my-resource'],
+        ['e', 'e2'.padEnd(64, '0')],
+        ['d', 'noise']
+      ]
+    };
+    const pointers = pinnedPointersFromEvent(pinList);
+    expect(pointers).toEqual([
+      { type: 'e', value: 'e1'.padEnd(64, '0') },
+      { type: 'a', value: '30142:abc:my-resource' },
+      { type: 'e', value: 'e2'.padEnd(64, '0') }
+    ]);
+  });
+
+  it('returns empty for missing event', () => {
+    expect(pinnedPointersFromEvent(null)).toEqual([]);
+    expect(pinnedPointersFromEvent(undefined)).toEqual([]);
+  });
+});
+
+describe('isEntryPinned', () => {
+  const pointers = [
+    { type: 'e', value: 'pinned-id' },
+    { type: 'a', value: '30142:author:res-1' }
+  ];
+
+  it('matches regular events by id', () => {
+    const entry = { type: 'notes', data: { id: 'pinned-id', kind: 1, pubkey: 'author', tags: [] } };
+    expect(isEntryPinned(entry, pointers)).toBe(true);
+  });
+
+  it('matches addressable events by coordinate', () => {
+    const entry = {
+      type: 'resources',
+      data: { id: 'other-id', kind: 30142, pubkey: 'author', tags: [['d', 'res-1']] }
+    };
+    expect(isEntryPinned(entry, pointers)).toBe(true);
+  });
+
+  it('does not match unpinned events', () => {
+    const entry = { type: 'notes', data: { id: 'other', kind: 1, pubkey: 'author', tags: [] } };
+    expect(isEntryPinned(entry, pointers)).toBe(false);
+  });
+
+  it('ignores bookmark group entries (no underlying single event)', () => {
+    const entry = { type: 'bookmark-url', data: { url: 'https://example.com' } };
+    expect(isEntryPinned(entry, pointers)).toBe(false);
+  });
+
+  it('handles empty pointer list', () => {
+    const entry = { type: 'notes', data: { id: 'pinned-id', kind: 1, pubkey: 'a', tags: [] } };
+    expect(isEntryPinned(entry, [])).toBe(false);
   });
 });

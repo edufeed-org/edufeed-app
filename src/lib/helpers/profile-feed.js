@@ -50,3 +50,49 @@ export function filterFeedItems(items, activeCategories) {
     return category !== null && activeCategories.has(category);
   });
 }
+
+/**
+ * @typedef {{ type: 'e' | 'a', value: string }} PinPointer
+ */
+
+/**
+ * Extract the ordered pin pointers from a kind 10001 pin-list event:
+ * `e`-tags reference regular events by id, `a`-tags addressable events by
+ * `kind:pubkey:d` coordinate.
+ *
+ * @param {{ tags?: string[][] } | null | undefined} event
+ * @returns {PinPointer[]}
+ */
+export function pinnedPointersFromEvent(event) {
+  /** @type {PinPointer[]} */
+  const pointers = [];
+  for (const tag of event?.tags || []) {
+    if ((tag[0] === 'e' || tag[0] === 'a') && tag[1]) {
+      pointers.push({ type: tag[0], value: tag[1] });
+    }
+  }
+  return pointers;
+}
+
+/**
+ * Whether a feed entry's underlying event is in the pin list. Bookmark
+ * group entries have no single underlying event and are never pinned.
+ *
+ * @param {{ data?: { id?: string, kind?: number, pubkey?: string, tags?: string[][] } }} entry
+ * @param {PinPointer[]} pointers
+ * @returns {boolean}
+ */
+export function isEntryPinned(entry, pointers) {
+  const event = entry?.data;
+  if (!event?.id || !pointers?.length) return false;
+
+  const dTag = event.tags?.find((t) => t[0] === 'd')?.[1];
+  const coord =
+    typeof event.kind === 'number' && event.kind >= 30000 && event.kind < 40000
+      ? `${event.kind}:${event.pubkey}:${dTag || ''}`
+      : null;
+
+  return pointers.some(
+    (p) => (p.type === 'e' && p.value === event.id) || (p.type === 'a' && p.value === coord)
+  );
+}

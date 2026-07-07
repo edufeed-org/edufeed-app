@@ -121,6 +121,21 @@ export function getProfileNip05s(event) {
 }
 
 /**
+ * Aggregate per-address verification results into a single profile-level
+ * trust status: one verified address is enough to call the profile verified;
+ * while any address is still resolving we stay pending; a profile whose
+ * addresses all failed — or that has none — is unverified.
+ *
+ * @param {Array<VerificationResult | 'pending'>} results
+ * @returns {'verified' | 'pending' | 'unverified'}
+ */
+export function aggregateNip05Results(results) {
+  if (results.includes('verified')) return 'verified';
+  if (results.includes('pending')) return 'pending';
+  return 'unverified';
+}
+
+/**
  * Test helper — clears the in-memory cache. Not exported as part of the
  * public API; only used by Vitest.
  */

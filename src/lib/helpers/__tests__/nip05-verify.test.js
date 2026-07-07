@@ -1,6 +1,11 @@
 // @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { verifyNip05, getProfileNip05s, _clearNip05Cache } from '../nip05-verify.js';
+import {
+  verifyNip05,
+  getProfileNip05s,
+  aggregateNip05Results,
+  _clearNip05Cache
+} from '../nip05-verify.js';
 
 const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
@@ -163,5 +168,29 @@ describe('getProfileNip05s', () => {
       'alice@edufeed.org'
     ]);
     expect(getProfileNip05s(kind0({ nip05: 42 }, [['nip05'], ['nip05', '']]))).toEqual([]);
+  });
+});
+
+describe('aggregateNip05Results', () => {
+  it('is verified when any address verifies', () => {
+    expect(aggregateNip05Results(['mismatch', 'verified'])).toBe('verified');
+    expect(aggregateNip05Results(['verified'])).toBe('verified');
+  });
+
+  it('is pending while any address is still resolving and none verified yet', () => {
+    expect(aggregateNip05Results(['pending', 'mismatch'])).toBe('pending');
+    expect(aggregateNip05Results(['pending'])).toBe('pending');
+  });
+
+  it('short-circuits to verified even with pending siblings', () => {
+    expect(aggregateNip05Results(['pending', 'verified'])).toBe('verified');
+  });
+
+  it('is unverified when all addresses failed to verify', () => {
+    expect(aggregateNip05Results(['mismatch', 'error'])).toBe('unverified');
+  });
+
+  it('is unverified for a profile without any address', () => {
+    expect(aggregateNip05Results([])).toBe('unverified');
   });
 });

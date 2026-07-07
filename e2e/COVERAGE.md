@@ -36,7 +36,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
 | `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                          |
 | `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → backup banner               |
-| `settings.test.js`                   | 20    | Both | Theme, relays, relay editing, gated/debug                                                                                         |
+| `settings.test.js`                   | 18    | Both | Single-theme check, relays, relay editing, gated/debug                                                                            |
 | `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
 | `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                 |
@@ -547,17 +547,22 @@ unchanged. These tests cover the routing shape only.
 
 ### profile.test.js (4 tests)
 
-**Route:** `/p/[npub]`
+**Route:** `/p/[npub]` (redesigned: pf-\* header, 8-tab bar, right rail)
 **Auth required:** No
 
-| Test                                  | What it verifies                   |
-| ------------------------------------- | ---------------------------------- |
-| loads and shows user info             | Name, avatar, bio render correctly |
-| shows notes tab with user notes       | Notes load after "Load more" click |
-| unknown profile shows not found state | 404-like UI after 5s timeout       |
-| no critical JavaScript errors         | No JS errors during load           |
+| Test                                  | What it verifies                           |
+| ------------------------------------- | ------------------------------------------ |
+| loads and shows user info             | Name, avatar, bio (About rail card) render |
+| shows user notes in the posts feed    | Notes render in the mixed Beiträge feed    |
+| unknown profile shows not found state | 404-like UI after 5s timeout               |
+| no critical JavaScript errors         | No JS errors during load                   |
 
-**Components exercised:** ProfilePage, NotesTimeline
+**Components exercised:** ProfilePage, ProfileHeader, ProfileTabBar, ProfileRail, ProfileFeedView
+
+**Known gaps (unit/component-tested instead):** tab customization editor (kind 30078),
+pinned posts (kind 10001), impersonation warning, per-type content tabs — covered by
+`ProfileTabEditor.test.js`, `ProfileContentTab.test.js`, `ImpersonationWarning.test.js`,
+`profile-tabs.test.js`, `profile-feed.test.js` (pin helpers).
 
 ---
 
@@ -568,10 +573,13 @@ unchanged. These tests cover the routing shape only.
 
 #### Edit Button Visibility (2 tests)
 
-| Test                               | What it verifies                      |
-| ---------------------------------- | ------------------------------------- |
-| edit button visible on own profile | Edit button shows for profile owner   |
-| edit button not visible on other   | Edit button hidden on other's profile |
+| Test                               | What it verifies                                                 |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| edit button visible on own profile | Rail edit icon + "Profil anpassen" show for owner (testid-based) |
+| edit button not visible on other   | Owner-only controls hidden on other's profile                    |
+
+Edit modal opens via `data-testid="edit-profile-rail"` (rail card icon); the header
+settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 
 #### Edit Modal Form (4 tests)
 
@@ -1020,13 +1028,11 @@ detection, banner show/hide flags) is covered by Vitest component tests:
 **Route:** `/settings`
 **Auth required:** Both authenticated and unauthenticated flows
 
-#### Theme Switching - Unauthenticated (3 tests)
+#### Theme (single editorial theme) - Unauthenticated (1 test)
 
-| Test                                          | What it verifies                     |
-| --------------------------------------------- | ------------------------------------ |
-| settings page loads and shows theme switcher  | Page loads with Appearance section   |
-| can switch between light and dark color modes | Dark/light buttons change data-theme |
-| can switch between theme families             | Default/STIL buttons change theme    |
+| Test                                                              | What it verifies                                                              |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| settings page loads on the default theme without a theme switcher | data-theme=light, no Appearance card (picker removed; single editorial theme) |
 
 #### Unauthenticated State (2 tests)
 
@@ -1075,7 +1081,7 @@ detection, banner show/hide flags) is covered by Vitest component tests:
 | no critical JavaScript errors on settings page   | No JS errors (unauthenticated) |
 | no critical JavaScript errors when authenticated | No JS errors (authenticated)   |
 
-**Components exercised:** ThemeSwitcher, RelaySettings, GatedModeCard, DeveloperSettingsCard
+**Components exercised:** RelaySettings, GatedModeCard, DeveloperSettingsCard
 
 ---
 

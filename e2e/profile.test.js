@@ -18,25 +18,19 @@ test.describe('Profile page', () => {
       timeout: 15_000
     });
 
-    // Bio should be visible
-    await expect(page.getByText('Bio for test author 0')).toBeVisible();
+    // Bio should be visible (raw-event JSON in the collapsed dev details also
+    // contains the text, so match only the first/visible instance)
+    await expect(page.getByText('Bio for test author 0').first()).toBeVisible();
   });
 
-  test('shows notes tab with user notes', async ({ page }) => {
+  test('shows user notes in the posts feed', async ({ page }) => {
     await page.goto(PROFILE_URL);
 
     // Wait for profile to load
     await expect(page.locator('h1')).toContainText(TEST_AUTHOR.name, { timeout: 15_000 });
 
-    // Notes tab should be visible
-    const notesTab = page.locator('button', { hasText: 'Notes' });
-    await expect(notesTab).toBeVisible();
-
-    // Click "Load more" to trigger loading notes from relay
-    const loadMoreBtn = page.locator('button', { hasText: 'Load more' });
-    if (await loadMoreBtn.isVisible()) {
-      await loadMoreBtn.click();
-    }
+    // The Beiträge tab (default) mixes all content types — notes included
+    await expect(page.getByTestId('profile-tab-posts')).toBeVisible();
 
     // Wait for notes to load from mock relay
     await expect(async () => {

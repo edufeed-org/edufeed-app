@@ -20,6 +20,15 @@ async function waitForProfileLoad(page) {
   await expect(page.locator('h1').first()).toBeVisible({ timeout: 15_000 });
 }
 
+/**
+ * Open the kind-0 edit modal via the rail card's edit icon.
+ * @param {import('@playwright/test').Page} page
+ */
+async function openEditModal(page) {
+  await page.getByTestId('edit-profile-rail').click();
+  await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+}
+
 // ============================================================================
 // Edit Button Visibility Tests
 // ============================================================================
@@ -29,18 +38,18 @@ test.describe('Profile Editing - Edit Button Visibility', () => {
     await page.goto(OWN_PROFILE_URL);
     await waitForProfileLoad(page);
 
-    // Edit button should be visible (has text "Edit" or "Bearbeiten")
-    const editButton = page.locator('button').filter({ hasText: /edit|bearbeiten/i });
-    await expect(editButton.first()).toBeVisible({ timeout: 5000 });
+    // Rail edit icon + tab customization button are owner-only controls
+    await expect(page.getByTestId('edit-profile-rail')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('customize-tabs')).toBeVisible({ timeout: 5000 });
   });
 
   test('edit button not visible on other profile', async ({ authenticatedPage: page }) => {
     await page.goto(OTHER_PROFILE_URL);
     await waitForProfileLoad(page);
 
-    // Edit button should NOT be visible on someone else's profile
-    const editButton = page.locator('button').filter({ hasText: /edit|bearbeiten/i });
-    await expect(editButton).not.toBeVisible({ timeout: 3000 });
+    // Owner-only edit controls should NOT be visible on someone else's profile
+    await expect(page.getByTestId('edit-profile-rail')).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByTestId('customize-tabs')).not.toBeVisible({ timeout: 3000 });
   });
 });
 
@@ -53,12 +62,8 @@ test.describe('Profile Editing - Modal Form', () => {
     await page.goto(OWN_PROFILE_URL);
     await waitForProfileLoad(page);
 
-    // Click edit button
-    const editButton = page.locator('button').filter({ hasText: /edit|bearbeiten/i });
-    await editButton.first().click();
-
-    // Modal should be visible
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    // Open modal via the rail edit icon
+    await openEditModal(page);
   });
 
   test('modal shows correct title', async ({ authenticatedPage: page }) => {
@@ -66,12 +71,7 @@ test.describe('Profile Editing - Modal Form', () => {
     await waitForProfileLoad(page);
 
     // Click edit button
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Modal title should indicate profile editing
     await expect(page.locator('dialog h3')).toBeVisible();
@@ -85,12 +85,7 @@ test.describe('Profile Editing - Modal Form', () => {
     const profileName = await page.locator('h1').first().textContent();
 
     // Click edit button
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Name field should be pre-populated
     const nameInput = page.locator('dialog input[name="name"], dialog input#name').first();
@@ -104,12 +99,7 @@ test.describe('Profile Editing - Modal Form', () => {
     await waitForProfileLoad(page);
 
     // Open modal
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Click close button (X button with ✕ text)
     await page.locator('dialog button.btn-circle:has-text("✕")').click();
@@ -129,12 +119,7 @@ test.describe('Profile Editing - Update Flow', () => {
     await waitForProfileLoad(page);
 
     // Open edit modal
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Find and update the name field
     const nameInput = page.locator('#profile-name');
@@ -167,12 +152,7 @@ test.describe('Profile Editing - Update Flow', () => {
     await waitForProfileLoad(page);
 
     // Open edit modal
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Find and update the about field (textarea)
     const aboutInput = page.locator('#profile-about');
@@ -206,12 +186,7 @@ test.describe('Profile Editing - Form Validation', () => {
     await waitForProfileLoad(page);
 
     // Open edit modal
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Clear the name field
     const nameInput = page.locator('#profile-name');
@@ -234,12 +209,7 @@ test.describe('Profile Editing - Form Validation', () => {
     await waitForProfileLoad(page);
 
     // Open edit modal
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Find website input and enter invalid URL
     const websiteInput = page.locator('#profile-website');
@@ -277,12 +247,7 @@ test.describe('Profile Editing - Error Handling', () => {
     await waitForProfileLoad(page);
 
     // Open edit modal
-    await page
-      .locator('button')
-      .filter({ hasText: /edit|bearbeiten/i })
-      .first()
-      .click();
-    await expect(page.locator('dialog[open]')).toBeVisible({ timeout: 5000 });
+    await openEditModal(page);
 
     // Make some changes
     const nameInput = page.locator('#profile-name');
