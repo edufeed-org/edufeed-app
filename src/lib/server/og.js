@@ -208,6 +208,10 @@ const TYPE_KEY_TO_OG_TYPE = {
   learning: 'article'
 };
 
+/** @type {string} */
+const DEFAULT_SITE_DESCRIPTION =
+  'Discover educational resources, events and communities on the open Nostr network.';
+
 /**
  * @typedef {Object} OgMetadata
  * @property {string} title
@@ -216,6 +220,18 @@ const TYPE_KEY_TO_OG_TYPE = {
  * @property {'article' | 'event' | 'website' | 'profile'} type
  * @property {string} [publishedAt] - ISO 8601 publication timestamp (articles only)
  */
+
+/**
+ * Default site-wide metadata for pages without a resolvable content target.
+ * @returns {OgMetadata}
+ */
+export function buildDefaultMeta() {
+  return {
+    title: env.APP_NAME || 'ComCal',
+    description: env.APP_OG_DESCRIPTION || DEFAULT_SITE_DESCRIPTION,
+    type: 'website'
+  };
+}
 
 /**
  * Extract OG metadata from a Nostr event based on its kind.
@@ -334,6 +350,17 @@ function proxyImageUrl(imageUrl, requestUrl) {
 }
 
 /**
+ * Absolute URL of the default brand OG image (1200x630, not proxied).
+ * @param {string} requestUrl
+ * @returns {string}
+ */
+function defaultOgImageUrl(requestUrl) {
+  const configured = env.OG_DEFAULT_IMAGE || '/og-default.png';
+  if (/^https?:\/\//.test(configured)) return configured;
+  return new URL(configured, new URL(requestUrl).origin).href;
+}
+
+/**
  * Render OG + Twitter meta tags as an HTML string.
  * @param {OgMetadata} meta
  * @param {string} url - The canonical page URL
@@ -342,8 +369,14 @@ function proxyImageUrl(imageUrl, requestUrl) {
 export function renderOgTags(meta, url) {
   const appName = env.APP_NAME || 'ComCal';
   const title = escapeHtml(meta.title);
-  const description = escapeHtml(meta.description);
-  const hasImage = !!meta.image;
+  const description = escapeHtml(
+    meta.description || env.APP_OG_DESCRIPTION || DEFAULT_SITE_DESCRIPTION
+  );
+
+  // Content images go through the resizing proxy; the static brand image
+  // is already 1200x630 and served from our origin.
+  const image = meta.image ? proxyImageUrl(meta.image, url) : defaultOgImageUrl(url);
+  const imageEsc = escapeHtml(image);
 
   /** @type {string[]} */
   const tags = [
@@ -351,22 +384,16 @@ export function renderOgTags(meta, url) {
     `<meta property="og:description" content="${description}" />`,
     `<meta property="og:url" content="${escapeHtml(url)}" />`,
     `<meta property="og:type" content="${meta.type}" />`,
-    `<meta property="og:site_name" content="${escapeHtml(appName)}" />`
+    `<meta property="og:site_name" content="${escapeHtml(appName)}" />`,
+    `<meta property="og:image" content="${imageEsc}" />`,
+    `<meta property="og:image:secure_url" content="${imageEsc}" />`,
+    `<meta property="og:image:type" content="${meta.image ? 'image/jpeg' : 'image/png'}" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="${title}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:image" content="${imageEsc}" />`
   ];
-
-  if (hasImage) {
-    const proxied = escapeHtml(proxyImageUrl(/** @type {string} */ (meta.image), url));
-    tags.push(`<meta property="og:image" content="${proxied}" />`);
-    tags.push(`<meta property="og:image:secure_url" content="${proxied}" />`);
-    tags.push(`<meta property="og:image:type" content="image/jpeg" />`);
-    tags.push(`<meta property="og:image:width" content="1200" />`);
-    tags.push(`<meta property="og:image:height" content="630" />`);
-    tags.push(`<meta property="og:image:alt" content="${title}" />`);
-    tags.push(`<meta name="twitter:card" content="summary_large_image" />`);
-    tags.push(`<meta name="twitter:image" content="${proxied}" />`);
-  } else {
-    tags.push(`<meta name="twitter:card" content="summary" />`);
-  }
 
   if (meta.type === 'article' && meta.publishedAt) {
     tags.push(

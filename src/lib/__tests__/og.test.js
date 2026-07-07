@@ -6,6 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('$env/dynamic/private', () => ({
   env: {
     APP_NAME: 'TestApp',
+    APP_OG_DESCRIPTION: 'Test site description',
+    OG_DEFAULT_IMAGE: '/og-default.png',
     FALLBACK_RELAYS: 'wss://relay1.example.com,wss://relay2.example.com',
     CALENDAR_RELAYS: 'wss://cal.example.com',
     AMB_RELAYS: 'wss://amb.example.com',
@@ -34,7 +36,8 @@ import {
   extractIdentifier,
   decodeIdentifier,
   resolvePageTarget,
-  getRelaysForKind
+  getRelaysForKind,
+  buildDefaultMeta
 } from '$lib/server/og.js';
 
 import {
@@ -365,7 +368,7 @@ describe('OG Meta Tags', () => {
       expect(html).toContain('<meta name="twitter:image"');
     });
 
-    it('omits image tags and uses summary card when no image', () => {
+    it('uses default brand image and summary_large_image card when no content image', () => {
       const html = renderOgTags(
         {
           title: 'No Image Event',
@@ -377,9 +380,10 @@ describe('OG Meta Tags', () => {
       );
 
       expect(html).toContain('<meta property="og:title" content="No Image Event" />');
-      expect(html).not.toContain('og:image');
-      expect(html).not.toContain('twitter:image');
-      expect(html).toContain('<meta name="twitter:card" content="summary" />');
+      expect(html).toContain('og:image');
+      expect(html).toContain('https://example.com/og-default.png');
+      expect(html).toContain('twitter:image');
+      expect(html).toContain('<meta name="twitter:card" content="summary_large_image" />');
     });
 
     it('escapes XSS characters in content', () => {
@@ -478,6 +482,63 @@ describe('OG Meta Tags', () => {
       );
 
       expect(html).not.toContain('article:published_time');
+    });
+  });
+
+  describe('default site tags', () => {
+    it('buildDefaultMeta uses APP_NAME and APP_OG_DESCRIPTION', () => {
+      const meta = buildDefaultMeta();
+      expect(meta.title).toBe('TestApp');
+      expect(meta.description).toBe('Test site description');
+      expect(meta.type).toBe('website');
+    });
+
+    it('renderOgTags falls back to the default brand image when meta has none', () => {
+      const html = renderOgTags(
+        { title: 'A Form', description: 'desc', type: 'website' },
+        'https://app.example.com/forms/naddr1xyz'
+      );
+      expect(html).toContain('og:image');
+      expect(html).toContain('https://app.example.com/og-default.png');
+      expect(html).toContain('summary_large_image');
+      expect(html).not.toContain('/api/image'); // default image is not proxied
+    });
+
+    it('renderOgTags still proxies content images', () => {
+      const html = renderOgTags(
+        { title: 'T', description: 'd', image: 'https://x.example/pic.png', type: 'article' },
+        'https://app.example.com/x'
+      );
+      expect(html).toContain('/api/image?url=');
+    });
+
+    it('renderOgTags falls back to site description when description is empty', () => {
+      const html = renderOgTags(
+        { title: 'Board', description: '', type: 'website' },
+        'https://app.example.com/x'
+      );
+      expect(html).toContain('Test site description');
+    });
+
+    it('renders og:type profile for profile metadata', () => {
+      const html = renderOgTags(
+        { title: 'Alice', description: 'about', type: 'profile' },
+        'https://app.example.com/p/npub1xyz'
+      );
+      expect(html).toContain('<meta property="og:type" content="profile" />');
+    });
+
+    it('supports an absolute OG_DEFAULT_IMAGE override', async () => {
+      // temporarily override the mocked env value
+      const { env } = await import('$env/dynamic/private');
+      const prev = env.OG_DEFAULT_IMAGE;
+      env.OG_DEFAULT_IMAGE = 'https://cdn.example.com/brand.png';
+      const html = renderOgTags(
+        { title: 'T', description: 'd', type: 'website' },
+        'https://app.example.com/x'
+      );
+      expect(html).toContain('https://cdn.example.com/brand.png');
+      env.OG_DEFAULT_IMAGE = prev;
     });
   });
 
