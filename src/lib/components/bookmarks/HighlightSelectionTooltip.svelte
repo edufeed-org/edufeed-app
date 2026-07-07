@@ -15,11 +15,11 @@
    * @type {{
    *   container: HTMLElement,
    *   source: import('nostr-tools/nip19').AddressPointer | string,
-   *   communityPubkey: string,
+   *   communityPubkey?: string | undefined,
    *   activeUser: any
    * }}
    */
-  let { container, source, communityPubkey, activeUser } = $props();
+  let { container, source, communityPubkey = undefined, activeUser } = $props();
 
   let visible = $state(false);
   let isSaving = $state(false);

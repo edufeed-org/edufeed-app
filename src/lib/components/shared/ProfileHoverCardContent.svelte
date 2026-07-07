@@ -65,18 +65,22 @@
       alt=""
       fallbackType="banner"
       size="banner"
+      loading="eager"
       class="h-16 w-full object-cover"
     />
   {:else}
+    <!-- bannerColor is an rgb() string — mix via color-mix (appending hex
+         alpha would produce invalid CSS and drop the whole background) -->
     <div
       class="h-16"
-      style="background: linear-gradient(135deg, {bannerColor}, {bannerColor}88)"
+      style="background: linear-gradient(135deg, {bannerColor}, color-mix(in srgb, {bannerColor} 55%, transparent))"
     ></div>
   {/if}
 
-  <!-- Avatar overlapping banner -->
+  <!-- Avatar overlapping banner (eager: the popover is visible NOW — lazy
+       images inside the portaled card may never fire their load) -->
   <div class="-mt-8 ml-3">
-    <ProfileAvatar {pubkey} {profile} size="xl" showHoverCard={false} />
+    <ProfileAvatar {pubkey} {profile} size="xl" showHoverCard={false} loading="eager" />
   </div>
 
   <!-- Info -->

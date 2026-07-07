@@ -47,7 +47,7 @@
 </script>
 
 <div
-  class="pb-safe fixed right-0 bottom-0 left-0 z-50 border-t border-base-300 bg-base-100 lg:hidden"
+  class="pb-safe fixed right-0 bottom-0 left-0 z-50 border-t border-base-300 bg-base-200 lg:hidden"
 >
   <div class="dock dock-lg mx-auto px-4 py-2">
     {#each sections as section (section.id)}

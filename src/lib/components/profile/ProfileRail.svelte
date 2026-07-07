@@ -6,6 +6,7 @@
 -->
 <script>
   import { resolve } from '$app/paths';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import BadgeThumb from '$lib/components/badges/BadgeThumb.svelte';
   import EducatorContextDisplay from '$lib/components/shared/EducatorContextDisplay.svelte';
@@ -14,7 +15,7 @@
     PeopleIcon,
     BadgeIcon,
     LinkIcon,
-    GlobeIcon,
+    Link45Icon,
     LightningIcon,
     LocationIcon,
     EditIcon,
@@ -196,50 +197,54 @@
   {/if}
 
   <!-- Verbindungen -->
-  <div class="pf-rcard">
-    <h4>
-      <LinkIcon class_="w-3.5 h-3.5" />
-      {m.profile_connections_title()}
-    </h4>
-    {#if profile?.website}
-      <!-- eslint-disable svelte/no-navigation-without-resolve -- external: user website -->
-      <a class="pf-rlink" href={profile.website} target="_blank" rel="noopener noreferrer">
-        <span class="ic"><GlobeIcon class_="w-4 h-4" /></span>
-        {m.profile_website_label()}
-        <code>{profile.website.replace(/^https?:\/\//, '')}</code>
-      </a>
-      <!-- eslint-enable svelte/no-navigation-without-resolve -->
-    {/if}
-    {#if profile?.lud16}
-      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: lightning wallet -->
-      <a class="pf-rlink" href={`lightning:${profile.lud16}`}>
-        <span class="ic"><LightningIcon class_="w-4 h-4" /></span>
-        {m.profile_zap_label()}
-        <code>{profile.lud16}</code>
-      </a>
-    {/if}
+  {#if profile?.website || profile?.lud16 || appSettings.debugMode}
+    <div class="pf-rcard">
+      <h4>
+        <LinkIcon class_="w-3.5 h-3.5" />
+        {m.profile_connections_title()}
+      </h4>
+      {#if profile?.website}
+        <!-- eslint-disable svelte/no-navigation-without-resolve -- external: user website -->
+        <a class="pf-rlink" href={profile.website} target="_blank" rel="noopener noreferrer">
+          <span class="ic"><Link45Icon class_="w-4 h-4" /></span>
+          {m.profile_website_label()}
+          <code>{profile.website.replace(/^https?:\/\//, '')}</code>
+        </a>
+        <!-- eslint-enable svelte/no-navigation-without-resolve -->
+      {/if}
+      {#if profile?.lud16}
+        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: lightning wallet -->
+        <a class="pf-rlink" href={`lightning:${profile.lud16}`}>
+          <span class="ic"><LightningIcon class_="w-4 h-4" /></span>
+          {m.profile_zap_label()}
+          <code>{profile.lud16}</code>
+        </a>
+      {/if}
 
-    <details class="pf-dev">
-      <summary>{m.profile_dev_details()}</summary>
-      <div class="pf-dev-body">
-        <div class="row">
-          <span>{m.profile_npub_label()}</span>
-          <code>{npub || 'N/A'}</code>
-        </div>
-        <div class="row">
-          <span>{m.profile_hex_pubkey_label()}</span>
-          <code>{pubkey}</code>
-        </div>
-        {#if profileEvent?.created_at}
-          <div class="row">
-            <span>{m.profile_updated_label()}</span>
-            <span>{formatCalendarDate(new Date(profileEvent.created_at * 1000), 'short')}</span>
+      {#if appSettings.debugMode}
+        <details class="pf-dev">
+          <summary>{m.profile_dev_details()}</summary>
+          <div class="pf-dev-body">
+            <div class="row">
+              <span>{m.profile_npub_label()}</span>
+              <code>{npub || 'N/A'}</code>
+            </div>
+            <div class="row">
+              <span>{m.profile_hex_pubkey_label()}</span>
+              <code>{pubkey}</code>
+            </div>
+            {#if profileEvent?.created_at}
+              <div class="row">
+                <span>{m.profile_updated_label()}</span>
+                <span>{formatCalendarDate(new Date(profileEvent.created_at * 1000), 'short')}</span>
+              </div>
+            {/if}
+            <pre>{JSON.stringify(profileEvent || {}, null, 2)}</pre>
           </div>
-        {/if}
-        <pre>{JSON.stringify(profileEvent || {}, null, 2)}</pre>
-      </div>
-    </details>
-  </div>
+        </details>
+      {/if}
+    </div>
+  {/if}
 </aside>
 
 <style>

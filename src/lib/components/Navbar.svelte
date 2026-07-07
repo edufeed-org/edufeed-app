@@ -58,7 +58,7 @@
   }
 </script>
 
-<div class="navbar bg-base-100 shadow-sm" class:max-lg:hidden={hideMobileNavbar}>
+<div class="navbar border-b border-base-300 bg-base-200" class:max-lg:hidden={hideMobileNavbar}>
   <!-- Left: Logo + Brand -->
   <div class="flex flex-1 items-center">
     <div class="avatar">

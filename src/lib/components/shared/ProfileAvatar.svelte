@@ -23,6 +23,7 @@
    * @property {boolean} [linkToProfile] - Wrap avatar in a link to the user's profile page
    * @property {boolean} [showHoverCard] - Show profile hover card on hover (defaults to linkToProfile && !!pubkey)
    * @property {string} [class] - Additional CSS classes
+   * @property {'lazy' | 'eager'} [loading] - Image loading strategy (eager inside popovers)
    */
 
   /** @type {Props} */
@@ -33,7 +34,8 @@
     fallbackType = 'initial',
     linkToProfile = false,
     showHoverCard = undefined,
-    class: className = ''
+    class: className = '',
+    loading = /** @type {'lazy' | 'eager'} */ ('lazy')
   } = $props();
 
   let effectiveShowHoverCard = $derived(showHoverCard ?? (linkToProfile && !!pubkey));
@@ -110,6 +112,7 @@
         alt={displayName || m.profile_avatar_alt()}
         fallbackType="avatar"
         size={sizeToProxy[size]}
+        {loading}
         class="h-full w-full rounded-full object-cover"
       />
     {:else if showRobohashFallback}
@@ -118,6 +121,7 @@
         alt={displayName || m.profile_avatar_alt()}
         fallbackType="avatar"
         size={sizeToProxy[size]}
+        {loading}
         class="h-full w-full rounded-full object-cover"
       />
     {:else if showInitialFallback}

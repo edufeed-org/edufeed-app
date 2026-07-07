@@ -497,7 +497,12 @@
         {#each CONTENT_TAB_IDS as tabId (tabId)}
           <div class:hidden={activeTab !== tabId}>
             {#if activatedTabs.has(tabId)}
-              <ProfileContentTab pubkey={data.pubkey} {tabId} />
+              <ProfileContentTab
+                pubkey={data.pubkey}
+                {tabId}
+                pinnedPointers={pinnedPointersFromEvent(pinListEvent)}
+                canPin={isOwnProfile}
+              />
             {/if}
           </div>
         {/each}

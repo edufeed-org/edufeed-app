@@ -8,7 +8,9 @@
  * The id namespace reserves the "spell:<event-id>" prefix for future
  * custom tabs backed by kind-777 spells; those entries are ignored for now.
  */
+import { getNip10References } from 'applesauce-common/helpers';
 import { kindToFeedCategory } from '$lib/helpers/profile-feed.js';
+import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
 
 /** @type {string[]} */
 export const PROFILE_TAB_IDS = [
@@ -50,23 +52,47 @@ const CATEGORY_TO_TAB = {
 };
 
 /**
- * Bucket loaded feed events into per-tab counts. The posts tab is the mixed
- * feed, so its count is the total across all feed kinds. Counts are
- * approximate (limited by what the loaders fetched) — display only.
+ * Bucket loaded feed events into per-tab counts, mirroring what the tabs
+ * actually DISPLAY: bookmarks collapse into URL / event-ref groups, kind-1
+ * replies are excluded from the mixed feed, and the posts count is the sum
+ * of displayed entries. Counts are approximate (limited by what the loaders
+ * fetched) — display only.
  *
- * @param {Array<{ kind: number }> | null | undefined} events
+ * @param {Array<{ kind: number, tags?: string[][] }> | null | undefined} events
  * @returns {Record<string, number>}
  */
 export function tabCountsFromEvents(events) {
   /** @type {Record<string, number>} */
   const counts = { posts: 0, content: 0, articles: 0, events: 0, polls: 0, bookmarks: 0 };
+
+  /** @type {any[]} */
+  const bookmarkEvents = [];
   for (const event of events || []) {
     const category = kindToFeedCategory(event.kind);
     if (!category) continue;
+
+    if (category === 'bookmarks') {
+      bookmarkEvents.push(event);
+      continue;
+    }
+    // The feed shows only root notes — skip replies like ProfileFeedView does.
+    if (event.kind === 1) {
+      const refs = getNip10References(/** @type {any} */ (event));
+      if (refs?.reply?.e || refs?.root?.e) continue;
+    }
+
     counts.posts += 1;
     const tab = CATEGORY_TO_TAB[category];
     if (tab && tab !== 'posts') counts[tab] += 1;
   }
+
+  if (bookmarkEvents.length > 0) {
+    counts.bookmarks =
+      groupByUrl(filterSocialBookmarks(bookmarkEvents)).length +
+      groupByEventRef(bookmarkEvents).length;
+    counts.posts += counts.bookmarks;
+  }
+
   return counts;
 }
 

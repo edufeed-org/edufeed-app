@@ -10,6 +10,10 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { TAB_KINDS } from '$lib/helpers/profile-tabs.js';
+  import { isEntryPinned } from '$lib/helpers/profile-feed.js';
+  import { pinEvent, unpinEvent } from '$lib/services/pin-list-service.js';
+  import { showToast } from '$lib/helpers/toast';
+  import { PinIcon } from '$lib/components/icons';
   import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
   import { formatAMBResource } from '$lib/helpers/educational/index.js';
   import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
@@ -25,22 +29,59 @@
   /**
    * @type {{
    *   pubkey: string,
-   *   tabId: 'content' | 'articles' | 'events' | 'polls' | 'bookmarks'
+   *   tabId: 'content' | 'articles' | 'events' | 'polls' | 'bookmarks',
+   *   pinnedPointers?: import('$lib/helpers/profile-feed.js').PinPointer[],
+   *   canPin?: boolean
    * }}
    */
-  let { pubkey, tabId } = $props();
+  let { pubkey, tabId, pinnedPointers = [], canPin = false } = $props();
 
-  let events = $state.raw(/** @type {any[]} */ ([]));
+  let rawEvents = $state.raw(/** @type {any[]} */ ([]));
+
+  // Pinned items first (the pin list is the user's global kind 10001 —
+  // a-tags cover the addressable kinds shown here, e-tags the rest).
+  let events = $derived.by(() => {
+    if (!pinnedPointers.length) return rawEvents;
+    /** @type {any[]} */
+    const pinned = [];
+    /** @type {any[]} */
+    const rest = [];
+    for (const event of rawEvents) {
+      (isEntryPinned({ data: event }, pinnedPointers) ? pinned : rest).push(event);
+    }
+    return [...pinned, ...rest];
+  });
+
+  /** @type {string | null} */
+  let pinBusy = $state(null);
+
+  /** @param {any} event */
+  async function togglePin(event) {
+    if (!event?.id || pinBusy) return;
+    pinBusy = event.id;
+    try {
+      if (isEntryPinned({ data: event }, pinnedPointers)) {
+        await unpinEvent(event);
+      } else {
+        await pinEvent(event);
+      }
+    } catch (err) {
+      console.error('ProfileContentTab: pin toggle failed:', err);
+      showToast(m.profile_pin_error(), 'error');
+    } finally {
+      pinBusy = null;
+    }
+  }
 
   $effect(() => {
     const kinds = TAB_KINDS[tabId];
     if (!pubkey || !kinds) {
-      events = [];
+      rawEvents = [];
       return;
     }
     const sub = eventStore.model(TimelineModel, { kinds, authors: [pubkey] }).subscribe({
       next: (loaded) => {
-        events = loaded || [];
+        rawEvents = loaded || [];
       },
       error: (err) => console.error('ProfileContentTab: Model error:', err)
     });
@@ -66,6 +107,33 @@
   );
 </script>
 
+{#snippet pinRow(/** @type {any} */ event)}
+  {@const pinned = isEntryPinned({ data: event }, pinnedPointers)}
+  {#if pinned || canPin}
+    <div class="mb-1 flex items-center justify-between gap-2">
+      {#if pinned}
+        <span class="badge gap-1 badge-outline badge-sm text-warning" data-testid="pin-flag">
+          <PinIcon class_="w-3 h-3" />
+          {m.profile_pinned_divider()}
+        </span>
+      {:else}
+        <span></span>
+      {/if}
+      {#if canPin}
+        <button
+          class="btn gap-1 btn-ghost btn-xs"
+          data-testid="pin-toggle"
+          disabled={pinBusy === event.id}
+          onclick={() => togglePin(event)}
+        >
+          <PinIcon class_="w-3 h-3" />
+          {pinned ? m.profile_unpin_action() : m.profile_pin_action()}
+        </button>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
 <div class="py-4">
   {#if isEmpty}
     <div class="pf-empty" data-testid="tab-empty">
@@ -78,22 +146,28 @@
       {#each events as event (event.id)}
         {@const resource = formatAMBResource(event)}
         {#if resource}
-          <AMBResourceCard
-            {resource}
-            authorProfile={authorProfiles.get(event.pubkey) || null}
-            compact={false}
-          />
+          <div>
+            {@render pinRow(event)}
+            <AMBResourceCard
+              {resource}
+              authorProfile={authorProfiles.get(event.pubkey) || null}
+              compact={false}
+            />
+          </div>
         {/if}
       {/each}
     </div>
   {:else if tabId === 'articles'}
     <div class="space-y-4">
       {#each events as event (event.id)}
-        <ArticleCard
-          article={event}
-          authorProfile={authorProfiles.get(event.pubkey) || null}
-          compact={false}
-        />
+        <div>
+          {@render pinRow(event)}
+          <ArticleCard
+            article={event}
+            authorProfile={authorProfiles.get(event.pubkey) || null}
+            compact={false}
+          />
+        </div>
       {/each}
     </div>
   {:else if tabId === 'events'}
@@ -101,18 +175,24 @@
       {#each events as event (event.id)}
         {@const calendarEvent = getCalendarEventMetadata(event)}
         {#if calendarEvent}
-          <CalendarEventCard
-            event={calendarEvent}
-            compact={false}
-            authorProfile={authorProfiles.get(event.pubkey) || null}
-          />
+          <div>
+            {@render pinRow(event)}
+            <CalendarEventCard
+              event={calendarEvent}
+              compact={false}
+              authorProfile={authorProfiles.get(event.pubkey) || null}
+            />
+          </div>
         {/if}
       {/each}
     </div>
   {:else if tabId === 'polls'}
     <div class="space-y-4">
       {#each events as event (event.id)}
-        <PollCard {event} truncate={true} />
+        <div>
+          {@render pinRow(event)}
+          <PollCard {event} truncate={true} />
+        </div>
       {/each}
     </div>
   {:else if tabId === 'bookmarks'}

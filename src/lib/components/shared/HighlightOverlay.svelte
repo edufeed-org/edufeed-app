@@ -184,7 +184,9 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="highlight-overlay relative" onclick={handleMarkClick}>
   <article class={className} bind:this={container}></article>
-  {#if activeUser && container && communityPubkey && source}
+  <!-- Highlighting works outside community context too — the h-tag on the
+       published highlight is simply omitted then. -->
+  {#if activeUser && container && source}
     <HighlightSelectionTooltip {container} {source} {communityPubkey} {activeUser} />
   {/if}
 
