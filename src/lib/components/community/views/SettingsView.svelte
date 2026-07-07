@@ -64,7 +64,7 @@
   }
 </script>
 
-<div class="bg-base-100">
+<div>
   <div class="p-6">
     <div class="container mx-auto max-w-4xl">
       <div class="mb-6 flex items-center gap-3">
@@ -75,7 +75,7 @@
       {#if profileEvent && communikeyEvent}
         <!-- Community Description -->
         {#if communikeyEvent?.content}
-          <div class="card mb-6 bg-base-200 shadow-xl">
+          <div class="card mb-6 bg-base-100 shadow-xl">
             <div class="card-body">
               <h2 class="mb-2 card-title">{m.community_views_settings_info_title()}</h2>
               <p class="text-base-content/80">{communikeyEvent.content}</p>
@@ -85,7 +85,7 @@
 
         <!-- Admin Settings -->
         {#if isOwner}
-          <div class="card bg-base-200 shadow-xl">
+          <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
               <h2 class="mb-4 card-title">
                 {m.community_views_settings_admin_title()}
@@ -111,7 +111,7 @@
           </div>
 
           <!-- Danger Zone -->
-          <div class="card mt-6 border border-error/40 bg-base-200 shadow-xl">
+          <div class="card mt-6 border border-error/40 bg-base-100 shadow-xl">
             <div class="card-body">
               <h2 class="mb-2 card-title text-error">
                 {m.community_views_settings_danger_title()}
@@ -127,7 +127,7 @@
         {/if}
 
         <!-- Community Actions -->
-        <div class="card mt-6 bg-base-200 shadow-xl">
+        <div class="card mt-6 bg-base-100 shadow-xl">
           <div class="card-body">
             <h2 class="mb-4 card-title">{m.community_views_settings_actions_title()}</h2>
 

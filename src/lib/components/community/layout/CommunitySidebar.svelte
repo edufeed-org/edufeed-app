@@ -28,7 +28,7 @@
 <!-- Desktop: Flex sibling in chrome row -->
 <div
   data-testid="community-sidebar"
-  class="hidden w-(--sidebar-icon-w) flex-col overflow-x-hidden overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
+  class="hidden w-(--sidebar-icon-w) flex-col overflow-x-hidden overflow-y-auto bg-base-200 lg:flex"
 >
   <div class="flex flex-col items-center space-y-3 py-4">
     <!-- Home button -->

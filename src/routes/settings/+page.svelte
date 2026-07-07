@@ -619,7 +619,7 @@
       </div>
     {:else}
       <!-- Relay Preferences Card -->
-      <div class="card bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+      <div class="card bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">
           <h2 class="mb-2 card-title text-2xl">
             <span class="text-2xl">{m.settings_relay_title()}</span>
@@ -782,7 +782,7 @@
 
       <!-- Blossom Servers Card -->
       {#if blossomLoading}
-        <div class="card mt-6 bg-base-200 shadow-xl">
+        <div class="card mt-6 bg-base-100 shadow-xl">
           <div class="card-body">
             <div class="flex justify-center py-8">
               <div class="text-center">
@@ -793,7 +793,7 @@
           </div>
         </div>
       {:else}
-        <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
           <div class="card-body">
             <h2 class="mb-2 card-title text-2xl">
               <span class="text-2xl">{m.settings_blossom_title()}</span>
@@ -905,7 +905,7 @@
 
       <!-- App-Specific Relays Card -->
       {#if appRelaysLoading}
-        <div class="card mt-6 bg-base-200 shadow-xl">
+        <div class="card mt-6 bg-base-100 shadow-xl">
           <div class="card-body">
             <div class="flex justify-center py-8">
               <div class="text-center">
@@ -916,7 +916,7 @@
           </div>
         </div>
       {:else}
-        <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
           <div class="card-body">
             <h2 class="mb-2 card-title text-2xl">
               <span class="text-2xl">{m.settings_app_relay_title()}</span>
@@ -1065,7 +1065,7 @@
       {/if}
 
       <!-- Link Previews Card -->
-      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+      <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">
           <h2 class="mb-2 card-title text-2xl">
             <span class="text-2xl">{m.settings_link_previews_title()}</span>
@@ -1093,7 +1093,7 @@
       </div>
 
       <!-- Gated Mode Card -->
-      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+      <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">
           <h2 class="mb-2 card-title text-2xl">
             <span class="text-2xl">{m.settings_gated_mode_title()}</span>
@@ -1174,7 +1174,7 @@
       </div>
 
       <!-- Client Tag Card -->
-      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+      <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">
           <h2 class="mb-2 card-title text-2xl">
             <span class="text-2xl">{m.settings_client_tag_title()}</span>
@@ -1202,7 +1202,7 @@
       <!-- DM Relay Settings Card -->
       <div
         id="dm-relay-settings"
-        class="card mt-6 scroll-mt-20 bg-base-200 shadow-xl"
+        class="card mt-6 scroll-mt-20 bg-base-100 shadow-xl"
         transition:fade={{ duration: 200 }}
       >
         <div class="card-body">
@@ -1214,7 +1214,7 @@
            accounts don't have a recoverable secret in this app) -->
       {#if activeAccount?.type === 'nsec'}
         <div
-          class="card mt-6 bg-base-200 shadow-xl"
+          class="card mt-6 bg-base-100 shadow-xl"
           data-testid="settings-recovery-card"
           transition:fade={{ duration: 200 }}
         >
@@ -1235,7 +1235,7 @@
       {/if}
 
       <!-- Developer Settings Card -->
-      <div class="card mt-6 bg-base-200 shadow-xl" transition:fade={{ duration: 200 }}>
+      <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
         <div class="card-body">
           <h2 class="mb-2 card-title text-2xl">
             <span class="text-2xl">{m.settings_developer_title()}</span>

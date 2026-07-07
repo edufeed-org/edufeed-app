@@ -223,7 +223,7 @@
 
   <!-- Description -->
   {#if event.summary}
-    <div class="card mb-8 bg-base-200 shadow-lg">
+    <div class="card mb-8 bg-base-100 shadow-lg">
       <div class="card-body">
         <h2 class="card-title text-2xl">{m.calendar_event_description()}</h2>
         <MarkdownRenderer content={event.summary} class="prose mt-2 max-w-none" />
@@ -232,7 +232,7 @@
   {/if}
 
   <!-- Date and Time Card -->
-  <div class="card mb-8 bg-base-200 shadow-lg">
+  <div class="card mb-8 bg-base-100 shadow-lg">
     <div class="card-body">
       <h2 class="card-title text-2xl">
         <CalendarIcon class_="w-6 h-6" />
@@ -289,7 +289,7 @@
   </div>
 
   <!-- Event Author Card -->
-  <div class="card mb-8 bg-base-200 shadow-lg">
+  <div class="card mb-8 bg-base-100 shadow-lg">
     <div class="card-body">
       <h2 class="card-title text-2xl">
         <UserIcon class_="w-6 h-6" />
@@ -303,7 +303,7 @@
 
   <!-- Location Card -->
   {#if event.location}
-    <div class="card mb-8 bg-base-200 shadow-lg">
+    <div class="card mb-8 bg-base-100 shadow-lg">
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <LocationIcon class_="w-6 h-6" />
@@ -328,7 +328,7 @@
 
   <!-- Event Tags -->
   {#if event.hashtags && event.hashtags.length > 0}
-    <div class="card mb-8 bg-base-200 shadow-lg">
+    <div class="card mb-8 bg-base-100 shadow-lg">
       <div class="card-body">
         <h2 class="card-title text-2xl">{m.calendar_detail_tags()}</h2>
         <div class="mt-4">
@@ -340,7 +340,7 @@
 
   <!-- Further Links -->
   {#if event.references && event.references.length > 0}
-    <div class="card mb-8 bg-base-200 shadow-lg">
+    <div class="card mb-8 bg-base-100 shadow-lg">
       <div class="card-body">
         <h2 class="card-title text-2xl">{m.calendar_detail_links()}</h2>
         <div class="mt-4 space-y-2">
@@ -363,7 +363,7 @@
   {/if}
 
   <!-- Featured in Calendars -->
-  <div class="card mb-8 bg-base-200 shadow-lg">
+  <div class="card mb-8 bg-base-100 shadow-lg">
     <div class="card-body">
       <h2 class="card-title text-2xl">{m.calendar_detail_featured_calendars()}</h2>
       {#if isLoadingCalendars}
@@ -395,7 +395,7 @@
 
   <!-- Event Participants -->
   {#if event.participants && event.participants.length > 0}
-    <div class="card mb-8 bg-base-200 shadow-lg">
+    <div class="card mb-8 bg-base-100 shadow-lg">
       <div class="card-body">
         <h2 class="card-title text-2xl">
           <UserIcon class_="w-6 h-6" />
@@ -427,7 +427,7 @@
   {/if}
 
   <!-- RSVP Section -->
-  <div class="card mb-8 bg-base-200 shadow-lg">
+  <div class="card mb-8 bg-base-100 shadow-lg">
     <div class="card-body">
       <h2 class="card-title text-2xl">
         <UserIcon class_="w-6 h-6" />
@@ -450,7 +450,7 @@
 
   <!-- Attendees/RSVP Section (New) -->
   {#if transformedRsvps.totalCount > 0}
-    <div class="card mb-8 bg-base-200 shadow-lg">
+    <div class="card mb-8 bg-base-100 shadow-lg">
       <div class="card-body">
         <AttendeeIndicator
           accepted={transformedRsvps.accepted}
@@ -465,7 +465,7 @@
 
   <!-- Reactions Section -->
   {#if rawEvent}
-    <div class="card mb-8 bg-base-200 shadow-lg">
+    <div class="card mb-8 bg-base-100 shadow-lg">
       <div class="card-body">
         <h2 class="card-title text-2xl">{m.calendar_detail_reactions()}</h2>
         <div class="mt-4">

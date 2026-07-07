@@ -7,7 +7,7 @@
 <script>
   import { resolve } from '$app/paths';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { hexToNpub, generateAuthorColor, profileLink } from '$lib/helpers/nostrUtils.js';
+  import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils.js';
   import Nip05VerifiedBadge from './Nip05VerifiedBadge.svelte';
   import { useProfileBadges } from '$lib/stores/badge-awards.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
@@ -37,8 +37,6 @@
     return about.length > 100 ? about.slice(0, 100) + '…' : about;
   });
 
-  let bannerColor = $derived(generateAuthorColor(pubkey));
-
   const { getBadges } = useProfileBadges(() => pubkey);
   let badges = $derived(getBadges());
 
@@ -59,6 +57,8 @@
 
 <a href={resolve(profileLink(pubkey))} class="block w-72 overflow-hidden rounded-lg">
   <!-- Banner -->
+  <!-- Banner only when the profile actually set one (design: no-banner
+       variant leaves it out — the avatar sits in flow instead) -->
   {#if profile?.banner}
     <ImageWithFallback
       src={profile.banner}
@@ -68,18 +68,11 @@
       loading="eager"
       class="h-16 w-full object-cover"
     />
-  {:else}
-    <!-- bannerColor is an rgb() string — mix via color-mix (appending hex
-         alpha would produce invalid CSS and drop the whole background) -->
-    <div
-      class="h-16"
-      style="background: linear-gradient(135deg, {bannerColor}, color-mix(in srgb, {bannerColor} 55%, transparent))"
-    ></div>
   {/if}
 
-  <!-- Avatar overlapping banner (eager: the popover is visible NOW — lazy
-       images inside the portaled card may never fire their load) -->
-  <div class="-mt-8 ml-3">
+  <!-- Avatar (eager: the popover is visible NOW — lazy images inside the
+       portaled card may never fire their load) -->
+  <div class="{profile?.banner ? '-mt-8' : 'pt-3'} ml-3">
     <ProfileAvatar {pubkey} {profile} size="xl" showHoverCard={false} loading="eager" />
   </div>
 

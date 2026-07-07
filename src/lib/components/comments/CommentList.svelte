@@ -251,7 +251,7 @@
 </script>
 
 <div class="comment-list" data-testid="comment-list">
-  <div class="card bg-base-200 shadow-lg">
+  <div class="card bg-base-100 shadow-lg">
     <div class="card-body">
       <div class="flex items-center justify-between">
         <h2 class="card-title text-2xl">{m.comments_list_title()}</h2>

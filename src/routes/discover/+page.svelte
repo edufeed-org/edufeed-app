@@ -1449,9 +1449,16 @@
   <meta name="description" content={m.discover_content_meta_description()} />
 </svelte:head>
 
-<div class="bg-base-100">
-  <!-- Hero Section -->
-  {#if runtimeConfig.ui?.discoverHeroImage}
+<div>
+  <!-- Hero Section — onboarding messaging for visitors; logged-in users go
+       straight to the content -->
+  {#if activeUser}
+    <div class="container mx-auto px-4 pt-8">
+      <h1 class="text-3xl font-extrabold tracking-tight text-base-content">
+        {m.discover_content_title()}
+      </h1>
+    </div>
+  {:else if runtimeConfig.ui?.discoverHeroImage}
     <div class="relative overflow-hidden py-12 text-primary-content">
       <img
         src={getProxiedImageUrl(runtimeConfig.ui.discoverHeroImage, 'hero') ||
@@ -1504,7 +1511,7 @@
   {/if}
 
   <!-- Content Type Tabs -->
-  <div class="border-b border-base-300 bg-base-100">
+  <div class="border-b border-base-300">
     <div class="container mx-auto px-4">
       <div class="tabs-boxed tabs justify-center bg-transparent py-4">
         <button

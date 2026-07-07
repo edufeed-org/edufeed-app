@@ -49,7 +49,7 @@
   }
 </script>
 
-<section class="card bg-base-200 shadow-xl">
+<section class="card bg-base-100 shadow-xl">
   <div class="card-body">
     <h2 class="mb-2 card-title text-2xl">
       <span class="text-2xl">{m.settings_cache_title()}</span>

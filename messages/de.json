@@ -2543,5 +2543,6 @@
   "profile_updated_label": "Profil zuletzt aktualisiert",
   "profile_tab_empty_title": "Noch nichts hier",
   "profile_tab_empty_description": "Dieses Profil hat hier noch nichts veröffentlicht.",
-  "profile_rail_view_all": "Alle anzeigen"
+  "profile_rail_view_all": "Alle anzeigen",
+  "community_shared_single_suffix": "hat geteilt"
 }

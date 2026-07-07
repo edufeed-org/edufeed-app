@@ -163,7 +163,7 @@
 </script>
 
 {#if enabled}
-  <div class="card bg-base-200 shadow-xl">
+  <div class="card bg-base-100 shadow-xl">
     <div class="card-body">
       <h2 class="mb-2 card-title text-2xl">
         {m.auth_signup_modal_membership_title()}

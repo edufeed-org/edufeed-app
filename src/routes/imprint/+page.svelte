@@ -11,7 +11,7 @@
 
 <div class="bg-base-100 px-4 py-8">
   <div class="mx-auto max-w-3xl">
-    <div class="card bg-base-200 shadow-xl">
+    <div class="card bg-base-100 shadow-xl">
       <div class="card-body">
         <h1 class="mb-6 card-title text-3xl">{m.imprint_title()}</h1>
 

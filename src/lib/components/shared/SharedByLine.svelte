@@ -60,5 +60,9 @@
       </HoverCard>
     {/if}
   </div>
-  <span>{m.community_shared_multiple_suffix()}</span>
+  <span>
+    {sharers.length === 1
+      ? m.community_shared_single_suffix()
+      : m.community_shared_multiple_suffix()}
+  </span>
 </div>

@@ -38,7 +38,7 @@
     </div>
   {:else if memberData.allMembers.length <= 1 && memberData.perSection.size === 0}
     <!-- Only owner, no gated sections -->
-    <div class="card bg-base-200">
+    <div class="card bg-base-100">
       <div class="card-body text-center">
         <p class="text-base-content/60">{m.community_members_open_community()}</p>
       </div>

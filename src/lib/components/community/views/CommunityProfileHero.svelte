@@ -74,10 +74,11 @@
   let description = $derived(communikeyEvent?.content || '');
 </script>
 
-<!-- Banner -->
-<div class="relative overflow-hidden rounded-t-xl">
-  {#if bannerUrl}
-    <div class="h-20 md:h-24">
+<!-- Banner — only when the community actually set one (design: the
+     no-banner variant leaves it out and the header sits in flow) -->
+{#if bannerUrl}
+  <div class="relative overflow-hidden rounded-t-xl">
+    <div class="h-24 md:h-32">
       <img
         src={bannerUrl}
         alt=""
@@ -88,17 +89,15 @@
         }}
       />
     </div>
-  {:else}
-    <div class="h-20 bg-gradient-to-r from-primary/20 to-secondary/20 md:h-24"></div>
-  {/if}
-</div>
+  </div>
+{/if}
 
 <!-- Identity Section -->
-<div class="px-4 pb-4">
-  <div class="-mt-6 flex items-start gap-3">
+<div class="px-4 pb-4" class:pt-5={!bannerUrl}>
+  <div class="flex items-start gap-3" class:-mt-6={bannerUrl}>
     <!-- Avatar -->
     <div class="avatar">
-      <div class="w-14 rounded-full ring-2 ring-base-100 md:w-12">
+      <div class="w-14 rounded-full ring-2 ring-base-100" class:ring-4={bannerUrl}>
         {#if avatarUrl}
           <ImageWithFallback
             src={avatarUrl}
@@ -117,9 +116,11 @@
     </div>
 
     <!-- Name + Meta -->
-    <div class="mt-7 min-w-0 flex-1">
+    <div class="min-w-0 flex-1" class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
       <div class="flex items-center gap-2">
-        <h2 class="truncate text-lg font-bold text-base-content">{displayName}</h2>
+        <h2 class="truncate text-2xl font-extrabold tracking-tight text-base-content">
+          {displayName}
+        </h2>
         {#if getJoined()}
           <div class="badge gap-1 badge-sm badge-success">
             <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -137,7 +138,7 @@
 
     <!-- Join Button (non-members) -->
     {#if !getJoined()}
-      <div class="mt-7">
+      <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
         {#if getCommunityWideFormRef?.()}
           <button onclick={handleRequestJoin} class="btn btn-sm btn-primary">
             {m.community_request_join()}

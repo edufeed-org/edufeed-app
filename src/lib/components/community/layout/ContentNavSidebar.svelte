@@ -91,7 +91,7 @@
 <!-- Desktop: Flex sibling in chrome row -->
 <div
   data-testid="content-nav-sidebar"
-  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
+  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto bg-base-200 lg:flex"
 >
   {#if !communitySelected}
     <div

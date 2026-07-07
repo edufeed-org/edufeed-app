@@ -111,15 +111,12 @@ describe('ProfileHoverCardContent', () => {
     expect(container.textContent).toContain(npubText);
   });
 
-  it('shows fallback banner when no banner image', () => {
+  it('renders no banner at all when the profile has none set', () => {
     const { container } = render(ProfileHoverCardContent, {
       props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
     });
-    // Fallback banner div should exist (no static gradient class — uses inline style)
-    const bannerDiv = container.querySelector('.h-16');
-    expect(bannerDiv).not.toBeNull();
-    // Should NOT have the old static gradient class
-    expect(bannerDiv?.classList.contains('bg-gradient-to-r')).toBe(false);
+    // Design: the no-banner variant leaves the banner out entirely
+    expect(container.querySelector('.h-16')).toBeNull();
   });
 
   it('truncates bio to 100 chars with ellipsis', () => {

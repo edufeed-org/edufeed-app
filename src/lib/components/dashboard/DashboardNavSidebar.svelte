@@ -49,7 +49,7 @@
 
 <div
   data-testid="dashboard-nav-sidebar"
-  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto border-r border-base-300 bg-base-200 lg:flex"
+  class="hidden w-(--sidebar-nav-w) flex-col overflow-y-auto bg-base-200 lg:flex"
 >
   <nav class="menu space-y-1 p-4">
     {#each sections as section (section.id)}

@@ -25,6 +25,7 @@ vi.mock('$app/paths', () => ({
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
+  community_shared_single_suffix: () => 'has shared',
   community_shared_multiple_suffix: () => 'shared',
   community_shared_all_label: (/** @type {{ count: number }} */ params) =>
     `Shared by ${params.count} people`
@@ -54,14 +55,14 @@ const pk3 = 'cccc3333dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333dddd4444';
 const pk4 = 'dddd4444eeee5555ffff6666aaaa1111bbbb2222cccc3333dddd4444eeee5555';
 
 describe('SharedByLine', () => {
-  it('renders "shared" suffix for single sharer', () => {
+  it('renders the singular suffix for a single sharer', () => {
     const profiles = new Map([[pk1, { name: 'Alice' }]]);
 
     const { container } = render(SharedByLine, {
       props: { sharers: [pk1], authorProfiles: profiles }
     });
 
-    expect(container.textContent).toContain('shared');
+    expect(container.textContent).toContain('has shared');
   });
 
   it('does not render individual names inline', () => {

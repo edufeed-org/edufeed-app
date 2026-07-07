@@ -196,7 +196,7 @@
 </script>
 
 {#if profileEvent && communikeyEvent}
-  <div class="bg-base-100">
+  <div>
     <!-- Community Profile Hero -->
     <CommunityProfileHero
       {communityId}
@@ -237,7 +237,7 @@
               <span class="loading loading-lg loading-spinner text-primary"></span>
             </div>
           {:else if displayedItems.length === 0}
-            <div class="card bg-base-200 shadow-xl">
+            <div class="card bg-base-100 shadow-xl">
               <div class="card-body">
                 <div class="py-8 text-center text-base-content/60">
                   <p class="text-sm">{m.community_views_home_recent_activity_empty()}</p>
