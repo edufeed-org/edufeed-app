@@ -7,6 +7,7 @@
 
 import { env } from '$env/dynamic/private';
 import { nip19 } from 'nostr-tools';
+import { verifyEvent } from 'nostr-tools/pure';
 import {
   getCalendarEventTitle,
   getCalendarEventSummary,
@@ -15,7 +16,10 @@ import {
   getArticleSummary,
   getArticleImage
 } from 'applesauce-common/helpers';
+import { getProfileContent } from 'applesauce-core/helpers';
+import { getFeedCardData } from '$lib/helpers/feedCardData.js';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
+import { normalizePubkey, hexToNpub } from '$lib/helpers/pubkey.js';
 
 // ─── Relay fetch ──────────────────────────────────────────────────────────────
 
@@ -35,20 +39,33 @@ function parseRelays(csv) {
 
 /**
  * Get relays to query for a given kind.
+ * Mirrors kindToAppRelayCategory in src/lib/services/app-relay-service.svelte.js,
+ * reading env directly (server context — no user 30002 overrides for crawlers).
  * @param {number} kind
  * @param {string[]} hintRelays
  * @returns {string[]}
  */
-function getRelaysForKind(kind, hintRelays) {
+export function getRelaysForKind(kind, hintRelays) {
   /** @type {string[]} */
   let appRelays = [];
 
-  if (kind === 31922 || kind === 31923 || kind === 31924 || kind === 31925) {
+  if (kind >= 31922 && kind <= 31925) {
     appRelays = parseRelays(env.CALENDAR_RELAYS);
   } else if (kind === 30142) {
     appRelays = parseRelays(env.AMB_RELAYS);
   } else if (kind === 30023) {
     appRelays = parseRelays(env.LONGFORM_CONTENT_RELAY);
+  } else if (kind === 30168 || kind === 10222 || kind === 11) {
+    appRelays = parseRelays(env.COMMUNIKEY_RELAYS);
+  } else if (kind === 30301) {
+    appRelays = parseRelays(env.KANBAN_RELAYS);
+  } else if (kind === 30818) {
+    appRelays = [
+      ...parseRelays(env.COMMUNIKEY_RELAYS),
+      ...parseRelays(env.RELAY_LIST_LOOKUP_RELAYS)
+    ];
+  } else if (kind === 0) {
+    appRelays = [...parseRelays(env.RELAY_LIST_LOOKUP_RELAYS), ...parseRelays(env.INDEXER_RELAYS)];
   }
 
   const fallback = parseRelays(env.FALLBACK_RELAYS);
@@ -88,33 +105,44 @@ export function decodeIdentifier(identifier) {
 }
 
 /**
- * Fetch a single event from Nostr relays server-side using WebSocket.
- * @param {string} identifier - naddr1... or nevent1... string
+ * Check whether an event satisfies the constraining fields of a filter.
+ * Used to reject events a relay claims match a REQ but don't — a malicious
+ * or misbehaving relay could otherwise return an arbitrary event and have it
+ * treated as the requested one. Never throws.
+ * @param {import('nostr-tools').NostrEvent | null | undefined} event
+ * @param {import('nostr-tools').Filter} filter
+ * @returns {boolean}
+ */
+export function eventMatchesFilter(event, filter) {
+  try {
+    if (!event || typeof event !== 'object') return false;
+
+    if (Array.isArray(filter?.kinds) && !filter.kinds.includes(event.kind)) return false;
+    if (Array.isArray(filter?.authors) && !filter.authors.includes(event.pubkey)) return false;
+    if (Array.isArray(filter?.ids) && !filter.ids.includes(event.id)) return false;
+
+    const dFilter = filter?.['#d'];
+    if (Array.isArray(dFilter)) {
+      const dTag = Array.isArray(event.tags)
+        ? event.tags.find((t) => Array.isArray(t) && t[0] === 'd')?.[1]
+        : undefined;
+      if (dTag === undefined || !dFilter.includes(dTag)) return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch the first event matching a filter from the given relays.
+ * Races all relays; resolves null after FETCH_TIMEOUT.
+ * @param {import('nostr-tools').Filter} filter
+ * @param {string[]} relays
  * @returns {Promise<import('nostr-tools').NostrEvent | null>}
  */
-export async function fetchEventFromRelays(identifier) {
-  const decoded = decodeIdentifier(identifier);
-  if (!decoded) return null;
-
-  /** @type {import('nostr-tools').Filter} */
-  let filter;
-  /** @type {string[]} */
-  let relays;
-
-  if (decoded.type === 'naddr') {
-    filter = {
-      kinds: [decoded.kind],
-      authors: [decoded.pubkey],
-      '#d': [decoded.identifier],
-      limit: 1
-    };
-    relays = getRelaysForKind(decoded.kind, decoded.relays);
-  } else {
-    filter = { ids: [decoded.id], limit: 1 };
-    relays = getRelaysForKind(decoded.kind || 1, decoded.relays);
-  }
-
-  // Race all relays — return first matching event
+export function fetchFirstEvent(filter, relays) {
   return new Promise((resolve) => {
     let resolved = false;
     const timeout = setTimeout(() => {
@@ -156,11 +184,15 @@ export async function fetchEventFromRelays(identifier) {
             try {
               const msg = JSON.parse(data.toString());
               if (msg[0] === 'EVENT' && msg[1] === 'og' && msg[2]) {
-                if (!resolved) {
+                if (!resolved && verifyEvent(msg[2]) && eventMatchesFilter(msg[2], filter)) {
                   resolved = true;
                   resolve(msg[2]);
                   cleanup();
                 }
+                // Non-matching or unverifiable events are ignored; keep
+                // listening on this and other relays until timeout/EOSE —
+                // a malicious relay could otherwise forge a preview by
+                // returning an unrelated (but validly signed) event.
               }
               if (msg[0] === 'EOSE' && msg[1] === 'og') {
                 ws.close();
@@ -179,19 +211,66 @@ export async function fetchEventFromRelays(identifier) {
   });
 }
 
+/**
+ * Fetch a single event from Nostr relays server-side using WebSocket.
+ * @param {string} identifier - naddr1... or nevent1... string
+ * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ */
+export async function fetchEventFromRelays(identifier) {
+  const decoded = decodeIdentifier(identifier);
+  if (!decoded) return null;
+
+  if (decoded.type === 'naddr') {
+    return fetchFirstEvent(
+      { kinds: [decoded.kind], authors: [decoded.pubkey], '#d': [decoded.identifier], limit: 1 },
+      getRelaysForKind(decoded.kind, decoded.relays)
+    );
+  }
+  return fetchFirstEvent(
+    { ids: [decoded.id], limit: 1 },
+    getRelaysForKind(decoded.kind || 1, decoded.relays)
+  );
+}
+
 // ─── Metadata extraction ──────────────────────────────────────────────────────
 
 /** @type {RegExp} */
 const IMAGE_URL_RE = /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?\S*)?/i;
 
 /**
+ * Map feed-card typeKeys to OG types. Unlisted keys → 'website'.
+ * @type {Record<string, 'event' | 'article' | 'website'>}
+ */
+const TYPE_KEY_TO_OG_TYPE = {
+  calendar: 'event',
+  article: 'article',
+  learning: 'article'
+};
+
+/** @type {string} */
+const DEFAULT_SITE_DESCRIPTION =
+  'Discover educational resources, events and communities on the open Nostr network.';
+
+/**
  * @typedef {Object} OgMetadata
  * @property {string} title
  * @property {string} description
  * @property {string} [image]
- * @property {'article' | 'event' | 'website'} type
+ * @property {'article' | 'event' | 'website' | 'profile'} type
  * @property {string} [publishedAt] - ISO 8601 publication timestamp (articles only)
  */
+
+/**
+ * Default site-wide metadata for pages without a resolvable content target.
+ * @returns {OgMetadata}
+ */
+export function buildDefaultMeta() {
+  return {
+    title: env.APP_NAME || 'ComCal',
+    description: env.APP_OG_DESCRIPTION || DEFAULT_SITE_DESCRIPTION,
+    type: 'website'
+  };
+}
 
 /**
  * Extract OG metadata from a Nostr event based on its kind.
@@ -234,12 +313,48 @@ export function extractMetadata(event) {
     return { title, description, image, type: 'article' };
   }
 
-  // Text notes and other kinds — generic extraction
-  const title = truncate(event.content, 70);
-  const description = truncate(event.content, 200);
-  const imageMatch = event.content.match(IMAGE_URL_RE);
-  const image = imageMatch ? imageMatch[0] : undefined;
-  return { title, description, image, type: 'website' };
+  // Calendar collections (NIP-52 kind 31924)
+  if (kind === 31924) {
+    const title = getTagValue(event.tags, 'title') || getTagValue(event.tags, 'name') || 'Calendar';
+    const description =
+      getTagValue(event.tags, 'description') || getTagValue(event.tags, 'summary') || '';
+    const image = getTagValue(event.tags, 'image') || undefined;
+    return { title, description, image, type: 'website' };
+  }
+
+  // Profiles (kind 0) — also used for community pages (communities are npubs)
+  if (kind === 0) {
+    const profile = getProfileContent(event);
+    return {
+      title: profile?.display_name || profile?.name || shortNpub(event.pubkey),
+      description: truncate(profile?.about || '', 200),
+      image: profile?.picture || undefined,
+      type: 'profile'
+    };
+  }
+
+  // Everything else: delegate to the shared feed-card extractor
+  const card = getFeedCardData(event);
+  const isJsonContent = /^\s*[[{]/.test(event.content || '');
+  const imageMatch = !isJsonContent && event.content ? event.content.match(IMAGE_URL_RE) : null;
+  return {
+    title: card.title,
+    description:
+      card.description || card.subtitle || (isJsonContent ? '' : truncate(event.content, 200)),
+    image: imageMatch ? imageMatch[0] : undefined,
+    type: TYPE_KEY_TO_OG_TYPE[card.typeKey] || 'website'
+  };
+}
+
+/**
+ * Short display form of a pubkey's npub, used as the profile title fallback
+ * when no display_name/name is set (per spec: npub short form, not "Profile").
+ * @param {string} pubkey - hex pubkey
+ * @returns {string}
+ */
+function shortNpub(pubkey) {
+  const npub = hexToNpub(pubkey);
+  return npub ? npub.slice(0, 12) + '…' + npub.slice(-4) : 'Profile';
 }
 
 /**
@@ -285,6 +400,31 @@ function proxyImageUrl(imageUrl, requestUrl) {
 }
 
 /**
+ * Infer the MIME type of the default OG image from its URL extension.
+ * Returns null when unknown (the og:image:type tag is then omitted).
+ * @param {string} url
+ * @returns {string | null}
+ */
+function imageMimeFromUrl(url) {
+  if (/\.jpe?g(\?|$)/i.test(url)) return 'image/jpeg';
+  if (/\.webp(\?|$)/i.test(url)) return 'image/webp';
+  if (/\.gif(\?|$)/i.test(url)) return 'image/gif';
+  if (/\.png(\?|$)/i.test(url)) return 'image/png';
+  return null;
+}
+
+/**
+ * Absolute URL of the default brand OG image (1200x630, not proxied).
+ * @param {string} requestUrl
+ * @returns {string}
+ */
+function defaultOgImageUrl(requestUrl) {
+  const configured = env.OG_DEFAULT_IMAGE || '/og-default.png';
+  if (/^https?:\/\//.test(configured)) return configured;
+  return new URL(configured, new URL(requestUrl).origin).href;
+}
+
+/**
  * Render OG + Twitter meta tags as an HTML string.
  * @param {OgMetadata} meta
  * @param {string} url - The canonical page URL
@@ -293,8 +433,17 @@ function proxyImageUrl(imageUrl, requestUrl) {
 export function renderOgTags(meta, url) {
   const appName = env.APP_NAME || 'ComCal';
   const title = escapeHtml(meta.title);
-  const description = escapeHtml(meta.description);
-  const hasImage = !!meta.image;
+  const description = escapeHtml(
+    meta.description || env.APP_OG_DESCRIPTION || DEFAULT_SITE_DESCRIPTION
+  );
+
+  // Content images go through the resizing proxy; the static brand image
+  // is already 1200x630 and served from our origin.
+  const image = meta.image ? proxyImageUrl(meta.image, url) : defaultOgImageUrl(url);
+  const imageEsc = escapeHtml(image);
+  // The proxy guarantees JPEG output; for the default image infer the type
+  // from its extension and omit the tag when unknown.
+  const imageMime = meta.image ? 'image/jpeg' : imageMimeFromUrl(image);
 
   /** @type {string[]} */
   const tags = [
@@ -302,22 +451,16 @@ export function renderOgTags(meta, url) {
     `<meta property="og:description" content="${description}" />`,
     `<meta property="og:url" content="${escapeHtml(url)}" />`,
     `<meta property="og:type" content="${meta.type}" />`,
-    `<meta property="og:site_name" content="${escapeHtml(appName)}" />`
+    `<meta property="og:site_name" content="${escapeHtml(appName)}" />`,
+    `<meta property="og:image" content="${imageEsc}" />`,
+    `<meta property="og:image:secure_url" content="${imageEsc}" />`,
+    ...(imageMime ? [`<meta property="og:image:type" content="${imageMime}" />`] : []),
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="${title}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:image" content="${imageEsc}" />`
   ];
-
-  if (hasImage) {
-    const proxied = escapeHtml(proxyImageUrl(/** @type {string} */ (meta.image), url));
-    tags.push(`<meta property="og:image" content="${proxied}" />`);
-    tags.push(`<meta property="og:image:secure_url" content="${proxied}" />`);
-    tags.push(`<meta property="og:image:type" content="image/jpeg" />`);
-    tags.push(`<meta property="og:image:width" content="1200" />`);
-    tags.push(`<meta property="og:image:height" content="630" />`);
-    tags.push(`<meta property="og:image:alt" content="${title}" />`);
-    tags.push(`<meta name="twitter:card" content="summary_large_image" />`);
-    tags.push(`<meta name="twitter:image" content="${proxied}" />`);
-  } else {
-    tags.push(`<meta name="twitter:card" content="summary" />`);
-  }
 
   if (meta.type === 'article' && meta.publishedAt) {
     tags.push(
@@ -402,44 +545,157 @@ export function extractIdentifier(pathname) {
 }
 
 /**
+ * decodeURIComponent that never throws — returns the raw value on malformed input.
+ * @param {string} value
+ * @returns {string}
+ */
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * @typedef {{ type: 'event', identifier: string }
+ *   | { type: 'community', pubkey: string }
+ *   | { type: 'profile', pubkey: string }
+ *   | { type: 'wiki-topic', topic: string }
+ *   | { type: 'default' }} PageTarget
+ */
+
+/**
+ * Classify a pathname into a previewable page target.
+ * naddr/nevent take precedence so community-scoped content URLs
+ * (/c/<npub>/article/<naddr>) preview the content, not the community.
+ * @param {string} pathname
+ * @returns {PageTarget}
+ */
+export function resolvePageTarget(pathname) {
+  const identifier = extractIdentifier(pathname);
+  if (identifier) return { type: 'event', identifier };
+
+  const cMatch = pathname.match(/^\/c\/([^/]+)/);
+  if (cMatch) {
+    const pubkey = normalizePubkey(safeDecodeURIComponent(cMatch[1]));
+    if (pubkey) return { type: 'community', pubkey };
+  }
+
+  const pMatch = pathname.match(/^\/p\/([^/]+)/);
+  if (pMatch) {
+    const pubkey = normalizePubkey(safeDecodeURIComponent(pMatch[1]));
+    if (pubkey) return { type: 'profile', pubkey };
+  }
+
+  const authorMatch = pathname.match(/^\/calendar\/author\/([^/]+)/);
+  if (authorMatch) {
+    const pubkey = normalizePubkey(safeDecodeURIComponent(authorMatch[1]));
+    if (pubkey) return { type: 'profile', pubkey };
+  }
+
+  const wikiMatch = pathname.match(/^\/wiki\/([^/]+)$/);
+  if (wikiMatch) return { type: 'wiki-topic', topic: safeDecodeURIComponent(wikiMatch[1]) };
+
+  return { type: 'default' };
+}
+
+/**
+ * Cache key for a resolved page target.
+ * @param {PageTarget} target
+ * @returns {string}
+ */
+function targetCacheKey(target) {
+  switch (target.type) {
+    case 'event':
+      return target.identifier;
+    case 'profile':
+      return `profile:${target.pubkey}`;
+    case 'community':
+      return `community:${target.pubkey}`;
+    case 'wiki-topic':
+      return `wiki:${target.topic}`;
+    default:
+      return 'default';
+  }
+}
+
+/**
+ * Fetch the Nostr event backing a page target.
+ * @param {PageTarget} target
+ * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ */
+async function fetchTargetEvent(target) {
+  switch (target.type) {
+    case 'event':
+      return fetchEventFromRelays(target.identifier);
+    case 'profile':
+    case 'community':
+      return fetchFirstEvent(
+        { kinds: [0], authors: [target.pubkey], limit: 1 },
+        getRelaysForKind(0, [])
+      );
+    case 'wiki-topic':
+      return fetchFirstEvent(
+        { kinds: [30818], '#d': [target.topic], limit: 1 },
+        getRelaysForKind(30818, [])
+      );
+    default:
+      return null;
+  }
+}
+
+/**
  * SvelteKit handle hook for injecting OG meta tags.
+ * Always injects exactly one tag set: content tags when a target resolves,
+ * default site tags otherwise (no page ships a bare head).
  * @type {import('@sveltejs/kit').Handle}
  */
 export async function ogMetaHandle({ event, resolve }) {
-  const identifier = extractIdentifier(event.url.pathname);
+  // API endpoints never render HTML — resolving a target here would run
+  // relay fetches (up to FETCH_TIMEOUT) for a result that's discarded, e.g.
+  // /api/calendar/<naddr>/ics matches NADDR_RE.
+  if (event.url.pathname.startsWith('/api/')) return resolve(event);
 
-  if (!identifier) {
-    return resolve(event);
-  }
+  const target = resolvePageTarget(event.url.pathname);
 
-  // Check cache
-  let ogHtml = ogCache.get(identifier);
+  /** @type {string | null} */
+  let ogHtml = null;
 
-  if (ogHtml === null) {
-    // Cache miss — fetch and render
-    try {
-      const nostrEvent = await fetchEventFromRelays(identifier);
-      if (nostrEvent) {
-        const meta = extractMetadata(nostrEvent);
-        ogHtml = renderOgTags(meta, event.url.href);
-        ogCache.set(identifier, ogHtml, POSITIVE_TTL);
-      } else {
-        // Negative cache — prevent repeated relay fetches for missing events
+  if (target.type !== 'default') {
+    const key = targetCacheKey(target);
+    ogHtml = ogCache.get(key);
+
+    if (ogHtml === null) {
+      try {
+        const nostrEvent = await fetchTargetEvent(target);
+        if (nostrEvent) {
+          const meta = extractMetadata(nostrEvent);
+          ogHtml = renderOgTags(meta, event.url.href);
+          ogCache.set(key, ogHtml, POSITIVE_TTL);
+        } else {
+          ogHtml = '';
+          ogCache.set(key, ogHtml, NEGATIVE_TTL);
+        }
+      } catch {
         ogHtml = '';
-        ogCache.set(identifier, ogHtml, NEGATIVE_TTL);
+        ogCache.set(key, ogHtml, NEGATIVE_TTL);
       }
-    } catch {
-      ogHtml = '';
-      ogCache.set(identifier, ogHtml, NEGATIVE_TTL);
     }
   }
 
+  // Default tags are cheap to render (string ops) and embed the per-request URL.
   if (!ogHtml) {
-    return resolve(event);
+    ogHtml = renderOgTags(buildDefaultMeta(), event.url.href);
   }
 
   const finalOgHtml = ogHtml;
   return resolve(event, {
-    transformPageChunk: ({ html }) => html.replace('</head>', `${finalOgHtml}\n</head>`)
+    // Use a replacer function, not a replacement string: String.replace
+    // interprets `$&`/`` $` ``/`$'`/`$$` patterns in string replacements, and
+    // attacker-controlled Nostr content (e.g. a profile title containing
+    // `$'`) can corrupt the injected/surrounding HTML — output that then
+    // gets cached for POSITIVE_TTL.
+    transformPageChunk: ({ html }) => html.replace('</head>', () => `${finalOgHtml}\n</head>`)
   });
 }
