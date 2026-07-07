@@ -7,6 +7,7 @@
 
 import { env } from '$env/dynamic/private';
 import { nip19 } from 'nostr-tools';
+import { verifyEvent } from 'nostr-tools/pure';
 import {
   getCalendarEventTitle,
   getCalendarEventSummary,
@@ -18,7 +19,7 @@ import {
 import { getProfileContent } from 'applesauce-core/helpers';
 import { getFeedCardData } from '$lib/helpers/feedCardData.js';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
-import { normalizePubkey } from '$lib/helpers/pubkey.js';
+import { normalizePubkey, hexToNpub } from '$lib/helpers/pubkey.js';
 
 // ─── Relay fetch ──────────────────────────────────────────────────────────────
 
@@ -104,6 +105,37 @@ export function decodeIdentifier(identifier) {
 }
 
 /**
+ * Check whether an event satisfies the constraining fields of a filter.
+ * Used to reject events a relay claims match a REQ but don't — a malicious
+ * or misbehaving relay could otherwise return an arbitrary event and have it
+ * treated as the requested one. Never throws.
+ * @param {import('nostr-tools').NostrEvent | null | undefined} event
+ * @param {import('nostr-tools').Filter} filter
+ * @returns {boolean}
+ */
+export function eventMatchesFilter(event, filter) {
+  try {
+    if (!event || typeof event !== 'object') return false;
+
+    if (Array.isArray(filter?.kinds) && !filter.kinds.includes(event.kind)) return false;
+    if (Array.isArray(filter?.authors) && !filter.authors.includes(event.pubkey)) return false;
+    if (Array.isArray(filter?.ids) && !filter.ids.includes(event.id)) return false;
+
+    const dFilter = filter?.['#d'];
+    if (Array.isArray(dFilter)) {
+      const dTag = Array.isArray(event.tags)
+        ? event.tags.find((t) => Array.isArray(t) && t[0] === 'd')?.[1]
+        : undefined;
+      if (dTag === undefined || !dFilter.includes(dTag)) return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetch the first event matching a filter from the given relays.
  * Races all relays; resolves null after FETCH_TIMEOUT.
  * @param {import('nostr-tools').Filter} filter
@@ -152,11 +184,15 @@ export function fetchFirstEvent(filter, relays) {
             try {
               const msg = JSON.parse(data.toString());
               if (msg[0] === 'EVENT' && msg[1] === 'og' && msg[2]) {
-                if (!resolved) {
+                if (!resolved && verifyEvent(msg[2]) && eventMatchesFilter(msg[2], filter)) {
                   resolved = true;
                   resolve(msg[2]);
                   cleanup();
                 }
+                // Non-matching or unverifiable events are ignored; keep
+                // listening on this and other relays until timeout/EOSE —
+                // a malicious relay could otherwise forge a preview by
+                // returning an unrelated (but validly signed) event.
               }
               if (msg[0] === 'EOSE' && msg[1] === 'og') {
                 ws.close();
@@ -290,7 +326,7 @@ export function extractMetadata(event) {
   if (kind === 0) {
     const profile = getProfileContent(event);
     return {
-      title: profile?.display_name || profile?.name || 'Profile',
+      title: profile?.display_name || profile?.name || shortNpub(event.pubkey),
       description: truncate(profile?.about || '', 200),
       image: profile?.picture || undefined,
       type: 'profile'
@@ -308,6 +344,17 @@ export function extractMetadata(event) {
     image: imageMatch ? imageMatch[0] : undefined,
     type: TYPE_KEY_TO_OG_TYPE[card.typeKey] || 'website'
   };
+}
+
+/**
+ * Short display form of a pubkey's npub, used as the profile title fallback
+ * when no display_name/name is set (per spec: npub short form, not "Profile").
+ * @param {string} pubkey - hex pubkey
+ * @returns {string}
+ */
+function shortNpub(pubkey) {
+  const npub = hexToNpub(pubkey);
+  return npub ? npub.slice(0, 12) + '…' + npub.slice(-4) : 'Profile';
 }
 
 /**
@@ -605,6 +652,11 @@ async function fetchTargetEvent(target) {
  * @type {import('@sveltejs/kit').Handle}
  */
 export async function ogMetaHandle({ event, resolve }) {
+  // API endpoints never render HTML — resolving a target here would run
+  // relay fetches (up to FETCH_TIMEOUT) for a result that's discarded, e.g.
+  // /api/calendar/<naddr>/ics matches NADDR_RE.
+  if (event.url.pathname.startsWith('/api/')) return resolve(event);
+
   const target = resolvePageTarget(event.url.pathname);
 
   /** @type {string | null} */
@@ -639,6 +691,11 @@ export async function ogMetaHandle({ event, resolve }) {
 
   const finalOgHtml = ogHtml;
   return resolve(event, {
-    transformPageChunk: ({ html }) => html.replace('</head>', `${finalOgHtml}\n</head>`)
+    // Use a replacer function, not a replacement string: String.replace
+    // interprets `$&`/`` $` ``/`$'`/`$$` patterns in string replacements, and
+    // attacker-controlled Nostr content (e.g. a profile title containing
+    // `$'`) can corrupt the injected/surrounding HTML — output that then
+    // gets cached for POSITIVE_TTL.
+    transformPageChunk: ({ html }) => html.replace('</head>', () => `${finalOgHtml}\n</head>`)
   });
 }

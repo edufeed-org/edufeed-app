@@ -2,6 +2,7 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { nip19 } from 'nostr-tools';
+import { verifyEvent, finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 
 // Mock $env/dynamic/private before importing the module
 vi.mock('$env/dynamic/private', () => ({
@@ -39,7 +40,8 @@ import {
   resolvePageTarget,
   getRelaysForKind,
   buildDefaultMeta,
-  ogMetaHandle
+  ogMetaHandle,
+  eventMatchesFilter
 } from '$lib/server/og.js';
 
 import {
@@ -330,16 +332,19 @@ describe('OG Meta Tags', () => {
         tags: []
       };
       const meta = extractMetadata(event);
+      // display_name wins over the npub fallback
       expect(meta.title).toBe('Alice A.');
       expect(meta.description).toBe('Educator on Nostr');
       expect(meta.image).toBe('https://example.com/alice.png');
       expect(meta.type).toBe('profile');
     });
 
-    it('handles kind 0 with unparseable content gracefully', () => {
-      const meta = extractMetadata({ kind: 0, content: 'not json', tags: [] });
+    it('handles kind 0 with unparseable content gracefully, falling back to npub short form', () => {
+      const pubkey = 'c'.repeat(64);
+      const meta = extractMetadata({ kind: 0, pubkey, content: 'not json', tags: [] });
       expect(meta.type).toBe('profile');
-      expect(meta.title).toBe('Profile');
+      const npub = nip19.npubEncode(pubkey);
+      expect(meta.title).toBe(`${npub.slice(0, 12)}…${npub.slice(-4)}`);
       expect(meta.description).toBe('');
     });
   });
@@ -835,6 +840,105 @@ describe('OG Meta Tags', () => {
       const { event, resolve, captured } = makeHandleInput('/wiki/missing-topic');
       await ogMetaHandle({ event, resolve });
       expect(captured.html).toContain('og-default.png');
+    });
+
+    it('does not corrupt output when cached OG html contains $-pattern replacement syntax', async () => {
+      ogCache.clear();
+      const npub = nip19.npubEncode('b'.repeat(64));
+      const key = `profile:${'b'.repeat(64)}`;
+      const dangerousTagHtml = renderOgTags(
+        { title: "Deal $' now", description: 'd', type: 'profile' },
+        'https://app.example.com/p/foo'
+      );
+      ogCache.set(key, dangerousTagHtml, 60000);
+      const { event, resolve, captured } = makeHandleInput(`/p/${npub}`);
+      await ogMetaHandle({ event, resolve });
+      expect(captured.html).toContain('Deal $&#39; now');
+      expect(captured.html.match(/<\/head>/g)?.length).toBe(1);
+    });
+
+    it('does not touch /api/ paths (no target resolution, no transformPageChunk, nothing cached)', async () => {
+      ogCache.clear();
+      const naddr = 'naddr1' + 'q'.repeat(60);
+      const { event, resolve, captured } = makeHandleInput(`/api/calendar/${naddr}/ics`);
+      await ogMetaHandle({ event, resolve });
+      expect(resolve).toHaveBeenCalledWith(event);
+      expect(resolve.mock.calls[0].length).toBe(1);
+      expect(captured.html).toBe('<html><head></head><body></body></html>');
+      expect(ogCache.get(naddr)).toBeNull();
+    });
+  });
+
+  describe('eventMatchesFilter', () => {
+    it('matches when kinds/authors/ids/#d all satisfy the filter', () => {
+      const event = {
+        kind: 30142,
+        pubkey: 'abc123',
+        id: 'eventid1',
+        tags: [['d', 'my-d-tag']]
+      };
+      expect(
+        eventMatchesFilter(event, {
+          kinds: [30142],
+          authors: ['abc123'],
+          ids: ['eventid1'],
+          '#d': ['my-d-tag']
+        })
+      ).toBe(true);
+    });
+
+    it('rejects when kind does not match', () => {
+      const event = { kind: 1, pubkey: 'abc123', id: 'e1', tags: [] };
+      expect(eventMatchesFilter(event, { kinds: [30142] })).toBe(false);
+    });
+
+    it('rejects when author is not in the filter list', () => {
+      const event = { kind: 1, pubkey: 'someoneelse', id: 'e1', tags: [] };
+      expect(eventMatchesFilter(event, { authors: ['abc123'] })).toBe(false);
+    });
+
+    it('rejects when id is not in the filter list', () => {
+      const event = { kind: 1, pubkey: 'abc123', id: 'wrongid', tags: [] };
+      expect(eventMatchesFilter(event, { ids: ['eventid1'] })).toBe(false);
+    });
+
+    it('rejects when #d filter present but event has no matching d-tag', () => {
+      const event = { kind: 30142, pubkey: 'abc123', id: 'e1', tags: [] };
+      expect(eventMatchesFilter(event, { '#d': ['my-d-tag'] })).toBe(false);
+    });
+
+    it('rejects when #d filter present but event d-tag value differs', () => {
+      const event = { kind: 30142, pubkey: 'abc123', id: 'e1', tags: [['d', 'other-tag']] };
+      expect(eventMatchesFilter(event, { '#d': ['my-d-tag'] })).toBe(false);
+    });
+
+    it('matches when filter has no constraining fields', () => {
+      const event = { kind: 1, pubkey: 'abc123', id: 'e1', tags: [] };
+      expect(eventMatchesFilter(event, {})).toBe(true);
+    });
+
+    it('never throws on malformed event input', () => {
+      expect(() => eventMatchesFilter(null, { kinds: [1] })).not.toThrow();
+      expect(eventMatchesFilter(null, { kinds: [1] })).toBe(false);
+      expect(() => eventMatchesFilter(undefined, {})).not.toThrow();
+      expect(() => eventMatchesFilter({}, { '#d': ['x'] })).not.toThrow();
+    });
+  });
+
+  describe('verifyEvent integration (locks in nostr-tools/pure import path)', () => {
+    it('accepts a properly signed event and rejects a tampered one', () => {
+      const sk = generateSecretKey();
+      const signed = finalizeEvent(
+        { kind: 1, created_at: 1700000000, tags: [], content: 'hello world' },
+        sk
+      );
+      expect(verifyEvent(signed)).toBe(true);
+      // Round-trip through JSON to drop nostr-tools' internal verified-cache
+      // Symbol (spreading `signed` directly would carry the cached `true`
+      // verdict along with it, since Symbol-keyed props survive `{...obj}`).
+      const tampered = JSON.parse(JSON.stringify(signed));
+      tampered.content = 'tampered';
+      expect(verifyEvent(tampered)).toBe(false);
     });
   });
 });
