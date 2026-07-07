@@ -159,7 +159,7 @@
         {@const resource = formatAMBResource(event)}
         {#if resource}
           <div
-            class="relative mb-4 break-inside-avoid"
+            class="relative mb-4 inline-block w-full break-inside-avoid"
             class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
             class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
           >
@@ -226,12 +226,12 @@
   {:else if tabId === 'bookmarks'}
     <div class="columns-1 gap-4 md:columns-2">
       {#each bookmarkGroups.urls as group (group.url)}
-        <div class="mb-4 break-inside-avoid">
+        <div class="mb-4 inline-block w-full break-inside-avoid">
           <UrlCard {group} {authorProfiles} />
         </div>
       {/each}
       {#each bookmarkGroups.refs as group (group.aTagValue)}
-        <div class="mb-4 break-inside-avoid">
+        <div class="mb-4 inline-block w-full break-inside-avoid">
           <EventHighlightCard {group} {authorProfiles} />
         </div>
       {/each}

@@ -1813,9 +1813,11 @@
           {m.discover_results_count({ count: filteredCommunities.length })}
         </div>
 
-        <div class="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div class="columns-1 gap-8 sm:columns-2 lg:columns-3 xl:columns-4">
           {#each filteredCommunities.slice(0, displayedCommunitiesCount) as community (community.pubkey)}
-            <CommunikeyCard pubkey={community.pubkey} showJoinButton={true} />
+            <div class="mb-8 inline-block w-full break-inside-avoid">
+              <CommunikeyCard pubkey={community.pubkey} showJoinButton={true} />
+            </div>
           {/each}
         </div>
 
@@ -1861,9 +1863,15 @@
       </div>
     {:else}
       <!-- Content Grid with lazy rendering -->
-      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="content-list">
+      <!-- CSS-columns masonry: cards of different heights pack naturally
+           instead of leaving rigid grid gaps -->
+      <div class="columns-1 gap-6 sm:columns-2 lg:columns-3" data-testid="content-list">
         {#each displayedContent as item (item.data.id)}
-          <div use:observeCard={item.data.id} class="min-h-[200px]" data-testid="content-card">
+          <div
+            use:observeCard={item.data.id}
+            class="mb-6 inline-block min-h-[200px] w-full break-inside-avoid"
+            data-testid="content-card"
+          >
             {#if visibleItemIds.has(item.data.id)}
               {#if item.type === 'article'}
                 <ArticleCard
