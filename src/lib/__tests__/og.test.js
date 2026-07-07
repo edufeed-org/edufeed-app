@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { nip19 } from 'nostr-tools';
 
 // Mock $env/dynamic/private before importing the module
 vi.mock('$env/dynamic/private', () => ({
@@ -37,7 +38,8 @@ import {
   decodeIdentifier,
   resolvePageTarget,
   getRelaysForKind,
-  buildDefaultMeta
+  buildDefaultMeta,
+  ogMetaHandle
 } from '$lib/server/og.js';
 
 import {
@@ -780,6 +782,59 @@ describe('OG Meta Tags', () => {
 
     it('includes calendar relays for calendar collections (31924)', () => {
       expect(getRelaysForKind(31924, [])).toContain('wss://cal.example.com');
+    });
+  });
+
+  describe('ogMetaHandle', () => {
+    const npubOfAAAA = nip19.npubEncode('a'.repeat(64));
+
+    /** Build a minimal SvelteKit-shaped handle input */
+    function makeHandleInput(pathname) {
+      /** @type {any} */
+      const captured = {};
+      const event = { url: new URL(`https://app.example.com${pathname}`) };
+      const resolve = vi.fn((evt, opts) => {
+        captured.opts = opts;
+        // simulate page rendering so transformPageChunk runs
+        const html = '<html><head></head><body></body></html>';
+        captured.html = opts?.transformPageChunk ? opts.transformPageChunk({ html }) : html;
+        return new Response(captured.html);
+      });
+      return { event, resolve, captured };
+    }
+
+    it('injects default site tags on pages without a target', async () => {
+      const { event, resolve, captured } = makeHandleInput('/discover');
+      await ogMetaHandle({ event, resolve });
+      expect(captured.html).toContain('og:title');
+      expect(captured.html).toContain('TestApp');
+      expect(captured.html).toContain('og-default.png');
+    });
+
+    it('injects default tags for the home page', async () => {
+      const { event, resolve, captured } = makeHandleInput('/');
+      await ogMetaHandle({ event, resolve });
+      expect(captured.html).toContain('og:site_name');
+    });
+
+    it('serves cached content tags for a previously resolved target', async () => {
+      ogCache.clear();
+      ogCache.set(
+        'profile:'.concat('a'.repeat(64)),
+        '<meta property="og:title" content="Cached" />',
+        60000
+      );
+      const { event, resolve, captured } = makeHandleInput(`/p/${npubOfAAAA}`);
+      await ogMetaHandle({ event, resolve });
+      expect(captured.html).toContain('content="Cached"');
+    });
+
+    it('falls back to default tags when the cached value is a negative entry', async () => {
+      ogCache.clear();
+      ogCache.set('wiki:missing-topic', '', 60000);
+      const { event, resolve, captured } = makeHandleInput('/wiki/missing-topic');
+      await ogMetaHandle({ event, resolve });
+      expect(captured.html).toContain('og-default.png');
     });
   });
 });

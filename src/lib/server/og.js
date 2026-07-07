@@ -551,40 +551,87 @@ export function resolvePageTarget(pathname) {
 }
 
 /**
+ * Cache key for a resolved page target.
+ * @param {PageTarget} target
+ * @returns {string}
+ */
+function targetCacheKey(target) {
+  switch (target.type) {
+    case 'event':
+      return target.identifier;
+    case 'profile':
+      return `profile:${target.pubkey}`;
+    case 'community':
+      return `community:${target.pubkey}`;
+    case 'wiki-topic':
+      return `wiki:${target.topic}`;
+    default:
+      return 'default';
+  }
+}
+
+/**
+ * Fetch the Nostr event backing a page target.
+ * @param {PageTarget} target
+ * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ */
+async function fetchTargetEvent(target) {
+  switch (target.type) {
+    case 'event':
+      return fetchEventFromRelays(target.identifier);
+    case 'profile':
+    case 'community':
+      return fetchFirstEvent(
+        { kinds: [0], authors: [target.pubkey], limit: 1 },
+        getRelaysForKind(0, [])
+      );
+    case 'wiki-topic':
+      return fetchFirstEvent(
+        { kinds: [30818], '#d': [target.topic], limit: 1 },
+        getRelaysForKind(30818, [])
+      );
+    default:
+      return null;
+  }
+}
+
+/**
  * SvelteKit handle hook for injecting OG meta tags.
+ * Always injects exactly one tag set: content tags when a target resolves,
+ * default site tags otherwise (no page ships a bare head).
  * @type {import('@sveltejs/kit').Handle}
  */
 export async function ogMetaHandle({ event, resolve }) {
-  const identifier = extractIdentifier(event.url.pathname);
+  const target = resolvePageTarget(event.url.pathname);
 
-  if (!identifier) {
-    return resolve(event);
-  }
+  /** @type {string | null} */
+  let ogHtml = null;
 
-  // Check cache
-  let ogHtml = ogCache.get(identifier);
+  if (target.type !== 'default') {
+    const key = targetCacheKey(target);
+    ogHtml = ogCache.get(key);
 
-  if (ogHtml === null) {
-    // Cache miss — fetch and render
-    try {
-      const nostrEvent = await fetchEventFromRelays(identifier);
-      if (nostrEvent) {
-        const meta = extractMetadata(nostrEvent);
-        ogHtml = renderOgTags(meta, event.url.href);
-        ogCache.set(identifier, ogHtml, POSITIVE_TTL);
-      } else {
-        // Negative cache — prevent repeated relay fetches for missing events
+    if (ogHtml === null) {
+      try {
+        const nostrEvent = await fetchTargetEvent(target);
+        if (nostrEvent) {
+          const meta = extractMetadata(nostrEvent);
+          ogHtml = renderOgTags(meta, event.url.href);
+          ogCache.set(key, ogHtml, POSITIVE_TTL);
+        } else {
+          ogHtml = '';
+          ogCache.set(key, ogHtml, NEGATIVE_TTL);
+        }
+      } catch {
         ogHtml = '';
-        ogCache.set(identifier, ogHtml, NEGATIVE_TTL);
+        ogCache.set(key, ogHtml, NEGATIVE_TTL);
       }
-    } catch {
-      ogHtml = '';
-      ogCache.set(identifier, ogHtml, NEGATIVE_TTL);
     }
   }
 
+  // Default tags are cheap to render (string ops) and embed the per-request URL.
   if (!ogHtml) {
-    return resolve(event);
+    ogHtml = renderOgTags(buildDefaultMeta(), event.url.href);
   }
 
   const finalOgHtml = ogHtml;
