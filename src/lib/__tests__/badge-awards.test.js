@@ -37,9 +37,8 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEventLoaderLookupRelays: () => []
 }));
 
-const { extractProfileBadgeSlots, buildProfileBadgeDisplayItems } = await import(
-  '../stores/badge-awards.svelte.js'
-);
+const { extractProfileBadgeSlots, mergeProfileBadgeSlots, buildProfileBadgeDisplayItems } =
+  await import('../stores/badge-awards.svelte.js');
 
 /** Build a profile_badges event (kind 10008 / 30008) with alternating a/e pairs.
  * @param {number} kind
@@ -241,5 +240,56 @@ describe('buildProfileBadgeDisplayItems', () => {
     expect(result[0].badgeImage).toBe('');
     expect(result[0].issuerPubkey).toBe('issuer1');
     expect(result[0].awardedAt).toBe(1705363200);
+  });
+});
+
+describe('mergeProfileBadgeSlots', () => {
+  const nostriches10008 = {
+    kind: 10008,
+    created_at: 200,
+    tags: [
+      ['alt', 'List of accepted badges by the author'],
+      ['a', '30009:issuer1:Nostriches'],
+      ['e', 'award-nostriches']
+    ]
+  };
+  const edufeed30008 = {
+    kind: 30008,
+    created_at: 100,
+    tags: [
+      ['d', 'profile_badges'],
+      ['a', '30009:issuer2:edufeed-community-member'],
+      ['e', 'award-member'],
+      ['a', '30009:issuer3:oercamp2024essen'],
+      ['e', 'award-oercamp']
+    ]
+  };
+
+  it('unions slots from both kinds, newest event first', () => {
+    const slots = mergeProfileBadgeSlots([edufeed30008, nostriches10008]);
+    expect(slots.map((s) => s.awardId)).toEqual([
+      'award-nostriches',
+      'award-member',
+      'award-oercamp'
+    ]);
+  });
+
+  it('dedupes by award id across events', () => {
+    const dupe = {
+      kind: 30008,
+      created_at: 50,
+      tags: [
+        ['d', 'profile_badges'],
+        ['a', '30009:issuer1:Nostriches'],
+        ['e', 'award-nostriches']
+      ]
+    };
+    const slots = mergeProfileBadgeSlots([nostriches10008, dupe]);
+    expect(slots).toHaveLength(1);
+  });
+
+  it('handles null/missing events', () => {
+    expect(mergeProfileBadgeSlots([null, nostriches10008, undefined])).toHaveLength(1);
+    expect(mergeProfileBadgeSlots([])).toEqual([]);
   });
 });

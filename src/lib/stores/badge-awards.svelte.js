@@ -60,6 +60,35 @@ export function extractProfileBadgeSlots(event) {
 }
 
 /**
+ * Pure helper: union the accepted-badge slots of several profile_badges
+ * events (typically the newest kind 10008 AND the newest kind 30008).
+ * Different clients maintain different kinds — Amethyst writes 10008 while
+ * edufeed historically wrote 30008 — so newest-wins across kinds would drop
+ * everything the other client accepted. Events are processed newest first;
+ * slots dedupe by award id.
+ *
+ * @param {Array<{ created_at?: number, tags?: string[][] } | null | undefined>} events
+ * @returns {ProfileBadgeSlot[]}
+ */
+export function mergeProfileBadgeSlots(events) {
+  const sorted = (events || [])
+    .filter(Boolean)
+    .sort((a, b) => (b?.created_at ?? 0) - (a?.created_at ?? 0));
+
+  /** @type {ProfileBadgeSlot[]} */
+  const merged = [];
+  const seen = new Set();
+  for (const event of sorted) {
+    for (const slot of extractProfileBadgeSlots(event)) {
+      if (seen.has(slot.awardId)) continue;
+      seen.add(slot.awardId);
+      merged.push(slot);
+    }
+  }
+  return merged;
+}
+
+/**
  * Pure helper: compose display items from slots + loaded awards + loaded definitions.
  * Order follows the slot array (the user's curated choice).
  *
@@ -208,19 +237,22 @@ export function useProfileBadges(getPubkey) {
     // Capture relays once (untrack avoids reactive deps through the SvelteMap)
     const relays = untrack(() => getAllLookupRelays());
 
-    /** Track the newest profile_badges event seen across kinds 10008 + 30008. */
-    /** @type {any} */
-    let bestEvent = null;
+    /** Newest profile_badges event per kind — different clients maintain
+     *  different kinds, so acceptances from both must be merged rather than
+     *  letting the globally newest event shadow the other list. */
+    /** @type {Map<number, any>} */
+    const latestByKind = new Map();
 
     /** @param {any} event */
     function applyCandidate(event) {
       if (!event) return;
-      if (bestEvent && event.created_at <= bestEvent.created_at) {
+      const current = latestByKind.get(event.kind);
+      if (current && event.created_at <= current.created_at) {
         isLoading = false;
         return;
       }
-      bestEvent = event;
-      slots = extractProfileBadgeSlots(event);
+      latestByKind.set(event.kind, event);
+      slots = mergeProfileBadgeSlots([...latestByKind.values()]);
       isLoading = false;
 
       // Re-subscribe per slot. Subs for removed badges are torn down.
