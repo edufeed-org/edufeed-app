@@ -19,7 +19,7 @@ const paths = [
   // '/calendar/event/<real naddr of a 31923>',
   // '/calendar/<real naddr of a 31924 collection>',
   // '/forms/<real naddr of a 30168>',
-  ...process.argv.slice(3)
+  ...process.argv.slice(3).filter((arg) => arg !== '--')
 ];
 
 let failed = 0;
