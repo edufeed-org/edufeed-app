@@ -14,7 +14,9 @@ import {
   getRestrictedTabIds,
   getAccessibleTabIds,
   filterEventsByAccess,
-  getSectionNameForContentType
+  getSectionNameForContentType,
+  getDefaultCommunityTabs,
+  getCommunityTabs
 } from '$lib/helpers/contentTypes.js';
 
 describe('CONTENT_TYPE_CONFIG', () => {
@@ -362,6 +364,97 @@ describe('filterEventsByAccess', () => {
     };
     const result = filterEventsByAccess(events, communityEvent, profileAccess);
     expect(result).toEqual(events);
+  });
+});
+
+describe('getCommunityTabs', () => {
+  it('returns all default tabs when event is null (not yet loaded — fail open)', () => {
+    expect(getCommunityTabs(null)).toEqual(getDefaultCommunityTabs());
+  });
+
+  it('returns all default tabs when the community declares no content sections (fail open)', () => {
+    expect(getCommunityTabs({ tags: [['r', 'wss://relay.example.com']] })).toEqual(
+      getDefaultCommunityTabs()
+    );
+  });
+
+  it('fails open for legacy definitions with sections but no strict marker', () => {
+    const event = {
+      tags: [
+        ['content', 'Calendar'],
+        ['k', '31922'],
+        ['k', '31923']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(getDefaultCommunityTabs());
+  });
+
+  it('keeps only declared content tabs plus home and settings (strict)', () => {
+    const event = {
+      tags: [
+        ['strict', 'content'],
+        ['content', 'Calendar'],
+        ['k', '31922'],
+        ['k', '31923'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'learning', 'calendar', 'settings']);
+  });
+
+  it('excludes chat when a strict community declares sections without kind 9', () => {
+    const event = {
+      tags: [
+        ['strict', 'content'],
+        ['content', 'Polls'],
+        ['k', '1068']
+      ]
+    };
+    const tabs = getCommunityTabs(event);
+    expect(tabs).not.toContain('chat');
+    expect(tabs).toContain('polls');
+    expect(tabs).not.toContain('wikis');
+    expect(tabs).not.toContain('boards');
+  });
+
+  it('includes chat when declared (strict)', () => {
+    const event = {
+      tags: [
+        ['strict', 'content'],
+        ['content', 'Chat'],
+        ['k', '9']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'chat', 'settings']);
+  });
+
+  it('preserves the default tab ordering', () => {
+    const event = {
+      tags: [
+        ['strict', 'content'],
+        ['content', 'Wikis'],
+        ['k', '30818'],
+        ['content', 'Articles'],
+        ['k', '30023']
+      ]
+    };
+    const tabs = getCommunityTabs(event);
+    const defaults = getDefaultCommunityTabs();
+    expect(tabs).toEqual(defaults.filter((t) => tabs.includes(t)));
+  });
+
+  it('ignores declared kinds without a tab mapping', () => {
+    const event = {
+      tags: [
+        ['strict', 'content'],
+        ['content', 'Custom'],
+        ['k', '77777'],
+        ['content', 'Forum'],
+        ['k', '11']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'forum', 'settings']);
   });
 });
 

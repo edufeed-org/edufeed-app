@@ -15,11 +15,7 @@
     LockIcon,
     LockOpenIcon
   } from '$lib/components/icons';
-  import {
-    getCommunityAvailableContentTypes,
-    kindToContentType,
-    getDefaultCommunityTabs
-  } from '$lib/helpers/contentTypes.js';
+  import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -50,6 +46,7 @@
 
   /** @type {Record<string, () => string>} */
   const tabLabelMap = {
+    home: () => m.community_layout_bottom_tab_bar_home(),
     chat: () => m.community_layout_bottom_tab_bar_chat(),
     calendar: () => m.community_layout_bottom_tab_bar_calendar(),
     learning: () => m.community_layout_bottom_tab_bar_learning(),
@@ -68,63 +65,13 @@
   let showLeftScroll = $state(false);
   let showRightScroll = $state(false);
 
-  /**
-   * Get content types to display in dock
-   * @typedef {Object} DockContentType
-   * @property {string} id
-   * @property {string} label
-   * @property {any} icon
-   * @property {number} [kind]
-   * @returns {Array<DockContentType>}
-   */
-  function getContentTypes() {
-    /** @type {Array<DockContentType>} */
-    const types = [{ id: 'home', label: m.community_layout_bottom_tab_bar_home(), icon: HomeIcon }];
-
-    // If we have a community event, get its content types
-    if (communityEvent) {
-      const availableTypes = getCommunityAvailableContentTypes(communityEvent);
-
-      // Map available content types to dock items
-      for (const contentType of availableTypes) {
-        const typeId = kindToContentType(contentType.kind);
-        if (typeId && contentType.enabled && typeId !== 'home') {
-          const icon = iconMap[typeId] || ChatIcon;
-          const label = contentType.name;
-
-          types.push({
-            id: typeId,
-            label,
-            icon,
-            kind: contentType.kind
-          });
-        }
-      }
-    }
-
-    // Ensure all default tabs are present (replaces per-type forced blocks)
-    for (const tabId of getDefaultCommunityTabs()) {
-      if (tabId === 'home' || tabId === 'settings') continue;
-      if (!types.some((t) => t.id === tabId)) {
-        types.push({
-          id: tabId,
-          label: tabLabelMap[tabId]?.() ?? tabId,
-          icon: iconMap[tabId] || ChatIcon
-        });
-      }
-    }
-
-    // Add settings tab at the end
-    types.push({
-      id: 'settings',
-      label: m.community_layout_bottom_tab_bar_settings(),
-      icon: SettingsIcon
-    });
-
-    return types;
-  }
-
-  const contentTypes = $derived(getContentTypes());
+  const contentTypes = $derived(
+    getCommunityTabs(communityEvent).map((id) => ({
+      id,
+      label: tabLabelMap[id]?.() ?? id,
+      icon: iconMap[id] ?? ChatIcon
+    }))
+  );
 
   /**
    * Handle content type selection

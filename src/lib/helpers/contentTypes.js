@@ -2,7 +2,7 @@
  * Content type configuration for community features
  * Maps event kinds to UI metadata and implementation status
  */
-import { parseCommunityContentTypes } from './communityRelays.js';
+import { parseCommunityContentTypes, hasStrictContentMarker } from './communityRelays.js';
 
 /**
  * @typedef {Object} ContentTypeConfig
@@ -439,6 +439,34 @@ export function getDefaultCommunityTabs() {
 
   tabs.push('settings');
   return tabs;
+}
+
+/**
+ * Get the community navigation tabs filtered by the community's declared content sections.
+ * Fails open (all default tabs) when the event is null, declares no content
+ * sections, or lacks the ["strict", "content"] marker — legacy definitions
+ * were written by UIs that showed all tabs regardless, so their declarations
+ * are advisory only. Mirrors the FAB's filterActionsForCommunity semantics.
+ * Home and settings are always included; chat only when kind 9 is declared.
+ * @param {any} communityEvent - kind 10222 event (or null)
+ * @returns {string[]} Tab IDs in default display order
+ */
+export function getCommunityTabs(communityEvent) {
+  const all = getDefaultCommunityTabs();
+  if (!communityEvent || !hasStrictContentMarker(communityEvent)) return all;
+
+  const sections = parseCommunityContentTypes(communityEvent);
+  if (sections.length === 0) return all;
+
+  const declared = new Set(['home', 'settings']);
+  for (const section of sections) {
+    for (const kind of section.kinds) {
+      const tabId = kindToContentType(kind);
+      if (tabId) declared.add(tabId);
+    }
+  }
+
+  return all.filter((id) => declared.has(id));
 }
 
 /**

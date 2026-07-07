@@ -19,7 +19,10 @@
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
   import ContentTypesAndACL from './shared/ContentTypesAndACL.svelte';
-  import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
+  import {
+    buildCommunityDefinitionTags,
+    createDefaultContentTypes
+  } from '$lib/helpers/communityTagBuilder.js';
   import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import { parseFormTemplate, createDefaultMembershipForm } from '$lib/helpers/forms.js';
@@ -98,6 +101,19 @@
     }
   });
 
+  // Content types enabled by default for new communities (Meet stays off
+  // because it needs a LiveKit operator URL)
+  const DEFAULT_ENABLED_CONTENT_TYPES = [
+    'calendar',
+    'chat',
+    'articles',
+    'posts',
+    'wikis',
+    'learning',
+    'polls',
+    'bookmarks'
+  ];
+
   // Community data state
   let communityData = $state({
     relays: ['wss://relay.edufeed.org'],
@@ -105,50 +121,7 @@
     location: '',
     description: '',
     livekitUrl: '',
-    contentTypes: {
-      calendar: {
-        name: 'Calendar',
-        enabled: true,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      chat: {
-        name: 'Chat',
-        enabled: true,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      articles: {
-        name: 'Articles',
-        enabled: true,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      posts: {
-        name: 'Forum',
-        enabled: true,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      wikis: {
-        name: 'Wikis',
-        enabled: true,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      },
-      meet: {
-        name: 'Meet',
-        enabled: false,
-        badges: { read: null, write: null },
-        relays: [],
-        formRef: ''
-      }
-    }
+    contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
   });
 
   // Toggle for access control configuration
@@ -228,50 +201,7 @@
           location: '',
           description: '',
           livekitUrl: '',
-          contentTypes: {
-            calendar: {
-              name: 'Calendar',
-              enabled: true,
-              badges: { read: null, write: null },
-              relays: [],
-              formRef: ''
-            },
-            chat: {
-              name: 'Chat',
-              enabled: true,
-              badges: { read: null, write: null },
-              relays: [],
-              formRef: ''
-            },
-            articles: {
-              name: 'Articles',
-              enabled: true,
-              badges: { read: null, write: null },
-              relays: [],
-              formRef: ''
-            },
-            posts: {
-              name: 'Forum',
-              enabled: true,
-              badges: { read: null, write: null },
-              relays: [],
-              formRef: ''
-            },
-            wikis: {
-              name: 'Wikis',
-              enabled: true,
-              badges: { read: null, write: null },
-              relays: [],
-              formRef: ''
-            },
-            meet: {
-              name: 'Meet',
-              enabled: false,
-              badges: { read: null, write: null },
-              relays: [],
-              formRef: ''
-            }
-          }
+          contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
         };
         showAccessConfig = false;
         defaultFormRef = '';
@@ -585,50 +515,7 @@
       location: '',
       description: '',
       livekitUrl: '',
-      contentTypes: {
-        calendar: {
-          name: 'Calendar',
-          enabled: true,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        chat: {
-          name: 'Chat',
-          enabled: true,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        articles: {
-          name: 'Articles',
-          enabled: true,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        posts: {
-          name: 'Forum',
-          enabled: true,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        wikis: {
-          name: 'Wikis',
-          enabled: true,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        },
-        meet: {
-          name: 'Meet',
-          enabled: false,
-          badges: { read: null, write: null },
-          relays: [],
-          formRef: ''
-        }
-      }
+      contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
     };
     showAccessConfig = false;
     defaultFormRef = '';

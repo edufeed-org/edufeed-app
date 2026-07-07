@@ -15,7 +15,7 @@
     LockIcon,
     LockOpenIcon
   } from '$lib/components/icons';
-  import { getDefaultCommunityTabs } from '$lib/helpers/contentTypes.js';
+  import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -25,7 +25,8 @@
     communityProfile = /** @type {any} */ (null),
     communityPubkey: _communityPubkey = /** @type {string | null} */ (null),
     restrictedTabs = /** @type {Set<string>} */ (new Set()),
-    accessibleTabs = /** @type {Set<string>} */ (new Set())
+    accessibleTabs = /** @type {Set<string>} */ (new Set()),
+    communityEvent = /** @type {any} */ (null)
   } = $props();
 
   import { getProfilePicture } from 'applesauce-core/helpers';
@@ -68,11 +69,13 @@
     settings: () => m.community_layout_bottom_tab_bar_settings()
   };
 
-  const contentTypes = getDefaultCommunityTabs().map((id) => ({
-    id,
-    label: labelMap[id]?.() ?? id,
-    icon: iconMap[id] ?? ChatIcon
-  }));
+  let contentTypes = $derived(
+    getCommunityTabs(communityEvent).map((id) => ({
+      id,
+      label: labelMap[id]?.() ?? id,
+      icon: iconMap[id] ?? ChatIcon
+    }))
+  );
 
   /**
    * Handle content type selection

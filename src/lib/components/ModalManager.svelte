@@ -1,5 +1,9 @@
 <script>
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { resourceCreatePath } from '$lib/helpers/contentCreation.js';
+  import ResourceVariantPickerModal from './educational/ResourceVariantPickerModal.svelte';
   import LoginModal from './LoginModal.svelte';
   import LoginWithPrivateKey from './LoginWithPrivateKey.svelte';
   import LoginWithBunker from './LoginWithBunker.svelte';
@@ -274,6 +278,14 @@
   let pollCommunityPubkey = $derived(
     /** @type {string} */ (/** @type {any} */ (modal.modalProps)?.communityPubkey) || ''
   );
+
+  /** @param {string} variantId */
+  function handleResourceVariantSelect(variantId) {
+    const communityPubkey =
+      /** @type {string} */ (/** @type {any} */ (modal.modalProps)?.communityPubkey) || '';
+    modal.closeModal();
+    goto(/** @type {any} */ (resolve)(resourceCreatePath(variantId, communityPubkey)));
+  }
 </script>
 
 <!-- Render modals based on active modal state -->
@@ -323,4 +335,11 @@
   <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
 {:else if modal.activeModal === 'deleteCommunity'}
   <DeleteCommunityModal modalId={deleteCommunityModalId} />
+{:else if modal.activeModal === 'resourceVariantPicker'}
+  <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
+  <ResourceVariantPickerModal
+    open={true}
+    onSelect={handleResourceVariantSelect}
+    onClose={() => modal.closeModal()}
+  />
 {/if}

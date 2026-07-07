@@ -30,13 +30,51 @@
  * @type {Record<string, string[]>}
  */
 const CONTENT_TYPE_KINDS = {
-  calendar: ['31922', '31923'],
+  calendar: ['31922', '31923', '31924'],
   chat: ['9'],
   articles: ['30023'],
   posts: ['1', '11'],
   wikis: ['30818'],
+  learning: ['30142'],
+  polls: ['1068'],
+  bookmarks: ['39701'],
   meet: ['30312', '30313']
 };
+
+/** Content type key → default section display name
+ * @type {Record<string, string>}
+ */
+const CONTENT_TYPE_NAMES = {
+  calendar: 'Calendar',
+  chat: 'Chat',
+  articles: 'Articles',
+  posts: 'Forum',
+  wikis: 'Wikis',
+  learning: 'Learning',
+  polls: 'Polls',
+  bookmarks: 'Social Bookmarks',
+  meet: 'Meet'
+};
+
+/**
+ * Build a fresh content-type state record for the community modals.
+ * @param {string[]} [enabledKeys] - Content type keys to enable
+ * @returns {Record<string, ContentTypeFormData & { formRef: string }>}
+ */
+export function createDefaultContentTypes(enabledKeys = []) {
+  /** @type {Record<string, ContentTypeFormData & { formRef: string }>} */
+  const result = {};
+  for (const [key, name] of Object.entries(CONTENT_TYPE_NAMES)) {
+    result[key] = {
+      name,
+      enabled: enabledKeys.includes(key),
+      badges: { read: null, write: null },
+      relays: [],
+      formRef: ''
+    };
+  }
+  return result;
+}
 
 /**
  * Build tags array for a kind 10222 community definition event.
@@ -95,6 +133,11 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
   if (data.livekitUrl?.trim()) {
     tags.push(['livekit', data.livekitUrl.trim()]);
   }
+
+  // Strict content marker: the modals present the full content-type
+  // vocabulary, so the sections below are an exhaustive, owner-reviewed
+  // choice. Clients only filter navigation/creation UIs when this is present.
+  tags.push(['strict', 'content']);
 
   // ── Content sections ──
 
