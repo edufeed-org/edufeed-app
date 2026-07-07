@@ -16,6 +16,7 @@ import {
   getArticleImage
 } from 'applesauce-common/helpers';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 // ─── Relay fetch ──────────────────────────────────────────────────────────────
 
@@ -399,6 +400,49 @@ export function extractIdentifier(pathname) {
   const neventMatch = pathname.match(NEVENT_RE);
   if (neventMatch) return neventMatch[1];
   return null;
+}
+
+/**
+ * @typedef {{ type: 'event', identifier: string }
+ *   | { type: 'community', pubkey: string }
+ *   | { type: 'profile', pubkey: string }
+ *   | { type: 'wiki-topic', topic: string }
+ *   | { type: 'default' }} PageTarget
+ */
+
+/**
+ * Classify a pathname into a previewable page target.
+ * naddr/nevent take precedence so community-scoped content URLs
+ * (/c/<npub>/article/<naddr>) preview the content, not the community.
+ * @param {string} pathname
+ * @returns {PageTarget}
+ */
+export function resolvePageTarget(pathname) {
+  const identifier = extractIdentifier(pathname);
+  if (identifier) return { type: 'event', identifier };
+
+  const cMatch = pathname.match(/^\/c\/([^/]+)/);
+  if (cMatch) {
+    const pubkey = normalizePubkey(decodeURIComponent(cMatch[1]));
+    if (pubkey) return { type: 'community', pubkey };
+  }
+
+  const pMatch = pathname.match(/^\/p\/([^/]+)/);
+  if (pMatch) {
+    const pubkey = normalizePubkey(decodeURIComponent(pMatch[1]));
+    if (pubkey) return { type: 'profile', pubkey };
+  }
+
+  const authorMatch = pathname.match(/^\/calendar\/author\/([^/]+)/);
+  if (authorMatch) {
+    const pubkey = normalizePubkey(decodeURIComponent(authorMatch[1]));
+    if (pubkey) return { type: 'profile', pubkey };
+  }
+
+  const wikiMatch = pathname.match(/^\/wiki\/([^/]+)$/);
+  if (wikiMatch) return { type: 'wiki-topic', topic: decodeURIComponent(wikiMatch[1]) };
+
+  return { type: 'default' };
 }
 
 /**

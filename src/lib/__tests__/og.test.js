@@ -28,7 +28,8 @@ import {
   renderOgTags,
   ogCache,
   extractIdentifier,
-  decodeIdentifier
+  decodeIdentifier,
+  resolvePageTarget
 } from '$lib/server/og.js';
 
 import {
@@ -476,6 +477,70 @@ describe('OG Meta Tags', () => {
 
     it('returns null for npub identifiers', () => {
       expect(decodeIdentifier('npub1abc')).toBeNull();
+    });
+  });
+
+  describe('resolvePageTarget', () => {
+    // hex + npub pair for fixtures
+    const HEX = '82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2';
+    const NPUB = 'npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m';
+
+    it('resolves naddr anywhere in the path as event (takes precedence over community)', () => {
+      const naddr = 'naddr1' + 'q'.repeat(60);
+      const target = resolvePageTarget(`/c/${NPUB}/article/${naddr}`);
+      expect(target).toEqual({ type: 'event', identifier: naddr });
+    });
+
+    it('resolves nevent paths as event', () => {
+      const nevent = 'nevent1' + 'q'.repeat(60);
+      expect(resolvePageTarget(`/${nevent}`)).toEqual({ type: 'event', identifier: nevent });
+    });
+
+    it('resolves /c/<npub> as community with hex pubkey', () => {
+      expect(resolvePageTarget(`/c/${NPUB}`)).toEqual({ type: 'community', pubkey: HEX });
+    });
+
+    it('resolves /c/<hex> as community', () => {
+      expect(resolvePageTarget(`/c/${HEX}`)).toEqual({ type: 'community', pubkey: HEX });
+    });
+
+    it('resolves /c/<npub>/bookmarks/foo (community subpage without naddr) as community', () => {
+      expect(resolvePageTarget(`/c/${NPUB}/bookmarks/foo`)).toEqual({
+        type: 'community',
+        pubkey: HEX
+      });
+    });
+
+    it('does NOT resolve dashboard routes /c, /c/inbox, /c/messages as community', () => {
+      expect(resolvePageTarget('/c')).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/c/inbox')).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/c/messages')).toEqual({ type: 'default' });
+    });
+
+    it('resolves /p/<npub> and /p/<hex> as profile', () => {
+      expect(resolvePageTarget(`/p/${NPUB}`)).toEqual({ type: 'profile', pubkey: HEX });
+      expect(resolvePageTarget(`/p/${HEX}`)).toEqual({ type: 'profile', pubkey: HEX });
+    });
+
+    it('resolves /calendar/author/<npub> as profile', () => {
+      expect(resolvePageTarget(`/calendar/author/${NPUB}`)).toEqual({
+        type: 'profile',
+        pubkey: HEX
+      });
+    });
+
+    it('resolves /wiki/<topic> with URI decoding', () => {
+      expect(resolvePageTarget('/wiki/peace%20education')).toEqual({
+        type: 'wiki-topic',
+        topic: 'peace education'
+      });
+    });
+
+    it('returns default for /, /discover, /settings and invalid pubkeys', () => {
+      expect(resolvePageTarget('/')).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/discover')).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/settings')).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/p/not-a-pubkey')).toEqual({ type: 'default' });
     });
   });
 });
