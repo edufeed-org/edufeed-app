@@ -233,7 +233,10 @@
     return () => subscription.unsubscribe();
   });
 
-  // IntersectionObserver for lazy rendering cards
+  // IntersectionObserver for lazy rendering cards.
+  // Rendering is STICKY: once a card rendered it stays rendered. Un-rendering
+  // on exit changes card heights, which rebalances the masonry columns and
+  // shifts cards across the observer boundary — a visible flicker loop.
   $effect(() => {
     cardObserver = new IntersectionObserver(
       (entries) => {
@@ -245,9 +248,8 @@
           if (entry.isIntersecting && !visibleItemIds.has(id)) {
             visibleItemIds.add(id);
             changed = true;
-          } else if (!entry.isIntersecting && visibleItemIds.has(id)) {
-            visibleItemIds.delete(id);
-            changed = true;
+            // Rendered for good — no need to keep tracking this node.
+            cardObserver?.unobserve(entry.target);
           }
         }
         if (changed) {
