@@ -542,5 +542,13 @@ describe('OG Meta Tags', () => {
       expect(resolvePageTarget('/settings')).toEqual({ type: 'default' });
       expect(resolvePageTarget('/p/not-a-pubkey')).toEqual({ type: 'default' });
     });
+
+    it('does not throw on malformed percent-encoding', () => {
+      // Malformed escapes fall back to the raw segment instead of throwing URIError
+      expect(resolvePageTarget('/wiki/%')).toEqual({ type: 'wiki-topic', topic: '%' });
+      expect(resolvePageTarget('/c/%zz')).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/p/%zz')).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/calendar/author/%zz')).toEqual({ type: 'default' });
+    });
   });
 });

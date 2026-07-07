@@ -403,6 +403,19 @@ export function extractIdentifier(pathname) {
 }
 
 /**
+ * decodeURIComponent that never throws — returns the raw value on malformed input.
+ * @param {string} value
+ * @returns {string}
+ */
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
  * @typedef {{ type: 'event', identifier: string }
  *   | { type: 'community', pubkey: string }
  *   | { type: 'profile', pubkey: string }
@@ -423,24 +436,24 @@ export function resolvePageTarget(pathname) {
 
   const cMatch = pathname.match(/^\/c\/([^/]+)/);
   if (cMatch) {
-    const pubkey = normalizePubkey(decodeURIComponent(cMatch[1]));
+    const pubkey = normalizePubkey(safeDecodeURIComponent(cMatch[1]));
     if (pubkey) return { type: 'community', pubkey };
   }
 
   const pMatch = pathname.match(/^\/p\/([^/]+)/);
   if (pMatch) {
-    const pubkey = normalizePubkey(decodeURIComponent(pMatch[1]));
+    const pubkey = normalizePubkey(safeDecodeURIComponent(pMatch[1]));
     if (pubkey) return { type: 'profile', pubkey };
   }
 
   const authorMatch = pathname.match(/^\/calendar\/author\/([^/]+)/);
   if (authorMatch) {
-    const pubkey = normalizePubkey(decodeURIComponent(authorMatch[1]));
+    const pubkey = normalizePubkey(safeDecodeURIComponent(authorMatch[1]));
     if (pubkey) return { type: 'profile', pubkey };
   }
 
   const wikiMatch = pathname.match(/^\/wiki\/([^/]+)$/);
-  if (wikiMatch) return { type: 'wiki-topic', topic: decodeURIComponent(wikiMatch[1]) };
+  if (wikiMatch) return { type: 'wiki-topic', topic: safeDecodeURIComponent(wikiMatch[1]) };
 
   return { type: 'default' };
 }
