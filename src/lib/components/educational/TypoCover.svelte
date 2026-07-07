@@ -325,7 +325,7 @@
   }
 
   .typo-cover-license {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
     font-size: clamp(0.45rem, 2.2cqi, 0.7rem);
     color: oklch(100% 0 0 / 0.75);
     white-space: nowrap;

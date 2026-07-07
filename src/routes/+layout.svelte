@@ -4,6 +4,7 @@
   import '@fontsource-variable/yanone-kaffeesatz';
   import '@fontsource-variable/outfit';
   import '@fontsource-variable/caveat';
+  import '@fontsource-variable/jetbrains-mono';
   import Navbar from '$lib/components/Navbar.svelte';
   import ModalManager from '$lib/components/ModalManager.svelte';
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';

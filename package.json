@@ -84,6 +84,7 @@
   },
   "dependencies": {
     "@fontsource-variable/caveat": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/outfit": "^5.2.8",
     "@mozilla/readability": "^0.6.0",
     "applesauce-common": "^5.2.0",

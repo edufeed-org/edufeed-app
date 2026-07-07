@@ -451,70 +451,82 @@
   {:else}
     {#snippet feedEntry(/** @type {any} */ entry, /** @type {boolean} */ pinned)}
       <div>
-        {#if pinned || (canPin && entry.data?.id)}
-          <div class="mb-1 flex items-center justify-between gap-2">
-            {#if pinned}
-              <span class="badge gap-1 badge-outline badge-sm text-warning" data-testid="pin-flag">
-                <PinIcon class_="w-3 h-3" />
-                {m.profile_pinned_divider()}
-              </span>
-            {:else}
-              <span></span>
-            {/if}
-            {#if canPin && entry.data?.id}
-              <button
-                class="btn gap-1 btn-ghost btn-xs"
-                data-testid="pin-toggle"
-                disabled={pinBusy === entry.data.id}
-                onclick={() => togglePin(entry)}
-              >
-                <PinIcon class_="w-3 h-3" />
-                {pinned ? m.profile_unpin_action() : m.profile_pin_action()}
-              </button>
-            {/if}
+        {#if !pinned && canPin && entry.data?.id}
+          <div class="mb-0.5 flex justify-end">
+            <button
+              class="btn gap-1 text-base-content/50 btn-ghost btn-xs"
+              data-testid="pin-toggle"
+              disabled={pinBusy === entry.data.id}
+              onclick={() => togglePin(entry)}
+            >
+              <PinIcon class_="w-3 h-3" />
+              {m.profile_pin_action()}
+            </button>
           </div>
         {/if}
         {#if entry.repost}
           <SharedByLine sharers={entry.repost.sharers} {authorProfiles} />
         {/if}
-        {#if entry.type === 'notes'}
-          <NoteCard
-            note={entry.data}
-            authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-            {activeUser}
-            extraRelays={getProfileLookupRelays()}
-          />
-        {:else if entry.type === 'calendar'}
-          {@const event = getCalendarEventMetadata(entry.data)}
-          {#if event}
-            <CalendarEventCard
-              {event}
-              compact={false}
-              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-            />
+        <!-- Pinned cards carry the flag on the card itself (design: in-card
+             pin pill + tinted border) instead of a detached row above. -->
+        <div class="relative" class:pf-pinned-card={pinned} class:mt-2={pinned}>
+          {#if pinned}
+            <div class="absolute -top-2.5 right-4 z-10 flex items-center gap-1.5">
+              <span class="pf-pin-flag" data-testid="pin-flag">
+                <PinIcon class_="w-3 h-3" />
+                {m.profile_pinned_divider()}
+              </span>
+              {#if canPin && entry.data?.id}
+                <button
+                  class="pf-pin-flag pf-pin-unpin"
+                  data-testid="pin-toggle"
+                  disabled={pinBusy === entry.data.id}
+                  onclick={() => togglePin(entry)}
+                >
+                  {m.profile_unpin_action()}
+                </button>
+              {/if}
+            </div>
           {/if}
-        {:else if entry.type === 'resources'}
-          {@const resource = formatAMBResource(entry.data)}
-          {#if resource}
-            <AMBResourceCard
-              {resource}
+          {#if entry.type === 'notes'}
+            <NoteCard
+              note={entry.data}
+              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+              {activeUser}
+              extraRelays={getProfileLookupRelays()}
+            />
+          {:else if entry.type === 'calendar'}
+            {@const event = getCalendarEventMetadata(entry.data)}
+            {#if event}
+              <CalendarEventCard
+                {event}
+                compact={false}
+                authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+              />
+            {/if}
+          {:else if entry.type === 'resources'}
+            {@const resource = formatAMBResource(entry.data)}
+            {#if resource}
+              <AMBResourceCard
+                {resource}
+                authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+                compact={false}
+              />
+            {/if}
+          {:else if entry.type === 'articles'}
+            <ArticleCard
+              article={entry.data}
               authorProfile={authorProfiles.get(entry.data.pubkey) || null}
               compact={false}
             />
+          {:else if entry.type === 'bookmark-url'}
+            <UrlCard group={entry.data} {authorProfiles} />
+          {:else if entry.type === 'bookmark-ref'}
+            <EventHighlightCard group={entry.data} {authorProfiles} />
+          {:else if entry.type === 'polls'}
+            <PollCard event={entry.data} truncate={true} />
           {/if}
-        {:else if entry.type === 'articles'}
-          <ArticleCard
-            article={entry.data}
-            authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-            compact={false}
-          />
-        {:else if entry.type === 'bookmark-url'}
-          <UrlCard group={entry.data} {authorProfiles} />
-        {:else if entry.type === 'bookmark-ref'}
-          <EventHighlightCard group={entry.data} {authorProfiles} />
-        {:else if entry.type === 'polls'}
-          <PollCard event={entry.data} truncate={true} />
-        {/if}
+        </div>
       </div>
     {/snippet}
 
@@ -543,3 +555,32 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  /* Pinned card treatment (design: in-card amber pill + tinted border) */
+  .pf-pin-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: color-mix(in oklch, var(--color-warning) 70%, var(--color-base-content));
+    background: color-mix(in oklch, var(--color-warning) 18%, var(--color-base-100));
+    border: 1px solid color-mix(in oklch, var(--color-warning) 45%, transparent);
+    border-radius: 999px;
+    padding: 5px 10px;
+  }
+  .pf-pin-unpin {
+    cursor: pointer;
+  }
+  .pf-pin-unpin:hover {
+    background: color-mix(in oklch, var(--color-warning) 32%, var(--color-base-100));
+  }
+  .pf-pinned-card > :global(*:last-child) {
+    border-color: color-mix(in oklch, var(--color-warning) 55%, transparent);
+  }
+</style>

@@ -9,13 +9,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="apple-touch-icon" href="%sveltekit.assets%/icon-192x192.png" />
 
-    <!-- Bunny Fonts: Outfit (sans), Caveat (script), JetBrains Mono — used by TypoCover.
-         GDPR-friendly Google Fonts mirror. display=swap keeps FOUT graceful. -->
-    <link rel="preconnect" href="https://fonts.bunny.net" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.bunny.net/css?family=outfit:600,800|caveat:700|jetbrains-mono:400&display=swap"
-    />
+    <!-- Fonts (Outfit, Caveat, JetBrains Mono) are self-hosted via
+         @fontsource-variable imports in src/routes/+layout.svelte — no
+         third-party font CDN. -->
 
     <!-- Pre-hydration theme: set data-theme from localStorage before first paint.
          Mirrors the effectiveTheme derivation in src/lib/stores/app-settings.svelte.js (see $derived).

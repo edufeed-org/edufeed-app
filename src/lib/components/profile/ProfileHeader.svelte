@@ -170,6 +170,7 @@
           </ul>
         </div>
       {:else if activeUser}
+        <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
         <button
           class="pf-btn solid"
           class:following={isFollowing}
@@ -206,7 +207,6 @@
             <LightningIcon class_="w-4 h-4" />
           </a>
         {/if}
-        <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
       {/if}
     </div>
   </div>

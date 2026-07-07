@@ -107,29 +107,39 @@
   );
 </script>
 
+<!-- Pinned cards carry the flag on the card itself (design: in-card pin pill
+     + tinted border). The wrapper calling this must be `relative`; pinned
+     wrappers also get `pf-pinned-card` + top margin for the straddling pill. -->
 {#snippet pinRow(/** @type {any} */ event)}
   {@const pinned = isEntryPinned({ data: event }, pinnedPointers)}
-  {#if pinned || canPin}
-    <div class="mb-1 flex items-center justify-between gap-2">
-      {#if pinned}
-        <span class="badge gap-1 badge-outline badge-sm text-warning" data-testid="pin-flag">
-          <PinIcon class_="w-3 h-3" />
-          {m.profile_pinned_divider()}
-        </span>
-      {:else}
-        <span></span>
-      {/if}
+  {#if pinned}
+    <div class="absolute -top-2.5 right-4 z-10 flex items-center gap-1.5">
+      <span class="pf-pin-flag" data-testid="pin-flag">
+        <PinIcon class_="w-3 h-3" />
+        {m.profile_pinned_divider()}
+      </span>
       {#if canPin}
         <button
-          class="btn gap-1 btn-ghost btn-xs"
+          class="pf-pin-flag pf-pin-unpin"
           data-testid="pin-toggle"
           disabled={pinBusy === event.id}
           onclick={() => togglePin(event)}
         >
-          <PinIcon class_="w-3 h-3" />
-          {pinned ? m.profile_unpin_action() : m.profile_pin_action()}
+          {m.profile_unpin_action()}
         </button>
       {/if}
+    </div>
+  {:else if canPin}
+    <div class="absolute -top-2.5 right-4 z-10">
+      <button
+        class="pf-pin-flag pf-pin-unpin opacity-70 hover:opacity-100"
+        data-testid="pin-toggle"
+        disabled={pinBusy === event.id}
+        onclick={() => togglePin(event)}
+      >
+        <PinIcon class_="w-3 h-3" />
+        {m.profile_pin_action()}
+      </button>
     </div>
   {/if}
 {/snippet}
@@ -142,11 +152,17 @@
       <p>{m.profile_tab_empty_description()}</p>
     </div>
   {:else if tabId === 'content'}
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <!-- CSS-columns masonry: cards of different heights flow naturally
+         instead of leaving rigid grid gaps -->
+    <div class="columns-1 gap-4 md:columns-2">
       {#each events as event (event.id)}
         {@const resource = formatAMBResource(event)}
         {#if resource}
-          <div>
+          <div
+            class="relative mb-4 break-inside-avoid"
+            class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
+            class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
+          >
             {@render pinRow(event)}
             <AMBResourceCard
               {resource}
@@ -160,7 +176,11 @@
   {:else if tabId === 'articles'}
     <div class="space-y-4">
       {#each events as event (event.id)}
-        <div>
+        <div
+          class="relative"
+          class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
+          class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
+        >
           {@render pinRow(event)}
           <ArticleCard
             article={event}
@@ -175,7 +195,11 @@
       {#each events as event (event.id)}
         {@const calendarEvent = getCalendarEventMetadata(event)}
         {#if calendarEvent}
-          <div>
+          <div
+            class="relative"
+            class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
+            class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
+          >
             {@render pinRow(event)}
             <CalendarEventCard
               event={calendarEvent}
@@ -189,19 +213,27 @@
   {:else if tabId === 'polls'}
     <div class="space-y-4">
       {#each events as event (event.id)}
-        <div>
+        <div
+          class="relative"
+          class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
+          class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
+        >
           {@render pinRow(event)}
           <PollCard {event} truncate={true} />
         </div>
       {/each}
     </div>
   {:else if tabId === 'bookmarks'}
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div class="columns-1 gap-4 md:columns-2">
       {#each bookmarkGroups.urls as group (group.url)}
-        <UrlCard {group} {authorProfiles} />
+        <div class="mb-4 break-inside-avoid">
+          <UrlCard {group} {authorProfiles} />
+        </div>
       {/each}
       {#each bookmarkGroups.refs as group (group.aTagValue)}
-        <EventHighlightCard {group} {authorProfiles} />
+        <div class="mb-4 break-inside-avoid">
+          <EventHighlightCard {group} {authorProfiles} />
+        </div>
       {/each}
     </div>
   {/if}
@@ -231,5 +263,32 @@
     margin: 0;
     font-size: 14px;
     max-width: 420px;
+  }
+
+  /* Pinned card treatment (shared look with the feed) */
+  .pf-pin-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: color-mix(in oklch, var(--color-warning) 70%, var(--color-base-content));
+    background: color-mix(in oklch, var(--color-warning) 18%, var(--color-base-100));
+    border: 1px solid color-mix(in oklch, var(--color-warning) 45%, transparent);
+    border-radius: 999px;
+    padding: 5px 10px;
+  }
+  .pf-pin-unpin {
+    cursor: pointer;
+  }
+  .pf-pin-unpin:hover {
+    background: color-mix(in oklch, var(--color-warning) 32%, var(--color-base-100));
+  }
+  .pf-pinned-card > :global(*:last-child) {
+    border-color: color-mix(in oklch, var(--color-warning) 55%, transparent);
   }
 </style>

@@ -52,7 +52,7 @@ body {
   --color-info: oklch(62% 0.08 230);
   --color-info-content: oklch(28% 0.06 230);
   --color-success: oklch(50% 0.1 105);
-  --color-success-content: oklch(24% 0.05 105);
+  --color-success-content: oklch(97% 0.02 105);
   --color-warning: oklch(62% 0.14 55);
   --color-warning-content: oklch(28% 0.08 55);
   --color-error: oklch(55% 0.18 25);
