@@ -15,6 +15,8 @@ import {
   getArticleSummary,
   getArticleImage
 } from 'applesauce-common/helpers';
+import { getProfileContent } from 'applesauce-core/helpers';
+import { getFeedCardData } from '$lib/helpers/feedCardData.js';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
 import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
@@ -199,12 +201,19 @@ export async function fetchEventFromRelays(identifier) {
 /** @type {RegExp} */
 const IMAGE_URL_RE = /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?\S*)?/i;
 
+/** Map feed-card typeKeys to OG types. Unlisted keys → 'website'. */
+const TYPE_KEY_TO_OG_TYPE = {
+  calendar: 'event',
+  article: 'article',
+  learning: 'article'
+};
+
 /**
  * @typedef {Object} OgMetadata
  * @property {string} title
  * @property {string} description
  * @property {string} [image]
- * @property {'article' | 'event' | 'website'} type
+ * @property {'article' | 'event' | 'website' | 'profile'} type
  * @property {string} [publishedAt] - ISO 8601 publication timestamp (articles only)
  */
 
@@ -249,12 +258,37 @@ export function extractMetadata(event) {
     return { title, description, image, type: 'article' };
   }
 
-  // Text notes and other kinds — generic extraction
-  const title = truncate(event.content, 70);
-  const description = truncate(event.content, 200);
-  const imageMatch = event.content.match(IMAGE_URL_RE);
-  const image = imageMatch ? imageMatch[0] : undefined;
-  return { title, description, image, type: 'website' };
+  // Calendar collections (NIP-52 kind 31924)
+  if (kind === 31924) {
+    const title = getTagValue(event.tags, 'title') || getTagValue(event.tags, 'name') || 'Calendar';
+    const description =
+      getTagValue(event.tags, 'description') || getTagValue(event.tags, 'summary') || '';
+    const image = getTagValue(event.tags, 'image') || undefined;
+    return { title, description, image, type: 'website' };
+  }
+
+  // Profiles (kind 0) — also used for community pages (communities are npubs)
+  if (kind === 0) {
+    const profile = getProfileContent(event);
+    return {
+      title: profile?.display_name || profile?.name || 'Profile',
+      description: truncate(profile?.about || '', 200),
+      image: profile?.picture || undefined,
+      type: 'profile'
+    };
+  }
+
+  // Everything else: delegate to the shared feed-card extractor
+  const card = getFeedCardData(event);
+  const isJsonContent = /^\s*[[{]/.test(event.content || '');
+  const imageMatch = !isJsonContent && event.content ? event.content.match(IMAGE_URL_RE) : null;
+  return {
+    title: card.title,
+    description:
+      card.description || card.subtitle || (isJsonContent ? '' : truncate(event.content, 200)),
+    image: imageMatch ? imageMatch[0] : undefined,
+    type: TYPE_KEY_TO_OG_TYPE[card.typeKey] || 'website'
+  };
 }
 
 /**

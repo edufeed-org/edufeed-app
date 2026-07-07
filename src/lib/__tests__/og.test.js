@@ -208,8 +208,8 @@ describe('OG Meta Tags', () => {
 
       const meta = extractMetadata(event);
 
-      // Title truncated at 70 chars
-      expect(meta.title.length).toBeLessThanOrEqual(73); // 70 + "..."
+      // Title comes from getFeedCardData, truncated at 120 chars
+      expect(meta.title.length).toBeLessThanOrEqual(123); // 120 + "..."
       expect(meta.title.endsWith('...')).toBe(true);
       // Description truncated at 200 chars
       expect(meta.description.length).toBeLessThanOrEqual(203); // 200 + "..."
@@ -247,6 +247,95 @@ describe('OG Meta Tags', () => {
       const meta = extractMetadata(event);
 
       expect(meta.title).toBe('Chemistry Basics');
+    });
+
+    it('extracts calendar collection (31924) metadata from tags', () => {
+      const event = {
+        kind: 31924,
+        content: '',
+        tags: [
+          ['d', 'my-cal'],
+          ['title', 'Community Calendar'],
+          ['description', 'All our events'],
+          ['image', 'https://example.com/cal.png']
+        ]
+      };
+      const meta = extractMetadata(event);
+      expect(meta.title).toBe('Community Calendar');
+      expect(meta.description).toBe('All our events');
+      expect(meta.image).toBe('https://example.com/cal.png');
+      expect(meta.type).toBe('website');
+    });
+
+    it('extracts wiki page (30818) metadata via feed card data', () => {
+      const event = {
+        kind: 30818,
+        content: 'Peace education is a practice...',
+        tags: [
+          ['d', 'peace-education'],
+          ['title', 'Peace Education']
+        ]
+      };
+      const meta = extractMetadata(event);
+      expect(meta.title).toBe('Peace Education');
+      expect(meta.type).toBe('website');
+      expect(meta.description.length).toBeGreaterThan(0);
+    });
+
+    it('extracts form template (30168) name and description tags', () => {
+      const event = {
+        kind: 30168,
+        content: '',
+        tags: [
+          ['d', 'membership'],
+          ['name', 'Membership Form'],
+          ['description', 'Apply to join']
+        ]
+      };
+      const meta = extractMetadata(event);
+      expect(meta.title).toBe('Membership Form');
+      expect(meta.type).toBe('website');
+    });
+
+    it('extracts kanban board (30301) title and never leaks JSON content', () => {
+      const event = {
+        kind: 30301,
+        content: '{"columns":[{"id":"todo"}]}',
+        tags: [
+          ['d', 'board-1'],
+          ['title', 'Sprint Board']
+        ]
+      };
+      const meta = extractMetadata(event);
+      expect(meta.title).toBe('Sprint Board');
+      expect(meta.description).not.toContain('{');
+      expect(meta.image).toBeUndefined();
+      expect(meta.type).toBe('website');
+    });
+
+    it('extracts profile metadata from kind 0 via getProfileContent', () => {
+      const event = {
+        kind: 0,
+        content: JSON.stringify({
+          name: 'alice',
+          display_name: 'Alice A.',
+          about: 'Educator on Nostr',
+          picture: 'https://example.com/alice.png'
+        }),
+        tags: []
+      };
+      const meta = extractMetadata(event);
+      expect(meta.title).toBe('Alice A.');
+      expect(meta.description).toBe('Educator on Nostr');
+      expect(meta.image).toBe('https://example.com/alice.png');
+      expect(meta.type).toBe('profile');
+    });
+
+    it('handles kind 0 with unparseable content gracefully', () => {
+      const meta = extractMetadata({ kind: 0, content: 'not json', tags: [] });
+      expect(meta.type).toBe('profile');
+      expect(meta.title).toBe('Profile');
+      expect(meta.description).toBe('');
     });
   });
 
