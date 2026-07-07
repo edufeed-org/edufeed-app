@@ -164,6 +164,11 @@
   /** @type {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} */
   let _learningFilters = $state(createEmptyFilters());
   let isLearningSearchActive = $state(false);
+  // True while a NIP-50 search request is in flight — gates the empty state
+  // so "no results" doesn't flash before the relay answers.
+  let isSearching = $state(false);
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let searchingSafetyTimer = null;
   let learningSearchResults = $state(/** @type {import('nostr-tools').Event[]} */ ([]));
   /** @type {import('rxjs').Subscription | null} */
   let currentSearchSubscription = null;
@@ -421,6 +426,14 @@
       isLearningSearchActive = true;
       learningSearchResults = []; // Clear previous results
 
+      // Show the spinner until the relay answers (or the safety timer fires —
+      // the loader's own request timeout is 5s, so this is a pure backstop).
+      isSearching = true;
+      if (searchingSafetyTimer) clearTimeout(searchingSafetyTimer);
+      searchingSafetyTimer = setTimeout(() => {
+        isSearching = false;
+      }, 8000);
+
       // Start NIP-50 search - accumulate individual events into array
       currentSearchSubscription = ambSearchLoader(filters, 100).subscribe({
         next: (/** @type {import('nostr-tools').Event} */ event) => {
@@ -431,12 +444,17 @@
         error: (error) => {
           console.error('🔍 Learning search error:', error);
           isLearningSearchActive = false;
+          isSearching = false;
         },
-        complete: () => {}
+        complete: () => {
+          isSearching = false;
+          if (searchingSafetyTimer) clearTimeout(searchingSafetyTimer);
+        }
       });
     } else {
       // No active filters, use normal timeline loading
       isLearningSearchActive = false;
+      isSearching = false;
       learningSearchResults = [];
     }
   }
@@ -1819,8 +1837,9 @@
           </div>
         {/if}
       {/if}
-    {:else if isLoading}
-      <!-- Loading State -->
+    {:else if isLoading || (isSearching && displayedContent.length === 0)}
+      <!-- Loading / searching state — while a search is in flight, show the
+           spinner instead of flashing the empty state before results arrive -->
       <div class="flex justify-center py-12">
         <div class="text-center">
           <div class="loading loading-lg loading-spinner text-primary"></div>
