@@ -2563,7 +2563,7 @@
   "termi_sugg_2_a": "There's plenty! Open the Discover section and search for “democracy” — you can also filter by resource type and educational level there.",
   "termi_sugg_3_q": "How do I publish on Nostr?",
   "termi_sugg_3_a": "Your content is automatically signed as Nostr events and sent to your relays when you publish. Just create something via the plus button — I'll let you know if anything is missing.",
-  "termi_fallback": "Good question — I can't answer that yet. Try one of the suggestions below, or ask me about learning materials.",
+  "termi_fallback": "Good question! I can't answer it just yet — my answers are pre-written for now, and real AI support is coming soon. Until then, feel free to try one of the suggestions below.",
   "termi_input_placeholder": "Ask Termi …",
   "termi_input_aria": "Message to Termi",
   "termi_send_aria": "Send",

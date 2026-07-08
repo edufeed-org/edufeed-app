@@ -2563,7 +2563,7 @@
   "termi_sugg_2_a": "Dazu gibt es einiges! Öffne den Bereich „Entdecken“ und suche nach „Demokratie“ — dort kannst du auch nach Ressourcentyp und Bildungsstufe filtern.",
   "termi_sugg_3_q": "Wie veröffentliche ich auf Nostr?",
   "termi_sugg_3_a": "Deine Inhalte werden beim Veröffentlichen automatisch als Nostr-Events signiert und an deine Relays geschickt. Erstelle einfach einen Inhalt über den Plus-Button — ich sage dir Bescheid, falls dabei noch etwas fehlt.",
-  "termi_fallback": "Gute Frage — darauf kann ich noch nicht antworten. Probiere einen der Vorschläge unten, oder frag mich nach Lernmaterialien.",
+  "termi_fallback": "Gute Frage! Beantworten kann ich sie leider noch nicht — meine Antworten sind im Moment vorgefertigt, echte KI-Unterstützung kommt bald. Bis dahin probiere gern einen der Vorschläge unten.",
   "termi_input_placeholder": "Frag Termi …",
   "termi_input_aria": "Nachricht an Termi",
   "termi_send_aria": "Senden",
