@@ -69,12 +69,19 @@ function isAddressableKind(kind) {
 function encodeNaddr(event) {
   if (!event?.pubkey) return null;
   const identifier = event.tags?.find((t) => t[0] === 'd')?.[1] ?? '';
+  // Carry the relays we actually saw the event on — this naddr ends up in the
+  // browser address bar (users copy it from there), so without hints the link
+  // only resolves on deployments whose lookup relays happen to hold the event.
+  const relays = prioritizeRelayHints(
+    getSeenRelays(/** @type {any} */ (event)),
+    getAppManagedRelays()
+  );
   try {
     return nip19.naddrEncode({
       kind: event.kind,
       pubkey: event.pubkey,
       identifier,
-      relays: []
+      relays
     });
   } catch {
     return null;
