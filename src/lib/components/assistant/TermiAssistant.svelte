@@ -41,7 +41,7 @@
   {#if expanded}
     <button
       type="button"
-      class="fixed inset-0 z-[65] cursor-default bg-black/20"
+      class="fixed inset-0 z-[65] cursor-default bg-(--c-scrim)"
       aria-label={m.aria_close_modal()}
       onclick={close}
     ></button>
