@@ -113,6 +113,23 @@ describe('parseEdufeedProfile', () => {
     expect(result.educationalLevels).toEqual([{ id: 'https://ok' }]);
     expect(result.subjects).toEqual([{ id: 'https://also-ok', prefLabel: { de: 'X' } }]);
   });
+
+  it('dedupes interests case-insensitively and concepts by id', () => {
+    const result = parseEdufeedProfile({
+      edufeed: {
+        interests: ['Podcasts', 'podcasts', 'OER'],
+        educationalLevels: [{ id: 'https://a' }, { id: 'https://a' }, { id: 'https://b' }],
+        subjects: [
+          { id: 'https://s', prefLabel: { de: 'X' } },
+          { id: 'https://s', prefLabel: { de: 'X (Dublette)' } }
+        ]
+      }
+    });
+
+    expect(result.interests).toEqual(['Podcasts', 'OER']);
+    expect(result.educationalLevels).toEqual([{ id: 'https://a' }, { id: 'https://b' }]);
+    expect(result.subjects).toEqual([{ id: 'https://s', prefLabel: { de: 'X' } }]);
+  });
 });
 
 describe('interestsFromListEvent', () => {

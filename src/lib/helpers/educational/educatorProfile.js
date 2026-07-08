@@ -137,11 +137,33 @@ export function mergeSubjectsForVocab(subjects, vocabKey, picked) {
  */
 function sanitizeConcepts(value) {
   if (!Array.isArray(value)) return [];
+  const seen = new Set();
   return /** @type {ProfileConcept[]} */ (
-    value.filter(
-      (c) => typeof c === 'object' && c !== null && typeof (/** @type {any} */ (c).id) === 'string'
-    )
+    value.filter((c) => {
+      const id = /** @type {any} */ (c)?.id;
+      if (typeof c !== 'object' || c === null || typeof id !== 'string') return false;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
   );
+}
+
+/**
+ * Case-insensitive dedupe keeping the first spelling — same policy as
+ * `interestsFromListEvent`.
+ *
+ * @param {string[]} interests
+ * @returns {string[]}
+ */
+function dedupeInterests(interests) {
+  const seen = new Set();
+  return interests.filter((i) => {
+    const key = i.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
@@ -161,7 +183,7 @@ export function parseEdufeedProfile(profileContent) {
   );
   return {
     interests: Array.isArray(interests)
-      ? interests.filter((i) => typeof i === 'string' && i.length > 0)
+      ? dedupeInterests(interests.filter((i) => typeof i === 'string' && i.length > 0))
       : [],
     educationalLevels: sanitizeConcepts(educationalLevels),
     subjects: sanitizeConcepts(subjects)

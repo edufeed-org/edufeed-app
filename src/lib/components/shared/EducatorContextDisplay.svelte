@@ -19,13 +19,16 @@
 
   /** @param {import('$lib/helpers/educational/educatorProfile.js').ProfileConcept[]} concepts */
   function labels(concepts) {
-    return concepts.map((c) => pickConceptLabel(c.prefLabel, locale) || c.id);
+    // Dedupe: the same label can come from several vocabs (e.g. "Latein" in
+    // schulfaecher and hochschulfaechersystematik) and labels key the #each.
+    return [...new Set(concepts.map((c) => pickConceptLabel(c.prefLabel, locale) || c.id))];
   }
 
   const levelLabels = $derived(labels(value.educationalLevels));
   const subjectLabels = $derived(labels(value.subjects));
+  const interests = $derived([...new Set(value.interests)]);
   const hasContent = $derived(
-    levelLabels.length > 0 || subjectLabels.length > 0 || value.interests.length > 0
+    levelLabels.length > 0 || subjectLabels.length > 0 || interests.length > 0
   );
 </script>
 
@@ -49,10 +52,10 @@
       </div>
     {/if}
 
-    {#if value.interests.length > 0}
+    {#if interests.length > 0}
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-xs text-base-content/60">{m.educator_context_interests_label()}:</span>
-        {#each value.interests as interest (interest)}
+        {#each interests as interest (interest)}
           <span class="badge badge-ghost badge-sm">{interest}</span>
         {/each}
       </div>
