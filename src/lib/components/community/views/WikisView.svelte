@@ -42,7 +42,7 @@
           modalStore.openModal('shareByNaddr', { communityPubkey, allowedKinds: [30818] })}
       >
         <RepostIcon class_="h-4 w-4" />
-        Add existing
+        {m.community_add_existing()}
       </button>
     {/if}
   {/snippet}

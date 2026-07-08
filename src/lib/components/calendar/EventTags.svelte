@@ -81,7 +81,7 @@
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           tabindex="0"
-          class="dropdown-content z-10 mt-1 flex flex-col gap-1 rounded-box bg-base-200 p-2 shadow-lg"
+          class="dropdown-content z-10 mt-1 flex flex-col gap-1 rounded-box bg-base-100 p-2 shadow-lg"
         >
           {#each hiddenTags as tag (tag)}
             <a

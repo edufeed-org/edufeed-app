@@ -221,9 +221,9 @@ test.describe('Community Membership - Leave Flow', () => {
     }
 
     // Verify joined state - card should have joined visual indicator
-    // The card gets border-emerald-500/30 class when joined (the anchor element)
+    // The card gets border-success/30 class when joined (the anchor element)
     const cardElement = cards.first();
-    await expect(cardElement).toHaveClass(/border-emerald/, { timeout: 5000 });
+    await expect(cardElement).toHaveClass(/border-success/, { timeout: 5000 });
 
     // Now leave
     await cards.first().locator('button', { hasText: 'Leave' }).click();
@@ -233,7 +233,7 @@ test.describe('Community Membership - Leave Flow', () => {
     });
 
     // Card should no longer have the joined styling
-    await expect(cardElement).not.toHaveClass(/border-emerald/);
+    await expect(cardElement).not.toHaveClass(/border-success/);
   });
 });
 

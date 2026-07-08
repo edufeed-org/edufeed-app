@@ -340,7 +340,7 @@
 
 <div class="flex h-full min-h-0 flex-col">
   <!-- Thread header -->
-  <div class="flex items-center gap-2 border-b border-base-300 px-4 py-3">
+  <div class="flex items-center gap-2 px-4 py-3">
     {#if onBack}
       <button class="btn btn-circle btn-ghost btn-sm" onclick={onBack}>
         <ChevronLeftIcon class_="h-5 w-5" />
@@ -468,7 +468,7 @@
   >
     {#if showEmojiPicker}
       <div
-        class="absolute bottom-full left-4 z-10 mb-2 flex max-h-80 w-72 flex-col rounded-lg bg-base-200 shadow-xl"
+        class="absolute bottom-full left-4 z-10 mb-2 flex max-h-80 w-72 flex-col rounded-lg bg-base-100 shadow-xl"
       >
         <EmojiPicker onSelect={insertEmoji} {customEmojiSets} onSelectCustom={insertCustomEmoji} />
       </div>

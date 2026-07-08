@@ -63,7 +63,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-4 border-b border-base-300 px-4 py-4">
+<div class="flex flex-col gap-4 px-4 py-4">
   <div class="flex items-center justify-between">
     <h3 class="font-bold">{m.dm_new_conversation()}</h3>
     <button class="btn btn-ghost btn-sm" onclick={onCancel}> ✕ </button>

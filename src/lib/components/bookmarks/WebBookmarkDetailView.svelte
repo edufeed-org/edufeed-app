@@ -687,7 +687,7 @@
               <BookmarkIcon class_="h-4 w-4" filled={savedAnywhere} />
               {savedAnywhere ? m.bookmark_detail_saved() : m.bookmark_detail_save()}
             </summary>
-            <ul class="dropdown-content menu z-20 mt-1 w-60 rounded-box bg-base-200 p-2 shadow-lg">
+            <ul class="dropdown-content menu z-20 mt-1 w-60 rounded-box bg-base-100 p-2 shadow-lg">
               <!-- Public social bookmark (kind 39701) — feeds the "Gemerkt von" layer -->
               <li>
                 <button

@@ -35,7 +35,7 @@
     <ChevronDownIcon class_="w-3 h-3 opacity-60" />
   </button>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <ul tabindex="0" class="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow-lg">
+  <ul tabindex="0" class="dropdown-content menu z-10 w-56 rounded-box bg-base-100 p-2 shadow-lg">
     {#each FEED_OPTIONS as option (option.id)}
       {@const Icon = option.icon}
       <li>

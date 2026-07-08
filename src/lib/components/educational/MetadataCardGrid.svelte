@@ -104,7 +104,7 @@
     grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
     gap: 18px;
     background: var(--c-olive);
-    border-radius: 18px;
+    border-radius: var(--radius-box, 18px);
     padding: clamp(20px, 3vw, 30px);
   }
   /* On narrow screens collapse to one column. A `span 2` wide card would
@@ -123,7 +123,7 @@
     gap: 14px;
     align-items: flex-start;
     background: color-mix(in oklch, var(--c-paper) 88%, transparent);
-    border-radius: 12px;
+    border-radius: var(--radius-field, 12px);
     padding: 16px 18px;
     min-height: 92px;
   }

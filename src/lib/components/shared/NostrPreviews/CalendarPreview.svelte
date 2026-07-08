@@ -71,7 +71,7 @@
   <!-- eslint-disable svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
   <a
     href={calendarUrl}
-    class="card my-2 block bg-base-200 no-underline shadow-md transition-all hover:bg-base-300 hover:shadow-lg"
+    class="card my-2 block bg-base-200 no-underline transition-colors hover:bg-base-300"
   >
     <div class="card-body p-4">
       <div class="flex items-center gap-3">

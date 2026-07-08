@@ -156,7 +156,7 @@
   }
   .eye.off {
     background: var(--c-olive-2);
-    color: #fff;
+    color: var(--c-on-dark);
   }
   .tab-tray {
     margin-top: 12px;

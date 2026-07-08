@@ -63,9 +63,7 @@
 
 <div class="mb-4">
   <!-- Toolbar: wraps to two rows on mobile, single row on sm:+ -->
-  <div
-    class="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-base-300 pb-2 sm:flex-nowrap"
-  >
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-2 pb-2 sm:flex-nowrap">
     <button
       onclick={() => {
         if (getHasHistory()) {

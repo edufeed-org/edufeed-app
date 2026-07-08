@@ -53,7 +53,6 @@
 
   // CSS custom properties set inline so each cover gets its own palette.
   // --cover-hue feeds the script-word color tint (see .typo-cover-title-script).
-  // Dot-pattern opacity is theme-swapped via :where([data-theme="dark"]) below.
   const inlineStyle = $derived.by(() => {
     if (hue === null) {
       return '--c-hero: oklch(45% 0.01 250); --c-hero-2: oklch(40% 0.01 250); --cover-hue: 250;';
@@ -135,7 +134,7 @@
   }
 
   .typo-cover-card {
-    border-radius: 22px;
+    border-radius: calc(var(--radius-box, 1rem) + 6px);
     background: white;
     padding: 14px;
     box-shadow: 0 8px 24px -8px oklch(0% 0 0 / 0.15);
@@ -146,7 +145,7 @@
     position: relative;
     isolation: isolate;
     height: 100%;
-    border-radius: 12px;
+    border-radius: var(--radius-field, 12px);
     padding: 8% 8%;
     overflow: hidden;
     background: linear-gradient(165deg, var(--c-hero) 0%, var(--c-hero-2) 100%);
@@ -341,13 +340,5 @@
     font-size: clamp(0.45rem, 5cqi, 0.7rem);
     padding: 0.25em 0.6em;
     letter-spacing: 0.08em;
-  }
-
-  /* Dark theme: lighter dot pattern so it doesn't fight the gradient.
-     Gradient tones themselves stay mid-range OKLCH and read fine on both themes. */
-  :global(:where([data-theme='dark'], [data-theme='stil-dark'], [data-theme='rpi-dark']))
-    .typo-cover-inner::before {
-    background-image: radial-gradient(circle at 1px 1px, oklch(100% 0 0 / 0.12) 1px, transparent 0),
-      radial-gradient(circle at 1px 1px, oklch(100% 0 0 / 0.12) 1px, transparent 0);
   }
 </style>

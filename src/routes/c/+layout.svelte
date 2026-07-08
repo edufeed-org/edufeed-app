@@ -98,7 +98,7 @@
         <!-- Unified Mobile Header -->
         <div
           data-testid="mobile-community-header"
-          class="sticky top-0 z-30 flex items-center justify-between border-b border-base-300 bg-base-200 p-4"
+          class="sticky top-0 z-30 flex items-center justify-between bg-base-200 p-4"
         >
           <!-- Left: Community avatar / App logo + chevron → opens drawer -->
           <button onclick={toggleDrawer} class="btn gap-0 rounded-full px-1 btn-ghost">

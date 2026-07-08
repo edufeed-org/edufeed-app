@@ -107,7 +107,7 @@
     <BookmarkShareIcon class_="h-4 w-4" />
     {m.bookmark_detail_share()}
   </summary>
-  <ul class="dropdown-content menu z-20 mt-1 w-56 rounded-box bg-base-200 p-2 shadow-lg">
+  <ul class="dropdown-content menu z-20 mt-1 w-56 rounded-box bg-base-100 p-2 shadow-lg">
     <li>
       <button type="button" onclick={copyLink}>
         <LinkIcon class_="h-4 w-4" />

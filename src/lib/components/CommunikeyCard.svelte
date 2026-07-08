@@ -67,15 +67,18 @@
 <a
   href={resolve(pubkey ? `/c/${hexToNpub(pubkey) || pubkey}` : '#')}
   class="card flex transform cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border bg-base-100 p-6 shadow-md transition-all duration-300 hover:scale-105 hover:shadow-lg {getJoined()
-    ? 'border-emerald-500/30 bg-emerald-50/5 dark:bg-emerald-950/10'
+    ? 'border-success/30'
     : 'border-base-200'} min-w-[240px] hover:border-primary/20"
 >
   <div class="absolute top-3 right-3 z-10">
     {#if getJoined()}
       <div
-        class="flex h-6 w-6 items-center justify-center rounded-full border border-emerald-600/20 bg-emerald-500 shadow-sm"
+        class="flex h-6 w-6 items-center justify-center rounded-full border border-success/20 bg-success shadow-sm"
       >
-        <BookmarkIcon class_="w-3 h-3 text-white" title={m.communikey_card_joined_badge()} />
+        <BookmarkIcon
+          class_="w-3 h-3 text-success-content"
+          title={m.communikey_card_joined_badge()}
+        />
       </div>
     {:else}
       <!-- <div class="bg-base-200 text-base-content/70 text-xs font-medium px-2 py-1 rounded-md shadow-sm border border-base-300/50 hover:bg-base-300/50 transition-colors duration-200">

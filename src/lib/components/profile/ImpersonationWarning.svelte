@@ -178,8 +178,8 @@
   .mav.fallback {
     display: grid;
     place-items: center;
-    background: linear-gradient(150deg, var(--c-hero), oklch(56% 0.13 290));
-    color: #fff;
+    background: linear-gradient(150deg, var(--c-hero), var(--c-hero-2));
+    color: var(--c-on-dark);
     font-family: var(--pf-display);
     font-weight: 800;
     font-size: 13px;

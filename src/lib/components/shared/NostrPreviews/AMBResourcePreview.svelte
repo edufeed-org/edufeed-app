@@ -96,7 +96,7 @@
   <!-- eslint-disable svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
   <a
     href={eventUrl}
-    class="card my-2 block border-l-4 border-l-accent bg-base-200 no-underline shadow-md transition-all hover:bg-base-300 hover:shadow-lg"
+    class="card my-2 block border-l-4 border-l-accent bg-base-200 no-underline transition-colors hover:bg-base-300"
   >
     <div class="card-body flex-row gap-3 p-4">
       <ResourceCover

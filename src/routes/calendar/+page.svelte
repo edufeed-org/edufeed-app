@@ -11,6 +11,4 @@
   />
 </svelte:head>
 
-<div class="bg-base-100">
-  <CalendarView globalMode={true} />
-</div>
+<CalendarView globalMode={true} />

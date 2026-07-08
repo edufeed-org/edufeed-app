@@ -54,7 +54,7 @@
 
 <button
   class="btn btn-circle transition-colors btn-sm
-    {waved || !cooldownState.canWave ? 'text-white btn-success' : 'btn-ghost'}"
+    {waved || !cooldownState.canWave ? 'btn-success' : 'btn-ghost'}"
   onclick={handleWave}
   disabled={!cooldownState.canWave}
   title={cooldownState.canWave ? m.wave_button_tooltip() : m.wave_cooldown_tooltip()}

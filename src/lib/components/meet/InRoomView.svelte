@@ -420,7 +420,7 @@
           </button>
           {#if audioDropdownOpen}
             <ul
-              class="dropdown-content menu z-10 mb-2 w-60 rounded-box bg-base-200 p-2 shadow-lg"
+              class="dropdown-content menu z-10 mb-2 w-60 rounded-box bg-base-100 p-2 shadow-lg"
               role="menu"
               onmouseleave={() => {
                 audioDropdownOpen = false;
@@ -498,7 +498,7 @@
             </button>
             {#if videoDropdownOpen}
               <ul
-                class="dropdown-content menu z-10 mb-2 w-60 rounded-box bg-base-200 p-2 shadow-lg"
+                class="dropdown-content menu z-10 mb-2 w-60 rounded-box bg-base-100 p-2 shadow-lg"
                 role="menu"
                 onmouseleave={() => {
                   videoDropdownOpen = false;

@@ -357,8 +357,8 @@
   .pf-mini-comm .ic.fallback {
     display: grid;
     place-items: center;
-    color: #fff;
-    background: linear-gradient(150deg, var(--c-hero), oklch(56% 0.13 290));
+    color: var(--c-on-dark);
+    background: linear-gradient(150deg, var(--c-hero), var(--c-hero-2));
     font-family: var(--pf-display);
     font-weight: 800;
     font-size: 14px;

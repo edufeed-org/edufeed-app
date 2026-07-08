@@ -883,7 +883,7 @@
   }
   /* Real image thumbnails have no frame of their own, so they get one here. */
   .ed-cover-framed {
-    background: #fff;
+    background: var(--c-paper);
     padding: 12px;
     box-shadow:
       0 30px 60px -28px rgba(0, 0, 0, 0.5),
@@ -1026,7 +1026,7 @@
   .ed-band-url {
     font-family: ui-monospace, monospace;
     font-size: 12px;
-    background: rgba(255, 255, 255, 0.16);
+    background: color-mix(in oklch, var(--c-on-dark) 16%, transparent);
     padding: 4px 8px;
     border-radius: 6px;
     color: var(--c-on-dark);

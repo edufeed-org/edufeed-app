@@ -110,7 +110,7 @@
           {@const title = getTagValue(event, 'title') || getTagValue(event, 'd') || 'Untitled'}
           <a
             href="/{encodeNaddr(event)}"
-            class="card bg-base-200 transition-colors hover:bg-base-300"
+            class="card bg-base-100 transition-shadow hover:shadow-md"
           >
             <div class="card-body p-4">
               <h2 class="card-title text-lg">{title}</h2>

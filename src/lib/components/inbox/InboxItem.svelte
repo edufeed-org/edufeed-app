@@ -142,7 +142,7 @@
       <span class="text-xs text-base-content/50">{formatTime(event.created_at)}</span>
       {#if type === 'wave'}
         <button
-          class="btn transition-colors btn-xs {wavedBack ? 'text-white btn-success' : 'btn-ghost'}"
+          class="btn transition-colors btn-xs {wavedBack ? 'btn-success' : 'btn-ghost'}"
           onclick={handleWaveBack}
         >
           👋 {wavedBack ? m.wave_success() : m.wave_back_button()}

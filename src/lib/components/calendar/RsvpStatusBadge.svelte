@@ -14,17 +14,17 @@
     accepted: {
       label: m.inline_rsvp_button_going(),
       icon: '✓',
-      class: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      class: 'bg-success/15 text-success'
     },
     declined: {
       label: m.rsvp_status_badge_not_going(),
       icon: '✗',
-      class: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+      class: 'bg-error/15 text-error'
     },
     tentative: {
       label: m.inline_rsvp_button_maybe(),
       icon: '?',
-      class: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+      class: 'bg-warning/15 text-warning'
     }
   });
 
