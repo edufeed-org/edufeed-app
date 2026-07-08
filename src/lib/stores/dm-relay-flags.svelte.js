@@ -1,7 +1,8 @@
-// Per-pubkey dismiss flag for DmRelayBanner. Mirrors backup-flags: the flag
+// Per-pubkey dismiss flag for the DM-relay nudge (now the Termi assistant's
+// dm hint). Mirrors backup-flags: the flag
 // lives in localStorage so a dismiss survives reloads, but a reactive version
 // counter ensures markDmRelayBannerDismissed() re-runs $derived consumers in
-// the same tab (so the banner hides immediately, no reload needed).
+// the same tab (so the hint hides immediately, no reload needed).
 
 const DISMISS_PREFIX = 'dm-relay-banner-dismissed:';
 

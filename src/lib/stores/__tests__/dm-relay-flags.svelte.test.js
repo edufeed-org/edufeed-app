@@ -1,6 +1,6 @@
 // @ts-nocheck
 /**
- * dm-relay-flags — per-pubkey dismiss flag for the DmRelayBanner.
+ * dm-relay-flags — per-pubkey dismiss flag for the DM-relay nudge (Termi hint).
  *
  * Mirrors backup-flags: localStorage-backed so a dismiss survives reloads,
  * plus a reactive version counter so isDmRelayBannerDismissed() re-runs in

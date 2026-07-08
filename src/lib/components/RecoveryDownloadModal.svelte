@@ -3,8 +3,8 @@
   //   encrypted  → NIP-49 ncryptsec (default; password ≥ 8 chars)
   //   plain      → raw nsec (the file IS the secret — keep it private)
   //
-  // Opened from BackupRecoveryBanner and from the Settings page. After a
-  // successful download we set `backup-downloaded:<pubkey>` so the banner
+  // Opened from the Termi assistant's backup hint and from the Settings page. After a
+  // successful download we set `backup-downloaded:<pubkey>` so the hint
   // stops nagging on subsequent reloads.
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';

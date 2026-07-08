@@ -1,7 +1,7 @@
-// Per-pubkey backup-state flags shared between BackupRecoveryBanner and
-// RecoveryDownloadModal. The two pieces of state live in localStorage so they
+// Per-pubkey backup-state flags shared between the Termi assistant's backup
+// hint and RecoveryDownloadModal. The two pieces of state live in localStorage so they
 // survive reloads, but a reactive version counter ensures any mark*() call
-// re-runs $derived consumers in the same tab — the banner used to keep a
+// re-runs $derived consumers in the same tab — the old banner used to keep a
 // stale view of these flags until the page reloaded.
 
 const DOWNLOAD_PREFIX = 'backup-downloaded:';
