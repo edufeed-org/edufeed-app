@@ -178,13 +178,24 @@
   {#if image}
     <div class="mb-8">
       <div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg">
-        <ImageWithFallback
-          src={image}
-          alt={title}
-          fallbackType="article"
-          size="hero"
-          class="h-full w-full object-cover"
-        />
+        <!-- The 16:9 crop can cut off attribution baked into the cover, and
+             license checks need the untouched original — keep it one click away. -->
+        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: original image source -->
+        <a
+          href={image}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={m.event_detail_view_original_image()}
+          class="block h-full w-full"
+        >
+          <ImageWithFallback
+            src={image}
+            alt={title}
+            fallbackType="article"
+            size="hero"
+            class="h-full w-full object-cover"
+          />
+        </a>
         <ImageLicenseOverlay
           licenseEvent={coverStatus.event}
           status={coverStatus.status}

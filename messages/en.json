@@ -35,6 +35,7 @@
   "common_show_more": "Show more",
   "common_show_less": "Show less",
   "navbar_brand": "{appName}",
+  "event_detail_view_original_image": "View original image (full size, including any attribution)",
   "navbar_feed": "Feed",
   "navbar_discover": "Discover",
   "navbar_calendar": "Calendar",

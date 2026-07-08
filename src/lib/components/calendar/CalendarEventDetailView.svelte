@@ -212,12 +212,22 @@
   <!-- Event Header with Image -->
   {#if event.image}
     <div class="mb-4">
-      <img
-        src={event.image}
-        alt={event.title}
-        class="h-64 w-full rounded-lg object-cover shadow-lg"
-        loading="lazy"
-      />
+      <!-- The banner crop can cut off attribution/copyright notices baked into
+           the image, so the full original must stay one click away. -->
+      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: original image source -->
+      <a
+        href={event.image}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={m.event_detail_view_original_image()}
+      >
+        <img
+          src={event.image}
+          alt={event.title}
+          class="h-64 w-full rounded-lg object-cover shadow-lg"
+          loading="lazy"
+        />
+      </a>
     </div>
   {/if}
 
