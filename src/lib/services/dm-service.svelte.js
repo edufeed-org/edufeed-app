@@ -82,7 +82,7 @@ const INITIAL_FETCH_DEADLINE_MS = 8000;
  * - 'present'  : a kind 10050 exists for the user
  * - 'absent'   : settle deadline elapsed with no 10050 found
  *
- * Drives DmRelayBanner. We only conclude 'absent' after querying the user's
+ * Drives the Termi assistant's dm hint. We only conclude 'absent' after querying the user's
  * own NIP-65 write relays + identity indexers (both gate-bypassing) and giving
  * them time to respond — so we never prompt over a custom list we just hadn't
  * fetched yet. Keyed off getReplaceable(10050) to stay consistent with
@@ -469,7 +469,7 @@ export function initializeDMs(pubkey, signer) {
 
     // Arm the settle deadline only once we know we actually queried somewhere.
     // If neither write relays nor indexers are available, we can't conclude
-    // absence — leave status 'checking' so the banner stays hidden.
+    // absence — leave status 'checking' so the hint stays hidden.
     if (
       dmRelayCheckStatus === 'checking' &&
       !dmRelayCheckTimer &&

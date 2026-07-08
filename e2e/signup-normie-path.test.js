@@ -98,9 +98,14 @@ test.describe('Signup - Normie path', () => {
     // Modal closes
     await expect(page.locator('#global-signup-modal')).not.toBeVisible({ timeout: 10_000 });
 
-    // Backup recovery banner now visible (active user is a freshly-created nsec account)
-    await expect(page.locator('[data-testid="backup-recovery-banner"]')).toBeVisible({
-      timeout: 10_000
+    // The Termi assistant launcher now carries the backup hint (active user is
+    // a freshly-created nsec account) — opening it shows the hint message.
+    const launcher = page.locator('[data-testid="termi-launcher"]');
+    await expect(launcher).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="termi-badge"]')).toBeVisible({ timeout: 10_000 });
+    await launcher.click();
+    await expect(page.locator('[data-testid="termi-hint-backup"]')).toBeVisible({
+      timeout: 5000
     });
 
     errorCapture.assertNoCriticalErrors();

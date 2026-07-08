@@ -35,7 +35,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                   |
 | `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
 | `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                          |
-| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → backup banner               |
+| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → Termi backup hint           |
 | `settings.test.js`                   | 18    | Both | Single-theme check, relays, relay editing, gated/debug                                                                            |
 | `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
 | `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
@@ -1006,20 +1006,20 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 
 #### Normie Happy Path (1 test)
 
-| Test                                                                | What it verifies                                                                                                                                                                                                                                                                                                                |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| user can create an account via the wizard skip path and sees banner | Login modal shows prominent `[data-testid="signup-primary-cta"]` and visible `[data-testid="other-signin-methods"]`; wizard skip path: name (Enter submit) → profile → educator context (`#educator-levels`) → communities Skip → optional handle step (only when membership enabled, per `/api/config` branch) → backup banner |
+| Test                                                                | What it verifies                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| user can create an account via the wizard skip path and sees banner | Login modal shows prominent `[data-testid="signup-primary-cta"]` and visible `[data-testid="other-signin-methods"]`; wizard skip path: name (Enter submit) → profile → educator context (`#educator-levels`) → communities Skip → optional handle step (only when membership enabled, per `/api/config` branch) → Termi backup hint |
 
 Field-level signup behavior (validation, kind 0 publish, account-type
-detection, banner show/hide flags) is covered by Vitest component tests:
+detection, hint show/hide flags) is covered by Vitest component tests:
 
 - `src/lib/components/__tests__/SignupModal.test.js`
 - `src/lib/components/__tests__/LoginModal.test.js`
-- `src/lib/components/__tests__/BackupRecoveryBanner.test.js`
+- `src/lib/components/__tests__/TermiAssistant.test.js`
 - `src/lib/components/__tests__/RecoveryDownloadModal.test.js`
 - `src/lib/__tests__/recoveryFile.test.js`
 
-**Components exercised:** LoginModal, SignupModal, BackupRecoveryBanner
+**Components exercised:** LoginModal, SignupModal, TermiAssistant
 
 ---
 
@@ -1226,20 +1226,20 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 
 ### Partially Covered
 
-| Feature              | What's Covered                                                              | What's Missing                                      |
-| -------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
-| Account management   | NSEC login, logout, persistence, switching                                  | NIP-07 extension, NIP-49 encrypted keys             |
-| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides | -                                                   |
-| Calendar events      | View, create, delete, edit (full CRUD)                                      | -                                                   |
-| AMB resources        | Full creation flow (page route), file upload, relay publish                 | Edit mode via naddr URL param                       |
-| Profile page         | View profile, notes, edit modal, save flow                                  | Avatar upload (Blossom integration)                 |
-| Comments             | Post, reply, delete                                                         | Edit comment                                        |
-| Reactions            | Add, remove                                                                 | Custom emoji support                                |
-| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                | Full search flow (depends on relay NIP-50 support)  |
-| Community membership | Join/leave, chat message posting                                            | -                                                   |
-| Community creation   | Both keypair flows, all steps, settings, publish                            | Badge access control                                |
-| Signup (normie path) | 2-step flow happy path, login modal CTA structure, backup banner appearance | Full backup/follow banner flows (covered by Vitest) |
-| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                          | -                                                   |
+| Feature              | What's Covered                                                                  | What's Missing                                     |
+| -------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Account management   | NSEC login, logout, persistence, switching                                      | NIP-07 extension, NIP-49 encrypted keys            |
+| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides     | -                                                  |
+| Calendar events      | View, create, delete, edit (full CRUD)                                          | -                                                  |
+| AMB resources        | Full creation flow (page route), file upload, relay publish                     | Edit mode via naddr URL param                      |
+| Profile page         | View profile, notes, edit modal, save flow                                      | Avatar upload (Blossom integration)                |
+| Comments             | Post, reply, delete                                                             | Edit comment                                       |
+| Reactions            | Add, remove                                                                     | Custom emoji support                               |
+| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                    | Full search flow (depends on relay NIP-50 support) |
+| Community membership | Join/leave, chat message posting                                                | -                                                  |
+| Community creation   | Both keypair flows, all steps, settings, publish                                | Badge access control                               |
+| Signup (normie path) | 2-step flow happy path, login modal CTA structure, Termi backup hint appearance | Full backup/follow hint flows (covered by Vitest)  |
+| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                              | -                                                  |
 
 ---
 
