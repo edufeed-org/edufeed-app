@@ -83,7 +83,7 @@ export function formatCreatorsLine(names) {
  * @property {string} ns
  * @property {string} facetName
  * @property {'concept' | 'scalar' | 'boolean'} kind
- * @property {string} value  First display value (empty for booleans)
+ * @property {string} value  All display values joined with ', ' (empty for booleans)
  * @property {string[]} items  All display values (scalar raw values / concept labels; empty for booleans)
  * @property {number} count  Number of items the facet carried
  */
@@ -96,9 +96,10 @@ export function formatCreatorsLine(names) {
  * - boolean flags set to "false" are skipped (a disabled flag is not a fact).
  * - boolean flags set to "true" become a value-less fact of kind `boolean`
  *   (the caller renders a checkmark / "yes").
- * - concept facets surface their first localized label.
- * - scalar facets surface their first value (long free-text is still returned
- *   so the caller can decide how to render it).
+ * - concept facets surface every localized label, joined with ', ' — a resource
+ *   tagged with three Schularten must show all three, not just the first.
+ * - scalar facets surface every value the same way (long free-text is still
+ *   returned so the caller can decide how to render it).
  *
  * @param {{ namespaces: Map<string, { facets: Map<string, { kind: 'concept'|'scalar', items: any[] }> }> } | null | undefined} parsed
  * @param {{ limit?: number, locale?: string }} [opts]
@@ -122,7 +123,14 @@ export function summarizeExtensionFacets(parsed, opts = {}) {
           out.push({ ns, facetName, kind: 'boolean', value: '', items: [], count: 1 });
           continue;
         }
-        out.push({ ns, facetName, kind: 'scalar', value: items[0], items, count: items.length });
+        out.push({
+          ns,
+          facetName,
+          kind: 'scalar',
+          value: items.join(', '),
+          items,
+          count: items.length
+        });
       } else {
         const labels = facet.items.map((it) => pickConceptLabel(it, locale)).filter(Boolean);
         if (labels.length === 0) continue;
@@ -130,7 +138,7 @@ export function summarizeExtensionFacets(parsed, opts = {}) {
           ns,
           facetName,
           kind: 'concept',
-          value: labels[0],
+          value: labels.join(', '),
           items: labels,
           count: facet.items.length
         });

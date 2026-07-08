@@ -142,7 +142,7 @@ describe('summarizeExtensionFacets', () => {
     ]);
   });
 
-  it('keeps every value of a multi-value scalar facet in items', () => {
+  it('keeps every value of a multi-value scalar facet in items and joins them in value', () => {
     const facts = facetsFrom([
       ['ekw:bibleReference', 'Psalm 34,15'],
       ['ekw:bibleReference', 'Jesaja 9,1-5'],
@@ -153,7 +153,7 @@ describe('summarizeExtensionFacets', () => {
         ns: 'ekw',
         facetName: 'bibleReference',
         kind: 'scalar',
-        value: 'Psalm 34,15',
+        value: 'Psalm 34,15, Jesaja 9,1-5, Matthäus 5,43-48',
         items: ['Psalm 34,15', 'Jesaja 9,1-5', 'Matthäus 5,43-48'],
         count: 3
       }
@@ -188,6 +188,30 @@ describe('summarizeExtensionFacets', () => {
         value: 'Gymnasium',
         items: ['Gymnasium'],
         count: 1
+      }
+    ]);
+  });
+
+  it('joins every label of a multi-concept facet in value (all Schularten visible)', () => {
+    const facts = facetsFrom(
+      [
+        ['ext:ekw:schoolType:id', 'https://w3id.org/example/gym'],
+        ['ext:ekw:schoolType:prefLabel:de', 'Gymnasium'],
+        ['ext:ekw:schoolType:id', 'https://w3id.org/example/real'],
+        ['ext:ekw:schoolType:prefLabel:de', 'Realschule'],
+        ['ext:ekw:schoolType:id', 'https://w3id.org/example/gesamt'],
+        ['ext:ekw:schoolType:prefLabel:de', 'Gesamtschule']
+      ],
+      { locale: 'de' }
+    );
+    expect(facts).toEqual([
+      {
+        ns: 'ekw',
+        facetName: 'schoolType',
+        kind: 'concept',
+        value: 'Gymnasium, Realschule, Gesamtschule',
+        items: ['Gymnasium', 'Realschule', 'Gesamtschule'],
+        count: 3
       }
     ]);
   });
