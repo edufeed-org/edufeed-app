@@ -254,6 +254,13 @@
     gap: 16px;
     position: sticky;
     top: 74px;
+    /* The rail is often taller than the viewport; without its own scroll a
+       stuck rail can never reveal its lower cards (they only move with the
+       main column). 138px = navbar (64px) + sticky offset (74px); the rest
+       is bottom breathing room. */
+    max-height: calc(100dvh - 158px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .pf-rcard {
     background: var(--c-paper);
