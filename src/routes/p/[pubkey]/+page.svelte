@@ -460,6 +460,7 @@
         pubkey={data.pubkey}
         npub={data.npub || ''}
         profileName={profile?.name || profile?.display_name}
+        {isOwnProfile}
       />
     {/if}
 

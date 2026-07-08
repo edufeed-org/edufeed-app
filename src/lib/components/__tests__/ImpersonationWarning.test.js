@@ -9,6 +9,15 @@ vi.mock('$lib/helpers/nip05-verify.js', async (importOriginal) => {
   return { ...original, verifyNip05: vi.fn() };
 });
 
+const mockMembership = { enabled: false, handleDomain: '' };
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: {
+    get membership() {
+      return mockMembership;
+    }
+  }
+}));
+
 import { verifyNip05 } from '$lib/helpers/nip05-verify.js';
 import ImpersonationWarning from '../profile/ImpersonationWarning.svelte';
 
@@ -72,5 +81,41 @@ describe('<ImpersonationWarning>', () => {
     const { container } = render(ImpersonationWarning, baseProps({ searchFn }));
     expect(container.querySelector('[data-testid="impersonation-warning"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="impersonation-match"]')).toBeFalsy();
+  });
+
+  describe('own profile (edufeed-app#10)', () => {
+    beforeEach(() => {
+      mockMembership.enabled = false;
+      mockMembership.handleDomain = '';
+    });
+
+    it('shows the own-profile hint instead of the visitor warning and skips the search', () => {
+      const searchFn = vi.fn(() => of());
+      const { container } = render(
+        ImpersonationWarning,
+        baseProps({ isOwnProfile: true, searchFn })
+      );
+
+      expect(container.querySelector('[data-testid="own-nip05-hint"]')).toBeTruthy();
+      expect(container.querySelector('[data-testid="impersonation-match"]')).toBeFalsy();
+      expect(searchFn).not.toHaveBeenCalled();
+    });
+
+    it('offers a request-handle CTA into settings when membership is enabled', () => {
+      mockMembership.enabled = true;
+      mockMembership.handleDomain = 'edufeed.org';
+
+      const { container } = render(ImpersonationWarning, baseProps({ isOwnProfile: true }));
+
+      const cta = container.querySelector('[data-testid="own-nip05-cta"]');
+      expect(cta).toBeTruthy();
+      expect(cta.getAttribute('href')).toContain('/settings');
+      expect(cta.textContent).toContain('edufeed.org');
+    });
+
+    it('shows no CTA when the membership feature is disabled', () => {
+      const { container } = render(ImpersonationWarning, baseProps({ isOwnProfile: true }));
+      expect(container.querySelector('[data-testid="own-nip05-cta"]')).toBeFalsy();
+    });
   });
 });

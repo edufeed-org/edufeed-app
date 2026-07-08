@@ -4,6 +4,10 @@
   and, when a similarly named *verified* profile exists (NIP-50 kind-0
   search + nip05 check), links it as a "did you mean" row. Relays without
   NIP-50 return nothing → the card degrades to the plain warning.
+
+  On the viewer's OWN profile the visitor wording makes no sense; instead
+  the card explains the missing verification and — when the membership
+  feature is enabled — offers requesting a handle in the settings.
 -->
 <script>
   import { resolve } from '$app/paths';
@@ -11,6 +15,7 @@
   import { rankImpersonationCandidates } from '$lib/helpers/impersonation.js';
   import { verifyNip05 } from '$lib/helpers/nip05-verify.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { AlertIcon, CheckIcon, ChevronRightIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -19,18 +24,30 @@
    *   pubkey: string,
    *   npub: string,
    *   profileName: string,
+   *   isOwnProfile?: boolean,
    *   searchFn?: (name: string, limit?: number) => import('rxjs').Observable<any>
    * }}
    */
-  let { pubkey, npub, profileName, searchFn = profileNameSearchLoader } = $props();
+  let {
+    pubkey,
+    npub,
+    profileName,
+    isOwnProfile = false,
+    searchFn = profileNameSearchLoader
+  } = $props();
 
   /** @type {{ pubkey: string, name: string, nip05: string, picture?: string } | null} */
   let match = $state(null);
 
   let npubShort = $derived(npub ? `${npub.slice(0, 12)}…${npub.slice(-6)}` : '');
 
+  let membershipEnabled = $derived(
+    !!runtimeConfig.membership?.enabled && !!runtimeConfig.membership?.handleDomain
+  );
+
   $effect(() => {
     match = null;
+    if (isOwnProfile) return;
     if (!profileName) return;
 
     let cancelled = false;
@@ -68,37 +85,53 @@
 <div class="pf-imp-warn" data-testid="impersonation-warning">
   <div class="in">
     <span class="wic"><AlertIcon class_="w-5 h-5" /></span>
-    <div class="body">
-      <div class="tt">{m.impersonation_title()}</div>
-      <div class="tx">
-        {m.impersonation_text()}
-        <code>{npubShort}</code>
+    {#if isOwnProfile}
+      <div class="body" data-testid="own-nip05-hint">
+        <div class="tt">{m.impersonation_own_title()}</div>
+        <div class="tx">
+          {m.impersonation_own_text()}
+          <code>{npubShort}</code>
+        </div>
+        {#if membershipEnabled}
+          <a class="cta" data-testid="own-nip05-cta" href={resolve('/settings')}>
+            {m.impersonation_own_cta({ domain: `@${runtimeConfig.membership.handleDomain}` })}
+            <ChevronRightIcon class_="w-4 h-4" />
+          </a>
+        {/if}
       </div>
-      {#if match}
-        <a
-          class="match"
-          data-testid="impersonation-match"
-          href={resolve(`/p/${hexToNpub(match.pubkey) || match.pubkey}`)}
-        >
-          {#if match.picture}
-            <img class="mav" src={match.picture} alt="" />
-          {:else}
-            <span class="mav fallback">{match.name[0]?.toUpperCase()}</span>
-          {/if}
-          <span class="mtext">
-            <span class="mn">
-              {m.impersonation_did_you_mean()}
-              <b>{match.name}</b>
-              <span class="verif"
-                ><CheckIcon class_="w-2.5 h-2.5" /> {m.profile_verified_chip()}</span
-              >
+    {:else}
+      <div class="body">
+        <div class="tt">{m.impersonation_title()}</div>
+        <div class="tx">
+          {m.impersonation_text()}
+          <code>{npubShort}</code>
+        </div>
+        {#if match}
+          <a
+            class="match"
+            data-testid="impersonation-match"
+            href={resolve(`/p/${hexToNpub(match.pubkey) || match.pubkey}`)}
+          >
+            {#if match.picture}
+              <img class="mav" src={match.picture} alt="" />
+            {:else}
+              <span class="mav fallback">{match.name[0]?.toUpperCase()}</span>
+            {/if}
+            <span class="mtext">
+              <span class="mn">
+                {m.impersonation_did_you_mean()}
+                <b>{match.name}</b>
+                <span class="verif"
+                  ><CheckIcon class_="w-2.5 h-2.5" /> {m.profile_verified_chip()}</span
+                >
+              </span>
+              <span class="mm">{match.nip05}</span>
             </span>
-            <span class="mm">{match.nip05}</span>
-          </span>
-          <span class="go"><ChevronRightIcon class_="w-4 h-4" /></span>
-        </a>
-      {/if}
-    </div>
+            <span class="go"><ChevronRightIcon class_="w-4 h-4" /></span>
+          </a>
+        {/if}
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -152,6 +185,24 @@
     border: 1px solid var(--c-rule);
     border-radius: 5px;
     padding: 1px 6px;
+  }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    background: var(--c-paper);
+    border: 1px solid var(--c-rule);
+    border-radius: 11px;
+    padding: 9px 14px;
+    text-decoration: none;
+    color: var(--c-ink);
+    font-family: var(--pf-display);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .cta:hover {
+    border-color: var(--color-primary);
   }
   .match {
     display: flex;
