@@ -18,6 +18,7 @@
   } from 'applesauce-core/helpers';
   import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
+  import { buildShareResultMessages } from '$lib/helpers/shareMessages.js';
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
@@ -80,7 +81,8 @@
   let shareError = $state('');
   let shareSuccess = $state('');
   let shareResults = $state({
-    successful: /** @type {string[]} */ ([]),
+    shared: /** @type {string[]} */ ([]),
+    unshared: /** @type {string[]} */ ([]),
     failed: /** @type {string[]} */ ([])
   });
 
@@ -330,7 +332,7 @@
     isProcessingShares = true;
     shareError = '';
     shareSuccess = '';
-    shareResults = { successful: [], failed: [] };
+    shareResults = { shared: [], unshared: [], failed: [] };
 
     try {
       // Separate into creates vs deletes (only deletable shares can be unshared)
@@ -342,7 +344,7 @@
         try {
           const success = await createCommunityReposts(event, toCreate, activeUser.signer);
           if (success) {
-            for (const id of toCreate) shareResults.successful.push(getCommunityName(id));
+            for (const id of toCreate) shareResults.shared.push(getCommunityName(id));
           } else {
             for (const id of toCreate) shareResults.failed.push(getCommunityName(id));
           }
@@ -358,7 +360,7 @@
         try {
           const success = await deleteShare(communityPubkey);
           if (success) {
-            shareResults.successful.push(communityName);
+            shareResults.unshared.push(communityName);
           } else {
             shareResults.failed.push(communityName);
           }
@@ -368,17 +370,13 @@
         }
       }
 
-      const successfulCount = shareResults.successful.length;
-      const failedCount = shareResults.failed.length;
-
-      if (successfulCount > 0) {
-        shareSuccess = `Successfully shared with ${successfulCount} community${successfulCount > 1 ? 'ies' : ''}`;
-        if (failedCount > 0) {
-          shareSuccess += `, failed for ${failedCount}`;
-        }
-      } else if (failedCount > 0) {
-        shareError = `Failed to share with ${failedCount} community${failedCount > 1 ? 'ies' : ''}`;
-      }
+      const messages = buildShareResultMessages({
+        shared: shareResults.shared.length,
+        unshared: shareResults.unshared.length,
+        failed: shareResults.failed.length
+      });
+      shareSuccess = messages.success;
+      shareError = messages.error;
 
       selectedCommunityIds = [];
     } catch (error) {
