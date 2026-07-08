@@ -101,7 +101,7 @@
   <!-- Mobile Modal -->
   {#if isOpen}
     <div
-      class="fixed inset-0 z-50 flex items-end bg-black/50"
+      class="fixed inset-0 z-50 flex items-end bg-(--c-scrim)"
       onclick={handleBackdropClick}
       onkeydown={(e) => e.key === 'Escape' && close()}
       role="dialog"

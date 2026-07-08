@@ -139,7 +139,7 @@
       <!-- Backdrop scrim — tap to dismiss -->
       <button
         type="button"
-        class="fixed inset-0 z-[55] cursor-default bg-black/40"
+        class="fixed inset-0 z-[55] cursor-default bg-(--c-scrim)"
         aria-label={m.aria_close_modal()}
         onclick={close}
       ></button>

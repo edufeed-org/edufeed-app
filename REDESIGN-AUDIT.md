@@ -9,10 +9,10 @@ Tokens (`--c-*`, DaisyUI-Semantik), kein Dark-Mode mehr.
 Legende: 🔴 sofort sichtbar / hoher Traffic · 🟡 mittel · ⚪ Politur
 
 > **Status (2026-07-08, Branch `fix/redesign-audit`):** A1–A6 und B1–B7 sind
-> behoben; aus C sind die `text-white`-Buttons und die Radius-Literale
-> umgesetzt. Bewusst offen gelassen (als optional markiert): `--c-scrim`/
-> `--c-shadow`-Tokens für Scrims & Schatten sowie das Kontrast-Ink in
-> `CalendarEventBar`. Empty-States (B6) laufen jetzt über die neue Komponente
+> behoben; aus C sind die `text-white`-Buttons, die Radius-Literale und der
+> `--c-scrim`-Token (GlobalFAB/ReactionPicker/AddToCalendarDropdown) umgesetzt.
+> Bewusst offen gelassen (als optional markiert): `--c-shadow`-Token für
+> Schattenliterale sowie das Kontrast-Ink in `CalendarEventBar`. Empty-States (B6) laufen jetzt über die neue Komponente
 > `src/lib/components/shared/EmptyState.svelte` (Dashboard-Feed, Posteingang,
 > Community-Inhaltslisten); weitere Kandidaten können folgen.
 
