@@ -2566,5 +2566,6 @@
   "termi_fallback": "Good question — I can't answer that yet. Try one of the suggestions below, or ask me about learning materials.",
   "termi_input_placeholder": "Ask Termi …",
   "termi_input_aria": "Message to Termi",
-  "termi_send_aria": "Send"
+  "termi_send_aria": "Send",
+  "termi_static_notice": "Termi is still learning: answers are pre-written for now — real AI support is coming soon!"
 }

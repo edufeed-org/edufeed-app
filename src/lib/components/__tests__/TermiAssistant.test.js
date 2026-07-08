@@ -39,6 +39,7 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_sugg_3_q',
       'termi_sugg_3_a',
       'termi_fallback',
+      'termi_static_notice',
       'termi_input_placeholder',
       'termi_input_aria',
       'termi_send_aria',

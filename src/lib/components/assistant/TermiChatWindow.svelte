@@ -263,6 +263,11 @@
     {/if}
   </div>
 
+  <!-- beta notice: answers are canned until the AI backend lands -->
+  <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
+    {m.termi_static_notice()}
+  </p>
+
   <!-- canned suggestions -->
   <div class="flex flex-wrap gap-2 px-4 pb-2.5">
     {#each suggestions as sugg (sugg.q)}
