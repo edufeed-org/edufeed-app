@@ -62,6 +62,14 @@
 
   const isList = $derived(variant === 'list');
 
+  // Attached files (encoding:*) + external references (r tags) — shown as a
+  // hover badge on the cover so users know there is material behind the card.
+  const linkedMaterialsCount = $derived(
+    (resource?.tags ?? []).filter(
+      (/** @type {string[]} */ t) => t[0] === 'encoding:contentUrl' || t[0] === 'r'
+    ).length
+  );
+
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, resource.pubkey.slice(0, 8) + '...'));
 
@@ -296,10 +304,19 @@
       {/if}
     </div>
 
-    <!-- Resource cover — image at 2:1 when present, typo cover at 3:4 (capped) when absent. -->
+    <!-- Resource cover — image at 2:1 when present, typo cover at 3:4 (capped) when absent.
+         On hover, a badge signals attached/linked materials behind the cover. -->
     {#if !compact}
-      <div class="mb-3">
+      <div class="group relative mb-3">
         <ResourceCover {resource} size="full" aspect="wide" />
+        {#if linkedMaterialsCount > 0}
+          <span
+            class="absolute right-2 bottom-2 badge badge-sm opacity-0 shadow transition-opacity duration-150 badge-neutral group-hover:opacity-100"
+            data-testid="linked-materials-badge"
+          >
+            📎 {m.amb_card_linked_materials({ count: linkedMaterialsCount })}
+          </span>
+        {/if}
       </div>
     {/if}
 
