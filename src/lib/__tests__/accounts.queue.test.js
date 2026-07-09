@@ -66,8 +66,46 @@ describe('hardenExtensionAccounts', () => {
 
     expect(ext.disableQueue).toBe(true);
     expect(ext.signer).not.toBe(extSigner); // wrapped
+    // Bunker keeps its queue (NIP-46 benefits from serialization) but the
+    // signer IS wrapped for timeout + error context (edufeed-app#19).
     expect(bunker.disableQueue).toBeUndefined();
-    expect(bunker.signer).toBe(bunkerSigner); // untouched
+    expect(bunker.signer).not.toBe(bunkerSigner);
+  });
+
+  it('bunker signEvent rejects with a clear timeout instead of hanging forever', async () => {
+    const bunker = {
+      type: 'nostr-connect',
+      disableQueue: undefined,
+      signer: makeSigner(() => new Promise(() => {})) // sleeping bunker
+    };
+    hardenExtensionAccounts([bunker], { bunkerTimeoutMs: 30 });
+
+    await expect(bunker.signer.signEvent({})).rejects.toThrow(/did not respond/);
+  });
+
+  it('bunker errors are wrapped with remote-signer context, not shown raw', async () => {
+    const bunker = {
+      type: 'nostr-connect',
+      disableQueue: undefined,
+      signer: makeSigner(() => Promise.reject(new Error('exceeded quota')))
+    };
+    hardenExtensionAccounts([bunker]);
+
+    await expect(bunker.signer.signEvent({})).rejects.toThrow(
+      /remote signing app.*exceeded quota/i
+    );
+  });
+
+  it('bunker signEvent passes through successful results unchanged', async () => {
+    const signed = { id: 'x', sig: 'y' };
+    const bunker = {
+      type: 'nostr-connect',
+      disableQueue: undefined,
+      signer: makeSigner(async () => signed)
+    };
+    hardenExtensionAccounts([bunker]);
+
+    await expect(bunker.signer.signEvent({})).resolves.toBe(signed);
   });
 
   it('is idempotent: re-running does not re-wrap the signer', () => {
@@ -80,6 +118,18 @@ describe('hardenExtensionAccounts', () => {
     const wrappedOnce = ext.signer;
     hardenExtensionAccounts([ext]);
     expect(ext.signer).toBe(wrappedOnce);
+  });
+
+  it('is idempotent for bunker accounts too', () => {
+    const bunker = {
+      type: 'nostr-connect',
+      disableQueue: undefined,
+      signer: makeSigner(async () => ({}))
+    };
+    hardenExtensionAccounts([bunker]);
+    const wrappedOnce = bunker.signer;
+    hardenExtensionAccounts([bunker]);
+    expect(bunker.signer).toBe(wrappedOnce);
   });
 });
 
