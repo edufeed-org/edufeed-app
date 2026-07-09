@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatAuthors,
+  longestWordLength,
   splitTitle,
   stringColorHue,
   titleLayout
@@ -234,5 +235,31 @@ describe('titleLayout', () => {
       '"Anders sein" heißt einmalig sein – und doch als Klasse zusammenzugehören. ' +
       'Eine Unterrichtsidee mit dem Wendebuch "Ich bin anders als du – ich bin wie du"';
     expect(titleLayout(title)).toBe('long');
+  });
+});
+
+describe('longestWordLength', () => {
+  it('returns the longest word length', () => {
+    expect(longestWordLength(['Wofür', 'Menschen'])).toBe(8);
+    expect(longestWordLength(['verantwortlich'])).toBe(14);
+  });
+
+  it('returns 0 for empty input', () => {
+    expect(longestWordLength([])).toBe(0);
+    expect(longestWordLength(undefined)).toBe(0);
+  });
+
+  it('ignores empty strings', () => {
+    expect(longestWordLength(['', 'ab'])).toBe(2);
+  });
+});
+
+describe('titleLayout — pathological word length (issue #23)', () => {
+  it('routes titles whose longest word cannot fit even downscaled to the long layout', () => {
+    expect(titleLayout('Donaudampfschifffahrtsgesellschaft verstehen')).toBe('long');
+  });
+
+  it('keeps ordinary German compounds in the short layout', () => {
+    expect(titleLayout('Wofür Menschen verantwortlich sind')).toBe('short');
   });
 });

@@ -160,3 +160,24 @@ describe('TypoCover', () => {
     expect(getByTestId('typo-cover-author').textContent).toContain('Alice, Bob et al.');
   });
 });
+
+describe('TypoCover — word-length font scaling (issue #23)', () => {
+  it('sets per-line longest-word-length custom props so long compounds shrink instead of clipping', () => {
+    const { container } = render(TypoCover, {
+      props: defaultProps({ title: 'Wofür Menschen verantwortlich sind (Muslimisch)' })
+    });
+    const frame = container.querySelector('[data-testid="typo-cover-frame"]');
+    const style = frame?.getAttribute('style') ?? '';
+    expect(style).toContain('--len-leading: 8'); // "Menschen"
+    expect(style).toContain('--len-script: 14'); // "verantwortlich"
+    expect(style).toContain('--len-trailing: 12'); // "(Muslimisch)"
+  });
+
+  it('falls back to sensible lengths for empty parts', () => {
+    const { container } = render(TypoCover, { props: defaultProps({ title: 'Wort' }) });
+    const frame = container.querySelector('[data-testid="typo-cover-frame"]');
+    const style = frame?.getAttribute('style') ?? '';
+    expect(style).toContain('--len-leading: 4');
+    expect(style).toMatch(/--len-script: [1-9]/); // never 0 (division guard)
+  });
+});
