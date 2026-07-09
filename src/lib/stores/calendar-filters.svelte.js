@@ -42,6 +42,11 @@ class CalendarFiltersStore {
   // Their events are removed from the displayed set client-side.
   hiddenAuthorPubkeys = $state(/** @type {string[]} */ ([]));
 
+  // Solo publisher: when set, ONLY this author's events are displayed
+  // (chart-legend convention: chip click = solo, eye = hide). Solo takes
+  // precedence over hiddenAuthorPubkeys, which stays intact for restore.
+  soloAuthorPubkey = $state(/** @type {string | null} */ (null));
+
   // Getter for current observable values (for convenience)
   get selectedCalendar() {
     return this.selectedCalendar$.value;
@@ -234,10 +239,14 @@ class CalendarFiltersStore {
   }
 
   /**
-   * Toggle an author on the hidden-publishers list.
+   * Toggle an author on the hidden-publishers list. Hiding the solo'd
+   * author would contradict the solo — the solo is cleared instead.
    * @param {string} pubkey
    */
   toggleHiddenAuthor(pubkey) {
+    if (this.soloAuthorPubkey === pubkey) {
+      this.soloAuthorPubkey = null;
+    }
     if (this.hiddenAuthorPubkeys.includes(pubkey)) {
       this.hiddenAuthorPubkeys = this.hiddenAuthorPubkeys.filter((p) => p !== pubkey);
     } else {
@@ -246,10 +255,25 @@ class CalendarFiltersStore {
   }
 
   /**
-   * Clear all hidden publishers.
+   * Toggle solo mode for an author: set on first click, back to normal on
+   * the second. Soloing a hidden author also unhides it.
+   * @param {string} pubkey
+   */
+  toggleSoloAuthor(pubkey) {
+    if (this.soloAuthorPubkey === pubkey) {
+      this.soloAuthorPubkey = null;
+      return;
+    }
+    this.soloAuthorPubkey = pubkey;
+    this.hiddenAuthorPubkeys = this.hiddenAuthorPubkeys.filter((p) => p !== pubkey);
+  }
+
+  /**
+   * Clear all hidden publishers and the solo selection.
    */
   clearHiddenAuthors() {
     this.hiddenAuthorPubkeys = [];
+    this.soloAuthorPubkey = null;
   }
 
   /**
@@ -333,6 +357,7 @@ class CalendarFiltersStore {
     this.userFollowPubkeys = [];
     this.featuredAuthorPubkeys = [];
     this.hiddenAuthorPubkeys = [];
+    this.soloAuthorPubkey = null;
   }
 }
 
