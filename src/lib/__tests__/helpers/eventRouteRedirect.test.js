@@ -56,6 +56,61 @@ describe('getCanonicalEventRoute', () => {
     });
   });
 
+  describe('relay hints on addressable events', () => {
+    it('preserves the event seen-relays as naddr hints on calendar events', () => {
+      const event = makeEvent({ kind: 31923, dTag: 'evt-hints' });
+      addSeenRelay(event, 'wss://calendar-relay.edufeed.org');
+      addSeenRelay(event, 'wss://relay.edufeed.org');
+
+      const route = getCanonicalEventRoute(event);
+      const naddr = route.split('/').pop();
+      const decoded = nip19.decode(naddr);
+
+      expect(decoded.type).toBe('naddr');
+      expect(decoded.data.relays).toEqual(
+        expect.arrayContaining(['wss://calendar-relay.edufeed.org', 'wss://relay.edufeed.org'])
+      );
+    });
+
+    it('falls back to caller-provided hints when the event has no seen relays', () => {
+      // Cache-served events carry no seen-relays; the incoming naddr's own
+      // hints must survive the canonical redirect.
+      const event = makeEvent({ kind: 31923, dTag: 'evt-cached' });
+
+      const route = getCanonicalEventRoute(event, {
+        relayHints: ['wss://relay.edufeed.org']
+      });
+      const naddr = route.split('/').pop();
+      const decoded = nip19.decode(naddr);
+
+      expect(decoded.data.relays).toEqual(['wss://relay.edufeed.org']);
+    });
+
+    it('prefers seen-relays over caller-provided hints', () => {
+      const event = makeEvent({ kind: 31923, dTag: 'evt-seen-first' });
+      addSeenRelay(event, 'wss://calendar-relay.edufeed.org');
+
+      const route = getCanonicalEventRoute(event, {
+        relayHints: ['wss://stale-hint.example']
+      });
+      const naddr = route.split('/').pop();
+      const decoded = nip19.decode(naddr);
+
+      expect(decoded.data.relays[0]).toBe('wss://calendar-relay.edufeed.org');
+    });
+
+    it('preserves seen-relays as naddr hints on community-scoped articles', () => {
+      const event = makeEvent({ kind: 30023, hTag: COMMUNITY_HEX, dTag: 'a-hints' });
+      addSeenRelay(event, 'wss://relay.edufeed.org');
+
+      const route = getCanonicalEventRoute(event);
+      const naddr = route.split('/').pop();
+      const decoded = nip19.decode(naddr);
+
+      expect(decoded.data.relays).toEqual(expect.arrayContaining(['wss://relay.edufeed.org']));
+    });
+  });
+
   describe('calendar collection (31924)', () => {
     it('routes calendar collection to /calendar/<naddr> regardless of h-tag', () => {
       const noHTag = makeEvent({ kind: 31924, dTag: 'col1' });

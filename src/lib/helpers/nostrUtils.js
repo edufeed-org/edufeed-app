@@ -231,15 +231,12 @@ export const fetchEventById = async (identifier) => {
             identifier: data.identifier
           };
 
-          // Include relay hints if present (addressLoader will prioritize them)
-          if (data.relays && data.relays.length > 0) {
-            addressPointer.relays = data.relays;
-          } else {
-            // No relay hints in naddr — provide lookup relays explicitly.
-            // addressLoader's lookupRelays config is captured at module init
-            // (before runtimeConfig loads), so we must pass relays in the pointer.
-            addressPointer.relays = getAllLookupRelays();
-          }
+          // Union hint relays with lookup relays (hints may point to dead
+          // relays, and addressLoader's lookupRelays config is captured at
+          // module init — before runtimeConfig loads — so we must pass the
+          // full relay set in the pointer).
+          const hintRelays = data.relays?.length ? data.relays : [];
+          addressPointer.relays = [...new Set([...hintRelays, ...getAllLookupRelays()])];
 
           // Use addressLoader for addressable events (fetches from relays)
           const event$ = addressLoader(addressPointer).pipe(
