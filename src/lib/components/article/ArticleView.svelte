@@ -5,6 +5,7 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
+  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
@@ -178,13 +179,35 @@
   {#if image}
     <div class="mb-8">
       <div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg">
-        <ImageWithFallback
-          src={image}
-          alt={title}
-          fallbackType="article"
-          size="hero"
-          class="h-full w-full object-cover"
-        />
+        {#if isHttpUrl(image)}
+          <!-- The 16:9 crop can cut off attribution baked into the cover, and
+               license checks need the untouched original — keep it one click
+               away. The link is gated on http(s): untrusted event data. -->
+          <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: original image source -->
+          <a
+            href={image}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={m.event_detail_view_original_image()}
+            class="block h-full w-full"
+          >
+            <ImageWithFallback
+              src={image}
+              alt={title}
+              fallbackType="article"
+              size="hero"
+              class="h-full w-full object-cover"
+            />
+          </a>
+        {:else}
+          <ImageWithFallback
+            src={image}
+            alt={title}
+            fallbackType="article"
+            size="hero"
+            class="h-full w-full object-cover"
+          />
+        {/if}
         <ImageLicenseOverlay
           licenseEvent={coverStatus.event}
           status={coverStatus.status}
