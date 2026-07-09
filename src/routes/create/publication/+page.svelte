@@ -8,6 +8,7 @@
   import { createPublication, updatePublication } from '$lib/stores/publication-actions.svelte.js';
   import { parsePublicationEvent } from '$lib/helpers/publication/publicationTags.js';
   import { normalizeDoi } from '$lib/helpers/publication/doi.js';
+  import { fetchPublicationPrefill } from '$lib/helpers/publication/urlMetadata.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
@@ -44,6 +45,13 @@
   // UI state
   let isPublishing = $state(false);
   let validationError = $state('');
+
+  // URL → metadata prefill (Highwire citation_* tags via /api/reader)
+  let isInspectingUrl = $state(false);
+  let urlPrefillApplied = $state(false);
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let urlInspectTimer;
+  let lastInspectedUrl = '';
 
   const licenseOptions = $derived(getLicenseOptions(license));
   const subjectField = $derived(resolveVocabField('hochschulfaecher'));
@@ -121,6 +129,63 @@
         isLoadingEdit = false;
       }
     })();
+  });
+
+  // Debounced auto-inspect of the article URL: derive metadata from the
+  // page's citation_*/OG tags and fill EMPTY fields only, so user input and
+  // edit-mode prefill are never overwritten.
+  $effect(() => {
+    const current = url.trim();
+    if (urlInspectTimer) clearTimeout(urlInspectTimer);
+    if (!current || current === lastInspectedUrl || isLoadingEdit) return;
+    if (!/^https?:\/\/.+\..+/.test(current)) return;
+
+    urlInspectTimer = setTimeout(async () => {
+      lastInspectedUrl = current;
+      isInspectingUrl = true;
+      try {
+        const prefill = await fetchPublicationPrefill(current);
+        let applied = false;
+        if (prefill.title && !title.trim()) {
+          title = prefill.title;
+          applied = true;
+        }
+        if (prefill.creators?.length && creators.length === 0) {
+          creators = prefill.creators;
+          applied = true;
+        }
+        if (prefill.doi && !doiInput.trim()) {
+          doiInput = prefill.doi;
+          applied = true;
+        }
+        if (prefill.datePublished && !datePublished) {
+          datePublished = prefill.datePublished;
+          applied = true;
+        }
+        if (prefill.journal && !journal.trim()) {
+          journal = prefill.journal;
+          applied = true;
+        }
+        if (prefill.abstract && !abstract.trim()) {
+          abstract = prefill.abstract;
+          applied = true;
+        }
+        if (prefill.keywords?.length && keywords.length === 0) {
+          keywords = prefill.keywords;
+          applied = true;
+        }
+        if (prefill.inLanguage) {
+          inLanguage = prefill.inLanguage;
+        }
+        urlPrefillApplied = applied;
+      } finally {
+        isInspectingUrl = false;
+      }
+    }, 600);
+
+    return () => {
+      if (urlInspectTimer) clearTimeout(urlInspectTimer);
+    };
   });
 
   function handleBack() {
@@ -256,7 +321,12 @@
         </div>
         <div class="form-control">
           <label class="label" for="publication-url">
-            <span class="label-text font-medium">{m.publication_form_label_url()}</span>
+            <span class="label-text flex items-center gap-2 font-medium">
+              {m.publication_form_label_url()}
+              {#if isInspectingUrl}
+                <span class="loading loading-xs loading-spinner"></span>
+              {/if}
+            </span>
           </label>
           <input
             id="publication-url"
@@ -265,6 +335,10 @@
             placeholder="https://..."
             bind:value={url}
           />
+          <p class="mt-1 text-xs text-base-content/60">{m.publication_form_url_inspect_hint()}</p>
+          {#if urlPrefillApplied}
+            <p class="mt-1 text-xs text-success">{m.publication_form_url_prefill_applied()}</p>
+          {/if}
         </div>
       </div>
 

@@ -2627,5 +2627,7 @@
   "places_input_remove_aria": "Remove place {name}",
   "calendar_top_publishers_label": "Most active publishers",
   "calendar_top_publishers_hide_aria": "Hide events by {name}",
-  "calendar_top_publishers_show_aria": "Show events by {name} again"
+  "calendar_top_publishers_show_aria": "Show events by {name} again",
+  "publication_form_url_inspect_hint": "When you enter an article URL we try to derive metadata from the page.",
+  "publication_form_url_prefill_applied": "Metadata taken from the page — please review."
 }
