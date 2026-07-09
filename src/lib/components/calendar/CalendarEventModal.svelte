@@ -155,11 +155,18 @@
     if (modalStore.activeModal === 'calendarEvent') {
       if (mode === 'edit' && existingEvent) {
         initializeFormForEdit();
+        // Pre-select the communities the event is already shared with (its
+        // h-tags) so editing doesn't look like — or silently cause — an
+        // un-share. Non-joined communities stay in the list untouched; the
+        // selector simply doesn't render them.
+        selectedCommunityIds = (existingRawEvent?.tags || [])
+          .filter((/** @type {string[]} */ t) => t[0] === 'h' && t[1])
+          .map((/** @type {string[]} */ t) => t[1]);
       } else {
         initializeForm();
+        selectedCommunityIds = [];
       }
       selectedCalendarIds = [];
-      selectedCommunityIds = [];
     }
   });
 
@@ -311,8 +318,14 @@
       let resultEvent = /** @type {any} */ (null);
 
       if (mode === 'edit' && existingRawEvent) {
-        // Update existing event
-        resultEvent = await calendarActions.updateEvent(formData, existingRawEvent);
+        // Update existing event, applying the (pre-selected) community set so
+        // unchanged selections keep the sharing state and edits to it stick.
+        resultEvent = await calendarActions.updateEvent(
+          formData,
+          existingRawEvent,
+          null,
+          selectedCommunityIds
+        );
         console.log('Event updated successfully');
 
         handleClose();
