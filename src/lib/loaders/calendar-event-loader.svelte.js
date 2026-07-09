@@ -14,6 +14,8 @@ import { getCalendarEventMetadata, parseAddressReference } from '$lib/helpers/ev
 import { calendarTimelineLoader } from '$lib/loaders/calendar.js';
 import { communityTargetedPublicationsLoader } from '$lib/loaders/targeted-publications.js';
 import { userDeletionLoader, addressLoader } from '$lib/loaders/base.js';
+import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
@@ -331,6 +333,65 @@ export function useCalendarEventLoader(options) {
         [31922, 31923]
       )().subscribe();
 
+      // 2b. NIP-18 reposts (kind 6/16 with h-tag) sharing calendar events into
+      // the community — fetched from relays so shares reconstruct on a fresh
+      // load instead of only appearing in the sharer's own session.
+      const repostRelayLoaderSubscription = createTimelineLoader(
+        pool,
+        getAllLookupRelays(),
+        { kinds: [6, 16], '#h': [communityPubkey], limit: 50 },
+        { eventStore, limit: 50 }
+      )().subscribe({
+        error: (/** @type {any} */ err) =>
+          console.warn('📅 EventLoader: Community repost loader error:', err)
+      });
+      deletionSubscriptions.set('repostRelayLoader', repostRelayLoaderSubscription);
+
+      /** Load the calendar events referenced by share/repost events on-demand.
+       * @param {any[]} shareEvents */
+      function loadReferencedEvents(shareEvents) {
+        // Extract unique event IDs and addressable references
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
+        const eventIds = new Set();
+        /** @type {Array<{kind: number, pubkey: string, dTag: string}>} */
+        const addressableRefs = [];
+
+        shareEvents.forEach((shareEvent) => {
+          const eTag = getTagValue(shareEvent, 'e');
+          const aTag = getTagValue(shareEvent, 'a');
+
+          if (eTag) {
+            eventIds.add(eTag);
+          }
+          if (aTag) {
+            const parsed = parseAddressReference(aTag);
+            if (parsed) {
+              addressableRefs.push(parsed);
+            }
+          }
+        });
+
+        // Start loader for events by ID
+        if (eventIds.size > 0) {
+          const timelineLoader = eventStore.timeline({
+            ids: Array.from(eventIds)
+          });
+          // Handle both Observable and Promise returns
+          if (timelineLoader && typeof timelineLoader.subscribe === 'function') {
+            timelineLoader.subscribe();
+          }
+        }
+
+        // Start loaders for addressable events
+        addressableRefs.forEach((ref) => {
+          addressLoader({
+            kind: ref.kind,
+            pubkey: ref.pubkey,
+            identifier: ref.dTag
+          }).subscribe();
+        });
+      }
+
       // 3. Watch targeted publications and load referenced calendar events on-demand
       const referencedEventsLoaderSubscription = eventStore
         .model(TimelineModel, {
@@ -339,51 +400,20 @@ export function useCalendarEventLoader(options) {
           '#k': ['31922', '31923'],
           limit: 100
         })
-        .subscribe((shareEvents) => {
-          // Extract unique event IDs and addressable references
-          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
-          const eventIds = new Set();
-          /** @type {Array<{kind: number, pubkey: string, dTag: string}>} */
-          const addressableRefs = [];
-
-          shareEvents.forEach((shareEvent) => {
-            const eTag = getTagValue(shareEvent, 'e');
-            const aTag = getTagValue(shareEvent, 'a');
-
-            if (eTag) {
-              eventIds.add(eTag);
-            }
-            if (aTag) {
-              const parsed = parseAddressReference(aTag);
-              if (parsed) {
-                addressableRefs.push(parsed);
-              }
-            }
-          });
-
-          // Start loader for events by ID
-          if (eventIds.size > 0) {
-            const timelineLoader = eventStore.timeline({
-              ids: Array.from(eventIds)
-            });
-            // Handle both Observable and Promise returns
-            if (timelineLoader && typeof timelineLoader.subscribe === 'function') {
-              timelineLoader.subscribe();
-            }
-          }
-
-          // Start loaders for addressable events
-          addressableRefs.forEach((ref) => {
-            addressLoader({
-              kind: ref.kind,
-              pubkey: ref.pubkey,
-              identifier: ref.dTag
-            }).subscribe();
-          });
-        });
+        .subscribe(loadReferencedEvents);
 
       // Store this subscription so it can be cleaned up
       deletionSubscriptions.set('referencedEventsLoader', referencedEventsLoaderSubscription);
+
+      // 3b. Same on-demand resolution for kind 6/16 repost references
+      const repostReferencedSubscription = eventStore
+        .model(TimelineModel, {
+          kinds: [6, 16],
+          '#h': [communityPubkey],
+          limit: 100
+        })
+        .subscribe(loadReferencedEvents);
+      deletionSubscriptions.set('repostReferencedLoader', repostReferencedSubscription);
 
       // 4. Use the CommunityCalendarEventModel to reactively combine all data
       subscription = eventStore.model(CommunityCalendarEventModel, communityPubkey).subscribe({
