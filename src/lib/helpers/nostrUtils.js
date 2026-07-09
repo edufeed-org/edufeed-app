@@ -607,3 +607,47 @@ export function generateAuthorColor(pubkey) {
   const { r, g, b } = generateAuthorColorRGB(pubkey);
   return `rgb(${r},${g},${b})`;
 }
+
+/**
+ * Pick a readable label color (black or white) for a given background.
+ *
+ * Author colors span the whole hue circle — dark blues/purples made the
+ * former hardcoded black label unreadable. Uses WCAG relative luminance
+ * with a threshold that keeps >= 4.5:1 contrast against the chosen text.
+ * Accepts `rgb(r,g,b)` and `#rrggbb`/`#rgb` strings; anything else falls
+ * back to black (matching the previous behavior on unknown overrides).
+ *
+ * @param {string | null | undefined} background
+ * @returns {'#000000' | '#ffffff'}
+ */
+export function readableTextColor(background) {
+  if (!background || typeof background !== 'string') return '#000000';
+
+  let r, g, b;
+  const rgbMatch = background.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  const hexMatch = background.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (rgbMatch) {
+    [r, g, b] = [Number(rgbMatch[1]), Number(rgbMatch[2]), Number(rgbMatch[3])];
+  } else if (hexMatch) {
+    let hex = hexMatch[1];
+    if (hex.length === 3)
+      hex = hex
+        .split('')
+        .map((c) => c + c)
+        .join('');
+    r = parseInt(hex.slice(0, 2), 16);
+    g = parseInt(hex.slice(2, 4), 16);
+    b = parseInt(hex.slice(4, 6), 16);
+  } else {
+    return '#000000';
+  }
+
+  const channel = (/** @type {number} */ v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const luminance = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+
+  // Black (L=0) needs bg luminance >= 0.175 for 4.5:1; below that white wins.
+  return luminance >= 0.175 ? '#000000' : '#ffffff';
+}

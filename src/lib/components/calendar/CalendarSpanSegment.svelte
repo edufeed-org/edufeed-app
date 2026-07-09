@@ -5,7 +5,7 @@
   day. Chevron caps mark spans clipped by the week boundary.
 -->
 <script>
-  import { generateAuthorColor } from '../../helpers/nostrUtils.js';
+  import { generateAuthorColor, readableTextColor } from '../../helpers/nostrUtils.js';
 
   /**
    * @typedef {import('../../helpers/calendar-lanes.js').WeekBar} WeekBar
@@ -17,9 +17,12 @@
   const event = $derived(bar.event);
 
   let inlineStyle = $derived.by(() => {
-    if (event.color) return `background-color: ${event.color}; color: #000000`;
+    if (event.color)
+      return `background-color: ${event.color}; color: ${readableTextColor(event.color)}`;
     const color = generateAuthorColor(event.pubkey);
-    return color ? `background-color: ${color}; color: #000000` : 'color: #000000';
+    return color
+      ? `background-color: ${color}; color: ${readableTextColor(color)}`
+      : 'color: #000000';
   });
 
   /** @param {Event} e */
