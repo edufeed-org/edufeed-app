@@ -382,26 +382,7 @@ describe('CommunityShare', () => {
     }
   });
 
-  it('uses targeted #e tag filters for share detection without authors filter', () => {
-    render(CommunityShare, {
-      props: {
-        event: mockEvent,
-        activeUser: mockActiveUser
-      }
-    });
-
-    // Should have loaders with #e tag filter targeting this event's id
-    const filtersUsed = mockCreateTimelineLoader.mock.calls.map((call) => call[2]);
-    const repostByE = filtersUsed.find(
-      (f) => f.kinds?.includes(6) && f.kinds?.includes(16) && f['#e']
-    );
-    expect(repostByE).toBeDefined();
-    expect(repostByE['#e']).toEqual(['event-123']);
-    // No authors filter — detect shares by ALL users
-    expect(repostByE.authors).toBeUndefined();
-  });
-
-  it('uses #a tag filters for addressable events without authors filter', () => {
+  it('detects shares with a SINGLE batched loader (one REQ, merged filters)', () => {
     render(CommunityShare, {
       props: {
         event: mockEvent, // kind 30142 is addressable (30000-40000)
@@ -409,14 +390,35 @@ describe('CommunityShare', () => {
       }
     });
 
-    const filtersUsed = mockCreateTimelineLoader.mock.calls.map((call) => call[2]);
-    const repostByA = filtersUsed.find(
-      (f) => f.kinds?.includes(6) && f.kinds?.includes(16) && f['#a']
-    );
-    expect(repostByA).toBeDefined();
-    expect(repostByA['#a']).toEqual(['30142:author-pubkey:test-resource-id']);
-    // No authors filter
-    expect(repostByA.authors).toBeUndefined();
+    // One loader call total — every extra loader costs a relay REQ slot
+    // against strfry's 20-per-connection budget (edufeed-app#18).
+    expect(mockCreateTimelineLoader).toHaveBeenCalledTimes(1);
+
+    const filters = mockCreateTimelineLoader.mock.calls[0][2];
+    expect(Array.isArray(filters)).toBe(true);
+
+    const byE = filters.find((f) => f['#e']);
+    expect([...byE.kinds].sort((a, b) => a - b)).toEqual([6, 16, 30222]);
+    expect(byE['#e']).toEqual(['event-123']);
+    expect(byE.authors).toBeUndefined(); // detect shares by ALL users
+
+    const byA = filters.find((f) => f['#a']);
+    expect([...byA.kinds].sort((a, b) => a - b)).toEqual([6, 16, 30222]);
+    expect(byA['#a']).toEqual(['30142:author-pubkey:test-resource-id']);
+    expect(byA.authors).toBeUndefined();
+  });
+
+  it('omits the #a filter for non-addressable events', () => {
+    render(CommunityShare, {
+      props: {
+        event: { ...mockEvent, kind: 1, tags: [] },
+        activeUser: mockActiveUser
+      }
+    });
+
+    const filters = mockCreateTimelineLoader.mock.calls[0][2];
+    expect(filters.some((f) => f['#a'])).toBe(false);
+    expect(filters.some((f) => f['#e'])).toBe(true);
   });
 
   it('shows loading state when checking shares', () => {
