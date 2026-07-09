@@ -531,4 +531,29 @@ describe('CommunityShare', () => {
     expect(checkboxes[0].disabled).toBe(false); // own share — can unshare
     expect(checkboxes[1].disabled).toBe(false); // other user's share — user can still share themselves
   });
+
+  it('renders shared communities with a CHECKED box (checkbox reflects current state)', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+
+    vi.mocked(eventStore.model).mockImplementation(
+      () =>
+        /** @type {any} */ ({
+          subscribe: (/** @type {Function} */ cb) => {
+            cb([mockRepostEvent, mockOtherUserRepostEvent]);
+            return { unsubscribe: vi.fn() };
+          }
+        })
+    );
+
+    const { container } = render(CommunityShare, {
+      props: {
+        event: mockEvent,
+        activeUser: mockActiveUser
+      }
+    });
+
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    expect(checkboxes[0].checked).toBe(true); // shared (own) → checked
+    expect(checkboxes[1].checked).toBe(true); // shared (by others) → checked
+  });
 });

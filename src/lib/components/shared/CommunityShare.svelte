@@ -463,10 +463,13 @@
           {@const getCommunityProfile = useUserProfile(communityPubKey)}
           {@const communityProfile = getCommunityProfile()}
           <label class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200">
+            <!-- The checkbox shows the RESULTING state: shared communities are
+                 checked; selecting a deletable share (pending unshare) unchecks
+                 it, selecting an unshared one checks it. -->
             <input
               type="checkbox"
               class="checkbox checkbox-secondary {compact ? 'checkbox-sm' : ''}"
-              checked={isSelected}
+              checked={isDeletable ? !isSelected : isAlreadyShared || isSelected}
               disabled={isProcessingShares}
               onchange={() => toggleCommunitySelection(communityPubKey)}
             />

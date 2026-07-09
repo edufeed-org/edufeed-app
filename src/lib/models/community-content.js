@@ -73,10 +73,13 @@ export function createCommunityContentModel(contentKinds, options = {}) {
           const fmt = transform || ((e) => e);
 
           /** Append a sharer pubkey to an item's _allSharers (deduplicating)
-           * @param {any} item @param {string} pubkey */
-          function addSharer(item, pubkey) {
+           * and keep the newest share time — resolved items carry the ORIGINAL
+           * event's created_at, so feeds need _sharedAt to rank fresh shares.
+           * @param {any} item @param {string} pubkey @param {number} [sharedAt] */
+          function addSharer(item, pubkey, sharedAt) {
             if (!item._allSharers) item._allSharers = [];
             if (!item._allSharers.includes(pubkey)) item._allSharers.push(pubkey);
+            if (sharedAt && sharedAt > (item._sharedAt || 0)) item._sharedAt = sharedAt;
           }
 
           // Add direct events first (highest priority)
@@ -92,11 +95,12 @@ export function createCommunityContentModel(contentKinds, options = {}) {
             if (!resolved) continue;
             const existing = resultMap.get(resolved.id);
             if (existing) {
-              addSharer(existing, share.pubkey);
+              addSharer(existing, share.pubkey, share.created_at);
             } else {
               const item = {
                 ...fmt(resolved),
                 _sharedBy: share.pubkey,
+                _sharedAt: share.created_at,
                 _allSharers: [share.pubkey]
               };
               resultMap.set(resolved.id, item);
@@ -111,11 +115,12 @@ export function createCommunityContentModel(contentKinds, options = {}) {
             if (!resolved) continue;
             const existing = resultMap.get(resolved.id);
             if (existing) {
-              addSharer(existing, repost.pubkey);
+              addSharer(existing, repost.pubkey, repost.created_at);
             } else {
               const item = {
                 ...fmt(resolved),
                 _sharedBy: repost.pubkey,
+                _sharedAt: repost.created_at,
                 _allSharers: [repost.pubkey]
               };
               resultMap.set(resolved.id, item);

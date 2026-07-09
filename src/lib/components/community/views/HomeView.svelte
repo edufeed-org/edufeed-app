@@ -23,6 +23,7 @@
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
   import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
   import { getEventStartTimestamp } from '$lib/helpers/calendar.js';
+  import { mergeFeedItems, selectUpcomingEvents } from '$lib/helpers/community-feed.js';
   import * as m from '$lib/paraglide/messages';
 
   /** Navigate to the detail view for a feed event
@@ -73,6 +74,7 @@
   // Activity feed state — use $state.raw for event arrays (Symbol-based relay provenance)
   /** @type {any[]} */
   let feedItems = $state.raw([]);
+  let allFeedItems = $state.raw(/** @type {any[]} */ ([]));
   let isLoadingFeed = $state(true);
 
   const getAuthorProfiles = useProfileMap(() => {
@@ -98,6 +100,7 @@
     const pubkey = communityId;
 
     feedItems = [];
+    allFeedItems = [];
     isLoadingFeed = true;
 
     if (loaderCleanup) {
@@ -126,17 +129,12 @@
     let bookmarkEmitIdx = 0;
 
     function mergeAndUpdate() {
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local dedup, not reactive
-      const seen = new Set();
-      const merged = [...activityItems, ...bookmarkItems]
-        .filter((e) => {
-          if (seen.has(e.id)) return false;
-          seen.add(e.id);
-          return true;
-        })
-        .sort((a, b) => b.created_at - a.created_at)
-        .slice(0, 15);
-      feedItems = merged;
+      // Rank by activity time (created_at OR newest share) so a fresh share
+      // of an old event surfaces; keep the full set for the upcoming-events
+      // rail, which must not be limited by the feed's top-N cut.
+      const { top, all } = mergeFeedItems([activityItems, bookmarkItems], 15);
+      feedItems = top;
+      allFeedItems = all;
       isLoadingFeed = false;
     }
 
@@ -186,12 +184,12 @@
 
   let displayedItems = $derived(filterEventsByAccess(feedItems, communikeyEvent, profileAccess));
 
+  // Upcoming events come from the FULL access-filtered set — deriving them
+  // from the top-15 feed silently dropped events that lost the recency race.
   let upcomingEvents = $derived.by(() => {
     const now = Math.floor(Date.now() / 1000);
-    return displayedItems
-      .filter((e) => (e.kind === 31922 || e.kind === 31923) && getEventStartTimestamp(e) > now)
-      .sort((a, b) => getEventStartTimestamp(a) - getEventStartTimestamp(b))
-      .slice(0, 5);
+    const accessible = filterEventsByAccess(allFeedItems, communikeyEvent, profileAccess);
+    return selectUpcomingEvents(accessible, getEventStartTimestamp, now, 5);
   });
 </script>
 
