@@ -81,3 +81,50 @@ describe('/api/pdf (CORS proxy for inline PDF preview)', () => {
     expect(res.status).toBe(502);
   });
 });
+
+describe('/api/pdf — SSRF via redirect', () => {
+  /** @type {ReturnType<typeof vi.spyOn>} */
+  let fetchSpy;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('blocks redirects to private/local addresses', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: 'http://192.168.1.1/internal.pdf' }
+      })
+    );
+    const res = await GET(makeEvent({ url: 'https://evil.example/redirect' }));
+    expect(res.status).toBe(502);
+    expect(fetchSpy).toHaveBeenCalledTimes(1); // never fetched the private target
+  });
+
+  it('follows redirects to public hosts and re-validates each hop', async () => {
+    const bytes = new TextEncoder().encode('%PDF-1.7 ok');
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(null, { status: 301, headers: { location: 'https://cdn.example/a.pdf' } })
+      )
+      .mockResolvedValueOnce(
+        new Response(bytes, { status: 200, headers: { 'content-type': 'application/pdf' } })
+      );
+    const res = await GET(makeEvent({ url: 'https://journal.example/dl/1' }));
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, 'https://cdn.example/a.pdf', expect.anything());
+  });
+
+  it('gives up after too many redirects', async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: 'https://journal.example/loop' } })
+    );
+    const res = await GET(makeEvent({ url: 'https://journal.example/loop' }));
+    expect(res.status).toBe(502);
+  });
+});

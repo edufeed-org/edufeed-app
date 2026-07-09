@@ -8,7 +8,7 @@
  * upstream timeout, content-type check.
  */
 
-import { parseHttpUrl, isPrivateIp } from '$lib/server/httpUrl.js';
+import { parseHttpUrl, isPrivateIp, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
 
 const MAX_UPSTREAM_SIZE = 50 * 1024 * 1024; // 50MB
 const FETCH_TIMEOUT = 20_000;
@@ -33,10 +33,9 @@ export async function GET({ url }) {
   /** @type {Response} */
   let upstream;
   try {
-    upstream = await fetch(parsed.toString(), {
+    upstream = await fetchGuardedRedirects(parsed.toString(), {
       signal: AbortSignal.timeout(FETCH_TIMEOUT),
-      headers: { accept: 'application/pdf,*/*' },
-      redirect: 'follow'
+      headers: { accept: 'application/pdf,*/*' }
     });
   } catch {
     return new Response('Failed to fetch PDF', { status: 502 });
