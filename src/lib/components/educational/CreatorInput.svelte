@@ -10,6 +10,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { fetchProfileData } from '$lib/helpers/profile.js';
   import { normalizeToHex } from '$lib/helpers/nostrUtils.js';
+  import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
 
   /**
@@ -19,6 +20,7 @@
    * @property {string} [pubkey] - Optional Nostr pubkey (hex)
    * @property {string} [affiliationName] - Optional affiliation name
    * @property {string} [honorificPrefix] - Optional title (Dr., Prof., etc.)
+   * @property {string} [orcid] - Optional ORCID iD (canonical https URI)
    */
 
   /** @type {{ creators?: Creator[], label?: string, required?: boolean, helpText?: string, onchange?: (creators: Creator[]) => void }} */
@@ -35,6 +37,7 @@
   let newCreator = $state(createEmptyCreator());
   let editingIndex = $state(/** @type {number | null} */ (null));
   let isLoadingProfile = $state(false);
+  let orcidInvalid = $state(false);
 
   /**
    * Create an empty creator object
@@ -46,7 +49,8 @@
       type: 'Person',
       pubkey: '',
       affiliationName: '',
-      honorificPrefix: ''
+      honorificPrefix: '',
+      orcid: ''
     };
   }
 
@@ -56,12 +60,21 @@
   function addCreator() {
     if (!newCreator.name.trim()) return;
 
+    // Normalize ORCID to its canonical https URI; block save on invalid input
+    const orcidInput = newCreator.orcid?.trim();
+    const normalizedOrcid = orcidInput ? normalizeOrcid(orcidInput) : '';
+    if (orcidInput && !normalizedOrcid) {
+      orcidInvalid = true;
+      return;
+    }
+
     /** @type {Creator} */
-    const creatorToAdd = { ...newCreator };
+    const creatorToAdd = { ...newCreator, orcid: normalizedOrcid || '' };
     // Clean up empty optional fields
     if (!creatorToAdd.pubkey?.trim()) delete creatorToAdd.pubkey;
     if (!creatorToAdd.affiliationName?.trim()) delete creatorToAdd.affiliationName;
     if (!creatorToAdd.honorificPrefix?.trim()) delete creatorToAdd.honorificPrefix;
+    if (!creatorToAdd.orcid) delete creatorToAdd.orcid;
 
     if (editingIndex !== null) {
       // Update existing
@@ -106,6 +119,7 @@
     newCreator = createEmptyCreator();
     editingIndex = null;
     showAddForm = false;
+    orcidInvalid = false;
   }
 
   /**
@@ -219,6 +233,9 @@
               {#if creator.pubkey}
                 <span class="badge badge-xs badge-primary">Nostr</span>
               {/if}
+              {#if creator.orcid}
+                <span class="badge badge-xs badge-success">ORCID</span>
+              {/if}
             </div>
           </div>
           <button
@@ -321,6 +338,25 @@
             bind:value={newCreator.honorificPrefix}
             placeholder={m.amb_creator_placeholder_title()}
           />
+        </div>
+
+        <!-- ORCID iD (for persons) -->
+        <div class="form-control">
+          <label class="label py-1" for="creator-orcid">
+            <span class="label-text text-sm">{m.amb_creator_label_orcid()}</span>
+          </label>
+          <input
+            id="creator-orcid"
+            type="text"
+            class="input-bordered input input-sm w-full {orcidInvalid ? 'input-error' : ''}"
+            bind:value={newCreator.orcid}
+            oninput={() => (orcidInvalid = false)}
+            placeholder={m.amb_creator_placeholder_orcid()}
+            aria-invalid={orcidInvalid}
+          />
+          {#if orcidInvalid}
+            <p class="mt-1 text-xs text-error">{m.amb_creator_error_orcid_invalid()}</p>
+          {/if}
         </div>
       {/if}
 

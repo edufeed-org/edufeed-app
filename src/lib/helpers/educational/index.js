@@ -29,6 +29,7 @@ export {
   getAMBLanguages,
   getAMBPublishedDate,
   getAMBCreatorNames,
+  getAMBCreators,
   getAMBResourceURLs,
   getAMBPrimaryURL,
   getAMBIdentifier,

@@ -176,6 +176,57 @@ export function getAMBCreatorNames(event) {
 }
 
 /**
+ * @typedef {Object} AMBCreator
+ * @property {string} [type] - 'Person' | 'Organization'
+ * @property {string} [name]
+ * @property {string} [id] - URI identifier (e.g. ORCID)
+ * @property {string} [honorificPrefix]
+ * @property {string} [affiliationName]
+ */
+
+/**
+ * Extracts structured creators from the flattened `creator:*` tags.
+ *
+ * The AMB flattening repeats `creator:<field>` per creator with no instance
+ * separator, so grouping fields positionally by key misattributes optional
+ * fields (a lone `creator:id` would land on creator 0 even if it belongs to
+ * creator 1). Instead we walk the tags in order and start a new creator
+ * whenever a field would repeat on the current one — the flattener always
+ * emits each creator's fields as one consecutive run.
+ *
+ * @param {any} event - AMB event (kind 30142)
+ * @returns {AMBCreator[]}
+ */
+export function getAMBCreators(event) {
+  /** @type {Record<string, keyof AMBCreator>} */
+  const fieldMap = {
+    'creator:type': 'type',
+    'creator:name': 'name',
+    'creator:id': 'id',
+    'creator:honorificPrefix': 'honorificPrefix',
+    'creator:affiliation:name': 'affiliationName'
+  };
+
+  /** @type {AMBCreator[]} */
+  const creators = [];
+  /** @type {AMBCreator} */
+  let current = {};
+
+  for (const tag of event?.tags || []) {
+    const field = fieldMap[tag[0]];
+    if (!field || !tag[1]) continue;
+    if (current[field] !== undefined) {
+      creators.push(current);
+      current = {};
+    }
+    current[field] = tag[1];
+  }
+  if (Object.keys(current).length > 0) creators.push(current);
+
+  return creators;
+}
+
+/**
  * Extracts main entity of page URLs (links to the actual resource)
  * @param {any} event - AMB event (kind 30142)
  * @returns {string[]} Array of URLs where the resource can be accessed
