@@ -15,6 +15,7 @@ import {
   GraduationCapIcon,
   ArticleIcon,
   BookIcon,
+  BookOpenIcon,
   ScrollTextIcon,
   PollIcon,
   BookmarkIcon,
@@ -101,6 +102,18 @@ export const CREATE_ACTIONS = [
     icon: ArticleIcon,
     run(ctx) {
       ctx.goto(ctx.resolve(withCommunity('/create/article', ctx)));
+    }
+  },
+  {
+    id: 'publication',
+    section: 'create',
+    kinds: [30040],
+    label: m.publication_fab_create,
+    ariaLabel: m.publication_fab_create,
+    description: m.publication_fab_create_desc,
+    icon: BookOpenIcon,
+    run(ctx) {
+      ctx.goto(ctx.resolve(withCommunity('/create/publication', ctx)));
     }
   },
   {

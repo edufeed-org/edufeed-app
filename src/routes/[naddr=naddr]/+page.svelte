@@ -4,6 +4,7 @@
   import AMBResourceView from '$lib/components/educational/AMBResourceView.svelte';
   import KanbanBoardView from '$lib/components/kanban/KanbanBoardView.svelte';
   import WikiView from '$lib/components/wiki/WikiView.svelte';
+  import PublicationView from '$lib/components/publication/PublicationView.svelte';
   import BookmarkSetView from '$lib/components/bookmarks/BookmarkSetView.svelte';
   import NIP51ListDetailView from '$lib/components/shared/NIP51ListDetailView.svelte';
   import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
@@ -44,6 +45,14 @@
         type: 'amb',
         event: data.event,
         resource: formatAMBResource(data.event)
+      };
+    }
+
+    // Scientific publication index (kind 30040, NKBIP-01)
+    if (data.kind === 30040) {
+      return {
+        type: 'publication',
+        event: data.event
       };
     }
 
@@ -105,6 +114,9 @@
       return `${titleTag?.[1] || 'Article'} - ${runtimeConfig.appName}`;
     } else if (displayData?.type === 'amb') {
       return `${/** @type {any} */ (displayData.resource)?.name || 'Educational Resource'} - ${runtimeConfig.appName}`;
+    } else if (displayData?.type === 'publication') {
+      const pubTitle = getTagValue(displayData.event, 'title') || 'Publication';
+      return `${pubTitle} - ${runtimeConfig.appName}`;
     } else if (displayData?.type === 'kanban') {
       const boardTitle =
         getTagValue(displayData.event, 'title') ||
@@ -144,6 +156,9 @@
   {:else if displayData?.type === 'amb'}
     <!-- AMB Resource Display -->
     <AMBResourceView event={displayData.event} resource={displayData.resource} />
+  {:else if displayData?.type === 'publication'}
+    <!-- Scientific Publication -->
+    <PublicationView event={displayData.event} />
   {:else if displayData?.type === 'kanban'}
     <!-- Kanban Board Preview -->
     <KanbanBoardView event={displayData.event} />
