@@ -3,6 +3,7 @@
   // hints render as proactive bot messages with real actions; free-text input
   // is matched against canned suggestions (no LLM backend yet).
   import * as m from '$lib/paraglide/messages';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
@@ -63,6 +64,15 @@
       action: m.dm_relay_banner_use_cta(),
       secondary: m.dm_relay_banner_customize_cta(),
       doing: m.termi_hint_dm_doing()
+    },
+    nip05: {
+      title: m.termi_hint_nip05_title(),
+      body: m.termi_hint_nip05_body({
+        domain: `@${runtimeConfig.membership?.handleDomain || ''}`
+      }),
+      action: m.termi_hint_nip05_cta(),
+      secondary: null,
+      doing: null
     }
   });
 
@@ -192,7 +202,7 @@
     </div>
 
     {#each hints as hint (hint.id)}
-      {@const copy = hintCopy[/** @type {'backup' | 'relays' | 'dm'} */ (hint.id)]}
+      {@const copy = hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05'} */ (hint.id)]}
       <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
         <TermiAvatar />
         <div
