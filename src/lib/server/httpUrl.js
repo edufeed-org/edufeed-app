@@ -43,6 +43,21 @@ export function validateSparqlIri(val) {
  * @param {URL} parsedUrl
  * @returns {boolean}
  */
+export function isPrivateIp(parsedUrl) {
+  const hostname = parsedUrl.hostname;
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    hostname === '0.0.0.0' ||
+    hostname.endsWith('.local')
+  );
+}
+
 /**
  * SSRF-guarded fetch: follows redirects manually and re-validates every hop
  * (http/https only, no private/local hosts), so a public URL cannot bounce
@@ -69,19 +84,4 @@ export async function fetchGuardedRedirects(url, init, maxRedirects = 5) {
     current = target.toString();
   }
   throw new Error('Too many redirects');
-}
-
-export function isPrivateIp(parsedUrl) {
-  const hostname = parsedUrl.hostname;
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '::1' ||
-    hostname === '[::1]' ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('192.168.') ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    hostname === '0.0.0.0' ||
-    hostname.endsWith('.local')
-  );
 }
