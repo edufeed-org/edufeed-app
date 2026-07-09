@@ -35,6 +35,7 @@
   "common_show_more": "Show more",
   "common_show_less": "Show less",
   "navbar_brand": "{appName}",
+  "navbar_beta_badge": "Beta",
   "navbar_feed": "Feed",
   "navbar_discover": "Discover",
   "navbar_calendar": "Calendar",

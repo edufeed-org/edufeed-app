@@ -69,6 +69,9 @@
     <a href={resolve('/')} class="btn text-xl btn-ghost"
       >{m.navbar_brand({ appName: runtimeConfig.appName })}</a
     >
+    <span class="badge badge-outline badge-primary" data-testid="navbar-beta-badge"
+      >{m.navbar_beta_badge()}</span
+    >
   </div>
 
   <!-- Center: Nav links (desktop only) -->
