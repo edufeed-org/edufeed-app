@@ -1,7 +1,8 @@
 <script>
   import { SvelteDate } from 'svelte/reactivity';
   import { onMount } from 'svelte';
-  import { afterNavigate } from '$app/navigation';
+  import { afterNavigate, replaceState } from '$app/navigation';
+  import { formatDateParam } from '$lib/helpers/urlParams.js';
   import { page } from '$app/stores';
   import {
     communityCalendarTimelineLoader,
@@ -324,6 +325,9 @@
     },
     (/** @type {CalendarViewMode} */ mode) => {
       viewMode = mode;
+    },
+    (/** @type {Date} */ date) => {
+      currentDate = date;
     }
   );
 
@@ -335,9 +339,30 @@
       },
       (/** @type {CalendarViewMode} */ mode) => {
         viewMode = mode;
+      },
+      (/** @type {Date} */ date) => {
+        currentDate = date;
       }
     )
   );
+
+  // State → URL: keep the viewed date shareable/reload-safe (#30). Uses
+  // replaceState so calendar paging doesn't spam the history stack; the
+  // param is omitted while the view sits on today (clean default URL).
+  $effect(() => {
+    const dateKey = formatDateParam(currentDate);
+    if (typeof window === 'undefined') return;
+    const next = dateKey === formatDateParam(new Date()) ? '' : dateKey;
+    const url = new URL(window.location.href);
+    if ((url.searchParams.get('date') || '') === next) return;
+    if (next) url.searchParams.set('date', next);
+    else url.searchParams.delete('date');
+    try {
+      replaceState(url, {});
+    } catch {
+      // Router not initialized yet (first paint) — the default URL is fine.
+    }
+  });
 
   // Get community profile for calendar title (when in communityMode)
   let getCommunityProfile = $derived.by(() => {

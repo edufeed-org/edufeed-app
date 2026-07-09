@@ -19,7 +19,7 @@ import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
-import { parseCalendarFilters } from '$lib/helpers/urlParams.js';
+import { parseCalendarFilters, parseDateParam } from '$lib/helpers/urlParams.js';
 import { CommunityCalendarEventModel } from '$lib/models';
 
 /**
@@ -552,9 +552,10 @@ function syncFiltersToStore(urlFilters) {
  * The component must call afterNavigate with the returned callback
  * @param {(mode: 'calendar' | 'list' | 'map') => void} onPresentationViewModeChange - Callback for presentation view mode changes
  * @param {(mode: 'month' | 'week' | 'day' | 'all') => void} onViewModeChange - Callback for view mode (period) changes
+ * @param {(date: Date) => void} [onDateChange] - Callback for the viewed anchor date (from the `date` param)
  * @returns {(navigation: any) => void} Handler function for afterNavigate
  */
-export function createUrlSyncHandler(onPresentationViewModeChange, onViewModeChange) {
+export function createUrlSyncHandler(onPresentationViewModeChange, onViewModeChange, onDateChange) {
   return (navigation) => {
     // Guard against null navigation.to
     if (!navigation.to) {
@@ -586,6 +587,10 @@ export function createUrlSyncHandler(onPresentationViewModeChange, onViewModeCha
     // Apply the coordinated values to the component state
     onPresentationViewModeChange(presentationView);
     onViewModeChange(/** @type {'month' | 'week' | 'day' | 'all'} */ (period));
+
+    // Restore the viewed date so reloads/shared links keep the time range (#30)
+    const parsedDate = parseDateParam(urlFilters?.date);
+    if (parsedDate && onDateChange) onDateChange(parsedDate);
   };
 }
 
@@ -594,8 +599,14 @@ export function createUrlSyncHandler(onPresentationViewModeChange, onViewModeCha
  * @param {URLSearchParams} searchParams - URL search params from $page.url.searchParams
  * @param {(mode: 'calendar' | 'list' | 'map') => void} onPresentationViewModeChange - Callback for presentation view mode changes
  * @param {(mode: 'month' | 'week' | 'day' | 'all') => void} onViewModeChange - Callback for view mode (period) changes
+ * @param {(date: Date) => void} [onDateChange] - Callback for the viewed anchor date (from the `date` param)
  */
-export function syncInitialUrlState(searchParams, onPresentationViewModeChange, onViewModeChange) {
+export function syncInitialUrlState(
+  searchParams,
+  onPresentationViewModeChange,
+  onViewModeChange,
+  onDateChange
+) {
   const urlFilters = /** @type {any} */ (parseCalendarFilters(searchParams));
 
   // Sync filters to store
@@ -620,4 +631,8 @@ export function syncInitialUrlState(searchParams, onPresentationViewModeChange, 
   // Apply the coordinated values to the component state
   onPresentationViewModeChange(presentationView);
   onViewModeChange(/** @type {'month' | 'week' | 'day' | 'all'} */ (period));
+
+  // Restore the viewed date so reloads/shared links keep the time range (#30)
+  const parsedDate = parseDateParam(urlFilters?.date);
+  if (parsedDate && onDateChange) onDateChange(parsedDate);
 }
