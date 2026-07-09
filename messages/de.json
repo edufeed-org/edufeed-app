@@ -2645,5 +2645,17 @@
   "publication_form_label_file": "Artikel-Datei (PDF)",
   "publication_form_placeholder_file_url": "Link zur Datei, z. B. https://.../download/569/493",
   "publication_form_help_file": "Alternativ die Datei hochladen – ein Upload ersetzt den Link.",
-  "publication_view_open_file": "Datei öffnen"
+  "publication_view_open_file": "Datei öffnen",
+  "event_invite_button": "Einladen",
+  "invite_modal_title": "Zum Termin einladen",
+  "invite_modal_recipients_label": "Empfänger:innen",
+  "invite_modal_search_placeholder": "Name suchen oder npub einfügen…",
+  "invite_modal_note_label": "Persönliche Nachricht (optional)",
+  "invite_modal_note_placeholder": "Ich würde mich freuen, dich dort zu sehen!",
+  "invite_modal_send": "Einladung senden",
+  "invite_modal_sending": "Wird gesendet…",
+  "invite_modal_sent_all": "Einladungen verschickt!",
+  "invite_modal_some_failed": "Einige Einladungen konnten nicht verschickt werden. Fehlgeschlagene kannst du erneut senden.",
+  "invite_modal_retry_failed": "Fehlgeschlagene erneut senden",
+  "invite_modal_privacy_hint": "Einladungen werden als private Direktnachricht verschickt. Empfänger:innen mit anderen Nostr-Apps sehen eine Textnachricht mit dem Termin-Link."
 }

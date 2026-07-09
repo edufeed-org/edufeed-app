@@ -2645,5 +2645,17 @@
   "publication_form_label_file": "Article file (PDF)",
   "publication_form_placeholder_file_url": "Link to the file, e.g. https://.../download/569/493",
   "publication_form_help_file": "Or upload the file — an upload replaces the link.",
-  "publication_view_open_file": "Open file"
+  "publication_view_open_file": "Open file",
+  "event_invite_button": "Invite",
+  "invite_modal_title": "Invite to event",
+  "invite_modal_recipients_label": "Recipients",
+  "invite_modal_search_placeholder": "Search name or paste npub…",
+  "invite_modal_note_label": "Personal message (optional)",
+  "invite_modal_note_placeholder": "I'd love to see you there!",
+  "invite_modal_send": "Send invitation",
+  "invite_modal_sending": "Sending…",
+  "invite_modal_sent_all": "Invitations sent!",
+  "invite_modal_some_failed": "Some invitations could not be sent. You can retry the failed ones.",
+  "invite_modal_retry_failed": "Retry failed",
+  "invite_modal_privacy_hint": "Invitations are sent as private direct messages. Recipients using other Nostr apps see a text message with the event link."
 }
