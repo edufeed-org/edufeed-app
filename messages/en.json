@@ -2624,5 +2624,8 @@
   "educator_context_places_help": "Helps us support local networking later (optional, multiple allowed)",
   "places_input_label": "Places",
   "places_input_placeholder": "Search and add a place...",
-  "places_input_remove_aria": "Remove place {name}"
+  "places_input_remove_aria": "Remove place {name}",
+  "calendar_top_publishers_label": "Most active publishers",
+  "calendar_top_publishers_hide_aria": "Hide events by {name}",
+  "calendar_top_publishers_show_aria": "Show events by {name} again"
 }
