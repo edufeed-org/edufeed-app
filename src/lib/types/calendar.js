@@ -81,6 +81,8 @@
  * @property {string} title - Event title
  * @property {string} summary - Event description
  * @property {string} image - Event image URL
+ * @property {boolean} [imageWasUploaded] - Image came from the in-form Blossom upload
+ * @property {any} [imageLicenseEvent] - NIP-94-style license attestation for the uploaded image
  * @property {string} startDate - Start date (YYYY-MM-DD)
  * @property {string} startTime - Start time (HH:MM)
  * @property {string} endDate - End date (YYYY-MM-DD)
