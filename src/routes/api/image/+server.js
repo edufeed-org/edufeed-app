@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { isPrivateIp } from '$lib/server/httpUrl.js';
+import { isPrivateIp, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
 
 const MAX_UPSTREAM_SIZE = 25 * 1024 * 1024; // 25MB
 const MAX_WIDTH = 1920;
@@ -55,7 +55,7 @@ export async function GET({ url }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-    const upstream = await fetch(imageUrl, {
+    const upstream = await fetchGuardedRedirects(imageUrl, {
       signal: controller.signal,
       headers: { Accept: 'image/*' }
     });

@@ -3,7 +3,7 @@ import { parseHTML } from 'linkedom';
 import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
 import { extractMetadataFromHtml } from '$lib/server/metadataExtraction.js';
 import { isHedgedocPage, extractHedgedocArticle } from '$lib/helpers/hedgedocExtractor.js';
-import { parseHttpUrl } from '$lib/server/httpUrl.js';
+import { parseHttpUrl, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
@@ -54,7 +54,7 @@ export async function GET({ url }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-    const response = await fetch(articleUrl, {
+    const response = await fetchGuardedRedirects(articleUrl, {
       signal: controller.signal,
       headers: {
         Accept: 'text/html, application/pdf',
