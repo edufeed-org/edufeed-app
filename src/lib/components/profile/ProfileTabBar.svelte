@@ -29,11 +29,13 @@
   $effect(() => {
     if (!strip) return;
     updateEdges();
-    const ro = new ResizeObserver(updateEdges);
-    ro.observe(strip);
+    // Guard: jsdom (tests) and very old browsers lack ResizeObserver — the
+    // fade then only updates on scroll, which is an acceptable degradation.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateEdges) : null;
+    ro?.observe(strip);
     strip.addEventListener('scroll', updateEdges, { passive: true });
     return () => {
-      ro.disconnect();
+      ro?.disconnect();
       strip?.removeEventListener('scroll', updateEdges);
     };
   });
