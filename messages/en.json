@@ -1579,7 +1579,7 @@
   "dashboard_upcoming_empty": "No upcoming events.",
   "dashboard_feed_selector_communities": "Communities",
   "dashboard_feed_selector_following": "Following",
-  "dashboard_feed_selector_combined": "All sources",
+  "dashboard_feed_selector_combined": "Both",
   "dashboard_follows_feed_loading": "Loading follows feed...",
   "dashboard_follows_feed_empty_title": "No content from your follows",
   "dashboard_follows_feed_empty_description": "Follow people to see their posts, events, and resources here.",

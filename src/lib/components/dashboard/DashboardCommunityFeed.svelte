@@ -35,6 +35,7 @@
   } from '$lib/models/community-content.js';
   import { getContentEventRoute, resolveCommunityPubkey } from '$lib/helpers/contentNavigation.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
+  import RichFeedEntry from '$lib/components/dashboard/RichFeedEntry.svelte';
   import { CalendarIcon, ChevronRightIcon, FilesIcon, SparkleIcon } from '$lib/components/icons';
   import { getEventStartTimestamp } from '$lib/helpers/calendar';
   import { activeDateLocale } from '$lib/helpers/dates.js';
@@ -69,14 +70,24 @@
   const getCommunityProfiles = useProfileMap(() => joinedCommunities);
   let communityProfiles = $derived(getCommunityProfiles());
 
+  // Bookmark/comment kinds need the grouped rendering of ProfileFeedView —
+  // as standalone feed cards they are noise, so keep them out of the merge.
+  const FOLLOWS_EXCLUDED_KINDS = new Set([39701, 9802, 1111]);
+
   // Community items merged with follows-authored items (combined mode).
   // Deduped by id; kind-1 replies are excluded — only root notes belong here.
   let feedItems = $derived.by(() => {
     if (!includeFollows || followItems.length === 0) return allItems;
     const seen = new Set();
     const merged = [];
-    for (const event of [...allItems, ...followItems]) {
+    for (const event of allItems) {
       if (seen.has(event.id)) continue;
+      seen.add(event.id);
+      merged.push(event);
+    }
+    for (const event of followItems) {
+      if (seen.has(event.id)) continue;
+      if (FOLLOWS_EXCLUDED_KINDS.has(event.kind)) continue;
       if (event.kind === 1) {
         const refs = getNip10References(event);
         if (refs?.reply?.e || refs?.root?.e) continue;
@@ -361,23 +372,36 @@
             {@const cardData = getFeedCardData(event)}
             {@const profile = profiles.get(event.pubkey)}
             {@const community = getCommunityInfo(event)}
-            <FeedCard
-              title={cardData.title}
-              subtitle={cardData.subtitle}
-              typeKey={cardData.typeKey}
-              kind={event.kind}
-              tags={cardData.tags}
-              description={cardData.description}
-              location={cardData.location}
-              authorName={profile ? getDisplayName(profile) : undefined}
-              authorAvatar={profile ? getProfilePicture(profile) : undefined}
-              authorPubkey={event.pubkey}
-              communityName={community.name}
-              communityAvatar={community.avatar}
-              communityPubkey={community.pubkey}
-              timestamp={event.created_at}
-              onclick={() => navigateToEvent(event)}
-            />
+            {#snippet compactCard()}
+              <FeedCard
+                title={cardData.title}
+                subtitle={cardData.subtitle}
+                typeKey={cardData.typeKey}
+                kind={event.kind}
+                tags={cardData.tags}
+                description={cardData.description}
+                location={cardData.location}
+                authorName={profile ? getDisplayName(profile) : undefined}
+                authorAvatar={profile ? getProfilePicture(profile) : undefined}
+                authorPubkey={event.pubkey}
+                communityName={community.name}
+                communityAvatar={community.avatar}
+                communityPubkey={community.pubkey}
+                timestamp={event.created_at}
+                onclick={() => navigateToEvent(event)}
+              />
+            {/snippet}
+            {#if includeFollows}
+              <!-- Combined feed renders rich per-kind cards (like the follows feed) -->
+              <RichFeedEntry
+                {event}
+                authorProfile={profile ?? null}
+                activeUser={getActiveUser()}
+                fallback={compactCard}
+              />
+            {:else}
+              {@render compactCard()}
+            {/if}
           {/each}
         </div>
 
