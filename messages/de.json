@@ -2651,5 +2651,7 @@
   "publication_form_label_file": "Artikel-Datei (PDF)",
   "publication_form_placeholder_file_url": "Link zur Datei, z. B. https://.../download/569/493",
   "publication_form_help_file": "Alternativ die Datei hochladen – ein Upload ersetzt den Link.",
-  "publication_view_open_file": "Datei öffnen"
+  "publication_view_open_file": "Datei öffnen",
+  "publication_view_highlights": "Hervorhebungen",
+  "amb_card_linked_materials": "{count} Materialien verlinkt"
 }
