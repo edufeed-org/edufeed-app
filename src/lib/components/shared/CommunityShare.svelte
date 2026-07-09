@@ -114,60 +114,29 @@
 
     isCheckingShares = true;
 
-    // Build targeted filters — no authors filter so we detect ALL shares
-    const lookupRelays = getAllLookupRelays();
-    /** @type {import('nostr-tools').Filter} */
-    const repostFilter = { kinds: [6, 16], '#e': [event.id] };
-    /** @type {import('nostr-tools').Filter} */
-    const legacyFilter = { kinds: [30222], '#e': [event.id] };
+    // Detect ALL shares (NIP-18 reposts + legacy 30222, by any user) with ONE
+    // loader carrying merged filters: relays enforce a per-connection REQ
+    // budget, and this component used to burn 2-4 slots per mount (#18).
+    const lookupRelays = [...new Set(getAllLookupRelays())];
 
     // For addressable events, also search by a-tag (some shares may only have a-tag)
     const isAddressable = event.kind >= 30000 && event.kind < 40000;
     const dTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
     const address = isAddressable ? `${event.kind}:${event.pubkey}:${dTag}` : null;
 
-    // Load ALL shares from relays (both NIP-18 reposts and legacy 30222)
-    const repostLoader = createTimelineLoader(pool, lookupRelays, repostFilter, {
-      eventStore,
-      limit: 50
-    });
-    const legacyLoader = createTimelineLoader(pool, lookupRelays, legacyFilter, {
-      eventStore,
-      limit: 50
-    });
-
-    const repostLoaderSub = repostLoader().subscribe({
-      error: (err) => console.warn('CommunityShare: Repost loader error:', err)
-    });
-    const legacyLoaderSub = legacyLoader().subscribe({
-      error: (err) => console.warn('CommunityShare: Legacy loader error:', err)
-    });
-
-    // For addressable events, also query by #a tag (some shares may lack e-tag)
-    /** @type {import('rxjs').Subscription | undefined} */
-    let repostByAddrSub;
-    /** @type {import('rxjs').Subscription | undefined} */
-    let legacyByAddrSub;
+    /** @type {import('nostr-tools').Filter[]} */
+    const shareFilters = [{ kinds: [6, 16, 30222], '#e': [event.id] }];
     if (address) {
-      const repostByAddrLoader = createTimelineLoader(
-        pool,
-        lookupRelays,
-        { kinds: [6, 16], '#a': [address] },
-        { eventStore, limit: 50 }
-      );
-      const legacyByAddrLoader = createTimelineLoader(
-        pool,
-        lookupRelays,
-        { kinds: [30222], '#a': [address] },
-        { eventStore, limit: 50 }
-      );
-      repostByAddrSub = repostByAddrLoader().subscribe({
-        error: (err) => console.warn('CommunityShare: Repost addr loader error:', err)
-      });
-      legacyByAddrSub = legacyByAddrLoader().subscribe({
-        error: (err) => console.warn('CommunityShare: Legacy addr loader error:', err)
-      });
+      shareFilters.push({ kinds: [6, 16, 30222], '#a': [address] });
     }
+
+    const shareLoader = createTimelineLoader(pool, lookupRelays, shareFilters, {
+      eventStore,
+      limit: 50
+    });
+    const shareLoaderSub = shareLoader().subscribe({
+      error: (err) => console.warn('CommunityShare: Share loader error:', err)
+    });
 
     // SharesModel handles kind 6/16 matching (no author filter, uses buildCommonEventRelationFilters)
     const sharesModelSub = eventStore.model(SharesModel, event).subscribe((repostEvents) => {
@@ -236,10 +205,7 @@
     });
 
     return () => {
-      repostLoaderSub.unsubscribe();
-      legacyLoaderSub.unsubscribe();
-      repostByAddrSub?.unsubscribe();
-      legacyByAddrSub?.unsubscribe();
+      shareLoaderSub.unsubscribe();
       sharesModelSub.unsubscribe();
       legacyModelSub.unsubscribe();
     };
