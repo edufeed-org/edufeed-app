@@ -59,6 +59,21 @@ describe('citationToPublicationPrefill', () => {
     expect(prefill.doi).toBeUndefined();
   });
 
+  it('maps citation_pdf_url to the article file with pdf mime type', () => {
+    const prefill = citationToPublicationPrefill({
+      source: 'none',
+      citation: {
+        authors: [],
+        keywords: [],
+        pdfUrl: 'https://oerf-journal.eu/index.php/oerf/article/download/569/493'
+      }
+    });
+    expect(prefill.file).toEqual({
+      url: 'https://oerf-journal.eu/index.php/oerf/article/download/569/493',
+      mimeType: 'application/pdf'
+    });
+  });
+
   it('returns {} for metadata without citation or og', () => {
     expect(citationToPublicationPrefill({ source: 'none' })).toEqual({});
   });

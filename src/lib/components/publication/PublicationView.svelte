@@ -15,6 +15,7 @@
   import { doiUrl } from '$lib/helpers/publication/doi.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
+  import EncodingPreview from '$lib/components/educational/EncodingPreview.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import EventTags from '$lib/components/calendar/EventTags.svelte';
@@ -128,6 +129,17 @@
         {m.publication_view_open_article()}
       </a>
     {/if}
+    {#if publication.file}
+      <a
+        class="btn gap-1 btn-outline btn-xs"
+        href={publication.file.url}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <ExternalLinkIcon class_="w-3 h-3" />
+        {m.publication_view_open_file()}
+      </a>
+    {/if}
   </section>
 
   <!-- Abstract -->
@@ -151,6 +163,17 @@
           <span class="badge badge-outline">{subject.label}</span>
         {/each}
       </div>
+    </section>
+  {/if}
+
+  <!-- Article file preview (inline PDF via pdf.js / image) -->
+  {#if publication.file}
+    <section class="mb-6">
+      <EncodingPreview
+        url={publication.file.url}
+        mimeType={publication.file.mimeType ?? ''}
+        name={publication.file.url.split('/').pop() ?? 'file'}
+      />
     </section>
   {/if}
 

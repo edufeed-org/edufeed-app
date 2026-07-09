@@ -22,6 +22,7 @@ import { normalizeDoi } from './doi.js';
  * @property {string} [inLanguage]
  * @property {string[]} [keywords]
  * @property {string} [abstract]
+ * @property {import('./publicationTags.js').PublicationFile} [file]
  */
 
 /**
@@ -67,6 +68,9 @@ export function citationToPublicationPrefill(metadata) {
   }
 
   if (citation.keywords?.length) prefill.keywords = citation.keywords;
+
+  // citation_pdf_url is by definition the article's PDF
+  if (citation.pdfUrl) prefill.file = { url: citation.pdfUrl, mimeType: 'application/pdf' };
 
   return prefill;
 }

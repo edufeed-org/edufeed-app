@@ -2631,5 +2631,9 @@
   "publication_form_url_inspect_hint": "Beim Eingeben einer Artikel-URL versuchen wir, Metadaten von der Seite zu übernehmen.",
   "publication_form_url_prefill_applied": "Metadaten von der Seite übernommen – bitte prüfen.",
   "calendar_top_publishers_solo_aria": "Nur Events von {name} anzeigen",
-  "calendar_top_publishers_unsolo_aria": "Wieder alle Events anzeigen"
+  "calendar_top_publishers_unsolo_aria": "Wieder alle Events anzeigen",
+  "publication_form_label_file": "Artikel-Datei (PDF)",
+  "publication_form_placeholder_file_url": "Link zur Datei, z. B. https://.../download/569/493",
+  "publication_form_help_file": "Alternativ die Datei hochladen – ein Upload ersetzt den Link.",
+  "publication_view_open_file": "Datei öffnen"
 }

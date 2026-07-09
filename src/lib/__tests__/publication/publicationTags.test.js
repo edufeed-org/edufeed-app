@@ -165,3 +165,80 @@ describe('parsePublicationEvent', () => {
     expect(parsePublicationEvent(event).creators).toEqual([{ name: 'A', type: 'Person' }]);
   });
 });
+
+describe('article file (encoding tags)', () => {
+  it('emits one encoding run for the article file', () => {
+    const tags = buildPublicationTags(
+      {
+        title: 'T',
+        creators: [],
+        keywords: [],
+        subjects: [],
+        file: {
+          url: 'https://blossom.example/abc.pdf',
+          mimeType: 'application/pdf',
+          size: 12345,
+          sha256: 'deadbeef'
+        }
+      },
+      'd1'
+    );
+    expect(tags.filter((t) => t[0] === 'encoding:contentUrl')).toEqual([
+      ['encoding:contentUrl', 'https://blossom.example/abc.pdf']
+    ]);
+    expect(tags.find((t) => t[0] === 'encoding:encodingFormat')?.[1]).toBe('application/pdf');
+    expect(tags.find((t) => t[0] === 'encoding:contentSize')?.[1]).toBe('12345');
+    expect(tags.find((t) => t[0] === 'encoding:sha256')?.[1]).toBe('deadbeef');
+  });
+
+  it('emits url-only encodings without format/size/sha tags', () => {
+    const tags = buildPublicationTags(
+      {
+        title: 'T',
+        creators: [],
+        keywords: [],
+        subjects: [],
+        file: { url: 'https://journal.example/download/569/493' }
+      },
+      'd1'
+    );
+    expect(tags.find((t) => t[0] === 'encoding:contentUrl')?.[1]).toBe(
+      'https://journal.example/download/569/493'
+    );
+    expect(tags.find((t) => t[0] === 'encoding:encodingFormat')).toBeUndefined();
+    expect(tags.find((t) => t[0] === 'encoding:contentSize')).toBeUndefined();
+  });
+
+  it('omits encoding tags when no file is set', () => {
+    const tags = buildPublicationTags(
+      { title: 'T', creators: [], keywords: [], subjects: [] },
+      'd1'
+    );
+    expect(tags.find((t) => t[0].startsWith('encoding:'))).toBeUndefined();
+  });
+
+  it('round-trips the file through parsePublicationEvent', () => {
+    const form = {
+      title: 'T',
+      creators: [],
+      keywords: [],
+      subjects: [],
+      file: { url: 'https://x.example/a.pdf', mimeType: 'application/pdf', size: 7, sha256: 'ff' }
+    };
+    const event = { kind: PUBLICATION_KIND, tags: buildPublicationTags(form, 'd1'), content: '' };
+    expect(parsePublicationEvent(event).file).toEqual(form.file);
+  });
+
+  it('parses url-only encodings back without invented fields', () => {
+    const event = {
+      kind: PUBLICATION_KIND,
+      tags: [
+        ['d', 'x'],
+        ['title', 'T'],
+        ['encoding:contentUrl', 'https://x.example/dl/1']
+      ],
+      content: ''
+    };
+    expect(parsePublicationEvent(event).file).toEqual({ url: 'https://x.example/dl/1' });
+  });
+});
