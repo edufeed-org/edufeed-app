@@ -9,6 +9,7 @@
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import InterestsInput from '$lib/components/shared/InterestsInput.svelte';
+  import PlacesInput from '$lib/components/shared/PlacesInput.svelte';
   import { getLocale } from '$lib/paraglide/runtime.js';
   import * as m from '$lib/paraglide/messages';
   import {
@@ -33,7 +34,7 @@
    */
   /** @type {Props} */
   let {
-    value = { interests: [], educationalLevels: [], subjects: [] },
+    value = { interests: [], educationalLevels: [], subjects: [], locations: [] },
     onchange,
     compact = false
   } = $props();
@@ -85,6 +86,11 @@
   function handleInterestsChange(interests) {
     onchange?.({ ...value, interests });
   }
+
+  /** @param {import('$lib/helpers/educational/educatorProfile.js').ProfilePlace[]} locations */
+  function handleLocationsChange(locations) {
+    onchange?.({ ...value, locations });
+  }
 </script>
 
 <div class="flex flex-col gap-4">
@@ -132,4 +138,11 @@
       <InterestsInput value={value.interests} onchange={handleInterestsChange} />
     </div>
   </div>
+
+  <PlacesInput
+    places={value.locations ?? []}
+    label={m.educator_context_places_label()}
+    helpText={m.educator_context_places_help()}
+    onchange={handleLocationsChange}
+  />
 </div>

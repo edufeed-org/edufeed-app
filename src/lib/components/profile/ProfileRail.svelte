@@ -79,7 +79,8 @@
         profile?.location ||
         edufeedValue?.interests?.length ||
         edufeedValue?.educationalLevels?.length ||
-        edufeedValue?.subjects?.length
+        edufeedValue?.subjects?.length ||
+        edufeedValue?.locations?.length
     )
   );
 

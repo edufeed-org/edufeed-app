@@ -20,10 +20,18 @@ import { BILDUNGSBEREICH_NAMESPACE_IRI } from './bildungsbereichNamespace.js';
  */
 
 /**
+ * @typedef {Object} ProfilePlace
+ * @property {string} name - Human-readable place name (geocoder formatted)
+ * @property {number} [lat]
+ * @property {number} [lng]
+ */
+
+/**
  * @typedef {Object} EdufeedProfile
  * @property {string[]} interests
  * @property {ProfileConcept[]} educationalLevels
  * @property {SubjectConcept[]} subjects
+ * @property {ProfilePlace[]} [locations] - Places the user feels connected to
  */
 
 /**
@@ -176,18 +184,50 @@ function dedupeInterests(interests) {
 export function parseEdufeedProfile(profileContent) {
   const edufeed = profileContent?.edufeed;
   if (typeof edufeed !== 'object' || edufeed === null || Array.isArray(edufeed)) {
-    return { interests: [], educationalLevels: [], subjects: [] };
+    return { interests: [], educationalLevels: [], subjects: [], locations: [] };
   }
-  const { interests, educationalLevels, subjects } = /** @type {Record<string, unknown>} */ (
-    edufeed
-  );
+  const { interests, educationalLevels, subjects, locations } =
+    /** @type {Record<string, unknown>} */ (edufeed);
   return {
     interests: Array.isArray(interests)
       ? dedupeInterests(interests.filter((i) => typeof i === 'string' && i.length > 0))
       : [],
     educationalLevels: sanitizeConcepts(educationalLevels),
-    subjects: sanitizeConcepts(subjects)
+    subjects: sanitizeConcepts(subjects),
+    locations: sanitizePlaces(locations)
   };
+}
+
+/**
+ * Sanitize the `edufeed.locations` array: entries must be objects with a
+ * non-empty string name; coordinates are kept only when both are finite
+ * numbers.
+ *
+ * @param {unknown} locations
+ * @returns {ProfilePlace[]}
+ */
+function sanitizePlaces(locations) {
+  if (!Array.isArray(locations)) return [];
+  /** @type {ProfilePlace[]} */
+  const out = [];
+  for (const entry of locations) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
+    const { name, lat, lng } = /** @type {Record<string, unknown>} */ (entry);
+    if (typeof name !== 'string' || !name.trim()) continue;
+    /** @type {ProfilePlace} */
+    const place = { name: name.trim() };
+    if (
+      typeof lat === 'number' &&
+      Number.isFinite(lat) &&
+      typeof lng === 'number' &&
+      Number.isFinite(lng)
+    ) {
+      place.lat = lat;
+      place.lng = lng;
+    }
+    out.push(place);
+  }
+  return out;
 }
 
 /**

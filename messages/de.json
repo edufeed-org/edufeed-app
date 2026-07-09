@@ -2619,5 +2619,10 @@
   "publication_view_subjects": "Fachsystematik",
   "publication_view_open_article": "Artikel öffnen",
   "publication_view_delete_success": "Publikation gelöscht",
-  "publication_view_delete_confirm_title": "Publikation löschen?"
+  "publication_view_delete_confirm_title": "Publikation löschen?",
+  "educator_context_places_label": "Orte, mit denen du dich verbunden fühlst",
+  "educator_context_places_help": "Hilft uns später, dich lokal zu vernetzen (optional, mehrere möglich)",
+  "places_input_label": "Orte",
+  "places_input_placeholder": "Ort suchen und hinzufügen...",
+  "places_input_remove_aria": "Ort {name} entfernen"
 }

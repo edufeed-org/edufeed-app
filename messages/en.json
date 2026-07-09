@@ -2619,5 +2619,10 @@
   "publication_view_subjects": "Subject classification",
   "publication_view_open_article": "Open article",
   "publication_view_delete_success": "Publication deleted",
-  "publication_view_delete_confirm_title": "Delete publication?"
+  "publication_view_delete_confirm_title": "Delete publication?",
+  "educator_context_places_label": "Places you feel connected to",
+  "educator_context_places_help": "Helps us support local networking later (optional, multiple allowed)",
+  "places_input_label": "Places",
+  "places_input_placeholder": "Search and add a place...",
+  "places_input_remove_aria": "Remove place {name}"
 }
