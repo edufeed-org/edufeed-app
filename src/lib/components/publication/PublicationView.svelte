@@ -16,6 +16,13 @@
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
   import EncodingPreview from '$lib/components/educational/EncodingPreview.svelte';
+  import HighlightSelectionTooltip from '$lib/components/bookmarks/HighlightSelectionTooltip.svelte';
+  import { loadEventHighlights } from '$lib/loaders/event-highlights.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { TimelineModel } from 'applesauce-core/models';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import EventTags from '$lib/components/calendar/EventTags.svelte';
@@ -30,6 +37,41 @@
   const isAuthor = $derived(!!activeUser && activeUser.pubkey === event?.pubkey);
 
   const publication = $derived(parsePublicationEvent(event));
+
+  // NIP-84 highlights: kind 9802 events referencing this publication via #a.
+  const dTag = $derived(event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] ?? '');
+  const highlightPointer = $derived(
+    /** @type {import('nostr-tools/nip19').AddressPointer} */ ({
+      kind: event?.kind ?? 30040,
+      pubkey: event?.pubkey ?? '',
+      identifier: dTag
+    })
+  );
+
+  let highlights = $state.raw(/** @type {any[]} */ ([]));
+  /** @type {HTMLElement | undefined} */
+  let pdfContainer = $state();
+
+  $effect(() => {
+    if (!event?.pubkey || !dTag) return;
+
+    const aTagValue = `${event.kind}:${event.pubkey}:${dTag}`;
+    const { loader, cleanup } = loadEventHighlights(highlightPointer);
+    loader();
+
+    const modelSub = eventStore
+      .model(TimelineModel, { kinds: [9802], '#a': [aTagValue] })
+      .subscribe((/** @type {any[]} */ events) => {
+        highlights = events || [];
+      });
+
+    return () => {
+      cleanup();
+      modelSub.unsubscribe();
+    };
+  });
+
+  const getHighlightProfiles = useProfileMap(() => highlights.map((h) => h.pubkey));
 
   async function handleDelete() {
     if (!activeUser || !event) return;
@@ -166,14 +208,45 @@
     </section>
   {/if}
 
-  <!-- Article file preview (inline PDF via pdf.js / image) -->
+  <!-- Article file preview (inline PDF via pdf.js / image). The wrapper is
+       the selection scope for NIP-84 highlighting on the PDF text layer. -->
   {#if publication.file}
-    <section class="mb-6">
+    <section class="relative mb-6" bind:this={pdfContainer}>
       <EncodingPreview
         url={publication.file.url}
         mimeType={publication.file.mimeType ?? ''}
         name={publication.title || publication.file.url.split('/').pop() || 'file'}
       />
+      {#if pdfContainer && activeUser}
+        <HighlightSelectionTooltip
+          container={pdfContainer}
+          source={highlightPointer}
+          {activeUser}
+        />
+      {/if}
+    </section>
+  {/if}
+
+  <!-- Highlights on this publication -->
+  {#if highlights.length > 0}
+    <section class="mb-6">
+      <h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
+        {m.publication_view_highlights()}
+      </h2>
+      <ul class="space-y-3">
+        {#each highlights as highlight (highlight.id)}
+          <li class="border-l-4 border-warning/60 pl-3">
+            <blockquote class="text-base-content/90 italic">“{highlight.content}”</blockquote>
+            <div class="mt-1 text-xs text-base-content/60">
+              {getDisplayName(
+                getHighlightProfiles().get(highlight.pubkey),
+                highlight.pubkey.slice(0, 8) + '…'
+              )}
+              · {formatCalendarDate(new Date(highlight.created_at * 1000), 'short')}
+            </div>
+          </li>
+        {/each}
+      </ul>
     </section>
   {/if}
 
