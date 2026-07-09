@@ -30,11 +30,13 @@ import { isBackupDownloaded, isBackupDismissed } from '$lib/stores/backup-flags.
 import { isRelayListBannerDismissed } from '$lib/stores/relay-list-flags.svelte.js';
 import { isDmRelayBannerDismissed } from '$lib/stores/dm-relay-flags.svelte.js';
 import { deriveHintStatus, trackEverOpen } from '$lib/helpers/assistant-hints.js';
+import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
+import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
-export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm']);
+export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'nip05']);
 
 /**
  * Reactive hook for the assistant's hints. Must be called during component
@@ -80,6 +82,33 @@ export function useAssistantHints() {
     };
   });
 
+  // NIP-05 presence check: reads the user's own kind 0 (loaded app-wide for
+  // the navbar) and only concludes "missing" once the profile arrived or the
+  // settle timeout passed — never over a profile we simply haven't fetched.
+  let profileSettled = $state(false);
+  let hasNip05 = $state(false);
+
+  $effect(() => {
+    const user = getActiveUser();
+    profileSettled = false;
+    hasNip05 = false;
+    if (!user) return;
+
+    const sub = eventStore.replaceable(0, user.pubkey).subscribe((event) => {
+      if (!event) return;
+      hasNip05 = getProfileNip05s(event).length > 0;
+      profileSettled = true;
+    });
+    const timeout = setTimeout(() => {
+      profileSettled = true;
+    }, 5000);
+
+    return () => {
+      sub?.unsubscribe();
+      clearTimeout(timeout);
+    };
+  });
+
   /** Hint ids whose primary action fired and awaits confirmation. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
   let running = $state.raw(/** @type {Set<HintId>} */ (new Set()));
@@ -89,7 +118,7 @@ export function useAssistantHints() {
 
   const statuses = $derived.by(() => {
     const user = getActiveUser();
-    if (!user) return { backup: null, relays: null, dm: null };
+    if (!user) return { backup: null, relays: null, dm: null, nip05: null };
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
     // Only nudge users who created their account via the in-app wizard —
@@ -106,6 +135,11 @@ export function useAssistantHints() {
       !hasRelayList &&
       getDefaultRelayList().length > 0 &&
       !isRelayListBannerDismissed(user.pubkey);
+
+    // Only membership-enabled deployments can offer a handle to request.
+    const membership = runtimeConfig.membership;
+    const nip05Applicable =
+      profileSettled && !hasNip05 && !!membership?.enabled && !!membership?.handleDomain;
 
     const dmStatus = getDmRelayCheckStatus();
     const dmApplicable =
@@ -131,6 +165,12 @@ export function useAssistantHints() {
         confirmed: dmStatus === 'present',
         running: running.has('dm'),
         everOpen: everOpen.has('dm')
+      }),
+      nip05: deriveHintStatus({
+        applicable: nip05Applicable,
+        confirmed: hasNip05,
+        running: false, // the action navigates; the profile confirms reactively
+        everOpen: everOpen.has('nip05')
       })
     };
   });
@@ -154,6 +194,11 @@ export function useAssistantHints() {
   function runHint(id) {
     if (id === 'backup') {
       modalStore.openModal('recovery-download');
+      return;
+    }
+    if (id === 'nip05') {
+      // The settings page hosts the membership card with the handle request.
+      goto('/settings');
       return;
     }
     if (running.has(id)) return;

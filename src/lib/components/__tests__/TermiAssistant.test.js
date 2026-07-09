@@ -32,6 +32,9 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_hint_done_chip',
       'termi_hint_relays_doing',
       'termi_hint_dm_doing',
+      'termi_hint_nip05_title',
+      'termi_hint_nip05_body',
+      'termi_hint_nip05_cta',
       'termi_sugg_1_q',
       'termi_sugg_1_a',
       'termi_sugg_2_q',
@@ -75,12 +78,13 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: mockModalStore }));
 
 // Relay-list check plumbing: the replaceable subscription emits mockRelayListEvent.
 const mockRelayListEvent = vi.hoisted(() => ({ value: null }));
+const mockProfileEvent = vi.hoisted(() => ({ value: null }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {},
   eventStore: {
-    replaceable: () => ({
+    replaceable: (kind) => ({
       subscribe: (cb) => {
-        cb(mockRelayListEvent.value);
+        cb(kind === 0 ? mockProfileEvent.value : mockRelayListEvent.value);
         return { unsubscribe: vi.fn() };
       }
     })
@@ -115,6 +119,15 @@ vi.mock('$lib/services/dm-service.svelte.js', () => ({
 
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
 
+const mockMembership = vi.hoisted(() => ({ value: { enabled: false, handleDomain: '' } }));
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: {
+    get membership() {
+      return mockMembership.value;
+    }
+  }
+}));
+
 import TermiAssistant from '../assistant/TermiAssistant.svelte';
 import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
 
@@ -137,6 +150,12 @@ beforeEach(() => {
   mockActiveUser.value = null;
   mockRelayListEvent.value = { tags: [['r', 'wss://a.example/']] }; // relay list present
   mockDmStatus.value = 'present';
+  mockMembership.value = { enabled: false, handleDomain: '' };
+  mockProfileEvent.value = {
+    kind: 0,
+    content: JSON.stringify({ nip05: 'me@edufeed.org' }),
+    tags: []
+  };
 });
 
 afterEach(() => {
@@ -230,6 +249,33 @@ describe('TermiAssistant launcher + hints', () => {
 
     await fireEvent.click(container.querySelector('[data-testid="termi-hint-dm-action"]'));
     expect(mockEnsureDm).toHaveBeenCalled();
+  });
+
+  it('shows the nip05 hint when membership is enabled and the profile has none, action routes to settings', async () => {
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
+    mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+
+    expect(container.querySelector('[data-testid="termi-hint-nip05"]')).not.toBeNull();
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
+    expect(mockGoto).toHaveBeenCalledWith('/settings');
+  });
+
+  it('shows no nip05 hint when the profile has one or membership is disabled', async () => {
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
+    let r = render(TermiAssistant);
+    await openTermi(r.container);
+    expect(r.container.querySelector('[data-testid="termi-hint-nip05"]')).toBeNull();
+    r.unmount();
+
+    mockMembership.value = { enabled: false, handleDomain: '' };
+    mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'x' }), tags: [] };
+    r = render(TermiAssistant);
+    await openTermi(r.container);
+    expect(r.container.querySelector('[data-testid="termi-hint-nip05"]')).toBeNull();
   });
 
   it('renders no launcher badge when everything is set up', async () => {
