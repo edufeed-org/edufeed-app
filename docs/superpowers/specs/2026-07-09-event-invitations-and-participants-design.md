@@ -51,24 +51,24 @@ Marmot Welcome) target relay/group access, not calendar events.
   nostr:naddr1...
   ```
 
-  The naddr encodes kind/pubkey/d plus relay hints (seen relays / calendar
-  relays).
+  The naddr comes from `CalendarEventDetailView`, which already generates it
+  (kind/pubkey/d plus relay hints) — no new encoding logic.
 - Per-recipient failures are shown in the modal with retry; successful sends
   are not rolled back.
 
-### Rendering on the receiving side
+### Rendering on the receiving side (mostly already built)
 
-- `ConversationThread` message rendering detects `nostr:naddr` references
-  that decode to kind 31922/31923 (pure helper `extractCalendarNaddr`,
-  handles the `nostr:` prefix, ignores other kinds and malformed input).
-- Matching messages render an event preview card (reuse the existing calendar
-  card component) plus the existing `InlineRsvp` buttons beneath the message
-  text. The event loads via `addressLoader` with the naddr's relay hints +
-  calendar relays.
-- If the event cannot be resolved or was deleted, fall back to the plain
-  clickable link.
-- This applies to **any** DM containing a calendar-event naddr, not only
-  invites sent from the modal — casual shares get the same card.
+The DM thread already renders message content through `NostrContentRenderer`
+→ `NostrIdentifier`, which routes calendar-event naddrs to
+`CalendarEventPreview` — a rich card with title, date, location, and a link
+to the event page, including loading/not-found fallbacks. **No new parsing
+helper and no `ConversationThread` changes are needed.**
+
+The only addition: `CalendarEventPreview` (block variant) gains the existing
+`InlineRsvp` component, shown for logged-in users. This lights up inline
+RSVP everywhere event links are embedded — DMs, chat, comments, threads —
+not just invites. (Note: the preview's parsed event may need its `d` tag
+threaded through for `InlineRsvp`/`createRsvp`.)
 
 ### Semantics & caveats
 
@@ -114,6 +114,22 @@ Marmot Welcome) target relay/group access, not calendar events.
 No changes needed — `CalendarEventDetailView` already renders participants
 with role badges.
 
+## Simplicity review (DRY/KISS pass)
+
+- Existing infra reused, verified via applesauce MCP: `SendWrappedMessage`
+  (`applesauce-actions/actions`) is the send path (3 existing call sites);
+  no new parsing needed — `NostrContentRenderer`/`NostrIdentifier` already
+  detect naddrs in DM content; `CalendarEventPreview` already loads and
+  renders the event card with fallbacks.
+- Net new code: one modal, one form section, one `InlineRsvp` placement,
+  p-tag emission in `buildCalendarEventTags`. No new services, helpers,
+  event kinds, or protocol extensions.
+- Rejected simpler alternative: no UI at all ("paste the event link into a
+  DM" — the card already renders). Zero code, but fails the discoverability
+  ask from the test report.
+- Rejected reuse: `ShareByNaddrModal` is the opposite flow (paste naddr →
+  community repost), no overlap with DM invites.
+
 ## Non-goals (possible follow-ups)
 
 - No inbox notification for being p-tagged on an event ("you were added as
@@ -133,8 +149,6 @@ is exercisable below page level; DM sending reuses the already-tested
 
 - `buildCalendarEventTags` with participants: roles, relay hints, round-trip
   with `getCalendarEventMetadata`.
-- `extractCalendarNaddr(content)`: naddr with/without `nostr:` prefix,
-  non-calendar kinds ignored, malformed input, multiple links.
 
 **Component (Vitest, jsdom):**
 
@@ -142,15 +156,16 @@ is exercisable below page level; DM sending reuses the already-tested
   edit.
 - `InviteToEventModal`: recipient add/remove/exclusion, per-recipient send,
   failure display.
+- `CalendarEventPreview`: shows `InlineRsvp` for logged-in users on a
+  resolved calendar event; hidden when logged out / event unresolved.
 
 ## Affected files (expected)
 
 | File | Change |
 |------|--------|
-| `src/lib/components/calendar/CalendarEventDetailView.svelte` | Invite button |
-| `src/lib/components/calendar/InviteToEventModal.svelte` | new |
-| `src/lib/components/dm/ConversationThread.svelte` | event card + inline RSVP for calendar naddrs |
-| `src/lib/helpers/calendar-naddr.js` | new — pure `extractCalendarNaddr` helper |
+| `src/lib/components/calendar/CalendarEventDetailView.svelte` | Invite button (naddr already generated here) |
+| `src/lib/components/calendar/InviteToEventModal.svelte` | new — ContactSearchInput + note + `SendWrappedMessage` loop |
+| `src/lib/components/shared/NostrPreviews/CalendarEventPreview.svelte` | add `InlineRsvp` (block variant, logged-in) |
 | `src/lib/components/calendar/CalendarEventModal.svelte` | Participants section |
 | `src/lib/helpers/calendar.js` | `buildCalendarEventTags` p-tag support |
 | `src/lib/stores/calendar-actions.svelte.js` | pass participants + taggedPubkeys |
