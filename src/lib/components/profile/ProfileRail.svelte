@@ -260,7 +260,9 @@
        is bottom breathing room. */
     max-height: calc(100dvh - 158px);
     overflow-y: auto;
-    overscroll-behavior: contain;
+    /* No overscroll-behavior here: when the rail's inner scroll ends the
+       wheel must chain to the page, otherwise a rail that hasn't fully
+       scrolled into view yet traps the cursor. */
     /* Scroll without a visible bar (same idiom as the tab strip) — the card
        cut off at the viewport edge is affordance enough. */
     scrollbar-width: none;
