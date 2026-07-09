@@ -39,6 +39,8 @@
   let profiles = $derived(getProfiles());
 
   let failedRecipients = $derived(recipients.filter((p) => sendStatus[p] === 'failed'));
+  // Recipients added after a send round, never attempted yet.
+  let pendingRecipients = $derived(recipients.filter((p) => !sendStatus[p]));
   let allSent = $derived(
     hasSent && recipients.length > 0 && recipients.every((p) => sendStatus[p] === 'sent')
   );
@@ -66,6 +68,9 @@
 
   /** @param {string[]} targets */
   async function sendTo(targets) {
+    // Never resend to a recipient whose DM already succeeded — guards every
+    // send control against duplicate invitations after a partial failure.
+    targets = targets.filter((p) => sendStatus[p] !== 'sent');
     if (!rawEvent || targets.length === 0 || isSending) return;
     isSending = true;
     const content = buildInviteContent();
@@ -183,12 +188,14 @@
           {m.invite_modal_retry_failed()}
         </button>
       {/if}
-      {#if !allSent}
+      <!-- After a send round, only newly added recipients justify the primary
+           button; retrying failures is the Retry button's job. -->
+      {#if !allSent && (!hasSent || pendingRecipients.length > 0)}
         <button
           class="btn btn-primary"
           data-testid="invite-send"
           disabled={isSending || recipients.length === 0 || !rawEvent}
-          onclick={() => sendTo(recipients)}
+          onclick={() => sendTo(hasSent ? pendingRecipients : recipients)}
         >
           {isSending ? m.invite_modal_sending() : m.invite_modal_send()}
         </button>

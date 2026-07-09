@@ -111,4 +111,29 @@ describe('InviteToEventModal', () => {
     await vi.waitFor(() => expect(runMock).toHaveBeenCalledTimes(1));
     expect(runMock).toHaveBeenCalledWith(SendWrappedMessage, PK_B, 'nostr:naddr1testxyz');
   });
+
+  it('never resends to a recipient already marked sent, on any send control', async () => {
+    // First round: A succeeds, B fails.
+    runMock.mockImplementation(async (/** @type {any} */ _action, /** @type {string} */ pubkey) => {
+      if (pubkey === PK_B) throw new Error('relay down');
+    });
+    const r = render(InviteToEventModal);
+    click(r, 'stub-select-a');
+    click(r, 'stub-select-b');
+    await tick();
+    click(r, 'invite-send');
+    await vi.waitFor(() => expect(r.queryByTestId('invite-retry')).not.toBeNull());
+
+    // Second round: whatever send controls are visible, clicking them all
+    // must never repeat a pubkey that already succeeded (PK_A).
+    runMock.mockClear();
+    runMock.mockImplementation(async () => {});
+    if (r.queryByTestId('invite-send')) click(r, 'invite-send');
+    if (r.queryByTestId('invite-retry')) click(r, 'invite-retry');
+    await vi.waitFor(() => expect(runMock).toHaveBeenCalled());
+    await tick();
+    const sentPubkeys = runMock.mock.calls.map((call) => call[1]);
+    expect(sentPubkeys).not.toContain(PK_A);
+    expect(sentPubkeys).toContain(PK_B);
+  });
 });
