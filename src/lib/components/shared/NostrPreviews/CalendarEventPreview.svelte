@@ -15,8 +15,13 @@
   import { CopyIcon } from '$lib/components/icons';
   import { getCalendarEventStart, getCalendarEventEnd } from 'applesauce-common/helpers';
   import MarkdownRenderer from '../MarkdownRenderer.svelte';
+  import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
 
   let { identifier, decoded: _decoded, inline: _inline = false } = $props();
+
+  const getActiveUser = useActiveUser();
+  let activeUser = $derived(getActiveUser());
 
   /** @type {any} */
   let event = $state(null);
@@ -159,4 +164,10 @@
     </div>
   </a>
   <!-- eslint-enable svelte/no-navigation-without-resolve -->
+
+  {#if !_inline && activeUser && event.originalEvent}
+    <div class="-mt-1 mb-2 pl-1">
+      <InlineRsvp calendarEvent={event.originalEvent} size="sm" compact={true} />
+    </div>
+  {/if}
 {/if}
