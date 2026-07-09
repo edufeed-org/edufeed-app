@@ -15,6 +15,10 @@
   import CreatorInput from '$lib/components/educational/CreatorInput.svelte';
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
+  import LicensedFileInput from '$lib/components/shared/LicensedFileInput.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: { communityPubkey: string, editNaddr: string } }} */
@@ -41,6 +45,39 @@
   let creators = $state([]);
   /** @type {Array<{id: string, label: string}>} */
   let subjects = $state([]);
+
+  // Article file: link OR Blossom upload (upload wins). `fileMeta` preserves
+  // format/size/sha for links that came from prefill or edit mode.
+  let fileUrl = $state('');
+  /** @type {import('$lib/helpers/publication/publicationTags.js').PublicationFile | null} */
+  let fileMeta = $state(null);
+  /** @type {any[]} */
+  let uploadedFiles = $state([]);
+
+  // Display name for the upload license modal's "I created this" auto-credit.
+  const getActiveUser = useActiveUser();
+  const activeUser = $derived(getActiveUser());
+  const getActiveUserProfile = useUserProfile(() => activeUser?.pubkey);
+  const activeUserDisplayName = $derived(
+    activeUser ? getDisplayName(getActiveUserProfile(), activeUser.pubkey.slice(0, 8)) : ''
+  );
+
+  /** Effective article file for publishing: upload > known link meta > bare link. */
+  function resolveArticleFile() {
+    const upload = uploadedFiles[0];
+    if (upload) {
+      /** @type {import('$lib/helpers/publication/publicationTags.js').PublicationFile} */
+      const file = { url: upload.url };
+      if (upload.type) file.mimeType = upload.type;
+      if (upload.size) file.size = upload.size;
+      if (upload.sha256) file.sha256 = upload.sha256;
+      return file;
+    }
+    const link = fileUrl.trim();
+    if (!link) return undefined;
+    if (fileMeta && fileMeta.url === link) return fileMeta;
+    return /\.pdf(\?|$)/i.test(link) ? { url: link, mimeType: 'application/pdf' } : { url: link };
+  }
 
   // UI state
   let isPublishing = $state(false);
@@ -122,6 +159,10 @@
         keywords = parsed.keywords;
         creators = parsed.creators;
         subjects = parsed.subjects;
+        if (parsed.file) {
+          fileUrl = parsed.file.url;
+          fileMeta = parsed.file;
+        }
       } catch (err) {
         console.error('Error loading publication for edit:', err);
         editError = m.publication_edit_error_load();
@@ -177,6 +218,11 @@
         if (prefill.inLanguage) {
           inLanguage = prefill.inLanguage;
         }
+        if (prefill.file && !fileUrl.trim() && uploadedFiles.length === 0) {
+          fileUrl = prefill.file.url;
+          fileMeta = prefill.file;
+          applied = true;
+        }
         urlPrefillApplied = applied;
       } finally {
         isInspectingUrl = false;
@@ -220,7 +266,8 @@
         license: license || undefined,
         keywords,
         creators,
-        subjects
+        subjects,
+        file: resolveArticleFile()
       };
 
       let naddr;
@@ -381,6 +428,29 @@
           placeholder={m.publication_form_placeholder_abstract()}
           bind:value={abstract}
         ></textarea>
+      </div>
+
+      <!-- Article file: link or upload (upload wins) -->
+      <div class="form-control space-y-2">
+        <div class="label">
+          <span class="label-text font-medium">{m.publication_form_label_file()}</span>
+        </div>
+        <input
+          id="publication-file-url"
+          type="url"
+          class="input w-full"
+          placeholder={m.publication_form_placeholder_file_url()}
+          bind:value={fileUrl}
+          oninput={() => (fileMeta = null)}
+          disabled={uploadedFiles.length > 0}
+        />
+        <LicensedFileInput
+          bind:files={uploadedFiles}
+          multiple={false}
+          label=""
+          helpText={m.publication_form_help_file()}
+          {activeUserDisplayName}
+        />
       </div>
 
       <!-- Subjects (DeStatis Fachsystematik) -->

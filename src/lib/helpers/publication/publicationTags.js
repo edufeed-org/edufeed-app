@@ -41,6 +41,15 @@ export const PUBLICATION_KIND = 30040;
  * @property {string} [inLanguage] - ISO 639-1 code
  * @property {string} [license] - license URL
  * @property {string} [image] - cover/preview image URL
+ * @property {PublicationFile} [file] - the actual article file (link or upload)
+ */
+
+/**
+ * @typedef {Object} PublicationFile
+ * @property {string} url
+ * @property {string} [mimeType]
+ * @property {number} [size]
+ * @property {string} [sha256]
  */
 
 /**
@@ -103,6 +112,17 @@ export function buildPublicationTags(formData, dTag) {
   if (formData.inLanguage) tags.push(['inLanguage', formData.inLanguage]);
   if (formData.license) tags.push(['license:id', formData.license]);
 
+  // The article file, AMB-encoding style. Single file by design — the
+  // positional getAMBEncodings pairing can't disambiguate mixed link/upload
+  // runs with heterogeneous optional fields.
+  const file = formData.file;
+  if (file?.url?.trim()) {
+    tags.push(['encoding:contentUrl', file.url.trim()]);
+    if (file.mimeType) tags.push(['encoding:encodingFormat', file.mimeType]);
+    if (file.size) tags.push(['encoding:contentSize', String(file.size)]);
+    if (file.sha256) tags.push(['encoding:sha256', file.sha256]);
+  }
+
   return tags;
 }
 
@@ -144,7 +164,22 @@ export function parsePublicationEvent(event) {
       .map((v) => normalizeDoi(v))
       .find(Boolean) || '';
 
+  // Article file (first encoding run)
+  const fileUrl = getTagValue(tags, 'encoding:contentUrl');
+  /** @type {PublicationFile | undefined} */
+  let file;
+  if (fileUrl) {
+    file = { url: fileUrl };
+    const mimeType = getTagValue(tags, 'encoding:encodingFormat');
+    if (mimeType) file.mimeType = mimeType;
+    const size = Number(getTagValue(tags, 'encoding:contentSize'));
+    if (Number.isFinite(size) && size > 0) file.size = size;
+    const sha256 = getTagValue(tags, 'encoding:sha256');
+    if (sha256) file.sha256 = sha256;
+  }
+
   return {
+    ...(file ? { file } : {}),
     title: getTagValue(tags, 'title') || '',
     abstract: getTagValue(tags, 'summary') || '',
     doi,

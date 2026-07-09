@@ -2631,5 +2631,9 @@
   "publication_form_url_inspect_hint": "When you enter an article URL we try to derive metadata from the page.",
   "publication_form_url_prefill_applied": "Metadata taken from the page — please review.",
   "calendar_top_publishers_solo_aria": "Show only events by {name}",
-  "calendar_top_publishers_unsolo_aria": "Show all events again"
+  "calendar_top_publishers_unsolo_aria": "Show all events again",
+  "publication_form_label_file": "Article file (PDF)",
+  "publication_form_placeholder_file_url": "Link to the file, e.g. https://.../download/569/493",
+  "publication_form_help_file": "Or upload the file — an upload replaces the link.",
+  "publication_view_open_file": "Open file"
 }
