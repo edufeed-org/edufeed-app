@@ -79,7 +79,8 @@
         profile?.location ||
         edufeedValue?.interests?.length ||
         edufeedValue?.educationalLevels?.length ||
-        edufeedValue?.subjects?.length
+        edufeedValue?.subjects?.length ||
+        edufeedValue?.locations?.length
     )
   );
 
@@ -254,6 +255,21 @@
     gap: 16px;
     position: sticky;
     top: 74px;
+    /* The rail is often taller than the viewport; without its own scroll a
+       stuck rail can never reveal its lower cards (they only move with the
+       main column). 138px = navbar (64px) + sticky offset (74px); the rest
+       is bottom breathing room. */
+    max-height: calc(100dvh - 158px);
+    overflow-y: auto;
+    /* No overscroll-behavior here: when the rail's inner scroll ends the
+       wheel must chain to the page, otherwise a rail that hasn't fully
+       scrolled into view yet traps the cursor. */
+    /* Scroll without a visible bar (same idiom as the tab strip) — the card
+       cut off at the viewport edge is affordance enough. */
+    scrollbar-width: none;
+  }
+  .pf-rail::-webkit-scrollbar {
+    display: none;
   }
   .pf-rcard {
     background: var(--c-paper);
@@ -357,8 +373,8 @@
   .pf-mini-comm .ic.fallback {
     display: grid;
     place-items: center;
-    color: #fff;
-    background: linear-gradient(150deg, var(--c-hero), oklch(56% 0.13 290));
+    color: var(--c-on-dark);
+    background: linear-gradient(150deg, var(--c-hero), var(--c-hero-2));
     font-family: var(--pf-display);
     font-weight: 800;
     font-size: 14px;

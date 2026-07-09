@@ -1805,7 +1805,7 @@
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              Create Community
+              {m.community_create()}
             </button>
           </div>
         {/if}

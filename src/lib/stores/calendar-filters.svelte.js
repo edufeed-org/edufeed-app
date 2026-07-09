@@ -38,6 +38,15 @@ class CalendarFiltersStore {
   // runtimeConfig.calendar.featuredAuthors).
   featuredAuthorPubkeys = $state(/** @type {string[]} */ ([]));
 
+  // Authors hidden via the "top publishers" quick filter (issue #28).
+  // Their events are removed from the displayed set client-side.
+  hiddenAuthorPubkeys = $state(/** @type {string[]} */ ([]));
+
+  // Solo publisher: when set, ONLY this author's events are displayed
+  // (chart-legend convention: chip click = solo, eye = hide). Solo takes
+  // precedence over hiddenAuthorPubkeys, which stays intact for restore.
+  soloAuthorPubkey = $state(/** @type {string | null} */ (null));
+
   // Getter for current observable values (for convenience)
   get selectedCalendar() {
     return this.selectedCalendar$.value;
@@ -230,6 +239,44 @@ class CalendarFiltersStore {
   }
 
   /**
+   * Toggle an author on the hidden-publishers list. Hiding the solo'd
+   * author would contradict the solo — the solo is cleared instead.
+   * @param {string} pubkey
+   */
+  toggleHiddenAuthor(pubkey) {
+    if (this.soloAuthorPubkey === pubkey) {
+      this.soloAuthorPubkey = null;
+    }
+    if (this.hiddenAuthorPubkeys.includes(pubkey)) {
+      this.hiddenAuthorPubkeys = this.hiddenAuthorPubkeys.filter((p) => p !== pubkey);
+    } else {
+      this.hiddenAuthorPubkeys = [...this.hiddenAuthorPubkeys, pubkey];
+    }
+  }
+
+  /**
+   * Toggle solo mode for an author: set on first click, back to normal on
+   * the second. Soloing a hidden author also unhides it.
+   * @param {string} pubkey
+   */
+  toggleSoloAuthor(pubkey) {
+    if (this.soloAuthorPubkey === pubkey) {
+      this.soloAuthorPubkey = null;
+      return;
+    }
+    this.soloAuthorPubkey = pubkey;
+    this.hiddenAuthorPubkeys = this.hiddenAuthorPubkeys.filter((p) => p !== pubkey);
+  }
+
+  /**
+   * Clear all hidden publishers and the solo selection.
+   */
+  clearHiddenAuthors() {
+    this.hiddenAuthorPubkeys = [];
+    this.soloAuthorPubkey = null;
+  }
+
+  /**
    * Set the pool of pubkeys representing the active user's NIP-02 follows.
    * Consumed by `getEffectiveAuthorPubkeys()` when mode === 'follows'.
    * @param {string[]} pubkeys
@@ -309,6 +356,8 @@ class CalendarFiltersStore {
     this.onlyFollowsMode = 'off';
     this.userFollowPubkeys = [];
     this.featuredAuthorPubkeys = [];
+    this.hiddenAuthorPubkeys = [];
+    this.soloAuthorPubkey = null;
   }
 }
 

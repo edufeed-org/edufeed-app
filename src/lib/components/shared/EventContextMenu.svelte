@@ -69,6 +69,7 @@
   let rawEventDialog = $state(undefined);
   /** @type {HTMLDialogElement|undefined} */
   let shareDialog = $state(undefined);
+  let shareModalOpen = $state(false);
   let isCopied = $state(false);
 
   function handleEditClick() {
@@ -104,6 +105,7 @@
 
   function openShareModal() {
     closeDropdown();
+    shareModalOpen = true;
     shareDialog?.showModal();
   }
 
@@ -172,7 +174,7 @@
     <MoreIcon class_="w-5 h-5" />
   </button>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <ul tabindex="0" class="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow-lg">
+  <ul tabindex="0" class="dropdown-content menu z-10 w-56 rounded-box bg-base-100 p-2 shadow-lg">
     <!-- Author actions -->
     {#if onEdit}
       <li>
@@ -243,10 +245,13 @@
 </div>
 
 <!-- Share to communities modal -->
-<dialog bind:this={shareDialog} class="modal">
+<dialog bind:this={shareDialog} class="modal" onclose={() => (shareModalOpen = false)}>
   <div class="modal-box max-w-lg">
     <h3 class="mb-4 text-lg font-bold">{m.event_menu_share_to_communities()}</h3>
-    {#if activeUser}
+    <!-- Mount only while open: CommunityShare fires share-detection REQs on
+         mount, and this dialog exists for every card that renders the menu.
+         Eagerly mounting it burned 1+ relay REQs per card (#18). -->
+    {#if activeUser && shareModalOpen}
       <CommunityShare {event} {activeUser} shareButtonText={m.event_menu_share_to_communities()} />
     {/if}
     <div class="modal-action">

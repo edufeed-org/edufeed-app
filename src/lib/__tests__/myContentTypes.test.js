@@ -45,7 +45,7 @@ describe('myContentTypes', () => {
   it('gives each type a ctaKey and an accent color', () => {
     for (const t of CONTENT_TYPES) {
       expect(t.ctaKey).toBeTruthy();
-      expect(t.accent).toMatch(/^oklch\(/);
+      expect(t.accent).toMatch(/^var\(--ct-/);
     }
   });
 

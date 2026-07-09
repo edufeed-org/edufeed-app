@@ -260,6 +260,20 @@ body {
   --c-on-dark: var(--color-base-100);
   --font-display: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
   --font-script: 'Caveat Variable', 'Caveat', cursive;
+
+  /* Categorical accents for the authored content types ("Meine Inhalte"
+     stripes/tags — see myContentTypes.js). Defined here so env-gated themes
+     (stil/rpi) can override them per deployment. */
+  /* Modal/overlay scrim — one shared value instead of per-component bg-black/NN */
+  --c-scrim: oklch(0% 0 0 / 0.45);
+
+  --ct-calendar: oklch(52% 0.12 12);
+  --ct-learning: oklch(50% 0.1 140);
+  --ct-article: oklch(58% 0.12 64);
+  --ct-wiki: oklch(52% 0.07 200);
+  --ct-form: oklch(52% 0.12 300);
+  --ct-poll: oklch(52% 0.11 250);
+  --ct-bookmark: oklch(52% 0.04 250);
 }
 
 /* Pages sit on the theme's page background (design: beige page, paper cards).

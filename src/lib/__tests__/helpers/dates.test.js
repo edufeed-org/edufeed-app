@@ -10,7 +10,8 @@ import {
   formatDate,
   formatTimestamp,
   isoToGermanDate,
-  germanDateToIso
+  germanDateToIso,
+  parseDateInput
 } from '$lib/helpers/dates.js';
 
 const SAMPLE = new Date(Date.UTC(2026, 5, 3)); // 2026-06-03 UTC
@@ -116,5 +117,45 @@ describe('germanDateToIso', () => {
 
   it('round-trips with isoToGermanDate', () => {
     expect(germanDateToIso(isoToGermanDate('2026-06-19'))).toBe('2026-06-19');
+  });
+});
+
+describe('parseDateInput', () => {
+  it('accepts strict German DD.MM.YYYY like germanDateToIso', () => {
+    expect(parseDateInput('03.05.2018')).toBe('2018-05-03');
+    expect(parseDateInput('3.5.2018')).toBe('2018-05-03');
+  });
+
+  it('accepts 2-digit years with a 70 pivot (users type 15.03.24)', () => {
+    expect(parseDateInput('15.03.24')).toBe('2024-03-15');
+    expect(parseDateInput('1.2.05')).toBe('2005-02-01');
+    expect(parseDateInput('24.12.98')).toBe('1998-12-24');
+    expect(parseDateInput('01.01.70')).toBe('1970-01-01');
+    expect(parseDateInput('31.12.69')).toBe('2069-12-31');
+  });
+
+  it('accepts pasted ISO YYYY-MM-DD', () => {
+    expect(parseDateInput('2024-01-05')).toBe('2024-01-05');
+    expect(parseDateInput('2024-1-5')).toBe('2024-01-05');
+  });
+
+  it('accepts slash and dash separators in German order', () => {
+    expect(parseDateInput('15/03/2024')).toBe('2024-03-15');
+    expect(parseDateInput('15-03-2024')).toBe('2024-03-15');
+  });
+
+  it('rejects 1- and 3-digit years so mid-typing input never parses eagerly', () => {
+    expect(parseDateInput('15.03.2')).toBe('');
+    expect(parseDateInput('15.03.202')).toBe('');
+  });
+
+  it('rejects incomplete, invalid, and overflow input', () => {
+    expect(parseDateInput('3.5')).toBe('');
+    expect(parseDateInput('abc')).toBe('');
+    expect(parseDateInput('31.02.2018')).toBe('');
+    expect(parseDateInput('2018-02-31')).toBe('');
+    expect(parseDateInput('')).toBe('');
+    expect(parseDateInput(undefined)).toBe('');
+    expect(parseDateInput(null)).toBe('');
   });
 });

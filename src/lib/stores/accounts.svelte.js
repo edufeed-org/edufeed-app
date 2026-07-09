@@ -18,6 +18,14 @@ registerCommonAccountTypes(manager);
  */
 export const EXTENSION_SIGNER_TIMEOUT_MS = 60_000;
 
+/**
+ * How long to wait for a NIP-46 remote signer (nsec.app, Amber, …). Bunkers
+ * often need a push notification to wake the signing app on another device,
+ * so the bound is more generous than the extension one — but a sleeping
+ * bunker must not hang "Applying changes…" forever (edufeed-app#19).
+ */
+export const BUNKER_SIGNER_TIMEOUT_MS = 90_000;
+
 /** Marks a signer that has already been wrapped, so re-runs don't double-wrap. */
 const TIMEOUT_WRAPPED = Symbol('timeout-wrapped-signer');
 
@@ -69,24 +77,72 @@ export function wrapSignerWithTimeout(signer, ms) {
 }
 
 /**
- * Harden NIP-07 extension accounts against a dismissed/never-settling signer popup:
+ * Wrap a NIP-46 bunker signer so signEvent (a) rejects after `ms` instead of
+ * hanging on a sleeping remote app, and (b) rethrows remote errors with
+ * context — NostrConnectSigner surfaces the bunker's raw error string (e.g.
+ * "exceeded quota"), which is meaningless to users without attribution.
  *
+ * @template {object} T
+ * @param {T} signer
+ * @param {number} ms
+ * @returns {T}
+ */
+export function wrapBunkerSigner(signer, ms) {
+  return new Proxy(signer, {
+    get(target, prop) {
+      if (prop === TIMEOUT_WRAPPED) return true;
+      if (prop === 'signEvent') {
+        return (/** @type {any} */ template) =>
+          rejectAfter(
+            /** @type {any} */ (target).signEvent(template),
+            ms,
+            'Signing the event'
+          ).catch((/** @type {any} */ err) => {
+            const message = err instanceof Error ? err.message : String(err);
+            if (message.includes('did not respond')) throw err; // our own timeout
+            throw new Error(`Your remote signing app reported an error: ${message}`);
+          });
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+}
+
+/**
+ * Harden signer-backed accounts against never-settling or opaque signers:
+ *
+ * NIP-07 extension accounts:
  * 1. Disable applesauce's per-account signing queue. Otherwise one never-settling
  *    request poisons the account's shared lock and blocks ALL subsequent signing
  *    until a hard reload. Extensions serialize prompts themselves, so this is safe
  *    for them (unlike NIP-46/bunker, which benefits from serialization).
  * 2. Wrap the signer with a timeout so the originating request itself eventually
  *    rejects, letting the calling UI clear its loading state instead of spinning
- *    forever. Idempotent — re-running won't double-wrap. See accounts.queue.test.js.
+ *    forever.
+ *
+ * NIP-46 bunker accounts keep their queue (serialization is wanted there) but
+ * get a timeout + error-context wrapper (see wrapBunkerSigner, edufeed-app#19).
+ *
+ * Idempotent — re-running won't double-wrap. See accounts.queue.test.js.
  *
  * @param {Array<{ type?: string, disableQueue?: boolean, signer?: any }>} accounts
+ * @param {{ bunkerTimeoutMs?: number }} [opts]
  */
-export function hardenExtensionAccounts(accounts) {
+export function hardenExtensionAccounts(accounts, opts = {}) {
   for (const account of accounts) {
-    if (account.type !== 'extension') continue;
-    account.disableQueue = true;
-    if (account.signer && !account.signer[TIMEOUT_WRAPPED]) {
-      account.signer = wrapSignerWithTimeout(account.signer, EXTENSION_SIGNER_TIMEOUT_MS);
+    if (account.type === 'extension') {
+      account.disableQueue = true;
+      if (account.signer && !account.signer[TIMEOUT_WRAPPED]) {
+        account.signer = wrapSignerWithTimeout(account.signer, EXTENSION_SIGNER_TIMEOUT_MS);
+      }
+    } else if (account.type === 'nostr-connect') {
+      if (account.signer && !account.signer[TIMEOUT_WRAPPED]) {
+        account.signer = wrapBunkerSigner(
+          account.signer,
+          opts.bunkerTimeoutMs ?? BUNKER_SIGNER_TIMEOUT_MS
+        );
+      }
     }
   }
 }

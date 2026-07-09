@@ -32,7 +32,7 @@
   import ProfileCard from '../shared/ProfileCard.svelte';
   import EventManagementActions from './EventManagementActions.svelte';
   import EventContextMenu from '../shared/EventContextMenu.svelte';
-  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+  import HeroImage from '$lib/components/shared/HeroImage.svelte';
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { getSha256FromURL } from 'applesauce-common/helpers';
@@ -307,22 +307,22 @@
         </div>
       </div>
 
-      <!-- Event Image -->
+      <!-- Event Image — full ratio, never cropped (#29) -->
       {#if event.image}
-        <div class="relative mb-6">
-          <ImageWithFallback
+        <div class="mb-6">
+          <HeroImage
             src={event.image}
             alt={event.title}
             fallbackType="event"
-            size="banner"
-            class="h-48 w-full rounded-lg object-cover"
-          />
-          <ImageLicenseOverlay
-            licenseEvent={imageStatus.event}
-            status={imageStatus.status}
-            variant="pill"
-            position="absolute right-2 bottom-2 bg-base-100/80 backdrop-blur"
-          />
+            maxHeightClass="max-h-64"
+          >
+            <ImageLicenseOverlay
+              licenseEvent={imageStatus.event}
+              status={imageStatus.status}
+              variant="pill"
+              position="absolute right-2 bottom-2 bg-base-100/80 backdrop-blur"
+            />
+          </HeroImage>
         </div>
       {/if}
 

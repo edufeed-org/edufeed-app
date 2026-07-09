@@ -115,9 +115,10 @@ export function createCalendarActions(_communityPubkey) {
      * @param {EventFormData} formData - Event form data
      * @param {any} existingEvent - Existing raw Nostr event to update
      * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
+     * @param {string[] | null} [communityPubkeys] - New community h-tag set; null preserves the existing h-tags unchanged
      * @returns {Promise<any>}
      */
-    async updateEvent(formData, existingEvent, communityEvent = null) {
+    async updateEvent(formData, existingEvent, communityEvent = null, communityPubkeys = null) {
       // Validate form data
       const validationErrors = validateEventForm(formData);
       if (validationErrors.length > 0) {
@@ -136,8 +137,14 @@ export function createCalendarActions(_communityPubkey) {
         throw new Error('Cannot update event: missing d-tag. Event may not be replaceable.');
       }
 
-      // Extract the original h-tag (community targeting) if present
-      const hTag = existingEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
+      // Community targeting: an explicit selection replaces the h-tag set;
+      // otherwise every existing h-tag is preserved (an event can be shared
+      // with several communities — dropping all but the first un-shares it).
+      const hTags =
+        communityPubkeys ??
+        existingEvent.tags
+          .filter((/** @type {string[]} */ t) => t[0] === 'h' && t[1])
+          .map((/** @type {string[]} */ t) => t[1]);
 
       // Verify the user owns this event
       if (existingEvent.pubkey !== currentAccount.pubkey) {
@@ -152,7 +159,7 @@ export function createCalendarActions(_communityPubkey) {
         const eventFactory = createAppEventFactory();
 
         // Build NIP-52 compliant tags (reuses original d-tag for replacement)
-        const tags = buildCalendarEventTags(formData, eventData, dTag, hTag);
+        const tags = buildCalendarEventTags(formData, eventData, dTag, hTags);
 
         // Build and sign the updated calendar event
         const eventTemplate = await eventFactory.build({

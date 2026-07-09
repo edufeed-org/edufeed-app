@@ -19,6 +19,8 @@
   import CalendarSelector from './CalendarSelector.svelte';
   import CommunitySelector from './CommunitySelector.svelte';
   import LocationInput from '../shared/LocationInput.svelte';
+  import LicensedImageInput from '../shared/LicensedImageInput.svelte';
+  import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import EditableList from '../shared/EditableList.svelte';
   import { CloseIcon } from '../icons';
 
@@ -64,6 +66,8 @@
     title: '',
     summary: '',
     image: '',
+    imageWasUploaded: false,
+    imageLicenseEvent: null,
     startDate: '',
     startTime: '09:00',
     endDate: '',
@@ -103,6 +107,9 @@
       calendarManagement = null;
     }
   });
+
+  const getOwnProfile = $derived(activeUser ? useUserProfile(activeUser.pubkey) : null);
+  const ownProfile = $derived(getOwnProfile ? getOwnProfile() : null);
 
   const getJoinedCommunities = useJoinedCommunitiesList();
   const joinedCommunities = $derived(getJoinedCommunities());
@@ -155,11 +162,18 @@
     if (modalStore.activeModal === 'calendarEvent') {
       if (mode === 'edit' && existingEvent) {
         initializeFormForEdit();
+        // Pre-select the communities the event is already shared with (its
+        // h-tags) so editing doesn't look like — or silently cause — an
+        // un-share. Non-joined communities stay in the list untouched; the
+        // selector simply doesn't render them.
+        selectedCommunityIds = (existingRawEvent?.tags || [])
+          .filter((/** @type {string[]} */ t) => t[0] === 'h' && t[1])
+          .map((/** @type {string[]} */ t) => t[1]);
       } else {
         initializeForm();
+        selectedCommunityIds = [];
       }
       selectedCalendarIds = [];
-      selectedCommunityIds = [];
     }
   });
 
@@ -171,6 +185,8 @@
       title: '',
       summary: '',
       image: '',
+      imageWasUploaded: false,
+      imageLicenseEvent: null,
       startDate: '',
       startTime: '09:00',
       endDate: '',
@@ -201,6 +217,8 @@
       title: '',
       summary: '',
       image: '',
+      imageWasUploaded: false,
+      imageLicenseEvent: null,
       startDate: today.toISOString().split('T')[0],
       startTime: '09:00',
       endDate: tomorrow.toISOString().split('T')[0],
@@ -244,6 +262,8 @@
       title: existingEvent.title || '',
       summary: existingEvent.summary || '',
       image: existingEvent.image || '',
+      imageWasUploaded: false,
+      imageLicenseEvent: null,
       startDate: startDate.toISOString().split('T')[0],
       startTime: startDate.toTimeString().slice(0, 5),
       endDate: endDate ? endDate.toISOString().split('T')[0] : '',
@@ -311,8 +331,14 @@
       let resultEvent = /** @type {any} */ (null);
 
       if (mode === 'edit' && existingRawEvent) {
-        // Update existing event
-        resultEvent = await calendarActions.updateEvent(formData, existingRawEvent);
+        // Update existing event, applying the (pre-selected) community set so
+        // unchanged selections keep the sharing state and edits to it stick.
+        resultEvent = await calendarActions.updateEvent(
+          formData,
+          existingRawEvent,
+          null,
+          selectedCommunityIds
+        );
         console.log('Event updated successfully');
 
         handleClose();
@@ -520,17 +546,16 @@
           />
         </div>
 
-        <!-- Event Image -->
+        <!-- Event Image (upload or URL, with license attestation — #13) -->
         <div class="mb-4">
-          <label for="image" class="mb-1 block text-sm font-medium text-base-content"
-            >{m.event_modal_image_label()}</label
+          <span class="mb-1 block text-sm font-medium text-base-content"
+            >{m.event_modal_image_label()}</span
           >
-          <input
-            id="image"
-            type="url"
-            class="input-bordered input w-full"
-            bind:value={formData.image}
-            placeholder={m.event_modal_image_placeholder()}
+          <LicensedImageInput
+            bind:imageUrl={formData.image}
+            bind:imageWasUploaded={formData.imageWasUploaded}
+            bind:licenseEvent={formData.imageLicenseEvent}
+            activeUserDisplayName={ownProfile?.display_name ?? ownProfile?.name ?? ''}
           />
         </div>
 

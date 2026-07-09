@@ -67,7 +67,7 @@
   const eventCount = $derived(validEvents.length);
 </script>
 
-<div class="stat rounded-lg bg-base-200 shadow">
+<div class="stat rounded-lg bg-base-100">
   <div class="stat-figure text-secondary">
     <CalendarIcon class_="w-8 h-8" />
   </div>

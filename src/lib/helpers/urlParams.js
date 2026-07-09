@@ -87,6 +87,7 @@ export function parseCalendarFilters(searchParams) {
   return {
     view: searchParams.get('view') || 'list',
     period: searchParams.get('period') || 'month',
+    date: searchParams.get('date') || '',
     tags: searchParams.getAll('tags'),
     relays: searchParams.getAll('relays'),
     authors: searchParams.getAll('authors'),
@@ -100,6 +101,7 @@ export function parseCalendarFilters(searchParams) {
  * @param {Object} filters - Filter parameters
  * @param {string} [filters.view] - Presentation view mode
  * @param {string} [filters.period] - Time period (month/week/day/all)
+ * @param {string} [filters.date] - Anchor date of the viewed range (YYYY-MM-DD)
  * @param {string[]} [filters.tags] - Tag filters
  * @param {string[]} [filters.relays] - Relay filters
  * @param {string[]} [filters.authors] - Author filters
@@ -127,6 +129,11 @@ export function buildCalendarURL(filters, basePath = '/calendar') {
   // Add period (time range)
   if (filters.period && filters.period !== 'month') {
     params.set('period', filters.period);
+  }
+
+  // Add anchor date of the viewed time range (YYYY-MM-DD, local)
+  if (filters.date) {
+    params.set('date', filters.date);
   }
 
   // Add tags (repeated keys)
@@ -285,4 +292,37 @@ export function hasFeedFilters(searchParams) {
     searchParams.get('author') !== null ||
     (searchParams.get('search') !== null && searchParams.get('search') !== '')
   );
+}
+
+/**
+ * Format a Date as the calendar's `date` URL param (YYYY-MM-DD).
+ *
+ * Uses LOCAL date components — toISOString would shift the day for viewers
+ * east/west of UTC around midnight.
+ *
+ * @param {Date} date
+ * @returns {string}
+ */
+export function formatDateParam(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Parse a `date` URL param (YYYY-MM-DD) into a LOCAL date at midnight.
+ * Returns null for malformed or impossible dates.
+ *
+ * @param {string | null | undefined} value
+ * @returns {Date | null}
+ */
+export function parseDateParam(value) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  // new Date() silently rolls over impossible dates (2026-02-30 → March 2) —
+  // reject those instead of landing the user somewhere unexpected.
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+  return date;
 }

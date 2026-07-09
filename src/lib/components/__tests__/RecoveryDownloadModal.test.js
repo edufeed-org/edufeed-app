@@ -1,9 +1,9 @@
 // @ts-nocheck
 /**
  * RecoveryDownloadModal — radio choice (encrypted w/ password vs plain) and
- * a download trigger. The modal is opened from BackupRecoveryBanner and from
+ * a download trigger. The modal is opened from the Termi assistant's backup hint and from
  * the Settings entry. After a successful download we set
- * `backup-downloaded:<pubkey>` so the banner stops nagging.
+ * `backup-downloaded:<pubkey>` so the hint stops nagging.
  *
  * @vitest-environment jsdom
  */

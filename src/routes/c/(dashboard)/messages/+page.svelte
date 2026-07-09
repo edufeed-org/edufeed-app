@@ -87,10 +87,10 @@
 
 <svelte:head><title>{m.dm_title()}</title></svelte:head>
 
-<div class="flex h-full w-full overflow-hidden border-l border-base-300">
+<div class="flex h-full w-full overflow-hidden">
   <!-- Left pane: Conversation list (hidden on mobile when a conversation is selected) -->
   <div
-    class="w-full shrink-0 border-r border-base-300 md:w-80 {selectedConversationId
+    class="w-full shrink-0 md:w-80 {selectedConversationId
       ? 'hidden md:flex md:flex-col'
       : 'flex flex-col'}"
   >
@@ -109,7 +109,9 @@
 
   <!-- Right pane: Thread or empty state -->
   <div
-    class="min-w-0 flex-1 {selectedConversationId ? 'flex flex-col' : 'hidden md:flex md:flex-col'}"
+    class="min-w-0 flex-1 bg-base-100 {selectedConversationId
+      ? 'flex flex-col'
+      : 'hidden md:flex md:flex-col'}"
   >
     {#if selectedConversationId}
       <ConversationThread

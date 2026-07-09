@@ -96,6 +96,10 @@ export function convertFormDataToAMB(formData) {
       if (creator.affiliationName) {
         creatorObj.affiliation = { name: creator.affiliationName };
       }
+      // ORCID is the AMB-recommended URI identifier for persons → creator.id
+      if (creator.orcid) {
+        creatorObj.id = creator.orcid;
+      }
       return creatorObj;
     });
   }

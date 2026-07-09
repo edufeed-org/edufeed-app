@@ -180,6 +180,48 @@ export function isEventInDateRange(event, start, end) {
 }
 
 /**
+ * The UTC day span an event covers, as integer day indices (floor(ts/86400)).
+ *
+ * End-bound conventions differ by kind:
+ *  - 31922 (date-based): the app's writer stores the user's chosen end date
+ *    as-is (inclusive), so the end day itself counts.
+ *  - 31923 (time-based): NIP-52 ends are exclusive — an event ending exactly
+ *    at midnight must not bleed into the next day.
+ * Implausible spans are capped at 92 days.
+ *
+ * @param {CalendarEvent} event
+ * @param {number} [startTimestamp] - pre-parsed start (avoids re-parsing)
+ * @returns {{startDay: number, endDay: number}}
+ */
+export function getEventDaySpan(event, startTimestamp) {
+  const SECONDS_PER_DAY = 86400;
+  const MAX_SPAN_DAYS = 92;
+
+  const start =
+    startTimestamp ??
+    (typeof event.start === 'number' ? event.start : parseCalendarTimestamp(String(event.start)));
+  const endTimestamp =
+    typeof event.end === 'number' ? event.end : parseCalendarTimestamp(String(event.end ?? ''));
+
+  const startDay = Math.floor(start / SECONDS_PER_DAY);
+  let endDay = startDay;
+  if (endTimestamp && endTimestamp > start) {
+    const effectiveEnd = event.kind === 31922 ? endTimestamp : endTimestamp - 1;
+    endDay = Math.max(startDay, Math.floor(effectiveEnd / SECONDS_PER_DAY));
+    if (endDay - startDay > MAX_SPAN_DAYS) {
+      console.warn(
+        '📅 getEventDaySpan: Capping implausible event span of',
+        endDay - startDay,
+        'days for event:',
+        event.title || event.id
+      );
+      endDay = startDay + MAX_SPAN_DAYS;
+    }
+  }
+  return { startDay, endDay };
+}
+
+/**
  * Group events by date for calendar display
  * Only includes valid events that pass NIP-52 validation
  * @param {CalendarEvent[]} events - Array of calendar events
@@ -216,14 +258,18 @@ export function groupEventsByDate(events) {
       return;
     }
 
-    // Convert UNIX timestamp to UTC date and create consistent date key
-    const eventDate = new Date(startTimestamp * 1000);
-    const dateKey = createDateKey(eventDate); // Use consistent UTC-based key generation
+    // Multi-day events appear on EVERY day they cover, not just the start day.
+    const SECONDS_PER_DAY = 86400;
+    const { startDay, endDay } = getEventDaySpan(event, startTimestamp);
 
-    if (!groupedEvents.has(dateKey)) {
-      groupedEvents.set(dateKey, []);
+    for (let day = startDay; day <= endDay; day++) {
+      // Convert UNIX timestamp to UTC date and create consistent date key
+      const dateKey = createDateKey(new Date(day * SECONDS_PER_DAY * 1000));
+      if (!groupedEvents.has(dateKey)) {
+        groupedEvents.set(dateKey, []);
+      }
+      groupedEvents.get(dateKey).push(event);
     }
-    groupedEvents.get(dateKey).push(event);
   });
 
   // Sort events within each date by start timestamp

@@ -11,7 +11,8 @@
 -->
 <script>
   import { onMount } from 'svelte';
-  import { isoToGermanDate, germanDateToIso, activeDateLocale } from '$lib/helpers/dates.js';
+  import { isoToGermanDate, parseDateInput, activeDateLocale } from '$lib/helpers/dates.js';
+  import * as m from '$lib/paraglide/messages';
 
   let {
     value = $bindable(''),
@@ -39,15 +40,31 @@
   // the text field — but never while the user is mid-typing a value that still
   // parses to the same ISO, so we don't clobber partial input.
   $effect(() => {
-    if (germanDateToIso(display) !== value) {
+    if (parseDateInput(display) !== value) {
       display = isoToGermanDate(value);
     }
   });
 
+  // Text that looks like a date to the user but doesn't parse would silently
+  // bind '' (lost in drafts, cleared on remount). Flag it on blur instead of
+  // per keystroke so partial input doesn't flash red while typing.
+  let invalid = $state(false);
+
   /** @param {Event & { currentTarget: HTMLInputElement }} e */
   function handleInput(e) {
     display = e.currentTarget.value;
-    value = germanDateToIso(display);
+    value = parseDateInput(display);
+    if (value || !display.trim()) invalid = false;
+  }
+
+  function handleBlur() {
+    if (value) {
+      // Normalize lenient input (15.3.24, 2024-03-15) to DD.MM.YYYY.
+      display = isoToGermanDate(value);
+      invalid = false;
+    } else {
+      invalid = display.trim() !== '';
+    }
   }
 
   /** @param {Event} e */
@@ -55,6 +72,7 @@
     const picked = /** @type {{ value?: string }} */ (e.target)?.value ?? '';
     value = picked;
     display = isoToGermanDate(picked);
+    invalid = false;
     open = false;
   }
 
@@ -91,8 +109,11 @@
       autocomplete="off"
       {placeholder}
       class="{klass} join-item"
+      class:input-error={invalid}
+      aria-invalid={invalid || undefined}
       value={display}
       oninput={handleInput}
+      onblur={handleBlur}
       {...rest}
     />
     <button
@@ -139,5 +160,11 @@
         <calendar-month></calendar-month>
       </calendar-date>
     </div>
+  {/if}
+
+  {#if invalid}
+    <p class="mt-1 text-xs text-error" data-testid="date-input-invalid">
+      {m.date_input_invalid_hint()}
+    </p>
   {/if}
 </div>

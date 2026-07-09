@@ -37,6 +37,7 @@
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import RichFeedEntry from '$lib/components/dashboard/RichFeedEntry.svelte';
   import { CalendarIcon, ChevronRightIcon, FilesIcon, SparkleIcon } from '$lib/components/icons';
+  import EmptyState from '$lib/components/shared/EmptyState.svelte';
   import { getEventStartTimestamp } from '$lib/helpers/calendar';
   import { activeDateLocale } from '$lib/helpers/dates.js';
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
@@ -360,12 +361,11 @@
     <!-- Activity Feed (main column) -->
     <div class="min-w-0 flex-1" data-testid="dashboard-community-activity">
       {#if visibleItems.length === 0}
-        <div
-          class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
-        >
-          <FilesIcon class_="mb-3 h-10 w-10 text-base-content/30" />
-          <p class="text-base-content/60">{m.dashboard_activity_empty()}</p>
-        </div>
+        <EmptyState title={m.dashboard_activity_empty()}>
+          {#snippet icon()}
+            <FilesIcon class_="h-10 w-10" />
+          {/snippet}
+        </EmptyState>
       {:else}
         <div class="space-y-4">
           {#each visibleItems as event (event.id)}

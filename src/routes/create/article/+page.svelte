@@ -173,7 +173,7 @@
 
 <div class="min-h-[calc(100vh-4rem)]">
   <!-- Top bar -->
-  <div class="border-b border-base-300 bg-base-100">
+  <div>
     <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
       <button class="btn btn-ghost btn-sm" onclick={handleBack} aria-label={m.aria_go_back()}>
         <ChevronLeftIcon class_="w-5 h-5" />

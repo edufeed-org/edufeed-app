@@ -361,7 +361,7 @@
       <!-- Emoji picker dropdown -->
       {#if showEmojiPicker}
         <div
-          class="absolute bottom-full left-4 z-10 mb-2 flex max-h-80 w-72 flex-col rounded-lg bg-base-200 shadow-xl"
+          class="absolute bottom-full left-4 z-10 mb-2 flex max-h-80 w-72 flex-col rounded-lg bg-base-100 shadow-xl"
         >
           <EmojiPicker
             onSelect={insertEmoji}

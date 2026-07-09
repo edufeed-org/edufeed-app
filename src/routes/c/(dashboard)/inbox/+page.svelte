@@ -16,6 +16,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import InboxItem from '$lib/components/inbox/InboxItem.svelte';
   import InboxDmItem from '$lib/components/inbox/InboxDmItem.svelte';
+  import EmptyState from '$lib/components/shared/EmptyState.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   const getActiveUser = useActiveUser();
@@ -145,11 +146,7 @@
 
   <!-- Notification list -->
   {#if mergedItems.length === 0}
-    <div
-      class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
-    >
-      <p class="text-base-content/60">{m.inbox_empty()}</p>
-    </div>
+    <EmptyState title={m.inbox_empty()} />
   {:else}
     <div class="divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300">
       {#each mergedItems as item (item.type === 'dm' ? `dm-${item.conversation.id}` : item.event.id)}

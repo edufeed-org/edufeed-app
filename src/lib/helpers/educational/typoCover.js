@@ -11,6 +11,10 @@
  *  playful split only reads well for short titles. */
 const SHORT_TITLE_MAX_WORDS = 6;
 const SHORT_TITLE_MAX_CHARS = 50;
+/** Words longer than this can't fit a cover line even at the minimum font
+ *  size the split layout allows — the long-headline layout wraps them
+ *  (overflow-wrap: anywhere) instead of clipping. */
+const SHORT_TITLE_MAX_WORD_CHARS = 16;
 
 /**
  * Decide which layout a title should use.
@@ -21,9 +25,10 @@ const SHORT_TITLE_MAX_CHARS = 50;
 export function titleLayout(title) {
   const s = (title ?? '').trim();
   if (!s) return 'short';
-  const wordCount = s.split(/\s+/).filter(Boolean).length;
-  if (wordCount > SHORT_TITLE_MAX_WORDS) return 'long';
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length > SHORT_TITLE_MAX_WORDS) return 'long';
   if (s.length > SHORT_TITLE_MAX_CHARS) return 'long';
+  if (longestWordLength(words) > SHORT_TITLE_MAX_WORD_CHARS) return 'long';
   return 'short';
 }
 
@@ -78,6 +83,18 @@ export function splitTitle(title) {
     script: words[scriptIdx].replace(SCRIPT_TRAILING_PUNCT, ''),
     trailing: words.slice(scriptIdx + 1)
   };
+}
+
+/**
+ * Length of the longest word in a list. Used by the cover to scale the
+ * title font down so long German compounds fit instead of being clipped
+ * by the card's `overflow: hidden`.
+ *
+ * @param {string[] | null | undefined} words
+ * @returns {number} 0 when the list is empty
+ */
+export function longestWordLength(words) {
+  return (words ?? []).reduce((max, w) => Math.max(max, (w ?? '').length), 0);
 }
 
 /**

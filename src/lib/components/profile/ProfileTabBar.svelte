@@ -12,10 +12,44 @@
    * }}
    */
   let { tabs, activeTab, onSelect } = $props();
+
+  /** @type {HTMLDivElement | null} */
+  let strip = $state(null);
+  // Edge-fade affordance: the strip scrolls with a hidden scrollbar, so on
+  // narrow screens users otherwise get no hint that more tabs exist.
+  let showStartFade = $state(false);
+  let showEndFade = $state(false);
+
+  function updateEdges() {
+    if (!strip) return;
+    showStartFade = strip.scrollLeft > 1;
+    showEndFade = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
+  }
+
+  $effect(() => {
+    if (!strip) return;
+    updateEdges();
+    // Guard: jsdom (tests) and very old browsers lack ResizeObserver — the
+    // fade then only updates on scroll, which is an acceptable degradation.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateEdges) : null;
+    ro?.observe(strip);
+    strip.addEventListener('scroll', updateEdges, { passive: true });
+    return () => {
+      ro?.disconnect();
+      strip?.removeEventListener('scroll', updateEdges);
+    };
+  });
+
+  // Tab labels/counts stream in async and change the strip's scrollWidth
+  // without resizing the strip itself — recheck when the tab list changes.
+  $effect(() => {
+    void tabs;
+    updateEdges();
+  });
 </script>
 
-<div class="pf-tabs-wrap">
-  <div class="pf-tabs" role="tablist">
+<div class="pf-tabs-wrap" class:fade-start={showStartFade} class:fade-end={showEndFade}>
+  <div class="pf-tabs" role="tablist" bind:this={strip}>
     {#each tabs as tab (tab.id)}
       <button
         role="tab"
@@ -53,6 +87,32 @@
   }
   .pf-tabs::-webkit-scrollbar {
     display: none;
+  }
+  /* Scroll affordance: soft fades over the clipped edge(s). */
+  .pf-tabs-wrap::before,
+  .pf-tabs-wrap::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 36px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .pf-tabs-wrap::before {
+    left: 0;
+    background: linear-gradient(to right, var(--c-bg), transparent);
+  }
+  .pf-tabs-wrap::after {
+    right: 0;
+    background: linear-gradient(to left, var(--c-bg), transparent);
+  }
+  .pf-tabs-wrap.fade-start::before {
+    opacity: 1;
+  }
+  .pf-tabs-wrap.fade-end::after {
+    opacity: 1;
   }
   .pf-tabs button {
     border: 0;

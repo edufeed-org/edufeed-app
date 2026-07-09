@@ -27,7 +27,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   interests_remove: (/** @type {{ name: string }} */ { name }) => `${name} entfernen`,
   educator_context_levels_label: () => 'Bildungsbereich',
   educator_context_subjects_label: () => 'Fächer',
-  educator_context_interests_label: () => 'Interessen'
+  educator_context_interests_label: () => 'Interessen',
+  educator_context_places_label: () => 'Orte',
+  educator_context_places_help: () => 'Hilft lokal zu vernetzen',
+  places_input_label: () => 'Orte',
+  places_input_placeholder: () => 'Ort suchen...',
+  places_input_remove_aria: (/** @type {{name: string}} */ p) => `Ort ${p.name} entfernen`,
+  location_input_loading: () => 'Lade...'
 }));
 
 vi.mock('$lib/helpers/educational/skosLoader.js', () => ({

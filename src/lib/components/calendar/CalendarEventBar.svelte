@@ -5,7 +5,7 @@
 
 <script>
   import { formatCalendarDate } from '../../helpers/calendar.js';
-  import { generateAuthorColor } from '../../helpers/nostrUtils.js';
+  import { generateAuthorColor, readableTextColor } from '../../helpers/nostrUtils.js';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
@@ -32,11 +32,11 @@
   // Text color is always black for better readability
   let inlineStyle = $derived.by(() => {
     if (event.color) {
-      return `background-color: ${event.color}; color: #000000`;
+      return `background-color: ${event.color}; color: ${readableTextColor(event.color)}`;
     }
     const color = colorValues;
     if (!color) return 'color: #000000';
-    return `background-color: ${color}; color: #000000`;
+    return `background-color: ${color}; color: ${readableTextColor(color)}`;
   });
 
   /**

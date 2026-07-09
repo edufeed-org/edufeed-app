@@ -1,4 +1,5 @@
 <script>
+  import { topLayerModal } from '$lib/actions/topLayerModal.js';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -28,7 +29,7 @@
 </script>
 
 {#if open}
-  <dialog class="modal-open modal">
+  <dialog class="modal-open modal" use:topLayerModal={handleCancel}>
     <div class="modal-box max-w-md">
       <h3 class="text-lg font-semibold">{m.image_source_chooser_title()}</h3>
 

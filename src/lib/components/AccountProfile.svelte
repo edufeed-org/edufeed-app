@@ -20,7 +20,7 @@
   });
 </script>
 
-<div class="flex w-full items-center rounded-md border border-purple-400 p-2">
+<div class="flex w-full items-center rounded-md border border-primary/40 p-2">
   <div tabindex="0" role="button" class="btn avatar btn-circle btn-ghost">
     <div class="w-10 rounded-full">
       <img

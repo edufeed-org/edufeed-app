@@ -77,7 +77,7 @@
 
 <div class="flex h-full flex-col">
   <!-- Header -->
-  <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+  <div class="flex items-center justify-between px-4 py-3">
     <h2 class="text-lg font-bold">{m.dm_title()}</h2>
     <button class="btn btn-sm btn-primary" onclick={onNewMessage}>
       {m.dm_new_message()}

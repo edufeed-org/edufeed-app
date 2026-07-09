@@ -1,4 +1,5 @@
 <script>
+  import { topLayerModal } from '$lib/actions/topLayerModal.js';
   import { onDestroy } from 'svelte';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import {
@@ -285,7 +286,7 @@
 </script>
 
 {#if open}
-  <dialog class="modal-open modal">
+  <dialog class="modal-open modal" use:topLayerModal={handleCancel}>
     <div class="modal-box w-11/12 max-w-4xl">
       <h3 class="text-lg font-semibold">{m.image_library_picker_title()}</h3>
 

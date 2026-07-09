@@ -410,7 +410,7 @@
     </div>
   {:else if !activeUser}
     <!-- Not logged in -->
-    <div class="hero min-h-[400px] rounded-box bg-base-200">
+    <div class="hero min-h-[400px] rounded-box bg-base-100">
       <div class="hero-content text-center">
         <div class="max-w-md">
           <svg
@@ -437,7 +437,7 @@
     </div>
   {:else if calendarManagement?.calendars.length === 0}
     <!-- Empty state -->
-    <div class="hero min-h-[400px] rounded-box bg-base-200">
+    <div class="hero min-h-[400px] rounded-box bg-base-100">
       <div class="hero-content text-center">
         <div class="max-w-md">
           <svg

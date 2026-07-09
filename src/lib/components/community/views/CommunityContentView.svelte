@@ -10,6 +10,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { matchesEventSearch } from '$lib/helpers/contentSearch.js';
   import { SearchIcon } from '$lib/components/icons';
+  import EmptyState from '$lib/components/shared/EmptyState.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const getAllowedAuthors = getContext('allowedAuthors');
@@ -206,21 +207,7 @@
     </div>
     <!-- Empty State -->
   {:else if displayedItems.length === 0}
-    <div class="flex flex-col items-center justify-center py-16 text-center">
-      <div class="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-base-200">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-12 w-12 text-base-content/40"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={emptyIconPath} />
-        </svg>
-      </div>
-      <h3 class="mb-2 text-lg font-semibold text-base-content">{emptyTitle}</h3>
-      <p class="max-w-md text-base-content/60">{emptyDescription}</p>
-    </div>
+    <EmptyState title={emptyTitle} description={emptyDescription} iconPath={emptyIconPath} />
     <!-- Content -->
   {:else}
     {@render content(displayedItems, authorProfiles)}

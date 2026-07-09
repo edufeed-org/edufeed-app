@@ -44,7 +44,7 @@
   );
 
   /** @type {import('$lib/helpers/educational/educatorProfile.js').EdufeedProfile} */
-  let edufeed = $state({ interests: [], educationalLevels: [], subjects: [] });
+  let edufeed = $state({ interests: [], educationalLevels: [], subjects: [], locations: [] });
 
   /**
    * The user's kind 10015 interests list. It is authoritative for interests;
@@ -242,7 +242,8 @@
           website: userData.website,
           edufeed: {
             educationalLevels: edufeed.educationalLevels,
-            subjects: edufeed.subjects
+            subjects: edufeed.subjects,
+            locations: edufeed.locations
           }
         });
 

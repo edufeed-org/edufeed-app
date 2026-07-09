@@ -242,7 +242,7 @@
 
   @keyframes highlight-fade {
     0% {
-      background-color: oklch(0.9 0.05 250 / 0.3);
+      background-color: color-mix(in oklch, var(--color-info) 30%, transparent);
     }
     100% {
       background-color: transparent;

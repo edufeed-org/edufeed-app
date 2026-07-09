@@ -190,8 +190,8 @@
           disabled={isSubmitting}
           class="btn {btnClass} flex-1 transition-all
 						{userRsvpStatus === 'accepted'
-            ? 'font-bold text-white shadow-lg ring-2 ring-success ring-offset-2 ring-offset-base-100 btn-success'
-            : 'btn-outline btn-success hover:font-semibold hover:text-white hover:btn-success'}
+            ? 'font-bold shadow-lg ring-2 ring-success ring-offset-2 ring-offset-base-100 btn-success'
+            : 'btn-outline btn-success hover:font-semibold hover:btn-success'}
 						{isSubmitting && submittingStatus === 'accepted' ? 'loading' : ''}"
           aria-label="RSVP as Going"
           aria-pressed={userRsvpStatus === 'accepted'}
@@ -215,8 +215,8 @@
           disabled={isSubmitting}
           class="btn {btnClass} flex-1 transition-all
 						{userRsvpStatus === 'tentative'
-            ? 'font-bold text-white shadow-lg ring-2 ring-warning ring-offset-2 ring-offset-base-100 btn-warning'
-            : 'btn-outline btn-warning hover:font-semibold hover:text-white hover:btn-warning'}
+            ? 'font-bold shadow-lg ring-2 ring-warning ring-offset-2 ring-offset-base-100 btn-warning'
+            : 'btn-outline btn-warning hover:font-semibold hover:btn-warning'}
 						{isSubmitting && submittingStatus === 'tentative' ? 'loading' : ''}"
           aria-label="RSVP as Maybe"
           aria-pressed={userRsvpStatus === 'tentative'}
@@ -240,8 +240,8 @@
           disabled={isSubmitting}
           class="btn {btnClass} flex-1 transition-all
 						{userRsvpStatus === 'declined'
-            ? 'font-bold text-white shadow-lg ring-2 ring-error ring-offset-2 ring-offset-base-100 btn-error'
-            : 'btn-outline btn-error hover:font-semibold hover:text-white hover:btn-error'}
+            ? 'font-bold shadow-lg ring-2 ring-error ring-offset-2 ring-offset-base-100 btn-error'
+            : 'btn-outline btn-error hover:font-semibold hover:btn-error'}
 						{isSubmitting && submittingStatus === 'declined' ? 'loading' : ''}"
           aria-label="RSVP as Not Going"
           aria-pressed={userRsvpStatus === 'declined'}

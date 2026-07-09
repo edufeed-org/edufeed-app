@@ -171,7 +171,7 @@
   }
 </script>
 
-<div class="card bg-base-200 shadow-xl">
+<div class="card bg-base-100">
   <div class="card-body">
     <h2 class="card-title">{m.form_link_title()}</h2>
     <p class="text-sm text-base-content/70">

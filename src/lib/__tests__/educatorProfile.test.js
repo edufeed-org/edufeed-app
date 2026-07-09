@@ -71,7 +71,7 @@ describe('getSubjectVocabKeysForConcepts', () => {
 });
 
 describe('parseEdufeedProfile', () => {
-  const EMPTY = { interests: [], educationalLevels: [], subjects: [] };
+  const EMPTY = { interests: [], educationalLevels: [], subjects: [], locations: [] };
 
   it('returns empty defaults for missing or edufeed-less content', () => {
     expect(parseEdufeedProfile(undefined)).toEqual(EMPTY);
@@ -94,7 +94,8 @@ describe('parseEdufeedProfile', () => {
       educationalLevels: [
         { id: `${BILDUNGSBEREICH_NAMESPACE_IRI}schule`, prefLabel: { de: 'Schule' } }
       ],
-      subjects: [{ id: 'https://example.org/subject/religion', prefLabel: { de: 'Religion' } }]
+      subjects: [{ id: 'https://example.org/subject/religion', prefLabel: { de: 'Religion' } }],
+      locations: [{ name: 'Köln, Deutschland', lat: 50.94, lng: 6.96 }]
     };
 
     expect(parseEdufeedProfile({ name: 'Anna', edufeed })).toEqual(edufeed);
@@ -112,6 +113,23 @@ describe('parseEdufeedProfile', () => {
     expect(result.interests).toEqual(['ok']);
     expect(result.educationalLevels).toEqual([{ id: 'https://ok' }]);
     expect(result.subjects).toEqual([{ id: 'https://also-ok', prefLabel: { de: 'X' } }]);
+  });
+
+  it('dedupes interests case-insensitively and concepts by id', () => {
+    const result = parseEdufeedProfile({
+      edufeed: {
+        interests: ['Podcasts', 'podcasts', 'OER'],
+        educationalLevels: [{ id: 'https://a' }, { id: 'https://a' }, { id: 'https://b' }],
+        subjects: [
+          { id: 'https://s', prefLabel: { de: 'X' } },
+          { id: 'https://s', prefLabel: { de: 'X (Dublette)' } }
+        ]
+      }
+    });
+
+    expect(result.interests).toEqual(['Podcasts', 'OER']);
+    expect(result.educationalLevels).toEqual([{ id: 'https://a' }, { id: 'https://b' }]);
+    expect(result.subjects).toEqual([{ id: 'https://s', prefLabel: { de: 'X' } }]);
   });
 });
 
@@ -236,5 +254,35 @@ describe('subjects ↔ picker value conversion', () => {
     it('clears the vocab slice when nothing is picked', () => {
       expect(mergeSubjectsForVocab([mathe, theologie], 'schulfaecher', [])).toEqual([theologie]);
     });
+  });
+});
+
+describe('parseEdufeedProfile — locations (issue #25)', () => {
+  it('parses locations with name and coordinates', () => {
+    const profile = parseEdufeedProfile({
+      edufeed: {
+        locations: [{ name: 'Köln, Deutschland', lat: 50.94, lng: 6.96 }, { name: 'Bonn' }]
+      }
+    });
+    expect(profile.locations).toEqual([
+      { name: 'Köln, Deutschland', lat: 50.94, lng: 6.96 },
+      { name: 'Bonn' }
+    ]);
+  });
+
+  it('returns [] when locations are missing or malformed', () => {
+    expect(parseEdufeedProfile({ edufeed: {} }).locations).toEqual([]);
+    expect(parseEdufeedProfile({}).locations).toEqual([]);
+    expect(parseEdufeedProfile({ edufeed: { locations: 'Köln' } }).locations).toEqual([]);
+    expect(
+      parseEdufeedProfile({ edufeed: { locations: [{ lat: 1 }, 42, { name: '' }] } }).locations
+    ).toEqual([]);
+  });
+
+  it('drops non-numeric coordinates but keeps the name', () => {
+    expect(
+      parseEdufeedProfile({ edufeed: { locations: [{ name: 'Köln', lat: 'x', lng: null }] } })
+        .locations
+    ).toEqual([{ name: 'Köln' }]);
   });
 });

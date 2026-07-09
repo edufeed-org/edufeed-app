@@ -10,9 +10,7 @@
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
-  import BackupRecoveryBanner from '$lib/components/BackupRecoveryBanner.svelte';
-  import DmRelayBanner from '$lib/components/DmRelayBanner.svelte';
-  import RelayListBanner from '$lib/components/RelayListBanner.svelte';
+  import TermiAssistant from '$lib/components/assistant/TermiAssistant.svelte';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
@@ -350,17 +348,6 @@
       class:lg:pb-0={showDashboardNav || isInsideCommunity}
     >
       {#if curatedReady}
-        {#if getActiveUser()}
-          <div class="px-4 pt-3 pb-2">
-            <BackupRecoveryBanner />
-          </div>
-          <div class="px-4 pt-1 pb-2">
-            <RelayListBanner />
-          </div>
-          <div class="px-4 pt-1 pb-2">
-            <DmRelayBanner />
-          </div>
-        {/if}
         {@render children?.()}
       {/if}
       <!-- Floating buttons — sticky inside main so they sit at the bottom of the scroll surface.
@@ -380,6 +367,9 @@
 <PublishStatusToast />
 {#if !hasOwnBottomUI && !pageHasOwnCreateAction && getActiveUser()}
   <GlobalFAB />
+{/if}
+{#if !hasOwnBottomUI && getActiveUser() && curatedReady}
+  <TermiAssistant />
 {/if}
 {#if showDashboardNav && !hasOwnBottomUI}
   <DashboardBottomTabBar />

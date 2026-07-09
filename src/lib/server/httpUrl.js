@@ -57,3 +57,31 @@ export function isPrivateIp(parsedUrl) {
     hostname.endsWith('.local')
   );
 }
+
+/**
+ * SSRF-guarded fetch: follows redirects manually and re-validates every hop
+ * (http/https only, no private/local hosts), so a public URL cannot bounce
+ * the server into internal infrastructure via a 3xx Location header.
+ *
+ * @param {string} url - already-validated public http(s) URL
+ * @param {RequestInit} init - fetch options; `redirect` is forced to 'manual'
+ * @param {number} [maxRedirects]
+ * @returns {Promise<Response>}
+ * @throws {Error} on a private/invalid redirect target or too many redirects
+ */
+export async function fetchGuardedRedirects(url, init, maxRedirects = 5) {
+  let current = url;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const response = await fetch(current, { ...init, redirect: 'manual' });
+    if (response.status < 300 || response.status >= 400) return response;
+
+    const location = response.headers.get('location');
+    if (!location) return response;
+    const target = parseHttpUrl(new URL(location, current).toString());
+    if (!target || isPrivateIp(target)) {
+      throw new Error('Redirect to a disallowed target');
+    }
+    current = target.toString();
+  }
+  throw new Error('Too many redirects');
+}

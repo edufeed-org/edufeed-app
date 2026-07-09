@@ -76,9 +76,44 @@ export function isoToGermanDate(iso) {
 export function germanDateToIso(value) {
   const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec((value ?? '').trim());
   if (!m) return '';
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  const year = Number(m[3]);
+  return toValidIso(Number(m[3]), Number(m[2]), Number(m[1]));
+}
+
+/**
+ * Lenient parser for user-typed date input. Accepts, in German day-first
+ * order with `.`, `/` or `-` separators:
+ *   - `DD.MM.YYYY` (single-digit day/month tolerated)
+ *   - `DD.MM.YY` — 2-digit years pivot at 70: 00–69 → 20xx, 70–99 → 19xx
+ * plus pasted ISO `YYYY-MM-DD`. 1- and 3-digit years never parse, so
+ * mid-typing input (`15.03.2`, `15.03.202`) doesn't resolve eagerly.
+ *
+ * Returns ISO `YYYY-MM-DD`, or '' for incomplete / invalid input.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function parseDateInput(value) {
+  const s = (value ?? '').trim();
+  if (!s) return '';
+
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (iso) return toValidIso(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  const german = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})$/.exec(s);
+  if (!german) return '';
+  let year = Number(german[3]);
+  if (german[3].length === 2) year += year < 70 ? 2000 : 1900;
+  return toValidIso(year, Number(german[2]), Number(german[1]));
+}
+
+/**
+ * Zero-padded ISO string for a real calendar date, '' otherwise.
+ * @param {number} year
+ * @param {number} month 1-based
+ * @param {number} day
+ * @returns {string}
+ */
+function toValidIso(year, month, day) {
   const dt = new Date(year, month - 1, day);
   // Reject overflow dates (JS rolls 31.02 over into March).
   if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) {

@@ -1,7 +1,8 @@
 <script>
   import { SvelteDate } from 'svelte/reactivity';
   import { onMount } from 'svelte';
-  import { afterNavigate } from '$app/navigation';
+  import { afterNavigate, replaceState } from '$app/navigation';
+  import { formatDateParam } from '$lib/helpers/urlParams.js';
   import { page } from '$app/stores';
   import {
     communityCalendarTimelineLoader,
@@ -38,6 +39,8 @@
   // Import existing UI components
   import CalendarNavigation from '$lib/components/calendar/CalendarNavigation.svelte';
   import CalendarGrid from '$lib/components/calendar/CalendarGrid.svelte';
+  import TopPublishersFilter from './TopPublishersFilter.svelte';
+  import { filterEventsByPublisherSelection } from '$lib/helpers/topPublishers.js';
   import CalendarDropdown from './CalendarDropdown.svelte';
   import CalendarFilterBar from './CalendarFilterBar.svelte';
   import CalendarFilterDrawer from './CalendarFilterDrawer.svelte';
@@ -324,6 +327,9 @@
     },
     (/** @type {CalendarViewMode} */ mode) => {
       viewMode = mode;
+    },
+    (/** @type {Date} */ date) => {
+      currentDate = date;
     }
   );
 
@@ -335,9 +341,30 @@
       },
       (/** @type {CalendarViewMode} */ mode) => {
         viewMode = mode;
+      },
+      (/** @type {Date} */ date) => {
+        currentDate = date;
       }
     )
   );
+
+  // State → URL: keep the viewed date shareable/reload-safe (#30). Uses
+  // replaceState so calendar paging doesn't spam the history stack; the
+  // param is omitted while the view sits on today (clean default URL).
+  $effect(() => {
+    const dateKey = formatDateParam(currentDate);
+    if (typeof window === 'undefined') return;
+    const next = dateKey === formatDateParam(new Date()) ? '' : dateKey;
+    const url = new URL(window.location.href);
+    if ((url.searchParams.get('date') || '') === next) return;
+    if (next) url.searchParams.set('date', next);
+    else url.searchParams.delete('date');
+    try {
+      replaceState(url, {});
+    } catch {
+      // Router not initialized yet (first paint) — the default URL is fine.
+    }
+  });
 
   // Get community profile for calendar title (when in communityMode)
   let getCommunityProfile = $derived.by(() => {
@@ -545,6 +572,7 @@
     calendarFilters.clearSelectedFeaturedAuthors();
     calendarFilters.clearSearchQuery();
     calendarFilters.setOnlyFollowsMode('off');
+    calendarFilters.clearHiddenAuthors();
   }
 
   // No-op handler passed to the new filter bar/drawer — filter state changes
@@ -565,6 +593,8 @@
       calendarFilters.selectedRelays.length +
       calendarFilters.selectedFollowListIds.length +
       calendarFilters.selectedFeaturedAuthors.length +
+      calendarFilters.hiddenAuthorPubkeys.length +
+      (calendarFilters.soloAuthorPubkey ? 1 : 0) +
       (calendarFilters.searchQuery.trim() ? 1 : 0) +
       (calendarFilters.onlyFollowsMode !== 'off' ? 1 : 0)
   );
@@ -628,11 +658,25 @@
     return filtered;
   });
 
+  // Top-publisher chips derive from the view-scoped set BEFORE hidden
+  // authors are removed, so a hidden publisher keeps its chip (issue #28).
+  let eventsInViewPreHide = $derived(
+    filterEventsByViewMode(displayedEvents, viewMode, currentDate)
+  );
+
+  // Step 4: apply the publisher quick-filter (solo wins over hidden).
+  let visibleEvents = $derived(
+    filterEventsByPublisherSelection(displayedEvents, {
+      solo: calendarFilters.soloAuthorPubkey,
+      hidden: calendarFilters.hiddenAuthorPubkeys
+    })
+  );
+
   // Events scoped to the currently rendered time range — used for the header
   // event count so it matches what the list/grid actually shows. In 'all'
-  // mode this is identical to displayedEvents.
+  // mode this is identical to visibleEvents.
   let displayedEventsInView = $derived(
-    filterEventsByViewMode(displayedEvents, viewMode, currentDate)
+    filterEventsByViewMode(visibleEvents, viewMode, currentDate)
   );
 </script>
 
@@ -809,24 +853,20 @@
 
   <!-- Content based on presentation view mode -->
   <div class="container mx-auto px-4">
+    <TopPublishersFilter events={eventsInViewPreHide} />
+
     {#if presentationViewMode === 'calendar'}
       <CalendarGrid
         {currentDate}
         {viewMode}
-        events={displayedEvents}
+        events={visibleEvents}
         onEventClick={handleEventClick}
         onDateClick={handleDateClick}
       />
     {:else if presentationViewMode === 'list'}
-      <SimpleCalendarEventsList
-        events={displayedEvents}
-        {viewMode}
-        {currentDate}
-        {loading}
-        {error}
-      />
+      <SimpleCalendarEventsList events={visibleEvents} {viewMode} {currentDate} {loading} {error} />
     {:else if presentationViewMode === 'map'}
-      <CalendarMapView events={displayedEvents} {viewMode} {currentDate} />
+      <CalendarMapView events={visibleEvents} {viewMode} {currentDate} />
     {/if}
   </div>
 

@@ -138,7 +138,7 @@
   >
     <BookmarkIcon class_="w-4 h-4" filled={active} />
   </summary>
-  <ul class="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow-lg">
+  <ul class="dropdown-content menu z-10 w-56 rounded-box bg-base-100 p-2 shadow-lg">
     <!-- Default bookmark list (kind 10003) -->
     <li>
       <button onclick={() => toggleBookmark(undefined)}>

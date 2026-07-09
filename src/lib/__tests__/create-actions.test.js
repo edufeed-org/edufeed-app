@@ -17,6 +17,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_create_resource_aria: () => 'Create new learning content',
   article_fab_write: () => 'Write Article',
   wiki_fab_write: () => 'Write Wiki',
+  publication_fab_create: () => 'Scientific Publication',
+  publication_fab_create_desc: () => 'Index a scientific article',
   fab_create_form: () => 'Create Form',
   fab_create_poll: () => 'Create Poll',
   fab_create_poll_aria: () => 'Create new poll',
@@ -35,6 +37,7 @@ vi.mock('$lib/components/icons', () => ({
   GraduationCapIcon: {},
   ArticleIcon: {},
   BookIcon: {},
+  BookOpenIcon: {},
   ScrollTextIcon: {},
   PollIcon: {},
   BookmarkIcon: {},
@@ -96,12 +99,13 @@ describe('CREATE_ACTIONS shape', () => {
     }
   });
 
-  it('contains the nine known actions', () => {
+  it('contains the ten known actions', () => {
     expect(CREATE_ACTIONS.map((a) => a.id)).toEqual([
       'event',
       'calendar',
       'resource',
       'article',
+      'publication',
       'wiki',
       'form',
       'poll',

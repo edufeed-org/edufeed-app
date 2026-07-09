@@ -57,13 +57,13 @@
 
 <!-- Modal backdrop -->
 <div
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+  class="fixed inset-0 z-50 flex items-center justify-center bg-(--c-scrim) p-4"
   onclick={handleBackdropClick}
   role="presentation"
   data-testid="reaction-picker"
 >
   <!-- Modal content -->
-  <div class="flex max-h-[80vh] w-full max-w-lg flex-col rounded-lg bg-base-200 shadow-xl">
+  <div class="flex max-h-[80vh] w-full max-w-lg flex-col rounded-lg bg-base-100 shadow-xl">
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-base-300 p-4">
       <h3 class="text-lg font-semibold text-base-content">{m.reactions_picker_title()}</h3>

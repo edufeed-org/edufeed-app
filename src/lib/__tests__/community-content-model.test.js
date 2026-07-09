@@ -176,6 +176,64 @@ describe('createCommunityContentModel', () => {
     expect(result[0].id).toBe('reposted-event');
   });
 
+  it('attaches the repost time as _sharedAt so fresh shares of old events rank correctly', () => {
+    const referencedEvent = mockEvent({ id: 'old-event', kind: 30142, created_at: 1000 });
+    const repostEvent = mockEvent({
+      kind: 16,
+      created_at: 9000,
+      tags: [
+        ['e', 'old-event'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      reposts: [repostEvent],
+      all: [referencedEvent]
+    });
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result[0]._sharedAt).toBe(9000);
+    expect(result[0].created_at).toBe(1000);
+  });
+
+  it('keeps the NEWEST share time when an item is shared multiple times', () => {
+    const referencedEvent = mockEvent({ id: 'old-event', kind: 30142, created_at: 1000 });
+    const early = mockEvent({
+      kind: 16,
+      created_at: 5000,
+      tags: [
+        ['e', 'old-event'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+    const late = mockEvent({
+      kind: 30222,
+      created_at: 8000,
+      tags: [
+        ['e', 'old-event'],
+        ['p', COMMUNITY_PUBKEY]
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [],
+      shares: [late],
+      reposts: [early],
+      all: [referencedEvent]
+    });
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result[0]._sharedAt).toBe(8000);
+  });
+
   it('resolves NIP-18 repost references by address (a-tag)', () => {
     const referencedEvent = mockEvent({
       id: 'reposted-addr',

@@ -60,6 +60,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_share_existing_desc: () => 'Repost existing content into a community',
   article_fab_write: () => 'Write Article',
   wiki_fab_write: () => 'Write Wiki',
+  publication_fab_create: () => 'Scientific Publication',
+  publication_fab_create_desc: () => 'Index a scientific article',
   fab_create_form: () => 'Create Form',
   fab_create_poll: () => 'Create Poll',
   fab_create_poll_aria: () => 'Create new poll',
@@ -191,9 +193,9 @@ describe('GlobalFAB', () => {
     expect(mainButton).toBeTruthy();
   });
 
-  it('renders all 9 action tiles in the sheet', async () => {
+  it('renders all 10 action tiles in the sheet', async () => {
     const { container } = await renderOpen();
-    expect(actionTiles(container).length).toBe(9);
+    expect(actionTiles(container).length).toBe(10);
   });
 
   it('renders the Create/Add/Share section headings (no Suggested on neutral routes)', async () => {
@@ -366,10 +368,10 @@ describe('GlobalFAB — toggle behavior', () => {
     expect(container.querySelector('[role="menu"]')).toBeFalsy();
   });
 
-  it('clicking the trigger opens the sheet and renders all 9 actions', async () => {
+  it('clicking the trigger opens the sheet and renders all 10 actions', async () => {
     const { container, trigger } = await renderOpen();
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
-    expect(actionTiles(container).length).toBe(9);
+    expect(actionTiles(container).length).toBe(10);
   });
 
   it('clicking the trigger again closes the sheet', async () => {
@@ -429,21 +431,21 @@ describe('GlobalFAB — community filtering', () => {
     );
     setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}`);
     const { container } = await renderOpen();
-    expect(actionTiles(container).length).toBe(9);
+    expect(actionTiles(container).length).toBe(10);
   });
 
   it('shows all actions when the community has no content sections (fail open)', async () => {
     communityState.event = makeCommunityEvent([]);
     setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}`);
     const { container } = await renderOpen();
-    expect(actionTiles(container).length).toBe(9);
+    expect(actionTiles(container).length).toBe(10);
   });
 
   it('shows all actions while the community event has not loaded (fail open)', async () => {
     communityState.event = null;
     setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}`);
     const { container } = await renderOpen();
-    expect(actionTiles(container).length).toBe(9);
+    expect(actionTiles(container).length).toBe(10);
   });
 });
 
@@ -456,8 +458,8 @@ describe('GlobalFAB — suggested row', () => {
       container.querySelector('[role="menu"] section')
     );
     expect(suggestedSection.querySelector('[aria-label="Create new event"]')).toBeTruthy();
-    // 9 stable tiles + 1 suggested
-    expect(actionTiles(container).length).toBe(10);
+    // 10 stable tiles + 1 suggested
+    expect(actionTiles(container).length).toBe(11);
   });
 
   it('suggests via community ?view= param', async () => {

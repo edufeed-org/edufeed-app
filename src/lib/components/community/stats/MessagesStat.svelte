@@ -62,7 +62,7 @@
   let messageCount = $derived(messages.length);
 </script>
 
-<div class="stat rounded-lg bg-base-200 shadow">
+<div class="stat rounded-lg bg-base-100">
   <div class="stat-figure text-accent">
     <ChatIcon class_="w-8 h-8" />
   </div>

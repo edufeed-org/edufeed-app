@@ -78,13 +78,15 @@
       tabindex="0"
       class="dropdown-content menu z-50 mt-2 w-96 rounded-lg bg-base-100 p-4 shadow-xl"
     >
-      {#if activeUser}
+      <!-- Mount the share widgets only while the dropdown is open — they
+           fire relay REQs on mount and this dropdown renders eagerly (#18). -->
+      {#if activeUser && isOpen}
         <PersonalCalendarShare {event} {activeUser} compact={true} />
 
         <div class="divider my-2"></div>
 
         <CommunityShare event={event.originalEvent} {activeUser} compact={true} />
-      {:else}
+      {:else if !activeUser}
         <div class="py-4 text-center text-sm text-base-content/60">
           {m.add_to_calendar_dropdown_signin_required()}
         </div>
@@ -101,7 +103,7 @@
   <!-- Mobile Modal -->
   {#if isOpen}
     <div
-      class="fixed inset-0 z-50 flex items-end bg-black/50"
+      class="fixed inset-0 z-50 flex items-end bg-(--c-scrim)"
       onclick={handleBackdropClick}
       onkeydown={(e) => e.key === 'Escape' && close()}
       role="dialog"

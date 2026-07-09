@@ -14,18 +14,18 @@
  * @property {string} key       Stable identifier, reused as the filter/create key.
  * @property {number[]} kinds   Nostr event kinds belonging to this type.
  * @property {string} ctaKey    Key into CONTENT_CREATION for the create flow.
- * @property {string} accent    OKLCH accent color (per-type stripe/tag color).
+ * @property {string} accent    CSS var reference (--ct-*, defined in app.css) for the per-type stripe/tag color.
  */
 
 /** @type {ContentTypeDef[]} — also defines shelf render order. */
 export const CONTENT_TYPES = [
-  { key: 'calendar', kinds: [31922, 31923], ctaKey: 'calendar', accent: 'oklch(52% 0.12 12)' },
-  { key: 'learning', kinds: [30142], ctaKey: 'learning', accent: 'oklch(50% 0.10 140)' },
-  { key: 'article', kinds: [30023], ctaKey: 'article', accent: 'oklch(58% 0.12 64)' },
-  { key: 'wiki', kinds: [30818], ctaKey: 'wiki', accent: 'oklch(52% 0.07 200)' },
-  { key: 'form', kinds: [30168], ctaKey: 'form', accent: 'oklch(52% 0.12 300)' },
-  { key: 'poll', kinds: [1068], ctaKey: 'poll', accent: 'oklch(52% 0.11 250)' },
-  { key: 'bookmark', kinds: [39701], ctaKey: 'bookmark', accent: 'oklch(52% 0.04 250)' }
+  { key: 'calendar', kinds: [31922, 31923], ctaKey: 'calendar', accent: 'var(--ct-calendar)' },
+  { key: 'learning', kinds: [30142], ctaKey: 'learning', accent: 'var(--ct-learning)' },
+  { key: 'article', kinds: [30023], ctaKey: 'article', accent: 'var(--ct-article)' },
+  { key: 'wiki', kinds: [30818], ctaKey: 'wiki', accent: 'var(--ct-wiki)' },
+  { key: 'form', kinds: [30168], ctaKey: 'form', accent: 'var(--ct-form)' },
+  { key: 'poll', kinds: [1068], ctaKey: 'poll', accent: 'var(--ct-poll)' },
+  { key: 'bookmark', kinds: [39701], ctaKey: 'bookmark', accent: 'var(--ct-bookmark)' }
 ];
 
 /** Shelf render order (type keys). */

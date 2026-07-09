@@ -41,6 +41,7 @@
   import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
   import { fetchProfileData } from '$lib/helpers/profile.js';
+  import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
   import {
     BILDUNGSBEREICHE,
     inferBildungsbereichFromEducationalLevels,
@@ -104,7 +105,7 @@
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
    * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
-   * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string }} Creator
+   * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string, orcid?: string }} Creator
    * @typedef {keyof typeof BILDUNGSBEREICHE} BildungsbereichKey
    * @typedef {{
    *   coordinate: string,
@@ -645,7 +646,7 @@
     getAMBLicense,
     isAMBFree,
     getAMBEncodings,
-    getAMBCreatorNames,
+    getAMBCreators,
     getAMBExternalUrls,
     getAMBHasPart,
     getAMBIsPartOf
@@ -725,44 +726,45 @@
    * Prefill form with existing data for edit mode
    */
   async function prefillEditData() {
-    // Extract creators from p-tags and creator:name tags
+    // Structured creators from the flattened creator:* tags are the source of
+    // truth (name, type, honorificPrefix, affiliation, ORCID). Nostr pubkeys
+    // live in separate `["p", pk, relay, "creator"]` tags and are re-attached
+    // by name match below.
+    /** @type {Creator[]} */
+    const editCreators = getAMBCreators(editEvent).map((c) => {
+      /** @type {Creator} */
+      const creator = {
+        name: c.name || '',
+        type: c.type === 'Organization' ? 'Organization' : 'Person'
+      };
+      if (c.honorificPrefix) creator.honorificPrefix = c.honorificPrefix;
+      if (c.affiliationName) creator.affiliationName = c.affiliationName;
+      // creator:id carries the ORCID URI; other URI schemes are not editable
+      // in the form, so only ORCID round-trips into the orcid field.
+      if (c.id && normalizeOrcid(c.id))
+        creator.orcid = /** @type {string} */ (normalizeOrcid(c.id));
+      return creator;
+    });
+
     const creatorPubkeys =
       editEvent.tags
         ?.filter((/** @type {string[]} */ t) => t[0] === 'p' && t[3] === 'creator')
         .map((/** @type {string[]} */ t) => t[1]) || [];
 
-    const creatorNames = getAMBCreatorNames(editEvent);
-
-    // Combine pubkey-based creators with name-only creators
-    /** @type {Creator[]} */
-    const editCreators = [];
-
-    // Add pubkey-based creators
     for (const pubkey of creatorPubkeys) {
+      /** @type {string} */
+      let profileName = '';
       try {
         const profile = /** @type {any} */ (await fetchProfileData(pubkey));
-        editCreators.push({
-          name: profile.name || '',
-          type: 'Person',
-          pubkey: pubkey
-        });
+        profileName = typeof profile?.name === 'string' ? profile.name : '';
       } catch (error) {
         console.warn('Failed to fetch profile for creator:', error);
-        editCreators.push({
-          name: '',
-          type: 'Person',
-          pubkey: pubkey
-        });
       }
-    }
-
-    // Add name-only creators (those without pubkeys)
-    for (const name of creatorNames) {
-      if (!editCreators.some((c) => c.name === name)) {
-        editCreators.push({
-          name: name,
-          type: 'Person'
-        });
+      const match = editCreators.find((c) => !c.pubkey && c.name && c.name === profileName);
+      if (match) {
+        match.pubkey = pubkey;
+      } else {
+        editCreators.push({ name: profileName, type: 'Person', pubkey });
       }
     }
 

@@ -66,6 +66,35 @@ describe('EducatorContextDisplay', () => {
     expect((container.textContent || '').trim()).toBe('');
   });
 
+  it('dedupes identical display labels across vocabs instead of crashing', () => {
+    // Real-world crash: "Latein" exists in both schulfaecher and
+    // hochschulfaechersystematik — same de label, different concept ids.
+    const { container } = render(EducatorContextDisplay, {
+      props: {
+        value: {
+          interests: ['Podcasts', 'Podcasts'],
+          educationalLevels: [],
+          subjects: [
+            {
+              id: 'http://w3id.org/kim/schulfaecher/s1016',
+              prefLabel: { de: 'Latein' },
+              vocab: 'schulfaecher'
+            },
+            {
+              id: 'https://w3id.org/kim/hochschulfaechersystematik/n095',
+              prefLabel: { de: 'Latein', en: 'Latin' },
+              vocab: 'hochschulfaecher'
+            }
+          ]
+        }
+      }
+    });
+
+    const badges = [...container.querySelectorAll('.badge')].map((b) => b.textContent);
+    expect(badges.filter((t) => t === 'Latein')).toHaveLength(1);
+    expect(badges.filter((t) => t === 'Podcasts')).toHaveLength(1);
+  });
+
   it('falls back to the concept id when a concept has no label', () => {
     const { container } = render(EducatorContextDisplay, {
       props: {

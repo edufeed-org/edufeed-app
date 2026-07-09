@@ -78,7 +78,7 @@ export async function load({ params, parent }) {
 
     // Redirect to canonical route when this isn't it (calendar events,
     // community-scoped articles/resources/boards/wikis, etc.).
-    const canonical = getCanonicalEventRoute(event);
+    const canonical = getCanonicalEventRoute(event, { relayHints: decoded.data.relays ?? [] });
     const currentPath = `/${params.naddr}`;
     if (canonical && canonical !== currentPath) {
       redirect(307, canonical);

@@ -66,15 +66,30 @@ function isAddressableKind(kind) {
  * @param {{ kind: number, pubkey: string, tags?: string[][] }} event
  * @returns {string|null}
  */
-function encodeNaddr(event) {
+/**
+ * @param {{ kind: number, pubkey: string, tags?: string[][] }} event
+ * @param {string[]} [inboundHints] - relay hints asserted by the identifier
+ *   that led us to this event (e.g. the naddr being redirected). Used after
+ *   seen-relays: cache-served events carry no seen-relays, and dropping the
+ *   inbound hints here would strip them from the address-bar URL users copy.
+ */
+function encodeNaddr(event, inboundHints = []) {
   if (!event?.pubkey) return null;
   const identifier = event.tags?.find((t) => t[0] === 'd')?.[1] ?? '';
+  // Carry the relays we actually saw the event on — this naddr ends up in the
+  // browser address bar (users copy it from there), so without hints the link
+  // only resolves on deployments whose lookup relays happen to hold the event.
+  const seenRelays = Array.from(getSeenRelays(/** @type {any} */ (event)) ?? []);
+  const relays = prioritizeRelayHints(
+    [...new Set([...seenRelays, ...inboundHints])],
+    getAppManagedRelays()
+  );
   try {
     return nip19.naddrEncode({
       kind: event.kind,
       pubkey: event.pubkey,
       identifier,
-      relays: []
+      relays
     });
   } catch {
     return null;
@@ -117,16 +132,18 @@ function encodeNevent(event) {
  * Returns null when the event lacks the data needed to encode a route.
  *
  * @param {any} event
+ * @param {{ relayHints?: string[] }} [options] - relayHints: hints from the
+ *   identifier that resolved this event, preserved in the re-encoded naddr
  * @returns {string|null}
  */
-export function getCanonicalEventRoute(event) {
+export function getCanonicalEventRoute(event, options = {}) {
   if (!event) return null;
 
   const hHex = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
   const communityNpub = hHex ? hexToNpub(hHex) : null;
 
   if (isAddressableKind(event.kind)) {
-    const naddr = encodeNaddr(event);
+    const naddr = encodeNaddr(event, options.relayHints ?? []);
     if (!naddr) return null;
 
     // Calendar collection — top-level only, no community variant.

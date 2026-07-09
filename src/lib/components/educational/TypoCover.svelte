@@ -14,6 +14,7 @@
 <script>
   import {
     formatAuthors,
+    longestWordLength,
     splitTitle,
     stringColorHue,
     titleLayout
@@ -51,14 +52,21 @@
   const parts = $derived(splitTitle(title));
   const hue = $derived(hueOverride ?? stringColorHue(paletteId));
 
+  // Longest word per title line. The CSS divides a container-width budget by
+  // these so long German compounds shrink to fit instead of being clipped by
+  // the card's overflow:hidden (issue #23). Floor of 1 guards the division.
+  const lenLeading = $derived(Math.max(1, longestWordLength(parts.leading)));
+  const lenScript = $derived(Math.max(1, parts.script.length));
+  const lenTrailing = $derived(Math.max(1, longestWordLength(parts.trailing)));
+
   // CSS custom properties set inline so each cover gets its own palette.
   // --cover-hue feeds the script-word color tint (see .typo-cover-title-script).
-  // Dot-pattern opacity is theme-swapped via :where([data-theme="dark"]) below.
   const inlineStyle = $derived.by(() => {
+    const lengths = `--len-leading: ${lenLeading}; --len-script: ${lenScript}; --len-trailing: ${lenTrailing};`;
     if (hue === null) {
-      return '--c-hero: oklch(45% 0.01 250); --c-hero-2: oklch(40% 0.01 250); --cover-hue: 250;';
+      return `--c-hero: oklch(45% 0.01 250); --c-hero-2: oklch(40% 0.01 250); --cover-hue: 250; ${lengths}`;
     }
-    return `--c-hero: oklch(55% 0.10 ${hue}); --c-hero-2: oklch(48% 0.11 ${hue}); --cover-hue: ${hue};`;
+    return `--c-hero: oklch(55% 0.10 ${hue}); --c-hero-2: oklch(48% 0.11 ${hue}); --cover-hue: ${hue}; ${lengths}`;
   });
 </script>
 
@@ -135,7 +143,7 @@
   }
 
   .typo-cover-card {
-    border-radius: 22px;
+    border-radius: calc(var(--radius-box, 1rem) + 6px);
     background: white;
     padding: 14px;
     box-shadow: 0 8px 24px -8px oklch(0% 0 0 / 0.15);
@@ -146,7 +154,7 @@
     position: relative;
     isolation: isolate;
     height: 100%;
-    border-radius: 12px;
+    border-radius: var(--radius-field, 12px);
     padding: 8% 8%;
     overflow: hidden;
     background: linear-gradient(165deg, var(--c-hero) 0%, var(--c-hero-2) 100%);
@@ -221,10 +229,16 @@
   .typo-cover-title-trailing {
     font-family: 'Outfit', system-ui, sans-serif;
     font-weight: 800;
-    /* Lower clamp min so German compounds (Menschenhandeln, 15 chars) fit
-       at narrow card widths without needing to break the word. */
-    font-size: clamp(0.95rem, 11cqi, 3rem);
+    /* The 11cqi ideal is additionally capped by a per-word budget:
+       ~125cqi divided by the line's longest word length (Outfit 800 glyphs
+       average ~0.6em) so compounds like "verantwortlich" shrink to fit
+       instead of being clipped by the card's overflow:hidden (issue #23). */
+    font-size: clamp(0.8rem, min(11cqi, calc(125cqi / var(--len-leading, 8))), 3rem);
     color: white;
+  }
+
+  .typo-cover-title-trailing {
+    font-size: clamp(0.8rem, min(11cqi, calc(125cqi / var(--len-trailing, 8))), 3rem);
   }
 
   .typo-cover-title-leading {
@@ -240,7 +254,9 @@
   .typo-cover-title-script {
     font-family: 'Caveat', cursive;
     font-weight: 700;
-    font-size: clamp(2.2rem, 19cqi, 5rem);
+    /* Same per-word budget as the bold lines, tuned for Caveat's narrower
+       glyphs (~0.45em average): ~170cqi / longest-word-length. */
+    font-size: clamp(1.4rem, min(19cqi, calc(170cqi / var(--len-script, 8))), 5rem);
     color: oklch(96% 0.02 var(--cover-hue, 80));
     text-align: center;
     transform: rotate(-4deg);
@@ -341,13 +357,5 @@
     font-size: clamp(0.45rem, 5cqi, 0.7rem);
     padding: 0.25em 0.6em;
     letter-spacing: 0.08em;
-  }
-
-  /* Dark theme: lighter dot pattern so it doesn't fight the gradient.
-     Gradient tones themselves stay mid-range OKLCH and read fine on both themes. */
-  :global(:where([data-theme='dark'], [data-theme='stil-dark'], [data-theme='rpi-dark']))
-    .typo-cover-inner::before {
-    background-image: radial-gradient(circle at 1px 1px, oklch(100% 0 0 / 0.12) 1px, transparent 0),
-      radial-gradient(circle at 1px 1px, oklch(100% 0 0 / 0.12) 1px, transparent 0);
   }
 </style>

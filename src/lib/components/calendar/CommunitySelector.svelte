@@ -34,6 +34,13 @@
     }
   }
 
+  // Selection entries the selector doesn't render (e.g. h-tags of communities
+  // the user hasn't joined, pre-selected when editing) must survive the bulk
+  // actions — replacing them would silently un-share the event there.
+  function hiddenSelections() {
+    return selectedCommunityIds.filter((id) => !communities.includes(id));
+  }
+
   /**
    * Select all communities that don't already have shares
    */
@@ -41,14 +48,14 @@
     const availableCommunities = communities.filter(
       (pubkey) => pubkey && !communitiesWithShares.has(pubkey)
     );
-    selectedCommunityIds = availableCommunities;
+    selectedCommunityIds = [...new Set([...hiddenSelections(), ...availableCommunities])];
   }
 
   /**
    * Deselect all communities
    */
   function deselectAllCommunities() {
-    selectedCommunityIds = [];
+    selectedCommunityIds = hiddenSelections();
   }
 </script>
 

@@ -24,7 +24,7 @@
   let avatarUrl = $derived(getProfilePicture(communityProfile));
 </script>
 
-<div class="flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
+<div class="flex items-center gap-3 bg-base-200 px-4 py-3">
   <!-- Community Avatar -->
   <div class="avatar">
     <div class="w-10 rounded-full ring-2 ring-base-300">

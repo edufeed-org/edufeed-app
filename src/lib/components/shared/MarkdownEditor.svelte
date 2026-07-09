@@ -174,7 +174,7 @@
 
 <div class="overflow-hidden rounded-lg border border-base-300">
   <!-- Tab bar + toolbar -->
-  <div class="flex flex-wrap items-center gap-1 border-b border-base-300 bg-base-200 px-2 py-1">
+  <div class="flex flex-wrap items-center gap-1 bg-base-200 px-2 py-1">
     <!-- Tabs -->
     <button
       class="btn btn-xs"

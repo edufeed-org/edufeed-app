@@ -81,6 +81,8 @@
  * @property {string} title - Event title
  * @property {string} summary - Event description
  * @property {string} image - Event image URL
+ * @property {boolean} [imageWasUploaded] - Image came from the in-form Blossom upload
+ * @property {any} [imageLicenseEvent] - NIP-94-style license attestation for the uploaded image
  * @property {string} startDate - Start date (YYYY-MM-DD)
  * @property {string} startTime - Start time (HH:MM)
  * @property {string} endDate - End date (YYYY-MM-DD)
@@ -122,7 +124,7 @@
 /**
  * @typedef {Object} CalendarActions
  * @property {function(EventFormData, string | string[]): Promise<any>} createEvent - Create new event with community pubkey(s)
- * @property {function(EventFormData, any): Promise<any>} updateEvent - Update event with form data and existing event
+ * @property {function(EventFormData, any, (import('nostr-tools').NostrEvent | null)=, (string[] | null)=): Promise<any>} updateEvent - Update event with form data, existing event, optional community event for relay routing and optional replacement community h-tag set
  * @property {function(string): Promise<void>} deleteEvent - Delete event
  * @property {function(string, string=): Promise<any>} createCalendar - Create new calendar (returns full event object)
  * @property {function(any, 'accepted' | 'declined' | 'tentative', string=, 'free' | 'busy'=): Promise<any>} createRsvp - Create or update RSVP for calendar event
