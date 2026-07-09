@@ -261,6 +261,12 @@
     max-height: calc(100dvh - 158px);
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* Scroll without a visible bar (same idiom as the tab strip) — the card
+       cut off at the viewport edge is affordance enough. */
+    scrollbar-width: none;
+  }
+  .pf-rail::-webkit-scrollbar {
+    display: none;
   }
   .pf-rcard {
     background: var(--c-paper);
