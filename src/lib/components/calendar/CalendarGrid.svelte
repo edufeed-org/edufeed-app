@@ -11,6 +11,8 @@
   } from '../../helpers/calendar.js';
   import CalendarEventCard from './CalendarEventCard.svelte';
   import CalendarEventBar from './CalendarEventBar.svelte';
+  import CalendarSpanSegment from './CalendarSpanSegment.svelte';
+  import { layoutWeekLanes, isMultiDayEvent } from '../../helpers/calendar-lanes.js';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
@@ -27,6 +29,34 @@
     const grouped = groupEventsByDate(events);
     return grouped;
   });
+
+  // Week rows for month/week views (7 dates each) — multi-day events render
+  // as continuous lane bars per week, single-day events stay in their cell.
+  let weeks = $derived.by(() => {
+    if (viewMode === 'day') return [];
+    const chunks = [];
+    for (let i = 0; i < viewDates.length; i += 7) chunks.push(viewDates.slice(i, i + 7));
+    return chunks;
+  });
+
+  let multiDayEvents = $derived.by(() => {
+    const seen = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- local dedup
+    return (events || []).filter((e) => {
+      if (!e?.id || seen.has(e.id) || !isMultiDayEvent(e)) return false;
+      seen.add(e.id);
+      return true;
+    });
+  });
+
+  /** @param {Date[]} weekDates */
+  function weekLayout(weekDates) {
+    return layoutWeekLanes(weekDates.map(createDateKey), multiDayEvents);
+  }
+
+  /** @param {Date} date */
+  function singleDayEventsFor(date) {
+    return getEventsForDate(date).filter((e) => !isMultiDayEvent(e));
+  }
 
   /**
    * Get dates array for current view mode
@@ -112,67 +142,98 @@
     </div>
   {/if}
   <!-- Calendar Grid -->
-  <div
-    class="grid {viewMode === 'month'
-      ? 'grid-cols-7'
-      : viewMode === 'week'
-        ? 'grid-cols-7'
-        : 'grid-cols-1'} gap-px bg-base-300"
-  >
-    {#each viewDates as date (date.toISOString())}
-      {@const dayEvents = getEventsForDate(date)}
-      {@const isCurrentDay = isToday(date)}
-      {@const isInCurrentMonth = viewMode !== 'month' || isCurrentMonth(date, currentDate)}
-
-      {@const cellClasses = [
-        'p-2 hover:bg-base-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset cursor-pointer transition-colors duration-200 flex flex-col',
-        viewMode === 'day' ? 'h-full p-4' : viewMode === 'week' ? 'h-96' : 'h-24',
-        isCurrentDay ? 'ring-2 ring-primary ring-inset' : '',
-        !isInCurrentMonth ? 'bg-base-200 text-base-content/40' : ''
-      ]
-        .filter(Boolean)
-        .join(' ')}
-
-      <div
-        class={cellClasses}
-        role="button"
-        tabindex="0"
-        onclick={(e) => handleDateClick(e, date)}
-        onkeydown={(e) => handleDateKeydown(e, date)}
-      >
-        <!-- Date Number -->
-        <div class="mb-1 flex-shrink-0 text-sm font-medium {isCurrentDay ? 'text-primary' : ''}">
-          {#if viewMode === 'day'}
+  {#if viewMode === 'day'}
+    <div class="grid grid-cols-1 gap-px bg-base-300">
+      {#each viewDates as date (date.toISOString())}
+        {@const dayEvents = getEventsForDate(date)}
+        {@const isCurrentDay = isToday(date)}
+        <div
+          class="flex h-full cursor-pointer flex-col p-4 transition-colors duration-200 hover:bg-base-200 focus:ring-2 focus:ring-primary focus:outline-none focus:ring-inset {isCurrentDay
+            ? 'ring-2 ring-primary ring-inset'
+            : ''}"
+          role="button"
+          tabindex="0"
+          onclick={(e) => handleDateClick(e, date)}
+          onkeydown={(e) => handleDateKeydown(e, date)}
+        >
+          <!-- Date Number -->
+          <div class="mb-1 flex-shrink-0 text-sm font-medium {isCurrentDay ? 'text-primary' : ''}">
             <div class="mb-4 text-center">
               <div class="text-lg font-semibold text-base-content">
                 {formatCalendarDate(date, 'long')}
               </div>
               <div class="text-3xl font-bold text-primary">{date.getDate()}</div>
             </div>
-          {:else}
-            {date.getDate()}
-          {/if}
-        </div>
+          </div>
 
-        <!-- Events for this date -->
-        <div
-          class="flex-1 space-y-1 overflow-x-hidden overflow-y-auto {viewMode === 'day'
-            ? 'space-y-2'
-            : ''}"
-        >
-          {#if viewMode === 'day'}
-            <!-- Day view: Show full event cards -->
+          <!-- Events for this date -->
+          <div class="flex-1 space-y-2 overflow-x-hidden overflow-y-auto">
             {#each dayEvents as event (event.id)}
               <CalendarEventCard {event} compact={false} onEventClick={handleEventClick} />
             {/each}
-          {:else}
-            <!-- Month/Week view: Show compact event bars -->
-            {#each dayEvents as event (event.id)}
-              <CalendarEventBar {event} onEventClick={handleEventClick} />
-            {/each}
-          {/if}
+          </div>
         </div>
-      </div>
-    {/each}
-  </div>
+      {/each}
+    </div>
+  {:else}
+    <!-- Month/Week: one grid per week row so multi-day events can span as
+         continuous lane bars across the row (Google-Calendar style). -->
+    <div class="flex flex-col gap-px bg-base-300">
+      {#each weeks as week (week[0].toISOString())}
+        {@const layout = weekLayout(week)}
+        <div class="grid grid-cols-7 gap-px">
+          {#each week as date (date.toISOString())}
+            {@const laneSlots = layout.cells.get(createDateKey(date)) || []}
+            {@const singleDayEvents = singleDayEventsFor(date)}
+            {@const isCurrentDay = isToday(date)}
+            {@const isInCurrentMonth = viewMode !== 'month' || isCurrentMonth(date, currentDate)}
+
+            {@const cellClasses = [
+              'p-2 hover:bg-base-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset cursor-pointer transition-colors duration-200 flex flex-col overflow-hidden bg-base-100',
+              viewMode === 'week' ? 'h-96' : 'h-24',
+              isCurrentDay ? 'ring-2 ring-primary ring-inset' : '',
+              !isInCurrentMonth ? 'bg-base-200 text-base-content/40' : ''
+            ]
+              .filter(Boolean)
+              .join(' ')}
+
+            <div
+              class={cellClasses}
+              role="button"
+              tabindex="0"
+              onclick={(e) => handleDateClick(e, date)}
+              onkeydown={(e) => handleDateKeydown(e, date)}
+            >
+              <!-- Date Number -->
+              <div
+                class="mb-1 flex-shrink-0 text-sm font-medium {isCurrentDay ? 'text-primary' : ''}"
+              >
+                {date.getDate()}
+              </div>
+
+              <!-- Multi-day lane bars (aligned across the week row) -->
+              {#if laneSlots.length > 0}
+                <div class="mb-1 flex-shrink-0 space-y-0.5">
+                  {#each laneSlots as slot, lane (lane)}
+                    {#if slot}
+                      <CalendarSpanSegment segment={slot} onEventClick={handleEventClick} />
+                    {:else}
+                      <div class="h-5" aria-hidden="true"></div>
+                    {/if}
+                  {/each}
+                </div>
+              {/if}
+
+              <!-- Single-day events for this date -->
+              <div class="flex-1 space-y-1 overflow-x-hidden overflow-y-auto">
+                {#each singleDayEvents as event (event.id)}
+                  <CalendarEventBar {event} onEventClick={handleEventClick} />
+                {/each}
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
