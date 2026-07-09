@@ -22,7 +22,7 @@
     type="button"
     data-testid="termi-launcher"
     aria-label={m.termi_launcher_aria()}
-    class="termi-slot fixed right-4 z-[60] grid h-[52px] w-[52px] place-items-center rounded-full border border-base-300 bg-base-100 shadow-lg transition-transform hover:scale-105 lg:right-6"
+    class="termi-slot fixed right-[0.875rem] z-[60] grid h-[52px] w-[52px] place-items-center rounded-full border border-base-300 bg-base-100 shadow-lg transition-transform hover:scale-105 lg:right-[1.375rem]"
     onclick={() => (open = true)}
   >
     <img src="/termi.png" alt="" class="h-9 w-9 object-contain" />

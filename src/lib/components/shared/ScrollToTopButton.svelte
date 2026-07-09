@@ -47,7 +47,7 @@
 
 {#if visible}
   <button
-    class="btn fixed right-6 bottom-[9.25rem] z-40 btn-circle bg-base-200 shadow-lg btn-ghost btn-sm lg:right-8 lg:bottom-[5.75rem]"
+    class="btn fixed right-6 bottom-[calc(13rem+env(safe-area-inset-bottom))] z-40 btn-circle bg-base-200 shadow-lg btn-ghost btn-sm lg:right-8 lg:bottom-[9.75rem]"
     onclick={scrollToTop}
     aria-label="Scroll to top"
   >
