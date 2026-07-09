@@ -47,6 +47,9 @@
     } catch {
       relay = undefined;
     }
+    // Re-check after the await: a concurrent call (double-click/re-paste)
+    // can have already added this pubkey while the relay lookup was pending.
+    if (participants.some((p) => p.pubkey === pubkey)) return;
     participants = [...participants, { pubkey, relay, role: role || undefined }];
     searchValue = '';
   }

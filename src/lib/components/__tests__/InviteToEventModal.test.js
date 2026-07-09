@@ -136,4 +136,31 @@ describe('InviteToEventModal', () => {
     expect(sentPubkeys).not.toContain(PK_A);
     expect(sentPubkeys).toContain(PK_B);
   });
+
+  it('disables the header close button and backdrop while a send is in flight', async () => {
+    /** @type {() => void} */
+    let resolveSend = () => {};
+    runMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = () => resolve(undefined);
+        })
+    );
+    const r = render(InviteToEventModal);
+    click(r, 'stub-select-a');
+    await tick();
+    click(r, 'invite-send');
+    await vi.waitFor(() => {
+      expect(/** @type {HTMLButtonElement} */ (r.getByTestId('invite-close')).disabled).toBe(true);
+    });
+    const backdrop = /** @type {HTMLButtonElement} */ (
+      r.container.querySelector('.modal-backdrop')
+    );
+    expect(backdrop.disabled).toBe(true);
+
+    resolveSend();
+    await vi.waitFor(() => {
+      expect(/** @type {HTMLButtonElement} */ (r.getByTestId('invite-close')).disabled).toBe(false);
+    });
+  });
 });

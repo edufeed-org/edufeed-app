@@ -106,7 +106,13 @@
   <div class="modal-box max-w-lg">
     <div class="mb-4 flex items-center justify-between">
       <h3 class="text-lg font-bold">{m.invite_modal_title()}</h3>
-      <button class="btn btn-circle btn-ghost btn-sm" onclick={handleClose} aria-label="Close">
+      <button
+        class="btn btn-circle btn-ghost btn-sm"
+        data-testid="invite-close"
+        disabled={isSending}
+        onclick={handleClose}
+        aria-label="Close"
+      >
         <CloseIcon class_="w-5 h-5" />
       </button>
     </div>
@@ -202,5 +208,7 @@
       {/if}
     </div>
   </div>
-  <button class="modal-backdrop" onclick={handleClose} aria-label="Close">close</button>
+  <button class="modal-backdrop" disabled={isSending} onclick={handleClose} aria-label="Close"
+    >close</button
+  >
 </dialog>
