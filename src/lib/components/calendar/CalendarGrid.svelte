@@ -184,7 +184,19 @@
     <div class="flex flex-col gap-px bg-base-300">
       {#each weeks as week (week[0].toISOString())}
         {@const layout = weekLayout(week)}
+        {@const todayCol = week.findIndex((d) => isToday(d)) + 1}
         <div class="relative">
+          <!-- Today indicator as the TOPMOST layer, so the multi-day bar
+               overlay cannot paint over the highlight ring. -->
+          {#if todayCol > 0}
+            <div class="pointer-events-none absolute inset-0 z-20 grid grid-cols-7 gap-px">
+              <div
+                class="ring-2 ring-primary ring-inset"
+                style="grid-column: {todayCol}"
+                aria-hidden="true"
+              ></div>
+            </div>
+          {/if}
           {#if layout.laneCount > 0}
             <!-- top-8 = cell padding (8px) + date-number row (h-5 + mb-1) -->
             <div
@@ -211,7 +223,6 @@
               {@const cellClasses = [
                 'p-2 hover:bg-base-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset cursor-pointer transition-colors duration-200 flex flex-col overflow-hidden bg-base-100',
                 viewMode === 'week' ? 'min-h-96' : 'min-h-24',
-                isCurrentDay ? 'ring-2 ring-primary ring-inset' : '',
                 !isInCurrentMonth ? 'bg-base-200 text-base-content/40' : ''
               ]
                 .filter(Boolean)
