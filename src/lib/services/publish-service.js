@@ -115,7 +115,13 @@ export async function publishEvent(signedEvent, taggedPubkeys = [], opts = {}) {
   const publishPromises = publishRelays.map(async (relayUrl) => {
     try {
       const relay = pool.relay(relayUrl);
-      await relay.publish(signedEvent, { timeout });
+      // relay.publish RESOLVES with {ok:false, message} when the relay
+      // rejects the event — it only throws on connection/timeout errors.
+      const response = await relay.publish(signedEvent, { timeout });
+      if (response && response.ok === false) {
+        console.warn(`Relay ${relayUrl} rejected event:`, response.message);
+        return { relay: relayUrl, success: false, error: response.message };
+      }
       return { relay: relayUrl, success: true };
     } catch (err) {
       console.warn(`Failed to publish to ${relayUrl}:`, err);
@@ -222,7 +228,13 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
     const publishPromises = publishRelays.map(async (relayUrl) => {
       try {
         const relay = pool.relay(relayUrl);
-        await relay.publish(signedEvent, { timeout });
+        // relay.publish RESOLVES with {ok:false, message} when the relay
+        // rejects the event — it only throws on connection/timeout errors.
+        const response = await relay.publish(signedEvent, { timeout });
+        if (response && response.ok === false) {
+          console.warn(`Relay ${relayUrl} rejected event:`, response.message);
+          return { relay: relayUrl, success: false, error: response.message };
+        }
 
         // Update success count
         status.successCount++;
