@@ -2636,5 +2636,6 @@
   "publication_form_placeholder_file_url": "Link to the file, e.g. https://.../download/569/493",
   "publication_form_help_file": "Or upload the file — an upload replaces the link.",
   "publication_view_open_file": "Open file",
-  "publication_view_highlights": "Highlights"
+  "publication_view_highlights": "Highlights",
+  "amb_card_linked_materials": "{count} linked materials"
 }

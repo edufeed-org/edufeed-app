@@ -21,6 +21,11 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
+  import {
+    canDeriveThumbnail,
+    getThumbnailSourceUrl,
+    pdfThumbnailEndpoint
+  } from '$lib/helpers/educational/pdfThumbnailGate.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
 
@@ -87,6 +92,17 @@
         : null
   );
 
+  // App-derived PDF page-1 thumbnail (issue #24): used only when the user
+  // set no cover image, gated by the rights policy (open license or attested
+  // upload). Never written to the event — /api/pdf-thumbnail renders+caches.
+  let thumbFailed = $state(false);
+  const pdfThumbUrl = $derived.by(() => {
+    if (resource?.image || thumbFailed) return null;
+    if (!canDeriveThumbnail(resource?.tags)) return null;
+    const src = getThumbnailSourceUrl(resource?.tags);
+    return src ? pdfThumbnailEndpoint(src) : null;
+  });
+
   const paletteId = $derived(resource?.identifier ?? '');
   const coverHue = $derived(getCoverHue(resource));
   const title = $derived(resource?.name ?? '');
@@ -133,6 +149,19 @@
       status={licenseStatus.status}
       variant={cautionVariant}
       position="absolute right-1 bottom-1 bg-base-100/80 backdrop-blur"
+    />
+  </div>
+{:else if pdfThumbUrl}
+  <div
+    class="resource-cover-pdf-thumb relative w-full overflow-hidden rounded-lg bg-base-200 {aspectClass} {className}"
+    data-testid="resource-cover-pdf-thumb"
+  >
+    <img
+      src={pdfThumbUrl}
+      alt={title}
+      loading="lazy"
+      class="h-full w-full object-cover object-top"
+      onerror={() => (thumbFailed = true)}
     />
   </div>
 {:else}
