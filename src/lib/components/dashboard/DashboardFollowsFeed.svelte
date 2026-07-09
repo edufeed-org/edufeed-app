@@ -8,14 +8,19 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import ProfileFeedView from '$lib/components/profile/ProfileFeedView.svelte';
   import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
+  import FeedComposer from '$lib/components/dashboard/FeedComposer.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const activeUser = useActiveUser();
 </script>
 
-<div class="mb-3">
-  <DashboardFeedSelector />
+<div class="mb-4 flex items-center gap-3">
+  <h1 class="text-2xl font-extrabold tracking-tight">{m.dashboard_nav_feed()}</h1>
+  <div class="ml-auto">
+    <DashboardFeedSelector />
+  </div>
 </div>
+<FeedComposer />
 
 {#if contactsStore.isLoading}
   <div class="flex flex-col items-center justify-center py-16">

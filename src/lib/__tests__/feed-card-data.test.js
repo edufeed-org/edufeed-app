@@ -157,6 +157,22 @@ describe('getFeedCardData', () => {
     });
   });
 
+  it('extracts location from calendar events', () => {
+    const result = getFeedCardData(
+      makeEvent(31923, [
+        ['title', 'Meeting'],
+        ['start', '1711929600'],
+        ['location', 'online · BBB']
+      ])
+    );
+    expect(result.location).toBe('online · BBB');
+  });
+
+  it('returns undefined location for calendar event without location tag', () => {
+    const result = getFeedCardData(makeEvent(31922, [['start', '2026-04-01']]));
+    expect(result.location).toBeUndefined();
+  });
+
   it('returns fallback title for calendar event when title tag is missing', () => {
     const result = getFeedCardData(makeEvent(31922, [['start', '2026-04-01']]));
     expect(result.title).toBe('Untitled Event');

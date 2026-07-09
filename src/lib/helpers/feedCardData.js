@@ -2,7 +2,7 @@
  * Maps any Nostr event to normalized feed card display data.
  *
  * @param {any} event - Nostr event
- * @returns {{ title: string, subtitle?: string, typeKey: string, tags: string[], description?: string }}
+ * @returns {{ title: string, subtitle?: string, typeKey: string, tags: string[], description?: string, location?: string }}
  */
 export function getFeedCardData(event) {
   /** @param {string} name */
@@ -59,7 +59,7 @@ export function getFeedCardData(event) {
     case 31923: {
       const title = getTag('title') || 'Untitled Event';
       const startStr = getTag('start');
-      return { title, subtitle: startStr, typeKey: 'calendar', tags };
+      return { title, subtitle: startStr, typeKey: 'calendar', tags, location: getTag('location') };
     }
     case 30168: {
       return {

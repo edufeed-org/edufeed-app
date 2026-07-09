@@ -15,6 +15,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
+  import { activeDateLocale } from '$lib/helpers/dates.js';
   import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -26,6 +27,7 @@
    *   kind?: number,
    *   tags?: string[],
    *   description?: string,
+   *   location?: string,
    *   authorName?: string,
    *   authorAvatar?: string,
    *   authorPubkey?: string,
@@ -43,6 +45,7 @@
     kind,
     tags = [],
     description,
+    location,
     authorName,
     authorAvatar,
     authorPubkey,
@@ -75,23 +78,27 @@
   let meta = $derived(typeMeta[typeKey]);
 
   /**
-   * Format a calendar start string for display.
-   * @param {string} startStr - Unix timestamp string or ISO date string
-   * @returns {string}
+   * Parse a calendar start (unix timestamp string for timed events, ISO date
+   * for all-day events) into date-row display parts. Returns null when the
+   * value is unparseable so the caller can fall back to plain text.
+   *
+   * @param {string} startStr
+   * @returns {{ day: string, month: string, when: string } | null}
    */
-  function formatCalendarSubtitle(startStr) {
+  function parseCalendarStart(startStr) {
     const num = Number(startStr);
-    if (!isNaN(num) && num > 0) {
-      return new Date(num * 1000).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-    }
-    // ISO date string — show as-is (already readable)
-    return startStr;
+    const isTimed = !isNaN(num) && num > 0;
+    const date = isTimed ? new Date(num * 1000) : new Date(startStr);
+    if (isNaN(date.getTime())) return null;
+    const locale = activeDateLocale();
+    const when = isTimed
+      ? `${date.toLocaleDateString(locale, { year: 'numeric' })}, ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`
+      : `${date.toLocaleDateString(locale, { weekday: 'long' })}, ${date.toLocaleDateString(locale, { year: 'numeric' })}`;
+    return {
+      day: date.toLocaleDateString(locale, { day: 'numeric' }),
+      month: date.toLocaleDateString(locale, { month: 'short' }),
+      when
+    };
   }
 </script>
 
@@ -151,13 +158,35 @@
     <h3 class="mt-0.5 line-clamp-2 text-base font-bold text-base-content">{title}</h3>
 
     {#if subtitle}
-      <p class="mt-0.5 truncate text-xs text-base-content/60">
-        {#if typeKey === 'calendar'}
-          {formatCalendarSubtitle(subtitle)}
+      {#if typeKey === 'calendar'}
+        {@const dateParts = parseCalendarStart(subtitle)}
+        {#if dateParts}
+          <div class="mt-2 mb-1 flex items-center gap-3.5 rounded-lg bg-base-200 px-3 py-2">
+            <div class="min-w-7 text-center leading-none">
+              <span class="block text-2xl font-extrabold tracking-tight text-secondary">
+                {dateParts.day}
+              </span>
+              <span
+                class="mt-1 block text-[10px] font-semibold tracking-widest text-base-content/60 uppercase"
+              >
+                {dateParts.month}
+              </span>
+            </div>
+            <div class="min-w-0 text-sm font-medium">
+              {dateParts.when}
+              {#if location}
+                <span class="mt-0.5 block truncate font-mono text-xs text-base-content/60">
+                  {location}
+                </span>
+              {/if}
+            </div>
+          </div>
         {:else}
-          {subtitle}
+          <p class="mt-0.5 truncate text-xs text-base-content/60">{subtitle}</p>
         {/if}
-      </p>
+      {:else}
+        <p class="mt-0.5 truncate text-xs text-base-content/60">{subtitle}</p>
+      {/if}
     {/if}
 
     {#if communityName}

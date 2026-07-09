@@ -34,6 +34,7 @@
   import { activeDateLocale } from '$lib/helpers/dates.js';
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
+  import FeedComposer from '$lib/components/dashboard/FeedComposer.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -262,9 +263,13 @@
 </script>
 
 {#if previewCount === 0}
-  <div class="mb-3">
-    <DashboardFeedSelector />
+  <div class="mb-4 flex items-center gap-3">
+    <h1 class="text-2xl font-extrabold tracking-tight">{m.dashboard_nav_feed()}</h1>
+    <div class="ml-auto">
+      <DashboardFeedSelector />
+    </div>
   </div>
+  <FeedComposer />
 {/if}
 
 {#if isLoading}
@@ -295,6 +300,7 @@
               kind={event.kind}
               tags={cardData.tags}
               description={cardData.description}
+              location={cardData.location}
               authorName={profile ? getDisplayName(profile) : undefined}
               authorAvatar={profile ? getProfilePicture(profile) : undefined}
               authorPubkey={event.pubkey}
@@ -396,7 +402,49 @@
           <h4 class="mb-1.5 text-sm font-bold">{m.home_tip_title()}</h4>
           <p class="text-[13px] leading-relaxed text-base-content/70">{m.home_tip_body()}</p>
         </div>
+
+        <!-- Playful nudge from the tip card toward the create FAB -->
+        <div
+          class="mt-2 hidden items-start justify-end gap-2 pr-8 text-accent lg:flex"
+          aria-hidden="true"
+        >
+          <span class="mt-1 text-xl leading-none" style="font-family: var(--font-script)">
+            {m.home_fab_nudge()}
+          </span>
+          <svg
+            class="fab-nudge-arrow h-12 w-12"
+            viewBox="0 0 64 64"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M10 8c4 18 15 33 41 41" />
+            <path d="M38 50l13-1-4-13" />
+          </svg>
+        </div>
       </div>
     {/if}
   </div>
 {/if}
+
+<style>
+  .fab-nudge-arrow {
+    animation: fab-nudge 1.8s ease-in-out infinite;
+  }
+  @keyframes fab-nudge {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    50% {
+      transform: translate(5px, 5px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fab-nudge-arrow {
+      animation: none;
+    }
+  }
+</style>

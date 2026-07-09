@@ -28,9 +28,12 @@
   }
 </script>
 
-<div class="dropdown">
-  <button class="btn gap-1 px-1 text-sm font-semibold btn-ghost btn-sm" tabindex="0">
-    <ActiveIcon class_="w-4 h-4" />
+<div class="dropdown dropdown-end">
+  <button
+    class="flex items-center gap-1.5 rounded-full border border-base-300 bg-base-100 px-3.5 py-1.5 text-[13px] font-medium transition-colors hover:bg-base-200"
+    tabindex="0"
+  >
+    <ActiveIcon class_="w-3.5 h-3.5" />
     {activeOption.label()}
     <ChevronDownIcon class_="w-3 h-3 opacity-60" />
   </button>
