@@ -43,11 +43,21 @@ function dayIndexFromKey(dateKey) {
 /**
  * Lay out multi-day events over one week row.
  *
+ * @typedef {Object} WeekBar
+ * @property {any} event
+ * @property {number} lane
+ * @property {number} colStart - 1-based grid column of the bar's first day
+ * @property {number} span - number of day columns covered in this week
+ * @property {boolean} clippedLeft - the span started before this week
+ * @property {boolean} clippedRight - the span ends after this week
+ */
+
+/**
  * @param {string[]} weekDayKeys - the week's 7 date keys (YYYY-MM-DD, UTC)
  * @param {any[]} events - multi-day events (deduplicated) to consider
- * @returns {{laneCount: number, cells: Map<string, Array<LaneSegment | null>>}}
- *   cells: per date key, an array indexed by lane (null = empty spacer slot).
- *   Every array has laneCount entries.
+ * @returns {{laneCount: number, cells: Map<string, Array<LaneSegment | null>>, bars: WeekBar[]}}
+ *   cells: per date key, an array indexed by lane (null = empty spacer slot);
+ *   bars: one continuous entry per event for overlay rendering across the row.
  */
 export function layoutWeekLanes(weekDayKeys, events) {
   const weekStart = dayIndexFromKey(weekDayKeys[0]);
@@ -113,5 +123,14 @@ export function layoutWeekLanes(weekDayKeys, events) {
     }
   }
 
-  return { laneCount, cells };
+  const bars = segments.map((seg) => ({
+    event: seg.event,
+    lane: seg.lane,
+    colStart: seg.segStart - weekStart + 1,
+    span: seg.segEnd - seg.segStart + 1,
+    clippedLeft: seg.startDay < seg.segStart,
+    clippedRight: seg.endDay > seg.segEnd
+  }));
+
+  return { laneCount, cells, bars };
 }

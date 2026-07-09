@@ -177,61 +177,80 @@
     </div>
   {:else}
     <!-- Month/Week: one grid per week row so multi-day events can span as
-         continuous lane bars across the row (Google-Calendar style). -->
+         continuous bars across the row (Google-Calendar style). The bars
+         live in an absolutely positioned overlay grid ABOVE the cells, so
+         they float over the cell borders instead of being sliced per day;
+         cells reserve matching vertical space below their date number. -->
     <div class="flex flex-col gap-px bg-base-300">
       {#each weeks as week (week[0].toISOString())}
         {@const layout = weekLayout(week)}
-        <div class="grid grid-cols-7 gap-px">
-          {#each week as date (date.toISOString())}
-            {@const laneSlots = layout.cells.get(createDateKey(date)) || []}
-            {@const singleDayEvents = singleDayEventsFor(date)}
-            {@const isCurrentDay = isToday(date)}
-            {@const isInCurrentMonth = viewMode !== 'month' || isCurrentMonth(date, currentDate)}
-
-            {@const cellClasses = [
-              'p-2 hover:bg-base-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset cursor-pointer transition-colors duration-200 flex flex-col overflow-hidden bg-base-100',
-              viewMode === 'week' ? 'h-96' : 'h-24',
-              isCurrentDay ? 'ring-2 ring-primary ring-inset' : '',
-              !isInCurrentMonth ? 'bg-base-200 text-base-content/40' : ''
-            ]
-              .filter(Boolean)
-              .join(' ')}
-
+        <div class="relative">
+          {#if layout.laneCount > 0}
+            <!-- top-8 = cell padding (8px) + date-number row (h-5 + mb-1) -->
             <div
-              class={cellClasses}
-              role="button"
-              tabindex="0"
-              onclick={(e) => handleDateClick(e, date)}
-              onkeydown={(e) => handleDateKeydown(e, date)}
+              class="pointer-events-none absolute inset-x-0 top-8 z-10 grid grid-cols-7"
+              style="grid-auto-rows: 22px; column-gap: 1px;"
             >
-              <!-- Date Number -->
-              <div
-                class="mb-1 flex-shrink-0 text-sm font-medium {isCurrentDay ? 'text-primary' : ''}"
-              >
-                {date.getDate()}
-              </div>
+              {#each layout.bars as bar (bar.event.id)}
+                <div
+                  class="pointer-events-auto pr-1"
+                  style="grid-column: {bar.colStart} / span {bar.span}; grid-row: {bar.lane + 1};"
+                >
+                  <CalendarSpanSegment {bar} onEventClick={handleEventClick} />
+                </div>
+              {/each}
+            </div>
+          {/if}
 
-              <!-- Multi-day lane bars (aligned across the week row) -->
-              {#if laneSlots.length > 0}
-                <div class="mb-1 flex-shrink-0 space-y-0.5">
-                  {#each laneSlots as slot, lane (lane)}
-                    {#if slot}
-                      <CalendarSpanSegment segment={slot} onEventClick={handleEventClick} />
-                    {:else}
-                      <div class="h-5" aria-hidden="true"></div>
-                    {/if}
+          <div class="grid grid-cols-7 gap-px">
+            {#each week as date (date.toISOString())}
+              {@const singleDayEvents = singleDayEventsFor(date)}
+              {@const isCurrentDay = isToday(date)}
+              {@const isInCurrentMonth = viewMode !== 'month' || isCurrentMonth(date, currentDate)}
+
+              {@const cellClasses = [
+                'p-2 hover:bg-base-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset cursor-pointer transition-colors duration-200 flex flex-col overflow-hidden bg-base-100',
+                viewMode === 'week' ? 'min-h-96' : 'min-h-24',
+                isCurrentDay ? 'ring-2 ring-primary ring-inset' : '',
+                !isInCurrentMonth ? 'bg-base-200 text-base-content/40' : ''
+              ]
+                .filter(Boolean)
+                .join(' ')}
+
+              <div
+                class={cellClasses}
+                role="button"
+                tabindex="0"
+                onclick={(e) => handleDateClick(e, date)}
+                onkeydown={(e) => handleDateKeydown(e, date)}
+              >
+                <!-- Date Number (h-5 keeps the overlay's top offset stable) -->
+                <div
+                  class="mb-1 h-5 flex-shrink-0 text-sm font-medium {isCurrentDay
+                    ? 'text-primary'
+                    : ''}"
+                >
+                  {date.getDate()}
+                </div>
+
+                <!-- Reserved space matching the overlay's lane rows -->
+                {#if layout.laneCount > 0}
+                  <div
+                    class="mb-1 flex-shrink-0"
+                    style="height: {layout.laneCount * 22 - 2}px"
+                    aria-hidden="true"
+                  ></div>
+                {/if}
+
+                <!-- Single-day events for this date -->
+                <div class="flex-1 space-y-1 overflow-x-hidden overflow-y-auto">
+                  {#each singleDayEvents as event (event.id)}
+                    <CalendarEventBar {event} onEventClick={handleEventClick} />
                   {/each}
                 </div>
-              {/if}
-
-              <!-- Single-day events for this date -->
-              <div class="flex-1 space-y-1 overflow-x-hidden overflow-y-auto">
-                {#each singleDayEvents as event (event.id)}
-                  <CalendarEventBar {event} onEventClick={handleEventClick} />
-                {/each}
               </div>
-            </div>
-          {/each}
+            {/each}
+          </div>
         </div>
       {/each}
     </div>

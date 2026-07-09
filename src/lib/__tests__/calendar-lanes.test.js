@@ -99,6 +99,24 @@ describe('layoutWeekLanes', () => {
     expect(cells.get(WEEK[3])[0].event.id).toBe('b');
   });
 
+  it('emits one continuous bar per event with column start/span for overlay rendering', () => {
+    const a = evt('a', 31922, OCT_5 + DAY, OCT_5 + 3 * DAY); // Tue-Thu
+    const long = evt('long', 31922, OCT_1, OCT_5 + 10 * DAY); // clipped both sides
+    const { bars } = layoutWeekLanes(WEEK, [a, long]);
+
+    const barLong = bars.find((b) => b.event.id === 'long');
+    expect(barLong).toMatchObject({ colStart: 1, span: 7, clippedLeft: true, clippedRight: true });
+
+    const barA = bars.find((b) => b.event.id === 'a');
+    expect(barA).toMatchObject({
+      colStart: 2,
+      span: 3,
+      clippedLeft: false,
+      clippedRight: false
+    });
+    expect(barA.lane).not.toBe(barLong.lane);
+  });
+
   it('ignores events that do not overlap the week', () => {
     const e = evt('elsewhere', 31922, OCT_5 + 30 * DAY, OCT_5 + 32 * DAY);
     const { laneCount } = layoutWeekLanes(WEEK, [e]);

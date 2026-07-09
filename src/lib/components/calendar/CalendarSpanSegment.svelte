@@ -1,21 +1,20 @@
 <!--
-  CalendarSpanSegment — one day-cell piece of a multi-day event bar in the
-  month/week grid. Pieces of the same event share a lane across the week;
-  middle pieces drop their rounding and bleed over the cell padding + grid
-  gap so the bar reads as one continuous span. Week-boundary continuations
-  get chevron caps.
+  CalendarSpanSegment — one continuous multi-day event bar in a week row of
+  the month/week grid. Rendered in an overlay layer spanning the row's grid
+  columns, so it floats above the cell borders instead of being sliced per
+  day. Chevron caps mark spans clipped by the week boundary.
 -->
 <script>
   import { generateAuthorColor } from '../../helpers/nostrUtils.js';
 
   /**
-   * @typedef {import('../../helpers/calendar-lanes.js').LaneSegment} LaneSegment
+   * @typedef {import('../../helpers/calendar-lanes.js').WeekBar} WeekBar
    */
 
-  /** @type {{ segment: LaneSegment, onEventClick?: (event: any) => void }} */
-  let { segment, onEventClick = () => {} } = $props();
+  /** @type {{ bar: WeekBar, onEventClick?: (event: any) => void }} */
+  let { bar, onEventClick = () => {} } = $props();
 
-  const event = $derived(segment.event);
+  const event = $derived(bar.event);
 
   let inlineStyle = $derived.by(() => {
     if (event.color) return `background-color: ${event.color}; color: #000000`;
@@ -39,9 +38,9 @@
 </script>
 
 <div
-  class="calendar-event-bar flex h-5 cursor-pointer items-center overflow-hidden text-xs whitespace-nowrap transition-opacity hover:opacity-80
-    {segment.continuesLeft ? 'seg-bleed-l' : 'ml-0 rounded-l pl-2'}
-    {segment.continuesRight ? 'seg-bleed-r' : 'mr-0 rounded-r pr-2'}"
+  class="calendar-event-bar flex h-5 cursor-pointer items-center px-2 text-xs whitespace-nowrap shadow-sm transition-opacity hover:opacity-80
+    {bar.clippedLeft ? 'rounded-l-none' : 'rounded-l'}
+    {bar.clippedRight ? 'rounded-r-none' : 'rounded-r'}"
   style={inlineStyle}
   role="button"
   tabindex="0"
@@ -49,29 +48,11 @@
   onkeydown={handleKeydown}
   title={event.title}
 >
-  {#if segment.clippedLeft}
-    <span class="mr-0.5 shrink-0 opacity-60">‹</span>
+  {#if bar.clippedLeft}
+    <span class="mr-1 shrink-0 opacity-60">‹</span>
   {/if}
-  {#if segment.showTitle}
-    <span class="truncate font-medium">{event.title}</span>
-  {:else}
-    <!-- middle/continuation piece: keep the bar height, no repeated title -->
-    <span class="sr-only">{event.title}</span>
-  {/if}
-  {#if segment.clippedRight}
-    <span class="ml-auto shrink-0 pl-0.5 opacity-60">›</span>
+  <span class="truncate font-medium">{event.title}</span>
+  {#if bar.clippedRight}
+    <span class="ml-auto shrink-0 pl-1 opacity-60">›</span>
   {/if}
 </div>
-
-<style>
-  /* Bleed over the cell's p-2 padding (8px) plus the 1px grid gap so
-     neighbouring pieces visually connect into one bar. */
-  .seg-bleed-l {
-    margin-left: -9px;
-    padding-left: 2px;
-  }
-  .seg-bleed-r {
-    margin-right: -9px;
-    padding-right: 2px;
-  }
-</style>
