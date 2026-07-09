@@ -172,7 +172,7 @@
       <EncodingPreview
         url={publication.file.url}
         mimeType={publication.file.mimeType ?? ''}
-        name={publication.file.url.split('/').pop() ?? 'file'}
+        name={publication.title || publication.file.url.split('/').pop() || 'file'}
       />
     </section>
   {/if}

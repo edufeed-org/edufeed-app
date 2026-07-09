@@ -58,8 +58,21 @@
 
         if (cancelled) return;
 
-        const loadingTask = pdfjsLib.getDocument({ url });
-        doc = await loadingTask.promise;
+        try {
+          const loadingTask = pdfjsLib.getDocument({ url });
+          doc = await loadingTask.promise;
+        } catch (directError) {
+          // Cross-origin PDFs (journal servers without CORS headers) fail the
+          // client-side fetch — retry once through the server-side proxy.
+          const isExternal =
+            /^https?:\/\//i.test(url) &&
+            typeof window !== 'undefined' &&
+            new URL(url).origin !== window.location.origin;
+          if (!isExternal || cancelled) throw directError;
+          const proxied = `/api/pdf?url=${encodeURIComponent(url)}`;
+          const retryTask = pdfjsLib.getDocument({ url: proxied });
+          doc = await retryTask.promise;
+        }
 
         if (cancelled) {
           doc?.destroy?.();
