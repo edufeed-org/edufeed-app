@@ -40,6 +40,7 @@
   import CalendarNavigation from '$lib/components/calendar/CalendarNavigation.svelte';
   import CalendarGrid from '$lib/components/calendar/CalendarGrid.svelte';
   import TopPublishersFilter from './TopPublishersFilter.svelte';
+  import { filterEventsByPublisherSelection } from '$lib/helpers/topPublishers.js';
   import CalendarDropdown from './CalendarDropdown.svelte';
   import CalendarFilterBar from './CalendarFilterBar.svelte';
   import CalendarFilterDrawer from './CalendarFilterDrawer.svelte';
@@ -593,6 +594,7 @@
       calendarFilters.selectedFollowListIds.length +
       calendarFilters.selectedFeaturedAuthors.length +
       calendarFilters.hiddenAuthorPubkeys.length +
+      (calendarFilters.soloAuthorPubkey ? 1 : 0) +
       (calendarFilters.searchQuery.trim() ? 1 : 0) +
       (calendarFilters.onlyFollowsMode !== 'off' ? 1 : 0)
   );
@@ -662,13 +664,12 @@
     filterEventsByViewMode(displayedEvents, viewMode, currentDate)
   );
 
-  // Step 4: hide events from publishers the user toggled off.
+  // Step 4: apply the publisher quick-filter (solo wins over hidden).
   let visibleEvents = $derived(
-    calendarFilters.hiddenAuthorPubkeys.length > 0
-      ? displayedEvents.filter(
-          (event) => !calendarFilters.hiddenAuthorPubkeys.includes(event.pubkey)
-        )
-      : displayedEvents
+    filterEventsByPublisherSelection(displayedEvents, {
+      solo: calendarFilters.soloAuthorPubkey,
+      hidden: calendarFilters.hiddenAuthorPubkeys
+    })
   );
 
   // Events scoped to the currently rendered time range — used for the header

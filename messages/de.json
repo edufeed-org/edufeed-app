@@ -2629,5 +2629,7 @@
   "calendar_top_publishers_hide_aria": "Events von {name} ausblenden",
   "calendar_top_publishers_show_aria": "Events von {name} wieder einblenden",
   "publication_form_url_inspect_hint": "Beim Eingeben einer Artikel-URL versuchen wir, Metadaten von der Seite zu übernehmen.",
-  "publication_form_url_prefill_applied": "Metadaten von der Seite übernommen – bitte prüfen."
+  "publication_form_url_prefill_applied": "Metadaten von der Seite übernommen – bitte prüfen.",
+  "calendar_top_publishers_solo_aria": "Nur Events von {name} anzeigen",
+  "calendar_top_publishers_unsolo_aria": "Wieder alle Events anzeigen"
 }

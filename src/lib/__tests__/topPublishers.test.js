@@ -1,6 +1,9 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { topEventPublishers } from '$lib/helpers/topPublishers.js';
+import {
+  topEventPublishers,
+  filterEventsByPublisherSelection
+} from '$lib/helpers/topPublishers.js';
 
 /** @param {string} pubkey */
 const ev = (pubkey) => ({ pubkey });
@@ -34,5 +37,26 @@ describe('topEventPublishers', () => {
   it('handles empty input and events without pubkey', () => {
     expect(topEventPublishers([])).toEqual([]);
     expect(topEventPublishers([{}, { pubkey: '' }])).toEqual([]);
+  });
+});
+
+describe('filterEventsByPublisherSelection', () => {
+  const events = [{ pubkey: 'a' }, { pubkey: 'b' }, { pubkey: 'c' }];
+
+  it('returns only the solo author when solo is set (hidden ignored)', () => {
+    expect(filterEventsByPublisherSelection(events, { solo: 'b', hidden: ['b', 'c'] })).toEqual([
+      { pubkey: 'b' }
+    ]);
+  });
+
+  it('removes hidden authors when no solo is set', () => {
+    expect(filterEventsByPublisherSelection(events, { solo: null, hidden: ['a'] })).toEqual([
+      { pubkey: 'b' },
+      { pubkey: 'c' }
+    ]);
+  });
+
+  it('returns the input array unchanged when nothing is selected', () => {
+    expect(filterEventsByPublisherSelection(events, { solo: null, hidden: [] })).toBe(events);
   });
 });
