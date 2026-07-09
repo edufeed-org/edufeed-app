@@ -2624,5 +2624,8 @@
   "educator_context_places_help": "Hilft uns später, dich lokal zu vernetzen (optional, mehrere möglich)",
   "places_input_label": "Orte",
   "places_input_placeholder": "Ort suchen und hinzufügen...",
-  "places_input_remove_aria": "Ort {name} entfernen"
+  "places_input_remove_aria": "Ort {name} entfernen",
+  "calendar_top_publishers_label": "Aktivste Veranstalter",
+  "calendar_top_publishers_hide_aria": "Events von {name} ausblenden",
+  "calendar_top_publishers_show_aria": "Events von {name} wieder einblenden"
 }

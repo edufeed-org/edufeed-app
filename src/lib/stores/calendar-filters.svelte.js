@@ -38,6 +38,10 @@ class CalendarFiltersStore {
   // runtimeConfig.calendar.featuredAuthors).
   featuredAuthorPubkeys = $state(/** @type {string[]} */ ([]));
 
+  // Authors hidden via the "top publishers" quick filter (issue #28).
+  // Their events are removed from the displayed set client-side.
+  hiddenAuthorPubkeys = $state(/** @type {string[]} */ ([]));
+
   // Getter for current observable values (for convenience)
   get selectedCalendar() {
     return this.selectedCalendar$.value;
@@ -230,6 +234,25 @@ class CalendarFiltersStore {
   }
 
   /**
+   * Toggle an author on the hidden-publishers list.
+   * @param {string} pubkey
+   */
+  toggleHiddenAuthor(pubkey) {
+    if (this.hiddenAuthorPubkeys.includes(pubkey)) {
+      this.hiddenAuthorPubkeys = this.hiddenAuthorPubkeys.filter((p) => p !== pubkey);
+    } else {
+      this.hiddenAuthorPubkeys = [...this.hiddenAuthorPubkeys, pubkey];
+    }
+  }
+
+  /**
+   * Clear all hidden publishers.
+   */
+  clearHiddenAuthors() {
+    this.hiddenAuthorPubkeys = [];
+  }
+
+  /**
    * Set the pool of pubkeys representing the active user's NIP-02 follows.
    * Consumed by `getEffectiveAuthorPubkeys()` when mode === 'follows'.
    * @param {string[]} pubkeys
@@ -309,6 +332,7 @@ class CalendarFiltersStore {
     this.onlyFollowsMode = 'off';
     this.userFollowPubkeys = [];
     this.featuredAuthorPubkeys = [];
+    this.hiddenAuthorPubkeys = [];
   }
 }
 
