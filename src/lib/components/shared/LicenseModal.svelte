@@ -1,4 +1,5 @@
 <script>
+  import { topLayerModal } from '$lib/actions/topLayerModal.js';
   import * as m from '$lib/paraglide/messages';
   import { manager } from '$lib/stores/accounts.svelte';
   import { publishLicenseAttestation } from '$lib/helpers/image-license.js';
@@ -203,7 +204,7 @@
 {/snippet}
 
 {#if open}
-  <div class="modal-open modal" data-testid="license-modal">
+  <dialog class="modal-open modal" data-testid="license-modal" use:topLayerModal={handleCancel}>
     <div class="modal-box max-w-2xl">
       {#if view === 'existing' && existingLicense}
         <!-- State A: existing license found, ask user to accept or create their own -->
@@ -410,5 +411,5 @@
         </div>
       {/if}
     </div>
-  </div>
+  </dialog>
 {/if}

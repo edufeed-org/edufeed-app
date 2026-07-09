@@ -1,4 +1,5 @@
 <script>
+  import { topLayerModal } from '$lib/actions/topLayerModal.js';
   import * as m from '$lib/paraglide/messages';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
@@ -111,7 +112,7 @@
 </script>
 
 {#if open && tile}
-  <dialog class="modal-open modal">
+  <dialog class="modal-open modal" use:topLayerModal={handleCancel}>
     <div class="modal-box w-11/12 max-w-3xl">
       <h3 class="text-lg font-semibold">{m.image_library_detail_title()}</h3>
 
