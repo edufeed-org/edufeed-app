@@ -41,7 +41,7 @@
 
   let multiDayEvents = $derived.by(() => {
     const seen = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- local dedup
-    return (events || []).filter((e) => {
+    return (events || []).filter((/** @type {any} */ e) => {
       if (!e?.id || seen.has(e.id) || !isMultiDayEvent(e)) return false;
       seen.add(e.id);
       return true;

@@ -54,6 +54,7 @@ export function layoutWeekLanes(weekDayKeys, events) {
   const weekEnd = dayIndexFromKey(weekDayKeys[weekDayKeys.length - 1]);
 
   // Clip each event to the week; drop non-overlapping ones.
+  /** @type {Array<{event: any, startDay: number, endDay: number, segStart: number, segEnd: number, lane: number}>} */
   const segments = [];
   for (const event of events) {
     if (!event?.start) continue;
@@ -64,7 +65,8 @@ export function layoutWeekLanes(weekDayKeys, events) {
       startDay,
       endDay,
       segStart: Math.max(startDay, weekStart),
-      segEnd: Math.min(endDay, weekEnd)
+      segEnd: Math.min(endDay, weekEnd),
+      lane: 0 // assigned below
     });
   }
 
@@ -77,8 +79,8 @@ export function layoutWeekLanes(weekDayKeys, events) {
   );
 
   // Greedy lane assignment: first lane free over the segment's day range.
-  /** @type {number[][]} laneOccupancy[lane] = list of occupied day indices */
-  const laneEnds = []; // per lane: array of [segStart, segEnd] ranges
+  /** @type {Array<Array<[number, number]>>} per lane: occupied [segStart, segEnd] ranges */
+  const laneEnds = [];
   for (const seg of segments) {
     let lane = 0;
     for (; lane < laneEnds.length; lane++) {
