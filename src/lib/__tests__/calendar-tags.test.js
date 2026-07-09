@@ -584,4 +584,93 @@ describe('buildCalendarEventTags', () => {
       expect(rTags).toHaveLength(1);
     });
   });
+
+  describe('participant p-tags (NIP-52)', () => {
+    const formBase = { startDate: '2024-06-15', eventType: 'date', title: 'Test Event' };
+    const eventBase = { kind: 31922, title: 'Test Event' };
+    const PK_A = 'a'.repeat(64);
+    const PK_B = 'b'.repeat(64);
+
+    it('emits ["p", pubkey, relay, role] when all fields present', () => {
+      const formData = {
+        ...formBase,
+        participants: [{ pubkey: PK_A, relay: 'wss://relay.example.com/', role: 'speaker' }]
+      };
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      expect(findTags(tags, 'p')).toEqual([['p', PK_A, 'wss://relay.example.com/', 'speaker']]);
+    });
+
+    it('emits empty relay placeholder when role present without relay', () => {
+      const formData = { ...formBase, participants: [{ pubkey: PK_A, role: 'organizer' }] };
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      expect(findTags(tags, 'p')).toEqual([['p', PK_A, '', 'organizer']]);
+    });
+
+    it('emits short tags when relay/role missing', () => {
+      const formData = {
+        ...formBase,
+        participants: [{ pubkey: PK_A }, { pubkey: PK_B, relay: 'wss://r.example/' }]
+      };
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      expect(findTags(tags, 'p')).toEqual([
+        ['p', PK_A],
+        ['p', PK_B, 'wss://r.example/']
+      ]);
+    });
+
+    it('skips entries without pubkey and emits nothing when participants absent', () => {
+      const noPk = { ...formBase, participants: [{ role: 'speaker' }] };
+      expect(
+        findTags(
+          buildCalendarEventTags(/** @type {any} */ (noPk), /** @type {any} */ (eventBase), 'd1'),
+          'p'
+        )
+      ).toHaveLength(0);
+      expect(
+        findTags(
+          buildCalendarEventTags(
+            /** @type {any} */ (formBase),
+            /** @type {any} */ (eventBase),
+            'd1'
+          ),
+          'p'
+        )
+      ).toHaveLength(0);
+    });
+
+    it('round-trips through getCalendarEventMetadata', async () => {
+      const { getCalendarEventMetadata } = await import('../helpers/eventUtils.js');
+      const participants = [
+        { pubkey: PK_A, relay: 'wss://relay.example.com/', role: 'speaker' },
+        { pubkey: PK_B, relay: undefined, role: undefined }
+      ];
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ ({ ...formBase, participants }),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      const rawEvent = {
+        id: 'e1',
+        pubkey: 'c'.repeat(64),
+        kind: 31922,
+        content: '',
+        created_at: 1718452800,
+        tags
+      };
+      const parsed = getCalendarEventMetadata(/** @type {any} */ (rawEvent));
+      expect(parsed.participants).toEqual(participants);
+    });
+  });
 });

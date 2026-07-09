@@ -874,6 +874,20 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
     tags.push(['g', eventData.geohash]);
   }
 
+  // Participants (NIP-52): ["p", pubkey, relay hint, role]
+  if (formData.participants) {
+    for (const participant of formData.participants) {
+      if (!participant?.pubkey) continue;
+      if (participant.role) {
+        tags.push(['p', participant.pubkey, participant.relay || '', participant.role]);
+      } else if (participant.relay) {
+        tags.push(['p', participant.pubkey, participant.relay]);
+      } else {
+        tags.push(['p', participant.pubkey]);
+      }
+    }
+  }
+
   return tags;
 }
 

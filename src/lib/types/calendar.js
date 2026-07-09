@@ -93,6 +93,7 @@
  * @property {boolean} isAllDay - Whether event is all day
  * @property {EventType} eventType - Event type (date or time)
  * @property {string[]} [references] - Optional array of reference URLs (r tags)
+ * @property {Array<{pubkey: string, relay?: string, role?: string}>} [participants] - NIP-52 participants (p-tags)
  */
 
 /**
