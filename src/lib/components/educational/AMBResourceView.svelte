@@ -40,6 +40,8 @@
     summarizeExtensionFacets
   } from '$lib/helpers/educational/resourceDetailView.js';
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
+  import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
+  import { ORCID_URI_PREFIX } from '$lib/helpers/educational/orcid.js';
   import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
   import { page } from '$app/stores';
   import * as m from '$lib/paraglide/messages.js';
@@ -221,6 +223,16 @@
       pubkey,
       hasProfile: true
     }));
+  });
+
+  // ORCID URIs by creator name (from the flattened creator:* tags)
+  const creatorOrcids = $derived.by(() => {
+    /** @type {Record<string, string>} */
+    const byName = {};
+    for (const c of getAMBCreators(event)) {
+      if (c.name && c.id?.startsWith(ORCID_URI_PREFIX)) byName[c.name] = c.id;
+    }
+    return byName;
   });
 
   // Published date
@@ -718,6 +730,17 @@
           <div class="ed-contrib">
             {@render initialAvatar(name)}
             <span class="name">{name}</span>
+            {#if creatorOrcids[name]}
+              <a
+                class="badge badge-outline badge-xs"
+                href={creatorOrcids[name]}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="ORCID"
+              >
+                ORCID
+              </a>
+            {/if}
           </div>
         {/each}
       </div>

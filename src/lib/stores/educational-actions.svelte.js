@@ -27,6 +27,7 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {string} [pubkey] - Nostr pubkey (hex)
  * @property {string} [affiliationName] - Affiliation/organization name
  * @property {string} [honorificPrefix] - Honorific prefix (Dr., Prof., etc.)
+ * @property {string} [orcid] - ORCID iD as canonical https URI
  */
 
 /**
