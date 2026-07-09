@@ -58,7 +58,7 @@
   let errors = $state(/** @type {Record<string, string>} */ ({}));
 
   /** @type {import('$lib/helpers/educational/educatorProfile.js').EdufeedProfile} */
-  let edufeed = $state({ interests: [], educationalLevels: [], subjects: [] });
+  let edufeed = $state({ interests: [], educationalLevels: [], subjects: [], locations: [] });
 
   /** True once the user submitted the handle application on step 5. */
   let handleApplied = $state(false);
@@ -168,7 +168,7 @@
     _signer = null;
     selected = new SvelteSet();
     hasSeededCommunities = false;
-    edufeed = { interests: [], educationalLevels: [], subjects: [] };
+    edufeed = { interests: [], educationalLevels: [], subjects: [], locations: [] };
     handleApplied = false;
     prewarmSub?.unsubscribe();
     prewarmSub = undefined;
@@ -265,10 +265,15 @@
       if (userData.picture) profileContent.picture = userData.picture;
       // Interests live in the NIP-51 kind 10015 list; the kind-0 edufeed
       // object only carries the SKOS concepts that don't fit flat t tags.
-      if (edufeed.educationalLevels.length || edufeed.subjects.length) {
+      if (
+        edufeed.educationalLevels.length ||
+        edufeed.subjects.length ||
+        edufeed.locations?.length
+      ) {
         profileContent.edufeed = {
           educationalLevels: edufeed.educationalLevels,
-          subjects: edufeed.subjects
+          subjects: edufeed.subjects,
+          locations: edufeed.locations
         };
       }
 

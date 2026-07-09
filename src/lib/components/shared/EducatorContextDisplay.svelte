@@ -27,8 +27,9 @@
   const levelLabels = $derived(labels(value.educationalLevels));
   const subjectLabels = $derived(labels(value.subjects));
   const interests = $derived([...new Set(value.interests)]);
+  const places = $derived([...new Set((value.locations ?? []).map((p) => p.name))]);
   const hasContent = $derived(
-    levelLabels.length > 0 || subjectLabels.length > 0 || interests.length > 0
+    levelLabels.length > 0 || subjectLabels.length > 0 || interests.length > 0 || places.length > 0
   );
 </script>
 
@@ -57,6 +58,15 @@
         <span class="text-xs text-base-content/60">{m.educator_context_interests_label()}:</span>
         {#each interests as interest (interest)}
           <span class="badge badge-ghost badge-sm">{interest}</span>
+        {/each}
+      </div>
+    {/if}
+
+    {#if places.length > 0}
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="text-xs text-base-content/60">{m.educator_context_places_label()}:</span>
+        {#each places as place (place)}
+          <span class="badge badge-ghost badge-sm">📍 {place}</span>
         {/each}
       </div>
     {/if}
