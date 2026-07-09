@@ -11,7 +11,7 @@
     getUnreadDmCount,
     isDmConversationUnread
   } from '$lib/services/dm-service.svelte.js';
-  import { getNotificationType } from '$lib/helpers/inbox.js';
+  import { filterNotificationsByType } from '$lib/helpers/inbox.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import InboxItem from '$lib/components/inbox/InboxItem.svelte';
@@ -53,18 +53,7 @@
     }
 
     // For notification-only filters
-    /** @type {import('nostr-tools').NostrEvent[]} */
-    let filteredNotifs;
-    if (activeFilter === 'all') {
-      filteredNotifs = allNotifications;
-    } else if (activeFilter === 'formRequest') {
-      filteredNotifs = allNotifications.filter((e) => {
-        const t = getNotificationType(e);
-        return t === 'formRequest' || t === 'formResponse';
-      });
-    } else {
-      filteredNotifs = allNotifications.filter((e) => getNotificationType(e) === activeFilter);
-    }
+    const filteredNotifs = filterNotificationsByType(allNotifications, activeFilter);
 
     /** @type {InboxItem_[]} */
     const items = filteredNotifs.map((event) => ({

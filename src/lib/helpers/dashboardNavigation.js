@@ -22,7 +22,7 @@ const resolvedMessages = stripTrailingSlash(resolve('/c/messages'));
  *
  * @param {string} pathname - Current URL pathname
  * @param {URLSearchParams} searchParams - Current URL search params
- * @returns {'feed' | 'inbox' | 'messages' | 'my-stuff' | 'communities' | null}
+ * @returns {'home' | 'feed' | 'inbox' | 'messages' | 'my-stuff' | 'communities' | null}
  */
 export function getDashboardActiveSection(pathname, searchParams) {
   const normalized = stripTrailingSlash(pathname);
@@ -30,8 +30,8 @@ export function getDashboardActiveSection(pathname, searchParams) {
   if (normalized === resolvedMessages || normalized.startsWith(resolvedMessages + '/'))
     return 'messages';
   if (normalized === resolvedInbox) return 'inbox';
-  const view = searchParams.get('view') || 'feed';
+  const view = searchParams.get('view') || 'home';
   // Backward compat: old 'your-content' URL maps to 'my-stuff'
   if (view === 'your-content') return 'my-stuff';
-  return /** @type {'feed' | 'my-stuff' | 'communities'} */ (view);
+  return /** @type {'home' | 'feed' | 'my-stuff' | 'communities'} */ (view);
 }

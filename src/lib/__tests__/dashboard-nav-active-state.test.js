@@ -17,12 +17,20 @@ describe('getDashboardActiveSection', () => {
     return new URLSearchParams(query);
   }
 
-  it('returns "feed" on /c/', () => {
-    expect(getDashboardActiveSection('/c/', params())).toBe('feed');
+  it('returns "home" on /c/', () => {
+    expect(getDashboardActiveSection('/c/', params())).toBe('home');
   });
 
-  it('returns "feed" on /c (no trailing slash)', () => {
-    expect(getDashboardActiveSection('/c', params())).toBe('feed');
+  it('returns "home" on /c (no trailing slash)', () => {
+    expect(getDashboardActiveSection('/c', params())).toBe('home');
+  });
+
+  it('returns "feed" on /c/?view=feed', () => {
+    expect(getDashboardActiveSection('/c/', params('view=feed'))).toBe('feed');
+  });
+
+  it('returns "feed" on /c?view=feed (no trailing slash)', () => {
+    expect(getDashboardActiveSection('/c', params('view=feed'))).toBe('feed');
   });
 
   it('returns "inbox" on /c/inbox', () => {

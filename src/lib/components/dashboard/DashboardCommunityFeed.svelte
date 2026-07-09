@@ -29,12 +29,20 @@
   } from '$lib/models/community-content.js';
   import { getContentEventRoute, resolveCommunityPubkey } from '$lib/helpers/contentNavigation.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
-  import { ChevronRightIcon, FilesIcon } from '$lib/components/icons';
-  import { generateKindColorRGB } from '$lib/helpers/nostrUtils';
+  import { CalendarIcon, ChevronRightIcon, FilesIcon, SparkleIcon } from '$lib/components/icons';
   import { getEventStartTimestamp } from '$lib/helpers/calendar';
+  import { activeDateLocale } from '$lib/helpers/dates.js';
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import * as m from '$lib/paraglide/messages';
+
+  /**
+   * When > 0 the feed renders as a compact preview: no feed selector,
+   * at most `previewCount` cards, and a "view all" button instead of
+   * incremental loading. Used by the Home view.
+   * @type {{ previewCount?: number }}
+   */
+  let { previewCount = 0 } = $props();
 
   /** @type {Map<string, any[]>} */
   let perCommunityItems = new Map();
@@ -58,8 +66,8 @@
     return filterUpcomingEvents(allItems, nowTs);
   });
 
-  let visibleItems = $derived(allItems.slice(0, displayCount));
-  let hasMore = $derived(displayCount < allItems.length);
+  let visibleItems = $derived(allItems.slice(0, previewCount > 0 ? previewCount : displayCount));
+  let hasMore = $derived(previewCount === 0 && displayCount < allItems.length);
 
   // Per-community cleanup functions
   /** @type {Map<string, () => void>} */
@@ -232,11 +240,32 @@
     displayCount += 15;
     feedStateCache.set('dashboard-community-feed', { displayCount });
   }
+
+  /**
+   * Date-square + time parts for the upcoming-events rail.
+   * @param {number} startTs
+   * @param {number} kind
+   */
+  function getUpcomingDateParts(startTs, kind) {
+    const date = new Date(startTs * 1000);
+    const locale = activeDateLocale();
+    return {
+      day: date.toLocaleDateString(locale, { day: 'numeric' }),
+      month: date.toLocaleDateString(locale, { month: 'short' }),
+      // Kind 31922 is all-day (date-based) — no meaningful time to show
+      time:
+        kind === 31923
+          ? date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+          : ''
+    };
+  }
 </script>
 
-<div class="mb-3">
-  <DashboardFeedSelector />
-</div>
+{#if previewCount === 0}
+  <div class="mb-3">
+    <DashboardFeedSelector />
+  </div>
+{/if}
 
 {#if isLoading}
   <div class="flex justify-center py-12">
@@ -285,44 +314,87 @@
             </button>
           </div>
         {/if}
+
+        {#if previewCount > 0 && allItems.length > previewCount}
+          <div class="mt-4 flex justify-center">
+            <button
+              class="btn btn-outline btn-sm"
+              onclick={() => goto(resolve('/c/') + '?view=feed')}
+            >
+              {m.home_feed_preview_all()}
+            </button>
+          </div>
+        {/if}
       {/if}
     </div>
 
     <!-- Upcoming Events Sidebar -->
     {#if upcomingEvents.length > 0}
       <div class="w-full shrink-0 lg:w-72" data-testid="dashboard-upcoming-events">
-        <a
-          href={resolve('/calendar')}
-          class="mb-3 flex items-center gap-1 text-sm font-semibold hover:text-primary"
+        <div
+          class="rounded-2xl bg-gradient-to-b from-(--c-hero) to-(--c-hero-2) p-5 text-white shadow-[0_20px_40px_-24px_rgba(0,0,0,0.3)]"
         >
-          {m.dashboard_upcoming_title()}
-          <ChevronRightIcon class_="h-4 w-4" />
-        </a>
-        <div class="flex flex-row gap-3 overflow-x-auto lg:flex-col lg:overflow-x-visible">
-          {#each upcomingEvents as event (event.id)}
-            {@const cardData = getFeedCardData(event)}
-            {@const kindColor = generateKindColorRGB(event.kind)}
-            {@const startTs = getEventStartTimestamp(event)}
-            {@const communityName = getCommunityInfo(event).name}
-            <button
-              class="w-[200px] shrink-0 rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md lg:w-full"
-              style:border-left-color="rgb({kindColor.r},{kindColor.g},{kindColor.b})"
-              onclick={() => navigateToEvent(event)}
+          <div class="mb-4 flex items-center gap-2">
+            <CalendarIcon class_="h-4 w-4" />
+            <h3 class="text-base font-extrabold tracking-tight">{m.dashboard_upcoming_title()}</h3>
+            <a
+              href={resolve('/calendar')}
+              class="ml-auto flex items-center gap-0.5 text-xs font-medium text-white/85 hover:text-white"
             >
-              <div class="text-xs font-medium text-primary">
-                {new Date(startTs * 1000).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit'
-                })}
-              </div>
-              <div class="mt-1 line-clamp-2 text-sm font-semibold">{cardData.title}</div>
-              {#if communityName}
-                <div class="mt-1 text-xs text-base-content/60">{communityName}</div>
-              {/if}
-            </button>
-          {/each}
+              {m.dashboard_upcoming_view_calendar()}
+              <ChevronRightIcon class_="h-3 w-3" />
+            </a>
+          </div>
+          <ol class="flex flex-col gap-3.5">
+            {#each upcomingEvents as event (event.id)}
+              {@const cardData = getFeedCardData(event)}
+              {@const dateParts = getUpcomingDateParts(getEventStartTimestamp(event), event.kind)}
+              {@const communityName = getCommunityInfo(event).name}
+              <li>
+                <button
+                  class="-m-1.5 flex w-[calc(100%+0.75rem)] gap-3 rounded-lg p-1.5 text-left transition-colors hover:bg-white/10"
+                  onclick={() => navigateToEvent(event)}
+                >
+                  <span class="w-12 shrink-0 rounded-lg bg-white/15 px-1 py-1.5 text-center">
+                    <span class="block text-xl leading-none font-extrabold tracking-tight">
+                      {dateParts.day}
+                    </span>
+                    <span
+                      class="mt-1 block text-[10px] leading-none font-semibold uppercase opacity-80"
+                    >
+                      {dateParts.month}
+                    </span>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="line-clamp-2 text-[13px] leading-tight font-semibold">
+                      {cardData.title}
+                    </span>
+                    {#if dateParts.time}
+                      <span class="mt-1 block font-mono text-[11px] leading-none text-white/70">
+                        {dateParts.time}
+                      </span>
+                    {/if}
+                    {#if communityName}
+                      <span class="mt-1 block text-[11px] leading-none text-white/70">
+                        {communityName}
+                      </span>
+                    {/if}
+                  </span>
+                </button>
+              </li>
+            {/each}
+          </ol>
+        </div>
+
+        <div class="mt-4 rounded-xl border border-base-300 bg-base-100 p-4">
+          <div
+            class="mb-2 flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-accent uppercase"
+          >
+            <SparkleIcon class_="h-3 w-3" />
+            {m.home_tip_label()}
+          </div>
+          <h4 class="mb-1.5 text-sm font-bold">{m.home_tip_title()}</h4>
+          <p class="text-[13px] leading-relaxed text-base-content/70">{m.home_tip_body()}</p>
         </div>
       </div>
     {/if}

@@ -27,6 +27,26 @@ export function getNotificationType(event) {
 }
 
 /**
+ * Filter notification events by an inbox filter key.
+ * 'all' passes everything through; 'formRequest' groups requests and
+ * responses; any other key matches the notification type exactly.
+ *
+ * @param {import('nostr-tools').NostrEvent[]} events
+ * @param {string} filterKey
+ * @returns {import('nostr-tools').NostrEvent[]}
+ */
+export function filterNotificationsByType(events, filterKey) {
+  if (filterKey === 'all') return events;
+  if (filterKey === 'formRequest') {
+    return events.filter((e) => {
+      const t = getNotificationType(e);
+      return t === 'formRequest' || t === 'formResponse';
+    });
+  }
+  return events.filter((e) => getNotificationType(e) === filterKey);
+}
+
+/**
  * @param {import('nostr-tools').NostrEvent} event
  * @param {Record<string, number> | null} readMarkers
  * @returns {boolean}

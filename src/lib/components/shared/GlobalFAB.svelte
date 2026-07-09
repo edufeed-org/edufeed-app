@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { PlusIcon, CloseIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { createHub } from '$lib/stores/create-hub.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -23,6 +24,14 @@
   function close() {
     open = false;
   }
+
+  // Open the sheet when another surface (e.g. Home quick action) requests it
+  $effect(() => {
+    if (createHub.requested) {
+      open = true;
+      createHub.requested = false;
+    }
+  });
 
   $effect(() => {
     if (!open) return;

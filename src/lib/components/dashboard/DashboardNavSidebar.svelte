@@ -3,6 +3,7 @@
   import { resolve } from '$app/paths';
   import {
     HomeIcon,
+    GridIcon,
     BellIcon,
     MessageSquareIcon,
     BookmarkIcon,
@@ -15,7 +16,13 @@
   import * as m from '$lib/paraglide/messages';
 
   const sections = [
-    { id: 'feed', href: resolve('/c/'), icon: HomeIcon, label: () => m.dashboard_nav_feed() },
+    { id: 'home', href: resolve('/c/'), icon: HomeIcon, label: () => m.dashboard_nav_home() },
+    {
+      id: 'feed',
+      href: resolve('/c/') + '?view=feed',
+      icon: GridIcon,
+      label: () => m.dashboard_nav_feed()
+    },
     {
       id: 'inbox',
       href: resolve('/c/inbox'),
