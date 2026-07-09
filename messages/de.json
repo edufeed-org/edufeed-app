@@ -2627,5 +2627,7 @@
   "places_input_remove_aria": "Ort {name} entfernen",
   "calendar_top_publishers_label": "Aktivste Veranstalter",
   "calendar_top_publishers_hide_aria": "Events von {name} ausblenden",
-  "calendar_top_publishers_show_aria": "Events von {name} wieder einblenden"
+  "calendar_top_publishers_show_aria": "Events von {name} wieder einblenden",
+  "publication_form_url_inspect_hint": "Beim Eingeben einer Artikel-URL versuchen wir, Metadaten von der Seite zu übernehmen.",
+  "publication_form_url_prefill_applied": "Metadaten von der Seite übernommen – bitte prüfen."
 }
