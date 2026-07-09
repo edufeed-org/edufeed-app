@@ -36,6 +36,11 @@ describe('dashboardFeedSource migration', () => {
     expect(result.dashboardFeedSource).toBe('following');
   });
 
+  it('preserves combined when explicitly set', () => {
+    const result = migrateSettingsForFeedSource({ dashboardFeedSource: 'combined' });
+    expect(result.dashboardFeedSource).toBe('combined');
+  });
+
   it('defaults to communities when value is null', () => {
     const result = migrateSettingsForFeedSource({ dashboardFeedSource: null });
     expect(result.dashboardFeedSource).toBe('communities');

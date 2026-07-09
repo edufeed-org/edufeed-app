@@ -6,13 +6,14 @@
 
 <script>
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
-  import { PeopleIcon, UserIcon, ChevronDownIcon } from '$lib/components/icons';
+  import { PeopleIcon, UserIcon, GridIcon, ChevronDownIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{ id: 'communities' | 'following', label: () => string, icon: any }[]} */
+  /** @type {{ id: 'communities' | 'following' | 'combined', label: () => string, icon: any }[]} */
   const FEED_OPTIONS = [
     { id: 'communities', label: () => m.dashboard_feed_selector_communities(), icon: PeopleIcon },
-    { id: 'following', label: () => m.dashboard_feed_selector_following(), icon: UserIcon }
+    { id: 'following', label: () => m.dashboard_feed_selector_following(), icon: UserIcon },
+    { id: 'combined', label: () => m.dashboard_feed_selector_combined(), icon: GridIcon }
   ];
 
   let activeOption = $derived(
@@ -20,7 +21,7 @@
   );
   const ActiveIcon = $derived(activeOption.icon);
 
-  /** @param {'communities' | 'following'} id */
+  /** @param {'communities' | 'following' | 'combined'} id */
   function selectFeed(id) {
     appSettings.dashboardFeedSource = id;
     // Close the dropdown by blurring the active element

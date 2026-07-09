@@ -27,7 +27,7 @@
     {#if appSettings.dashboardFeedSource === 'following'}
       <DashboardFollowsFeed />
     {:else}
-      <DashboardCommunityFeed />
+      <DashboardCommunityFeed includeFollows={appSettings.dashboardFeedSource === 'combined'} />
     {/if}
   {:else}
     <DashboardHome />

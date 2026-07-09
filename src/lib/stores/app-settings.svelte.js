@@ -17,7 +17,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {'light' | 'dark' | 'system'} colorMode
  * @property {boolean} gatedMode
  * @property {boolean} includeClientTag
- * @property {'communities' | 'following'} dashboardFeedSource
+ * @property {'communities' | 'following' | 'combined'} dashboardFeedSource
  * @property {boolean} linkPreviewsEnabled
  */
 
@@ -386,7 +386,7 @@ export const appSettings = {
 
   /**
    * Get dashboard feed source
-   * @returns {'communities' | 'following'}
+   * @returns {'communities' | 'following' | 'combined'}
    */
   get dashboardFeedSource() {
     return settings.dashboardFeedSource;
@@ -394,7 +394,7 @@ export const appSettings = {
 
   /**
    * Set dashboard feed source
-   * @param {'communities' | 'following'} value
+   * @param {'communities' | 'following' | 'combined'} value
    */
   set dashboardFeedSource(value) {
     settings.dashboardFeedSource = value;

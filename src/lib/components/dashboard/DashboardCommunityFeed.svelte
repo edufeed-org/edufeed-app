@@ -9,7 +9,13 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getNip10References } from 'applesauce-common/helpers';
+  import { TimelineModel } from 'applesauce-core/models';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { contactsStore } from '$lib/stores/contacts.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
+  import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
@@ -38,16 +44,21 @@
   import * as m from '$lib/paraglide/messages';
 
   /**
-   * When > 0 the feed renders as a compact preview: no feed selector,
-   * at most `previewCount` cards, and a "view all" button instead of
-   * incremental loading. Used by the Home view.
-   * @type {{ previewCount?: number }}
+   * previewCount > 0 renders a compact preview: no feed selector, at most
+   * `previewCount` cards, and a "view all" button instead of incremental
+   * loading. Used by the Home view.
+   * includeFollows additionally merges content authored by the user's
+   * follows (kind 3 contacts) into the list — the "combined" feed source.
+   * @type {{ previewCount?: number, includeFollows?: boolean }}
    */
-  let { previewCount = 0 } = $props();
+  let { previewCount = 0, includeFollows = false } = $props();
+
+  const getActiveUser = useActiveUser();
 
   /** @type {Map<string, any[]>} */
   let perCommunityItems = new Map();
   let allItems = $state.raw(/** @type {any[]} */ ([]));
+  let followItems = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let displayCount = $state(15);
 
@@ -58,17 +69,35 @@
   const getCommunityProfiles = useProfileMap(() => joinedCommunities);
   let communityProfiles = $derived(getCommunityProfiles());
 
+  // Community items merged with follows-authored items (combined mode).
+  // Deduped by id; kind-1 replies are excluded — only root notes belong here.
+  let feedItems = $derived.by(() => {
+    if (!includeFollows || followItems.length === 0) return allItems;
+    const seen = new Set();
+    const merged = [];
+    for (const event of [...allItems, ...followItems]) {
+      if (seen.has(event.id)) continue;
+      if (event.kind === 1) {
+        const refs = getNip10References(event);
+        if (refs?.reply?.e || refs?.root?.e) continue;
+      }
+      seen.add(event.id);
+      merged.push(event);
+    }
+    return merged.toSorted((a, b) => b.created_at - a.created_at);
+  });
+
   // Event author profiles
-  const getProfiles = useProfileMap(() => allItems.map((e) => e.pubkey));
+  const getProfiles = useProfileMap(() => feedItems.map((e) => e.pubkey));
   let profiles = $derived(getProfiles());
 
   let upcomingEvents = $derived.by(() => {
     const nowTs = Math.floor(Date.now() / 1000);
-    return filterUpcomingEvents(allItems, nowTs);
+    return filterUpcomingEvents(feedItems, nowTs);
   });
 
-  let visibleItems = $derived(allItems.slice(0, previewCount > 0 ? previewCount : displayCount));
-  let hasMore = $derived(previewCount === 0 && displayCount < allItems.length);
+  let visibleItems = $derived(feedItems.slice(0, previewCount > 0 ? previewCount : displayCount));
+  let hasMore = $derived(previewCount === 0 && displayCount < feedItems.length);
 
   // Per-community cleanup functions
   /** @type {Map<string, () => void>} */
@@ -214,6 +243,45 @@
     };
   });
 
+  // Combined mode: subscribe to content authored by the user's follows.
+  // Same model + loaders as the follows feed (ProfileFeedView), rendered
+  // here uniformly as FeedCards.
+  $effect(() => {
+    if (!includeFollows) {
+      followItems = [];
+      return;
+    }
+    const contacts = contactsStore.contacts;
+    if (!contacts.length) {
+      followItems = [];
+      return;
+    }
+
+    /** @type {import('rxjs').Subscription[]} */
+    const subs = [];
+    subs.push(
+      eventStore.model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: contacts }).subscribe({
+        next: (loaded) => {
+          followItems = loaded || [];
+        },
+        error: (err) => console.error('DashboardCommunityFeed: follows model error:', err)
+      })
+    );
+
+    // Defer network loaders slightly (same pattern as ProfileFeedView) —
+    // the model already emits cached data instantly.
+    const loaderTimer = setTimeout(() => {
+      subs.push(
+        ...startProfileFeedLoaders({ pubkeys: contacts, userPubkey: getActiveUser()?.pubkey })
+      );
+    }, 100);
+
+    return () => {
+      clearTimeout(loaderTimer);
+      subs.forEach((s) => s.unsubscribe());
+    };
+  });
+
   /** @param {any} event */
   function navigateToEvent(event) {
     const communityPubkey = resolveCommunityPubkey(event, perCommunityItems);
@@ -321,7 +389,7 @@
           </div>
         {/if}
 
-        {#if previewCount > 0 && allItems.length > previewCount}
+        {#if previewCount > 0 && feedItems.length > previewCount}
           <div class="mt-4 flex justify-center">
             <button
               class="btn btn-outline btn-sm"
@@ -402,30 +470,31 @@
           <h4 class="mb-1.5 text-sm font-bold">{m.home_tip_title()}</h4>
           <p class="text-[13px] leading-relaxed text-base-content/70">{m.home_tip_body()}</p>
         </div>
-
-        <!-- Playful nudge from the tip card toward the create FAB -->
-        <div
-          class="mt-2 hidden items-start justify-end gap-2 pr-8 text-accent lg:flex"
-          aria-hidden="true"
-        >
-          <span class="mt-1 text-xl leading-none" style="font-family: var(--font-script)">
-            {m.home_fab_nudge()}
-          </span>
-          <svg
-            class="fab-nudge-arrow h-12 w-12"
-            viewBox="0 0 64 64"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M10 8c4 18 15 33 41 41" />
-            <path d="M38 50l13-1-4-13" />
-          </svg>
-        </div>
       </div>
     {/if}
+  </div>
+
+  <!-- Playful nudge toward the create FAB. Viewport-fixed like the FAB itself
+       so it always points at it; sits below the FAB's scrim (z-55). -->
+  <div
+    class="pointer-events-none fixed right-[5.5rem] bottom-9 z-30 hidden items-start gap-1.5 text-accent lg:flex"
+    aria-hidden="true"
+  >
+    <span class="text-xl leading-none" style="font-family: var(--font-script)">
+      {m.home_fab_nudge()}
+    </span>
+    <svg
+      class="fab-nudge-arrow h-10 w-10"
+      viewBox="0 0 64 64"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="3"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M10 8c4 18 15 33 41 41" />
+      <path d="M38 50l13-1-4-13" />
+    </svg>
   </div>
 {/if}
 
