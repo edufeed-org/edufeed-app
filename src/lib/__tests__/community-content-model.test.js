@@ -187,7 +187,11 @@ describe('createCommunityContentModel', () => {
       ]
     });
 
-    const store = createMockEventStore({ reposts: [repostEvent], all: [referencedEvent] });
+    const store = createMockEventStore({
+      direct: [],
+      reposts: [repostEvent],
+      all: [referencedEvent]
+    });
     const Model = createCommunityContentModel([30142]);
     /** @type {any} */
     let result;
@@ -217,6 +221,7 @@ describe('createCommunityContentModel', () => {
     });
 
     const store = createMockEventStore({
+      direct: [],
       shares: [late],
       reposts: [early],
       all: [referencedEvent]
