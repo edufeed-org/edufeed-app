@@ -38,7 +38,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
   import * as m from '$lib/paraglide/messages';
-  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
+  import HeroImage from '$lib/components/shared/HeroImage.svelte';
 
   /**
    * @typedef {Object} Props
@@ -210,35 +210,10 @@
     {/snippet}
   </DetailHeader>
 
-  <!-- Event Header with Image -->
+  <!-- Event Header with Image — full ratio, never cropped (#29) -->
   {#if event.image}
     <div class="mb-4">
-      {#if isHttpUrl(event.image)}
-        <!-- The banner crop can cut off attribution/copyright notices baked into
-             the image, so the full original must stay one click away. The link
-             is gated on http(s) — the tag value is untrusted event data. -->
-        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: original image source -->
-        <a
-          href={event.image}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={m.event_detail_view_original_image()}
-        >
-          <img
-            src={event.image}
-            alt={event.title}
-            class="h-64 w-full rounded-lg object-cover shadow-lg"
-            loading="lazy"
-          />
-        </a>
-      {:else}
-        <img
-          src={event.image}
-          alt={event.title}
-          class="h-64 w-full rounded-lg object-cover shadow-lg"
-          loading="lazy"
-        />
-      {/if}
+      <HeroImage src={event.image} alt={event.title} fallbackType="event" />
     </div>
   {/if}
 

@@ -5,7 +5,7 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
+  import HeroImage from '$lib/components/shared/HeroImage.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
@@ -20,7 +20,6 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { TimelineModel } from 'applesauce-core/models';
   import DetailHeader from '../shared/DetailHeader.svelte';
-  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { getSha256FromURL } from 'applesauce-common/helpers';
@@ -175,46 +174,17 @@
     {/snippet}
   </DetailHeader>
 
-  <!-- Featured Image -->
+  <!-- Featured Image — full ratio, never cropped (#29) -->
   {#if image}
     <div class="mb-8">
-      <div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg">
-        {#if isHttpUrl(image)}
-          <!-- The 16:9 crop can cut off attribution baked into the cover, and
-               license checks need the untouched original — keep it one click
-               away. The link is gated on http(s): untrusted event data. -->
-          <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: original image source -->
-          <a
-            href={image}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={m.event_detail_view_original_image()}
-            class="block h-full w-full"
-          >
-            <ImageWithFallback
-              src={image}
-              alt={title}
-              fallbackType="article"
-              size="hero"
-              class="h-full w-full object-cover"
-            />
-          </a>
-        {:else}
-          <ImageWithFallback
-            src={image}
-            alt={title}
-            fallbackType="article"
-            size="hero"
-            class="h-full w-full object-cover"
-          />
-        {/if}
+      <HeroImage src={image} alt={title} fallbackType="article">
         <ImageLicenseOverlay
           licenseEvent={coverStatus.event}
           status={coverStatus.status}
           variant="pill"
           position="absolute right-2 bottom-2 bg-base-100/80 backdrop-blur"
         />
-      </div>
+      </HeroImage>
     </div>
   {/if}
 
