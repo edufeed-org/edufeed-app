@@ -134,6 +134,14 @@ export function useAssistantHints() {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
   let dismissed = $state.raw(/** @type {Set<HintId>} */ (new Set()));
 
+  // The session-local dismissed Set must not leak across accounts: a hint
+  // dismissed under account A would otherwise hide account B's open hints
+  // until a reload.
+  $effect(() => {
+    getActiveUser();
+    dismissed = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
+  });
+
   const statuses = $derived.by(() => {
     const user = getActiveUser();
     if (!user) return { backup: null, relays: null, dm: null, nip05: null };

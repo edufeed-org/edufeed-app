@@ -67,12 +67,24 @@ vi.mock('$lib/paraglide/messages', () =>
 const mockGoto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto: mockGoto }));
 
-const mockActiveUser = vi.hoisted(() => ({ value: null }));
+// The active-user mock must be a genuine Svelte rune signal (not a plain
+// object) so the hook's own $effects — which track getActiveUser() the same
+// way production's real useActiveUser() does — actually re-run on a
+// mid-session account switch, the exact scenario this suite exercises below.
+// $state can only be created inside a file the Svelte compiler processes
+// (.svelte.js), so the box lives in ./__mocks__/reactive-box.svelte.js and is
+// created inside the (async) mock factory — vi.hoisted callbacks run before
+// this file's own imports resolve, so they can't reference it directly.
 const mockManager = vi.hoisted(() => ({ active: { signer: { signEvent: vi.fn() } } }));
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => mockActiveUser.value,
-  manager: mockManager
-}));
+vi.mock('$lib/stores/accounts.svelte', async () => {
+  const { createReactiveBox } = await import('./__mocks__/reactive-box.svelte.js');
+  const activeUserBox = createReactiveBox(null);
+  return {
+    useActiveUser: () => () => activeUserBox.value,
+    manager: mockManager,
+    __activeUserBox: activeUserBox
+  };
+});
 
 const mockModalStore = vi.hoisted(() => ({ openModal: vi.fn(), closeModal: vi.fn() }));
 vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: mockModalStore }));
@@ -131,6 +143,9 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 
 import TermiAssistant from '../assistant/TermiAssistant.svelte';
 import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
+// Reactive box (see the vi.mock('$lib/stores/accounts.svelte', ...) factory
+// above) — tests still just assign mockActiveUser.value like a plain object.
+import { __activeUserBox as mockActiveUser } from '$lib/stores/accounts.svelte';
 
 const NSEC_PUBKEY = 'a'.repeat(64);
 const EXT_PUBKEY = 'b'.repeat(64);
@@ -308,6 +323,25 @@ describe('TermiAssistant launcher + hints', () => {
     await fireEvent.click(container.querySelector('[data-testid="termi-hint-dm-dismiss"]'));
     expect(container.querySelector('[data-testid="termi-hint-dm"]')).toBeNull();
     expect(localStorage.getItem(`dm-relay-banner-dismissed:${EXT_PUBKEY}`)).toBe('1');
+  });
+
+  it('resets session-dismissed hints on account switch', async () => {
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockDmStatus.value = 'absent';
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    expect(container.querySelector('[data-testid="termi-hint-dm"]')).not.toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-dm-dismiss"]'));
+    expect(container.querySelector('[data-testid="termi-hint-dm"]')).toBeNull();
+
+    // Switch to a different account with no dismiss flag of its own: the
+    // session-local dismissed Set from account B must not leak and hide C's
+    // legitimately open hint.
+    mockActiveUser.value = { type: 'extension', pubkey: 'c'.repeat(64) };
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-dm"]')).not.toBeNull();
   });
 
   it('dismissing a done card removes it without writing any dismiss flag', async () => {
