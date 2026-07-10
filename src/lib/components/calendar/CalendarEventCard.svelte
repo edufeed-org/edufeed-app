@@ -413,7 +413,7 @@
           <div class="mt-2 flex items-center gap-2">
             {#if commentCount > 0}
               <span class="flex items-center gap-1 text-sm text-base-content/60">
-                <ChatIcon class_="w-4 h-4" />
+                <ChatIcon class_="w-4 h-4" title={m.comments_show()} />
                 {commentCount}
               </span>
             {/if}

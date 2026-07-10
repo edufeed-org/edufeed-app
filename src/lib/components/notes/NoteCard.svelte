@@ -7,6 +7,7 @@
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils';
   import { ChatIcon, RepostIcon, LightningIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
   import BookmarkButton from '$lib/components/bookmarks/BookmarkButton.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
@@ -125,7 +126,7 @@
       class="btn gap-1 btn-ghost btn-sm {showComments ? 'text-primary' : ''}"
       onclick={() => (showComments = !showComments)}
     >
-      <ChatIcon class_="w-4 h-4" />
+      <ChatIcon class_="w-4 h-4" title={showComments ? m.comments_hide() : m.comments_show()} />
       {#if commentCount > 0}
         <span class="text-xs">{commentCount}</span>
       {/if}
