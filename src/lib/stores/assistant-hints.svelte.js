@@ -26,10 +26,23 @@ import { publishDefaultRelayList } from '$lib/services/relay-list-backfill.js';
 import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
 import { getDmRelayCheckStatus } from '$lib/services/dm-service.svelte.js';
 import { modalStore } from '$lib/stores/modal.svelte.js';
-import { isBackupDownloaded, isBackupDismissed } from '$lib/stores/backup-flags.svelte.js';
-import { isRelayListBannerDismissed } from '$lib/stores/relay-list-flags.svelte.js';
-import { isDmRelayBannerDismissed } from '$lib/stores/dm-relay-flags.svelte.js';
-import { isNip05HintDismissed } from '$lib/stores/nip05-hint-flags.svelte.js';
+import {
+  isBackupDownloaded,
+  isBackupDismissed,
+  markBackupDismissed
+} from '$lib/stores/backup-flags.svelte.js';
+import {
+  isRelayListBannerDismissed,
+  markRelayListBannerDismissed
+} from '$lib/stores/relay-list-flags.svelte.js';
+import {
+  isDmRelayBannerDismissed,
+  markDmRelayBannerDismissed
+} from '$lib/stores/dm-relay-flags.svelte.js';
+import {
+  isNip05HintDismissed,
+  markNip05HintDismissed
+} from '$lib/stores/nip05-hint-flags.svelte.js';
 import { deriveHintStatus, trackEverOpen } from '$lib/helpers/assistant-hints.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -47,7 +60,8 @@ export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'nip
  *   getHints: () => Array<{id: HintId, status: HintStatus}>,
  *   getOpenCount: () => number,
  *   runHint: (id: HintId) => void,
- *   customizeHint: (id: HintId) => void
+ *   customizeHint: (id: HintId) => void,
+ *   dismissHint: (id: HintId) => void
  * }}
  */
 export function useAssistantHints() {
@@ -116,6 +130,9 @@ export function useAssistantHints() {
   /** Hint ids that were visible (open/doing) at some point this session. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
   let everOpen = $state.raw(/** @type {Set<string>} */ (new Set()));
+  /** Hint ids removed from the chat this session via the card's "x". */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
+  let dismissed = $state.raw(/** @type {Set<HintId>} */ (new Set()));
 
   const statuses = $derived.by(() => {
     const user = getActiveUser();
@@ -222,15 +239,38 @@ export function useAssistantHints() {
     else if (id === 'dm') goto('/settings#dm-relay-settings');
   }
 
+  /**
+   * Remove a hint card from the chat. Open/doing hints also get their
+   * per-account dismiss flag set so they stay gone across sessions; done
+   * cards are session-only (they cannot reappear after a reload anyway).
+   * @param {HintId} id
+   */
+  function dismissHint(id) {
+    const user = getActiveUser();
+    const status = statuses[id];
+    if (user && (status === 'open' || status === 'doing')) {
+      if (id === 'backup') markBackupDismissed(user.pubkey);
+      else if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
+      else if (id === 'dm') markDmRelayBannerDismissed(user.pubkey);
+      else if (id === 'nip05') markNip05HintDismissed(user.pubkey);
+    }
+    const next = new Set(dismissed); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale below
+    next.add(id);
+    dismissed = next;
+  }
+
   return {
     getHints: () =>
       HINT_IDS.flatMap((id) => {
         const status = statuses[id];
-        return status === null ? [] : [{ id, status }];
+        return status === null || dismissed.has(id) ? [] : [{ id, status }];
       }),
     getOpenCount: () =>
-      HINT_IDS.filter((id) => statuses[id] === 'open' || statuses[id] === 'doing').length,
+      HINT_IDS.filter(
+        (id) => !dismissed.has(id) && (statuses[id] === 'open' || statuses[id] === 'doing')
+      ).length,
     runHint,
-    customizeHint
+    customizeHint,
+    dismissHint
   };
 }

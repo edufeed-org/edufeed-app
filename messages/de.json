@@ -2585,6 +2585,7 @@
   "termi_greeting_hint_one": "Außerdem habe ich einen Hinweis zu deinem Konto:",
   "termi_greeting_hint_many": "Außerdem habe ich {count} Hinweise zu deinem Konto:",
   "termi_hint_done_chip": "Erledigt",
+  "termi_hint_dismiss_aria": "Hinweis ausblenden",
   "termi_hint_relays_doing": "Relay-Liste wird signiert und veröffentlicht …",
   "termi_hint_dm_doing": "Direktnachrichten werden eingerichtet …",
   "termi_hint_nip05_title": "Hol dir eine verifizierte Adresse",

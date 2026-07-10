@@ -6,7 +6,7 @@
   import { useAssistantHints } from '$lib/stores/assistant-hints.svelte.js';
   import TermiChatWindow from './TermiChatWindow.svelte';
 
-  const { getHints, getOpenCount, runHint, customizeHint } = useAssistantHints();
+  const { getHints, getOpenCount, runHint, customizeHint, dismissHint } = useAssistantHints();
 
   let open = $state(false);
   let expanded = $state(false);
@@ -54,6 +54,7 @@
     openCount={getOpenCount()}
     {runHint}
     {customizeHint}
+    {dismissHint}
   />
 {/if}
 

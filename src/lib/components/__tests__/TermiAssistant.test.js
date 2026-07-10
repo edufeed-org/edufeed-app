@@ -30,6 +30,7 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_greeting_hint_one',
       'termi_greeting_hint_many',
       'termi_hint_done_chip',
+      'termi_hint_dismiss_aria',
       'termi_hint_relays_doing',
       'termi_hint_dm_doing',
       'termi_hint_nip05_title',
@@ -295,5 +296,32 @@ describe('TermiAssistant launcher + hints', () => {
 
     await openTermi(container);
     expect(container.querySelectorAll('[data-testid^="termi-hint-"]').length).toBe(0);
+  });
+
+  it('dismissing an open hint removes it and persists the per-account flag', async () => {
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockDmStatus.value = 'absent';
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    expect(container.querySelector('[data-testid="termi-hint-dm"]')).not.toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-dm-dismiss"]'));
+    expect(container.querySelector('[data-testid="termi-hint-dm"]')).toBeNull();
+    expect(localStorage.getItem(`dm-relay-banner-dismissed:${EXT_PUBKEY}`)).toBe('1');
+  });
+
+  it('dismissing a done card removes it without writing any dismiss flag', async () => {
+    mockActiveUser.value = signedUpNsecUser();
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+
+    markBackupDownloaded(NSEC_PUBKEY);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-backup"]')).not.toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-backup-dismiss"]'));
+    expect(container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
+    expect(localStorage.getItem(`backup-banner-dismissed:${NSEC_PUBKEY}`)).toBeNull();
   });
 });

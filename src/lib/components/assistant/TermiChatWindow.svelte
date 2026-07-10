@@ -18,7 +18,8 @@
    *   hints: Array<{id: string, status: string}>,
    *   openCount: number,
    *   runHint: (id: any) => void,
-   *   customizeHint: (id: any) => void
+   *   customizeHint: (id: any) => void,
+   *   dismissHint: (id: any) => void
    * }}
    */
   let {
@@ -28,7 +29,8 @@
     hints,
     openCount,
     runHint,
-    customizeHint
+    customizeHint,
+    dismissHint
   } = $props();
 
   const getActiveUser = useActiveUser();
@@ -208,7 +210,19 @@
         <div
           class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-100 px-3.5 py-2.5 shadow-sm"
         >
-          <div class="text-sm font-bold">{copy.title}</div>
+          <div class="flex items-start justify-between gap-2">
+            <div class="text-sm font-bold">{copy.title}</div>
+            <button
+              type="button"
+              data-testid="termi-hint-{hint.id}-dismiss"
+              class="btn -mt-1 -mr-1.5 btn-circle text-base-content/40 btn-ghost btn-xs hover:text-base-content"
+              aria-label={m.termi_hint_dismiss_aria()}
+              title={m.termi_hint_dismiss_aria()}
+              onclick={() => dismissHint(hint.id)}
+            >
+              <CloseIcon class_="h-3.5 w-3.5" />
+            </button>
+          </div>
           <div class="mt-1 text-[13px] leading-snug text-base-content/70">{copy.body}</div>
           {#if hint.status === 'done'}
             <div
