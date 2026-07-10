@@ -19,6 +19,8 @@
   import CalendarSelector from './CalendarSelector.svelte';
   import CommunitySelector from './CommunitySelector.svelte';
   import LocationInput from '../shared/LocationInput.svelte';
+  import EuropeanDateInput from '../shared/EuropeanDateInput.svelte';
+  import EuropeanTimeInput from '../shared/EuropeanTimeInput.svelte';
   import LicensedImageInput from '../shared/LicensedImageInput.svelte';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import EditableList from '../shared/EditableList.svelte';
@@ -489,13 +491,7 @@
             <label for="startDate" class="mb-1 block text-sm font-medium text-base-content">
               {m.event_modal_start_date_label()} <span class="text-error">*</span>
             </label>
-            <input
-              id="startDate"
-              type="date"
-              class="input-bordered input w-full"
-              bind:value={formData.startDate}
-              required
-            />
+            <EuropeanDateInput id="startDate" bind:value={formData.startDate} required />
           </div>
 
           {#if formData.eventType === 'time'}
@@ -503,13 +499,7 @@
               <label for="startTime" class="mb-1 block text-sm font-medium text-base-content">
                 {m.event_modal_start_time_label()} <span class="text-error">*</span>
               </label>
-              <input
-                id="startTime"
-                type="time"
-                class="input-bordered input w-full"
-                bind:value={formData.startTime}
-                required
-              />
+              <EuropeanTimeInput id="startTime" bind:value={formData.startTime} required />
             </div>
           {/if}
         </div>
@@ -519,12 +509,7 @@
             <label for="endDate" class="mb-1 block text-sm font-medium text-base-content"
               >{m.event_modal_end_date_label()}</label
             >
-            <input
-              id="endDate"
-              type="date"
-              class="input-bordered input w-full"
-              bind:value={formData.endDate}
-            />
+            <EuropeanDateInput id="endDate" bind:value={formData.endDate} />
           </div>
 
           {#if formData.eventType === 'time'}
@@ -532,12 +517,7 @@
               <label for="endTime" class="mb-1 block text-sm font-medium text-base-content"
                 >{m.event_modal_end_time_label()}</label
               >
-              <input
-                id="endTime"
-                type="time"
-                class="input-bordered input w-full"
-                bind:value={formData.endTime}
-              />
+              <EuropeanTimeInput id="endTime" bind:value={formData.endTime} />
             </div>
           {/if}
         </div>

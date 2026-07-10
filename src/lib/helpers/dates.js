@@ -107,6 +107,39 @@ export function parseDateInput(value) {
 }
 
 /**
+ * Lenient parser for user-typed 24-hour time input. Accepts `HH:MM` (single
+ * digits and a `.` separator tolerated), a bare hour (`13` → `13:00`), and
+ * digit-only `HMM`/`HHMM` (`930` → `09:30`). Returns a zero-padded `HH:MM`
+ * string — the same shape `<input type="time">` binds — or '' when the input
+ * is not a valid time, so callers can treat '' as "no valid time yet".
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function parseTimeInput(value) {
+  const s = (value ?? '').trim();
+  if (!s) return '';
+
+  let hours, minutes;
+  const separated = /^(\d{1,2})[:.](\d{2})$/.exec(s);
+  const digits = /^(\d{1,2})(\d{2})$/.exec(s);
+  const bareHour = /^(\d{1,2})$/.exec(s);
+  if (separated) {
+    [hours, minutes] = [Number(separated[1]), Number(separated[2])];
+  } else if (digits) {
+    [hours, minutes] = [Number(digits[1]), Number(digits[2])];
+  } else if (bareHour) {
+    [hours, minutes] = [Number(bareHour[1]), 0];
+  } else {
+    return '';
+  }
+
+  if (hours > 23 || minutes > 59) return '';
+  const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}`;
+}
+
+/**
  * Zero-padded ISO string for a real calendar date, '' otherwise.
  * @param {number} year
  * @param {number} month 1-based
