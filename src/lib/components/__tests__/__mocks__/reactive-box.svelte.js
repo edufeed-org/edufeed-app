@@ -4,6 +4,7 @@
 // inside its own $effect/$derived — a plain object's `.value` read is
 // invisible to Svelte's reactivity, so the effect would only ever see the
 // value as of mount and never re-run when a test mutates it later.
+/** @param {any} initial */
 export function createReactiveBox(initial) {
   let current = $state(initial);
   return {
