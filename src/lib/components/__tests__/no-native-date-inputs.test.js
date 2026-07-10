@@ -1,11 +1,12 @@
 /**
- * Guard: no native `<input type="date">` anywhere in the app.
+ * Guard: no native `<input type="date">` or `<input type="time">`
+ * anywhere in the app.
  *
- * Native date inputs render in the browser's locale (US users see
- * MM/DD/YYYY), but the app must show German DD.MM.YYYY everywhere
- * (issue #33). EuropeanDateInput wraps a masked text field + calendar
- * popup and binds the same ISO YYYY-MM-DD string, so it is a drop-in
- * replacement for every native date input.
+ * Native date/time inputs render in the browser's locale (US users see
+ * MM/DD/YYYY and a 12-hour clock), but the app must show German
+ * DD.MM.YYYY / 24-hour HH:MM everywhere (issue #33). EuropeanDateInput
+ * and EuropeanTimeInput are masked text fields binding the same value
+ * shapes, so they are drop-in replacements.
  *
  * @vitest-environment node
  */
@@ -25,10 +26,10 @@ function withoutComments(source) {
   return source.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-describe('native date inputs', () => {
-  it('are not used anywhere (use EuropeanDateInput instead)', () => {
+describe('native date/time inputs', () => {
+  it('are not used anywhere (use EuropeanDateInput / EuropeanTimeInput instead)', () => {
     const offenders = svelteFiles('src').filter((file) =>
-      /type=["']date["']/.test(withoutComments(readFileSync(file, 'utf8')))
+      /type=["'](date|time)["']/.test(withoutComments(readFileSync(file, 'utf8')))
     );
     expect(offenders).toEqual([]);
   });
