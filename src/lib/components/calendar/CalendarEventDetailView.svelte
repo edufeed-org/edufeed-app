@@ -425,10 +425,20 @@
   <!-- RSVP Section -->
   <div class="card mb-8 bg-base-100 shadow-lg">
     <div class="card-body">
-      <h2 class="card-title text-2xl">
-        <UserIcon class_="w-6 h-6" />
-        {m.calendar_detail_rsvp_title()}
-      </h2>
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-2xl">
+          <UserIcon class_="w-6 h-6" />
+          {m.calendar_detail_rsvp_title()}
+        </h2>
+        {#if activeUser && rawEvent}
+          <button
+            class="btn btn-outline btn-sm"
+            onclick={() => modalStore.openModal('inviteToEvent', { rawEvent })}
+          >
+            {m.event_invite_button()}
+          </button>
+        {/if}
+      </div>
       <div class="mt-4">
         <InlineRsvp
           calendarEvent={rawEvent || event}

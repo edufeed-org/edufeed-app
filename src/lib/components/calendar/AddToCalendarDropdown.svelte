@@ -65,9 +65,20 @@
 </script>
 
 {#if isDesktop}
-  <!-- Desktop: Dropdown -->
-  <div class="dropdown dropdown-end" class:dropdown-open={isOpen}>
-    <button tabindex="0" class="btn gap-2 btn-sm btn-primary" onclick={toggleOpen} {disabled}>
+  <!-- Desktop: Dropdown. DaisyUI shows .dropdown-content on focus-within,
+       independent of component state — so isOpen must track focus, not
+       clicks, or a focused-but-"closed" state renders an empty shell. -->
+  <div
+    class="dropdown dropdown-end"
+    class:dropdown-open={isOpen}
+    onfocusin={() => {
+      if (!disabled) isOpen = true;
+    }}
+    onfocusout={(e) => {
+      if (!e.currentTarget.contains(/** @type {Node | null} */ (e.relatedTarget))) isOpen = false;
+    }}
+  >
+    <button tabindex="0" class="btn gap-2 btn-sm btn-primary" {disabled}>
       <PlusIcon class_="w-4 h-4" />
       {m.add_to_calendar_dropdown_button_label()}
       <ChevronDownIcon class_="w-4 h-4" />

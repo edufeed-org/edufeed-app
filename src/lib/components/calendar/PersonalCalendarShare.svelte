@@ -7,6 +7,7 @@
 <script>
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
   import { useCalendarManagement } from '$lib/stores/calendar-management-store.svelte.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -236,25 +237,34 @@
       <div class="py-4 text-center text-base-content/60 {compact ? 'text-sm' : ''}">
         {m.personal_calendar_no_calendars()}
       </div>
+      <button
+        class="btn btn-outline btn-primary {compact ? 'btn-block btn-sm' : ''}"
+        onclick={() => modalStore.openModal('createCalendar')}
+      >
+        <PlusIcon class_="w-4 h-4 mr-2" />
+        {m.calendar_dropdown_create_new()}
+      </button>
     {/if}
   </div>
 
   <!-- Apply Changes Button -->
-  <div class="flex items-center gap-3">
-    <button
-      class="btn btn-primary {compact ? 'btn-block btn-sm' : ''}"
-      disabled={selectedCalendarIds.length === 0 || isProcessingChanges}
-      onclick={handleApplyCalendarChanges}
-    >
-      {#if isProcessingChanges}
-        <span class="loading loading-spinner {compact ? 'loading-sm' : ''}"></span>
-        {m.personal_calendar_applying({ count: selectedCalendarIds.length })}
-      {:else}
-        <PlusIcon class_="w-4 h-4 mr-2" />
-        {m.personal_calendar_apply_changes({ count: selectedCalendarIds.length })}
-      {/if}
-    </button>
-  </div>
+  {#if loading || calendars.length > 0}
+    <div class="flex items-center gap-3">
+      <button
+        class="btn btn-primary {compact ? 'btn-block btn-sm' : ''}"
+        disabled={selectedCalendarIds.length === 0 || isProcessingChanges}
+        onclick={handleApplyCalendarChanges}
+      >
+        {#if isProcessingChanges}
+          <span class="loading loading-spinner {compact ? 'loading-sm' : ''}"></span>
+          {m.personal_calendar_applying({ count: selectedCalendarIds.length })}
+        {:else}
+          <PlusIcon class_="w-4 h-4 mr-2" />
+          {m.personal_calendar_apply_changes({ count: selectedCalendarIds.length })}
+        {/if}
+      </button>
+    </div>
+  {/if}
 
   <!-- Success Message -->
   {#if calendarChangesSuccess}

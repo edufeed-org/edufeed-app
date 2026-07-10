@@ -18,6 +18,7 @@
   import CommunityMigrationModal from './CommunityMigrationModal.svelte';
   import AddBookmarkModal from './bookmarks/AddBookmarkModal.svelte';
   import ShareByNaddrModal from './shared/ShareByNaddrModal.svelte';
+  import InviteToEventModal from '$lib/components/calendar/InviteToEventModal.svelte';
   import ReportMetadataModal from './shared/ReportMetadataModal.svelte';
   import CreateRoomModal from './meet/CreateRoomModal.svelte';
   import PollCreateModal from './polls/PollCreateModal.svelte';
@@ -325,6 +326,8 @@
   <AddBookmarkModal modalId={addBookmarkModalId} />
 {:else if modal.activeModal === 'shareByNaddr'}
   <ShareByNaddrModal modalId={shareByNaddrModalId} />
+{:else if modal.activeModal === 'inviteToEvent'}
+  <InviteToEventModal />
 {:else if modal.activeModal === 'reportMetadata'}
   <ReportMetadataModal modalId={reportMetadataModalId} />
 {:else if modal.activeModal === 'createRoom'}
