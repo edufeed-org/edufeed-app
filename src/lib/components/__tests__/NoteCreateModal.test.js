@@ -79,7 +79,9 @@ const naddr = nip19.naddrEncode({
 describe('NoteCreateModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    spies.publishSpy = vi.fn().mockResolvedValue({ relays: [] });
+    spies.publishSpy = vi
+      .fn()
+      .mockResolvedValue({ success: true, relays: ['wss://relay.example'], successCount: 1 });
     spies.signEventSpy = vi.fn(async (/** @type {any} */ template) => ({
       ...template,
       id: 'signed-id',
@@ -214,6 +216,21 @@ describe('NoteCreateModal', () => {
 
     expect(screen.getByRole('alert')).toBeTruthy();
     expect(spies.publishSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows an error and stays open when the publish reaches no relay', async () => {
+    spies.publishSpy = vi.fn().mockResolvedValue({ success: false, relays: [], successCount: 0 });
+    render(NoteCreateModal, { props: {} });
+
+    await fireEvent.input(screen.getByTestId('note-content-input'), {
+      target: { value: 'Nowhere to go' }
+    });
+    await fireEvent.click(screen.getByTestId('note-publish-button'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+    expect(spies.closeSpy).not.toHaveBeenCalled();
   });
 
   it('surfaces sign errors and re-enables the form', async () => {

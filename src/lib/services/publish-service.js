@@ -9,6 +9,7 @@
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.js';
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
+import { getFallbackRelays } from '$lib/helpers/relay-helper.js';
 import {
   getRelaysForKind,
   getCommunityGlobalRelays,
@@ -108,6 +109,15 @@ export async function publishEvent(signedEvent, taggedPubkeys = [], opts = {}) {
 
   // 4. Additional relays (explicit)
   additionalRelays.forEach((r) => relaySet.add(r));
+
+  // 5. Safety net: a fresh account (no NIP-65 write relays) publishing a
+  // kind without an app-relay category (e.g. kind 1 note, kind 1068 poll)
+  // can end up with an EMPTY set — the event would silently go nowhere.
+  // Fall back to the deployment fallback relays (empty in gated mode,
+  // where users are provisioned with proper relay lists).
+  if (relaySet.size === 0) {
+    getFallbackRelays().forEach((r) => relaySet.add(r));
+  }
 
   const publishRelays = Array.from(relaySet);
 

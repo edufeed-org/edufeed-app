@@ -2694,5 +2694,6 @@
   "note_create_modal_preview_empty": "Nothing to preview yet.",
   "fab_create_note": "Write a note",
   "fab_create_note_aria": "Write a new note",
-  "fab_create_note_desc": "Short text post to the feed"
+  "fab_create_note_desc": "Short text post to the feed",
+  "note_create_modal_error_publish": "Your note could not be delivered to any relay. Please try again."
 }

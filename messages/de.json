@@ -2694,5 +2694,6 @@
   "note_create_modal_preview_empty": "Noch nichts zur Vorschau.",
   "fab_create_note": "Notiz verfassen",
   "fab_create_note_aria": "Neue Notiz verfassen",
-  "fab_create_note_desc": "Kurzer Textbeitrag im Feed"
+  "fab_create_note_desc": "Kurzer Textbeitrag im Feed",
+  "note_create_modal_error_publish": "Deine Notiz konnte an kein Relay übermittelt werden. Bitte versuche es erneut."
 }

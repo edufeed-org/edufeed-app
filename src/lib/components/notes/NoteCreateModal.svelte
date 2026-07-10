@@ -107,7 +107,11 @@
       const signed = await factory.sign(draft);
 
       eventStore.add(signed);
-      await publishEvent(signed, [], { communityEvent });
+      const result = await publishEvent(signed, [], { communityEvent });
+      if (!result.success) {
+        submitError = m.note_create_modal_error_publish();
+        return;
+      }
 
       content = '';
       modalStore.closeModal();
