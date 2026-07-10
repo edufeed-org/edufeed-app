@@ -19,6 +19,7 @@
   import CalendarSelector from './CalendarSelector.svelte';
   import CommunitySelector from './CommunitySelector.svelte';
   import LocationInput from '../shared/LocationInput.svelte';
+  import EuropeanDateInput from '../shared/EuropeanDateInput.svelte';
   import LicensedImageInput from '../shared/LicensedImageInput.svelte';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import EditableList from '../shared/EditableList.svelte';
@@ -489,13 +490,7 @@
             <label for="startDate" class="mb-1 block text-sm font-medium text-base-content">
               {m.event_modal_start_date_label()} <span class="text-error">*</span>
             </label>
-            <input
-              id="startDate"
-              type="date"
-              class="input-bordered input w-full"
-              bind:value={formData.startDate}
-              required
-            />
+            <EuropeanDateInput id="startDate" bind:value={formData.startDate} required />
           </div>
 
           {#if formData.eventType === 'time'}
@@ -519,12 +514,7 @@
             <label for="endDate" class="mb-1 block text-sm font-medium text-base-content"
               >{m.event_modal_end_date_label()}</label
             >
-            <input
-              id="endDate"
-              type="date"
-              class="input-bordered input w-full"
-              bind:value={formData.endDate}
-            />
+            <EuropeanDateInput id="endDate" bind:value={formData.endDate} />
           </div>
 
           {#if formData.eventType === 'time'}
