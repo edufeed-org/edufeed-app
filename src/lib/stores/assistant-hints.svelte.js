@@ -29,6 +29,7 @@ import { modalStore } from '$lib/stores/modal.svelte.js';
 import { isBackupDownloaded, isBackupDismissed } from '$lib/stores/backup-flags.svelte.js';
 import { isRelayListBannerDismissed } from '$lib/stores/relay-list-flags.svelte.js';
 import { isDmRelayBannerDismissed } from '$lib/stores/dm-relay-flags.svelte.js';
+import { isNip05HintDismissed } from '$lib/stores/nip05-hint-flags.svelte.js';
 import { deriveHintStatus, trackEverOpen } from '$lib/helpers/assistant-hints.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -139,7 +140,11 @@ export function useAssistantHints() {
     // Only membership-enabled deployments can offer a handle to request.
     const membership = runtimeConfig.membership;
     const nip05Applicable =
-      profileSettled && !hasNip05 && !!membership?.enabled && !!membership?.handleDomain;
+      profileSettled &&
+      !hasNip05 &&
+      !!membership?.enabled &&
+      !!membership?.handleDomain &&
+      !isNip05HintDismissed(user.pubkey);
 
     const dmStatus = getDmRelayCheckStatus();
     const dmApplicable =

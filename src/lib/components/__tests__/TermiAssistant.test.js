@@ -278,6 +278,16 @@ describe('TermiAssistant launcher + hints', () => {
     expect(r.container.querySelector('[data-testid="termi-hint-nip05"]')).toBeNull();
   });
 
+  it('shows no nip05 hint when its dismiss flag is set', async () => {
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
+    mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
+    localStorage.setItem(`nip05-hint-dismissed:${EXT_PUBKEY}`, '1');
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    expect(container.querySelector('[data-testid="termi-hint-nip05"]')).toBeNull();
+  });
+
   it('renders no launcher badge when everything is set up', async () => {
     mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
     const { container } = render(TermiAssistant);
