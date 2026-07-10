@@ -2676,5 +2676,9 @@
   "invite_modal_sent_all": "Invitations sent!",
   "invite_modal_some_failed": "Some invitations could not be sent. You can retry the failed ones.",
   "invite_modal_retry_failed": "Retry failed",
-  "invite_modal_privacy_hint": "Invitations are sent as private direct messages. Recipients using other Nostr apps see a text message with the event link."
+  "invite_modal_privacy_hint": "Invitations are sent as private direct messages. Recipients using other Nostr apps see a text message with the event link.",
+  "feed_filter_solo_aria": "Show only {name}",
+  "feed_filter_unsolo_aria": "Show all content types again",
+  "feed_filter_hide_aria": "Hide {name}",
+  "feed_filter_show_aria": "Show {name} again"
 }

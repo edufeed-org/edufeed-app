@@ -52,6 +52,58 @@ export function filterFeedItems(items, activeCategories) {
 }
 
 /**
+ * Solo/hide selection for the feed category chips (issue #35), following the
+ * chart-legend convention of the calendar top-publishers filter: chip body
+ * click = solo ("only this"), eye button = hide/exclude. Solo takes
+ * precedence over the hidden list, which stays intact for restore.
+ *
+ * @typedef {Object} CategorySelection
+ * @property {string | null} solo
+ * @property {string[]} hidden
+ */
+
+/**
+ * Toggle solo mode for a category: set on first click, back to normal on
+ * the second. Soloing a hidden category also un-hides it.
+ * @param {CategorySelection} selection
+ * @param {string} id
+ * @returns {CategorySelection}
+ */
+export function toggleSoloCategory(selection, id) {
+  if (selection.solo === id) {
+    return { solo: null, hidden: [...selection.hidden] };
+  }
+  return { solo: id, hidden: selection.hidden.filter((h) => h !== id) };
+}
+
+/**
+ * Toggle a category on the hidden list. Hiding the solo'd category would
+ * contradict the solo — the solo is cleared instead.
+ * @param {CategorySelection} selection
+ * @param {string} id
+ * @returns {CategorySelection}
+ */
+export function toggleHiddenCategory(selection, id) {
+  const solo = selection.solo === id ? null : selection.solo;
+  const hidden = selection.hidden.includes(id)
+    ? selection.hidden.filter((h) => h !== id)
+    : [...selection.hidden, id];
+  return { solo, hidden };
+}
+
+/**
+ * Resolve a selection to the set of active category ids: only the solo
+ * category when solo is set, otherwise all ids minus the hidden ones.
+ * @param {CategorySelection} selection
+ * @param {string[]} allIds
+ * @returns {Set<string>}
+ */
+export function effectiveActiveCategories(selection, allIds) {
+  if (selection.solo) return new Set([selection.solo]);
+  return new Set(allIds.filter((id) => !selection.hidden.includes(id)));
+}
+
+/**
  * @typedef {{ type: 'e' | 'a', value: string }} PinPointer
  */
 

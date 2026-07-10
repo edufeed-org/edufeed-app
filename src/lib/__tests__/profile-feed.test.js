@@ -14,7 +14,10 @@ import {
   filterFeedItems,
   FEED_CATEGORIES,
   pinnedPointersFromEvent,
-  isEntryPinned
+  isEntryPinned,
+  toggleSoloCategory,
+  toggleHiddenCategory,
+  effectiveActiveCategories
 } from '$lib/helpers/profile-feed.js';
 
 describe('FEED_CATEGORIES', () => {
@@ -185,5 +188,99 @@ describe('isEntryPinned', () => {
   it('handles empty pointer list', () => {
     const entry = { type: 'notes', data: { id: 'pinned-id', kind: 1, pubkey: 'a', tags: [] } };
     expect(isEntryPinned(entry, [])).toBe(false);
+  });
+});
+
+describe('category solo/hide selection (issue #35)', () => {
+  const ALL_IDS = FEED_CATEGORIES.map((c) => c.id);
+  const EMPTY = { solo: null, hidden: [] };
+
+  describe('toggleSoloCategory', () => {
+    it('solos a category from the empty state', () => {
+      expect(toggleSoloCategory(EMPTY, 'notes')).toEqual({ solo: 'notes', hidden: [] });
+    });
+
+    it('un-solos when toggling the solo category again', () => {
+      expect(toggleSoloCategory({ solo: 'notes', hidden: [] }, 'notes')).toEqual(EMPTY);
+    });
+
+    it('switches solo to another category', () => {
+      expect(toggleSoloCategory({ solo: 'notes', hidden: [] }, 'polls')).toEqual({
+        solo: 'polls',
+        hidden: []
+      });
+    });
+
+    it('un-hides a hidden category when soloing it', () => {
+      expect(toggleSoloCategory({ solo: null, hidden: ['notes', 'polls'] }, 'notes')).toEqual({
+        solo: 'notes',
+        hidden: ['polls']
+      });
+    });
+
+    it('does not mutate the input selection', () => {
+      const input = { solo: null, hidden: ['polls'] };
+      toggleSoloCategory(input, 'notes');
+      expect(input).toEqual({ solo: null, hidden: ['polls'] });
+    });
+  });
+
+  describe('toggleHiddenCategory', () => {
+    it('hides a visible category', () => {
+      expect(toggleHiddenCategory(EMPTY, 'notes')).toEqual({ solo: null, hidden: ['notes'] });
+    });
+
+    it('un-hides a hidden category', () => {
+      expect(toggleHiddenCategory({ solo: null, hidden: ['notes'] }, 'notes')).toEqual(EMPTY);
+    });
+
+    it('clears the solo when hiding the solo category', () => {
+      expect(toggleHiddenCategory({ solo: 'notes', hidden: [] }, 'notes')).toEqual({
+        solo: null,
+        hidden: ['notes']
+      });
+    });
+
+    it('keeps an unrelated solo intact', () => {
+      expect(toggleHiddenCategory({ solo: 'polls', hidden: [] }, 'notes')).toEqual({
+        solo: 'polls',
+        hidden: ['notes']
+      });
+    });
+
+    it('does not mutate the input selection', () => {
+      const input = { solo: 'notes', hidden: [] };
+      toggleHiddenCategory(input, 'notes');
+      expect(input).toEqual({ solo: 'notes', hidden: [] });
+    });
+  });
+
+  describe('effectiveActiveCategories', () => {
+    it('returns all categories for the empty selection', () => {
+      expect([...effectiveActiveCategories(EMPTY, ALL_IDS)]).toEqual(ALL_IDS);
+    });
+
+    it('returns only the solo category when solo is set', () => {
+      expect([...effectiveActiveCategories({ solo: 'notes', hidden: [] }, ALL_IDS)]).toEqual([
+        'notes'
+      ]);
+    });
+
+    it('solo wins over the hidden list', () => {
+      expect([...effectiveActiveCategories({ solo: 'notes', hidden: ['polls'] }, ALL_IDS)]).toEqual(
+        ['notes']
+      );
+    });
+
+    it('excludes hidden categories when no solo is set', () => {
+      const active = effectiveActiveCategories({ solo: null, hidden: ['notes', 'polls'] }, ALL_IDS);
+      expect([...active]).toEqual(['calendar', 'resources', 'articles', 'bookmarks']);
+    });
+
+    it('integrates with filterFeedItems', () => {
+      const items = [{ kind: 1 }, { kind: 31922 }, { kind: 1068 }];
+      const active = effectiveActiveCategories({ solo: null, hidden: ['notes'] }, ALL_IDS);
+      expect(filterFeedItems(items, active)).toEqual([{ kind: 31922 }, { kind: 1068 }]);
+    });
   });
 });

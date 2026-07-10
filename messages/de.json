@@ -2676,5 +2676,9 @@
   "invite_modal_sent_all": "Einladungen verschickt!",
   "invite_modal_some_failed": "Einige Einladungen konnten nicht verschickt werden. Fehlgeschlagene kannst du erneut senden.",
   "invite_modal_retry_failed": "Fehlgeschlagene erneut senden",
-  "invite_modal_privacy_hint": "Einladungen werden als private Direktnachricht verschickt. Empfänger:innen mit anderen Nostr-Apps sehen eine Textnachricht mit dem Termin-Link."
+  "invite_modal_privacy_hint": "Einladungen werden als private Direktnachricht verschickt. Empfänger:innen mit anderen Nostr-Apps sehen eine Textnachricht mit dem Termin-Link.",
+  "feed_filter_solo_aria": "Nur {name} anzeigen",
+  "feed_filter_unsolo_aria": "Wieder alle Inhaltstypen anzeigen",
+  "feed_filter_hide_aria": "{name} ausblenden",
+  "feed_filter_show_aria": "{name} wieder einblenden"
 }

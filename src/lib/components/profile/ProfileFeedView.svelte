@@ -7,7 +7,6 @@
 <script>
   /* eslint-disable svelte/prefer-svelte-reactivity -- Map/Set inside $derived.by() must be plain to avoid infinite loops */
   import { untrack } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
   import { TimelineModel } from 'applesauce-core/models';
   import { getNip10References, getSharedEventPointer } from 'applesauce-common/helpers';
   import { getTagValue } from 'applesauce-core/helpers';
@@ -26,7 +25,10 @@
     ALL_FEED_KINDS,
     kindToFeedCategory,
     filterFeedItems,
-    isEntryPinned
+    isEntryPinned,
+    toggleSoloCategory,
+    toggleHiddenCategory,
+    effectiveActiveCategories
   } from '$lib/helpers/profile-feed.js';
   import { mergeRepostsIntoFeed } from '$lib/helpers/repost-feed.js';
   import { resolveRepostReferences } from '$lib/helpers/repost-resolution.js';
@@ -45,7 +47,9 @@
     BookIcon,
     BookmarkIcon,
     PollIcon,
-    PinIcon
+    PinIcon,
+    EyeIcon,
+    EyeOffIcon
   } from '$lib/components/icons';
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import * as m from '$lib/paraglide/messages';
@@ -92,11 +96,20 @@
   let resolvedTargets = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let displayLimit = $state(untrack(() => savedFeedState)?.displayLimit ?? DISPLAY_BATCH);
-  // Without the chip UI there is nothing to toggle — ignore any cached filter
-  // subset and always show every category.
-  let activeFilters = new SvelteSet(
-    untrack(() => (showFilters ? savedFeedState?.activeFilters : null)) ??
+  // Solo/hide chip selection (issue #35). Without the chip UI there is
+  // nothing to toggle — ignore any cached selection and show every category.
+  /** @type {import('$lib/helpers/profile-feed.js').CategorySelection} */
+  let categorySelection = $state(
+    untrack(() => (showFilters ? savedFeedState?.categorySelection : null)) ?? {
+      solo: null,
+      hidden: []
+    }
+  );
+  const activeFilters = $derived(
+    effectiveActiveCategories(
+      categorySelection,
       FEED_CATEGORIES.map((c) => c.id)
+    )
   );
 
   // Derive pubkeys from all sources for profile loading (items + reposters + resolved targets)
@@ -254,7 +267,7 @@
   // Loaders are deferred by 100ms so quick back-nav + re-click has zero active subs to tear down.
   $effect(() => {
     // Reset data state without creating reactive dependencies.
-    // displayLimit and activeFilters are initialized from cache at declaration
+    // displayLimit and categorySelection are initialized from cache at declaration
     // time, so they persist correctly across back-navigation without resetting here.
     untrack(() => {
       items = [];
@@ -366,17 +379,20 @@
   function saveFeedState() {
     feedStateCache.set(feedCacheKey, {
       displayLimit,
-      activeFilters: [...activeFilters]
+      categorySelection: { solo: categorySelection.solo, hidden: [...categorySelection.hidden] }
     });
   }
 
   /** @param {string} id */
-  function toggleFilter(id) {
-    if (activeFilters.has(id)) {
-      activeFilters.delete(id);
-    } else {
-      activeFilters.add(id);
-    }
+  function soloFilter(id) {
+    categorySelection = toggleSoloCategory(categorySelection, id);
+    displayLimit = DISPLAY_BATCH;
+    saveFeedState();
+  }
+
+  /** @param {string} id */
+  function hideFilter(id) {
+    categorySelection = toggleHiddenCategory(categorySelection, id);
     displayLimit = DISPLAY_BATCH;
     saveFeedState();
   }
@@ -407,17 +423,51 @@
 
 <div class="py-4">
   {#if showFilters}
-    <!-- Filter chips -->
+    <!-- Filter chips — chart-legend convention (issue #35): body click solos
+         the content type, the eye button hides/unhides it. -->
     <div class="flex flex-wrap gap-2 pb-4">
       {#each FILTER_CHIPS as chip (chip.id)}
         {@const Icon = chip.icon}
-        <button
-          class="btn gap-1 btn-xs {activeFilters.has(chip.id) ? 'btn-primary' : 'btn-outline'}"
-          onclick={() => toggleFilter(chip.id)}
+        {@const isHidden = categorySelection.hidden.includes(chip.id)}
+        {@const isSolo = categorySelection.solo === chip.id}
+        {@const dimmed = isHidden || (categorySelection.solo !== null && !isSolo)}
+        <span
+          class="join {dimmed ? 'opacity-45' : ''}"
+          data-testid="feed-filter-chip"
+          data-category={chip.id}
         >
-          <Icon class_="w-3 h-3" />
-          {chip.label()}
-        </button>
+          <button
+            class="btn join-item gap-1 btn-xs {isSolo ? 'btn-primary' : 'btn-outline'}"
+            onclick={() => soloFilter(chip.id)}
+            aria-pressed={isSolo}
+            aria-label={isSolo
+              ? m.feed_filter_unsolo_aria()
+              : m.feed_filter_solo_aria({ name: chip.label() })}
+            title={isSolo
+              ? m.feed_filter_unsolo_aria()
+              : m.feed_filter_solo_aria({ name: chip.label() })}
+          >
+            <Icon class_="w-3 h-3" />
+            <span class={isHidden ? 'line-through' : ''}>{chip.label()}</span>
+          </button>
+          <button
+            class="btn join-item px-1.5 btn-outline btn-xs"
+            onclick={() => hideFilter(chip.id)}
+            aria-pressed={isHidden}
+            aria-label={isHidden
+              ? m.feed_filter_show_aria({ name: chip.label() })
+              : m.feed_filter_hide_aria({ name: chip.label() })}
+            title={isHidden
+              ? m.feed_filter_show_aria({ name: chip.label() })
+              : m.feed_filter_hide_aria({ name: chip.label() })}
+          >
+            {#if isHidden}
+              <EyeOffIcon class_="w-3 h-3" />
+            {:else}
+              <EyeIcon class_="w-3 h-3" />
+            {/if}
+          </button>
+        </span>
       {/each}
     </div>
   {/if}
