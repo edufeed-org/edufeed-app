@@ -2680,5 +2680,19 @@
   "feed_filter_solo_aria": "Nur {name} anzeigen",
   "feed_filter_unsolo_aria": "Wieder alle Inhaltstypen anzeigen",
   "feed_filter_hide_aria": "{name} ausblenden",
-  "feed_filter_show_aria": "{name} wieder einblenden"
+  "feed_filter_show_aria": "{name} wieder einblenden",
+  "note_create_modal_title": "Notiz verfassen",
+  "note_create_modal_content_placeholder": "Was möchtest du teilen?",
+  "note_create_modal_reference_label": "Inhalt einbetten",
+  "note_create_modal_reference_placeholder": "Link, nevent, naddr oder note1 zum Einbetten einfügen",
+  "note_create_modal_reference_insert": "Einfügen",
+  "note_create_modal_reference_invalid": "Das ist kein gültiger Nostr-Verweis oder Link.",
+  "note_create_modal_error_login": "Du musst angemeldet sein, um eine Notiz zu veröffentlichen.",
+  "note_create_modal_publish": "Veröffentlichen",
+  "note_create_modal_community_label": "Community (optional)",
+  "note_create_modal_community_none": "— Keine —",
+  "note_create_modal_preview_empty": "Noch nichts zur Vorschau.",
+  "fab_create_note": "Notiz verfassen",
+  "fab_create_note_aria": "Neue Notiz verfassen",
+  "fab_create_note_desc": "Kurzer Textbeitrag im Feed"
 }

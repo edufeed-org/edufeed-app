@@ -18,6 +18,7 @@ import {
   BookOpenIcon,
   ScrollTextIcon,
   PollIcon,
+  MessageSquareIcon,
   BookmarkIcon,
   RepostIcon
 } from '$lib/components/icons';
@@ -148,6 +149,21 @@ export const CREATE_ACTIONS = [
     run(ctx) {
       ctx.openModal(
         'createPoll',
+        ctx.communityPubkey ? { communityPubkey: ctx.communityPubkey } : {}
+      );
+    }
+  },
+  {
+    id: 'note',
+    section: 'create',
+    kinds: [1],
+    label: m.fab_create_note,
+    ariaLabel: m.fab_create_note_aria,
+    description: m.fab_create_note_desc,
+    icon: MessageSquareIcon,
+    run(ctx) {
+      ctx.openModal(
+        'createNote',
         ctx.communityPubkey ? { communityPubkey: ctx.communityPubkey } : {}
       );
     }

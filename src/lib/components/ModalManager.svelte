@@ -22,6 +22,7 @@
   import ReportMetadataModal from './shared/ReportMetadataModal.svelte';
   import CreateRoomModal from './meet/CreateRoomModal.svelte';
   import PollCreateModal from './polls/PollCreateModal.svelte';
+  import NoteCreateModal from './notes/NoteCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
   import DeleteCommunityModal from './community/DeleteCommunityModal.svelte';
 
@@ -280,6 +281,10 @@
     /** @type {string} */ (/** @type {any} */ (modal.modalProps)?.communityPubkey) || ''
   );
 
+  let noteCommunityPubkey = $derived(
+    /** @type {string} */ (/** @type {any} */ (modal.modalProps)?.communityPubkey) || ''
+  );
+
   /** @param {string} variantId */
   function handleResourceVariantSelect(variantId) {
     const communityPubkey =
@@ -334,6 +339,8 @@
   <CreateRoomModal modalId={createRoomModalId} />
 {:else if modal.activeModal === 'createPoll'}
   <PollCreateModal communityPubkey={pollCommunityPubkey} />
+{:else if modal.activeModal === 'createNote'}
+  <NoteCreateModal communityPubkey={noteCommunityPubkey} />
 {:else if modal.activeModal === 'recovery-download'}
   <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
 {:else if modal.activeModal === 'deleteCommunity'}

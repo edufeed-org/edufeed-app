@@ -2680,5 +2680,19 @@
   "feed_filter_solo_aria": "Show only {name}",
   "feed_filter_unsolo_aria": "Show all content types again",
   "feed_filter_hide_aria": "Hide {name}",
-  "feed_filter_show_aria": "Show {name} again"
+  "feed_filter_show_aria": "Show {name} again",
+  "note_create_modal_title": "Write a note",
+  "note_create_modal_content_placeholder": "What's on your mind?",
+  "note_create_modal_reference_label": "Embed content",
+  "note_create_modal_reference_placeholder": "Paste a link, nevent, naddr, or note1 to embed",
+  "note_create_modal_reference_insert": "Insert",
+  "note_create_modal_reference_invalid": "That doesn't look like a valid Nostr reference or link.",
+  "note_create_modal_error_login": "You must be logged in to post a note.",
+  "note_create_modal_publish": "Post",
+  "note_create_modal_community_label": "Community (optional)",
+  "note_create_modal_community_none": "— None —",
+  "note_create_modal_preview_empty": "Nothing to preview yet.",
+  "fab_create_note": "Write a note",
+  "fab_create_note_aria": "Write a new note",
+  "fab_create_note_desc": "Short text post to the feed"
 }
