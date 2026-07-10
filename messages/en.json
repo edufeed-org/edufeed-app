@@ -2595,6 +2595,7 @@
   "termi_greeting_hint_one": "I also have one tip for your account:",
   "termi_greeting_hint_many": "I also have {count} tips for your account:",
   "termi_hint_done_chip": "Done",
+  "termi_hint_dismiss_aria": "Dismiss hint",
   "termi_hint_relays_doing": "Signing and publishing your relay list …",
   "termi_hint_dm_doing": "Setting up direct messages …",
   "termi_hint_nip05_title": "Get a verified address",
