@@ -70,7 +70,7 @@
           onclick={() => onFocusThread?.(comment.id)}
           data-testid="continue-thread-btn"
         >
-          <ChatIcon class_="w-4 h-4" />
+          <ChatIcon class_="w-4 h-4" title="" />
           {replyCount === 1
             ? m.comments_continue_thread_singular()
             : m.comments_continue_thread({ count: replyCount })}
@@ -87,7 +87,7 @@
           onclick={() => (expanded = true)}
           data-testid="expand-replies-btn"
         >
-          <ChatIcon class_="w-4 h-4" />
+          <ChatIcon class_="w-4 h-4" title="" />
           {replyCount === 1
             ? m.comments_view_reply()
             : m.comments_view_replies({ count: replyCount })}
