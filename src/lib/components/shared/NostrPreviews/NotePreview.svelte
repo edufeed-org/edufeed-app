@@ -6,7 +6,9 @@
 
 <script>
   import { resolve } from '$app/paths';
-  import { fetchEventById } from '$lib/helpers/nostrUtils.js';
+  import { nip19 } from 'nostr-tools';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
@@ -18,6 +20,9 @@
 
   const MAX_DEPTH = 2;
   const COLLAPSED_HEIGHT_PX = 192; // max-h-48 = 12rem = 192px
+  // How long the skeleton shows before falling back to the badge. The store
+  // subscription stays open, so a late arrival still upgrades the badge.
+  const LOADING_TIMEOUT_MS = 8000;
 
   let { identifier, depth = 0 } = $props();
 
@@ -33,24 +38,60 @@
   const getUserProfile = useUserProfile(() => event?.pubkey);
   let authorProfile = $derived(getUserProfile());
 
+  /**
+   * Decode note/nevent identifier to an EventPointer. Relay hints from the
+   * nevent are unioned with the lookup relays so the store's fallback loader
+   * knows where to fetch from.
+   * @param {string} id
+   * @returns {{ id: string, relays?: string[] } | null}
+   */
+  function toEventPointer(id) {
+    try {
+      const decoded = nip19.decode(id);
+      if (decoded.type === 'nevent') {
+        const hints = decoded.data.relays?.length ? decoded.data.relays : [];
+        return { id: decoded.data.id, relays: [...new Set([...hints, ...getAllLookupRelays()])] };
+      }
+      if (decoded.type === 'note') {
+        return { id: decoded.data, relays: getAllLookupRelays() };
+      }
+    } catch {
+      // fall through to null
+    }
+    return null;
+  }
+
+  // Reactive store subscription (issue #37): eventStore.event() auto-loads
+  // missing events via the attached eventLoader and keeps emitting, so an
+  // event arriving late (from the loader or any other surface) upgrades the
+  // badge to the embedded card without a remount.
   $effect(() => {
     if (depth >= MAX_DEPTH) {
       isLoading = false;
       return;
     }
 
-    isLoading = true;
+    const pointer = toEventPointer(identifier);
+    if (!pointer) {
+      isLoading = false;
+      return;
+    }
 
-    fetchEventById(identifier)
-      .then((e) => {
+    isLoading = true;
+    const sub = eventStore.event(pointer).subscribe((e) => {
+      if (e) {
         event = e;
-      })
-      .catch(() => {
-        // Event not found or network error — event stays null
-      })
-      .finally(() => {
         isLoading = false;
-      });
+      }
+    });
+    const timer = setTimeout(() => {
+      isLoading = false;
+    }, LOADING_TIMEOUT_MS);
+
+    return () => {
+      sub.unsubscribe();
+      clearTimeout(timer);
+    };
   });
 
   // Detect whether the rendered content overflows the collapsed height
