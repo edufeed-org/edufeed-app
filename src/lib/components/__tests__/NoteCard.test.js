@@ -13,9 +13,10 @@ import NoteCard from '../notes/NoteCard.svelte';
 // --- Mocks ---
 
 const mockNote = {
-  id: 'note-123',
+  // Valid 64-char hex so nip19.neventEncode works in the card-click handler
+  id: 'a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8',
   kind: 1,
-  pubkey: 'author-pubkey-hex-string-64-chars-long-aaaa1111bbbb2222cccc3333',
+  pubkey: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
   tags: [],
   created_at: 1700000000,
   content: 'Hello world'
@@ -23,6 +24,11 @@ const mockNote = {
 
 /** @type {Function | null} */
 let repliesModelSubscriber = null;
+
+const mockGoto = vi.fn();
+vi.mock('$app/navigation', () => ({
+  goto: (/** @type {any[]} */ ...args) => mockGoto(...args)
+}));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
@@ -150,7 +156,10 @@ vi.mock('../reactions/ReactionButton.svelte', () => ({ default: StubComponent })
 vi.mock('../reactions/AddReactionButton.svelte', () => ({ default: StubComponent }));
 vi.mock('../shared/NostrContentRenderer.svelte', () => ({ default: StubComponent }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: StubComponent }));
-vi.mock('../comments/CommentList.svelte', () => ({ default: StubComponent }));
+// CommentList stub renders a real textarea so click-bubbling can be tested
+vi.mock('../comments/CommentList.svelte', async () => ({
+  default: (await import('./fixtures/CommentListStub.svelte')).default
+}));
 vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: StubComponent }));
 
 describe('NoteCard', () => {
@@ -237,6 +246,65 @@ describe('NoteCard', () => {
       const button = container.querySelector('.btn-ghost');
       expect(button?.textContent).toContain('3');
     });
+  });
+
+  it('does not navigate when clicking into the comment textarea', async () => {
+    const { container } = render(NoteCard, {
+      props: { note: mockNote }
+    });
+
+    // Open the comment section
+    const button = container.querySelector('.btn-ghost');
+    await fireEvent.click(/** @type {HTMLElement} */ (button));
+
+    const textarea = container.querySelector('[data-testid="comment-textarea"]');
+    expect(textarea).toBeTruthy();
+
+    await fireEvent.click(/** @type {HTMLElement} */ (textarea));
+    expect(mockGoto).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate when clicking elsewhere inside the comment section', async () => {
+    const { container } = render(NoteCard, {
+      props: { note: mockNote }
+    });
+
+    const button = container.querySelector('.btn-ghost');
+    await fireEvent.click(/** @type {HTMLElement} */ (button));
+
+    const commentSection = container.querySelector('.mt-3.border-t.border-base-300');
+    expect(commentSection).toBeTruthy();
+
+    await fireEvent.click(/** @type {HTMLElement} */ (commentSection));
+    expect(mockGoto).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate when typing Space or Enter in the comment textarea', async () => {
+    const { container } = render(NoteCard, {
+      props: { note: mockNote }
+    });
+
+    const button = container.querySelector('.btn-ghost');
+    await fireEvent.click(/** @type {HTMLElement} */ (button));
+
+    const textarea = container.querySelector('[data-testid="comment-textarea"]');
+    expect(textarea).toBeTruthy();
+
+    await fireEvent.keyDown(/** @type {HTMLElement} */ (textarea), { key: ' ' });
+    await fireEvent.keyDown(/** @type {HTMLElement} */ (textarea), { key: 'Enter' });
+    expect(mockGoto).not.toHaveBeenCalled();
+  });
+
+  it('navigates to the note view when clicking the card body', async () => {
+    const { container } = render(NoteCard, {
+      props: { note: mockNote }
+    });
+
+    const card = container.querySelector('[role="button"]');
+    expect(card).toBeTruthy();
+
+    await fireEvent.click(/** @type {HTMLElement} */ (card));
+    expect(mockGoto).toHaveBeenCalledTimes(1);
   });
 
   it('shows count for exactly one comment', async () => {

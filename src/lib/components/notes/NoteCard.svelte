@@ -50,10 +50,23 @@
   });
 
   /**
+   * True when the event originated inside an interactive child (links, form
+   * fields, the comment section) whose clicks/keys must not trigger card
+   * navigation.
+   * @param {Event} e
+   */
+  function isInteractiveTarget(e) {
+    return (
+      e.target instanceof HTMLElement &&
+      !!e.target.closest('button, a, textarea, input, [contenteditable], [data-comment-section]')
+    );
+  }
+
+  /**
    * @param {MouseEvent} e
    */
   function handleCardClick(e) {
-    if (e.target instanceof HTMLElement && e.target.closest('button, a')) return;
+    if (isInteractiveTarget(e)) return;
     goto(neventHref);
   }
 
@@ -61,6 +74,7 @@
    * @param {KeyboardEvent} e
    */
   function handleKeydown(e) {
+    if (isInteractiveTarget(e)) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       goto(neventHref);
@@ -141,7 +155,7 @@
   </div>
 
   {#if showComments}
-    <div class="mt-3 border-t border-base-300 pt-3">
+    <div class="mt-3 border-t border-base-300 pt-3" data-comment-section>
       <CommentList rootEvent={note} {activeUser} {communityPubkey} {extraRelays} />
     </div>
   {/if}
