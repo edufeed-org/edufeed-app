@@ -1817,6 +1817,7 @@
   "amb_form_link_license_details": "View license details →",
   "amb_form_checkbox_free_access": "This resource is accessible free of charge",
   "date_input_invalid_hint": "Invalid date — please enter it as DD.MM.YYYY.",
+  "time_input_invalid_hint": "Invalid time — please enter it as HH:MM (24-hour).",
   "amb_form_label_cover_color": "Cover color",
   "amb_form_cover_color_auto": "Auto",
   "amb_form_cover_or": "or",

@@ -1817,6 +1817,7 @@
   "amb_form_link_license_details": "Lizenzdetails anzeigen →",
   "amb_form_checkbox_free_access": "Diese Ressource ist kostenfrei zugänglich",
   "date_input_invalid_hint": "Ungültiges Datum — bitte als TT.MM.JJJJ eingeben.",
+  "time_input_invalid_hint": "Ungültige Uhrzeit — bitte als HH:MM eingeben.",
   "amb_form_label_cover_color": "Titelbild-Farbe",
   "amb_form_cover_color_auto": "Automatisch",
   "amb_form_cover_or": "oder",

@@ -141,7 +141,7 @@ test.describe('Calendar Event Editing - Form Pre-population', () => {
     const startDateInput = page.locator('#startDate');
     await expect(startDateInput).toBeVisible();
     const startDateValue = await startDateInput.inputValue();
-    expect(startDateValue).toMatch(/^\d{4}-\d{2}-\d{2}$/); // YYYY-MM-DD format
+    expect(startDateValue).toMatch(/^\d{2}\.\d{2}\.\d{4}$/); // German DD.MM.YYYY display (#33)
   });
 });
 

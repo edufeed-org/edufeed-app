@@ -16,6 +16,7 @@
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
   import LicensedFileInput from '$lib/components/shared/LicensedFileInput.svelte';
+  import EuropeanDateInput from '$lib/components/shared/EuropeanDateInput.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
@@ -407,9 +408,8 @@
           <label class="label" for="publication-date">
             <span class="label-text font-medium">{m.publication_form_label_date()}</span>
           </label>
-          <input
+          <EuropeanDateInput
             id="publication-date"
-            type="date"
             class="input w-full"
             bind:value={datePublished}
           />
