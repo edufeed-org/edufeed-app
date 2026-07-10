@@ -181,16 +181,17 @@
         {m.inline_rsvp_login_prompt()}
       </div>
     {:else}
-      <!-- Status Button Group -->
-      <div class="btn-group w-full {compact ? 'btn-group-horizontal' : ''}">
+      <!-- Status buttons: separate gapped buttons (not a joined group) so the
+           selected ring and hover borders never overlap the neighbors -->
+      <div class="flex w-full flex-wrap gap-2">
         <!-- Going (Accepted) -->
         <button
           type="button"
           onclick={() => handleRsvp('accepted')}
           disabled={isSubmitting}
-          class="btn {btnClass} flex-1 transition-all
+          class="btn {btnClass} flex-auto whitespace-nowrap transition-all
 						{userRsvpStatus === 'accepted'
-            ? 'font-bold shadow-lg ring-2 ring-success ring-offset-2 ring-offset-base-100 btn-success'
+            ? 'shadow-md btn-success'
             : 'border-base-300 bg-base-100 text-base-content shadow-sm hover:border-success hover:bg-success/10'}
 						{isSubmitting && submittingStatus === 'accepted' ? 'loading' : ''}"
           aria-label="RSVP as Going"
@@ -199,9 +200,7 @@
           {#if isSubmitting && submittingStatus === 'accepted'}
             <span class="loading loading-xs loading-spinner"></span>
           {:else}
-            <span
-              class="flex items-center gap-1 {userRsvpStatus === 'accepted' ? 'font-bold' : ''}"
-            >
+            <span class="flex items-center gap-1">
               <span class="text-lg {userRsvpStatus === 'accepted' ? '' : 'text-success'}">✓</span>
               <span>{m.inline_rsvp_button_going()}</span>
             </span>
@@ -213,9 +212,9 @@
           type="button"
           onclick={() => handleRsvp('tentative')}
           disabled={isSubmitting}
-          class="btn {btnClass} flex-1 transition-all
+          class="btn {btnClass} flex-auto whitespace-nowrap transition-all
 						{userRsvpStatus === 'tentative'
-            ? 'font-bold shadow-lg ring-2 ring-warning ring-offset-2 ring-offset-base-100 btn-warning'
+            ? 'shadow-md btn-warning'
             : 'border-base-300 bg-base-100 text-base-content shadow-sm hover:border-warning hover:bg-warning/10'}
 						{isSubmitting && submittingStatus === 'tentative' ? 'loading' : ''}"
           aria-label="RSVP as Maybe"
@@ -224,9 +223,7 @@
           {#if isSubmitting && submittingStatus === 'tentative'}
             <span class="loading loading-xs loading-spinner"></span>
           {:else}
-            <span
-              class="flex items-center gap-1 {userRsvpStatus === 'tentative' ? 'font-bold' : ''}"
-            >
+            <span class="flex items-center gap-1">
               <span class="text-lg {userRsvpStatus === 'tentative' ? '' : 'text-warning'}">?</span>
               <span>{m.inline_rsvp_button_maybe()}</span>
             </span>
@@ -238,9 +235,9 @@
           type="button"
           onclick={() => handleRsvp('declined')}
           disabled={isSubmitting}
-          class="btn {btnClass} flex-1 transition-all
+          class="btn {btnClass} flex-auto whitespace-nowrap transition-all
 						{userRsvpStatus === 'declined'
-            ? 'font-bold shadow-lg ring-2 ring-error ring-offset-2 ring-offset-base-100 btn-error'
+            ? 'shadow-md btn-error'
             : 'border-base-300 bg-base-100 text-base-content shadow-sm hover:border-error hover:bg-error/10'}
 						{isSubmitting && submittingStatus === 'declined' ? 'loading' : ''}"
           aria-label="RSVP as Not Going"
@@ -249,9 +246,7 @@
           {#if isSubmitting && submittingStatus === 'declined'}
             <span class="loading loading-xs loading-spinner"></span>
           {:else}
-            <span
-              class="flex items-center gap-1 {userRsvpStatus === 'declined' ? 'font-bold' : ''}"
-            >
+            <span class="flex items-center gap-1">
               <span class="text-lg {userRsvpStatus === 'declined' ? '' : 'text-error'}">✗</span>
               <span>{m.inline_rsvp_button_no()}</span>
             </span>
@@ -296,36 +291,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* Ensure smooth transitions for button states */
-  .btn {
-    transition: all 0.2s ease-in-out;
-  }
-
-  /* Override DaisyUI btn-group to ensure proper spacing */
-  .btn-group {
-    display: flex;
-    gap: 0;
-  }
-
-  .btn-group > .btn {
-    border-radius: 0;
-  }
-
-  .btn-group > .btn:first-child {
-    border-top-left-radius: 0.5rem;
-    border-bottom-left-radius: 0.5rem;
-  }
-
-  .btn-group > .btn:last-child {
-    border-top-right-radius: 0.5rem;
-    border-bottom-right-radius: 0.5rem;
-  }
-
-  /* Ensure buttons are equal width */
-  .btn-group > .btn {
-    flex: 1;
-    min-width: 0;
-  }
-</style>

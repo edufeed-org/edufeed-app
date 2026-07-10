@@ -106,7 +106,7 @@
   <!-- Single opaque surface for card + RSVP so both stay readable when
        embedded on colored backgrounds (e.g. a teal DM chat bubble) -->
   <div
-    class="card my-2 overflow-hidden border border-l-4 border-base-300 border-l-primary bg-base-100 shadow-sm"
+    class="nostr-preview-surface card my-2 overflow-hidden border border-l-4 border-base-300 border-l-primary bg-base-100 shadow-sm"
     data-testid="calendar-event-preview-card"
   >
     <!-- eslint-disable svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
