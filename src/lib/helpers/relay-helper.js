@@ -58,6 +58,18 @@ export function getDefaultRelayList() {
 }
 
 /**
+ * Fallback relays for personal notification queries (inbox).
+ * Intentionally NOT gated: notification queries are p-tagged to the user —
+ * social signals, not content feeds — mirroring how WoT filtering exempts
+ * social content. External clients publish reactions/replies only to public
+ * relays, so a gated inbox would silently miss them (issue #43).
+ * @returns {string[]}
+ */
+export function getNotificationFallbackRelays() {
+  return runtimeConfig.fallbackRelays || [];
+}
+
+/**
  * True when a kind 10002 event advertises at least one inbox or outbox relay.
  * Used to treat an empty 10002 as "no relay list".
  *
