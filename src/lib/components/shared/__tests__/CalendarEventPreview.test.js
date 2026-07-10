@@ -65,4 +65,13 @@ describe('CalendarEventPreview RSVP', () => {
     const stub = await findByTestId('inline-rsvp-stub');
     expect(stub.getAttribute('data-event-id')).toBe('raw1');
   });
+
+  it('renders InlineRsvp inside the opaque card surface (readable on colored chat bubbles)', async () => {
+    mockUser = { pubkey: 'u'.repeat(64) };
+    const { findByTestId } = render(CalendarEventPreview, PROPS);
+    const stub = await findByTestId('inline-rsvp-stub');
+    const card = stub.closest('[data-testid="calendar-event-preview-card"]');
+    expect(card).not.toBeNull();
+    expect(card?.className).toContain('bg-base-100');
+  });
 });

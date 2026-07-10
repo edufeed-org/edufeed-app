@@ -191,7 +191,7 @@
           class="btn {btnClass} flex-1 transition-all
 						{userRsvpStatus === 'accepted'
             ? 'font-bold shadow-lg ring-2 ring-success ring-offset-2 ring-offset-base-100 btn-success'
-            : 'btn-outline btn-success hover:font-semibold hover:btn-success'}
+            : 'border-base-300 bg-base-100 text-base-content shadow-sm hover:border-success hover:bg-success/10'}
 						{isSubmitting && submittingStatus === 'accepted' ? 'loading' : ''}"
           aria-label="RSVP as Going"
           aria-pressed={userRsvpStatus === 'accepted'}
@@ -202,7 +202,7 @@
             <span
               class="flex items-center gap-1 {userRsvpStatus === 'accepted' ? 'font-bold' : ''}"
             >
-              <span class="text-lg">{userRsvpStatus === 'accepted' ? '✓' : '✓'}</span>
+              <span class="text-lg {userRsvpStatus === 'accepted' ? '' : 'text-success'}">✓</span>
               <span>{m.inline_rsvp_button_going()}</span>
             </span>
           {/if}
@@ -216,7 +216,7 @@
           class="btn {btnClass} flex-1 transition-all
 						{userRsvpStatus === 'tentative'
             ? 'font-bold shadow-lg ring-2 ring-warning ring-offset-2 ring-offset-base-100 btn-warning'
-            : 'btn-outline btn-warning hover:font-semibold hover:btn-warning'}
+            : 'border-base-300 bg-base-100 text-base-content shadow-sm hover:border-warning hover:bg-warning/10'}
 						{isSubmitting && submittingStatus === 'tentative' ? 'loading' : ''}"
           aria-label="RSVP as Maybe"
           aria-pressed={userRsvpStatus === 'tentative'}
@@ -227,7 +227,7 @@
             <span
               class="flex items-center gap-1 {userRsvpStatus === 'tentative' ? 'font-bold' : ''}"
             >
-              <span class="text-lg">{userRsvpStatus === 'tentative' ? '?' : '?'}</span>
+              <span class="text-lg {userRsvpStatus === 'tentative' ? '' : 'text-warning'}">?</span>
               <span>{m.inline_rsvp_button_maybe()}</span>
             </span>
           {/if}
@@ -241,7 +241,7 @@
           class="btn {btnClass} flex-1 transition-all
 						{userRsvpStatus === 'declined'
             ? 'font-bold shadow-lg ring-2 ring-error ring-offset-2 ring-offset-base-100 btn-error'
-            : 'btn-outline btn-error hover:font-semibold hover:btn-error'}
+            : 'border-base-300 bg-base-100 text-base-content shadow-sm hover:border-error hover:bg-error/10'}
 						{isSubmitting && submittingStatus === 'declined' ? 'loading' : ''}"
           aria-label="RSVP as Not Going"
           aria-pressed={userRsvpStatus === 'declined'}
@@ -252,7 +252,7 @@
             <span
               class="flex items-center gap-1 {userRsvpStatus === 'declined' ? 'font-bold' : ''}"
             >
-              <span class="text-lg">{userRsvpStatus === 'declined' ? '✗' : '✗'}</span>
+              <span class="text-lg {userRsvpStatus === 'declined' ? '' : 'text-error'}">✗</span>
               <span>{m.inline_rsvp_button_no()}</span>
             </span>
           {/if}
