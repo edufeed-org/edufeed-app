@@ -15,6 +15,7 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://relay1'],
   getCalendarRelays: () => ['wss://relay2'],
   getEducationalRelays: () => ['wss://relay3'],
+  getNotificationFallbackRelays: () => ['wss://fallback1', 'wss://relay1'],
   getAllLookupRelays: () => ['wss://lookup1'],
   getEventLoaderLookupRelays: () => []
 }));
@@ -51,12 +52,13 @@ vi.mock('$lib/services/dm-service.svelte.js', () => ({
 }));
 
 describe('inbox-service pure functions', () => {
-  let buildMainFilter, getNotificationRelays, parseReadMarkers;
+  let buildMainFilter, getNotificationRelays, getSupplementalNotificationRelays, parseReadMarkers;
 
   beforeEach(async () => {
     const mod = await import('$lib/services/inbox-service.svelte.js');
     buildMainFilter = mod.buildMainFilter;
     getNotificationRelays = mod.getNotificationRelays;
+    getSupplementalNotificationRelays = mod.getSupplementalNotificationRelays;
     parseReadMarkers = mod.parseReadMarkers;
   });
 
@@ -72,12 +74,46 @@ describe('inbox-service pure functions', () => {
   });
 
   describe('getNotificationRelays', () => {
-    it('returns deduplicated union of communikey + calendar + educational relays', () => {
+    it('returns deduplicated union of communikey + calendar + educational + fallback relays', () => {
       const relays = getNotificationRelays();
       expect(relays).toContain('wss://relay1');
       expect(relays).toContain('wss://relay2');
       expect(relays).toContain('wss://relay3');
-      expect(relays).toHaveLength(3);
+      // Fallback relays are always included (even in gated mode) so
+      // notifications published by external clients are found (issue #43)
+      expect(relays).toContain('wss://fallback1');
+      expect(relays).toHaveLength(4);
+    });
+  });
+
+  describe('getSupplementalNotificationRelays', () => {
+    it('returns read relays not already covered by the base set', () => {
+      const result = getSupplementalNotificationRelays(
+        ['wss://relay1', 'wss://relay2'],
+        ['wss://user-inbox.example', 'wss://relay1']
+      );
+      expect(result).toEqual(['wss://user-inbox.example/']);
+    });
+
+    it('treats trailing-slash and case variants as the same relay', () => {
+      const result = getSupplementalNotificationRelays(
+        ['wss://relay1'],
+        ['wss://Relay1/', 'wss://relay1']
+      );
+      expect(result).toEqual([]);
+    });
+
+    it('deduplicates the returned supplemental relays', () => {
+      const result = getSupplementalNotificationRelays(
+        [],
+        ['wss://user-inbox.example', 'wss://user-inbox.example/']
+      );
+      expect(result).toEqual(['wss://user-inbox.example/']);
+    });
+
+    it('ignores invalid relay URLs', () => {
+      const result = getSupplementalNotificationRelays(['wss://relay1'], ['not a url', '']);
+      expect(result).toEqual([]);
     });
   });
 

@@ -22,6 +22,7 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://relay1'],
   getCalendarRelays: () => ['wss://relay2'],
   getEducationalRelays: () => ['wss://relay3'],
+  getNotificationFallbackRelays: () => [],
   getAllLookupRelays: () => ['wss://lookup1'],
   getEventLoaderLookupRelays: () => []
 }));
@@ -47,7 +48,8 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: vi.fn()
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  getRelayListLookupRelays: () => []
+  getRelayListLookupRelays: () => [],
+  getReadRelays: vi.fn(async () => ['wss://user-inbox.example'])
 }));
 vi.mock('$lib/services/dm-service.svelte.js', () => ({
   getUnreadDmCount: () => 0,
@@ -183,6 +185,37 @@ describe('per-item read tracking', () => {
       expect(
         service.isNotificationUnread({ id: 'event-abc', kind: 7, created_at: 9999999999 })
       ).toBe(true);
+    });
+  });
+
+  describe('supplemental read-relay loader (issue #43)', () => {
+    it('spawns a loader on the user read relays with the main notification filters', async () => {
+      const { createTimelineLoader } = await import('applesauce-loaders/loaders');
+      createTimelineLoader.mockClear();
+
+      service.initializeInbox('user123');
+      await vi.waitFor(() => {
+        const calls = createTimelineLoader.mock.calls;
+        const supplemental = calls.find((c) => c[1].includes('wss://user-inbox.example/'));
+        expect(supplemental).toBeDefined();
+        // Same filters as the main loader (reactions, comments, chat, forms)
+        expect(supplemental[2]).toEqual(service.buildMainFilter('user123', expect.any(Number)));
+      });
+    });
+
+    it('does not spawn a supplemental loader after cleanup', async () => {
+      const { createTimelineLoader } = await import('applesauce-loaders/loaders');
+
+      service.initializeInbox('user123');
+      service.cleanup();
+      createTimelineLoader.mockClear();
+
+      // Give the pending getReadRelays promise a chance to resolve
+      await new Promise((r) => setTimeout(r, 0));
+      const supplemental = createTimelineLoader.mock.calls.find((c) =>
+        c[1].includes('wss://user-inbox.example/')
+      );
+      expect(supplemental).toBeUndefined();
     });
   });
 

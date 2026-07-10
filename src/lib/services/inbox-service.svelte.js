@@ -14,6 +14,7 @@ import {
   getCommunikeyRelays,
   getCalendarRelays,
   getEducationalRelays,
+  getNotificationFallbackRelays,
   getAllLookupRelays
 } from '$lib/helpers/relay-helper.js';
 import {
@@ -23,7 +24,8 @@ import {
   isMembershipApplication
 } from '$lib/helpers/inbox.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
-import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
+import { getRelayListLookupRelays, getReadRelays } from '$lib/services/relay-service.svelte.js';
+import { normalizeURL } from 'applesauce-core/helpers';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import { hasNip44 } from '$lib/helpers/nip44.js';
@@ -56,8 +58,44 @@ export function buildMainFilter(pubkey, since) {
  * @returns {string[]}
  */
 export function getNotificationRelays() {
-  const all = [...getCommunikeyRelays(), ...getCalendarRelays(), ...getEducationalRelays()];
+  const all = [
+    ...getCommunikeyRelays(),
+    ...getCalendarRelays(),
+    ...getEducationalRelays(),
+    ...getNotificationFallbackRelays()
+  ];
   return all.filter((url, i) => all.indexOf(url) === i);
+}
+
+/**
+ * Get the user's read relays that are not already covered by the base
+ * notification relays. Reactions (kind 7) are published outbox-model to the
+ * target author's NIP-65 read relays and map to no app relay category, so the
+ * inbox must also query the user's own read relays to see them.
+ * @param {string[]} baseRelays
+ * @param {string[]} readRelays
+ * @returns {string[]} Normalized supplemental relay URLs
+ */
+export function getSupplementalNotificationRelays(baseRelays, readRelays) {
+  /** @param {string} url */
+  const safeNormalize = (url) => {
+    try {
+      return normalizeURL(url);
+    } catch {
+      return null;
+    }
+  };
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local lookup set, not reactive
+  const base = new Set(baseRelays.map(safeNormalize).filter(Boolean));
+  /** @type {string[]} */
+  const supplemental = [];
+  for (const url of readRelays) {
+    const normalized = safeNormalize(url);
+    if (normalized && !base.has(normalized) && !supplemental.includes(normalized)) {
+      supplemental.push(normalized);
+    }
+  }
+  return supplemental;
 }
 
 /**
@@ -285,6 +323,21 @@ export function initializeInbox(pubkey) {
 
   const mainSub = mainLoader().subscribe();
   subscriptions.push(mainSub);
+
+  // Supplemental loader: the user's NIP-65 read relays. Reactions and other
+  // p-tagged notifications are published outbox-model to these relays, which
+  // may not overlap the app relay set (see issue #43). Read relays resolve
+  // asynchronously, so this loader is spawned after the main one.
+  getReadRelays(pubkey).then((readRelays) => {
+    if (activePubkey !== pubkey) return; // inbox was cleaned up or switched user
+    const supplementalRelays = getSupplementalNotificationRelays(relays, readRelays);
+    if (!supplementalRelays.length) return;
+    const supplementalLoader = createTimelineLoader(timedPool, supplementalRelays, filters, {
+      eventStore,
+      limit: 50
+    });
+    subscriptions.push(supplementalLoader().subscribe());
+  });
 
   // Model subscription — watch eventStore for matching events
   const modelSub = eventStore
