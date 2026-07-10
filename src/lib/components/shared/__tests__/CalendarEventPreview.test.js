@@ -56,13 +56,13 @@ describe('CalendarEventPreview RSVP', () => {
     expect(queryByTestId('inline-rsvp-stub')).toBeNull();
   });
 
-  it('hides InlineRsvp in inline variant', async () => {
+  it('shows InlineRsvp in inline variant too (nostr: mentions arrive with inline=true)', async () => {
     mockUser = { pubkey: 'u'.repeat(64) };
-    const { findByText, queryByTestId } = render(CalendarEventPreview, {
+    const { findByTestId } = render(CalendarEventPreview, {
       ...PROPS,
       inline: true
     });
-    await findByText('Test Event');
-    expect(queryByTestId('inline-rsvp-stub')).toBeNull();
+    const stub = await findByTestId('inline-rsvp-stub');
+    expect(stub.getAttribute('data-event-id')).toBe('raw1');
   });
 });
