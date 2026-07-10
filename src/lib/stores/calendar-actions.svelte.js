@@ -98,8 +98,12 @@ export function createCalendarActions(_communityPubkey) {
         calendarStore.setEvents([...calendarStore.events, transformedEvent]);
         console.log('📅 Calendar Actions: Added transformed event to store');
 
-        // Publish optimistically in background (returns immediately)
-        publishEventOptimistic(calendarEvent, [], { communityEvent });
+        // Publish optimistically in background (returns immediately).
+        // Participants are tagged pubkeys: outbox model also targets their read relays.
+        const participantPubkeys = (formData.participants || [])
+          .map((/** @type {{pubkey: string}} */ p) => p.pubkey)
+          .filter(Boolean);
+        publishEventOptimistic(calendarEvent, participantPubkeys, { communityEvent });
 
         // Return the created event so caller can handle sharing/adding to calendars
         return eventWithDTag;
@@ -190,7 +194,10 @@ export function createCalendarActions(_communityPubkey) {
         // Await publish for updates to ensure event is saved before returning
         // Unlike creation which navigates away, updates reload the same page
         // and need the updated event to be available immediately
-        await publishEvent(updatedEvent, [], { communityEvent });
+        const participantPubkeys = (formData.participants || [])
+          .map((/** @type {{pubkey: string}} */ p) => p.pubkey)
+          .filter(Boolean);
+        await publishEvent(updatedEvent, participantPubkeys, { communityEvent });
 
         // Return the updated event
         return eventWithDTag;

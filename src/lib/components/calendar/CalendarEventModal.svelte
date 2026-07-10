@@ -22,6 +22,7 @@
   import LicensedImageInput from '../shared/LicensedImageInput.svelte';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import EditableList from '../shared/EditableList.svelte';
+  import ParticipantsEditor from '$lib/components/calendar/ParticipantsEditor.svelte';
   import { CloseIcon } from '../icons';
 
   /**
@@ -77,7 +78,8 @@
     location: '',
     isAllDay: false,
     eventType: 'date',
-    references: []
+    references: [],
+    participants: []
   });
 
   let validationErrors = $state(/** @type {string[]} */ ([]));
@@ -196,7 +198,8 @@
       location: '',
       isAllDay: false,
       eventType: 'date',
-      references: []
+      references: [],
+      participants: []
     };
     validationErrors = [];
     isSubmitting = false;
@@ -228,7 +231,8 @@
       location: '',
       isAllDay: false,
       eventType: 'date',
-      references: []
+      references: [],
+      participants: []
     };
 
     validationErrors = [];
@@ -273,7 +277,8 @@
       location: location,
       isAllDay: isAllDay,
       eventType: eventType,
-      references: existingEvent.references || []
+      references: existingEvent.references || [],
+      participants: existingEvent.participants || []
     };
 
     validationErrors = [];
@@ -570,6 +575,11 @@
             validator={validateUrl}
             helpText={m.event_modal_references_help()}
           />
+        </div>
+
+        <!-- Participants (Optional) -->
+        <div class="mb-4">
+          <ParticipantsEditor bind:participants={formData.participants} disabled={isSubmitting} />
         </div>
 
         <!-- Calendar Selection (Optional) -->
