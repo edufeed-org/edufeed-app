@@ -10,11 +10,18 @@
    * @type {{
    *   event: any,
    *   authorProfile?: any,
+   *   authorProfiles?: Map<string, any>,
    *   activeUser?: any,
    *   fallback?: import('svelte').Snippet
    * }}
    */
-  let { event, authorProfile = null, activeUser = null, fallback } = $props();
+  let {
+    event,
+    authorProfile = null,
+    authorProfiles = new Map(),
+    activeUser = null,
+    fallback
+  } = $props();
 </script>
 
-<FeedEntryCard {event} {authorProfile} {activeUser} {fallback} />
+<FeedEntryCard {event} {authorProfile} {authorProfiles} {activeUser} {fallback} />

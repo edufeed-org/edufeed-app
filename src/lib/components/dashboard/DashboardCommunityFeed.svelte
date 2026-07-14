@@ -396,6 +396,7 @@
               <RichFeedEntry
                 {event}
                 authorProfile={profile ?? null}
+                authorProfiles={profiles}
                 activeUser={getActiveUser()}
                 fallback={compactCard}
               />
