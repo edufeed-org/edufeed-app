@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-14
 **Issue:** [#45](https://git.edufeed.org/edufeed/edufeed-app/issues/45)
-**Status:** approved (brainstorm 2026-07-14)
+**Status:** approved (brainstorm 2026-07-14, revised same day: DRY/KISS pass)
 
 ## Problem
 
@@ -33,18 +33,18 @@ Split the category three ways and give reposts their own first-class section:
 ## Category model
 
 - `FEED_CATEGORIES` in `src/lib/helpers/profile-feed.js` gains `highlights`
-  (kinds `[9802]`) and `shared` (no direct kinds — membership is derived from
-  repost metadata, see below). The `bookmarks` category keeps kinds
-  `[39701, 1111]`; `kindToFeedCategory(9802)` returns `'highlights'`.
-- Each feed entry carries a **category set** rather than a single type:
-  `categoriesOf(entry) = { entry.type } ∪ ({ 'shared' } when entry.repost)`.
-  `entry.type` remains the content category (repost-only entries keep the
-  target's category, exactly as `mergeRepostsIntoFeed` assigns today).
+  (kinds `[9802]`); the `bookmarks` category keeps kinds `[39701, 1111]`;
+  `kindToFeedCategory(9802)` returns `'highlights'`.
+- `shared` is **not** a kind-driven category: it exists only in the chips
+  config. Membership is decided by a single pure predicate:
+  `entryMatchesCategory(entry, id)` — `'shared'` matches `!!entry.repost`,
+  every other id matches `entry.type` (group entries `bookmark-url` /
+  `bookmark-ref` match `'bookmarks'`). `entry.type` remains the single
+  content category exactly as `mergeRepostsIntoFeed` assigns today; no
+  entry data-model change.
 - URL/event-ref grouping (`groupByUrl` / `groupByEventRef`) is unchanged: a
   highlight that references a URL still appears inside that URL's group under
-  Lesezeichen *and* individually under Highlights. Group entries
-  (`bookmark-url` / `bookmark-ref`) belong to the `bookmarks` category for
-  filtering purposes.
+  Lesezeichen *and* individually under Highlights.
 
 ## Filter semantics (dual membership)
 
@@ -62,24 +62,31 @@ set-based:
   clears the solo (unchanged from #35).
 
 The pure helpers in `profile-feed.js` (`toggleSoloCategory`,
-`toggleHiddenCategory`, `effectiveActiveCategories`) stay; `filterFeedItems`
-/ the entry filter in `ProfileFeedView` switch from single-type membership to
-set intersection.
+`toggleHiddenCategory`, `effectiveActiveCategories`) stay; solo and hide
+filtering both route through the one `entryMatchesCategory` predicate
+(visible iff some active category matches; with a solo set, visible iff the
+solo category matches).
 
-## Rendering (fixes #45 by construction)
+## Rendering (fixes #45 by construction — in BOTH feed surfaces)
 
-- Repost entries render `SharedByLine` plus the **proper card for the target
-  kind**. Existing branches (notes, calendar, resources, articles, polls)
-  stay; new branches:
-  - kind 9802 target → individual highlight card (adapt the existing
-    `EventHighlightCard` used by event-ref groups, or extract a
-    single-highlight variant);
-  - kind 1111 target → compact comment preview (reuse `NoteCard`-style
-    rendering with the comment's content).
-- **Safety net:** an entry whose type has no matching render branch is
-  skipped entirely — a share byline must never render without a body. This is
-  enforced by resolving the card component *first* and rendering the
-  byline+card wrapper only when a card exists.
+- **Shared category→card resolver.** `RichFeedEntry` (community feed) also
+  branches on `kindToFeedCategory` and already lacks a bookmarks branch —
+  the same headless/blank failure class exists there today. Extract ONE
+  shared resolver component (entry → card component + props) used by both
+  `ProfileFeedView` and `RichFeedEntry`, so categories are added in exactly
+  one place.
+- Repost entries render `SharedByLine` plus the proper card for the target
+  kind. Existing branches (notes, calendar, resources, articles, polls)
+  stay; new branches reuse existing components:
+  - kind 9802 target → single-highlight card extracted from
+    `EventHighlightCard`'s featured-highlight styling, reading tags via
+    applesauce helpers (`getHighlightSourceUrl`,
+    `getHighlightSourceAddressPointer`, `getHighlightAttributions`) — no
+    hand-parsed highlight tags;
+  - kind 1111 target → reuse `PageNoteItem` (existing kind-1111 preview).
+- **Safety net:** the resolver returns null for unknown categories and the
+  wrapper renders byline+card only when a card exists — a share byline can
+  never render without a body, in either surface.
 
 ## Chip row UI
 
@@ -101,12 +108,13 @@ body + eye button interaction from #35 unchanged.
 
 ## Testing
 
-- Unit: set-based solo/hide semantics (solo Artikel includes shared
-  articles; hide Artikel removes shared articles; hide Geteilt removes all
-  repost entries; solo Geteilt shows only repost entries), category-set
-  derivation, repost→card mapping incl. 9802/1111 branches, no-headless
-  safety net (unknown type ⇒ entry skipped), URL-group composition
-  unchanged.
+- Unit (TDD order): `entryMatchesCategory` predicate first (solo Artikel
+  includes shared articles; hide Artikel removes shared articles; hide
+  Geteilt removes all repost entries; solo Geteilt shows only repost
+  entries; group entries match bookmarks), then the resolver mapping incl.
+  9802/1111 branches and the null-for-unknown safety net; URL-group
+  composition unchanged.
 - Component: chip row renders all 8 chips inside the scroll container; solo
   and hide interactions unchanged; a repost-of-highlight entry renders
-  byline + highlight card.
+  byline + highlight card; RichFeedEntry renders a card (not blank) for all
+  categories.
