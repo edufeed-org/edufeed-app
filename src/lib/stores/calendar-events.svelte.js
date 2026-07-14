@@ -60,7 +60,6 @@ class CalendarStore {
    * @param {CalendarEvent[]} newEvents
    */
   setEvents(newEvents) {
-    console.log('📅 CalendarEventsStore: Setting events:', newEvents.length);
     this.events = newEvents;
   }
 
@@ -68,7 +67,6 @@ class CalendarStore {
    * Clear all events
    */
   clearEvents() {
-    console.log('📅 CalendarEventsStore: Clearing events');
     this.events = [];
   }
 
@@ -85,7 +83,6 @@ class CalendarStore {
    * @param {string | null} errorMessage
    */
   setError(errorMessage) {
-    console.log('📅 CalendarEventsStore: Setting error:', errorMessage);
     this.error = errorMessage;
   }
 
@@ -94,11 +91,6 @@ class CalendarStore {
    * @param {any} calendar - Calendar object with id property
    */
   setSelectedCalendar(calendar) {
-    console.log(
-      '📅 CalendarEventsStore: Setting selected calendar:',
-      calendar?.id,
-      calendar?.title
-    );
     this.selectedCalendar$.next(calendar);
   }
 
@@ -107,7 +99,6 @@ class CalendarStore {
    * @param {string[]} relays - Array of relay URLs
    */
   setSelectedRelays(relays) {
-    console.log('📅 CalendarEventsStore: Setting selected relays:', relays);
     this.selectedRelays = relays;
   }
 
@@ -115,7 +106,6 @@ class CalendarStore {
    * Clear selected relays (revert to default)
    */
   clearSelectedRelays() {
-    console.log('📅 CalendarEventsStore: Clearing selected relays');
     this.selectedRelays = [];
   }
 
@@ -125,7 +115,6 @@ class CalendarStore {
    */
   addRelay(relay) {
     if (!this.selectedRelays.includes(relay)) {
-      console.log('📅 CalendarEventsStore: Adding relay:', relay);
       this.selectedRelays = [...this.selectedRelays, relay];
     }
   }
@@ -135,7 +124,6 @@ class CalendarStore {
    * @param {string} relay - Relay URL to remove
    */
   removeRelay(relay) {
-    console.log('📅 CalendarEventsStore: Removing relay:', relay);
     this.selectedRelays = this.selectedRelays.filter((r) => r !== relay);
   }
 
@@ -144,7 +132,6 @@ class CalendarStore {
    * @param {string[]} tags - Array of tag strings
    */
   setSelectedTags(tags) {
-    console.log('📅 CalendarEventsStore: Setting selected tags:', tags);
     this.selectedTags = tags;
   }
 
@@ -152,7 +139,6 @@ class CalendarStore {
    * Clear selected tags (revert to showing all)
    */
   clearSelectedTags() {
-    console.log('📅 CalendarEventsStore: Clearing selected tags');
     this.selectedTags = [];
   }
 
@@ -162,7 +148,6 @@ class CalendarStore {
    */
   addTag(tag) {
     if (!this.selectedTags.includes(tag)) {
-      console.log('📅 CalendarEventsStore: Adding tag:', tag);
       this.selectedTags = [...this.selectedTags, tag];
     }
   }
@@ -172,7 +157,6 @@ class CalendarStore {
    * @param {string} tag - Tag to remove
    */
   removeTag(tag) {
-    console.log('📅 CalendarEventsStore: Removing tag:', tag);
     this.selectedTags = this.selectedTags.filter((t) => t !== tag);
   }
 
@@ -181,7 +165,6 @@ class CalendarStore {
    * @param {string} query - Search query string
    */
   setSearchQuery(query) {
-    console.log('📅 CalendarEventsStore: Setting search query:', query);
     this.searchQuery = query;
   }
 
@@ -189,7 +172,6 @@ class CalendarStore {
    * Clear search query
    */
   clearSearchQuery() {
-    console.log('📅 CalendarEventsStore: Clearing search query');
     this.searchQuery = '';
   }
 
@@ -198,7 +180,6 @@ class CalendarStore {
    * @param {Array<{id: string, name: string, type: 'nip02' | 'nip51', description?: string, pubkeys: string[], count: number}>} lists - Array of follow lists
    */
   setFollowLists(lists) {
-    console.log('👥 CalendarEventsStore: Setting follow lists:', lists.length);
     this.followLists = lists;
   }
 
@@ -206,7 +187,6 @@ class CalendarStore {
    * Clear follow lists
    */
   clearFollowLists() {
-    console.log('👥 CalendarEventsStore: Clearing follow lists');
     this.followLists = [];
   }
 
@@ -215,7 +195,6 @@ class CalendarStore {
    * @param {string[]} listIds - Array of follow list IDs
    */
   setSelectedFollowListIds(listIds) {
-    console.log('👥 CalendarEventsStore: Setting selected follow list IDs:', listIds);
     this.selectedFollowListIds = listIds;
   }
 
@@ -223,7 +202,6 @@ class CalendarStore {
    * Clear selected follow list IDs (revert to showing all)
    */
   clearSelectedFollowListIds() {
-    console.log('👥 CalendarEventsStore: Clearing selected follow list IDs');
     this.selectedFollowListIds = [];
   }
 
@@ -247,9 +225,6 @@ class CalendarStore {
     });
 
     const uniquePubkeys = Array.from(pubkeysSet);
-    console.log(
-      `👥 CalendarEventsStore: Got ${uniquePubkeys.length} unique authors from ${selectedLists.length} follow lists`
-    );
 
     return uniquePubkeys;
   }
@@ -258,7 +233,6 @@ class CalendarStore {
    * Reset all state
    */
   reset() {
-    console.log('📅 CalendarEventsStore: Resetting all state');
     this.events = [];
     this.loading = false;
     this.error = null;

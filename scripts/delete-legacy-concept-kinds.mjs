@@ -34,7 +34,7 @@ import { PrivateKeySigner } from 'applesauce-signers/signers/private-key-signer'
 // Side-effect import: registers factory.delete() (NIP-09 blueprint).
 import 'applesauce-common';
 import { timer, firstValueFrom, EMPTY } from 'rxjs';
-import { takeUntil, toArray, catchError, tap } from 'rxjs/operators';
+import { takeUntil, toArray, catchError } from 'rxjs/operators';
 import { VOCAB_KIND } from 'nostr-vocab-core/constants';
 
 const REQUEST_TIMEOUT_MS = 5_000;

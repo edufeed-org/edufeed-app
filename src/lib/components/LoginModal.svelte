@@ -34,7 +34,6 @@
     const handleDialogClose = () => {
       // Only update store if this modal is currently active
       if (modalStore.activeModal === 'login') {
-        console.log('LoginModal: Dialog closed, syncing with store');
         modalStore.closeModal();
       }
     };
@@ -69,7 +68,7 @@
                 fmsg
               );
             if (!isPortClosed) throw firstErr;
-            console.info('Extension first call failed (port closed), retrying once…');
+            console.warn('Extension first call failed (port closed), retrying once…');
             await new Promise((r) => setTimeout(r, 250));
             // Re-instantiate; some signers cache state from the failed call.
             /** @type {any} */ (signer).signer = new ExtensionSigner();

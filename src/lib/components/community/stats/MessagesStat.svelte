@@ -27,7 +27,6 @@
   // Load messages
   $effect(() => {
     if (!communityId) {
-      console.log('💬 MessagesStat: No communityId provided, skipping load');
       return;
     }
 

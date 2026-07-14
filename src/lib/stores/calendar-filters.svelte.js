@@ -64,11 +64,6 @@ class CalendarFiltersStore {
    * @param {any} calendar - Calendar object with id property
    */
   setSelectedCalendar(calendar) {
-    console.log(
-      '📅 CalendarFiltersStore: Setting selected calendar:',
-      calendar?.id,
-      calendar?.title
-    );
     this.selectedCalendar$.next(calendar);
   }
 
@@ -77,7 +72,6 @@ class CalendarFiltersStore {
    * @param {string[]} relays - Array of relay URLs
    */
   setSelectedRelays(relays) {
-    console.log('📅 CalendarFiltersStore: Setting selected relays:', relays);
     this.selectedRelays = relays;
   }
 
@@ -85,7 +79,6 @@ class CalendarFiltersStore {
    * Clear selected relays (revert to default)
    */
   clearSelectedRelays() {
-    console.log('📅 CalendarFiltersStore: Clearing selected relays');
     this.selectedRelays = [];
   }
 
@@ -95,7 +88,6 @@ class CalendarFiltersStore {
    */
   addRelay(relay) {
     if (!this.selectedRelays.includes(relay)) {
-      console.log('📅 CalendarFiltersStore: Adding relay:', relay);
       this.selectedRelays = [...this.selectedRelays, relay];
     }
   }
@@ -105,7 +97,6 @@ class CalendarFiltersStore {
    * @param {string} relay - Relay URL to remove
    */
   removeRelay(relay) {
-    console.log('📅 CalendarFiltersStore: Removing relay:', relay);
     this.selectedRelays = this.selectedRelays.filter((r) => r !== relay);
   }
 
@@ -114,7 +105,6 @@ class CalendarFiltersStore {
    * @param {string[]} tags - Array of tag strings
    */
   setSelectedTags(tags) {
-    console.log('📅 CalendarFiltersStore: Setting selected tags:', tags);
     this.selectedTags = tags;
   }
 
@@ -122,7 +112,6 @@ class CalendarFiltersStore {
    * Clear selected tags (revert to showing all)
    */
   clearSelectedTags() {
-    console.log('📅 CalendarFiltersStore: Clearing selected tags');
     this.selectedTags = [];
   }
 
@@ -132,7 +121,6 @@ class CalendarFiltersStore {
    */
   addTag(tag) {
     if (!this.selectedTags.includes(tag)) {
-      console.log('📅 CalendarFiltersStore: Adding tag:', tag);
       this.selectedTags = [...this.selectedTags, tag];
     }
   }
@@ -142,7 +130,6 @@ class CalendarFiltersStore {
    * @param {string} tag - Tag to remove
    */
   removeTag(tag) {
-    console.log('📅 CalendarFiltersStore: Removing tag:', tag);
     this.selectedTags = this.selectedTags.filter((t) => t !== tag);
   }
 
@@ -151,7 +138,6 @@ class CalendarFiltersStore {
    * @param {string} query - Search query string
    */
   setSearchQuery(query) {
-    console.log('📅 CalendarFiltersStore: Setting search query:', query);
     this.searchQuery = query;
   }
 
@@ -159,7 +145,6 @@ class CalendarFiltersStore {
    * Clear search query
    */
   clearSearchQuery() {
-    console.log('📅 CalendarFiltersStore: Clearing search query');
     this.searchQuery = '';
   }
 
@@ -168,7 +153,6 @@ class CalendarFiltersStore {
    * @param {Array<{id: string, name: string, type: 'nip02' | 'nip51', description?: string, pubkeys: string[], count: number}>} lists - Array of follow lists
    */
   setFollowLists(lists) {
-    console.log('👥 CalendarFiltersStore: Setting follow lists:', lists.length);
     this.followLists = lists;
   }
 
@@ -176,7 +160,6 @@ class CalendarFiltersStore {
    * Clear follow lists
    */
   clearFollowLists() {
-    console.log('👥 CalendarFiltersStore: Clearing follow lists');
     this.followLists = [];
   }
 
@@ -185,7 +168,6 @@ class CalendarFiltersStore {
    * @param {string[]} listIds - Array of follow list IDs
    */
   setSelectedFollowListIds(listIds) {
-    console.log('👥 CalendarFiltersStore: Setting selected follow list IDs:', listIds);
     this.selectedFollowListIds = listIds;
   }
 
@@ -193,7 +175,6 @@ class CalendarFiltersStore {
    * Clear selected follow list IDs (revert to showing all)
    */
   clearSelectedFollowListIds() {
-    console.log('👥 CalendarFiltersStore: Clearing selected follow list IDs');
     this.selectedFollowListIds = [];
   }
 
@@ -334,9 +315,6 @@ class CalendarFiltersStore {
     });
 
     const uniquePubkeys = Array.from(pubkeysSet);
-    console.log(
-      `👥 CalendarFiltersStore: Got ${uniquePubkeys.length} unique authors from ${selectedLists.length} follow lists`
-    );
 
     return uniquePubkeys;
   }
@@ -345,7 +323,6 @@ class CalendarFiltersStore {
    * Reset all filter state
    */
   reset() {
-    console.log('📅 CalendarFiltersStore: Resetting all filter state');
     this.selectedCalendar$.next(null);
     this.selectedRelays = [];
     this.selectedTags = [];

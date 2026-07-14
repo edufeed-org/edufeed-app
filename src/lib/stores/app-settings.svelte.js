@@ -224,7 +224,6 @@ export function initializeAppSettings() {
     settings = defaults;
     saveSettings(settings);
     saveConfigDefaults(currentLightTheme, currentDarkTheme);
-    console.log('App settings initialized with runtime config defaults:', defaults);
     return;
   }
 
@@ -242,7 +241,6 @@ export function initializeAppSettings() {
     );
     settings.themeFamily = themeFamily;
     saveSettings(settings);
-    console.log('App settings updated with new deployment theme defaults:', { themeFamily });
   }
 
   // Always save current config defaults for future comparison

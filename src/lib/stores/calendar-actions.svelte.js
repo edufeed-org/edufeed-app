@@ -96,7 +96,6 @@ export function createCalendarActions(_communityPubkey) {
 
         // Add the transformed event to the calendar store for immediate UI update
         calendarStore.setEvents([...calendarStore.events, transformedEvent]);
-        console.log('📅 Calendar Actions: Added transformed event to store');
 
         // Publish optimistically in background (returns immediately).
         // Participants are tagged pubkeys: outbox model also targets their read relays.
@@ -189,7 +188,6 @@ export function createCalendarActions(_communityPubkey) {
           evt.id === existingEvent.id ? transformedEvent : evt
         );
         calendarStore.setEvents(updatedEvents);
-        console.log('📅 Calendar Actions: Updated event in store');
 
         // Await publish for updates to ensure event is saved before returning
         // Unlike creation which navigates away, updates reload the same page
@@ -280,7 +278,6 @@ export function createCalendarActions(_communityPubkey) {
         const calendarEvent = await currentAccount.signEvent(eventTemplate);
         await publishEvent(calendarEvent, []);
 
-        console.log('📅 Calendar created successfully:', calendarEvent.id);
         return calendarEvent;
       } catch (error) {
         console.error('Error creating calendar:', error);
@@ -362,7 +359,6 @@ export function createCalendarActions(_communityPubkey) {
         // Optimistic: adds to EventStore immediately, publishes in background.
         // Include event author in tagged pubkeys for outbox routing.
         publishEventOptimistic(rsvpEvent, [eventPubkey]);
-        console.log('✅ RSVP created successfully:', rsvpEvent.id, 'Status:', status);
 
         return rsvpEvent;
       } catch (error) {

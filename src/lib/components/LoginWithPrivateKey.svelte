@@ -36,7 +36,6 @@
     const handleDialogClose = () => {
       // Only update store if this modal is currently active
       if (modalStore.activeModal === 'privateKey') {
-        console.log('LoginWithPrivateKey: Dialog closed, syncing with store');
         modalStore.closeModal();
       }
     };
@@ -134,7 +133,6 @@
         try {
           // Decrypt the ncryptsec with the provided password
           privateKey = nip49.decrypt(trimmedInput, password);
-          console.log('Successfully decrypted ncryptsec');
         } catch (decryptError) {
           console.error('Decryption error:', decryptError);
           errorMessage = m.auth_login_private_key_error_decrypt_failed();
@@ -153,7 +151,6 @@
       // Create signer and derive the public key
       const simpleSigner = new SimpleSigner(privateKey);
       const pk = await simpleSigner.getPublicKey();
-      console.log('Public Key:', pk);
 
       // If this account is already in the manager, switch to the EXISTING object.
       // Building a fresh SimpleAccount and passing it to setActive throws
@@ -165,16 +162,11 @@
       if (existing) {
         manager.setActive(existing);
         infoMessage = m.auth_login_private_key_already_logged_in();
-        console.log('LoginWithPrivateKey: Existing account set active:', existing);
       } else {
         const account = new SimpleAccount(pk, simpleSigner);
         manager.addAccount(account);
         manager.setActive(account);
-        console.log('LoginWithPrivateKey: New account created and set active:', account);
       }
-
-      console.log('LoginWithPrivateKey: Current active account:', manager.active);
-      console.log('LoginWithPrivateKey: All accounts:', manager.accounts);
 
       // Call the callback to notify parent component of successful account creation
       if (onAccountCreated) {

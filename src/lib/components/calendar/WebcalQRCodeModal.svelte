@@ -37,7 +37,6 @@
     const handleDialogClose = () => {
       // Only update store if this modal is currently active
       if (modal.activeModal === 'webcalQRCode') {
-        console.log('WebcalQRCodeModal: Dialog closed, syncing with store');
         modal.closeModal();
       }
     };
@@ -69,7 +68,6 @@
     const dialog = /** @type {HTMLDialogElement} */ (document.getElementById(modalId));
 
     if (currentModal === 'webcalQRCode' && dialog && !dialog.open) {
-      console.log('WebcalQRCodeModal: Opening QR code modal');
       dialog.showModal();
 
       // Generate QR code when modal opens
@@ -77,7 +75,6 @@
         generateQRCode();
       }
     } else if (currentModal !== 'webcalQRCode' && dialog && dialog.open) {
-      console.log('WebcalQRCodeModal: Closing QR code modal');
       dialog.close();
     }
   });

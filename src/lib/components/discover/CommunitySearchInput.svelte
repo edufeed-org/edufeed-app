@@ -28,7 +28,6 @@
 
     // Debounce the search - wait 300ms after user stops typing
     debounceTimer = setTimeout(() => {
-      console.log('🔍 CommunitySearchInput: Updating search query:', searchQuery);
       onSearchChange(searchQuery);
     }, 300);
   }
@@ -37,7 +36,6 @@
    * Clear search query
    */
   function clearSearch() {
-    console.log('🔍 CommunitySearchInput: Clearing search');
     searchQuery = '';
     onSearchChange('');
 

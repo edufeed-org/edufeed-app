@@ -41,16 +41,6 @@
   let hiddenTags = $derived(
     maxDisplay && uniqueTags.length > maxDisplay ? uniqueTags.slice(maxDisplay) : []
   );
-
-  /**
-   * Handle tag click
-   * @param {MouseEvent} e
-   * @param {string} tag
-   */
-  function handleTagClick(e, tag) {
-    // Navigation is handled by the href, this is just for tracking
-    console.log('Tag clicked:', tag);
-  }
 </script>
 
 {#if tags.length > 0}
@@ -61,7 +51,6 @@
       <a
         href={resolve(`${targetRoute}?tags=${encodeURIComponent(tag)}`)}
         class="badge max-w-full badge-outline badge-{size} transition-colors hover:badge-primary focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:badge-primary focus:outline-none"
-        onclick={(e) => handleTagClick(e, tag)}
         title={m.event_tags_view_all_tooltip({ tag })}
       >
         <!-- truncate: degenerate tags (hundreds of chars, no break points)

@@ -18,7 +18,6 @@
   onMount(async () => {
     // Load accounts from localStorage and restore manager state
     const savedAccounts = JSON.parse(localStorage.getItem('accounts') || '[]');
-    console.log('Restoring accounts:', savedAccounts);
     manager.fromJSON(savedAccounts);
 
     const activeAccountId = localStorage.getItem('activeAccount');

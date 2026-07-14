@@ -78,8 +78,6 @@
    * @param {CalendarViewMode} mode
    */
   function handleViewModeClick(mode) {
-    console.log('🔄 handleViewModeClick called with mode:', mode);
-
     // Update URL with new period - let useCalendarUrlSync handle state updates
     updateQueryParams($page.url.searchParams, {
       period: mode === 'month' ? null : mode // Don't include 'month' as it's the default
@@ -87,34 +85,27 @@
 
     // NOTE: Don't call _onViewModeChange here - let URL sync effect handle it
     // This prevents race conditions between async URL updates and sync callbacks
-    console.log('✅ URL updated, waiting for sync effect');
   }
 
   /**
    * Handle previous button click
    */
   function handlePreviousClick() {
-    console.log('🔄 Previous button clicked');
     onPrevious();
-    console.log('✅ onPrevious callback completed');
   }
 
   /**
    * Handle next button click
    */
   function handleNextClick() {
-    console.log('🔄 Next button clicked');
     onNext();
-    console.log('✅ onNext callback completed');
   }
 
   /**
    * Handle today button click
    */
   function handleTodayClick() {
-    console.log('🔄 Today button clicked');
     onToday();
-    console.log('✅ onToday callback completed');
   }
 
   /**

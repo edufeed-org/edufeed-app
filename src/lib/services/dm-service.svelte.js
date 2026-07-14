@@ -470,12 +470,6 @@ export function initializeDMs(pubkey, signer) {
     const fallback = runtimeConfig.fallbackRelays || [];
     const baseRelays = computeBaseGiftWrapRelays(writeRelays, readRelays, fallback);
     if (baseRelays.length > 0) {
-      console.debug('[dm] base relays → subscribing gift wraps', {
-        relayCount: baseRelays.length,
-        writeRelayCount: writeRelays.length,
-        readRelayCount: readRelays.length,
-        fallbackCount: fallback.length
-      });
       addRelaysToGiftWrapSub(pubkey, baseRelays);
     }
 
@@ -520,10 +514,6 @@ export function initializeDMs(pubkey, signer) {
     }
     hasDedicatedDmRelays = true;
     const additions = newRelays.filter((r) => !subscribedRelays.has(r));
-    console.debug('[dm] kind 10050 → merging into gift-wrap union', {
-      listed: newRelays.length,
-      additions: additions.length
-    });
     if (additions.length > 0) {
       addRelaysToGiftWrapSub(pubkey, additions);
     }
@@ -539,12 +529,6 @@ export function initializeDMs(pubkey, signer) {
   const lockedSub = eventStore.model(GiftWrapsModel, pubkey, false).subscribe((wraps) => {
     const tryable = (wraps || []).filter((w) => !failedUnlockIds.has(w.id));
     lockedCount = tryable.length;
-    console.debug('[dm] locked gift wraps', {
-      total: wraps?.length || 0,
-      tryable: tryable.length,
-      failed: failedUnlockIds.size,
-      unlocking
-    });
     if (tryable.length > 0 && !unlocking) {
       // Debounced: give persistEncryptedContent's async restore a head start
       // so cached wraps unlock without signer prompts (batchUnlock re-checks
@@ -562,9 +546,6 @@ export function initializeDMs(pubkey, signer) {
   const convSub = eventStore.model(WrappedMessagesGroups, pubkey).subscribe((conversations) => {
     wrappedConversations = conversations || [];
     closeInitialFetchWindowIfReady();
-    console.debug('[dm] WrappedMessagesGroups emission', {
-      conversationCount: wrappedConversations.length
-    });
   });
   subscriptions.push(convSub);
 
@@ -601,10 +582,6 @@ export function initializeDMs(pubkey, signer) {
       if (lockedLast.length > 0 && !unlockingLegacy) {
         batchUnlockLegacy(pubkey, lockedLast);
       }
-      console.debug('[dm] legacy conversations emission', {
-        conversationCount: legacyConversations.length,
-        lockedPreviews: lockedLast.length
-      });
     });
   subscriptions.push(legacySub);
 }
@@ -684,14 +661,6 @@ function addRelaysToGiftWrapSub(pubkey, relays) {
  * @param {string[]} relays
  */
 function subscribeToGiftWraps(pubkey, relays) {
-  console.debug('[dm] subscribeToGiftWraps()', {
-    pubkey: pubkey.slice(0, 8),
-    relays,
-    poolRelayStates: relays.map((url) => {
-      const r = pool.relays.get(url);
-      return { url, found: !!r, ready: r?.ready ?? null };
-    })
-  });
   // IMPORTANT: use `group(relays, false)` rather than `pool.subscription(relays, …)`.
   // The default `pool.subscription` calls `group(relays)` with `ignoreOffline=true`,
   // which synchronously filters out any relay whose WebSocket isn't `ready` yet
@@ -713,19 +682,7 @@ function subscribeToGiftWraps(pubkey, relays) {
     ])
     .pipe(
       tap({
-        next: (raw) => {
-          if (typeof raw === 'string') {
-            // v6: subscription() no longer emits 'EOSE' strings; kept for safety
-            console.debug('[dm] gift-wrap stream string', /** @type {string} */ (raw).slice(0, 80));
-          } else if (raw && typeof raw === 'object' && 'id' in raw) {
-            console.debug('[dm] gift-wrap event from relay', {
-              id: /** @type {any} */ (raw).id?.slice(0, 8),
-              kind: /** @type {any} */ (raw).kind
-            });
-          }
-        },
-        error: (err) => console.warn('[dm] gift-wrap stream error', err),
-        complete: () => console.debug('[dm] gift-wrap stream complete')
+        error: (err) => console.warn('[dm] gift-wrap stream error', err)
       }),
       mapEventsToStore(eventStore)
     )
@@ -750,26 +707,11 @@ function subscribeToGiftWraps(pubkey, relays) {
         // for unlocking gift wraps). The real account signer also implements
         // AuthSigner.signEvent — cast to access it.
         await relay.authenticate(/** @type {any} */ (activeSigner));
-        console.debug('[dm] authenticated to relay', url);
       } catch (err) {
         console.warn('[dm] auth failed for', url, err);
       }
     });
     subscriptions.push(authSub);
-
-    // Per-relay status diagnostic. RelayGroup's catchError silently swallows
-    // per-relay errors (group.js:84) — without this we can't tell whether a
-    // DM relay is connected, auth-required, or errored.
-    const statusSub = relay.status$.subscribe((s) => {
-      console.debug('[dm] relay status', url, {
-        connected: s.connected,
-        ready: s.ready,
-        authenticated: s.authenticated,
-        authRequiredForRead: s.authRequiredForRead,
-        authRequiredForPublish: s.authRequiredForPublish
-      });
-    });
-    subscriptions.push(statusSub);
   }
 }
 
@@ -786,8 +728,6 @@ async function batchUnlock(wraps) {
   // Skip wraps whose plaintext is already in the cache — the restore
   // pipeline unlocks those without any signer interaction.
   wraps = await filterEventsNeedingSignerUnlock(wraps, dmContentCache, isGiftWrapUnlocked);
-  console.debug('[dm] batchUnlock start', { count: wraps.length });
-  const startedAt = performance.now();
   let failedThisRun = 0;
 
   for (let i = 0; i < wraps.length; i += BATCH_SIZE) {
@@ -815,10 +755,6 @@ async function batchUnlock(wraps) {
     saveFailedUnlockIds(activePubkey);
   }
   unlocking = false;
-  console.debug('[dm] batchUnlock done', {
-    count: wraps.length,
-    durationMs: Math.round(performance.now() - startedAt)
-  });
 }
 
 /**

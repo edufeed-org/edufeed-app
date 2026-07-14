@@ -210,7 +210,6 @@ class ReactionsStore {
       }
 
       // Delete the reaction - pass the REACTION event, not the target event
-      console.log('Attempting to delete reaction for emoji:', emoji);
       const { event: deletedEvent } = await deleteReaction(reactionData.userReactionEvent, {
         relays
       });

@@ -97,8 +97,6 @@
       const resultCalendar = await calendarActions.createCalendar(title.trim(), description.trim());
 
       if (resultCalendar && resultCalendar.id) {
-        console.log('Calendar created successfully:', resultCalendar.id);
-
         // Refresh the calendar management store to show the new calendar
         if (calendarManagement) {
           await calendarManagement.refresh();
@@ -107,7 +105,6 @@
         // Generate naddr with relay hints and navigate to calendar page
         const relayHints = getCalendarRelays().slice(0, 3); // Limit to 3 per NIP-19
         const naddr = encodeEventToNaddr(resultCalendar, relayHints);
-        console.log('Navigating to newly created calendar:', naddr);
 
         handleClose();
 

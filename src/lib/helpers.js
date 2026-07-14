@@ -46,7 +46,6 @@
  * // ]
  */
 export function getCommunityContentTypes(event) {
-  console.log('getCommunityContentTypes', event);
   /** @type {Array<{name: string, kinds: number[], exclusive: boolean, roles: string[], fee?: {amount: string, unit: string}}>} */
   const contentTypes = [];
   /** @type {{name: string, kinds: number[], exclusive: boolean, roles: string[], fee?: {amount: string, unit: string}} | null} */

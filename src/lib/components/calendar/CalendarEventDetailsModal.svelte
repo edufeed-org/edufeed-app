@@ -63,7 +63,6 @@
     const handleDialogClose = () => {
       // Only update store if this modal is currently active
       if (modal.activeModal === 'eventDetails') {
-        console.log('CalendarEventDetailsModal: Dialog closed, syncing with store');
         modal.closeModal();
       }
     };
@@ -80,10 +79,8 @@
     const dialog = /** @type {HTMLDialogElement} */ (document.getElementById(modalId));
 
     if (currentModal === 'eventDetails' && dialog && !dialog.open) {
-      console.log('CalendarEventDetailsModal: Opening event details modal');
       dialog.showModal();
     } else if (currentModal !== 'eventDetails' && dialog && dialog.open) {
-      console.log('CalendarEventDetailsModal: Closing event details modal');
       dialog.close();
     }
   });
@@ -150,7 +147,6 @@
       try {
         const naddr = encodeEventToNaddr(event.originalEvent);
         await navigator.clipboard.writeText(naddr);
-        console.log('Event naddr copied to clipboard:', naddr);
         showToast(m.event_details_link_copied(), 'success');
       } catch (err) {
         console.error('Failed to copy event naddr:', err);

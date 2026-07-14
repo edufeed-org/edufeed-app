@@ -263,9 +263,6 @@ export function createEducationalActions() {
         // Generate naddr using educational relays for hint
         const naddr = encodeEventToNaddr(resourceEvent, getAppRelaysForCategory('educational'));
 
-        console.log('📚 Educational resource created:', resourceEvent.id);
-        console.log('📚 Resource naddr:', naddr);
-
         return { event: resourceEvent, naddr };
       } catch (error) {
         console.error('Error creating educational resource:', error);
@@ -349,8 +346,6 @@ export function createEducationalActions() {
 
         // Generate naddr using educational relays for hint
         const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('educational'));
-
-        console.log('📚 Educational resource updated:', updatedEvent.id);
 
         return { event: updatedEvent, naddr };
       } catch (error) {

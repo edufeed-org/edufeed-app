@@ -119,15 +119,12 @@
 
     // Notify parent
     onTagFilterChange(newTags);
-    console.log('🏷️ Selected tags:', newTags);
   }
 
   /**
    * Clear all selected tags
    */
   function clearTags() {
-    console.log('🏷️ Clearing tag filters');
-
     // Update store
     calendarFilters.clearSelectedTags();
 

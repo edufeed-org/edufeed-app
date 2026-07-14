@@ -69,7 +69,6 @@
   async function copyToClipboard(text, label) {
     try {
       await navigator.clipboard.writeText(text);
-      console.log(`${label} copied to clipboard`);
     } catch (err) {
       console.error(`Failed to copy ${label}:`, err);
     }

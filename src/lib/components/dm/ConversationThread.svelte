@@ -127,14 +127,6 @@
         .subscribe((msgs) => {
           // timeline is newest-first; reverse to oldest-first for display
           const list = (msgs || []).toReversed();
-          console.debug('[dm] legacy thread emission', {
-            correspondent: correspondent?.slice(0, 8),
-            count: list.length,
-            // 'in' = authored by the correspondent, 'out' = authored by us. If
-            // the partner's messages never appear, the kind-4 inbound events
-            // aren't in the store (relay coverage), not a render bug.
-            directions: list.map((m) => (m.pubkey === user.pubkey ? 'out' : 'in'))
-          });
           rawMessages = list;
           ensureLegacyMessagesUnlocked(list).then((failed) => {
             if (failed.size > 0) failedLegacyIds = new Set([...failedLegacyIds, ...failed]);
@@ -151,10 +143,6 @@
       .subscribe((msgs) => {
         // WrappedMessagesGroup returns newest-first, we need oldest-first
         const next = (msgs || []).toReversed();
-        console.debug('[dm] ConversationThread emission', {
-          conversationId,
-          count: next.length
-        });
         rawMessages = next;
       });
 

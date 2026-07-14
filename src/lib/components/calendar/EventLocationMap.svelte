@@ -49,7 +49,6 @@
 
       if (locationType === 'url') {
         // URL detected - don't show map
-        console.log(`'${location}' detected as URL, skipping map display`);
         shouldShowMap = false;
         loading = false;
         return;
@@ -60,11 +59,9 @@
 
       if (result) {
         coordinates = { lat: result.lat, lng: result.lng };
-        console.log(`Location parsed (${result.source}):`, coordinates);
       } else {
         // parseLocation will have logged why geocoding failed
         // Don't show an error UI - just don't display the map
-        console.log(`No coordinates found for location: ${location}`);
       }
     } catch (err) {
       console.error('Error parsing location:', err);

@@ -346,7 +346,6 @@
           null,
           selectedCommunityIds
         );
-        console.log('Event updated successfully');
 
         handleClose();
         // Refresh data to show the updated event
@@ -374,7 +373,6 @@
           // Generate naddr with relay hints and navigate to event page
           const relayHints = getCalendarRelays().slice(0, 3); // Limit to 3 per NIP-19
           const naddr = encodeEventToNaddr(resultEvent, relayHints);
-          console.log('Navigating to newly created event:', naddr);
 
           handleClose();
 
