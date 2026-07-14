@@ -14,31 +14,23 @@
   import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { getProfileLookupRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { pinEvent, unpinEvent } from '$lib/services/pin-list-service.js';
   import { showToast } from '$lib/helpers/toast';
-  import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
-  import { formatAMBResource } from '$lib/helpers/educational/index.js';
   import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
   import {
-    FEED_CATEGORIES,
     ALL_FEED_KINDS,
     kindToFeedCategory,
-    filterFeedItems,
+    entryVisible,
     isEntryPinned,
     toggleSoloCategory,
-    toggleHiddenCategory,
-    effectiveActiveCategories
+    toggleHiddenCategory
   } from '$lib/helpers/profile-feed.js';
   import { mergeRepostsIntoFeed } from '$lib/helpers/repost-feed.js';
   import { resolveRepostReferences } from '$lib/helpers/repost-resolution.js';
-  import NoteCard from '$lib/components/notes/NoteCard.svelte';
-  import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
-  import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
-  import ArticleCard from '$lib/components/article/ArticleCard.svelte';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
   import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
-  import PollCard from '$lib/components/polls/PollCard.svelte';
+  import FeedEntryCard from '$lib/components/shared/FeedEntryCard.svelte';
   import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import {
     ChatIcon,
@@ -49,7 +41,9 @@
     PollIcon,
     PinIcon,
     EyeIcon,
-    EyeOffIcon
+    EyeOffIcon,
+    EditIcon,
+    RepostIcon
   } from '$lib/components/icons';
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import * as m from '$lib/paraglide/messages';
@@ -82,6 +76,8 @@
     { id: 'resources', label: () => m.profile_tab_resources(), icon: GraduationCapIcon },
     { id: 'articles', label: () => m.profile_tab_articles(), icon: BookIcon },
     { id: 'bookmarks', label: () => m.profile_tab_bookmarks(), icon: BookmarkIcon },
+    { id: 'highlights', label: () => m.profile_tab_highlights(), icon: EditIcon },
+    { id: 'shared', label: () => m.profile_tab_shared(), icon: RepostIcon },
     { id: 'polls', label: () => m.profile_tab_polls(), icon: PollIcon }
   ];
 
@@ -89,7 +85,19 @@
   const savedFeedState = $derived(feedStateCache.get(feedCacheKey));
 
   const DISPLAY_BATCH = 10;
-  const BOOKMARK_KINDS = new Set([39701, 9802, 1111]);
+  const BOOKMARK_GROUP_KINDS = new Set([39701, 9802, 1111]);
+  const GROUP_ONLY_KINDS = new Set([39701, 1111]);
+  const RENDERABLE_TYPES = new Set([
+    'notes',
+    'calendar',
+    'resources',
+    'articles',
+    'bookmarks',
+    'highlights',
+    'polls',
+    'bookmark-url',
+    'bookmark-ref'
+  ]);
 
   let items = $state.raw(/** @type {any[]} */ ([]));
   let repostItems = $state.raw(/** @type {any[]} */ ([]));
@@ -105,13 +113,6 @@
       hidden: []
     }
   );
-  const activeFilters = $derived(
-    effectiveActiveCategories(
-      categorySelection,
-      FEED_CATEGORIES.map((c) => c.id)
-    )
-  );
-
   // Derive pubkeys from all sources for profile loading (items + reposters + resolved targets)
   const itemPubkeys = $derived.by(() => {
     /** @type {string[]} */
@@ -125,19 +126,16 @@
   const getAuthorProfiles = useProfileMap(() => itemPubkeys);
   let authorProfiles = $derived(getAuthorProfiles());
 
-  // Separate non-bookmark items from bookmark items, apply filters, merge reposts
+  // Separate non-bookmark items from bookmark items, merge reposts, apply visibility
   const feedItems = $derived.by(() => {
-    const filtered = filterFeedItems(items, activeFilters);
-
-    // Split bookmarks from regular items
+    // Split bookmarks from regular items. Kind 9802 (highlights) is dual-membership:
+    // it renders as its own entry AND feeds the bookmark-ref group (spec: highlights
+    // appear in URL groups AND individually).
     const regular = [];
     const bookmarkEvents = [];
-    for (const event of filtered) {
-      if (BOOKMARK_KINDS.has(event.kind)) {
-        bookmarkEvents.push(event);
-      } else {
-        regular.push(event);
-      }
+    for (const event of items) {
+      if (BOOKMARK_GROUP_KINDS.has(event.kind)) bookmarkEvents.push(event);
+      if (!GROUP_ONLY_KINDS.has(event.kind)) regular.push(event);
     }
 
     // Filter notes: only root notes (no replies)
@@ -181,20 +179,19 @@
         if (dTag) resolvedLookup.set(`${event.kind}:${event.pubkey}:${dTag}`, event);
       }
 
-      const merged = mergeRepostsIntoFeed(feedEntries, repostItems, resolvedLookup);
+      const merged = mergeRepostsIntoFeed(feedEntries, repostItems, resolvedLookup).filter(
+        (entry) => RENDERABLE_TYPES.has(entry.type)
+      );
 
-      // Filter repost entries by active categories
-      const filteredMerged = merged.filter((entry) => {
-        return activeFilters.has(entry.type);
-      });
-
-      filteredMerged.sort((a, b) => b.ts - a.ts);
-      return filteredMerged;
+      const visible = merged.filter((entry) => entryVisible(entry, categorySelection));
+      visible.sort((a, b) => b.ts - a.ts);
+      return visible;
     }
 
     // Sort chronologically (newest first)
-    feedEntries.sort((a, b) => b.ts - a.ts);
-    return feedEntries;
+    const visible = feedEntries.filter((entry) => entryVisible(entry, categorySelection));
+    visible.sort((a, b) => b.ts - a.ts);
+    return visible;
   });
 
   // Pinned entries render first under their own divider; the rest paginates.
@@ -425,50 +422,55 @@
   {#if showFilters}
     <!-- Filter chips — chart-legend convention (issue #35): body click solos
          the content type, the eye button hides/unhides it. -->
-    <div class="flex flex-wrap gap-2 pb-4">
-      {#each FILTER_CHIPS as chip (chip.id)}
-        {@const Icon = chip.icon}
-        {@const isHidden = categorySelection.hidden.includes(chip.id)}
-        {@const isSolo = categorySelection.solo === chip.id}
-        {@const dimmed = isHidden || (categorySelection.solo !== null && !isSolo)}
-        <span
-          class="join {dimmed ? 'opacity-45' : ''}"
-          data-testid="feed-filter-chip"
-          data-category={chip.id}
-        >
-          <button
-            class="btn join-item gap-1 btn-xs {isSolo ? 'btn-primary' : 'btn-outline'}"
-            onclick={() => soloFilter(chip.id)}
-            aria-pressed={isSolo}
-            aria-label={isSolo
-              ? m.feed_filter_unsolo_aria()
-              : m.feed_filter_solo_aria({ name: chip.label() })}
-            title={isSolo
-              ? m.feed_filter_unsolo_aria()
-              : m.feed_filter_solo_aria({ name: chip.label() })}
+    <div class="relative pb-4">
+      <div class="pf-chip-row flex flex-nowrap gap-2 overflow-x-auto" data-testid="feed-filter-row">
+        {#each FILTER_CHIPS as chip (chip.id)}
+          {@const Icon = chip.icon}
+          {@const isHidden = categorySelection.hidden.includes(chip.id)}
+          {@const isSolo = categorySelection.solo === chip.id}
+          {@const dimmed = isHidden || (categorySelection.solo !== null && !isSolo)}
+          <span
+            class="join {dimmed ? 'opacity-45' : ''}"
+            data-testid="feed-filter-chip"
+            data-category={chip.id}
           >
-            <Icon class_="w-3 h-3" />
-            <span class={isHidden ? 'line-through' : ''}>{chip.label()}</span>
-          </button>
-          <button
-            class="btn join-item px-1.5 btn-outline btn-xs"
-            onclick={() => hideFilter(chip.id)}
-            aria-pressed={isHidden}
-            aria-label={isHidden
-              ? m.feed_filter_show_aria({ name: chip.label() })
-              : m.feed_filter_hide_aria({ name: chip.label() })}
-            title={isHidden
-              ? m.feed_filter_show_aria({ name: chip.label() })
-              : m.feed_filter_hide_aria({ name: chip.label() })}
-          >
-            {#if isHidden}
-              <EyeOffIcon class_="w-3 h-3" />
-            {:else}
-              <EyeIcon class_="w-3 h-3" />
-            {/if}
-          </button>
-        </span>
-      {/each}
+            <button
+              class="btn join-item gap-1 btn-xs {isSolo ? 'btn-primary' : 'btn-outline'}"
+              onclick={() => soloFilter(chip.id)}
+              aria-pressed={isSolo}
+              aria-label={isSolo
+                ? m.feed_filter_unsolo_aria()
+                : m.feed_filter_solo_aria({ name: chip.label() })}
+              title={isSolo
+                ? m.feed_filter_unsolo_aria()
+                : m.feed_filter_solo_aria({ name: chip.label() })}
+            >
+              <Icon class_="w-3 h-3" />
+              <span class={isHidden ? 'line-through' : ''}>{chip.label()}</span>
+            </button>
+            <button
+              class="btn join-item px-1.5 btn-outline btn-xs"
+              onclick={() => hideFilter(chip.id)}
+              aria-pressed={isHidden}
+              aria-label={isHidden
+                ? m.feed_filter_show_aria({ name: chip.label() })
+                : m.feed_filter_hide_aria({ name: chip.label() })}
+              title={isHidden
+                ? m.feed_filter_show_aria({ name: chip.label() })
+                : m.feed_filter_hide_aria({ name: chip.label() })}
+            >
+              {#if isHidden}
+                <EyeOffIcon class_="w-3 h-3" />
+              {:else}
+                <EyeIcon class_="w-3 h-3" />
+              {/if}
+            </button>
+          </span>
+        {/each}
+      </div>
+      <div
+        class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-base-100 to-transparent"
+      ></div>
     </div>
   {/if}
 
@@ -538,43 +540,17 @@
               {/if}
             </div>
           {/if}
-          {#if entry.type === 'notes'}
-            <NoteCard
-              note={entry.data}
-              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-              {activeUser}
-              extraRelays={getProfileLookupRelays()}
-            />
-          {:else if entry.type === 'calendar'}
-            {@const event = getCalendarEventMetadata(entry.data)}
-            {#if event}
-              <CalendarEventCard
-                {event}
-                compact={false}
-                authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-              />
-            {/if}
-          {:else if entry.type === 'resources'}
-            {@const resource = formatAMBResource(entry.data)}
-            {#if resource}
-              <AMBResourceCard
-                {resource}
-                authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-                compact={false}
-              />
-            {/if}
-          {:else if entry.type === 'articles'}
-            <ArticleCard
-              article={entry.data}
-              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
-              compact={false}
-            />
-          {:else if entry.type === 'bookmark-url'}
+          {#if entry.type === 'bookmark-url'}
             <UrlCard group={entry.data} {authorProfiles} />
           {:else if entry.type === 'bookmark-ref'}
             <EventHighlightCard group={entry.data} {authorProfiles} />
-          {:else if entry.type === 'polls'}
-            <PollCard event={entry.data} truncate={true} />
+          {:else}
+            <FeedEntryCard
+              event={entry.data}
+              authorProfile={authorProfiles.get(entry.data.pubkey) || null}
+              {authorProfiles}
+              {activeUser}
+            />
           {/if}
         </div>
       </div>
@@ -607,6 +583,15 @@
 </div>
 
 <style>
+  /* Scrollable filter chip row (issue #45): hide the scrollbar, let the
+     right-edge gradient in markup signal there's more to scroll to. */
+  .pf-chip-row {
+    scrollbar-width: none;
+  }
+  .pf-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Pinned card treatment (design: in-card amber pill + tinted border) */
   .pf-pin-flag {
     display: inline-flex;

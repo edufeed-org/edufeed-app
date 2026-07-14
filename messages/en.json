@@ -2696,5 +2696,7 @@
   "fab_create_note": "Write a note",
   "fab_create_note_aria": "Write a new note",
   "fab_create_note_desc": "Short text post to the feed",
-  "note_create_modal_error_publish": "Your note could not be delivered to any relay. Please try again."
+  "note_create_modal_error_publish": "Your note could not be delivered to any relay. Please try again.",
+  "profile_tab_highlights": "Highlights",
+  "profile_tab_shared": "Shared"
 }
