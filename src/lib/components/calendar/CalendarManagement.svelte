@@ -112,8 +112,6 @@
         // Force refresh to show changes immediately
         await calendarManagement.refresh();
 
-        console.log('📅 Calendar Management: Successfully updated calendar:', editTitle);
-
         // Reset editing state
         cancelEditing();
       } else {
@@ -180,8 +178,6 @@
         eventStore.add(signedDeletionEvent);
         // Force refresh to show changes immediately
         await calendarManagement.refresh();
-
-        console.log('📅 Calendar Management: Successfully deleted calendar:', calendar.title);
 
         // Reset deletion state
         cancelDeleting();

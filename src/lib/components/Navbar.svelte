@@ -42,7 +42,6 @@
    * Also closes the dropdown menu if it's open
    */
   function openLoginModal() {
-    console.log('Navbar: Opening login modal');
     modal.openModal('login');
     closeDropdown();
   }

@@ -59,7 +59,6 @@ function validateGeocodeResult(result) {
 
   // Check confidence score
   if (result.confidence < validation.minConfidenceScore) {
-    console.log(`Geocode result rejected: low confidence (${result.confidence})`);
     return false;
   }
 
@@ -67,14 +66,12 @@ function validateGeocodeResult(result) {
   const componentType = result.components?._type;
   if (componentType && validation.acceptedComponentTypes.length > 0) {
     if (!validation.acceptedComponentTypes.includes(componentType)) {
-      console.log(`Geocode result rejected: type '${componentType}' not accepted`);
       return false;
     }
   }
 
   // Ensure coordinates are valid
   if (!isValidCoordinates(result.lat, result.lng)) {
-    console.log('Geocode result rejected: invalid coordinates');
     return false;
   }
 
@@ -319,7 +316,6 @@ export async function geocodeAddress(address) {
   // Basic validation: minimum length and not just a single word
   const trimmed = address.trim();
   if (trimmed.length < 3 || (!trimmed.includes(' ') && !trimmed.includes(','))) {
-    console.log(`Skipping geocoding for '${address}': too short or single word`);
     return null;
   }
 
@@ -358,11 +354,9 @@ export async function geocodeAddress(address) {
       return coords;
     }
 
-    console.log(`No geocoding results found for '${address}'`);
     return null;
-  } catch (error) {
-    // Use log instead of error - geocoding failures are expected when not configured
-    console.log('Geocoding unavailable:', error instanceof Error ? error.message : error);
+  } catch {
+    // Geocoding failures are expected when not configured
     return null;
   }
 }

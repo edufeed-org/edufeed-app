@@ -176,7 +176,6 @@
       }
       // Only update store if this modal is currently active
       if (modalStore.activeModal === 'createCommunity') {
-        console.log('CreateCommunityModal: Dialog closed, syncing with store');
         modalStore.closeModal();
         // Reset state on close
         currentStep = 0;
@@ -394,7 +393,6 @@
         const profileResult = await publishEvent(signedProfileEvent);
         if (profileResult.success) {
           eventStore.add(signedProfileEvent);
-          console.log('CreateCommunityModal: Profile event published');
         }
       }
 
@@ -465,7 +463,6 @@
       const joinResult = await joinCommunity(account.pubkey);
 
       if (communityResult.success || joinResult.success) {
-        console.log('CreateCommunityModal: Successfully created community');
         isPublishing = false;
 
         // Navigate to the newly created community

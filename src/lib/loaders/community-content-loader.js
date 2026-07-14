@@ -50,30 +50,11 @@ export function createCommunityContentLoader(kinds, getRelays) {
     // Broad relay set for reference resolution — includes all app + fallback relays
     const lookupRelays = [...new Set([...getAllLookupRelays(), ...communityRelays])];
 
-    // Temporary instrumentation — track per-stream event counts until loader completes.
-    // Remove once empty-feed root cause is identified.
-    const t0 = Date.now();
-    const shortPk = communityPubkey.slice(0, 8);
-    /** @param {string} name */
-    const countingSub = (name) => {
-      let n = 0;
-      return {
-        next: () => {
-          n++;
-        },
-        complete: () => {
-          console.debug(
-            `[community-content-loader] ${shortPk} kinds=${kinds.join(',')} stream=${name} events=${n} dt=${Date.now() - t0}ms`
-          );
-        }
-      };
-    };
-
     // 1. Direct community content (events with h-tag matching community).
     // h-tag scoping IS the curation — do NOT add an `authors:` restriction.
     const directFilter = { kinds, '#h': [communityPubkey] };
     const directLoader = createCachedTimelineLoader(relays, directFilter, { limit: 50 });
-    subscriptions.set('direct', directLoader().subscribe(countingSub('direct')));
+    subscriptions.set('direct', directLoader().subscribe());
 
     // 2. NIP-18 reposts (kind 6/16 with h-tag targeting this community)
     // Reposts are published to the author's write relays (outbox model), not content-type relays.
@@ -83,12 +64,13 @@ export function createCommunityContentLoader(kinds, getRelays) {
       { kinds: [6, 16], '#h': [communityPubkey] },
       { limit: 50 }
     );
-    subscriptions.set('reposts', repostLoader().subscribe(countingSub('reposts')));
+    subscriptions.set('reposts', repostLoader().subscribe());
 
     // 3. Legacy targeted publications (kind 30222) — backward compat
-    const targetedPubSub = communityTargetedPublicationsLoader(communityPubkey, kinds)().subscribe(
-      countingSub('targetedPublications')
-    );
+    const targetedPubSub = communityTargetedPublicationsLoader(
+      communityPubkey,
+      kinds
+    )().subscribe();
     subscriptions.set('targetedPublications', targetedPubSub);
 
     // 4a. Watch legacy 30222 shares and load referenced content on-demand

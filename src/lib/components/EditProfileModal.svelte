@@ -136,7 +136,6 @@
     const handleDialogClose = () => {
       // Only update store if this modal is currently active
       if (modalStore.activeModal === 'profile') {
-        console.log('EditProfileModal: Dialog closed, syncing with store');
         modalStore.closeModal();
       }
     };
@@ -284,7 +283,6 @@
         eventStore.add(signedEvent);
       }
 
-      console.log('Profile updated successfully');
       submitSuccess = true;
 
       // Close modal after a brief delay to show success message

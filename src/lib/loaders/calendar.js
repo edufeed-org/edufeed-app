@@ -296,22 +296,9 @@ export const calendarEventReferencesLoader = (calendar) => {
     .filter((/** @type {any[]} */ tag) => tag[0] === 'a')
     .map((/** @type {any[]} */ tag) => {
       const pointer = parseAddressPointerFromATag(tag);
-      console.log(
-        '📅 calendarEventReferencesLoader: Parsed pointer from a-tag',
-        tag,
-        '->',
-        pointer
-      );
       return pointer;
     })
     .filter((/** @type {any} */ pointer) => pointer !== null); // Filter out invalid pointers
-
-  console.log(
-    '📅 calendarEventReferencesLoader: Found',
-    pointers.length,
-    'event pointers:',
-    pointers
-  );
 
   if (pointers.length === 0) {
     console.warn('📅 calendarEventReferencesLoader: No event coordinates found in calendar');
@@ -322,7 +309,6 @@ export const calendarEventReferencesLoader = (calendar) => {
   return () =>
     from(pointers).pipe(
       mergeMap((/** @type {any} */ pointer) => {
-        console.log('📅 Loading event from pointer:', pointer);
         return addressLoader(pointer);
       })
     );

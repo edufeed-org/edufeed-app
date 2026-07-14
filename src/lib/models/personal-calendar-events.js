@@ -25,58 +25,22 @@ function getCalendarAddressPointers(calendar) {
     .map((/** @type {any[]} */ tag) => parseAddressPointerFromATag(tag))
     .filter((/** @type {any} */ pointer) => pointer !== null);
 
-  console.log('📅 PersonalCalendarEventsModel: Parsed pointers from calendar:', pointers);
   return pointers;
 }
 
 export function PersonalCalendarEventsModel(/** @type {any} */ calendar) {
   return (/** @type {any} */ eventStore) => {
-    console.log('📅 PersonalCalendarEventsModel: Creating model for calendar:', calendar.id);
-
     const pointers = getCalendarAddressPointers(calendar);
 
     if (pointers.length === 0) {
-      console.log('📅 PersonalCalendarEventsModel: No pointers found, returning empty array');
       return of([]);
     }
 
-    console.log(`📅 PersonalCalendarEventsModel: Creating ${pointers.length} replaceable queries`);
-
     // Create a replaceable query for each pointer
-    const queries = pointers.map((pointer, index) => {
-      console.log(`📅 PersonalCalendarEventsModel: Query ${index + 1}/${pointers.length}:`, {
-        kind: pointer.kind,
-        pubkey: pointer.pubkey,
-        identifier: pointer.identifier,
-        identifierLength: pointer.identifier.length,
-        identifierType: typeof pointer.identifier
-      });
-
-      // Create the replaceable query
-      // IMPORTANT: Do NOT filter out null/undefined here, as combineLatest requires all observables to emit
-      const query = eventStore.replaceable(pointer.kind, pointer.pubkey, pointer.identifier).pipe(
-        // Log what we get from the query
-        map((event) => {
-          if (event) {
-            console.log(`📅 PersonalCalendarEventsModel: Query ${index + 1} returned event:`, {
-              id: event.id,
-              kind: event.kind,
-              dTag: event.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1],
-              dTagLength: event.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1]?.length
-            });
-          } else {
-            console.log(
-              `📅 PersonalCalendarEventsModel: Query ${index + 1} returned null/undefined`
-            );
-          }
-          return event;
-        })
-      );
-
-      return query;
-    });
-
-    console.log('📅 PersonalCalendarEventsModel: Combining queries with combineLatest');
+    // IMPORTANT: Do NOT filter out null/undefined here, as combineLatest requires all observables to emit
+    const queries = pointers.map((pointer) =>
+      eventStore.replaceable(pointer.kind, pointer.pubkey, pointer.identifier)
+    );
 
     // If no queries, return empty array
     if (queries.length === 0) {
@@ -86,20 +50,12 @@ export function PersonalCalendarEventsModel(/** @type {any} */ calendar) {
     // Combine all queries (using array syntax to avoid deprecation warning)
     return combineLatest(queries).pipe(
       map((events) => {
-        console.log(
-          `📅 PersonalCalendarEventsModel: combineLatest returned ${events.length} events (including nulls)`
-        );
-
         // Filter out null/undefined events
         const validEvents = events.filter((event) => event != null);
-        console.log(
-          `📅 PersonalCalendarEventsModel: After filtering nulls: ${validEvents.length} valid events`
-        );
 
         // Transform to calendar event format
         const calendarEvents = validEvents.map((event) => getCalendarEventMetadata(event));
 
-        console.log('📅 PersonalCalendarEventsModel: Final calendar events:', calendarEvents);
         return calendarEvents;
       })
     );

@@ -419,48 +419,30 @@ export const fetchCalendarEvents = async (calendarEvent) => {
 /**
  * Removes deleted event references from a calendar and publishes the updated calendar
  *
- * @param {import('nostr-tools').NostrEvent} calendarEvent - The calendar event to update
- * @param {string[]} deletedEventRefs - Array of deleted event coordinate strings to remove
+ * @param {import('nostr-tools').NostrEvent} _calendarEvent - The calendar event to update
+ * @param {string[]} _deletedEventRefs - Array of deleted event coordinate strings to remove
  */
-async function removeDeletedEventsFromCalendar(calendarEvent, deletedEventRefs) {
-  try {
-    console.log(`Removing ${deletedEventRefs.length} deleted events from calendar`);
-
-    // TODO: Implement calendar update functionality using existing publisher utilities
-    // This would require integrating with the publisher.js utilities in the project
-    // For now, just log the action that would be taken
-    console.log(
-      `Would update calendar ${calendarEvent.id} to remove deleted event references:`,
-      deletedEventRefs
-    );
-
-    // The actual implementation would:
-    // 1. Create updated calendar event with filtered tags
-    // 2. Use the existing publisher utilities to sign and publish
-    // 3. Update the calendar in the EventStore
-  } catch (error) {
-    console.error('Error updating calendar to remove deleted events:', error);
-  }
+async function removeDeletedEventsFromCalendar(_calendarEvent, _deletedEventRefs) {
+  // TODO: Implement calendar update functionality using existing publisher utilities
+  // This would require integrating with the publisher.js utilities in the project
+  // The actual implementation would:
+  // 1. Create updated calendar event with filtered tags
+  // 2. Use the existing publisher utilities to sign and publish
+  // 3. Update the calendar in the EventStore
 }
 
 /**
  * Checks if an event has been deleted according to NIP-09
  *
- * @param {import('nostr-tools').NostrEvent} event - The event to check
+ * @param {import('nostr-tools').NostrEvent} _event - The event to check
  * @returns {Promise<boolean>} True if the event has been deleted
  */
-async function checkForDeletionEvents(event) {
-  try {
-    // For now, return false as deletion event checking with applesauce
-    // would require more complex timeline loader setup
-    // This maintains the same behavior as before (no deletion checking)
-    // TODO: Implement proper deletion event checking with applesauce timeline loaders
-    console.log(`Checking deletion for event ${event.id} - skipping for now`);
-    return false;
-  } catch (error) {
-    console.error('Error checking for deletion events:', error);
-    return false; // On error, assume not deleted
-  }
+async function checkForDeletionEvents(_event) {
+  // For now, return false as deletion event checking with applesauce
+  // would require more complex timeline loader setup
+  // This maintains the same behavior as before (no deletion checking)
+  // TODO: Implement proper deletion event checking with applesauce timeline loaders
+  return false;
 }
 
 /**

@@ -121,13 +121,6 @@
     /** @type {any[]} */
     let bookmarkItems = [];
 
-    // Temporary instrumentation — track emission index and timing per effect run
-    // to diagnose intermittent empty-feed bug. Remove once root cause identified.
-    const shortPk = pubkey.slice(0, 8);
-    const effectT0 = Date.now();
-    let activityEmitIdx = 0;
-    let bookmarkEmitIdx = 0;
-
     function mergeAndUpdate() {
       // Rank by activity time (created_at OR newest share) so a fresh share
       // of an old event surfaces; keep the full set for the upcoming-events
@@ -140,10 +133,6 @@
 
     const activitySub = eventStore.model(CommunityActivityModel, pubkey).subscribe({
       next: (loaded) => {
-        activityEmitIdx++;
-        console.debug(
-          `[HomeView] ${shortPk} activity emit #${activityEmitIdx} length=${loaded?.length ?? 0} dt=${Date.now() - effectT0}ms`
-        );
         activityItems = loaded || [];
         mergeAndUpdate();
       },
@@ -155,10 +144,6 @@
 
     const bookmarkSub = eventStore.model(CommunitySocialBookmarkModel, pubkey).subscribe({
       next: (loaded) => {
-        bookmarkEmitIdx++;
-        console.debug(
-          `[HomeView] ${shortPk} bookmark emit #${bookmarkEmitIdx} length=${loaded?.length ?? 0} dt=${Date.now() - effectT0}ms`
-        );
         bookmarkItems = loaded || [];
         mergeAndUpdate();
       },

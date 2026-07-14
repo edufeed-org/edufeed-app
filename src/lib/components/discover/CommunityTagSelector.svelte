@@ -106,7 +106,6 @@
       ? selectedTags.filter((t) => t !== tag)
       : [...selectedTags, tag];
 
-    console.log('🏷️ CommunityTagSelector: Selected tags:', newTags);
     onTagChange(newTags);
   }
 
@@ -114,7 +113,6 @@
    * Clear all selected tags
    */
   function clearTags() {
-    console.log('🏷️ CommunityTagSelector: Clearing tag filters');
     onTagChange([]);
   }
 

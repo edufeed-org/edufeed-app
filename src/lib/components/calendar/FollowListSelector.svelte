@@ -34,12 +34,10 @@
    */
   async function loadUserFollowLists() {
     if (!manager.active) {
-      console.log('👥 FollowListSelector: No active user, skipping follow list load');
       return;
     }
 
     const userPubkey = manager.active.pubkey;
-    console.log('👥 FollowListSelector: Loading follow lists for user:', userPubkey);
 
     // Load NIP-02 and NIP-51 in parallel with separate loading states
     const loadNip02 = async () => {
@@ -77,9 +75,6 @@
 
     // Combine all lists
     const allLists = [...nip02Lists, ...nip51Lists];
-    console.log(
-      `👥 FollowListSelector: Loaded ${nip02Lists.length} NIP-02 lists and ${nip51Lists.length} NIP-51 sets`
-    );
     calendarFilters.setFollowLists(allLists);
   }
 
@@ -99,7 +94,6 @@
    * Apply follow list filters
    */
   function applyFilters() {
-    console.log('👥 FollowListSelector: Applying follow list filters:', selectedListIds);
     calendarFilters.setSelectedFollowListIds(selectedListIds);
     onApplyFilters(selectedListIds);
   }
@@ -108,7 +102,6 @@
    * Clear all filters
    */
   function clearFilters() {
-    console.log('👥 FollowListSelector: Clearing follow list filters');
     selectedListIds = [];
     calendarFilters.clearSelectedFollowListIds();
     onApplyFilters([]);
