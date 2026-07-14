@@ -12,6 +12,7 @@
   } from 'applesauce-common/helpers';
   import { resolve } from '$app/paths';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
+  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
 
@@ -21,7 +22,10 @@
   const getInternalProfile = useUserProfile(() => (authorProfile ? null : event.pubkey));
   const profile = $derived(authorProfile ?? getInternalProfile());
 
-  const sourceUrl = $derived(getHighlightSourceUrl(event));
+  // Only trust http(s) URLs from the attacker-controlled r tag — a raw
+  // `javascript:` URI in an anchor href would be stored XSS.
+  const rawSourceUrl = $derived(getHighlightSourceUrl(event));
+  const sourceUrl = $derived(isHttpUrl(rawSourceUrl) ? rawSourceUrl : undefined);
   const sourceHref = $derived.by(() => {
     if (sourceUrl) return sourceUrl;
     const pointer = getHighlightSourceAddressPointer(event);
@@ -32,6 +36,7 @@
       return null;
     }
   });
+  // isHttpUrl already validated sourceUrl, so new URL() cannot throw here.
   const sourceLabel = $derived(sourceUrl ? new URL(sourceUrl).hostname : null);
 </script>
 

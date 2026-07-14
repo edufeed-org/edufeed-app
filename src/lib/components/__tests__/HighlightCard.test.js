@@ -39,6 +39,23 @@ describe('HighlightCard', () => {
     expect(link?.getAttribute('target')).toBe('_blank');
   });
 
+  it('renders no anchor for a javascript: URI in the r tag (stored XSS guard)', () => {
+    const { container } = render(HighlightCard, {
+      props: { event: highlight([['r', 'javascript:alert(1)']]) }
+    });
+    expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+    // No source link at all (ProfileAvatar is stubbed, so any anchor is the source link)
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('renders without throwing and shows no source link for a malformed r-tag value', () => {
+    const { container } = render(HighlightCard, {
+      props: { event: highlight([['r', 'not a url %%%']]) }
+    });
+    expect(screen.getByText(/the highlighted passage/)).toBeTruthy();
+    expect(container.querySelector('a')).toBeNull();
+  });
+
   it('links to the nostr source for a-tag highlights', () => {
     const { container } = render(HighlightCard, {
       props: { event: highlight([['a', `30023:${PUBKEY}:my-article`]]) }
