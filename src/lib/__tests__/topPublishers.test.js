@@ -43,20 +43,27 @@ describe('topEventPublishers', () => {
 describe('filterEventsByPublisherSelection', () => {
   const events = [{ pubkey: 'a' }, { pubkey: 'b' }, { pubkey: 'c' }];
 
-  it('returns only the solo author when solo is set (hidden ignored)', () => {
-    expect(filterEventsByPublisherSelection(events, { solo: 'b', hidden: ['b', 'c'] })).toEqual([
-      { pubkey: 'b' }
+  it('returns only the selected authors when a selection exists (hidden ignored)', () => {
+    expect(
+      filterEventsByPublisherSelection(events, { selected: ['b'], hidden: ['b', 'c'] })
+    ).toEqual([{ pubkey: 'b' }]);
+  });
+
+  it('returns events from ANY of multiple selected authors', () => {
+    expect(filterEventsByPublisherSelection(events, { selected: ['a', 'c'], hidden: [] })).toEqual([
+      { pubkey: 'a' },
+      { pubkey: 'c' }
     ]);
   });
 
-  it('removes hidden authors when no solo is set', () => {
-    expect(filterEventsByPublisherSelection(events, { solo: null, hidden: ['a'] })).toEqual([
+  it('removes hidden authors when nothing is selected', () => {
+    expect(filterEventsByPublisherSelection(events, { selected: [], hidden: ['a'] })).toEqual([
       { pubkey: 'b' },
       { pubkey: 'c' }
     ]);
   });
 
-  it('returns the input array unchanged when nothing is selected', () => {
-    expect(filterEventsByPublisherSelection(events, { solo: null, hidden: [] })).toBe(events);
+  it('returns the input array unchanged when nothing is selected or hidden', () => {
+    expect(filterEventsByPublisherSelection(events, { selected: [], hidden: [] })).toBe(events);
   });
 });

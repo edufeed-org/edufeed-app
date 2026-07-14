@@ -594,7 +594,7 @@
       calendarFilters.selectedFollowListIds.length +
       calendarFilters.selectedFeaturedAuthors.length +
       calendarFilters.hiddenAuthorPubkeys.length +
-      (calendarFilters.soloAuthorPubkey ? 1 : 0) +
+      calendarFilters.selectedAuthorPubkeys.length +
       (calendarFilters.searchQuery.trim() ? 1 : 0) +
       (calendarFilters.onlyFollowsMode !== 'off' ? 1 : 0)
   );
@@ -664,10 +664,10 @@
     filterEventsByViewMode(displayedEvents, viewMode, currentDate)
   );
 
-  // Step 4: apply the publisher quick-filter (solo wins over hidden).
+  // Step 4: apply the publisher quick-filter (selection wins over hidden).
   let visibleEvents = $derived(
     filterEventsByPublisherSelection(displayedEvents, {
-      solo: calendarFilters.soloAuthorPubkey,
+      selected: calendarFilters.selectedAuthorPubkeys,
       hidden: calendarFilters.hiddenAuthorPubkeys
     })
   );
