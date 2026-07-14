@@ -9,6 +9,11 @@
  *    is added to the local EventStore by ActionRunner itself, so subscribers
  *    see the new state immediately.
  *
+ * applesauce v6: ActionRunner takes the signer directly (the legacy
+ * EventFactory was removed). Actions sign via their context, so the NIP-89
+ * client tag is no longer applied to action-created events — only to events
+ * built through $lib/helpers/event-factory.js.
+ *
  * Usage:
  *   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
  *   import { AddEventToCalendar } from 'applesauce-actions/actions';
@@ -16,15 +21,10 @@
  */
 
 import { ActionRunner } from 'applesauce-actions';
-import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from './nostr-infrastructure.svelte';
 import { manager } from './accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { publishGiftWrap, GIFT_WRAP_KIND } from '$lib/services/gift-wrap-publish.js';
-import { appSettings } from '$lib/stores/app-settings.svelte.js';
-import { runtimeConfig } from '$lib/stores/config.svelte.js';
-
-export const factory = createAppEventFactory({ signer: manager.signer });
 
 /**
  * Publish wrapper adapting our publishEvent to applesauce's PublishMethod signature.
@@ -63,17 +63,9 @@ const publishOptimistic = async (event, relays) => {
   });
 };
 
-// Sync client tag on the long-lived factory when settings change at runtime
-// Wrapped in $effect.root() because this runs at module level (outside any component)
-$effect.root(() => {
-  $effect.pre(() => {
-    if (appSettings.includeClientTag && runtimeConfig.clientName) {
-      factory.setClient({ name: runtimeConfig.clientName });
-    } else {
-      factory.clearClient();
-    }
-  });
-});
-
-export const actionRunner = new ActionRunner(eventStore, factory, publish);
-export const actionRunnerOptimistic = new ActionRunner(eventStore, factory, publishOptimistic);
+export const actionRunner = new ActionRunner(eventStore, manager.signer, publish);
+export const actionRunnerOptimistic = new ActionRunner(
+  eventStore,
+  manager.signer,
+  publishOptimistic
+);

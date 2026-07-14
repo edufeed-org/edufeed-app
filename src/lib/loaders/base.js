@@ -5,6 +5,8 @@
  * The loaders connect the EventStore to the relay pool, enabling automatic
  * data fetching without explicit configuration in each component.
  */
+import { EMPTY } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import {
   createAddressLoader,
   createEventLoader,
@@ -18,15 +20,18 @@ import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
 /**
  * Pool wrapper for use with createTimelineLoader.
  *
- * The pool is configured with eoseTimeout: 3000 (in nostr-infrastructure.svelte.js),
- * so each relay emits a synthetic EOSE after 3s if unresponsive. This ensures
- * group.request() completes promptly and pagination can proceed.
+ * v6 removed the pool-level eoseTimeout (synthetic per-relay EOSE). The
+ * default group.request() complete strategy (first relay EOSE + 5s grace, or
+ * all EOSE) covers the healthy case; the explicit timeout caps the
+ * all-relays-dead case, and catchError converts the resulting TimeoutError
+ * into clean completion so pagination can proceed instead of erroring.
  *
  * @param {string[]} relays
  * @param {import('nostr-tools').Filter[]} filters
  * @returns {import('rxjs').Observable<any>}
  */
-export const timedPool = (relays, filters) => pool.request(relays, filters);
+export const timedPool = (relays, filters) =>
+  pool.request(relays, filters, { timeout: 10_000 }).pipe(catchError(() => EMPTY));
 
 // Standalone address loader for direct use in components/loaders
 // Uses a getter function for lookupRelays to ensure config updates are reflected.

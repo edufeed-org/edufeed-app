@@ -36,11 +36,10 @@ export function useRoomPresence(getRoomCoordinate, getCommunityPubkey) {
     const relays = getCommunikeyRelays();
 
     // Subscribe to presence events via pool.subscription
-    // pool.subscription() emits SubscriptionResponse which includes "EOSE" strings
+    // v6: subscription() emits only NostrEvents (no 'EOSE' strings)
     const sub = pool
       .subscription(relays, [{ kinds: [PRESENCE_KIND], '#a': [coordinate] }])
       .subscribe((response) => {
-        if (typeof response === 'string') return; // skip EOSE
         const event = /** @type {import('nostr-tools').NostrEvent} */ (response);
         eventStore.add(event);
         const existing = presenceMap.get(event.pubkey);
