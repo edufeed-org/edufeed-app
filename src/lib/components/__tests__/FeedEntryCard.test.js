@@ -25,6 +25,9 @@ vi.mock('$lib/components/bookmarks/PageNoteItem.svelte', async () => ({
 vi.mock('$lib/components/bookmarks/UrlCard.svelte', async () => ({
   default: (await import('./fixtures/StubUrlCard.svelte')).default
 }));
+vi.mock('$lib/components/bookmarks/EventHighlightCard.svelte', async () => ({
+  default: (await import('./fixtures/StubEventHighlightCard.svelte')).default
+}));
 vi.mock('$lib/components/bookmarks/HighlightCard.svelte', async () => ({
   default: (await import('./fixtures/StubHighlightCard.svelte')).default
 }));
@@ -80,6 +83,22 @@ describe('FeedEntryCard dispatch', () => {
     });
     expect(container.querySelector('[data-stub="UrlCard"]')).toBeTruthy();
     expect(container.querySelectorAll('[data-stub]')).toHaveLength(1);
+  });
+
+  it('renders an EventHighlightCard for a kind 39701 event-ref bookmark (a-tag, no d-URL)', () => {
+    const { container } = render(FeedEntryCard, {
+      props: {
+        event: ev(39701, [['a', '30023:' + 'a'.repeat(64) + ':my-article']])
+      }
+    });
+    expect(container.querySelector('[data-stub="EventHighlightCard"]')).toBeTruthy();
+    expect(container.querySelectorAll('[data-stub]')).toHaveLength(1);
+  });
+
+  it('renders NOTHING for a kind 39701 with neither d-URL nor a-tag (malformed)', () => {
+    const { container } = render(FeedEntryCard, { props: { event: ev(39701) } });
+    expect(container.querySelector('[data-stub]')).toBeFalsy();
+    expect(container.textContent?.trim()).toBe('');
   });
 
   it('renders NOTHING for an unknown kind (safety net)', () => {

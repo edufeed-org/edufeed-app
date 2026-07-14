@@ -9,7 +9,7 @@
   import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
   import { formatAMBResource } from '$lib/helpers/educational/index.js';
   import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
-  import { groupByUrl } from '$lib/helpers/urlGrouping.js';
+  import { groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
   import NoteCard from '$lib/components/notes/NoteCard.svelte';
   import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
   import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
@@ -17,6 +17,7 @@
   import PollCard from '$lib/components/polls/PollCard.svelte';
   import PageNoteItem from '$lib/components/bookmarks/PageNoteItem.svelte';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
+  import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
   import HighlightCard from '$lib/components/bookmarks/HighlightCard.svelte';
 
   /**
@@ -40,6 +41,13 @@
   // Single 39701 events reuse the URL-group card by grouping just themselves.
   const soloUrlGroup = $derived(
     category === 'bookmarks' && event.kind === 39701 ? (groupByUrl([event])[0] ?? null) : null
+  );
+  // Bookmarks referencing a Nostr event via a-tag (no URL) get the
+  // event-highlight group card instead — never a blank body under a byline.
+  const soloRefGroup = $derived(
+    category === 'bookmarks' && event.kind === 39701 && !soloUrlGroup
+      ? (groupByEventRef([event])[0] ?? null)
+      : null
   );
 </script>
 
@@ -69,6 +77,8 @@
   <PageNoteItem {event} {authorProfile} {activeUser} />
 {:else if soloUrlGroup}
   <UrlCard group={soloUrlGroup} {authorProfiles} />
+{:else if soloRefGroup}
+  <EventHighlightCard group={soloRefGroup} {authorProfiles} />
 {:else}
   {@render fallback?.()}
 {/if}
