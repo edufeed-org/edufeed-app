@@ -423,7 +423,14 @@
     <!-- Filter chips — chart-legend convention (issue #35): body click solos
          the content type, the eye button hides/unhides it. -->
     <div class="relative pb-4">
-      <div class="pf-chip-row flex flex-nowrap gap-2 overflow-x-auto" data-testid="feed-filter-row">
+      <!-- Mobile: single-line scroll (hidden scrollbar + edge fade). Desktop
+           (md+): wrap onto two rows — the 8 dual-button chips exceed the feed
+           column even on wide screens, and clipped chips read as broken.
+           Mirrors FeaturedAuthors/TopPublishersFilter. -->
+      <div
+        class="pf-chip-row flex flex-nowrap gap-2 overflow-x-auto md:flex-wrap md:overflow-visible"
+        data-testid="feed-filter-row"
+      >
         {#each FILTER_CHIPS as chip (chip.id)}
           {@const Icon = chip.icon}
           {@const isHidden = categorySelection.hidden.includes(chip.id)}
@@ -469,7 +476,7 @@
         {/each}
       </div>
       <div
-        class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-base-100 to-transparent"
+        class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-base-100 to-transparent md:hidden"
       ></div>
     </div>
   {/if}
