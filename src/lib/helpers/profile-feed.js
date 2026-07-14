@@ -14,7 +14,8 @@ export const FEED_CATEGORIES = [
   { id: 'calendar', kinds: [31922, 31923] },
   { id: 'resources', kinds: [30142] },
   { id: 'articles', kinds: [30023] },
-  { id: 'bookmarks', kinds: [39701, 9802, 1111] },
+  { id: 'bookmarks', kinds: [39701, 1111] },
+  { id: 'highlights', kinds: [9802] },
   { id: 'polls', kinds: [1068] }
 ];
 
@@ -36,19 +37,6 @@ for (const cat of FEED_CATEGORIES) {
  */
 export function kindToFeedCategory(kind) {
   return KIND_TO_CATEGORY.get(kind) ?? null;
-}
-
-/**
- * Filter events by active feed categories.
- * @param {any[]} items
- * @param {Set<string>} activeCategories
- * @returns {any[]}
- */
-export function filterFeedItems(items, activeCategories) {
-  return items.filter((event) => {
-    const category = kindToFeedCategory(event.kind);
-    return category !== null && activeCategories.has(category);
-  });
 }
 
 /**
@@ -89,6 +77,37 @@ export function toggleHiddenCategory(selection, id) {
     ? selection.hidden.filter((h) => h !== id)
     : [...selection.hidden, id];
   return { solo, hidden };
+}
+
+/**
+ * Chart-legend category membership for a feed entry (issue #45).
+ * 'shared' is not kind-driven: it matches any entry carrying repost
+ * metadata. Group entries (bookmark-url / bookmark-ref) belong to
+ * 'bookmarks'. Everything else matches by entry type.
+ * @param {{type: string, repost?: object}} entry
+ * @param {string} categoryId
+ * @returns {boolean}
+ */
+export function entryMatchesCategory(entry, categoryId) {
+  if (categoryId === 'shared') return !!entry.repost;
+  if (categoryId === 'bookmarks')
+    return (
+      entry.type === 'bookmarks' || entry.type === 'bookmark-url' || entry.type === 'bookmark-ref'
+    );
+  return entry.type === categoryId;
+}
+
+/**
+ * Dual-membership visibility: with a solo set, the entry must match the solo
+ * category (hidden list ignored — solo wins, mirroring the calendar filter);
+ * without one, the entry is hidden when ANY of its categories is hidden.
+ * @param {{type: string, repost?: object}} entry
+ * @param {CategorySelection} selection
+ * @returns {boolean}
+ */
+export function entryVisible(entry, selection) {
+  if (selection.solo) return entryMatchesCategory(entry, selection.solo);
+  return !selection.hidden.some((id) => entryMatchesCategory(entry, id));
 }
 
 /**

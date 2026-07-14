@@ -11,19 +11,28 @@
 import { describe, it, expect } from 'vitest';
 import {
   kindToFeedCategory,
-  filterFeedItems,
   FEED_CATEGORIES,
   pinnedPointersFromEvent,
   isEntryPinned,
   toggleSoloCategory,
   toggleHiddenCategory,
-  effectiveActiveCategories
+  effectiveActiveCategories,
+  entryMatchesCategory,
+  entryVisible
 } from '$lib/helpers/profile-feed.js';
 
 describe('FEED_CATEGORIES', () => {
   it('contains all expected categories', () => {
     const ids = FEED_CATEGORIES.map((c) => c.id);
-    expect(ids).toEqual(['notes', 'calendar', 'resources', 'articles', 'bookmarks', 'polls']);
+    expect(ids).toEqual([
+      'notes',
+      'calendar',
+      'resources',
+      'articles',
+      'bookmarks',
+      'highlights',
+      'polls'
+    ]);
   });
 
   it('each category has required fields', () => {
@@ -60,8 +69,8 @@ describe('kindToFeedCategory', () => {
     expect(kindToFeedCategory(39701)).toBe('bookmarks');
   });
 
-  it('maps kind 9802 to bookmarks', () => {
-    expect(kindToFeedCategory(9802)).toBe('bookmarks');
+  it('maps kind 9802 to highlights', () => {
+    expect(kindToFeedCategory(9802)).toBe('highlights');
   });
 
   it('maps kind 1111 to bookmarks', () => {
@@ -78,56 +87,74 @@ describe('kindToFeedCategory', () => {
   });
 });
 
-describe('filterFeedItems', () => {
-  const mockEvents = [
-    { id: '1', kind: 1, created_at: 100 },
-    { id: '2', kind: 31922, created_at: 200 },
-    { id: '3', kind: 30142, created_at: 300 },
-    { id: '4', kind: 30023, created_at: 400 },
-    { id: '5', kind: 39701, created_at: 500 },
-    { id: '6', kind: 1, created_at: 600 }
-  ];
+describe('entryMatchesCategory', () => {
+  const authored = { type: 'articles', data: { kind: 30023 } };
+  const shared = { type: 'articles', data: { kind: 30023 }, repost: { sharers: ['a'] } };
+  const urlGroup = { type: 'bookmark-url', data: {} };
+  const refGroup = { type: 'bookmark-ref', data: {} };
 
-  it('returns all items when all categories active', () => {
-    const active = new Set(['notes', 'calendar', 'resources', 'articles', 'bookmarks']);
-    const result = filterFeedItems(mockEvents, active);
-    expect(result).toHaveLength(6);
+  it('matches the content category by entry type', () => {
+    expect(entryMatchesCategory(authored, 'articles')).toBe(true);
+    expect(entryMatchesCategory(authored, 'notes')).toBe(false);
   });
 
-  it('filters out notes when notes category inactive', () => {
-    const active = new Set(['calendar', 'resources', 'articles', 'bookmarks']);
-    const result = filterFeedItems(mockEvents, active);
-    expect(result).toHaveLength(4);
-    expect(result.every((e) => e.kind !== 1)).toBe(true);
+  it("matches 'shared' only for entries with repost metadata", () => {
+    expect(entryMatchesCategory(shared, 'shared')).toBe(true);
+    expect(entryMatchesCategory(authored, 'shared')).toBe(false);
   });
 
-  it('shows only calendar when only calendar active', () => {
-    const active = new Set(['calendar']);
-    const result = filterFeedItems(mockEvents, active);
-    expect(result).toHaveLength(1);
-    expect(result[0].kind).toBe(31922);
+  it('a shared entry also matches its content category (dual membership)', () => {
+    expect(entryMatchesCategory(shared, 'articles')).toBe(true);
   });
 
-  it('returns empty array when no categories active', () => {
-    const active = new Set();
-    const result = filterFeedItems(mockEvents, active);
-    expect(result).toHaveLength(0);
+  it("group entries match 'bookmarks'", () => {
+    expect(entryMatchesCategory(urlGroup, 'bookmarks')).toBe(true);
+    expect(entryMatchesCategory(refGroup, 'bookmarks')).toBe(true);
+    expect(entryMatchesCategory(urlGroup, 'shared')).toBe(false);
+  });
+});
+
+describe('entryVisible', () => {
+  const note = { type: 'notes', data: { kind: 1 } };
+  const sharedNote = { type: 'notes', data: { kind: 1 }, repost: { sharers: ['a'] } };
+  const sharedArticle = { type: 'articles', data: { kind: 30023 }, repost: { sharers: ['a'] } };
+  const none = { solo: null, hidden: [] };
+
+  it('shows everything with the empty selection', () => {
+    expect(entryVisible(note, none)).toBe(true);
+    expect(entryVisible(sharedArticle, none)).toBe(true);
   });
 
-  it('handles empty items array', () => {
-    const active = new Set(['notes', 'calendar']);
-    const result = filterFeedItems([], active);
-    expect(result).toHaveLength(0);
+  it('solo on a content category includes shared entries of that category', () => {
+    const sel = { solo: 'articles', hidden: [] };
+    expect(entryVisible(sharedArticle, sel)).toBe(true);
+    expect(entryVisible(note, sel)).toBe(false);
   });
 
-  it('excludes events with unknown kinds', () => {
-    const events = [
-      { id: '1', kind: 1, created_at: 100 },
-      { id: '2', kind: 9999, created_at: 200 }
-    ];
-    const active = new Set(['notes', 'calendar', 'resources', 'articles', 'bookmarks']);
-    const result = filterFeedItems(events, active);
-    expect(result).toHaveLength(1);
+  it("solo 'shared' shows only repost entries, any target kind", () => {
+    const sel = { solo: 'shared', hidden: [] };
+    expect(entryVisible(sharedNote, sel)).toBe(true);
+    expect(entryVisible(sharedArticle, sel)).toBe(true);
+    expect(entryVisible(note, sel)).toBe(false);
+  });
+
+  it('solo wins over hidden (hidden list ignored while solo is set)', () => {
+    const sel = { solo: 'articles', hidden: ['shared'] };
+    expect(entryVisible(sharedArticle, sel)).toBe(true);
+  });
+
+  it('hiding a content category also hides shared entries of it', () => {
+    const sel = { solo: null, hidden: ['notes'] };
+    expect(entryVisible(note, sel)).toBe(false);
+    expect(entryVisible(sharedNote, sel)).toBe(false);
+    expect(entryVisible(sharedArticle, sel)).toBe(true);
+  });
+
+  it("hiding 'shared' hides every repost entry but keeps authored content", () => {
+    const sel = { solo: null, hidden: ['shared'] };
+    expect(entryVisible(sharedNote, sel)).toBe(false);
+    expect(entryVisible(sharedArticle, sel)).toBe(false);
+    expect(entryVisible(note, sel)).toBe(true);
   });
 });
 
@@ -274,13 +301,7 @@ describe('category solo/hide selection (issue #35)', () => {
 
     it('excludes hidden categories when no solo is set', () => {
       const active = effectiveActiveCategories({ solo: null, hidden: ['notes', 'polls'] }, ALL_IDS);
-      expect([...active]).toEqual(['calendar', 'resources', 'articles', 'bookmarks']);
-    });
-
-    it('integrates with filterFeedItems', () => {
-      const items = [{ kind: 1 }, { kind: 31922 }, { kind: 1068 }];
-      const active = effectiveActiveCategories({ solo: null, hidden: ['notes'] }, ALL_IDS);
-      expect(filterFeedItems(items, active)).toEqual([{ kind: 31922 }, { kind: 1068 }]);
+      expect([...active]).toEqual(['calendar', 'resources', 'articles', 'bookmarks', 'highlights']);
     });
   });
 });
