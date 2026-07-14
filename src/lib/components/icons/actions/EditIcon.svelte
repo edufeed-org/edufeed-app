@@ -4,11 +4,13 @@
 -->
 
 <script>
-  let { class: className = '', ...props } = $props();
+  // Accepts both `class` and the icon-convention `class_` (several call
+  // sites use the latter; it used to be silently dropped).
+  let { class: className = '', class_ = '', ...props } = $props();
 </script>
 
 <svg
-  class={className}
+  class={class_ || className}
   {...props}
   xmlns="http://www.w3.org/2000/svg"
   fill="none"
