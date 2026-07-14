@@ -71,7 +71,8 @@ export function tabCountsFromEvents(events) {
     const category = kindToFeedCategory(event.kind);
     if (!category) continue;
 
-    if (category === 'bookmarks') {
+    // Profile page keeps highlights inside its Bookmarks tab (the feed's separate Highlights chip is feed-only).
+    if (category === 'bookmarks' || category === 'highlights') {
       bookmarkEvents.push(event);
       continue;
     }
