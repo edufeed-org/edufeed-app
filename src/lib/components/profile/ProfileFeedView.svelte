@@ -423,7 +423,15 @@
     <!-- Filter chips — chart-legend convention (issue #35): body click solos
          the content type, the eye button hides/unhides it. -->
     <div class="relative pb-4">
-      <div class="pf-chip-row flex flex-nowrap gap-2 overflow-x-auto" data-testid="feed-filter-row">
+      <!-- Layout follows the INPUT, not just the width: swipe-scroll is only
+           natural on coarse pointers (touch), so narrow touch screens get the
+           single-line scroll (hidden scrollbar + edge fade), while any
+           fine-pointer window (mouse/trackpad — even narrow ones) and md+
+           wraps onto rows. Mirrors FeaturedAuthors/TopPublishersFilter. -->
+      <div
+        class="pf-chip-row flex flex-nowrap gap-2 overflow-x-auto md:flex-wrap md:overflow-visible pointer-fine:flex-wrap pointer-fine:overflow-visible"
+        data-testid="feed-filter-row"
+      >
         {#each FILTER_CHIPS as chip (chip.id)}
           {@const Icon = chip.icon}
           {@const isHidden = categorySelection.hidden.includes(chip.id)}
@@ -445,7 +453,7 @@
                 ? m.feed_filter_unsolo_aria()
                 : m.feed_filter_solo_aria({ name: chip.label() })}
             >
-              <Icon class_="w-3 h-3" />
+              <Icon class_="w-3 h-3" title="" />
               <span class={isHidden ? 'line-through' : ''}>{chip.label()}</span>
             </button>
             <button
@@ -460,16 +468,16 @@
                 : m.feed_filter_hide_aria({ name: chip.label() })}
             >
               {#if isHidden}
-                <EyeOffIcon class_="w-3 h-3" />
+                <EyeOffIcon class_="w-3 h-3" title="" />
               {:else}
-                <EyeIcon class_="w-3 h-3" />
+                <EyeIcon class_="w-3 h-3" title="" />
               {/if}
             </button>
           </span>
         {/each}
       </div>
       <div
-        class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-base-100 to-transparent"
+        class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-base-100 to-transparent md:hidden pointer-fine:hidden"
       ></div>
     </div>
   {/if}
