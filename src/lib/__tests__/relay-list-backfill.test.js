@@ -4,17 +4,27 @@
  * signup batch); publishDefaultRelayList also adds it to EventStore and
  * fire-and-forget publishes (used by the banner). No-op when no default relays.
  *
- * Uses the REAL applesauce EventFactory (no client tag) so the produced r-tags
+ * Runs the REAL applesauce operations (no client tag) so the produced r-tags
  * are asserted for real, not mocked.
  *
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventFactory } from 'applesauce-core/event-factory';
 
-// Real factory, no client tag (avoids config/app-settings store deps).
+// Minimal build pipeline, no client tag (avoids config/app-settings store deps);
+// the real addMailboxRelay operations still run against the draft.
 vi.mock('$lib/helpers/event-factory.js', () => ({
-  createAppEventFactory: () => new EventFactory()
+  createAppEventFactory: () => ({
+    /**
+     * @param {any} template
+     * @param {...any} operations
+     */
+    async build(template, ...operations) {
+      let draft = { created_at: 1700000000, tags: [], content: '', ...template };
+      for (const op of operations) if (op) draft = await op(draft);
+      return draft;
+    }
+  })
 }));
 
 const mockGetDefaultRelayList = vi.hoisted(() =>

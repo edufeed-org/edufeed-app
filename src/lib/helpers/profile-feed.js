@@ -14,7 +14,8 @@ export const FEED_CATEGORIES = [
   { id: 'calendar', kinds: [31922, 31923] },
   { id: 'resources', kinds: [30142] },
   { id: 'articles', kinds: [30023] },
-  { id: 'bookmarks', kinds: [39701, 9802, 1111] },
+  { id: 'bookmarks', kinds: [39701, 1111] },
+  { id: 'highlights', kinds: [9802] },
   { id: 'polls', kinds: [1068] }
 ];
 
@@ -39,16 +40,86 @@ export function kindToFeedCategory(kind) {
 }
 
 /**
- * Filter events by active feed categories.
- * @param {any[]} items
- * @param {Set<string>} activeCategories
- * @returns {any[]}
+ * Solo/hide selection for the feed category chips (issue #35), following the
+ * chart-legend convention of the calendar top-publishers filter: chip body
+ * click = solo ("only this"), eye button = hide/exclude. Solo takes
+ * precedence over the hidden list, which stays intact for restore.
+ *
+ * @typedef {Object} CategorySelection
+ * @property {string | null} solo
+ * @property {string[]} hidden
  */
-export function filterFeedItems(items, activeCategories) {
-  return items.filter((event) => {
-    const category = kindToFeedCategory(event.kind);
-    return category !== null && activeCategories.has(category);
-  });
+
+/**
+ * Toggle solo mode for a category: set on first click, back to normal on
+ * the second. Soloing a hidden category also un-hides it.
+ * @param {CategorySelection} selection
+ * @param {string} id
+ * @returns {CategorySelection}
+ */
+export function toggleSoloCategory(selection, id) {
+  if (selection.solo === id) {
+    return { solo: null, hidden: [...selection.hidden] };
+  }
+  return { solo: id, hidden: selection.hidden.filter((h) => h !== id) };
+}
+
+/**
+ * Toggle a category on the hidden list. Hiding the solo'd category would
+ * contradict the solo — the solo is cleared instead.
+ * @param {CategorySelection} selection
+ * @param {string} id
+ * @returns {CategorySelection}
+ */
+export function toggleHiddenCategory(selection, id) {
+  const solo = selection.solo === id ? null : selection.solo;
+  const hidden = selection.hidden.includes(id)
+    ? selection.hidden.filter((h) => h !== id)
+    : [...selection.hidden, id];
+  return { solo, hidden };
+}
+
+/**
+ * Chart-legend category membership for a feed entry (issue #45).
+ * 'shared' is not kind-driven: it matches any entry carrying repost
+ * metadata. Group entries (bookmark-url / bookmark-ref) belong to
+ * 'bookmarks'. Everything else matches by entry type.
+ * @param {{type: string, repost?: object}} entry
+ * @param {string} categoryId
+ * @returns {boolean}
+ */
+export function entryMatchesCategory(entry, categoryId) {
+  if (categoryId === 'shared') return !!entry.repost;
+  if (categoryId === 'bookmarks')
+    return (
+      entry.type === 'bookmarks' || entry.type === 'bookmark-url' || entry.type === 'bookmark-ref'
+    );
+  return entry.type === categoryId;
+}
+
+/**
+ * Dual-membership visibility: with a solo set, the entry must match the solo
+ * category (hidden list ignored — solo wins, mirroring the calendar filter);
+ * without one, the entry is hidden when ANY of its categories is hidden.
+ * @param {{type: string, repost?: object}} entry
+ * @param {CategorySelection} selection
+ * @returns {boolean}
+ */
+export function entryVisible(entry, selection) {
+  if (selection.solo) return entryMatchesCategory(entry, selection.solo);
+  return !selection.hidden.some((id) => entryMatchesCategory(entry, id));
+}
+
+/**
+ * Resolve a selection to the set of active category ids: only the solo
+ * category when solo is set, otherwise all ids minus the hidden ones.
+ * @param {CategorySelection} selection
+ * @param {string[]} allIds
+ * @returns {Set<string>}
+ */
+export function effectiveActiveCategories(selection, allIds) {
+  if (selection.solo) return new Set([selection.solo]);
+  return new Set(allIds.filter((id) => !selection.hidden.includes(id)));
 }
 
 /**

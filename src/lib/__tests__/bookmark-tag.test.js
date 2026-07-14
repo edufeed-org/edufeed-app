@@ -6,16 +6,13 @@
  * - emit `e` tags for non-replaceable kinds (e.g. kind 1 notes)
  * - support symmetric add/remove
  *
- * Underlying applesauce ops (`addAddressPointerTag`, `addEventPointerTag`) are
- * async and accept a context `{ getPubkeyRelayHint?, getEventRelayHint? }` —
- * we pass `{}` which is valid (the relay-hint lookups are optional).
+ * Underlying applesauce v6 ops (`addAddressPointerTag`, `addEventPointerTag`)
+ * are async, single-argument tag operations: `(tags) => tags`.
  *
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
 import { addAnyKindBookmarkTag, removeAnyKindBookmarkTag } from '../helpers/bookmark-tag.js';
-
-const CTX = /** @type {any} */ ({});
 
 const kind1Note = {
   id: 'a'.repeat(64),
@@ -50,7 +47,7 @@ const kind30023Article = {
 describe('addAnyKindBookmarkTag', () => {
   it('adds an `e` tag for a kind 1 note', async () => {
     const op = addAnyKindBookmarkTag(kind1Note);
-    const result = await op([], CTX);
+    const result = await op([]);
     expect(result.some((/** @type {string[]} */ t) => t[0] === 'e' && t[1] === kind1Note.id)).toBe(
       true
     );
@@ -58,7 +55,7 @@ describe('addAnyKindBookmarkTag', () => {
 
   it('adds an `a` tag for a kind 30142 resource', async () => {
     const op = addAnyKindBookmarkTag(kind30142Resource);
-    const result = await op([], CTX);
+    const result = await op([]);
     const aTag = result.find((/** @type {string[]} */ t) => t[0] === 'a');
     expect(aTag).toBeTruthy();
     expect(aTag?.[1]).toBe(`30142:${kind30142Resource.pubkey}:intro-math`);
@@ -66,7 +63,7 @@ describe('addAnyKindBookmarkTag', () => {
 
   it('adds an `a` tag for a kind 30023 article', async () => {
     const op = addAnyKindBookmarkTag(kind30023Article);
-    const result = await op([], CTX);
+    const result = await op([]);
     const aTag = result.find((/** @type {string[]} */ t) => t[0] === 'a');
     expect(aTag).toBeTruthy();
     expect(aTag?.[1]).toBe(`30023:${kind30023Article.pubkey}:my-article`);
@@ -77,7 +74,7 @@ describe('removeAnyKindBookmarkTag', () => {
   it('removes the `e` tag for a kind 1 note', async () => {
     const tags = [['e', kind1Note.id, '']];
     const op = removeAnyKindBookmarkTag(kind1Note);
-    const result = await op(tags, CTX);
+    const result = await op(tags);
     expect(result.some((/** @type {string[]} */ t) => t[0] === 'e' && t[1] === kind1Note.id)).toBe(
       false
     );
@@ -86,14 +83,14 @@ describe('removeAnyKindBookmarkTag', () => {
   it('removes the `a` tag for a kind 30142 resource', async () => {
     const tags = [['a', `30142:${kind30142Resource.pubkey}:intro-math`, '']];
     const op = removeAnyKindBookmarkTag(kind30142Resource);
-    const result = await op(tags, CTX);
+    const result = await op(tags);
     expect(result.some((/** @type {string[]} */ t) => t[0] === 'a')).toBe(false);
   });
 
   it('add then remove returns to empty for a kind 30142 resource', async () => {
     const addOp = addAnyKindBookmarkTag(kind30142Resource);
     const removeOp = removeAnyKindBookmarkTag(kind30142Resource);
-    const after = await removeOp(await addOp([], CTX), CTX);
+    const after = await removeOp(await addOp([]));
     expect(after.some((/** @type {string[]} */ t) => t[0] === 'a')).toBe(false);
   });
 });

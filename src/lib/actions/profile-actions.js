@@ -8,6 +8,7 @@
  */
 import { modifyPublicTags } from 'applesauce-core/operations/tags';
 import { addNameValueTag } from 'applesauce-core/operations/tag/common';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 
 /**
  * Append an additional `["nip05", <address>]` tag to the user's kind 0,
@@ -21,7 +22,7 @@ import { addNameValueTag } from 'applesauce-core/operations/tag/common';
  */
 export function AddProfileNip05Tag(address) {
   return async (
-    /** @type {import('applesauce-actions').ActionContext} */ { factory, user, publish, sign }
+    /** @type {import('applesauce-actions').ActionContext} */ { user, publish, sign }
   ) => {
     const [profile, outboxes] = await Promise.all([
       user.profile$.$first(1000, undefined),
@@ -29,6 +30,7 @@ export function AddProfileNip05Tag(address) {
     ]);
     if (!profile) throw new Error('Unable to find profile metadata');
 
+    const factory = createAppEventFactory();
     const draft = await factory.modify(
       profile.event,
       modifyPublicTags(addNameValueTag(['nip05', address], false))

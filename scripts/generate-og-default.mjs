@@ -43,4 +43,9 @@ const svg = `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
 
 const png = await sharp(Buffer.from(svg)).png().toBuffer();
 writeFileSync(new URL('../static/og-default.png', import.meta.url), png);
-console.log('wrote static/og-default.png', (await sharp(png).metadata()).width, 'x', (await sharp(png).metadata()).height);
+console.log(
+  'wrote static/og-default.png',
+  (await sharp(png).metadata()).width,
+  'x',
+  (await sharp(png).metadata()).height
+);

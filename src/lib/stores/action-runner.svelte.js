@@ -9,6 +9,14 @@
  *    is added to the local EventStore by ActionRunner itself, so subscribers
  *    see the new state immediately.
  *
+ * applesauce v6: ActionRunner takes the signer directly (the legacy
+ * EventFactory context that auto-applied the NIP-89 client tag was removed).
+ * Every user-signed action event funnels through signer.signEvent, so the
+ * client tag is restored by wrapping the account signer: setClient() runs on
+ * each draft before signing when the user has opted in. setClient
+ * self-guards on DM kinds (4 legacy DM, 13 seal, 14 rumor, 1059 gift wrap),
+ * so sealed/private events are never client-attributed.
+ *
  * Usage:
  *   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
  *   import { AddEventToCalendar } from 'applesauce-actions/actions';
@@ -16,7 +24,7 @@
  */
 
 import { ActionRunner } from 'applesauce-actions';
-import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+import { setClient } from 'applesauce-core/operations';
 import { eventStore } from './nostr-infrastructure.svelte';
 import { manager } from './accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
@@ -24,7 +32,27 @@ import { publishGiftWrap, GIFT_WRAP_KIND } from '$lib/services/gift-wrap-publish
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-export const factory = createAppEventFactory({ signer: manager.signer });
+/**
+ * Account signer wrapped with NIP-89 client tagging. Delegates key access
+ * and encryption to manager.signer (a proxy for the active account).
+ * @type {import('applesauce-core/factories').EventSigner}
+ */
+const clientTagSigner = {
+  getPublicKey: () => manager.signer.getPublicKey(),
+  signEvent: async (draft) => {
+    const tagged =
+      appSettings.includeClientTag && runtimeConfig.clientName
+        ? await setClient(runtimeConfig.clientName)(draft)
+        : draft;
+    return manager.signer.signEvent(tagged);
+  },
+  get nip04() {
+    return manager.signer.nip04;
+  },
+  get nip44() {
+    return manager.signer.nip44;
+  }
+};
 
 /**
  * Publish wrapper adapting our publishEvent to applesauce's PublishMethod signature.
@@ -63,17 +91,9 @@ const publishOptimistic = async (event, relays) => {
   });
 };
 
-// Sync client tag on the long-lived factory when settings change at runtime
-// Wrapped in $effect.root() because this runs at module level (outside any component)
-$effect.root(() => {
-  $effect.pre(() => {
-    if (appSettings.includeClientTag && runtimeConfig.clientName) {
-      factory.setClient({ name: runtimeConfig.clientName });
-    } else {
-      factory.clearClient();
-    }
-  });
-});
-
-export const actionRunner = new ActionRunner(eventStore, factory, publish);
-export const actionRunnerOptimistic = new ActionRunner(eventStore, factory, publishOptimistic);
+export const actionRunner = new ActionRunner(eventStore, clientTagSigner, publish);
+export const actionRunnerOptimistic = new ActionRunner(
+  eventStore,
+  clientTagSigner,
+  publishOptimistic
+);

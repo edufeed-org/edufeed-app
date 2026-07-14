@@ -26,8 +26,7 @@ let failed = 0;
 for (const path of paths) {
   const res = await fetch(base + path, { headers: { accept: 'text/html' } });
   const html = await res.text();
-  const get = (prop) =>
-    html.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`))?.[1];
+  const get = (prop) => html.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`))?.[1];
   const title = get('og:title');
   const image = get('og:image');
   const ok = Boolean(title && image);

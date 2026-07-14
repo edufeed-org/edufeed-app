@@ -24,7 +24,10 @@ const baseLoader = createReactionsLoader(pool, {
  * @returns {import('rxjs').Observable<any>}
  */
 export function reactionsLoader(event, relays) {
-  const base$ = baseLoader(event, relays);
+  // v6: request timeouts ERROR instead of quietly completing — a dead seen
+  // relay would otherwise kill the whole merged stream (including the healthy
+  // inbox leg). Treat timeouts as completion.
+  const base$ = baseLoader(event, relays).pipe(catchError(() => EMPTY));
 
   const inbox$ = from(getReadRelays(event.pubkey)).pipe(
     switchMap((inboxRelays) => {

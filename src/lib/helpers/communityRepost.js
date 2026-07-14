@@ -1,5 +1,5 @@
-import 'applesauce-common/blueprints';
-import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+import { ShareFactory } from 'applesauce-common/factories';
+import { finalizeDraft } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import {
   getAppRelaysForCategory,
@@ -53,9 +53,7 @@ function repostTargetRelays(event, communityPubkeys) {
 export async function createCommunityReposts(event, communityPubkeys, signer) {
   if (!communityPubkeys.length) return true;
 
-  const factory = createAppEventFactory({ signer });
-
-  const template = await factory.share(event);
+  const template = await finalizeDraft(ShareFactory.share(event));
 
   // Add h-tag for each community — single event, multiple targets
   for (const pubkey of communityPubkeys) {
@@ -63,12 +61,12 @@ export async function createCommunityReposts(event, communityPubkeys, signer) {
   }
 
   // Clear content for replaceable events (NIP-18: optional when a-tag present)
-  const aTag = template.tags.find((t) => t[0] === 'a');
+  const aTag = template.tags.find((/** @type {string[]} */ t) => t[0] === 'a');
   if (aTag) {
     template.content = '';
   }
 
-  const signedEvent = await factory.sign(template);
+  const signedEvent = await signer.signEvent(template);
 
   // Optimistic publish: adds to EventStore immediately, publishes in background
   publishEventOptimistic(signedEvent, communityPubkeys, {

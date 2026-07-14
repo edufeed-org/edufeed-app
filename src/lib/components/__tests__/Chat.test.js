@@ -3,12 +3,14 @@
  *
  * Pins the contract that `isLoading` clears on whichever happens first:
  *   1) the model emits a non-empty events array,
- *   2) the pool subscription emits 'EOSE',
+ *   2) a subscription error arrives,
  *   3) a 4s fallback timer fires.
  *
- * The regression that motivated this test: pool.group(...).subscription(...)
- * does not reliably deliver EOSE on a tab-switch resubscribe, so gating the
- * spinner on EOSE alone leaves it stuck even though events are arriving.
+ * The regression that motivated this test: relay subscriptions do not
+ * reliably signal end-of-stored-events on a tab-switch resubscribe, so
+ * gating the spinner on the relay alone leaves it stuck even though events
+ * are arriving. (applesauce v6's group.subscription() emits only NostrEvents
+ * — no 'EOSE' marker — so the fallback timer is the no-events path.)
  *
  * @vitest-environment jsdom
  */
@@ -180,13 +182,13 @@ describe('Chat.svelte loading state', () => {
     expect(isSpinnerVisible(container)).toBe(false);
   });
 
-  it("clears the spinner on 'EOSE' even when no events arrive", async () => {
+  it('clears the spinner when the subscription errors', async () => {
     const { container } = render(Chat, {
       props: { communikeyEvent: { pubkey: COMMUNITY_PUBKEY }, canPublish: false }
     });
     expect(isSpinnerVisible(container)).toBe(true);
 
-    _poolHandlers[0].next?.('EOSE');
+    _poolHandlers[0].error?.(new Error('relay unreachable'));
     await Promise.resolve();
 
     expect(isSpinnerVisible(container)).toBe(false);

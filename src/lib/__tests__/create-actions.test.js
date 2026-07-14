@@ -22,6 +22,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_create_form: () => 'Create Form',
   fab_create_poll: () => 'Create Poll',
   fab_create_poll_aria: () => 'Create new poll',
+  fab_create_note: () => 'Write a note',
+  fab_create_note_aria: () => 'Write a new note',
+  fab_create_note_desc: () => 'Short text post to the feed',
   fab_add_bookmark: () => 'Add Bookmark',
   fab_add_bookmark_desc: () => 'Recommend a link as a bookmark',
   fab_share_existing: () => 'Share Existing Content',
@@ -40,6 +43,7 @@ vi.mock('$lib/components/icons', () => ({
   BookOpenIcon: {},
   ScrollTextIcon: {},
   PollIcon: {},
+  MessageSquareIcon: {},
   BookmarkIcon: {},
   RepostIcon: {}
 }));
@@ -99,7 +103,7 @@ describe('CREATE_ACTIONS shape', () => {
     }
   });
 
-  it('contains the ten known actions', () => {
+  it('contains the eleven known actions', () => {
     expect(CREATE_ACTIONS.map((a) => a.id)).toEqual([
       'event',
       'calendar',
@@ -109,6 +113,7 @@ describe('CREATE_ACTIONS shape', () => {
       'wiki',
       'form',
       'poll',
+      'note',
       'bookmark',
       'share'
     ]);
@@ -131,6 +136,7 @@ describe('CREATE_ACTIONS shape', () => {
     expect(action('article').kinds).toEqual([30023]);
     expect(action('wiki').kinds).toEqual([30818]);
     expect(action('poll').kinds).toEqual([1068]);
+    expect(action('note').kinds).toEqual([1]);
     expect(action('form').kinds).toBeNull();
     expect(action('bookmark').kinds).toBeNull();
     expect(action('share').kinds).toBeNull();
@@ -192,6 +198,16 @@ describe('CREATE_ACTIONS run(ctx)', () => {
     const plain = makeCtx();
     action('poll').run(plain);
     expect(plain.openModal).toHaveBeenCalledWith('createPoll', {});
+  });
+
+  it('note opens the createNote modal with communityPubkey only when present', () => {
+    const community = makeCtx('abc');
+    action('note').run(community);
+    expect(community.openModal).toHaveBeenCalledWith('createNote', { communityPubkey: 'abc' });
+
+    const plain = makeCtx();
+    action('note').run(plain);
+    expect(plain.openModal).toHaveBeenCalledWith('createNote', {});
   });
 
   it('bookmark opens the addBookmark modal', () => {

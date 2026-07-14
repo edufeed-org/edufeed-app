@@ -92,7 +92,9 @@ export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
   const signer = new NostrConnectSigner({
     relays,
     signer: clientSigner,
-    secret: generateSecret(),
+    // v6.2: `secret` deprecated in favor of connectSecret (client-initiated
+    // nostrconnect:// flow)
+    connectSecret: generateSecret(),
     onAuth
   });
 

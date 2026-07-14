@@ -1,6 +1,6 @@
 <!--
   FeedComposer — composer card at the top of the feed (design: feed.html).
-  Not a real text composer: the placeholder opens the create hub, and the
+  The placeholder opens the kind-1 note composer modal (issue #36), and the
   type shortcuts jump straight into the event/resource/article create flows.
 -->
 
@@ -9,7 +9,6 @@
   import { resolve } from '$app/paths';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { openCreateHub } from '$lib/stores/create-hub.svelte.js';
   import { CREATE_ACTIONS } from '$lib/config/create-actions.js';
   import { startResourceCreation } from '$lib/helpers/contentCreation.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -17,8 +16,15 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
+  /** @type {{ communityPubkey?: string }} */
+  let { communityPubkey = '' } = $props();
+
   const getActiveUser = useActiveUser();
   const getProfile = useUserProfile();
+
+  function openNoteComposer() {
+    modalStore.openModal('createNote', communityPubkey ? { communityPubkey } : {});
+  }
 
   let displayName = $derived.by(() => {
     const profile = getProfile();
@@ -54,7 +60,8 @@
   <ProfileAvatar pubkey={getActiveUser()?.pubkey ?? ''} size="md" />
   <button
     class="min-w-0 flex-1 truncate rounded-lg bg-base-200 px-3.5 py-2.5 text-left text-sm text-base-content/60 transition-colors hover:bg-base-300/60"
-    onclick={openCreateHub}
+    data-testid="feed-composer-placeholder"
+    onclick={openNoteComposer}
   >
     {displayName
       ? m.feed_composer_placeholder_named({ name: displayName })

@@ -3,8 +3,8 @@
   in the article container. Publishes NIP-84 highlight (kind 9802) on click.
 -->
 <script>
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-  import { HighlightBlueprint } from 'applesauce-common/blueprints';
+  import { finalizeDraft } from '$lib/helpers/event-factory.js';
+  import { HighlightFactory } from 'applesauce-common/factories';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -109,18 +109,16 @@
     isSaving = true;
 
     try {
-      const factory = createAppEventFactory({ signer: activeUser.signer });
-
       const context = container
         ? extractContext(container.textContent || '', selectedText)
         : undefined;
 
-      const draft = await factory.create(HighlightBlueprint, selectedText, source, {
-        context: context || undefined
-      });
+      let highlightFactory = HighlightFactory.create(selectedText, source);
+      if (context) highlightFactory = highlightFactory.context(context);
+      const draft = await finalizeDraft(highlightFactory);
 
       // Add relay hint to a-tag for discoverability
-      const aTagIdx = draft.tags.findIndex((t) => t[0] === 'a');
+      const aTagIdx = draft.tags.findIndex((/** @type {string[]} */ t) => t[0] === 'a');
       if (aTagIdx !== -1 && typeof source === 'object' && source.pubkey) {
         const relayHint = await getPrimaryWriteRelay(source.pubkey);
         if (relayHint) {
@@ -148,7 +146,7 @@
         draft.tags.push(['h', communityPubkey]);
       }
 
-      const signedEvent = await factory.sign(draft);
+      const signedEvent = await activeUser.signer.signEvent(draft);
 
       // Optimistic UI: add to EventStore immediately
       eventStore.add(signedEvent);

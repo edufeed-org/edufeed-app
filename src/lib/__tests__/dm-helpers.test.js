@@ -18,6 +18,7 @@ import {
   getDmRelaysFromEvent,
   buildDmRelayListEvent,
   computeBaseGiftWrapRelays,
+  filterEventsNeedingSignerUnlock,
   DM_READ_TIMESTAMPS_KEY,
   loadReadTimestamps,
   saveReadTimestamps,
@@ -150,5 +151,53 @@ describe('isConversationUnread', () => {
 
   it('returns true when conversation has no read timestamp', () => {
     expect(isConversationUnread('conv1', 1000, {})).toBe(true);
+  });
+});
+
+describe('filterEventsNeedingSignerUnlock (decrypt-storm guard)', () => {
+  const cacheWith = (/** @type {Record<string, string>} */ entries) => ({
+    getItem: async (/** @type {string} */ id) => entries[id] ?? null,
+    setItem: async () => {}
+  });
+
+  const wrap = (/** @type {string} */ id) =>
+    /** @type {any} */ ({ id, kind: 1059, content: 'x', tags: [] });
+
+  it('keeps events with no cached plaintext', async () => {
+    const result = await filterEventsNeedingSignerUnlock(
+      [wrap('aa'), wrap('bb')],
+      cacheWith({}),
+      () => false
+    );
+    expect(result.map((e) => e.id)).toEqual(['aa', 'bb']);
+  });
+
+  it('skips events whose plaintext is already in the cache', async () => {
+    const result = await filterEventsNeedingSignerUnlock(
+      [wrap('aa'), wrap('bb'), wrap('cc')],
+      cacheWith({ bb: 'cached-plaintext' }),
+      () => false
+    );
+    expect(result.map((e) => e.id)).toEqual(['aa', 'cc']);
+  });
+
+  it('skips events the unlocked-predicate already covers', async () => {
+    const result = await filterEventsNeedingSignerUnlock(
+      [wrap('aa'), wrap('bb')],
+      cacheWith({}),
+      (e) => e.id === 'aa'
+    );
+    expect(result.map((e) => e.id)).toEqual(['bb']);
+  });
+
+  it('treats cache read errors as cache misses', async () => {
+    const throwingCache = {
+      getItem: async () => {
+        throw new Error('storage broken');
+      },
+      setItem: async () => {}
+    };
+    const result = await filterEventsNeedingSignerUnlock([wrap('aa')], throwingCache, () => false);
+    expect(result.map((e) => e.id)).toEqual(['aa']);
   });
 });

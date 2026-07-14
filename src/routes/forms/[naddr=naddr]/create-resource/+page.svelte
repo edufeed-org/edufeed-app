@@ -7,7 +7,7 @@
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
-  import { factory } from '$lib/stores/action-runner.svelte.js';
+  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { getEducationalRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -140,6 +140,7 @@
       ];
 
       const template = { kind: 30142, tags, content: rawValues.description || '' };
+      const factory = createAppEventFactory({ signer: manager.signer });
       const built = await factory.build(template);
       const signed = await factory.sign(built);
       eventStore.add(signed);

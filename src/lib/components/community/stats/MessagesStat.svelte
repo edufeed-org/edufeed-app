@@ -36,15 +36,20 @@
     isLoading = true;
     error = null;
 
+    // v6: subscription() emits only events (no 'EOSE' marker) — resolve the
+    // spinner on the first event or via the fallback timer.
+    const spinnerTimer = setTimeout(() => {
+      isLoading = false;
+    }, 4000);
+
     const sub = pool
       .group(getCommunikeyRelays())
       .subscription({ kinds: [9], '#h': [communityId] })
       .subscribe({
-        next: (/** @type {any} */ response) => {
-          if (response === 'EOSE') {
+        next: (/** @type {any} */ event) => {
+          if (event && typeof event === 'object' && event.kind === 9) {
             isLoading = false;
-          } else if (response && typeof response === 'object' && response.kind === 9) {
-            messages = [...messages, response];
+            messages = [...messages, event];
           }
         },
         error: (/** @type {any} */ err) => {
@@ -55,6 +60,7 @@
       });
 
     return () => {
+      clearTimeout(spinnerTimer);
       sub.unsubscribe();
     };
   });

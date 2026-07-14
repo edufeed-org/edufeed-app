@@ -3,7 +3,7 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
-import { getEmojis, getPackName } from 'applesauce-common/helpers';
+import { getEmojiPackEmojis, getEmojiPackName } from 'applesauce-common/helpers';
 
 /**
  * @typedef {{ shortcode: string, url: string }} Emoji
@@ -215,8 +215,8 @@ export function useUserEmojiSets() {
         sub.unsubscribe();
 
         if (packEvent) {
-          const emojis = getEmojis(packEvent);
-          const packName = getPackName(packEvent) || identifier || 'Unnamed';
+          const emojis = getEmojiPackEmojis(packEvent);
+          const packName = getEmojiPackName(packEvent) || identifier || 'Unnamed';
           if (emojis.length > 0) {
             packs.push({ packName, emojis });
           }

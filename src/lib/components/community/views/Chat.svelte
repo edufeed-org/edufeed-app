@@ -102,14 +102,13 @@
       isLoading = false;
     }, 4000);
 
+    // v6: subscription() emits only events (no 'EOSE' marker); the spinner is
+    // dropped by the fallback timer above or by the first rendered events below.
     const subSub = pool
       .group(chatRelays)
       .subscription({ ...filter, limit: PAGE_SIZE })
       .pipe(storeEvents(eventStore))
       .subscribe({
-        next: (response) => {
-          if (response === 'EOSE') isLoading = false;
-        },
         error: () => {
           isLoading = false;
         }
@@ -143,24 +142,23 @@
       limit: PAGE_SIZE
     };
 
+    // v6: request() completes after EOSE (or timeout) and emits only events,
+    // replacing the manual EOSE-and-unsubscribe bookkeeping.
     let count = 0;
-    const sub = pool
+    pool
       .group(chatRelays)
-      .subscription(olderFilter)
+      .request(olderFilter, { timeout: 10_000 })
       .pipe(storeEvents(eventStore))
       .subscribe({
-        next: (response) => {
-          if (response === 'EOSE') {
-            if (count < PAGE_SIZE) hasMore = false;
-            isLoadingMore = false;
-            sub.unsubscribe();
-          } else {
-            count++;
-          }
+        next: () => {
+          count++;
         },
         error: () => {
           isLoadingMore = false;
-          sub.unsubscribe();
+        },
+        complete: () => {
+          if (count < PAGE_SIZE) hasMore = false;
+          isLoadingMore = false;
         }
       });
   }

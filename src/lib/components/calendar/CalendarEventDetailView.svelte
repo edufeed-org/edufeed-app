@@ -103,33 +103,29 @@
 
     isLoadingCalendars = true;
 
-    // Query for calendars (kind 31924) that reference this event
+    // Query for calendars (kind 31924) that reference this event.
+    // v6: request() completes after EOSE (or timeout) and emits only events.
     const subscription = pool
       .group(getCalendarRelays())
-      .subscription({
-        kinds: [31924],
-        '#a': [eventAddress]
-      })
+      .request({ kinds: [31924], '#a': [eventAddress] }, { timeout: 10_000 })
       .subscribe({
-        next: (response) => {
-          if (response === 'EOSE') {
-            console.log('Calendars: End of stored events');
-            isLoadingCalendars = false;
-          } else if (response && typeof response === 'object' && response.kind === 31924) {
-            console.log('Found calendar featuring this event:', response);
+        next: (event) => {
+          if (event?.kind !== 31924) return;
 
-            // Add to eventStore
-            eventStore.add(response);
+          // Add to eventStore
+          eventStore.add(event);
 
-            // Add to featured calendars if not already present
-            const existingIndex = featuredCalendars.findIndex((c) => c.id === response.id);
-            if (existingIndex === -1) {
-              featuredCalendars = [...featuredCalendars, response];
-            }
+          // Add to featured calendars if not already present
+          const existingIndex = featuredCalendars.findIndex((c) => c.id === event.id);
+          if (existingIndex === -1) {
+            featuredCalendars = [...featuredCalendars, event];
           }
         },
         error: (error) => {
-          console.error('Calendar subscription error:', error);
+          console.error('Calendar request error:', error);
+          isLoadingCalendars = false;
+        },
+        complete: () => {
           isLoadingCalendars = false;
         }
       });

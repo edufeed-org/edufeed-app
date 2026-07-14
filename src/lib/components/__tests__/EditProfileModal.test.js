@@ -194,7 +194,7 @@ describe('EditProfileModal save (own profile)', () => {
       picture: '',
       banner: '',
       website: '',
-      edufeed: { educationalLevels: [], subjects: [] }
+      edufeed: { educationalLevels: [], subjects: [], locations: [] }
     });
     // nip05/lud16/display_name are preserved by the merge, never submitted.
     expect(content).not.toHaveProperty('nip05');
@@ -237,7 +237,7 @@ describe('EditProfileModal save (own profile)', () => {
 
     // Kind 0 no longer carries interests (wholesale replace drops the legacy key).
     const [, content] = /** @type {any[]} */ (h.runAction.mock.calls[0]);
-    expect(content.edufeed).toEqual({ educationalLevels: [], subjects: [] });
+    expect(content.edufeed).toEqual({ educationalLevels: [], subjects: [], locations: [] });
 
     // No 10015 list yet → the full current set is written as adds.
     const [listAction, listParams] = /** @type {any[]} */ (h.runAction.mock.calls[1]);

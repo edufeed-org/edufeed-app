@@ -33,7 +33,8 @@ import {
   isConversationUnread,
   normalizeLegacyConversation,
   groupLegacyConversations,
-  mergeDmConversations
+  mergeDmConversations,
+  filterEventsNeedingSignerUnlock
 } from '$lib/helpers/dm.js';
 import {
   getRelayListLookupRelays,
@@ -115,6 +116,31 @@ let activeSigner = null;
 let subscriptions = [];
 /** @type {(() => void) | null} */
 let persistCleanup = null;
+
+/**
+ * Encrypted-content cache backing persistEncryptedContent AND the
+ * decrypt-storm guard: plaintext persisted here (keyed by event id) means
+ * the event never needs another signer decrypt.
+ */
+const dmContentCache = {
+  /** @param {string} key */
+  getItem: (key) => Promise.resolve(localStorage.getItem(`comcal:dm:cache:${key}`)),
+  /**
+   * @param {string} key
+   * @param {string} value
+   */
+  setItem: (key, value) => Promise.resolve(localStorage.setItem(`comcal:dm:cache:${key}`, value))
+};
+
+/**
+ * Debounce for the locked-wraps → batchUnlock trigger. The locked model emits
+ * synchronously on insert while persistEncryptedContent restores plaintext
+ * asynchronously — waiting a beat lets cache restores unlock wraps first, so
+ * the signer is only asked about genuinely new messages.
+ */
+const UNLOCK_DEBOUNCE_MS = 400;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let unlockDebounceTimer = null;
 /**
  * URLs we've already opened a gift-wrap subscription on. Used to dedupe when
  * the relay union grows (e.g. fallback relays subscribe immediately, then
@@ -296,9 +322,17 @@ export async function ensureLegacyMessagesUnlocked(messages) {
   if (!activeSigner || !activePubkey) return failedIds;
   const pubkey = activePubkey;
   let savedNew = false;
+  // Skip messages whose plaintext is cached — restore handles them promptless.
+  // (plain local lookup set, not reactive state)
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const needSigner = new Set(
+    (await filterEventsNeedingSignerUnlock(messages, dmContentCache, isLegacyMessageUnlocked)).map(
+      (e) => e.id
+    )
+  );
   for (const msg of messages) {
     if (activePubkey !== pubkey) return failedIds;
-    if (isLegacyMessageUnlocked(msg)) continue;
+    if (!needSigner.has(msg.id)) continue;
     if (failedUnlockIds.has(msg.id)) {
       failedIds.add(msg.id);
       continue;
@@ -394,16 +428,7 @@ export function initializeDMs(pubkey, signer) {
   }
 
   // 1. Set up encrypted content persistence (survives page reloads)
-  const storage = {
-    /** @param {string} key */
-    getItem: (key) => Promise.resolve(localStorage.getItem(`comcal:dm:cache:${key}`)),
-    /**
-     * @param {string} key
-     * @param {string} value
-     */
-    setItem: (key, value) => Promise.resolve(localStorage.setItem(`comcal:dm:cache:${key}`, value))
-  };
-  persistCleanup = persistEncryptedContent(eventStore, storage);
+  persistCleanup = persistEncryptedContent(eventStore, dmContentCache);
 
   // 2. Subscribe to gift wraps on the UNION of the user's NIP-65 write relays,
   //    app fallback relays, and (once it loads) the user's kind 10050 DM relay
@@ -521,7 +546,14 @@ export function initializeDMs(pubkey, signer) {
       unlocking
     });
     if (tryable.length > 0 && !unlocking) {
-      batchUnlock(tryable);
+      // Debounced: give persistEncryptedContent's async restore a head start
+      // so cached wraps unlock without signer prompts (batchUnlock re-checks
+      // both the unlocked state and the cache per wrap).
+      if (unlockDebounceTimer) clearTimeout(unlockDebounceTimer);
+      unlockDebounceTimer = setTimeout(() => {
+        unlockDebounceTimer = null;
+        if (!unlocking) batchUnlock(tryable);
+      }, UNLOCK_DEBOUNCE_MS);
     }
   });
   subscriptions.push(lockedSub);
@@ -600,6 +632,10 @@ export function cleanup() {
   subscriptions = [];
   persistCleanup?.();
   persistCleanup = null;
+  if (unlockDebounceTimer) {
+    clearTimeout(unlockDebounceTimer);
+    unlockDebounceTimer = null;
+  }
 
   activePubkey = null;
   activeSigner = null;
@@ -679,7 +715,8 @@ function subscribeToGiftWraps(pubkey, relays) {
       tap({
         next: (raw) => {
           if (typeof raw === 'string') {
-            console.debug('[dm] gift-wrap stream string', raw.slice(0, 80));
+            // v6: subscription() no longer emits 'EOSE' strings; kept for safety
+            console.debug('[dm] gift-wrap stream string', /** @type {string} */ (raw).slice(0, 80));
           } else if (raw && typeof raw === 'object' && 'id' in raw) {
             console.debug('[dm] gift-wrap event from relay', {
               id: /** @type {any} */ (raw).id?.slice(0, 8),
@@ -746,6 +783,9 @@ async function batchUnlock(wraps) {
 
   unlocking = true;
   const BATCH_SIZE = 5;
+  // Skip wraps whose plaintext is already in the cache — the restore
+  // pipeline unlocks those without any signer interaction.
+  wraps = await filterEventsNeedingSignerUnlock(wraps, dmContentCache, isGiftWrapUnlocked);
   console.debug('[dm] batchUnlock start', { count: wraps.length });
   const startedAt = performance.now();
   let failedThisRun = 0;
