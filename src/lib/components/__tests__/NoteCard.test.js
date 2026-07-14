@@ -178,6 +178,19 @@ describe('NoteCard', () => {
     expect(chatButton).toBeTruthy();
   });
 
+  it('labels the comment toggle as comments, not "Chat" (issue #44)', () => {
+    const { container } = render(NoteCard, {
+      props: { note: mockNote }
+    });
+
+    const button = container.querySelector('.btn-ghost');
+    const iconTitle = button?.querySelector('svg title');
+    // The ChatIcon default title "Chat" renders a misleading native tooltip —
+    // the button opens the comments section.
+    expect(iconTitle?.textContent).not.toBe('Chat');
+    expect(iconTitle?.textContent).toBe('Comments');
+  });
+
   it('does not render CommentList initially', () => {
     const { container } = render(NoteCard, {
       props: { note: mockNote }

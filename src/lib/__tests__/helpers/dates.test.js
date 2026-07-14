@@ -11,7 +11,8 @@ import {
   formatTimestamp,
   isoToGermanDate,
   germanDateToIso,
-  parseDateInput
+  parseDateInput,
+  parseTimeInput
 } from '$lib/helpers/dates.js';
 
 const SAMPLE = new Date(Date.UTC(2026, 5, 3)); // 2026-06-03 UTC
@@ -157,5 +158,47 @@ describe('parseDateInput', () => {
     expect(parseDateInput('')).toBe('');
     expect(parseDateInput(undefined)).toBe('');
     expect(parseDateInput(null)).toBe('');
+  });
+});
+
+describe('parseTimeInput', () => {
+  it('accepts 24-hour HH:MM', () => {
+    expect(parseTimeInput('13:00')).toBe('13:00');
+    expect(parseTimeInput('00:00')).toBe('00:00');
+    expect(parseTimeInput('23:59')).toBe('23:59');
+  });
+
+  it('zero-pads single-digit hours', () => {
+    expect(parseTimeInput('9:30')).toBe('09:30');
+  });
+
+  it('accepts a dot separator (German habit)', () => {
+    expect(parseTimeInput('9.30')).toBe('09:30');
+    expect(parseTimeInput('13.05')).toBe('13:05');
+  });
+
+  it('accepts a bare hour as full hour', () => {
+    expect(parseTimeInput('13')).toBe('13:00');
+    expect(parseTimeInput('9')).toBe('09:00');
+  });
+
+  it('accepts digit-only HMM / HHMM input', () => {
+    expect(parseTimeInput('0930')).toBe('09:30');
+    expect(parseTimeInput('930')).toBe('09:30');
+    expect(parseTimeInput('1330')).toBe('13:30');
+  });
+
+  it('rejects out-of-range hours and minutes', () => {
+    expect(parseTimeInput('24:00')).toBe('');
+    expect(parseTimeInput('13:60')).toBe('');
+    expect(parseTimeInput('99')).toBe('');
+  });
+
+  it('rejects junk and empty input', () => {
+    expect(parseTimeInput('abc')).toBe('');
+    expect(parseTimeInput('1:2:3')).toBe('');
+    expect(parseTimeInput('')).toBe('');
+    expect(parseTimeInput(undefined)).toBe('');
+    expect(parseTimeInput(null)).toBe('');
   });
 });

@@ -103,74 +103,78 @@
     </div>
   </div>
 {:else if event}
-  <!-- eslint-disable svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
-  <a
-    href={eventUrl}
-    class="card my-2 block border-l-4 border-l-primary bg-base-200 no-underline transition-colors hover:bg-base-300"
+  <!-- Single opaque surface for card + RSVP so both stay readable when
+       embedded on colored backgrounds (e.g. a teal DM chat bubble) -->
+  <div
+    class="nostr-preview-surface card my-2 overflow-hidden border border-l-4 border-base-300 border-l-primary bg-base-100 shadow-sm"
+    data-testid="calendar-event-preview-card"
   >
-    <div class="card-body p-4">
-      <div class="flex items-start gap-3">
-        {#if event.image}
-          <img
-            src={event.image}
-            alt={event.title}
-            class="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
-          />
-        {/if}
-
-        <div class="min-w-0 flex-1">
-          <h3 class="mb-2 card-title text-base text-base-content">{event.title}</h3>
-
-          <div class="flex flex-col gap-1 text-sm text-base-content/70">
-            {#if startDate}
-              <div class="flex items-center gap-2">
-                <CalendarIcon class_="w-4 h-4 flex-shrink-0" />
-                <span>{formatCalendarDate(startDate, 'short')}</span>
-              </div>
-            {/if}
-
-            {#if !isAllDay && startDate}
-              <div class="flex items-center gap-2">
-                <ClockIcon class_="w-4 h-4 flex-shrink-0" />
-                <span>
-                  {formatCalendarDate(startDate, 'time')}
-                  {#if endDate}
-                    - {formatCalendarDate(endDate, 'time')}
-                  {/if}
-                </span>
-              </div>
-            {/if}
-
-            {#if locationString}
-              <div class="flex items-center gap-2">
-                <span>📍</span>
-                <LocationLink location={locationString} />
-              </div>
-            {/if}
-          </div>
-
-          {#if event.summary}
-            <MarkdownRenderer
-              content={event.summary}
-              class="mt-2 line-clamp-2 text-sm text-base-content/60"
+    <!-- eslint-disable svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
+    <a href={eventUrl} class="block no-underline transition-colors hover:bg-base-200">
+      <div class="card-body p-4">
+        <div class="flex items-start gap-3">
+          {#if event.image}
+            <img
+              src={event.image}
+              alt={event.title}
+              class="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
             />
           {/if}
+
+          <div class="min-w-0 flex-1">
+            <h3 class="mb-2 card-title text-base text-base-content">{event.title}</h3>
+
+            <div class="flex flex-col gap-1 text-sm text-base-content/85">
+              {#if startDate}
+                <div class="flex items-center gap-2">
+                  <CalendarIcon class_="w-4 h-4 flex-shrink-0" />
+                  <span>{formatCalendarDate(startDate, 'short')}</span>
+                </div>
+              {/if}
+
+              {#if !isAllDay && startDate}
+                <div class="flex items-center gap-2">
+                  <ClockIcon class_="w-4 h-4 flex-shrink-0" />
+                  <span>
+                    {formatCalendarDate(startDate, 'time')}
+                    {#if endDate}
+                      - {formatCalendarDate(endDate, 'time')}
+                    {/if}
+                  </span>
+                </div>
+              {/if}
+
+              {#if locationString}
+                <div class="flex items-center gap-2">
+                  <span>📍</span>
+                  <LocationLink location={locationString} />
+                </div>
+              {/if}
+            </div>
+
+            {#if event.summary}
+              <MarkdownRenderer
+                content={event.summary}
+                class="mt-2 line-clamp-2 text-sm text-base-content/70"
+              />
+            {/if}
+          </div>
+        </div>
+
+        <div class="mt-2 card-actions justify-end">
+          <div class="badge badge-sm badge-primary">Calendar Event</div>
         </div>
       </div>
+    </a>
+    <!-- eslint-enable svelte/no-navigation-without-resolve -->
 
-      <div class="mt-2 card-actions justify-end">
-        <div class="badge badge-sm badge-primary">Calendar Event</div>
+    <!-- Always offered regardless of the `inline` flag: this component renders a
+         block card either way, and nostr: mentions (the DM invite path) arrive
+         with inline=true -->
+    {#if activeUser && event.originalEvent}
+      <div class="border-t border-base-300 px-4 py-3">
+        <InlineRsvp calendarEvent={event.originalEvent} size="sm" compact={true} />
       </div>
-    </div>
-  </a>
-  <!-- eslint-enable svelte/no-navigation-without-resolve -->
-
-  <!-- Always offered regardless of the `inline` flag: this component renders a
-       block card either way, and nostr: mentions (the DM invite path) arrive
-       with inline=true -->
-  {#if activeUser && event.originalEvent}
-    <div class="-mt-1 mb-2 pl-1">
-      <InlineRsvp calendarEvent={event.originalEvent} size="sm" compact={true} />
-    </div>
-  {/if}
+    {/if}
+  </div>
 {/if}

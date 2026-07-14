@@ -118,4 +118,14 @@
   :global(.chat-bubble-primary .text-primary) {
     color: var(--color-primary-content);
   }
+
+  /*
+   * ...but NOT inside embedded preview cards (.nostr-preview-surface), which
+   * paint their own opaque base-100 background — there primary-content would
+   * be white-on-white, so restore the normal primary color.
+   */
+  :global(.chat-bubble-primary .nostr-preview-surface .link-primary),
+  :global(.chat-bubble-primary .nostr-preview-surface .text-primary) {
+    color: var(--color-primary);
+  }
 </style>

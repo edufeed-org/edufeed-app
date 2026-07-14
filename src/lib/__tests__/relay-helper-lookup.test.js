@@ -91,3 +91,14 @@ describe('getEventLoaderLookupRelays', () => {
     expect(relays).toContain('wss://comm.example.com');
   });
 });
+
+describe('getNotificationFallbackRelays', () => {
+  it('returns fallback relays even when gated mode is ON (personal notifications are not gated)', async () => {
+    const { getNotificationFallbackRelays } = await import('$lib/helpers/relay-helper.js');
+    mockAppSettings.gatedMode = true;
+    expect(getNotificationFallbackRelays()).toEqual([
+      'wss://fallback1.example.com',
+      'wss://fallback2.example.com'
+    ]);
+  });
+});

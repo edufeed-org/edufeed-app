@@ -20,7 +20,8 @@
     ClockIcon,
     LocationIcon,
     UserIcon,
-    ExternalLinkIcon
+    ExternalLinkIcon,
+    EnvelopeIcon
   } from '$lib/components/icons';
   import DetailHeader from '$lib/components/shared/DetailHeader.svelte';
   import MarkdownRenderer from '$lib/components/shared/MarkdownRenderer.svelte';
@@ -428,9 +429,10 @@
         </h2>
         {#if activeUser && rawEvent}
           <button
-            class="btn btn-outline btn-sm"
+            class="btn btn-primary"
             onclick={() => modalStore.openModal('inviteToEvent', { rawEvent })}
           >
+            <EnvelopeIcon class_="w-5 h-5" />
             {m.event_invite_button()}
           </button>
         {/if}

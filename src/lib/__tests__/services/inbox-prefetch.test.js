@@ -14,6 +14,7 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://relay1'],
   getCalendarRelays: () => ['wss://relay2'],
   getEducationalRelays: () => ['wss://relay3'],
+  getNotificationFallbackRelays: () => [],
   getAllLookupRelays: () => ['wss://lookup1', 'wss://lookup2'],
   getEventLoaderLookupRelays: () => []
 }));

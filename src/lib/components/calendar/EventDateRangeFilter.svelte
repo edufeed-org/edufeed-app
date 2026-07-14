@@ -6,6 +6,7 @@
 <script>
   import { ChevronLeftIcon, ChevronRightIcon } from '$lib/components/icons';
   import { CalendarIcon } from '$lib/components/icons';
+  import EuropeanDateInput from '$lib/components/shared/EuropeanDateInput.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -174,10 +175,8 @@
           <label class="label" for="date-range-start">
             <span class="label-text">{m.discover_events_date_range_from()}</span>
           </label>
-          <input
+          <EuropeanDateInput
             id="date-range-start"
-            type="date"
-            class="input-bordered input w-full"
             bind:value={pickerStartDate}
             data-testid="date-range-start-input"
           />
@@ -188,10 +187,8 @@
           <label class="label" for="date-range-end">
             <span class="label-text">{m.discover_events_date_range_to()}</span>
           </label>
-          <input
+          <EuropeanDateInput
             id="date-range-end"
-            type="date"
-            class="input-bordered input w-full"
             bind:value={pickerEndDate}
             data-testid="date-range-end-input"
           />
