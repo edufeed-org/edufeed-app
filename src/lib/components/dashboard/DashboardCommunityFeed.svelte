@@ -505,20 +505,28 @@
     class="pointer-events-none fixed right-[5.5rem] bottom-9 z-30 hidden items-start gap-1.5 text-accent lg:flex"
     aria-hidden="true"
   >
-    <span class="text-xl leading-none" style="font-family: var(--font-script)">
+    <span
+      class="-rotate-2 rounded-md border border-base-300 bg-base-100 px-2.5 py-1 text-xl leading-none shadow-sm"
+      style="font-family: var(--font-script)"
+    >
       {m.home_fab_nudge()}
     </span>
     <svg
       class="fab-nudge-arrow h-10 w-10"
       viewBox="0 0 64 64"
       fill="none"
-      stroke="currentColor"
-      stroke-width="3"
       stroke-linecap="round"
       stroke-linejoin="round"
     >
-      <path d="M10 8c4 18 15 33 41 41" />
-      <path d="M38 50l13-1-4-13" />
+      <!-- paper-colored halo keeps the arrow legible over any background -->
+      <g stroke="var(--color-base-100)" stroke-width="8">
+        <path d="M10 8c4 18 15 33 41 41" />
+        <path d="M38 50l13-1-4-13" />
+      </g>
+      <g stroke="currentColor" stroke-width="3">
+        <path d="M10 8c4 18 15 33 41 41" />
+        <path d="M38 50l13-1-4-13" />
+      </g>
     </svg>
   </div>
 {/if}
