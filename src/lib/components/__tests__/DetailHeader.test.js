@@ -74,10 +74,8 @@ describe('DetailHeader', () => {
     const { container } = render(DetailHeaderTestWrapper, {
       props: { title: 'No Author', authorPubkey: '' }
     });
-    // No author name link should be rendered
-    const toolbar = container.querySelector('.border-b');
-    expect(toolbar).toBeTruthy();
-    const authorLinks = toolbar.querySelectorAll('a[href*="/p/"]');
+    // No author name link should be rendered anywhere in the header
+    const authorLinks = container.querySelectorAll('a[href*="/p/"]');
     expect(authorLinks.length).toBe(0);
   });
 
