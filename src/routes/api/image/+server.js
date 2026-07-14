@@ -84,9 +84,13 @@ export async function GET({ url }) {
       return new Response('Upstream image too large', { status: 502 });
     }
 
+    // Animated sources (GIF, animated WebP/APNG) keep their frames only for
+    // webp output — jpeg/png can't animate, so those flatten to frame 1.
+    const animated = fmtParam === 'webp';
+
     // 'cover' fills the exact w×h box (used for link-preview images that must
     // declare fixed dimensions); 'inside' preserves aspect ratio without upscaling.
-    const pipeline = sharp(buffer)
+    const pipeline = sharp(buffer, { animated })
       .rotate()
       .resize(width, height, {
         fit: fitParam,
