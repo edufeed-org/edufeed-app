@@ -7,13 +7,14 @@
  * create/delete helper used by the edit UI for any list kind.
  *
  * Contract follows the applesauce `Action` type:
- *   `(params) => async ({ factory, user, publish, sign }) => Promise<void>`
+ *   `(params) => async ({ signer, user, publish, sign }) => Promise<void>`
  *
  * Pre-built applesauce actions should still be preferred when
  * available (e.g. `PinNote`, `FollowUser`, `AddBlockedRelay`) because
  * they encode the correct pointer type per kind.
  */
 import { canHaveHiddenTags } from 'applesauce-core/helpers/hidden-tags';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { modifyPublicTags, modifyHiddenTags } from 'applesauce-core/operations/tags';
 import { addNameValueTag, removeNameValueTag } from 'applesauce-core/operations/tag/common';
 import * as List from 'applesauce-common/operations/list';
@@ -44,11 +45,12 @@ function randomDTag() {
  */
 export function ModifyListTags({ kind, dTag, add = [], remove = [], hidden = false }) {
   return async (
-    /** @type {import('applesauce-actions').ActionContext} */ { factory, user, publish, sign }
+    /** @type {import('applesauce-actions').ActionContext} */ { signer, user, publish, sign }
   ) => {
     if (hidden && !canHaveHiddenTags(kind)) {
       throw new Error(`Kind ${kind} does not support hidden tags`);
     }
+    const factory = createAppEventFactory();
     const [event, outboxes] = await Promise.all([
       user.replaceable(kind, dTag).$first(1000, undefined),
       user.outboxes$.$first(1000, undefined)
@@ -58,7 +60,8 @@ export function ModifyListTags({ kind, dTag, add = [], remove = [], hidden = fal
       ...add.map((t) => addNameValueTag(/** @type {any} */ (t))),
       ...remove.map((t) => removeNameValueTag(t))
     ];
-    const op = hidden ? modifyHiddenTags(...tagOps) : modifyPublicTags(...tagOps);
+    // v6: modifyHiddenTags needs the signer to encrypt/decrypt hidden tags
+    const op = hidden ? modifyHiddenTags(signer, ...tagOps) : modifyPublicTags(...tagOps);
 
     const signed = event
       ? await factory.modify(event, op).then(sign)
@@ -90,17 +93,18 @@ export function CreateList({ kind, dTag, title, description, image, items = [], 
   const identifier = addressable ? dTag || randomDTag() : undefined;
 
   return async (
-    /** @type {import('applesauce-actions').ActionContext} */ { factory, user, publish, sign }
+    /** @type {import('applesauce-actions').ActionContext} */ { signer, user, publish, sign }
   ) => {
     if (hidden && !canHaveHiddenTags(kind)) {
       throw new Error(`Kind ${kind} does not support hidden tags`);
     }
+    const factory = createAppEventFactory();
     const initialTags = identifier ? [['d', identifier]] : [];
 
     const tagOps = items.map((t) => addNameValueTag(/** @type {any} */ (t)));
     const itemsOp = tagOps.length
       ? hidden
-        ? modifyHiddenTags(...tagOps)
+        ? modifyHiddenTags(signer, ...tagOps)
         : modifyPublicTags(...tagOps)
       : undefined;
 
@@ -127,11 +131,12 @@ export function CreateList({ kind, dTag, title, description, image, items = [], 
  */
 export function DeleteList(listEvent) {
   return async (
-    /** @type {import('applesauce-actions').ActionContext} */ { factory, user, publish, sign }
+    /** @type {import('applesauce-actions').ActionContext} */ { user, publish, sign }
   ) => {
     if (listEvent.pubkey !== user.pubkey) {
       throw new Error('Cannot delete a list owned by another pubkey');
     }
+    const factory = createAppEventFactory();
     const draft = await factory.delete([listEvent]);
     const signed = await sign(draft);
     // Persist the deletion to IDB so it survives a reload. Kind 5 is never

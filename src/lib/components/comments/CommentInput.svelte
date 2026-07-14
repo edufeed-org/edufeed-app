@@ -1,6 +1,6 @@
 <script>
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-  import { CommentBlueprint } from 'applesauce-common/blueprints';
+  import { finalizeDraft } from '$lib/helpers/event-factory.js';
+  import { CommentFactory } from 'applesauce-common/factories';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
@@ -75,8 +75,6 @@
     isPosting = true; // Show loading during signing (may require user approval)
 
     try {
-      const factory = createAppEventFactory({ signer: activeUser.signer });
-
       // Determine parent: explicit reply parent → fallback to thread root.
       // For URL-rooted top-level posts, build a NIP-22 external pointer so
       // applesauce-common's setParent emits ["I", url] + ["K", "web"] tags.
@@ -89,14 +87,14 @@
         parent = { type: 'external', identifier: rootUrl, kind: 'web' };
       }
 
-      const draft = await factory.create(CommentBlueprint, parent, commentContent);
+      const draft = await finalizeDraft(CommentFactory.create(parent, commentContent));
 
       // Add community #h tag for deep-linking support
       if (communityPubkey) {
         draft.tags.push(['h', communityPubkey]);
       }
 
-      const signedEvent = await factory.sign(draft);
+      const signedEvent = await activeUser.signer.signEvent(draft);
       isPosting = false;
 
       // Add to eventStore immediately for instant UI update

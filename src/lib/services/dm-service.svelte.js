@@ -679,7 +679,8 @@ function subscribeToGiftWraps(pubkey, relays) {
       tap({
         next: (raw) => {
           if (typeof raw === 'string') {
-            console.debug('[dm] gift-wrap stream string', raw.slice(0, 80));
+            // v6: subscription() no longer emits 'EOSE' strings; kept for safety
+            console.debug('[dm] gift-wrap stream string', /** @type {string} */ (raw).slice(0, 80));
           } else if (raw && typeof raw === 'object' && 'id' in raw) {
             console.debug('[dm] gift-wrap event from relay', {
               id: /** @type {any} */ (raw).id?.slice(0, 8),

@@ -4,8 +4,8 @@
  */
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { TimelineModel } from 'applesauce-core/models';
-import { AppDataBlueprint } from 'applesauce-common/blueprints';
-import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+import { AppDataFactory } from 'applesauce-common/factories';
+import { finalizeDraft } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
@@ -455,20 +455,21 @@ export async function markAsRead(type) {
 
   readMarkers = updated;
 
-  // Publish kind 30078 via EventFactory + AppDataBlueprint
-  const factory = createAppEventFactory({ signer: manager.active.signer });
+  // Publish kind 30078 via AppDataFactory (v6). Note: the v5 code published
+  // the unsigned draft; the events are now properly signed before publishing.
+  const signer = manager.active.signer;
   try {
-    const signed = /** @type {import('nostr-tools').NostrEvent} */ (
-      await factory.create(AppDataBlueprint, APP_DATA_D_TAG, updated, true)
+    const draft = await finalizeDraft(
+      AppDataFactory.create(APP_DATA_D_TAG, updated, true).as(signer)
     );
+    const signed = await signer.signEvent(draft);
     eventStore.add(signed);
     await publishEvent(signed);
   } catch {
     // Fallback: try without encryption (signer may not support NIP-44)
     try {
-      const signed = /** @type {import('nostr-tools').NostrEvent} */ (
-        await factory.create(AppDataBlueprint, APP_DATA_D_TAG, updated, false)
-      );
+      const draft = await finalizeDraft(AppDataFactory.create(APP_DATA_D_TAG, updated, false));
+      const signed = await signer.signEvent(draft);
       eventStore.add(signed);
       await publishEvent(signed);
     } catch (err) {

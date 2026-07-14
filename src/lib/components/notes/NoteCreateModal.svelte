@@ -5,12 +5,11 @@
 -->
 
 <script>
-  import 'applesauce-common';
   import { untrack } from 'svelte';
-  import { NoteBlueprint } from 'applesauce-common/blueprints';
+  import { NoteFactory } from 'applesauce-common/factories';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { finalizeDraft } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -98,13 +97,12 @@
         communityEvent = eventStore.getReplaceable(10222, community) || null;
       }
 
-      const factory = createAppEventFactory({ signer: activeUser.signer });
-      const draft = await factory.create(NoteBlueprint, content.trim());
+      const draft = await finalizeDraft(NoteFactory.create(content.trim()));
 
-      // NoteBlueprint doesn't add h-tags; append for community targeting.
+      // NoteFactory doesn't add h-tags; append for community targeting.
       if (community) draft.tags.push(['h', community]);
 
-      const signed = await factory.sign(draft);
+      const signed = await activeUser.signer.signEvent(draft);
 
       eventStore.add(signed);
       const result = await publishEvent(signed, [], { communityEvent });

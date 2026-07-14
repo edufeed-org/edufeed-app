@@ -25,8 +25,11 @@ import { TimelineModel } from 'applesauce-core/models';
 import { timedPool } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
-import { factory } from '$lib/stores/action-runner.svelte.js';
+import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { publishEvent } from '$lib/services/publish-service.js';
+
+// App factory bound to the account manager's active-account signer
+const factory = createAppEventFactory({ signer: manager.signer });
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { showToast } from '$lib/helpers/toast.js';
 import * as m from '$lib/paraglide/messages';

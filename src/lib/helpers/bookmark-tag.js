@@ -32,7 +32,7 @@ import { normalizeUrl } from '$lib/helpers/urlGrouping.js';
  * Replaceable kinds (≥10000 or 30000–39999) become `a` tags; other kinds become `e` tags.
  *
  * @param {import('nostr-tools').NostrEvent} event - The event to bookmark
- * @returns {import('applesauce-core/event-factory').TagOperation} Tag operation
+ * @returns {import('applesauce-core/factories').TagOperation} Tag operation
  */
 export function addAnyKindBookmarkTag(event) {
   return isReplaceable(event.kind) ? addAddressPointerTag(event) : addEventPointerTag(event);
@@ -42,7 +42,7 @@ export function addAnyKindBookmarkTag(event) {
  * Build a tag operation that removes a bookmark reference from a NIP-51 list.
  *
  * @param {import('nostr-tools').NostrEvent} event - The event to remove
- * @returns {import('applesauce-core/event-factory').TagOperation} Tag operation
+ * @returns {import('applesauce-core/factories').TagOperation} Tag operation
  */
 export function removeAnyKindBookmarkTag(event) {
   return isReplaceable(event.kind) ? removeAddressPointerTag(event) : removeEventPointerTag(event);

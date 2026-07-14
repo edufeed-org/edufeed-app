@@ -1,13 +1,13 @@
 <script>
   import { getPollType } from 'applesauce-common/helpers';
-  import { PollResponseBlueprint } from 'applesauce-common/blueprints';
+  import { PollResponseFactory } from 'applesauce-common/factories';
   import { getTagValue, getDisplayName } from 'applesauce-core/helpers';
   import { tallyPollVotes, extractPollRelayTags, getPollOptionsPure } from '$lib/helpers/polls.js';
   import { pollResponsesLoader } from '$lib/loaders/polls.js';
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { finalizeDraft } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -161,8 +161,7 @@
     try {
       let signed;
       try {
-        const factory = createAppEventFactory();
-        const template = await factory.create(PollResponseBlueprint, event, selected);
+        const template = await finalizeDraft(PollResponseFactory.create(event, selected));
         signed = await account.signEvent(template);
       } catch (err) {
         console.warn('Vote sign failed', err);

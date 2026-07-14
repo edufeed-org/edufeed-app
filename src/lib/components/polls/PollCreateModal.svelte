@@ -1,5 +1,5 @@
 <script>
-  import 'applesauce-common';
+  import { PollFactory } from 'applesauce-common/factories';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -10,7 +10,7 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { finalizeDraft } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -144,18 +144,15 @@
         communityEvent = eventStore.getReplaceable(10222, community) || null;
       }
 
-      const factory = createAppEventFactory();
       const endsAt = computeEndsAt();
-      const template = await factory.poll(
+      let pollFactory = PollFactory.create(
         question.trim(),
-        options.map((o) => ({ id: o.id, label: o.label.trim() })),
-        {
-          pollType,
-          ...(endsAt != null ? { endsAt } : {})
-        }
-      );
+        options.map((o) => ({ id: o.id, label: o.label.trim() }))
+      ).pollType(pollType);
+      if (endsAt != null) pollFactory = pollFactory.endsAt(endsAt);
+      const template = await finalizeDraft(pollFactory);
 
-      // PollBlueprint does not add h-tag; append for community targeting.
+      // PollFactory does not add h-tag; append for community targeting.
       if (community) template.tags.push(['h', community]);
 
       const signed = await currentAccount.signEvent(template);

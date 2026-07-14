@@ -85,7 +85,7 @@ export async function unpinEvent(event) {
 
 /**
  * Modify the pin list with a given operation, sign, publish, and optimistically update EventStore.
- * @param {import('applesauce-core/event-factory').EventOperation} operation
+ * @param {import('applesauce-core/factories').EventOperation} operation
  */
 async function modifyPinList(operation) {
   const signer = manager.active?.signer;
