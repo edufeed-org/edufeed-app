@@ -10,6 +10,12 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
+// The real event-factory wrapper runs; disable the NIP-89 client tag so the
+// exact-tags assertion below stays deterministic.
+vi.mock('$lib/stores/app-settings.svelte.js', () => ({
+  appSettings: { includeClientTag: false }
+}));
+
 import { AddProfileNip05Tag } from '../actions/profile-actions.js';
 
 /** @param {{ profileEvent?: any, outboxes?: string[], pubkey?: string }} [opts] */

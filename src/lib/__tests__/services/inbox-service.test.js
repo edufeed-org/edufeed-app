@@ -24,14 +24,8 @@ vi.mock('applesauce-loaders/loaders', () => ({
 vi.mock('applesauce-core/models', () => ({
   TimelineModel: 'TimelineModel'
 }));
-vi.mock('applesauce-common/blueprints', () => ({
-  AppDataBlueprint: vi.fn()
-}));
-vi.mock('applesauce-core/event-factory', () => ({
-  EventFactory: vi.fn()
-}));
 vi.mock('$lib/helpers/event-factory.js', () => ({
-  createAppEventFactory: vi.fn(() => ({}))
+  finalizeDraft: vi.fn(async (draft) => await draft)
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: { active: null }

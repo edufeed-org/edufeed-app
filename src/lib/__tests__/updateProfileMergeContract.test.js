@@ -1,7 +1,7 @@
 /**
  * Locks in the applesauce contract the profile-edit flow depends on:
  * `UpdateProfile` (applesauce-actions) internally runs
- * `factory.modify(existingKind0, updateProfile(partial))`, which shallow-merges
+ * `ProfileFactory.modify(existingKind0).update(partial)`, which shallow-merges
  * the partial into the existing kind-0 content.
  *
  * The edit modal relies on this to:
@@ -13,14 +13,11 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { EventFactory } from 'applesauce-core/event-factory';
-import { updateProfile } from 'applesauce-core/operations/profile';
-
-const factory = new EventFactory();
+import { ProfileFactory } from 'applesauce-core/factories';
 
 /** @param {Record<string, unknown>} content */
 function existingKind0(content) {
-  return {
+  return /** @type {import('applesauce-core/helpers/event').KnownEvent<0>} */ ({
     kind: 0,
     pubkey: 'a'.repeat(64),
     created_at: 1700000000,
@@ -28,7 +25,7 @@ function existingKind0(content) {
     content: JSON.stringify(content),
     id: 'f'.repeat(64),
     sig: 'f'.repeat(128)
-  };
+  });
 }
 
 /**
@@ -36,12 +33,12 @@ function existingKind0(content) {
  * @param {Record<string, unknown>} partial
  */
 async function merge(existing, partial) {
-  const draft = await factory.modify(existingKind0(existing), updateProfile(partial));
+  const draft = await ProfileFactory.modify(existingKind0(existing)).update(partial);
   expect(draft.kind).toBe(0);
   return JSON.parse(draft.content);
 }
 
-describe('UpdateProfile merge contract (factory.modify + updateProfile)', () => {
+describe('UpdateProfile merge contract (ProfileFactory.modify().update())', () => {
   it('preserves lud16, display_name, nip05 and unknown third-party keys', async () => {
     const merged = await merge(
       {

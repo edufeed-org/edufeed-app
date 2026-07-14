@@ -18,12 +18,21 @@ const env = Object.fromEntries(
     .filter((l) => l && !l.startsWith('#') && l.includes('='))
     .map((l) => {
       const i = l.indexOf('=');
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')];
+      return [
+        l.slice(0, i).trim(),
+        l
+          .slice(i + 1)
+          .trim()
+          .replace(/^["']|["']$/g, '')
+      ];
     })
 );
 
 const rawKey = env.EDUFEED_PUBLISHER_NSEC;
-const adminAllow = (env.MEMBERSHIP_ADMIN_PUBKEYS || '').split(',').map((s) => s.trim()).filter(Boolean);
+const adminAllow = (env.MEMBERSHIP_ADMIN_PUBKEYS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 const upstream = (env.NIP05_SERVICE_URL || '').replace(/\/$/, '');
 
 if (!rawKey) throw new Error('EDUFEED_PUBLISHER_NSEC missing');

@@ -12,9 +12,8 @@
  * UI.
  */
 import { describe, it, expect } from 'vitest';
-import { EventFactory } from 'applesauce-core/event-factory';
 import { PrivateKeySigner } from 'applesauce-signers/signers/private-key-signer';
-import { GiftWrapBlueprint, WrappedMessageBlueprint } from 'applesauce-common/blueprints';
+import { GiftWrapFactory, WrappedMessageFactory } from 'applesauce-common/factories';
 import { getGiftWrapRumor, isGiftWrapUnlocked } from 'applesauce-common/helpers/gift-wrap';
 import { kinds } from 'nostr-tools';
 
@@ -25,19 +24,15 @@ describe('gift wrap rumor contract', () => {
     const senderPubkey = await sender.getPublicKey();
     const recipientPubkey = await recipient.getPublicKey();
 
-    const factory = new EventFactory({ signer: sender });
-
     // Step 1: build the rumor (kind 14) the same way SendWrappedMessage does
-    const rumor = await factory.create(
-      WrappedMessageBlueprint,
-      [senderPubkey, recipientPubkey],
-      'hello world'
-    );
+    const rumor = await WrappedMessageFactory.create([senderPubkey, recipientPubkey], 'hello world')
+      .as(sender)
+      .stamp();
 
     // Step 2: gift-wrap the rumor for the sender themselves (the wrap that
     // WrappedMessagesGroup picks up via "#p":[self] when the sender views
     // their own conversation).
-    const gift = await factory.create(GiftWrapBlueprint, senderPubkey, rumor);
+    const gift = await GiftWrapFactory.create(sender, senderPubkey, rumor);
 
     // Sanity: the gift wrap is a kind-1059 event tagged for `self`.
     expect(gift.kind).toBe(kinds.GiftWrap);

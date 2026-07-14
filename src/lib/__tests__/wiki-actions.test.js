@@ -14,24 +14,7 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   }
 }));
 
-vi.mock('applesauce-core/event-factory', () => {
-  class MockEventFactory {
-    /** @param {any} template */
-    async build(template) {
-      return {
-        ...template,
-        created_at: Math.floor(Date.now() / 1000)
-      };
-    }
-  }
-  return { EventFactory: MockEventFactory };
-});
-
-vi.mock('$lib/helpers/event-factory.js', async () => {
-  const { EventFactory } = await import('applesauce-core/event-factory');
-  return { createAppEventFactory: vi.fn(() => new EventFactory()) };
-});
-
+// The real $lib/helpers/event-factory.js wrapper runs (no mock needed on v6).
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
   encodeEventToNaddr: vi.fn().mockReturnValue('naddr1test')
 }));

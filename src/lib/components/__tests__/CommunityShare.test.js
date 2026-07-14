@@ -140,19 +140,14 @@ vi.mock('applesauce-common/models', () => ({
   SharesModel: 'SharesModel'
 }));
 
-vi.mock('applesauce-core/event-factory', () => ({
-  EventFactory: vi.fn()
-}));
-
 vi.mock('$lib/helpers/event-factory.js', () => ({
-  createAppEventFactory: vi.fn(() => ({}))
+  finalizeDraft: vi.fn(async (/** @type {any} */ draft) => await draft)
 }));
 
 vi.mock('$lib/services/publish-service.js', () => ({
-  publishEvent: vi.fn()
+  publishEvent: vi.fn(),
+  publishEventOptimistic: vi.fn()
 }));
-
-vi.mock('applesauce-common/blueprints', () => ({}));
 
 vi.mock('applesauce-core/helpers', () => ({
   getTagValue: (/** @type {any} */ event, /** @type {string} */ tag) =>

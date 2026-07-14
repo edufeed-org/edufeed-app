@@ -15,21 +15,7 @@ const publishEventOptimistic = vi.fn();
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEventOptimistic: (...args) => publishEventOptimistic(...args)
 }));
-vi.mock('$lib/helpers/event-factory.js', () => ({
-  createAppEventFactory: () => ({
-    share: async (event) => ({
-      kind: 16,
-      content: JSON.stringify(event),
-      tags: [
-        ['e', event.id],
-        ['a', `${event.kind}:${event.pubkey}:d1`],
-        ['k', String(event.kind)]
-      ]
-    }),
-    sign: async (t) => ({ ...t, id: 'f'.repeat(64), pubkey: 'a'.repeat(64), sig: '' })
-  })
-}));
-vi.mock('applesauce-common/blueprints', () => ({}));
+// The real applesauce v6 ShareFactory and the real finalizeDraft wrapper run.
 vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   getAppRelaysForCategory: vi.fn((cat) =>
     cat === 'communikey'
@@ -55,6 +41,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
 
 import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
 
+const fakeSigner = {
+  signEvent: async (t) => ({ ...t, id: 'f'.repeat(64), pubkey: 'a'.repeat(64), sig: '' })
+};
+
 const COMMUNITY = 'b'.repeat(64);
 const EVENT = {
   id: '1'.repeat(64),
@@ -74,7 +64,7 @@ describe('createCommunityReposts relay routing', () => {
   it('publishes to communikey + shared-kind app relays and the community relays from its 10222', async () => {
     getReplaceable.mockReturnValue({ kind: 10222, pubkey: COMMUNITY, tags: [] });
 
-    await createCommunityReposts(EVENT, [COMMUNITY], {});
+    await createCommunityReposts(EVENT, [COMMUNITY], fakeSigner);
 
     const opts = publishEventOptimistic.mock.calls[0][2];
     expect(opts.additionalRelays).toEqual(
@@ -91,7 +81,7 @@ describe('createCommunityReposts relay routing', () => {
   it('still includes the app relays when the community 10222 is not in the store', async () => {
     getReplaceable.mockReturnValue(null);
 
-    await createCommunityReposts(EVENT, [COMMUNITY], {});
+    await createCommunityReposts(EVENT, [COMMUNITY], fakeSigner);
 
     const opts = publishEventOptimistic.mock.calls[0][2];
     expect(opts.additionalRelays).toEqual(

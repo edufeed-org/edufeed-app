@@ -22,12 +22,6 @@ const mockFactory = {
   sign: vi.fn().mockResolvedValue(mockSignedEvent)
 };
 
-vi.mock('applesauce-core/event-factory', () => ({
-  EventFactory: vi.fn(function () {
-    return mockFactory;
-  })
-}));
-
 vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: vi.fn(() => mockFactory)
 }));

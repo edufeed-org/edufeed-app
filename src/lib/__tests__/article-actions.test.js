@@ -13,26 +13,7 @@ let lastSignedEvent = null;
 /** @type {any} */
 let _lastPublishCall = null;
 
-// Mock dependencies
-vi.mock('applesauce-core/event-factory', () => {
-  class MockEventFactory {
-    /** @param {any} template */
-    async build(template) {
-      return {
-        ...template,
-        created_at: 1700000000,
-        pubkey: ''
-      };
-    }
-  }
-  return { EventFactory: MockEventFactory };
-});
-
-vi.mock('$lib/helpers/event-factory.js', async () => {
-  const { EventFactory } = await import('applesauce-core/event-factory');
-  return { createAppEventFactory: vi.fn(() => new EventFactory()) };
-});
-
+// Mock dependencies (the real $lib/helpers/event-factory.js wrapper runs)
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: {
     active: null

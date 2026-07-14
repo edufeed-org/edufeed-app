@@ -5,13 +5,21 @@
  * create/delete helpers used for any list kind.
  *
  * We construct a fake action context matching applesauce's
- * `{ factory, user, publish, sign }` contract so the tests never touch
- * the network or the real EventStore.
+ * `{ user, publish, sign }` contract so the tests never touch the network
+ * or the real EventStore. The actions build events via the app's
+ * `createAppEventFactory()` wrapper (v6), so we inject the fake factory
+ * through a module mock and still expose it as `ctx.factory` for the
+ * call-shape assertions.
  *
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as kinds from 'nostr-tools/kinds';
+
+const factoryRef = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
+vi.mock('$lib/helpers/event-factory.js', () => ({
+  createAppEventFactory: () => factoryRef.current
+}));
 
 import { ModifyListTags, CreateList, DeleteList } from '../actions/list-actions.js';
 
@@ -87,6 +95,9 @@ function createContext({ existing, outboxes = ['wss://out.example'], pubkey = 'u
   const events = {
     getReplaceable: vi.fn(() => existing)
   };
+
+  // The actions call createAppEventFactory() themselves — route it here.
+  factoryRef.current = factory;
 
   return /** @type {any} */ ({
     self: pubkey,

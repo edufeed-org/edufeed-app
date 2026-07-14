@@ -53,7 +53,11 @@ vi.mock('$lib/helpers/eventDeletion.js', () => ({
 }));
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
-  createAppEventFactory: () => ({ create: factoryCreate })
+  finalizeDraft: vi.fn(async (/** @type {any} */ draft) => await draft)
+}));
+
+vi.mock('applesauce-common/factories', () => ({
+  PollResponseFactory: { create: factoryCreate }
 }));
 
 vi.mock('$lib/services/publish-service.js', () => ({
@@ -255,7 +259,7 @@ describe('PollCard — render skeleton + states', () => {
     expect(inner[0]?.getAttribute('role')).toBe('img');
   });
 
-  it('casts a vote: signs PollResponseBlueprint output and publishes', async () => {
+  it('casts a vote: signs PollResponseFactory output and publishes', async () => {
     managerState.active = {
       pubkey: 'me',
       signEvent: vi.fn().mockResolvedValue({

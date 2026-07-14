@@ -4,10 +4,10 @@
  *
  *  1. Preview/Write toggle (NAST-rendered preview pane).
  *  2. URL-rooted (page-note) parent handling: when `rootUrl` is provided and
- *     there is no `parentItem`, the factory is invoked with a
- *     CommentExternalPointer so applesauce-common's setParent operation emits
- *     NIP-22-compliant ["I", url] + ["K", "web"] root tags (and matching
- *     lowercase "i"/"k" parent tags for top-level posts).
+ *     there is no `parentItem`, CommentFactory.create is invoked with a
+ *     CommentExternalPointer so applesauce-common emits NIP-22-compliant
+ *     ["I", url] + ["K", "web"] root tags (and matching lowercase "i"/"k"
+ *     parent tags for top-level posts).
  *
  * @vitest-environment jsdom
  */
@@ -16,24 +16,23 @@ import { render, fireEvent } from '@testing-library/svelte';
 
 // --- Module-level mocks (shared across both describe blocks) ---
 
-const createMock = vi.fn(async () => ({ tags: [] }));
-const signMock = vi.fn(async (draft) => ({
-  ...draft,
-  id: 'signed-id',
-  pubkey: 'me',
-  created_at: 1700000000,
-  sig: 'sig'
-}));
+const createMock = vi.hoisted(() => vi.fn(async () => ({ tags: [] })));
+const signMock = vi.hoisted(() =>
+  vi.fn(async (/** @type {any} */ draft) => ({
+    ...draft,
+    id: 'signed-id',
+    pubkey: 'me',
+    created_at: 1700000000,
+    sig: 'sig'
+  }))
+);
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
-  createAppEventFactory: () => ({
-    create: createMock,
-    sign: signMock
-  })
+  finalizeDraft: vi.fn(async (draft) => await draft)
 }));
 
-vi.mock('applesauce-common/blueprints', () => ({
-  CommentBlueprint: { __id: 'CommentBlueprint' }
+vi.mock('applesauce-common/factories', () => ({
+  CommentFactory: { create: createMock }
 }));
 
 vi.mock('$lib/services/publish-service.js', () => ({
@@ -80,7 +79,7 @@ const stubUser = {
   pubkey: 'u1',
   signer: { signEvent: vi.fn() }
 };
-const activeUser = { signer: {}, pubkey: 'me' };
+const activeUser = { signer: { signEvent: signMock }, pubkey: 'me' };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -163,8 +162,7 @@ describe('CommentInput URL-rooted (page note) posting', () => {
     await fireEvent.submit(/** @type {HTMLFormElement} */ (textarea.closest('form')));
 
     expect(createMock).toHaveBeenCalledOnce();
-    const [blueprint, parent, content] = /** @type {any[]} */ (createMock.mock.calls[0]);
-    expect(blueprint).toMatchObject({ __id: 'CommentBlueprint' });
+    const [parent, content] = /** @type {any[]} */ (createMock.mock.calls[0]);
     expect(parent).toEqual({ type: 'external', identifier: url, kind: 'web' });
     expect(content).toBe('hello world');
   });
@@ -192,7 +190,7 @@ describe('CommentInput URL-rooted (page note) posting', () => {
     await fireEvent.submit(/** @type {HTMLFormElement} */ (textarea.closest('form')));
 
     expect(createMock).toHaveBeenCalledOnce();
-    const [, parent] = /** @type {any[]} */ (createMock.mock.calls[0]);
+    const [parent] = /** @type {any[]} */ (createMock.mock.calls[0]);
     expect(parent).toBe(parentItem);
   });
 
@@ -215,7 +213,7 @@ describe('CommentInput URL-rooted (page note) posting', () => {
     await fireEvent.submit(/** @type {HTMLFormElement} */ (textarea.closest('form')));
 
     expect(createMock).toHaveBeenCalledOnce();
-    const [, parent] = /** @type {any[]} */ (createMock.mock.calls[0]);
+    const [parent] = /** @type {any[]} */ (createMock.mock.calls[0]);
     expect(parent).toBe(rootEvent);
   });
 });
