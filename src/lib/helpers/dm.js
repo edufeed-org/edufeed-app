@@ -258,3 +258,35 @@ export function mergeDmConversations(wrapped, legacy) {
     (a, b) => (b.lastMessage?.created_at || 0) - (a.lastMessage?.created_at || 0)
   );
 }
+
+/**
+ * Filter encrypted events down to the ones that genuinely need a signer
+ * decrypt (issue: decrypt-prompt storm on app start).
+ *
+ * `persistEncryptedContent` restores cached plaintext asynchronously after an
+ * event is inserted, but the locked-events model emits synchronously on the
+ * same insert — so an eager unlock pass would prompt the signer for events
+ * whose plaintext is already sitting in the cache. Skip those: the restore
+ * pipeline unlocks them without any signer interaction moments later.
+ *
+ * @param {import('nostr-tools').NostrEvent[]} events
+ * @param {{ getItem: (id: string) => Promise<string | null> }} cache
+ * @param {(event: any) => boolean} isUnlocked - predicate for already-unlocked events
+ * @returns {Promise<import('nostr-tools').NostrEvent[]>} events that require the signer
+ */
+export async function filterEventsNeedingSignerUnlock(events, cache, isUnlocked) {
+  /** @type {import('nostr-tools').NostrEvent[]} */
+  const needSigner = [];
+  for (const event of events) {
+    if (isUnlocked(event)) continue;
+    let cached = null;
+    try {
+      cached = await cache.getItem(event.id);
+    } catch {
+      // unreadable cache — fall through to a signer unlock
+    }
+    if (cached) continue;
+    needSigner.push(event);
+  }
+  return needSigner;
+}
