@@ -161,6 +161,10 @@ vi.mock('../comments/CommentList.svelte', async () => ({
   default: (await import('./fixtures/CommentListStub.svelte')).default
 }));
 vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: StubComponent }));
+// LinkPreviewList stub renders a marker so the wiring can be asserted
+vi.mock('../shared/LinkPreviewList.svelte', async () => ({
+  default: (await import('./fixtures/LinkPreviewListStub.svelte')).default
+}));
 
 describe('NoteCard', () => {
   beforeEach(() => {
@@ -318,6 +322,16 @@ describe('NoteCard', () => {
 
     await fireEvent.click(/** @type {HTMLElement} */ (card));
     expect(mockGoto).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders link previews for the note content', () => {
+    const { container } = render(NoteCard, {
+      props: { note: mockNote }
+    });
+
+    const previewList = container.querySelector('[data-testid="link-preview-list-stub"]');
+    expect(previewList).toBeTruthy();
+    expect(previewList?.getAttribute('data-event-id')).toBe(mockNote.id);
   });
 
   it('shows count for exactly one comment', async () => {

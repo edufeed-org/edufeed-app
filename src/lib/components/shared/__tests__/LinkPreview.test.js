@@ -64,7 +64,7 @@ describe('LinkPreview', () => {
     expect(container.querySelector('[data-testid="link-preview-skeleton"]')).not.toBeNull();
   });
 
-  it('renders Card variant when metadata.image is present', async () => {
+  it('renders a horizontal card with a 150px cover thumbnail when metadata.image is present', async () => {
     mockFetchOnce({
       success: true,
       metadata: {
@@ -78,26 +78,67 @@ describe('LinkPreview', () => {
       }
     });
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
-    await waitFor(() => {
-      const card = container.querySelector('[data-testid="link-preview-card"]');
-      expect(card).not.toBeNull();
+    const card = await waitFor(() => {
+      const el = container.querySelector('[data-testid="link-preview-card"]');
+      expect(el).not.toBeNull();
+      return el;
     });
-    expect(container.querySelector('img[alt=""]')).not.toBeNull();
+
+    // horizontal card: thumbnail left, meta right (design handoff rule 4)
+    expect(card?.className).toContain('flex');
+    expect(card?.className).not.toContain('flex-col');
+    expect(card?.className).toContain('rounded-xl');
+    expect(card?.className).toContain('overflow-hidden');
+    expect(card?.className).toContain('border');
+
+    const thumb = card?.querySelector('[data-testid="link-preview-thumb"]');
+    expect(thumb).not.toBeNull();
+    expect(thumb?.className).toContain('w-[150px]');
+    expect(thumb?.querySelector('img')?.className).toContain('object-cover');
+
     expect(container.textContent).toContain('Hello World');
     expect(container.textContent).toContain('A short description');
-    expect(container.textContent).toContain('X Test');
   });
 
-  it('renders Compact variant when image is missing but title is present', async () => {
+  it('stacks domain (mono) → title → clamped description in the meta column', async () => {
+    mockFetchOnce({
+      success: true,
+      metadata: {
+        source: 'opengraph',
+        og: {
+          title: 'Hello World',
+          description: 'A short description',
+          image: 'https://x.test/cover.png'
+        }
+      }
+    });
+    const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="link-preview-card"]')).not.toBeNull();
+    });
+
+    const domain = container.querySelector('[data-testid="link-preview-domain"]');
+    expect(domain?.textContent).toBe('x.test');
+    expect(domain?.className).toContain('font-mono');
+
+    const title = container.querySelector('[data-testid="link-preview-title"]');
+    expect(title?.textContent).toBe('Hello World');
+    expect(title?.className).toContain('font-semibold');
+
+    const desc = container.querySelector('[data-testid="link-preview-description"]');
+    expect(desc?.className).toContain('line-clamp-2');
+  });
+
+  it('renders the card without a thumbnail when image is missing but title is present', async () => {
     mockFetchOnce({
       success: true,
       metadata: { source: 'opengraph', og: { title: 'Hello', siteName: 'X Test' } }
     });
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="link-preview-compact"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="link-preview-card"]')).not.toBeNull();
     });
-    expect(container.querySelector('[data-testid="link-preview-card"]')).toBeNull();
+    expect(container.querySelector('[data-testid="link-preview-thumb"]')).toBeNull();
     expect(container.textContent).toContain('Hello');
   });
 
@@ -113,18 +154,17 @@ describe('LinkPreview', () => {
     });
   });
 
-  it('renders Compact with hostname fallback when only siteName is present', async () => {
+  it('shows the domain when only siteName is present (no duplicate hostname)', async () => {
     mockFetchOnce({
       success: true,
       metadata: { source: 'opengraph', og: { siteName: 'X Test' } }
     });
     const { container } = render(LinkPreview, { props: { url: 'https://example.test/page' } });
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="link-preview-compact"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="link-preview-card"]')).not.toBeNull();
     });
     expect(container.textContent).toContain('example.test');
-    expect(container.textContent).toContain('X Test');
-    // Hostname must appear exactly once — no duplicate from siteName fallback.
+    // Hostname must appear exactly once.
     const matches = container.textContent?.match(/example\.test/g) ?? [];
     expect(matches.length).toBe(1);
   });
@@ -179,7 +219,7 @@ describe('LinkPreview', () => {
     expect(a.href).toBe('https://x.test/page');
   });
 
-  it('falls back to Compact variant when the OG image fails to load', async () => {
+  it('drops the thumbnail but keeps the card when the OG image fails to load', async () => {
     mockFetchOnce({
       success: true,
       metadata: {
@@ -194,15 +234,15 @@ describe('LinkPreview', () => {
     });
     const { container } = render(LinkPreview, { props: { url: 'https://x.test/page' } });
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="link-preview-card"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="link-preview-thumb"]')).not.toBeNull();
     });
     const img = /** @type {HTMLImageElement} */ (container.querySelector('img'));
     expect(img).not.toBeNull();
     // Simulate the browser failing to load the image.
     img.dispatchEvent(new Event('error'));
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="link-preview-card"]')).toBeNull();
-      expect(container.querySelector('[data-testid="link-preview-compact"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="link-preview-thumb"]')).toBeNull();
+      expect(container.querySelector('[data-testid="link-preview-card"]')).not.toBeNull();
     });
     expect(container.textContent).toContain('Hello World');
   });
