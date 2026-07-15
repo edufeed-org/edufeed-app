@@ -2,7 +2,7 @@ import { env } from '$env/dynamic/private';
 import { json } from '@sveltejs/kit';
 
 export function GET() {
-  const appName = env.APP_NAME || 'ComCal';
+  const appName = env.APP_NAME || 'Edufeed';
 
   return json({
     name: appName,

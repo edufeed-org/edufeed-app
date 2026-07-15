@@ -266,7 +266,7 @@ const DEFAULT_SITE_DESCRIPTION =
  */
 export function buildDefaultMeta() {
   return {
-    title: env.APP_NAME || 'ComCal',
+    title: env.APP_NAME || 'Edufeed',
     description: env.APP_OG_DESCRIPTION || DEFAULT_SITE_DESCRIPTION,
     type: 'website'
   };
@@ -431,7 +431,7 @@ function defaultOgImageUrl(requestUrl) {
  * @returns {string}
  */
 export function renderOgTags(meta, url) {
-  const appName = env.APP_NAME || 'ComCal';
+  const appName = env.APP_NAME || 'Edufeed';
   const title = escapeHtml(meta.title);
   const description = escapeHtml(
     meta.description || env.APP_OG_DESCRIPTION || DEFAULT_SITE_DESCRIPTION

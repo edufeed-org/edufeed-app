@@ -12,10 +12,10 @@ import { writable } from 'svelte/store';
  * These are minimal defaults used before the API config loads
  */
 const defaultConfig = {
-  name: 'ComCal',
+  name: 'Edufeed',
   logo: 'https://blossom.edufeed.org/f22e1410f09a9130757704b6dcd4c34774d2926b9cfd6cf2e4c4675c64d4333b.webp',
-  gitRepo: 'https://github.com/edufeed-org/comcal',
-  clientName: 'ComCal',
+  gitRepo: 'https://github.com/edufeed-org/edufeed-app',
+  clientName: 'Edufeed',
   // NIP-65 relay list discovery relays
   relayListLookupRelays: [],
   // Profile indexer relays for bulk profile lookups

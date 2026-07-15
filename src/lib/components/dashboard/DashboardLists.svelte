@@ -81,7 +81,7 @@
   let relaySets = $derived(
     getRelaySets().filter((s) => {
       const dTag = getSetDTag(s);
-      const appPrefix = (runtimeConfig.appName || 'ComCal') + '/';
+      const appPrefix = (runtimeConfig.appName || 'Edufeed') + '/';
       return !dTag.startsWith(appPrefix);
     })
   );

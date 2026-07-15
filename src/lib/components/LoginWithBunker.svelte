@@ -138,7 +138,7 @@
           status = 'awaiting_approval';
         },
         appMetadata: {
-          name: runtimeConfig.appName || 'ComCal',
+          name: runtimeConfig.appName || 'Edufeed',
           url: window.location.origin
         }
       });

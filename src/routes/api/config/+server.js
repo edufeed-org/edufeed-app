@@ -151,12 +151,12 @@ function resolveWotConfig(env, suffix) {
 export function GET() {
   const config = {
     // App branding
-    appName: env.APP_NAME || 'ComCal',
+    appName: env.APP_NAME || 'Edufeed',
     appLogo:
       env.APP_LOGO ||
       'https://blossom.edufeed.org/f22e1410f09a9130757704b6dcd4c34774d2926b9cfd6cf2e4c4675c64d4333b.webp',
-    gitRepo: env.APP_GIT_REPO || 'https://github.com/edufeed-org/comcal',
-    clientName: env.CLIENT_NAME || env.APP_NAME || 'ComCal',
+    gitRepo: env.APP_GIT_REPO || 'https://github.com/edufeed-org/edufeed-app',
+    clientName: env.CLIENT_NAME || env.APP_NAME || 'Edufeed',
 
     // Relays - Fallback for users without kind 10002
     fallbackRelays: parseArray(env.FALLBACK_RELAYS),

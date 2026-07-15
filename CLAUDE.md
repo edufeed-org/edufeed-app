@@ -1,13 +1,16 @@
-# ComCal - Claude Code Context
+# Edufeed-App - Claude Code Context
 
 ## Project Overview
 
-ComCal (Communikey Calendar) is a decentralized social education platform built on the Nostr protocol using SvelteKit. It enables users to:
+Edufeed-App (formerly ComCal / Communikey Calendar; the display name is deployment-configurable via `APP_NAME`, default `Edufeed`) is a decentralized social education platform built on the Nostr protocol using SvelteKit. It enables users to:
 
 - Create and interact in communities
 - Create and manage events/calendars (NIP-52)
 - Search through educational content (kind 30142 - AMB spec)
 - Organize content in lists and share with communities
+- Read and write long-form articles, wiki pages, publications, notes, and polls
+- Exchange NIP-17 private DMs and follow notifications in the inbox
+- Apply for a NIP-05 handle (membership application, admin-approved)
 
 ## Tech Stack
 
@@ -248,17 +251,21 @@ async function handleClick() {
 ```
 src/
 ├── lib/
-│   ├── components/     # Svelte components
-│   │   ├── calendar/   # Calendar-related components
-│   │   ├── community/  # Community views and management
-│   │   ├── educational/# AMB content components
-│   │   ├── icons/      # Icon components (by category)
-│   │   ├── reactions/  # NIP-25 reactions
-│   │   └── shared/     # Reusable components
+│   ├── components/     # Svelte components, one folder per domain:
+│   │   │               # calendar/, community/, educational/, article/,
+│   │   │               # publication/, wiki/, polls/, notes/, waves/, meet/,
+│   │   │               # dm/, inbox/, forms/, membership/, kanban/, thread/,
+│   │   │               # feed/, dashboard/, discover/, bookmarks/, badges/,
+│   │   │               # comments/, reactions/, assistant/ (Termi), landing/,
+│   │   │               # lists/, profile/, settings/, icons/, shared/
+│   │   └── __tests__/  # Component tests
+│   ├── config/         # Static registries (resource-form-variants, create-actions, oer-sources)
 │   ├── helpers/        # Utility functions
-│   │   └── educational/# SKOS loader, search builders
+│   │   └── educational/# SKOS loader, search builders, draft store
 │   ├── loaders/        # Applesauce loaders
 │   ├── models/         # Custom applesauce models
+│   ├── server/         # Server-only code (og.js link previews)
+│   ├── services/       # Publish, relay, DM, inbox, curated-authors services
 │   ├── stores/         # Svelte reactive stores
 │   │   ├── nostr-infrastructure.svelte.js  # EventStore, RelayPool
 │   │   ├── accounts.svelte.js              # User authentication
@@ -266,11 +273,20 @@ src/
 │   │   └── calendar-*.svelte.js            # Calendar domain
 │   └── types/          # JSDoc types
 ├── routes/
+│   ├── api/            # Server endpoints (config, enrich, oer, curricula, nip05)
 │   ├── calendar/       # Calendar routes
+│   ├── dashboard/      # Feed dashboard (relay feed picker)
 │   ├── discover/       # Unified discovery page
+│   ├── inbox/          # Notifications + DMs
+│   ├── communities/    # Community directory
+│   ├── bookmarks/      # Personal + social bookmarks
+│   ├── wiki/           # Wiki articles
+│   ├── forms/          # Form templates / responses
+│   ├── admin/          # Admin panels (membership approvals)
+│   ├── create/         # Content creation flows
 │   ├── c/[pubkey]/     # Community pages
 │   ├── p/[pubkey]/     # Profile pages
-│   └── [naddr=naddr]/  # Dynamic Nostr address routes
+│   └── [naddr=naddr]/  # Dynamic Nostr address routes (+ [nevent], nostr shortcuts)
 └── params/             # SvelteKit param matchers
 ```
 
@@ -278,38 +294,50 @@ src/
 
 ### Core Kinds
 
-| Kind | NIP    | Description                                     |
-| ---- | ------ | ----------------------------------------------- |
-| 0    | NIP-01 | User profile (metadata)                         |
-| 1    | NIP-01 | Text note (defined, not yet supported)          |
-| 3    | NIP-02 | Contact list                                    |
-| 5    | NIP-09 | Deletion event                                  |
-| 7    | NIP-25 | Reaction                                        |
-| 8    | NIP-58 | Badge award                                     |
-| 9    | —      | Chat message (with `#h` tag for community chat) |
-| 11   | —      | Forum discussion (defined, not yet supported)   |
-| 1111 | NIP-22 | Comment (uses `#A` tag for root scope)          |
+| Kind | NIP    | Description                                                  |
+| ---- | ------ | ------------------------------------------------------------ |
+| 0    | NIP-01 | User profile (metadata)                                      |
+| 1    | NIP-01 | Text note / post (`NoteCard`, `NoteCreateModal`)             |
+| 3    | NIP-02 | Contact list                                                 |
+| 5    | NIP-09 | Deletion event                                               |
+| 7    | NIP-25 | Reaction (also "waves": reactions targeting kind 0 profiles) |
+| 8    | NIP-58 | Badge award                                                  |
+| 9    | —      | Chat message (with `#h` tag for community chat)              |
+| 11   | —      | Forum discussion (`ForumView`)                               |
+| 1111 | NIP-22 | Comment (uses `#A` tag for root scope)                       |
+| 1068 | NIP-88 | Poll (`PollsView`)                                           |
+| 1018 | NIP-88 | Poll response                                                |
+| 1059 | NIP-17 | Gift wrap (private DMs; see `dm-service.svelte.js`)          |
+| 1069 | —      | Form response (membership application, encrypted)            |
+| 9802 | NIP-84 | Highlight (social bookmarks)                                 |
 
 ### Replaceable / Parameterized Kinds
 
 | Kind  | NIP        | Description                                                                                           |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------- |
 | 10002 | NIP-65     | Relay list (read/write relays for outbox model)                                                       |
+| 10030 | NIP-51     | User emoji list (+ kind 30030 emoji packs)                                                            |
+| 10050 | NIP-17     | DM relay list (published as a default at signup, `DM_RELAYS` env)                                     |
 | 10063 | —          | Blossom server list (preferred file upload servers)                                                   |
 | 10222 | Communikey | Community definition                                                                                  |
 | 30002 | NIP-51     | Relay set (user app relay overrides per category)                                                     |
-| 30009 | NIP-58     | Badge definition (for access control)                                                                 |
-| 30023 | NIP-23     | Long-form article (defined, not yet supported)                                                        |
-| 30040 | —          | Publication (defined, not yet supported)                                                              |
+| 30009 | NIP-58     | Badge definition — **legacy access control**, read/delete only, no longer written                     |
+| 30023 | NIP-23     | Long-form article (`ArticlesView`, article editor)                                                    |
+| 30040 | —          | Publication — create + view work; discover integration and relay support still pending                |
 | 30142 | AMB        | Educational resource (OER with SKOS metadata)                                                         |
+| 30168 | —          | Form template (metadata/membership forms; responses are kind 1069)                                    |
 | 30222 | Communikey | Targeted publication — **read-only legacy**, no longer created. Old communities may still have these. |
 | 30301 | —          | Kanban board                                                                                          |
 | 30302 | —          | Kanban card (config only)                                                                             |
-| 30000 | NIP-51     | Follow set (d="communities" for community membership)                                                 |
+| 30312 | NIP-53     | Meet room (interactive room; + 30313 room meta, 10312 room presence)                                  |
+| 30818 | NIP-54     | Wiki article (`WikisView`, `/wiki/<topic>` route)                                                     |
+| 30000 | NIP-51     | Follow set (d="communities" for community membership; also community section profile lists)           |
 | 31922 | NIP-52     | Date-based calendar event                                                                             |
 | 31923 | NIP-52     | Time-based calendar event                                                                             |
 | 31924 | NIP-52     | Calendar collection                                                                                   |
 | 31925 | NIP-52     | Calendar RSVP                                                                                         |
+| 39701 | NIP-B0     | Web bookmark (social bookmarks)                                                                       |
+| 39737 | NIP-VOCAB  | SKOS ConceptScheme (vocabularies for resource forms, published via `pnpm run publish:vocabs`)         |
 
 ### Regular Kinds
 
@@ -353,8 +381,8 @@ This app implements the Communikey community specification. Use `/communikey` sk
 - **Communities = npubs** - Any keypair can become a community (kind 10222)
 - **Membership via kind 30000 follow set** - d="communities", p-tags = community pubkeys
 - **H-tag community targeting** - Events target communities via `["h", communityPubkey]` tags directly on the content event. Multiple h-tags for multi-community targeting. Kind 9 (chat) and 11 (forum) are always single-community exclusive.
-- **Profile-list access control (new spec)** - Content sections in kind 10222 can reference `["a", "30000:pubkey:d-tag", relay]` profile lists to control who can publish. Not yet enforced client-side (deferred).
-- **Enforced relays (new spec)** - `["r", "url", "enforced"]` relays guarantee only profile-list members' content is stored. Not yet used client-side (deferred).
+- **Profile-list access control (new spec)** - Content sections in kind 10222 can reference `["a", "30000:pubkey:d-tag", relay]` profile lists to control who can publish. Enforced client-side via `useProfileListAccess` (`src/lib/stores/profile-list-access.svelte.js`) — replaced the old badge-based access control.
+- **Enforced relays (new spec)** - `["r", "url", "enforced"]` relays guarantee only profile-list members' content is stored. Write side is implemented (`communityTagBuilder.js` writes the tag; `publish-service.js` always includes enforced relays when publishing to a community). Read-side content filtering is still deferred.
 - **Kind 30222 (legacy)** - Old-spec targeted publications are still read for backward compat but no longer created. New content uses h-tags only.
 
 **Key implementation files:**
@@ -367,9 +395,8 @@ This app implements the Communikey community specification. Use `/communikey` sk
 
 **Deferred work:**
 
-- Enforced relay content filtering
-- Community create/edit modals: still write old-spec badge tags (30009)
-- Kind 30222 read removal once enough time passed
+- Enforced relay content filtering (read side — trusting enforced relays instead of client-side author filtering)
+- Kind 30222 read removal once enough time passed (kind 30009 badge definitions are likewise legacy: read/delete only)
 
 ## Configuration
 
@@ -377,13 +404,27 @@ Runtime config loads from `/api/config` (sourced from `.env`) into `runtimeConfi
 
 Top-level shape:
 
-- `appRelays.{calendar,communikey,educational,longform}` — per-content-type relays
+- `appName` / `clientName` — branding (`APP_NAME`, `CLIENT_NAME` env; also drives kind 30002 d-tags — see User Relay Overrides)
+- `appRelays.{calendar,communikey,educational,longform,kanban}` — per-content-type relays
 - `fallbackRelays` — general-purpose, used when gated mode is OFF
+- `feedRelays` / feed relay sources — dashboard feed picker (`FEED_RELAYS`, `FEED_RELAY_SOURCES` env: `config,custom,nip65,community`)
 - `dmRelays` — NIP-17 DM relays (kind 10050) published as a default for new users at signup (`DM_RELAYS` env); falls back to `fallbackRelays` when unset. Use `getDefaultDmRelays()` from `relay-helper.js`.
 - `gatedMode.{default,force}` — gated mode defaults / lockout
+- `curatedMode` — curated authors (`CURATED_PUBKEYS_SETS`, `CURATED_PUBKEYS`, per-category overrides)
 - `wotMode.{enabled,includeUserFollows,calendar,communikey,educational,longform,kanban}` — WoT config
 - `blossom.serverUrl` — file upload server
-- `ui.{defaultLightTheme,defaultDarkTheme}` — theme defaults
+- `ui.{defaultLightTheme,defaultDarkTheme}` — theme defaults (dark is inert)
+- `educational` — search debounce, vocabulary choices, `schemeNaddrs` (kind 39737 ConceptScheme naddrs from `SCHEME_NADDR_*` env vars)
+- Whitelabel: `APP_LOGO`, hero images (`LANDING_HERO_IMAGE`, `DISCOVER_HERO_IMAGE`), favicons, imprint vars
+
+### Server API Endpoints
+
+Besides `/api/config`, the app has server-side proxy endpoints (all optional, 503/hidden when their env is unset):
+
+- `/api/enrich` — URL → form-prefill metadata via the deployed AMB MCP server (`AMB_MCP_URL`, Keycloak client-credentials auth via `AMB_MCP_TOKEN_URL`/`AMB_MCP_CLIENT_ID`/`AMB_MCP_CLIENT_SECRET`)
+- `/api/oer` — OER media-library image search proxy (`OER_PROXY_URL`)
+- `/api/curricula` — Lehrplan-ontology SPARQL cascade for the curriculum picker (`SPARQL_ENDPOINT_URL`)
+- `/api/nip05` — membership/handle admin proxy to the standalone nip-05-service (`NIP05_SERVICE_URL`, `NIP05_SERVICE_API_KEY`, allowlist `MEMBERSHIP_ADMIN_PUBKEYS`; feature flag `MEMBERSHIP_ENABLED`)
 
 ### Gated Mode
 
@@ -394,7 +435,7 @@ Gated mode controls content sources for institutional/controlled deployments:
 
 Env vars: `GATED_MODE_DEFAULT`, `GATED_MODE_FORCE` (when true, users cannot toggle off). Toggle in `/settings`; page reloads on change.
 
-Use the relay-helper functions (`getCalendarRelays`, `getEducationalRelays`, `getCommunikeyRelays`, `getLongformRelays`) from `$lib/helpers/relay-helper.js` — they automatically respect gated mode + user overrides. Never read `runtimeConfig.appRelays.*` directly.
+Use the relay-helper functions (`getCalendarRelays`, `getEducationalRelays`, `getCommunikeyRelays`, `getLongformRelays`, `getKanbanRelays`) from `$lib/helpers/relay-helper.js` — they automatically respect gated mode + user overrides. Never read `runtimeConfig.appRelays.*` directly.
 
 ### WoT Content Filtering
 
@@ -418,12 +459,13 @@ Disabled by default. Unioned with curated in the same `getCuratedAuthors()` call
 | communikey  | `COMMUNIKEY_RELAYS`      | 10222, 30222               |
 | educational | `AMB_RELAYS`             | 30142                      |
 | longform    | `LONGFORM_CONTENT_RELAY` | 30023                      |
+| kanban      | `KANBAN_RELAYS`          | 30301, 30302, 8571         |
 
 `kindToAppRelayCategory(kind)` and `getAppRelaysForCategory(category)` live in `$lib/services/app-relay-service.svelte.js`.
 
 ### User Relay Overrides (Kind 30002)
 
-Users can override app-specific relays per category via NIP-51 relay sets (d-tag `{APP_NAME}/{category}`, e.g. `ComCal/educational`). Resolution: user override → server default. On login, `accounts.svelte.js` waits for `configReady`, fetches user's kind 30002 events, and populates the cache in `app-relay-service.svelte.js`.
+Users can override app-specific relays per category via NIP-51 relay sets (d-tag `{APP_NAME}/{category}`, e.g. `Edufeed/educational`). **Because the d-tag embeds `APP_NAME`, changing `APP_NAME` on an existing deployment orphans all users' relay-set overrides.** Resolution: user override → server default. On login, `accounts.svelte.js` waits for `configReady`, fetches user's kind 30002 events, and populates the cache in `app-relay-service.svelte.js`.
 
 ```javascript
 // ❌ Bypasses user overrides
@@ -513,6 +555,11 @@ The "Share Learning Resource" flow runs through `ResourceFormWizard.svelte` with
 **NIP-32 labeling:** Published events carry `["L", "metadata-form"]` + `["l", variantId, "metadata-form"]` so edit flows can reopen the correct form. `resolveVariantFromEvent.js` falls back to `'amb'` when missing.
 
 Single-variant deployments skip the picker modal (FAB navigates directly). Legacy `/create/resource` always redirects via `+page.svelte`, preserving `?community=` and `?edit=`. Registry lives in `src/lib/config/resource-form-variants.js`.
+
+## DMs & Inbox
+
+- **NIP-17 DMs:** `src/lib/services/dm-service.svelte.js` subscribes to kind 1059 gift wraps (`#p` = user) on the user's DM relays (kind 10050); sending goes through `gift-wrap-publish.js`. New users get a default kind 10050 pointing at `DM_RELAYS` at signup.
+- **Inbox/notifications:** `src/lib/services/inbox-service.svelte.js`. Last-seen is synced as NIP-78 app data (d-tag `comcal/inbox/last-seen` — legacy name, do not change; existing users' state depends on it), per-item read state in localStorage. Notifications are intentionally **ungated**: the inbox always queries fallback + user read relays even in gated mode — do not re-gate.
 
 ## Calendar Events (NIP-52)
 

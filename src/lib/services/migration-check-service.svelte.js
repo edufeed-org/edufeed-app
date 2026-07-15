@@ -27,7 +27,7 @@ let ran = false;
  * @returns {string}
  */
 export function getMigrationIdentifier() {
-  const appName = runtimeConfig.appName || 'ComCal';
+  const appName = runtimeConfig.appName || 'Edufeed';
   return `${appName}/community-migration-v1`;
 }
 

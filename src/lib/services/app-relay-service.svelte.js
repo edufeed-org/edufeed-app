@@ -2,7 +2,7 @@
  * App Relay Service - NIP-51 Relay Sets for app-specific relays
  *
  * Users can override app relays via kind 30002 events with app-specific d-tags.
- * D-tags are based on APP_NAME from config (e.g., "ComCal/calendar")
+ * D-tags are based on APP_NAME from config (e.g., "Edufeed/calendar")
  */
 import { writable } from 'svelte/store';
 import { SvelteMap } from 'svelte/reactivity';
@@ -36,12 +36,12 @@ export const CATEGORIES = {
 
 /**
  * Get d-tag for a category based on APP_NAME from config
- * Example: APP_NAME="ComCal" → "ComCal/calendar"
+ * Example: APP_NAME="Edufeed" → "Edufeed/calendar"
  * @param {string} category - 'calendar' | 'communikey' | 'educational'
  * @returns {string}
  */
 export function getRelaySetDTag(category) {
-  const appName = runtimeConfig.appName || 'ComCal';
+  const appName = runtimeConfig.appName || 'Edufeed';
   return `${appName}/${category}`;
 }
 

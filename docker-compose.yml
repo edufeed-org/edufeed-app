@@ -13,7 +13,7 @@ services:
       - ORIGIN=${ORIGIN}
 
       # App Branding
-      - APP_NAME=${APP_NAME:-ComCal}
+      - APP_NAME=${APP_NAME:-Edufeed}
       - APP_LOGO=${APP_LOGO}
       - APP_GIT_REPO=${APP_GIT_REPO}
 
