@@ -9,7 +9,7 @@
   import { resolve } from '$app/paths';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { parsePublicationEvent } from '$lib/helpers/publication/publicationTags.js';
   import { doiUrl } from '$lib/helpers/publication/doi.js';
@@ -73,6 +73,13 @@
 
   const getHighlightProfiles = useProfileMap(() => highlights.map((h) => h.pubkey));
 
+  // Creators with a Nostr identity (from `["p", pk, relay, "creator"]` tags)
+  // resolve their display name from their kind:0 profile when the event
+  // carries no author-tag name for them.
+  const getCreatorProfiles = useProfileMap(() =>
+    publication.creators.flatMap((c) => (c.pubkey ? [c.pubkey] : []))
+  );
+
   async function handleDelete() {
     if (!activeUser || !event) return;
     const result = await deleteEvent(event, activeUser);
@@ -113,12 +120,26 @@
         {m.publication_view_authors()}
       </h2>
       <ul class="space-y-1">
-        {#each publication.creators as creator (creator.name)}
+        <!-- Index key: names are tag-derived network input and may repeat or be empty -->
+        {#each publication.creators as creator, i (i)}
           <li class="flex flex-wrap items-center gap-2">
-            <span class="font-medium">
-              {#if creator.honorificPrefix}{creator.honorificPrefix}
-              {/if}{creator.name}
-            </span>
+            {#if creator.pubkey}
+              {@const displayName =
+                creator.name ||
+                getDisplayName(
+                  getCreatorProfiles().get(creator.pubkey),
+                  creator.pubkey.slice(0, 8) + '…'
+                )}
+              <a class="font-medium link-hover" href={resolve(profileLink(creator.pubkey))}>
+                {#if creator.honorificPrefix}{creator.honorificPrefix}
+                {/if}{displayName}
+              </a>
+            {:else}
+              <span class="font-medium">
+                {#if creator.honorificPrefix}{creator.honorificPrefix}
+                {/if}{creator.name}
+              </span>
+            {/if}
             {#if creator.affiliationName}
               <span class="text-sm text-base-content/60">({creator.affiliationName})</span>
             {/if}

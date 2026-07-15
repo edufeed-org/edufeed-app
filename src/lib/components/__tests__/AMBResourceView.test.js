@@ -374,13 +374,25 @@ describe('AMBResourceView', () => {
       expect(orcidLink).toBeTruthy();
     });
 
-    it('links the sole creator to their Nostr profile when a creator p-tag exists', () => {
+    it('renders a structured creator and a creator p-tag as two distinct entries', () => {
+      // NIP-AMB: a person is EITHER a creator:* run OR a p-tag, never both —
+      // so one of each on an event means two different people. (The old
+      // "1+1 = same person" merge stitched the structured name onto the
+      // p-tag identity's avatar and hid a creator.)
       const { container } = render(AMBResourceView, {
         props: { event: singleCreatorEvent, resource: mockResource }
       });
 
+      const entries = container.querySelectorAll('.ed-contrib');
+      expect(entries.length).toBe(2);
+
+      // The p-tag person links to their Nostr profile…
       const profileAnchor = container.querySelector(`.ed-contrib a[href="/p/${CREATOR_PK}"]`);
       expect(profileAnchor).toBeTruthy();
+
+      // …while the structured (non-Nostr) creator's name is NOT profile-linked.
+      const structuredEntry = [...entries].find((e) => e.textContent?.includes('Dr. Corinna Link'));
+      expect(structuredEntry?.querySelector(`a[href="/p/${CREATOR_PK}"]`)).toBeFalsy();
     });
 
     it('renders nothing when the event has no creator data', () => {

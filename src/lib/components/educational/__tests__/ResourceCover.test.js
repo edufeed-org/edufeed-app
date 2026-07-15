@@ -30,6 +30,13 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => profileState.current
 }));
 
+// Stub the batch profile lookup for `["p", pk, relay, "creator"]` creators.
+// Tests seed `profileMapState.current` with pubkey → kind:0 profile entries.
+const profileMapState = { current: /** @type {Map<string, any>} */ (new Map()) };
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => profileMapState.current
+}));
+
 import ResourceCover from '../ResourceCover.svelte';
 
 /**
@@ -168,6 +175,92 @@ describe('ResourceCover — typo branch', () => {
 describe('ResourceCover — credit derivation', () => {
   beforeEach(() => {
     profileState.current = null;
+    profileMapState.current = new Map();
+  });
+
+  it('includes a creator p-tag profile name in the attribution', () => {
+    // NIP-AMB: creators with a Nostr identity have NO creator:name run — the
+    // p-tag is their sole representation, name resolved from their kind:0.
+    const colibri = 'f'.repeat(64);
+    profileMapState.current = new Map([[colibri, { name: 'Colibri' }]]);
+    const tags = [
+      ['d', 'r-ptag'],
+      ['creator:name', 'Corinna Link'],
+      ['p', colibri, 'wss://hint', 'creator'],
+      ['learningResourceType:prefLabel:en', 'Worksheet']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: null, tags, identifier: 'r-ptag' }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-author').textContent).toContain('Corinna Link & Colibri');
+  });
+
+  it('dedupes a legacy dual-write creator (creator:name run + p-tag for the same person)', () => {
+    // Events written before the NIP-AMB single-representation fix carry both;
+    // the profile name would otherwise be counted twice ("… et al.").
+    const colibri = 'f'.repeat(64);
+    profileMapState.current = new Map([[colibri, { name: 'Colibri' }]]);
+    const tags = [
+      ['d', 'r-legacy'],
+      ['creator:name', 'Corinna Link'],
+      ['creator:name', 'Colibri'],
+      ['p', colibri, 'wss://hint', 'creator'],
+      ['learningResourceType:prefLabel:en', 'Worksheet']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: null, tags, identifier: 'r-legacy' }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-author').textContent).toContain('Corinna Link & Colibri');
+  });
+
+  it('attributes to the p-tag creator profile even when it is not the publisher', () => {
+    const creator = 'a'.repeat(64);
+    profileMapState.current = new Map([[creator, { name: 'Actual Author' }]]);
+    profileState.current = { name: 'Uploader' };
+    const tags = [
+      ['d', 'r-ptag-only'],
+      ['p', creator, 'wss://hint', 'creator'],
+      ['learningResourceType:prefLabel:en', 'Worksheet']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: {
+          ...buildResource({ image: null, tags, identifier: 'r-ptag-only' }),
+          pubkey: '0'.repeat(64)
+        },
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-author').textContent).toContain('Actual Author');
+  });
+
+  it('falls back to the publisher while p-tag creator profiles are still loading', () => {
+    profileState.current = { name: 'Uploader' };
+    const tags = [
+      ['d', 'r-ptag-loading'],
+      ['p', 'a'.repeat(64), 'wss://hint', 'creator'],
+      ['learningResourceType:prefLabel:en', 'Worksheet']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: {
+          ...buildResource({ image: null, tags, identifier: 'r-ptag-loading' }),
+          pubkey: '0'.repeat(64)
+        },
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    expect(getByTestId('typo-cover-author').textContent).toContain('Uploader');
   });
 
   it('uses a single creator:name tag as the attribution', () => {

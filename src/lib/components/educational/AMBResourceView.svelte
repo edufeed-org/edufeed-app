@@ -229,10 +229,11 @@
     }));
   });
 
-  // Creators & roles: structured creator:* runs merged with creator p-tag
-  // identities. When exactly one of each exists they are almost certainly
-  // the same person (the form writes both from one entry), so render a
-  // single merged card; otherwise list them side by side.
+  // Creators & roles: structured creator:* runs followed by creator p-tag
+  // identities. NIP-AMB gives every person exactly ONE representation on the
+  // wire (p-tag when they have a Nostr identity, creator:* run otherwise),
+  // so the two lists are disjoint people — never merge them. Legacy
+  // dual-write events show such a person twice until re-saved.
   const contributorEntries = $derived.by(() => {
     const structured = uniqueBy(getAMBCreators(event), (c) => `${c.name ?? ''}|${c.id ?? ''}`);
     const roleByPubkey = new Map(
@@ -242,17 +243,9 @@
     );
     /** @type {any[]} */
     const entries = [];
-    if (structured.length === 1 && creators.length === 1) {
-      entries.push({
-        ...structured[0],
-        pubkey: creators[0].pubkey,
-        role: roleByPubkey.get(creators[0].pubkey) || 'creator'
-      });
-    } else {
-      for (const c of structured) entries.push({ ...c, role: 'creator' });
-      for (const c of creators)
-        entries.push({ pubkey: c.pubkey, role: roleByPubkey.get(c.pubkey) || '' });
-    }
+    for (const c of structured) entries.push({ ...c, role: 'creator' });
+    for (const c of creators)
+      entries.push({ pubkey: c.pubkey, role: roleByPubkey.get(c.pubkey) || '' });
     return entries.map((e, i) => ({ ...e, key: `${i}:${e.pubkey || e.name || ''}` }));
   });
 
