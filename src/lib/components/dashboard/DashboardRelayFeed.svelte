@@ -47,26 +47,37 @@
   /** @type {import('rxjs').Subscription | undefined} */
   let pageSub;
 
+  // createTimelineLoader's observable may never complete (timedPool is 2s,
+  // +buffer) — same safety-timeout pattern as discover's BATCH_TIMEOUT.
+  const BATCH_TIMEOUT = 4_000;
+
   function loadPage() {
     if (!loader || loadingPage || exhausted) return;
     loadingPage = true;
     let received = 0;
+    let finished = false;
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let safetyTimer;
+    const finalize = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(safetyTimer);
+      // Close the REQ — the loader observable stays open past EOSE
+      pageSub?.unsubscribe();
+      loadingPage = false;
+      isLoading = false;
+      // A page with zero events means the relay has nothing older
+      if (received === 0) exhausted = true;
+    };
     pageSub?.unsubscribe();
     pageSub = loader().subscribe({
       next: () => {
         received++;
       },
-      complete: () => {
-        loadingPage = false;
-        isLoading = false;
-        // A page with zero events means the relay has nothing older
-        if (received === 0) exhausted = true;
-      },
-      error: () => {
-        loadingPage = false;
-        isLoading = false;
-      }
+      complete: finalize,
+      error: finalize
     });
+    safetyTimer = setTimeout(finalize, BATCH_TIMEOUT);
   }
 
   $effect(() => {
