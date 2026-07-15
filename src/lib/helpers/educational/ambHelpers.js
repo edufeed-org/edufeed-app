@@ -168,6 +168,52 @@ export function getAMBDateCreated(event) {
 }
 
 /**
+ * Parse a flattened pedagogical Concept run (`<prefix>:id` /
+ * `<prefix>:prefLabel:<lang>`) back into the SKOS Concept shape the
+ * curriculum picker holds in formData.
+ * @param {any} event - AMB event (kind 30142)
+ * @param {'teaches'|'assesses'|'competencyRequired'} prefix
+ * @param {string} lang
+ * @returns {{id: string, type: 'Concept', prefLabel: {de: string}}[]}
+ */
+function getAMBPedagogicalConcepts(event, prefix, lang) {
+  return getLabelsWithFallback(event.tags, prefix, lang).map((c) => ({
+    id: c.id,
+    type: /** @type {'Concept'} */ ('Concept'),
+    // Keyed by the label's actual language; typed as `{de}` to match the
+    // curriculum picker's formData shape (Lehrplan labels are German-only).
+    prefLabel: /** @type {{de: string}} */ ({ [c.fallbackLang ?? lang]: c.label })
+  }));
+}
+
+/**
+ * Extracts `teaches` curriculum Concepts (edit-mode prefill).
+ * @param {any} event
+ * @param {string} [lang='en']
+ */
+export function getAMBTeaches(event, lang = 'en') {
+  return getAMBPedagogicalConcepts(event, 'teaches', lang);
+}
+
+/**
+ * Extracts `assesses` curriculum Concepts (edit-mode prefill).
+ * @param {any} event
+ * @param {string} [lang='en']
+ */
+export function getAMBAssesses(event, lang = 'en') {
+  return getAMBPedagogicalConcepts(event, 'assesses', lang);
+}
+
+/**
+ * Extracts `competencyRequired` curriculum Concepts (edit-mode prefill).
+ * @param {any} event
+ * @param {string} [lang='en']
+ */
+export function getAMBCompetencyRequired(event, lang = 'en') {
+  return getAMBPedagogicalConcepts(event, 'competencyRequired', lang);
+}
+
+/**
  * Extracts creator names from an AMB event
  * @param {any} event - AMB event (kind 30142)
  * @returns {string[]} Array of creator names
