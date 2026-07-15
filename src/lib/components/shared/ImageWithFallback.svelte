@@ -16,6 +16,7 @@
    * @property {string | {w: number, h: number}} [size] - Proxy size preset or custom dimensions
    * @property {string} [class] - Additional CSS classes
    * @property {'lazy' | 'eager'} [loading] - Loading attribute
+   * @property {(event: Event) => void} [onload] - Fires when the (possibly fallback) image has loaded; read natural dimensions off `event.currentTarget`
    */
 
   let {
@@ -24,7 +25,8 @@
     fallbackType: _fallbackType = 'generic',
     size = undefined,
     class: className = '',
-    loading = /** @type {'lazy' | 'eager'} */ ('lazy')
+    loading = /** @type {'lazy' | 'eager'} */ ('lazy'),
+    onload = undefined
   } = $props();
 
   // Track current image source (primary or fallback)
@@ -65,4 +67,12 @@
   });
 </script>
 
-<img src={currentSrc} {alt} {loading} decoding="async" class={className} onerror={handleError} />
+<img
+  src={currentSrc}
+  {alt}
+  {loading}
+  decoding="async"
+  class={className}
+  onerror={handleError}
+  {onload}
+/>
