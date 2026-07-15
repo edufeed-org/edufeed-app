@@ -83,6 +83,7 @@
   import { buildPreviewResource } from '$lib/helpers/educational/buildPreviewResource.js';
   import { loadDraft, saveDraft, clearDraft } from '$lib/helpers/educational/draftStore.js';
   import { createInitialFormData } from '$lib/helpers/educational/wizardInitialState.js';
+  import { buildResourceData } from '$lib/helpers/educational/buildResourceData.js';
   import { attachWizardHistoryNav } from '$lib/helpers/educational/wizardHistoryNav.js';
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
@@ -649,7 +650,10 @@
     getAMBCreators,
     getAMBExternalUrls,
     getAMBHasPart,
-    getAMBIsPartOf
+    getAMBIsPartOf,
+    getAMBTeaches,
+    getAMBAssesses,
+    getAMBCompetencyRequired
   } from '$lib/helpers/educational/ambHelpers.js';
 
   // Self-coordinate: in edit mode the resource cannot reference itself.
@@ -751,23 +755,6 @@
         ?.filter((/** @type {string[]} */ t) => t[0] === 'p' && t[3] === 'creator')
         .map((/** @type {string[]} */ t) => t[1]) || [];
 
-    for (const pubkey of creatorPubkeys) {
-      /** @type {string} */
-      let profileName = '';
-      try {
-        const profile = /** @type {any} */ (await fetchProfileData(pubkey));
-        profileName = typeof profile?.name === 'string' ? profile.name : '';
-      } catch (error) {
-        console.warn('Failed to fetch profile for creator:', error);
-      }
-      const match = editCreators.find((c) => !c.pubkey && c.name && c.name === profileName);
-      if (match) {
-        match.pubkey = pubkey;
-      } else {
-        editCreators.push({ name: profileName, type: 'Person', pubkey });
-      }
-    }
-
     const lrtTypes = getAMBLearningResourceTypes(editEvent, getLocale());
     const subjects = getAMBSubjects(editEvent, getLocale());
     const eduLevels = getAMBEducationalLevels(editEvent, getLocale());
@@ -825,7 +812,10 @@
       isAccessibleForFree: isAMBFree(editEvent),
       coverHue: getCoverHue(editEvent),
       datePublished: toDateInputValue(getAMBDatePublished(editEvent)),
-      dateCreated: toDateInputValue(getAMBDateCreated(editEvent))
+      dateCreated: toDateInputValue(getAMBDateCreated(editEvent)),
+      teaches: getAMBTeaches(editEvent, getLocale()),
+      assesses: getAMBAssesses(editEvent, getLocale()),
+      competencyRequired: getAMBCompetencyRequired(editEvent, getLocale())
     };
 
     // Merge EKW fields parsed from ekw:* tags (no-op for non-EKW events).
@@ -860,6 +850,35 @@
       aboutByVocab = { [firstKey]: subjects.map((s) => ({ id: s.id, label: s.label })) };
     } else {
       aboutByVocab = {};
+    }
+
+    // Every step of an existing resource was validated at publish time —
+    // unlock all step-indicator dots so the user can jump straight to the
+    // field they want to change instead of walking Weiter through the wizard.
+    maxVisitedStep = totalSteps;
+
+    // Re-attach Nostr pubkeys (`["p", pk, relay, "creator"]`) to creators by
+    // profile-name match. Deliberately AFTER the synchronous prefill above:
+    // each fetch can block up to 2 s, and awaiting it first used to leave the
+    // whole form (including step 1) empty while relays were slow.
+    if (creatorPubkeys.length > 0) {
+      for (const pubkey of creatorPubkeys) {
+        /** @type {string} */
+        let profileName = '';
+        try {
+          const profile = /** @type {any} */ (await fetchProfileData(pubkey));
+          profileName = typeof profile?.name === 'string' ? profile.name : '';
+        } catch (error) {
+          console.warn('Failed to fetch profile for creator:', error);
+        }
+        const match = editCreators.find((c) => !c.pubkey && c.name && c.name === profileName);
+        if (match) {
+          match.pubkey = pubkey;
+        } else {
+          editCreators.push({ name: profileName, type: 'Person', pubkey });
+        }
+      }
+      formData.creators = [...editCreators];
     }
   }
 
@@ -1286,50 +1305,16 @@
 
     try {
       const actions = createEducationalActions();
-      const about = mergedAbout();
 
-      const resourceData = {
-        name: formData.name,
-        description: formData.description,
-        slug: hasNoUrl ? '' : formData.identifier?.trim() || '',
-        learningResourceType: formData.learningResourceType[0]?.id || '',
-        learningResourceTypeLabel: formData.learningResourceType[0]?.label || '',
-        about: about.map((s) => s.id),
-        aboutLabels: about.map((s) => ({ id: s.id, label: s.label })),
-        educationalLevels: formData.educationalLevels.map((e) => e.id),
-        educationalLevelLabels: formData.educationalLevels.map((e) => ({
-          id: e.id,
-          label: e.label
-        })),
-        inLanguage: formData.inLanguage,
-        license: formData.license,
-        coverHue: formData.coverHue,
-        creators: formData.creators,
-        keywords: formData.keywords,
-        files: formData.encodings,
-        isAccessibleForFree: formData.isAccessibleForFree,
-        externalUrls: formData.externalUrls,
-        hasPart: formData.hasPart,
-        isPartOf: formData.isPartOf,
-        // EKW-variant facets — `formDataToEkwTags` no-ops when these are
-        // empty/undefined, so it's safe to forward unconditionally rather
-        // than gating on `variantId === 'ekw'`.
-        gradeLevels: formData.gradeLevels,
-        gradeLevelLabels: formData.gradeLevelLabels,
-        schoolTypes: formData.schoolTypes,
-        schoolTypeLabels: formData.schoolTypeLabels,
-        didacticConcepts: formData.didacticConcepts,
-        didacticConceptLabels: formData.didacticConceptLabels,
-        methods: formData.methods,
-        methodLabels: formData.methodLabels,
-        methodOther: formData.methodOther,
-        bibleReferences: formData.bibleReferences,
+      const resourceData = buildResourceData(formData, {
+        about: mergedAbout(),
         konfiTags: formDataToKonfiTags(
           formData,
           bildungsbereichConfig?.step4SubSteps ?? [],
           bildungsbereichConfig?.bildungsbereichTag
-        )
-      };
+        ),
+        hasNoUrl
+      });
 
       let result;
       if (isEditMode && editEvent) {
@@ -1892,90 +1877,107 @@
             </div>
           {/snippet}
 
-          {#if hasNoUrl}
+          {#if isEditMode}
+            <!-- Edit mode: the URL is the immutable identifier — render a
+                 read-only summary card instead of a bare (dead) input so the
+                 step explains itself. -->
+            <div
+              class="space-y-2 rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
+              data-testid="edit-url-summary"
+            >
+              {#if hasNoUrl}
+                <p>{m.amb_form_no_url_state_card()}</p>
+              {:else}
+                <p class="font-medium">
+                  {m.amb_form_step_url_label?.() ?? 'Resource URL'}
+                </p>
+                <!-- eslint-disable svelte/no-navigation-without-resolve -- external: resource URL -->
+                <a
+                  href={formData.identifier}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link break-all link-primary"
+                >
+                  {formData.identifier}
+                </a>
+                <!-- eslint-enable svelte/no-navigation-without-resolve -->
+              {/if}
+              <p class="text-xs text-base-content/60">
+                {m.amb_form_help_url_no_edit?.() ??
+                  'The resource URL cannot be changed after publishing.'}
+              </p>
+            </div>
+          {:else if hasNoUrl}
             <div
               class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
               data-testid="no-url-state-card"
             >
               <p>{m.amb_form_no_url_state_card()}</p>
-              {#if !isEditMode}
-                <button
-                  type="button"
-                  class="btn mt-2 btn-ghost btn-sm"
-                  onclick={() => {
-                    hasNoUrl = false;
-                    formData.urlInput = '';
-                    formData.identifier = '';
-                  }}
-                >
-                  {m.amb_form_no_url_cancel()}
-                </button>
-              {/if}
+              <button
+                type="button"
+                class="btn mt-2 btn-ghost btn-sm"
+                onclick={() => {
+                  hasNoUrl = false;
+                  formData.urlInput = '';
+                  formData.identifier = '';
+                }}
+              >
+                {m.amb_form_no_url_cancel()}
+              </button>
             </div>
-            {#if !isEditMode}
-              <LicensedFileInput
-                bind:files={formData.encodings}
-                multiple={true}
-                accept={NO_URL_UPLOAD_ACCEPT}
-                label={m.amb_form_step2_upload_label()}
-                helpText={m.amb_form_step2_upload_help()}
-                activeUserDisplayName={previewAuthorProfile?.display_name ??
-                  previewAuthorProfile?.name ??
-                  ''}
-              />
-              {#if showError('attachments')}
-                <p class="text-xs text-error">{fieldErrors.attachments}</p>
-              {/if}
-              {#if uploadedSourceUrls.length > 0}
-                {@render enrichBlock(uploadedSourceUrls)}
-              {/if}
+            <LicensedFileInput
+              bind:files={formData.encodings}
+              multiple={true}
+              accept={NO_URL_UPLOAD_ACCEPT}
+              label={m.amb_form_step2_upload_label()}
+              helpText={m.amb_form_step2_upload_help()}
+              activeUserDisplayName={previewAuthorProfile?.display_name ??
+                previewAuthorProfile?.name ??
+                ''}
+            />
+            {#if showError('attachments')}
+              <p class="text-xs text-error">{fieldErrors.attachments}</p>
+            {/if}
+            {#if uploadedSourceUrls.length > 0}
+              {@render enrichBlock(uploadedSourceUrls)}
             {/if}
           {:else}
             <MetadataFetchStep
               bind:value={formData.urlInput}
               activeUserPubkey={activeUser?.pubkey ?? null}
-              readOnly={isEditMode}
               onresult={handleMetadataResult}
               onbusychange={(busy) => (metadataFetchBusy = busy)}
             />
-            {#if !isEditMode && metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
+            {#if metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
               {@render enrichBlock([formData.identifier])}
             {/if}
-            {#if !isEditMode}
-              <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
-                <span class="h-px flex-1 bg-base-300"></span>
-                <span>{m.amb_form_no_url_or_divider()}</span>
-                <span class="h-px flex-1 bg-base-300"></span>
-              </div>
-              <button
-                type="button"
-                class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
-                data-testid="no-url-button"
-                onclick={() => {
-                  hasNoUrl = true;
-                  formData.urlInput = '';
-                  formData.identifier = '';
-                  // Hide any prior step-2 advance error; the user just
-                  // resolved the "URL required" branch by opting out. Stay on
-                  // Step 2 so they can upload files before advancing manually.
-                  advanceAttempted = false;
-                }}
-              >
-                <span class="flex-1">
-                  <span class="block font-medium">{m.amb_form_no_url_button()}</span>
-                  <span class="mt-1 block text-sm text-base-content/70">
-                    {m.amb_form_no_url_button_description()}
-                  </span>
+            <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
+              <span class="h-px flex-1 bg-base-300"></span>
+              <span>{m.amb_form_no_url_or_divider()}</span>
+              <span class="h-px flex-1 bg-base-300"></span>
+            </div>
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
+              data-testid="no-url-button"
+              onclick={() => {
+                hasNoUrl = true;
+                formData.urlInput = '';
+                formData.identifier = '';
+                // Hide any prior step-2 advance error; the user just
+                // resolved the "URL required" branch by opting out. Stay on
+                // Step 2 so they can upload files before advancing manually.
+                advanceAttempted = false;
+              }}
+            >
+              <span class="flex-1">
+                <span class="block font-medium">{m.amb_form_no_url_button()}</span>
+                <span class="mt-1 block text-sm text-base-content/70">
+                  {m.amb_form_no_url_button_description()}
                 </span>
-                <span aria-hidden="true" class="text-base-content/40">→</span>
-              </button>
-            {/if}
-          {/if}
-          {#if isEditMode && !hasNoUrl}
-            <p class="text-xs text-base-content/60">
-              {m.amb_form_help_url_no_edit?.() ??
-                'The resource URL cannot be changed after publishing.'}
-            </p>
+              </span>
+              <span aria-hidden="true" class="text-base-content/40">→</span>
+            </button>
           {/if}
         </div>
       {/if}

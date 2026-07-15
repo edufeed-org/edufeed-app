@@ -113,10 +113,18 @@ export function convertFormDataToAMB(formData) {
   if (formData.files && formData.files.length > 0) {
     amb.encoding = formData.files.map((file) => ({
       contentUrl: file.url,
-      encodingFormat: file.mimeType,
+      // Actions-layer callers use `mimeType`; the wizard's LicensedFileInput
+      // descriptors carry `type` (File API naming). Accept both — otherwise
+      // encodingFormat is silently dropped from the published event.
+      encodingFormat: file.mimeType ?? /** @type {any} */ (file).type,
       contentSize: file.size,
       sha256: file.sha256
     }));
+  }
+
+  // Thumbnail image URL → `["image", url]` tag via ambToNostr.
+  if (/** @type {any} */ (formData).image?.trim()) {
+    amb.image = /** @type {any} */ (formData).image.trim();
   }
 
   if (formData.isAccessibleForFree !== undefined) {

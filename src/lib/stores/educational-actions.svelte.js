@@ -51,6 +51,8 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {string} inLanguage - ISO 639-1 language code
  * @property {string} license - License URI
  * @property {number | null} [coverHue] - User-chosen cover hue (null = auto)
+ * @property {string} [image] - Thumbnail image URL; emitted as an `image` tag
+ * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - NIP-94 license attestation for the thumbnail; its `x` tag becomes the resource's `x` tag
  * @property {string} [datePublished] - schema.org datePublished (YYYY-MM-DD); emitted as a `datePublished` tag
  * @property {string} [dateCreated] - schema.org dateCreated (YYYY-MM-DD); emitted as a `dateCreated` tag
  * @property {Creator[]} creators - Array of creators
@@ -162,7 +164,13 @@ function resolveImageHash(formData) {
     if (xTag) return xTag;
   }
   if (formData?.image) {
-    return getSha256FromURL(formData.image) ?? undefined;
+    // getSha256FromURL does `new URL(...)` — a malformed pasted image URL
+    // must not make the whole publish throw.
+    try {
+      return getSha256FromURL(formData.image) ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
   return undefined;
 }
