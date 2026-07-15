@@ -17,6 +17,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
   import { filterEventsForRelay, relayHostLabel } from '$lib/helpers/relay-feed.js';
+  import { createRelayPageLoader } from '$lib/helpers/relay-page-loader.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
@@ -44,47 +45,25 @@
 
   /** @type {(() => import('rxjs').Observable<any>) | undefined} */
   let loader;
-  /** @type {import('rxjs').Subscription | undefined} */
-  let pageSub;
 
   // createTimelineLoader's observable may never complete (timedPool is 2s,
-  // +buffer) — same safety-timeout pattern as discover's BATCH_TIMEOUT.
-  const BATCH_TIMEOUT = 4_000;
-
-  function loadPage() {
-    if (!loader || loadingPage || exhausted) return;
-    loadingPage = true;
-    let received = 0;
-    let finished = false;
-    /** @type {ReturnType<typeof setTimeout> | undefined} */
-    let safetyTimer;
-    const finalize = () => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(safetyTimer);
-      // Close the REQ — the loader observable stays open past EOSE
-      pageSub?.unsubscribe();
-      loadingPage = false;
-      isLoading = false;
-      // A page with zero events means the relay has nothing older
-      if (received === 0) exhausted = true;
-    };
-    pageSub?.unsubscribe();
-    pageSub = loader().subscribe({
-      next: () => {
-        received++;
-      },
-      complete: finalize,
-      error: finalize
-    });
-    safetyTimer = setTimeout(finalize, BATCH_TIMEOUT);
-  }
+  // +buffer) — the pager finalizes each page via a 4s safety timeout and is
+  // cancelled on relay switch/unmount so pagination state never goes stale.
+  const pager = createRelayPageLoader({
+    timeout: 4_000,
+    onChange: ({ loading, exhausted: pageExhausted, settled }) => {
+      loadingPage = loading;
+      exhausted = pageExhausted;
+      if (settled) isLoading = false;
+    }
+  });
 
   $effect(() => {
     const relayUrl = relay; // read the dep before anything else
     isLoading = true;
-    exhausted = false;
     displayCount = DISPLAY_STEP;
+    // Cancel any in-flight page and clear pagination state for the new relay
+    pager.reset();
     loader = createTimelineLoader(
       timedPool,
       [relayUrl],
@@ -96,12 +75,12 @@
       .subscribe((/** @type {any[]} */ events) => {
         modelEvents = events || [];
       });
-    // Untracked: loadPage reads/writes pagination $state (loadingPage, exhausted)
-    // and must not become an effect dependency — the effect tracks only `relay`.
-    untrack(loadPage);
+    // Untracked: the pager callback writes pagination $state which must not
+    // become an effect dependency — the effect tracks only `relay`.
+    untrack(() => pager.loadPage(loader));
     return () => {
       modelSub.unsubscribe();
-      pageSub?.unsubscribe();
+      pager.cancel();
       loader = undefined;
     };
   });
@@ -118,7 +97,7 @@
   function loadMore() {
     displayCount += DISPLAY_STEP;
     // Running low on already-fetched items — pull the next page from the relay
-    if (displayCount >= feedItems.length) loadPage();
+    if (displayCount >= feedItems.length) pager.loadPage(loader);
   }
 
   /** @param {any} event */
