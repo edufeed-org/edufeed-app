@@ -1273,8 +1273,11 @@
   }
   .ed-file {
     display: flex;
+    /* Wrap on narrow cards: the buttons don't shrink, so without wrapping
+       they squeeze .ed-file-meta to 0 width and its text spills under them */
+    flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
+    gap: 10px 14px;
     padding: 12px 16px;
     background: var(--c-paper);
     border: 1px solid var(--c-rule);
@@ -1286,7 +1289,9 @@
   }
   .ed-file-meta {
     min-width: 0;
-    flex: 1;
+    /* 12rem basis: when emoji + meta + both buttons don't fit on one line,
+       the buttons wrap to their own row instead of crushing the meta text */
+    flex: 1 1 12rem;
   }
   .ed-file-meta .name {
     font-weight: 600;
