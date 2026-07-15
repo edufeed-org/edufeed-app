@@ -7,6 +7,7 @@
  */
 
 import { extractLabelFromUri } from './skosLoader.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 /**
  * @typedef {import('$lib/stores/educational-actions.svelte').EducationalFormData} EducationalFormData
@@ -83,8 +84,13 @@ export function convertFormDataToAMB(formData) {
     amb.keywords = formData.keywords;
   }
 
-  if (formData.creators && formData.creators.length > 0) {
-    amb.creator = formData.creators.map((creator) => {
+  // NIP-AMB: creators with a Nostr identity are represented solely by a
+  // `["p", pk, relay, "creator"]` tag (appended by appendCreatorPTags) —
+  // never by a flattened creator:* run as well. Only creators whose pubkey
+  // is absent or invalid (no p-tag emitted) go into the AMB creator array.
+  const flattenedCreators = (formData.creators || []).filter((c) => !normalizePubkey(c.pubkey));
+  if (flattenedCreators.length > 0) {
+    amb.creator = flattenedCreators.map((creator) => {
       /** @type {Record<string, any>} */
       const creatorObj = {
         type: creator.type,
