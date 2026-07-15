@@ -606,7 +606,9 @@
   <section class="ed-hero" class:no-cover={false}>
     <div class="ed-hero-grid">
       <div class="ed-cover-card" class:ed-cover-framed={!!resource.image}>
-        <ResourceCover {resource} size="full" aspect="portrait" />
+        <!-- 'adaptive': the paper frame follows the artwork's orientation
+             (clamped 3:4…16:9) so landscape slides aren't center-cropped. -->
+        <ResourceCover {resource} size="full" aspect="adaptive" />
       </div>
 
       <div class="ed-hero-body">

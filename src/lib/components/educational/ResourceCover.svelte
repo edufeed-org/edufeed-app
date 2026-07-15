@@ -31,12 +31,13 @@
   } from '$lib/helpers/educational/pdfThumbnailGate.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+  import { clampCoverAspect } from '$lib/helpers/educational/coverAspect.js';
 
   /**
    * @typedef {Object} Props
    * @property {any} resource — AMB resource (same shape AMBResourceCard consumes)
    * @property {'thumbnail' | 'full'} [size]
-   * @property {'auto' | 'square' | 'video' | 'wide' | 'portrait'} [aspect]
+   * @property {'auto' | 'square' | 'video' | 'wide' | 'portrait' | 'adaptive'} [aspect] - 'adaptive' sizes the frame to the image's natural orientation (clamped 3:4 to 16:9); non-image branches treat it as portrait
    * @property {string} [class]
    */
 
@@ -47,15 +48,30 @@
   ensureVocabularyLoaded('learningResourceType');
 
   // Aspect class map for the image branch. 'auto' = no aspect class.
+  // 'adaptive' renders as portrait until the image reports its natural size,
+  // then follows the artwork's orientation (see adaptiveRatio below).
   const ASPECT_CLASS = /** @type {Record<string, string>} */ ({
     auto: '',
     square: 'aspect-square',
     video: 'aspect-video',
     wide: 'aspect-[2/1]',
-    portrait: 'aspect-[3/4]'
+    portrait: 'aspect-[3/4]',
+    adaptive: 'aspect-[3/4]'
   });
 
   const aspectClass = $derived(ASPECT_CLASS[aspect] ?? '');
+
+  // Adaptive frame: measured natural ratio of the loaded image, clamped so
+  // the frame follows the artwork (landscape slides stay landscape) instead
+  // of center-cropping it. null until the image has loaded — the portrait
+  // aspect class above covers that window so the layout doesn't jump for
+  // the common portrait/typo case.
+  let adaptiveRatio = $state(/** @type {number | null} */ (null));
+  function handleImageLoad(/** @type {Event} */ event) {
+    if (aspect !== 'adaptive') return;
+    const img = /** @type {HTMLImageElement} */ (event.currentTarget);
+    adaptiveRatio = clampCoverAspect(img.naturalWidth, img.naturalHeight);
+  }
 
   // License-badge centralization: lookup the kind-1063 license event for the
   // image's SHA-256 hash (if the resource carries an `x` tag).
@@ -153,6 +169,7 @@
 {#if resource?.image}
   <div
     class="resource-cover-image relative w-full overflow-hidden rounded-lg bg-base-200 {aspectClass} {className}"
+    style:aspect-ratio={aspect === 'adaptive' && adaptiveRatio ? adaptiveRatio : undefined}
     data-testid="resource-cover-image"
   >
     <ImageWithFallback
@@ -161,6 +178,7 @@
       fallbackType="article"
       size={size === 'thumbnail' ? 'thumbnail' : 'card'}
       class="h-full w-full object-cover"
+      onload={handleImageLoad}
     />
     <ImageLicenseOverlay
       licenseEvent={licenseStatus.event}
