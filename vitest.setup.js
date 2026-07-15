@@ -35,3 +35,21 @@ if (typeof window !== 'undefined') {
   // @ts-ignore - replace jsdom's ws-backed WebSocket with an inert stub
   globalThis.WebSocket = NoopWebSocket;
 }
+
+// jsdom's Blob/File implementation does not implement the body-reading
+// methods (`text()`, `arrayBuffer()`, `stream()`) — jsdom considers them out
+// of scope and leaves them unimplemented (see jsdom/jsdom#2555). Component
+// tests that assert on `File#text()` (e.g. verifying a downloaded/cleaned
+// file's contents) would otherwise fail with "file.text is not a function"
+// purely due to this environment gap. Polyfill via FileReader, which jsdom
+// does implement.
+if (typeof Blob !== 'undefined' && typeof Blob.prototype.text !== 'function') {
+  Blob.prototype.text = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(this);
+    });
+  };
+}
