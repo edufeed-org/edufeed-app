@@ -2701,5 +2701,8 @@
   "fab_create_note_desc": "Short text post to the feed",
   "note_create_modal_error_publish": "Your note could not be delivered to any relay. Please try again.",
   "profile_tab_highlights": "Highlights",
-  "profile_tab_shared": "Shared"
+  "profile_tab_shared": "Shared",
+  "render_error_title": "This page hit an error",
+  "render_error_description": "Something on this page could not be displayed — possibly caused by malformed content from the network. The rest of the app keeps working.",
+  "render_error_retry": "Try again"
 }

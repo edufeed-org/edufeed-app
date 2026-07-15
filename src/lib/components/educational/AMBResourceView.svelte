@@ -7,6 +7,7 @@
 <script>
   import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -221,7 +222,7 @@
         ?.filter((/** @type {any} */ t) => t[0] === 'p' && /^[0-9a-f]{64}$/i.test(t[1] || ''))
         .map((/** @type {any} */ t) => t[1].toLowerCase()) || [];
 
-    return [...new Set(creatorPubkeys)].map((/** @type {string} */ pubkey) => ({
+    return unique(creatorPubkeys).map((/** @type {string} */ pubkey) => ({
       pubkey,
       hasProfile: true
     }));

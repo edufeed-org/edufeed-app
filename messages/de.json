@@ -2701,5 +2701,8 @@
   "fab_create_note_desc": "Kurzer Textbeitrag im Feed",
   "note_create_modal_error_publish": "Deine Notiz konnte an kein Relay übermittelt werden. Bitte versuche es erneut.",
   "profile_tab_highlights": "Highlights",
-  "profile_tab_shared": "Geteilt"
+  "profile_tab_shared": "Geteilt",
+  "render_error_title": "Diese Seite hat einen Fehler",
+  "render_error_description": "Etwas auf dieser Seite konnte nicht angezeigt werden — möglicherweise durch fehlerhafte Inhalte aus dem Netzwerk. Der Rest der App funktioniert weiter.",
+  "render_error_retry": "Erneut versuchen"
 }

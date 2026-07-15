@@ -12,6 +12,7 @@ import {
   getLabelsWithFallback
 } from './ambTransform.js';
 import { formatLicenseUrl } from './licenseLabel.js';
+import { unique } from '$lib/helpers/unique.js';
 
 /**
  * Extracts the resource name from an AMB event
@@ -174,7 +175,7 @@ export function getAMBDateCreated(event) {
 export function getAMBCreatorNames(event) {
   // Deduped: events in the wild repeat the whole creator run, and the names
   // feed keyed {#each} blocks where duplicates crash the page.
-  return [...new Set(getNestedTagValues(event.tags, 'creator:name'))];
+  return unique(getNestedTagValues(event.tags, 'creator:name'));
 }
 
 /**

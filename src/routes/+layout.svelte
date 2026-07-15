@@ -10,6 +10,7 @@
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
+  import RenderErrorCard from '$lib/components/shared/RenderErrorCard.svelte';
   import TermiAssistant from '$lib/components/assistant/TermiAssistant.svelte';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
@@ -348,7 +349,16 @@
       class:lg:pb-0={showDashboardNav || isInsideCommunity}
     >
       {#if curatedReady}
-        {@render children?.()}
+        <!-- Route-level error boundary: a page that throws during render
+             (e.g. malformed network events) degrades to an inline error card
+             instead of killing the whole app. RenderErrorCard resets the
+             boundary on retry and on navigation. -->
+        <svelte:boundary onerror={(e) => console.error('Route render error:', e)}>
+          {@render children?.()}
+          {#snippet failed(error, reset)}
+            <RenderErrorCard {error} onretry={reset} />
+          {/snippet}
+        </svelte:boundary>
       {/if}
       <!-- Floating buttons — sticky inside main so they sit at the bottom of the scroll surface.
            `mt-auto` pushes the wrapper to the bottom of the flex column on short pages
