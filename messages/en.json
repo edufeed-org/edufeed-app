@@ -1926,6 +1926,8 @@
   "amb_creator_type_organization": "Organization",
   "amb_creator_button_update": "Update Creator",
   "amb_creator_button_add": "Add Creator",
+  "amb_creator_button_add_self": "Add myself",
+  "amb_creator_error_duplicate": "This creator is already in the list.",
   "amb_creator_edit_aria": "Edit creator",
   "amb_creator_remove_aria": "Remove creator",
   "form_builder_header": "Form Builder",

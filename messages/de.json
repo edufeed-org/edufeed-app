@@ -1926,6 +1926,8 @@
   "amb_creator_type_organization": "Organisation",
   "amb_creator_button_update": "Urheber aktualisieren",
   "amb_creator_button_add": "Urheber hinzufügen",
+  "amb_creator_button_add_self": "Mich selbst hinzufügen",
+  "amb_creator_error_duplicate": "Diese Person ist bereits in der Liste.",
   "amb_creator_edit_aria": "Urheber bearbeiten",
   "amb_creator_remove_aria": "Urheber entfernen",
   "form_builder_header": "Formular-Editor",

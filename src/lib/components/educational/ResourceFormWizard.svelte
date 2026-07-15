@@ -2745,6 +2745,7 @@
             bind:creators={formData.creators}
             label={m.amb_form_label_creators()}
             helpText={m.amb_form_help_creators()}
+            activeUserPubkey={activeUser?.pubkey || ''}
           />
           <FieldAiSuggestionBadge
             field="creators"

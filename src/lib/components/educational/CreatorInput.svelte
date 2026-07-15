@@ -23,12 +23,13 @@
    * @property {string} [orcid] - Optional ORCID iD (canonical https URI)
    */
 
-  /** @type {{ creators?: Creator[], label?: string, required?: boolean, helpText?: string, onchange?: (creators: Creator[]) => void }} */
+  /** @type {{ creators?: Creator[], label?: string, required?: boolean, helpText?: string, activeUserPubkey?: string, onchange?: (creators: Creator[]) => void }} */
   let {
     creators = $bindable([]),
     label = 'Creators',
     required = false,
     helpText = '',
+    activeUserPubkey = '',
     onchange = () => {}
   } = $props();
 
@@ -39,6 +40,39 @@
   let isLoadingProfile = $state(false);
   let orcidInvalid = $state(false);
   let pubkeyInvalid = $state(false);
+  let duplicateCreator = $state(false);
+  let isAddingSelf = $state(false);
+
+  // "Add myself" is offered while the logged-in user isn't in the list yet —
+  // one click instead of hand-entering a key (which is how an nsec once got
+  // pasted into the identity field).
+  const canAddSelf = $derived(
+    Boolean(activeUserPubkey) && !creators.some((c) => c.pubkey === activeUserPubkey)
+  );
+
+  /**
+   * Add the logged-in user as a creator, name prefilled from their profile.
+   */
+  async function addSelf() {
+    if (!canAddSelf || isAddingSelf) return;
+    isAddingSelf = true;
+    let name = '';
+    try {
+      const profile = await fetchProfileData(activeUserPubkey);
+      // @ts-ignore - profile has name property from fetchProfileData
+      if (profile && typeof profile.name === 'string' && profile.name !== 'Anonymous') {
+        // @ts-ignore
+        name = profile.name;
+      }
+    } catch {
+      // Profile fetch is best-effort; the user can still type their name.
+    } finally {
+      isAddingSelf = false;
+    }
+    if (!canAddSelf) return; // list may have changed while fetching
+    creators = [...creators, { name, type: 'Person', pubkey: activeUserPubkey }];
+    onchange(creators);
+  }
 
   /**
    * Create an empty creator object
@@ -75,6 +109,16 @@
     const normalizedPubkey = pubkeyInput ? normalizeToHex(pubkeyInput) : '';
     pubkeyInvalid = Boolean(pubkeyInput && !normalizedPubkey);
     if (pubkeyInvalid) return;
+
+    // Guard against the same person landing in the list twice: same pubkey,
+    // or same trimmed name when neither entry carries a pubkey.
+    const trimmedName = newCreator.name.trim();
+    duplicateCreator = creators.some((c, i) => {
+      if (i === editingIndex) return false;
+      if (normalizedPubkey && c.pubkey === normalizedPubkey) return true;
+      return !normalizedPubkey && !c.pubkey && c.name.trim() === trimmedName;
+    });
+    if (duplicateCreator) return;
 
     /** @type {Creator} */
     const creatorToAdd = {
@@ -133,6 +177,7 @@
     showAddForm = false;
     orcidInvalid = false;
     pubkeyInvalid = false;
+    duplicateCreator = false;
   }
 
   /**
@@ -393,6 +438,12 @@
         />
       </div>
 
+      {#if duplicateCreator}
+        <p class="creator-duplicate-error text-xs text-error">
+          {m.amb_creator_error_duplicate()}
+        </p>
+      {/if}
+
       <!-- Submit Button -->
       <button
         type="submit"
@@ -403,15 +454,33 @@
       </button>
     </form>
   {:else}
-    <!-- Add Button -->
-    <button
-      type="button"
-      class="btn w-full btn-outline btn-sm"
-      onclick={() => (showAddForm = true)}
-    >
-      <PlusIcon class_="w-4 h-4" />
-      {m.amb_creator_button_add()}
-    </button>
+    <div class="flex flex-col gap-2 sm:flex-row">
+      {#if canAddSelf}
+        <!-- One-click self-add: fills pubkey + profile name from the account -->
+        <button
+          type="button"
+          class="creator-add-self btn btn-outline btn-sm sm:flex-1"
+          onclick={addSelf}
+          disabled={isAddingSelf}
+        >
+          {#if isAddingSelf}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            <PlusIcon class_="w-4 h-4" />
+          {/if}
+          {m.amb_creator_button_add_self()}
+        </button>
+      {/if}
+      <!-- Add Button -->
+      <button
+        type="button"
+        class="btn btn-outline btn-sm sm:flex-1"
+        onclick={() => (showAddForm = true)}
+      >
+        <PlusIcon class_="w-4 h-4" />
+        {m.amb_creator_button_add()}
+      </button>
+    </div>
   {/if}
 
   <!-- Help Text -->
