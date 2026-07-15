@@ -1,5 +1,7 @@
 <script>
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
@@ -57,8 +59,13 @@
 
     <!-- Issuer -->
     <div class="mt-2 flex items-center gap-2">
-      <ProfileAvatar pubkey={badge.issuerPubkey} profile={issuerProfile} size="xs" />
-      <span class="text-xs text-base-content/60">{issuerName}</span>
+      <ProfileAvatar pubkey={badge.issuerPubkey} profile={issuerProfile} size="xs" linkToProfile />
+      <a
+        href={resolve(profileLink(badge.issuerPubkey))}
+        class="text-xs text-base-content/60 hover:underline"
+      >
+        {issuerName}
+      </a>
     </div>
 
     <!-- Date -->

@@ -10,7 +10,7 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
   import { KanbanIcon } from '$lib/components/icons';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { goto } from '$app/navigation';
   import { resolve as _resolve } from '$app/paths';
   /** @type {(path: string) => string} */
@@ -87,6 +87,12 @@
     if (href) goto(href);
   }
 
+  /** @param {MouseEvent} e */
+  function handleCardClick(e) {
+    if (e.target instanceof HTMLElement && e.target.closest('a, button')) return;
+    navigateToDetail();
+  }
+
   /** @param {KeyboardEvent} e */
   function handleKeydown(e) {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -98,10 +104,12 @@
 
 {#if isList}
   <!-- List variant: horizontal row -->
-  <button
-    type="button"
-    class="kanban-card-list focus:ring-opacity-50 flex w-full items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 text-left transition-shadow hover:border-primary hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
-    onclick={navigateToDetail}
+  <div
+    role="button"
+    tabindex="0"
+    class="kanban-card-list focus:ring-opacity-50 flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 bg-base-100 p-3 text-left transition-shadow hover:border-primary hover:shadow-sm focus:ring-2 focus:ring-primary focus:outline-none"
+    onclick={handleCardClick}
+    onkeydown={handleKeydown}
   >
     <div
       class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded bg-base-200 sm:h-20 sm:w-20"
@@ -111,7 +119,8 @@
     <div class="min-w-0 flex-1">
       <div class="truncate font-semibold text-base-content">{title}</div>
       <div class="truncate text-sm text-base-content/60">
-        {authorName} · {formatCalendarDate(publishedAt, 'short')}
+        <a href={resolve(profileLink(board.pubkey))} class="hover:underline">{authorName}</a>
+        · {formatCalendarDate(publishedAt, 'short')}
         {#if columns.length > 0}
           · {m.kanban_board_columns({ count: columns.length })}
         {/if}
@@ -132,7 +141,7 @@
         </div>
       {/if}
     </div>
-  </button>
+  </div>
 {:else}
   <!-- Card variant: vertical layout -->
   <div
@@ -141,7 +150,7 @@
       : 'p-4'}"
     role="button"
     tabindex="0"
-    onclick={navigateToDetail}
+    onclick={handleCardClick}
     onkeydown={handleKeydown}
   >
     <!-- Author Header -->
@@ -150,10 +159,16 @@
         pubkey={board.pubkey}
         profile={authorProfile}
         size="md"
+        linkToProfile
         fallbackType="robohash"
       />
       <div class="min-w-0 flex-1">
-        <div class="truncate font-medium text-base-content">{authorName}</div>
+        <a
+          href={resolve(profileLink(board.pubkey))}
+          class="block truncate font-medium text-base-content hover:underline"
+        >
+          {authorName}
+        </a>
         <div class="text-sm text-base-content/60">
           {formatCalendarDate(publishedAt, 'short')}
         </div>

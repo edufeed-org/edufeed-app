@@ -10,7 +10,8 @@
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
 
-  import { generateAuthorColorRGB } from '$lib/helpers/nostrUtils';
+  import { generateAuthorColorRGB, profileLink } from '$lib/helpers/nostrUtils';
+  import { resolve } from '$app/paths';
 
   /**
    * @typedef {Object} AncestorChainProps
@@ -33,10 +34,21 @@
       {@const ancestorBg = `rgba(${ancestorRgb.r},${ancestorRgb.g},${ancestorRgb.b},0.07)`}
 
       <!-- Ancestor card -->
-      <button
-        class="flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-base-200"
+      <div
+        role="button"
+        tabindex="0"
+        class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-base-200"
         style="background-color: {ancestorBg}"
-        onclick={() => onAncestorClick?.(ancestor.id)}
+        onclick={(e) => {
+          if (e.target instanceof HTMLElement && e.target.closest('a')) return;
+          onAncestorClick?.(ancestor.id);
+        }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onAncestorClick?.(ancestor.id);
+          }
+        }}
         data-testid="ancestor-card"
       >
         <!-- Avatar -->
@@ -48,14 +60,19 @@
         <!-- Content -->
         <div class="min-w-0 flex-1">
           <div class="flex items-baseline gap-2">
-            <span class="truncate text-xs font-semibold text-base-content">{displayName}</span>
+            <a
+              href={resolve(profileLink(ancestor.pubkey))}
+              class="truncate text-xs font-semibold text-base-content hover:underline"
+            >
+              {displayName}
+            </a>
             <span class="shrink-0 text-xs text-base-content/40">{timestamp}</span>
           </div>
           {#if ancestor.content}
             <p class="mt-0.5 text-xs text-base-content/60">{ancestor.content}</p>
           {/if}
         </div>
-      </button>
+      </div>
 
       <!-- Connector line between ancestors -->
       {#if i < ancestors.length - 1}

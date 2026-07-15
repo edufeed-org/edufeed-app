@@ -11,7 +11,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @type {{
@@ -71,7 +71,25 @@
     return profile ? getDisplayName(profile) : 'Unknown';
   }
 
-  function handleClick() {
+  /**
+   * @param {MouseEvent} e
+   */
+  function handleClick(e) {
+    if (e.target instanceof HTMLElement && e.target.closest('a, button')) return;
+    navigateToDetail();
+  }
+
+  /**
+   * @param {KeyboardEvent} e
+   */
+  function handleKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      navigateToDetail();
+    }
+  }
+
+  function navigateToDetail() {
     // Route to the unified social-bookmark detail view, keyed by the target
     // event coordinate. The view renders the referenced article natively,
     // wrapped in savers/highlights + a shared discussion.
@@ -85,8 +103,11 @@
   }
 </script>
 
-<button
+<div
+  role="button"
+  tabindex="0"
   onclick={handleClick}
+  onkeydown={handleKeydown}
   class="w-full cursor-pointer rounded-lg border border-base-300 bg-base-100 p-4 text-left shadow-sm transition-shadow hover:shadow-md"
 >
   <!-- Contributor header -->
@@ -99,6 +120,7 @@
             {pubkey}
             {profile}
             size="sm"
+            linkToProfile
             fallbackType="robohash"
             class="ring-2 ring-base-100"
           />
@@ -106,7 +128,9 @@
       </div>
       <div class="min-w-0 flex-1">
         <span class="truncate text-sm font-medium text-base-content">
-          {getAuthorName(group.contributors[0])}
+          <a href={resolve(profileLink(group.contributors[0]))} class="hover:underline">
+            {getAuthorName(group.contributors[0])}
+          </a>
           {#if group.contributors.length > 1}
             <span class="font-normal text-base-content/50">
               +{group.contributors.length - 1}
@@ -132,9 +156,12 @@
         <p class="line-clamp-3 text-xs text-base-content/80 italic">
           &ldquo;{featuredHighlightText}&rdquo;
         </p>
-        <span class="text-xs text-base-content/50">
+        <a
+          href={resolve(profileLink(featuredHighlight.pubkey))}
+          class="text-xs text-base-content/50 hover:underline"
+        >
           {getAuthorName(featuredHighlight.pubkey)}
-        </span>
+        </a>
       </div>
     {/if}
 
@@ -170,4 +197,4 @@
       {/if}
     </div>
   </div>
-</button>
+</div>

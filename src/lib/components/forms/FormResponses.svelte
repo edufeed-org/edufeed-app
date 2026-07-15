@@ -15,6 +15,8 @@
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -304,22 +306,36 @@
         class="overflow-hidden rounded-lg border border-base-content/15"
       >
         <!-- Header -->
-        <button
-          class="flex w-full items-center justify-between bg-base-200/30 p-3 transition-colors hover:bg-base-200/50"
-          onclick={() => toggleExpand(response)}
+        <div
+          role="button"
+          tabindex="0"
+          class="flex w-full cursor-pointer items-center justify-between bg-base-200/30 p-3 transition-colors hover:bg-base-200/50"
+          onclick={(e) => {
+            if (e.target instanceof HTMLElement && e.target.closest('a')) return;
+            toggleExpand(response);
+          }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleExpand(response);
+            }
+          }}
         >
           <div class="flex items-center gap-3">
-            <ProfileAvatar pubkey={response.pubkey} {profile} size="sm" />
+            <ProfileAvatar pubkey={response.pubkey} {profile} size="sm" linkToProfile />
             <div class="text-left">
-              <div class="text-sm font-semibold">
+              <a
+                href={resolve(profileLink(response.pubkey))}
+                class="block text-sm font-semibold hover:underline"
+              >
                 {profile?.name || response.pubkey.slice(0, 8) + '...'}
-              </div>
+              </a>
               <div class="text-xs text-base-content/40">
                 {formatTimestamp(response.created_at)}
               </div>
             </div>
           </div>
-        </button>
+        </div>
 
         <!-- Expanded content -->
         {#if isExpanded}

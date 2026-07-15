@@ -8,7 +8,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { ExternalLinkIcon, BookmarkIcon } from '$lib/components/icons';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
-  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
    * @type {{
@@ -39,7 +39,25 @@
     return profile ? getDisplayName(profile) : 'Unknown';
   }
 
-  function handleClick() {
+  /**
+   * @param {MouseEvent} e
+   */
+  function handleClick(e) {
+    if (e.target instanceof HTMLElement && e.target.closest('a, button')) return;
+    navigateToDetail();
+  }
+
+  /**
+   * @param {KeyboardEvent} e
+   */
+  function handleKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      navigateToDetail();
+    }
+  }
+
+  function navigateToDetail() {
     if (communityPubkey) {
       const npub = hexToNpub(communityPubkey);
       const encodedUrl = encodeURIComponent(group.displayUrl);
@@ -54,8 +72,11 @@
   }
 </script>
 
-<button
+<div
+  role="button"
+  tabindex="0"
   onclick={handleClick}
+  onkeydown={handleKeydown}
   class="w-full cursor-pointer rounded-lg border border-base-300 bg-base-100 p-4 text-left shadow-sm transition-shadow hover:shadow-md"
 >
   <!-- Contributor header -->
@@ -68,6 +89,7 @@
             {pubkey}
             {profile}
             size="sm"
+            linkToProfile
             fallbackType="robohash"
             class="ring-2 ring-base-100"
           />
@@ -75,7 +97,9 @@
       </div>
       <div class="min-w-0 flex-1">
         <span class="truncate text-sm font-medium text-base-content">
-          {getAuthorName(group.contributors[0])}
+          <a href={resolve(profileLink(group.contributors[0]))} class="hover:underline">
+            {getAuthorName(group.contributors[0])}
+          </a>
           {#if group.contributors.length > 1}
             <span class="font-normal text-base-content/50">
               +{group.contributors.length - 1}
@@ -106,9 +130,12 @@
         <p class="line-clamp-3 text-xs text-base-content/80 italic">
           &ldquo;{featuredHighlightText}&rdquo;
         </p>
-        <span class="text-xs text-base-content/50">
+        <a
+          href={resolve(profileLink(featuredHighlight.pubkey))}
+          class="text-xs text-base-content/50 hover:underline"
+        >
           {getAuthorName(featuredHighlight.pubkey)}
-        </span>
+        </a>
       </div>
     {/if}
 
@@ -116,9 +143,12 @@
     {#if featuredPageNote && !featuredHighlightText}
       <div class="border-l-3 border-info bg-info/5 py-1 pl-3">
         <p class="line-clamp-3 text-xs text-base-content/80">{featuredPageNote.content}</p>
-        <span class="text-xs text-base-content/50">
+        <a
+          href={resolve(profileLink(featuredPageNote.pubkey))}
+          class="text-xs text-base-content/50 hover:underline"
+        >
           {getAuthorName(featuredPageNote.pubkey)}
-        </span>
+        </a>
       </div>
     {/if}
 
@@ -160,4 +190,4 @@
       {/if}
     </div>
   </div>
-</button>
+</div>

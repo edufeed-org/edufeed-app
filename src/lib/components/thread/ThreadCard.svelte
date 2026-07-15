@@ -6,6 +6,8 @@
 
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { TimelineModel } from 'applesauce-core/models';
   import { debounceTime } from 'rxjs/operators';
@@ -122,6 +124,7 @@
       pubkey={thread.pubkey}
       profile={authorProfile}
       size="md"
+      linkToProfile
       fallbackType="robohash"
     />
   </div>
@@ -130,7 +133,12 @@
   <div class="min-w-0 flex-1">
     <!-- Author + Date row -->
     <div class="flex items-center gap-2">
-      <span class="truncate text-sm font-medium text-base-content">{authorName}</span>
+      <a
+        href={resolve(profileLink(thread.pubkey))}
+        class="truncate text-sm font-medium text-base-content hover:underline"
+      >
+        {authorName}
+      </a>
       <span class="ml-auto shrink-0 text-xs text-base-content/50">{relativeDate}</span>
     </div>
 
@@ -158,7 +166,11 @@
         {#if displayCommenters.length > 0}
           <div class="flex -space-x-2">
             {#each displayCommenters as commenter (commenter.pubkey)}
-              <div class="avatar rounded-full border-2 border-base-100">
+              <a
+                href={resolve(profileLink(commenter.pubkey))}
+                class="avatar rounded-full border-2 border-base-100"
+                title={commenter.name}
+              >
                 <div class="h-6 w-6 rounded-full">
                   <img
                     src={commenter.avatar}
@@ -167,7 +179,7 @@
                     decoding="async"
                   />
                 </div>
-              </div>
+              </a>
             {/each}
           </div>
         {/if}

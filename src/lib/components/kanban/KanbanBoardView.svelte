@@ -22,7 +22,7 @@
   import { KanbanIcon, TrashIcon, ExternalLinkIcon } from '$lib/components/icons';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import EventContextMenu from '../shared/EventContextMenu.svelte';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
@@ -219,10 +219,16 @@
           pubkey={event.pubkey}
           profile={authorProfile}
           size="lg"
+          linkToProfile
           fallbackType="robohash"
         />
         <div>
-          <div class="font-semibold text-base-content">{authorName}</div>
+          <a
+            href={resolve(profileLink(event.pubkey))}
+            class="block font-semibold text-base-content hover:underline"
+          >
+            {authorName}
+          </a>
           <div class="text-sm text-base-content/60">
             {formatCalendarDate(publishedAt, 'short')}
             {#if columns.length > 0}
