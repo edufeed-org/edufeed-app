@@ -6,6 +6,7 @@
 -->
 
 <script>
+  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
@@ -84,7 +85,9 @@
       .subscribe((/** @type {any[]} */ events) => {
         modelEvents = events || [];
       });
-    loadPage();
+    // Untracked: loadPage reads/writes pagination $state (loadingPage, exhausted)
+    // and must not become an effect dependency — the effect tracks only `relay`.
+    untrack(loadPage);
     return () => {
       modelSub.unsubscribe();
       pageSub?.unsubscribe();
