@@ -103,7 +103,9 @@ vi.mock('$lib/paraglide/runtime.js', () => ({
 vi.mock('applesauce-core/helpers', () => ({
   getProfilePicture: (/** @type {any} */ profile) => profile?.picture || null,
   getDisplayName: (/** @type {any} */ profile, /** @type {string} */ fallback) =>
-    profile?.name || fallback
+    profile?.name || fallback,
+  getTagValue: (/** @type {any} */ event, /** @type {string} */ name) =>
+    event?.tags?.find((/** @type {string[]} */ t) => t[0] === name)?.[1]
 }));
 vi.mock('$lib/helpers/navigationHistory.js', () => ({
   getHasHistory: () => true,
@@ -115,14 +117,18 @@ vi.mock('$lib/helpers/form-to-amb.js', () => ({
 vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: () => 'Jan 15'
 }));
-vi.mock('$lib/helpers/educational/ambTransform.js', () => ({
-  getLabelsWithFallback: () => [],
-  getLanguageDisplayName: (/** @type {string} */ code) => {
-    /** @type {Record<string, string>} */
-    const names = { de: 'German', en: 'English', fr: 'French' };
-    return names[code] || code;
-  }
-}));
+vi.mock('$lib/helpers/educational/ambTransform.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return {
+    ...actual,
+    getLabelsWithFallback: () => [],
+    getLanguageDisplayName: (/** @type {string} */ code) => {
+      /** @type {Record<string, string>} */
+      const names = { de: 'German', en: 'English', fr: 'French' };
+      return names[code] || code;
+    }
+  };
+});
 vi.mock('$lib/stores/skos-cache.svelte.js', () => ({
   getCachedConcepts: () => [],
   ensureVocabularyLoaded: vi.fn()
@@ -329,6 +335,60 @@ describe('AMBResourceView', () => {
     const stub = container.querySelector('[data-testid="pdf-viewer-stub"]');
     expect(stub).toBeTruthy();
     expect(stub?.getAttribute('data-src')).toBe('https://example.com/file.pdf');
+  });
+
+  // Regression for a real event (kind 30142, d=u5mfchck): the creator run
+  // was duplicated in the tags and the p-tag carried an nsec instead of a
+  // pubkey. The duplicate names crashed the page (each_key_duplicate) and
+  // the nsec was rendered as a contributor.
+  describe('malformed creator data (real-world event shape)', () => {
+    const dirtyEvent = {
+      ...mockEvent,
+      tags: [
+        ['d', 'u5mfchck'],
+        ['name', 'Test Resource'],
+        ['creator:name', 'Corinna Link'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Corinna Link'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Second Author'],
+        ['creator:type', 'Person'],
+        [
+          'p',
+          'nsec1ashx20k9x3qshzah8ktnu7da529wg8ps29fa30khrwhc0zpam20qpdw7q4',
+          'wss://x',
+          'creator'
+        ],
+        ['p', 'f'.repeat(64), 'wss://x', 'creator']
+      ]
+    };
+
+    it('renders without throwing on duplicated creator names', async () => {
+      const { formatAMBResource } = await import('$lib/helpers/educational/ambHelpers.js');
+      const resource = formatAMBResource(dirtyEvent);
+      expect(() =>
+        render(AMBResourceView, { props: { event: dirtyEvent, resource } })
+      ).not.toThrow();
+    });
+
+    it('shows the duplicated creator only once and never renders an nsec p-tag', async () => {
+      const { formatAMBResource } = await import('$lib/helpers/educational/ambHelpers.js');
+      const resource = formatAMBResource(dirtyEvent);
+      const { container } = render(AMBResourceView, {
+        props: { event: dirtyEvent, resource }
+      });
+
+      // The leaked private key must never appear anywhere in the DOM.
+      expect(container.textContent).not.toContain('nsec1');
+
+      // Contributors grid: each person once — the duplicate run collapsed,
+      // the invalid p-tag dropped (only the one valid hex p-tag remains).
+      const contribNames = [...container.querySelectorAll('.ed-contrib .name')].map((el) =>
+        el.textContent?.trim()
+      );
+      expect(contribNames.filter((n) => n === 'Corinna Link')).toHaveLength(1);
+      expect(contribNames.filter((n) => n === 'Second Author')).toHaveLength(1);
+    });
   });
 });
 

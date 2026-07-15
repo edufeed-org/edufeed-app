@@ -1917,6 +1917,7 @@
   "amb_creator_label_orcid": "ORCID iD (optional)",
   "amb_creator_placeholder_orcid": "0000-0002-1825-0097 or https://orcid.org/...",
   "amb_creator_error_orcid_invalid": "Invalid ORCID iD. Please check the 16-digit identifier.",
+  "amb_creator_error_pubkey_invalid": "Invalid Nostr identity. Enter an npub or hex public key — never a private key (nsec).",
   "amb_creator_placeholder_search": "Search follows or enter npub...",
   "amb_creator_placeholder_name": "Enter name",
   "amb_creator_placeholder_title": "Dr., Prof., etc.",
@@ -1925,6 +1926,8 @@
   "amb_creator_type_organization": "Organization",
   "amb_creator_button_update": "Update Creator",
   "amb_creator_button_add": "Add Creator",
+  "amb_creator_button_add_self": "Add myself",
+  "amb_creator_error_duplicate": "This creator is already in the list.",
   "amb_creator_edit_aria": "Edit creator",
   "amb_creator_remove_aria": "Remove creator",
   "form_builder_header": "Form Builder",
@@ -2698,5 +2701,8 @@
   "fab_create_note_desc": "Short text post to the feed",
   "note_create_modal_error_publish": "Your note could not be delivered to any relay. Please try again.",
   "profile_tab_highlights": "Highlights",
-  "profile_tab_shared": "Shared"
+  "profile_tab_shared": "Shared",
+  "render_error_title": "This page hit an error",
+  "render_error_description": "Something on this page could not be displayed — possibly caused by malformed content from the network. The rest of the app keeps working.",
+  "render_error_retry": "Try again"
 }

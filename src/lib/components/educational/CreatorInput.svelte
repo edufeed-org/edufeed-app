@@ -23,12 +23,13 @@
    * @property {string} [orcid] - Optional ORCID iD (canonical https URI)
    */
 
-  /** @type {{ creators?: Creator[], label?: string, required?: boolean, helpText?: string, onchange?: (creators: Creator[]) => void }} */
+  /** @type {{ creators?: Creator[], label?: string, required?: boolean, helpText?: string, activeUserPubkey?: string, onchange?: (creators: Creator[]) => void }} */
   let {
     creators = $bindable([]),
     label = 'Creators',
     required = false,
     helpText = '',
+    activeUserPubkey = '',
     onchange = () => {}
   } = $props();
 
@@ -38,6 +39,40 @@
   let editingIndex = $state(/** @type {number | null} */ (null));
   let isLoadingProfile = $state(false);
   let orcidInvalid = $state(false);
+  let pubkeyInvalid = $state(false);
+  let duplicateCreator = $state(false);
+  let isAddingSelf = $state(false);
+
+  // "Add myself" is offered while the logged-in user isn't in the list yet —
+  // one click instead of hand-entering a key (which is how an nsec once got
+  // pasted into the identity field).
+  const canAddSelf = $derived(
+    Boolean(activeUserPubkey) && !creators.some((c) => c.pubkey === activeUserPubkey)
+  );
+
+  /**
+   * Add the logged-in user as a creator, name prefilled from their profile.
+   */
+  async function addSelf() {
+    if (!canAddSelf || isAddingSelf) return;
+    isAddingSelf = true;
+    let name = '';
+    try {
+      const profile = await fetchProfileData(activeUserPubkey);
+      // @ts-ignore - profile has name property from fetchProfileData
+      if (profile && typeof profile.name === 'string' && profile.name !== 'Anonymous') {
+        // @ts-ignore
+        name = profile.name;
+      }
+    } catch {
+      // Profile fetch is best-effort; the user can still type their name.
+    } finally {
+      isAddingSelf = false;
+    }
+    if (!canAddSelf) return; // list may have changed while fetching
+    creators = [...creators, { name, type: 'Person', pubkey: activeUserPubkey }];
+    onchange(creators);
+  }
 
   /**
    * Create an empty creator object
@@ -68,8 +103,29 @@
       return;
     }
 
+    // Normalize the Nostr identity to a hex pubkey; block save on anything
+    // that doesn't normalize (nsec, typos) so no secret/garbage gets published
+    const pubkeyInput = newCreator.pubkey?.trim();
+    const normalizedPubkey = pubkeyInput ? normalizeToHex(pubkeyInput) : '';
+    pubkeyInvalid = Boolean(pubkeyInput && !normalizedPubkey);
+    if (pubkeyInvalid) return;
+
+    // Guard against the same person landing in the list twice: same pubkey,
+    // or same trimmed name when neither entry carries a pubkey.
+    const trimmedName = newCreator.name.trim();
+    duplicateCreator = creators.some((c, i) => {
+      if (i === editingIndex) return false;
+      if (normalizedPubkey && c.pubkey === normalizedPubkey) return true;
+      return !normalizedPubkey && !c.pubkey && c.name.trim() === trimmedName;
+    });
+    if (duplicateCreator) return;
+
     /** @type {Creator} */
-    const creatorToAdd = { ...newCreator, orcid: normalizedOrcid || '' };
+    const creatorToAdd = {
+      ...newCreator,
+      pubkey: normalizedPubkey || '',
+      orcid: normalizedOrcid || ''
+    };
     // Clean up empty optional fields
     if (!creatorToAdd.pubkey?.trim()) delete creatorToAdd.pubkey;
     if (!creatorToAdd.affiliationName?.trim()) delete creatorToAdd.affiliationName;
@@ -120,6 +176,8 @@
     editingIndex = null;
     showAddForm = false;
     orcidInvalid = false;
+    pubkeyInvalid = false;
+    duplicateCreator = false;
   }
 
   /**
@@ -280,14 +338,20 @@
           bind:value={newCreator.pubkey}
           id="creator-pubkey"
           placeholder={m.amb_creator_placeholder_search()}
-          inputClass="input-sm"
+          inputClass="input-sm {pubkeyInvalid ? 'input-error' : ''}"
           exclude={creators.map((c) => c.pubkey || '').filter((p) => p !== '')}
           onselect={(contact) => {
+            pubkeyInvalid = false;
             newCreator.pubkey = contact.pubkey;
             newCreator.name = contact.display_name || contact.name || '';
           }}
           onblur={handlePubkeyBlur}
         />
+        {#if pubkeyInvalid}
+          <p class="creator-pubkey-error mt-1 text-xs text-error">
+            {m.amb_creator_error_pubkey_invalid()}
+          </p>
+        {/if}
       </div>
 
       <!-- Name -->
@@ -374,6 +438,12 @@
         />
       </div>
 
+      {#if duplicateCreator}
+        <p class="creator-duplicate-error text-xs text-error">
+          {m.amb_creator_error_duplicate()}
+        </p>
+      {/if}
+
       <!-- Submit Button -->
       <button
         type="submit"
@@ -384,15 +454,33 @@
       </button>
     </form>
   {:else}
-    <!-- Add Button -->
-    <button
-      type="button"
-      class="btn w-full btn-outline btn-sm"
-      onclick={() => (showAddForm = true)}
-    >
-      <PlusIcon class_="w-4 h-4" />
-      {m.amb_creator_button_add()}
-    </button>
+    <div class="flex flex-col gap-2 sm:flex-row">
+      {#if canAddSelf}
+        <!-- One-click self-add: fills pubkey + profile name from the account -->
+        <button
+          type="button"
+          class="creator-add-self btn btn-outline btn-sm sm:flex-1"
+          onclick={addSelf}
+          disabled={isAddingSelf}
+        >
+          {#if isAddingSelf}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            <PlusIcon class_="w-4 h-4" />
+          {/if}
+          {m.amb_creator_button_add_self()}
+        </button>
+      {/if}
+      <!-- Add Button -->
+      <button
+        type="button"
+        class="btn btn-outline btn-sm sm:flex-1"
+        onclick={() => (showAddForm = true)}
+      >
+        <PlusIcon class_="w-4 h-4" />
+        {m.amb_creator_button_add()}
+      </button>
+    </div>
   {/if}
 
   <!-- Help Text -->

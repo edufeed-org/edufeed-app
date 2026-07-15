@@ -21,6 +21,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
+  import { getAMBCreatorNames } from '$lib/helpers/educational/ambHelpers.js';
   import {
     canDeriveThumbnail,
     getThumbnailSourceUrl,
@@ -112,12 +113,7 @@
   // metadata, e.g. "Constanze von Kitzing") over the Nostr publisher.
   // Falls back to the publisher profile's display name, then a shortened pubkey.
   // The display order matters: the first author is the primary attribution.
-  const creatorNames = $derived(
-    (resource?.tags ?? [])
-      .filter((/** @type {string[]} */ t) => t[0] === 'creator:name')
-      .map((/** @type {string[]} */ t) => t[1])
-      .filter(Boolean)
-  );
+  const creatorNames = $derived(getAMBCreatorNames({ tags: resource?.tags ?? [] }).filter(Boolean));
   const publisherProfile = useUserProfile(() => resource?.pubkey);
   const authors = $derived.by(() => {
     if (creatorNames.length > 0) return creatorNames;

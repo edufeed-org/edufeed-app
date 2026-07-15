@@ -1917,6 +1917,7 @@
   "amb_creator_label_orcid": "ORCID iD (optional)",
   "amb_creator_placeholder_orcid": "0000-0002-1825-0097 oder https://orcid.org/...",
   "amb_creator_error_orcid_invalid": "Ungültige ORCID iD. Bitte die 16-stellige Kennung prüfen.",
+  "amb_creator_error_pubkey_invalid": "Ungültige Nostr-Identität. Bitte einen npub oder Hex-Public-Key eingeben — niemals einen privaten Schlüssel (nsec).",
   "amb_creator_placeholder_search": "Follows durchsuchen oder npub eingeben...",
   "amb_creator_placeholder_name": "Name eingeben",
   "amb_creator_placeholder_title": "Dr., Prof. usw.",
@@ -1925,6 +1926,8 @@
   "amb_creator_type_organization": "Organisation",
   "amb_creator_button_update": "Urheber aktualisieren",
   "amb_creator_button_add": "Urheber hinzufügen",
+  "amb_creator_button_add_self": "Mich selbst hinzufügen",
+  "amb_creator_error_duplicate": "Diese Person ist bereits in der Liste.",
   "amb_creator_edit_aria": "Urheber bearbeiten",
   "amb_creator_remove_aria": "Urheber entfernen",
   "form_builder_header": "Formular-Editor",
@@ -2698,5 +2701,8 @@
   "fab_create_note_desc": "Kurzer Textbeitrag im Feed",
   "note_create_modal_error_publish": "Deine Notiz konnte an kein Relay übermittelt werden. Bitte versuche es erneut.",
   "profile_tab_highlights": "Highlights",
-  "profile_tab_shared": "Geteilt"
+  "profile_tab_shared": "Geteilt",
+  "render_error_title": "Diese Seite hat einen Fehler",
+  "render_error_description": "Etwas auf dieser Seite konnte nicht angezeigt werden — möglicherweise durch fehlerhafte Inhalte aus dem Netzwerk. Der Rest der App funktioniert weiter.",
+  "render_error_retry": "Erneut versuchen"
 }

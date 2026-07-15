@@ -55,19 +55,23 @@ vi.mock('applesauce-core/helpers', () => ({
 vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: () => 'Jan 15'
 }));
-vi.mock('$lib/helpers/educational/ambTransform.js', () => ({
-  getLabelsWithFallback: (/** @type {any} */ tags, /** @type {any} */ field) => {
-    if (field === 'learningResourceType') return [{ id: 'hcrt/text', label: 'Text' }];
-    if (field === 'about') return [{ id: 'math', label: 'Mathematik', fallbackLang: 'de' }];
-    if (field === 'educationalLevel') return [{ id: 'higher', label: 'Higher Education' }];
-    return [];
-  },
-  getLanguageDisplayName: (/** @type {string} */ code) => {
-    /** @type {Record<string, string>} */
-    const names = { de: 'German', en: 'English', fr: 'French' };
-    return names[code] || code;
-  }
-}));
+vi.mock('$lib/helpers/educational/ambTransform.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return {
+    ...actual,
+    getLabelsWithFallback: (/** @type {any} */ tags, /** @type {any} */ field) => {
+      if (field === 'learningResourceType') return [{ id: 'hcrt/text', label: 'Text' }];
+      if (field === 'about') return [{ id: 'math', label: 'Mathematik', fallbackLang: 'de' }];
+      if (field === 'educationalLevel') return [{ id: 'higher', label: 'Higher Education' }];
+      return [];
+    },
+    getLanguageDisplayName: (/** @type {string} */ code) => {
+      /** @type {Record<string, string>} */
+      const names = { de: 'German', en: 'English', fr: 'French' };
+      return names[code] || code;
+    }
+  };
+});
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     appRelays: { educational: ['wss://relay.example.com'] }
