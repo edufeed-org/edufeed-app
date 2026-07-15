@@ -5,6 +5,7 @@
 
 <script>
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { nip19 } from 'nostr-tools';
   import { goto } from '$app/navigation';
@@ -277,16 +278,25 @@
   >
     <!-- Author Header -->
     <div class="mb-3 flex items-center gap-3">
-      <ProfileAvatar
-        pubkey={resource.pubkey}
-        profile={authorProfile}
-        size="md"
-        linkToProfile
-        showHoverCard
-        fallbackType="robohash"
-      />
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+        <ProfileAvatar
+          pubkey={resource.pubkey}
+          profile={authorProfile}
+          size="md"
+          linkToProfile
+          showHoverCard
+          fallbackType="robohash"
+        />
+      </div>
       <div class="min-w-0 flex-1">
-        <div class="truncate font-medium text-base-content">{authorName}</div>
+        <a
+          href={resolve(profileLink(resource.pubkey))}
+          class="block truncate font-medium text-base-content hover:underline"
+          onclick={(e) => e.stopPropagation()}
+        >
+          {authorName}
+        </a>
         <div class="text-sm text-base-content/60">
           {formatCalendarDate(publishedAt, 'short')}
         </div>

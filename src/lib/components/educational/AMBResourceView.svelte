@@ -773,13 +773,15 @@
               ]
                 .filter(Boolean)
                 .join(' ')}
-              {#if picture}
-                <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
-              {:else}
-                {@render initialAvatar(displayName, entry.type)}
-              {/if}
+              <a class="av-link" href={resolve(profileLink(entry.pubkey))} aria-label={displayName}>
+                {#if picture}
+                  <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
+                {:else}
+                  {@render initialAvatar(displayName, entry.type)}
+                {/if}
+              </a>
               <div class="ed-contrib-body">
-                <a class="name" href={profileLink(entry.pubkey)}>{displayName}</a>
+                <a class="name" href={resolve(profileLink(entry.pubkey))}>{displayName}</a>
                 {@render contribMeta(entry)}
               </div>
             {:else}
@@ -1247,6 +1249,10 @@
     border: 1px solid var(--c-rule);
     border-radius: 999px;
     padding: 6px 14px 6px 6px;
+  }
+  .ed-contrib .av-link {
+    display: flex;
+    flex-shrink: 0;
   }
   .ed-contrib .av {
     width: 32px;

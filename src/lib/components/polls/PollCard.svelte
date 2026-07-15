@@ -228,7 +228,12 @@
       linkToProfile
       showHoverCard
     />
-    <span class="truncate text-sm text-base-content/80">{authorName}</span>
+    <a
+      href={resolve(profileLink(event.pubkey))}
+      class="truncate text-sm text-base-content/80 hover:underline"
+    >
+      {authorName}
+    </a>
   </div>
 
   <p data-testid="poll-question" class="text-lg font-semibold {truncate ? 'line-clamp-3' : ''}">

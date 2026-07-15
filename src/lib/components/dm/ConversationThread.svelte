@@ -344,7 +344,15 @@
         showHoverCard
       />
     {/if}
-    <h3 class="truncate font-bold">{getHeaderName()}</h3>
+    <h3 class="truncate font-bold">
+      {#if getHeaderPubkey()}
+        <a href={resolve(profileLink(getHeaderPubkey() ?? ''))} class="hover:underline">
+          {getHeaderName()}
+        </a>
+      {:else}
+        {getHeaderName()}
+      {/if}
+    </h3>
   </div>
 
   <!-- Legacy (NIP-04) insecure notice -->

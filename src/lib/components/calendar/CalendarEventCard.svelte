@@ -26,7 +26,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
-  import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
+  import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
@@ -229,7 +229,16 @@
           fallbackType="robohash"
         />
         <div class="min-w-0 flex-1">
-          <span class="truncate font-medium text-base-content">{authorName}</span>
+          {#if event.originalEvent?.pubkey}
+            <a
+              href={resolve(profileLink(event.originalEvent.pubkey))}
+              class="block truncate font-medium text-base-content hover:underline"
+            >
+              {authorName}
+            </a>
+          {:else}
+            <span class="truncate font-medium text-base-content">{authorName}</span>
+          {/if}
           <div class="text-sm text-base-content/60">
             {formatRelativeTime(event.createdAt || event.originalEvent?.created_at)}
           </div>

@@ -14,6 +14,7 @@
    * standalone nip-05-service with the server-held Bearer token.
    */
   import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -400,7 +401,7 @@
           <!-- Header: identity + wished handle + actions + expand toggle -->
           <div class="flex flex-wrap items-start gap-3 bg-base-200/40 p-4">
             <a
-              href={resolve(`/p/${response.pubkey}`)}
+              href={resolve(profileLink(response.pubkey))}
               class="group flex min-w-0 flex-1 items-start gap-3 transition-opacity hover:opacity-80"
               aria-label={m.admin_membership_view_profile()}
             >
@@ -481,7 +482,7 @@
               {values?.wished_handle ?? '…'}@{cfg.handleDomain}
             </code>
             <a
-              href={resolve(`/p/${response.pubkey}`)}
+              href={resolve(profileLink(response.pubkey))}
               class="group flex items-center gap-2 text-base-content/70"
               aria-label={m.admin_membership_view_profile()}
             >

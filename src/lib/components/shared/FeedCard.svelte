@@ -1,5 +1,6 @@
 <script>
   import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import {
     CalendarIcon,
     BookIcon,
@@ -141,7 +142,17 @@
   <div class="min-w-0 flex-1">
     {#if authorName}
       <div class="flex items-center gap-1.5">
-        <span class="truncate text-sm font-medium text-base-content">{authorName}</span>
+        {#if authorPubkey}
+          <a
+            href={resolve(profileLink(authorPubkey))}
+            class="truncate text-sm font-medium text-base-content hover:underline"
+            onclick={(e) => e.stopPropagation()}
+          >
+            {authorName}
+          </a>
+        {:else}
+          <span class="truncate text-sm font-medium text-base-content">{authorName}</span>
+        {/if}
         {#if timestamp}
           <span class="text-base-content/30">&middot;</span>
           <span class="shrink-0 text-xs text-base-content/50">
