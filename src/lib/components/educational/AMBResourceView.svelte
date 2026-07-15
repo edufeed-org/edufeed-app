@@ -1290,7 +1290,7 @@
   }
   .ed-contrib .role-badge {
     background: var(--c-band);
-    color: var(--c-ink);
+    color: var(--c-on-dark);
     border-radius: 999px;
     padding: 1px 8px;
     font-size: 11px;
