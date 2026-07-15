@@ -1,8 +1,12 @@
 /**
  * useRelayFeedOptions — reactive relay list for the dashboard feed selector.
- * Sources: the user's NIP-65 relay list (kind 10002, read ∪ write, NO
- * default-relay fallback), joined communities' relays (kind 10222), and
- * user-added custom relays. Returns a getter for RelayOption[].
+ * Sources are deployment-gated via runtimeConfig.feed.relaySources
+ * (FEED_RELAY_SOURCES env; default `config,custom`):
+ * - config: deployment-curated relays (FEED_RELAYS env)
+ * - custom: user-added free-text relays (persisted in app settings)
+ * - nip65: the user's kind 10002 relay list (read ∪ write, NO default-relay fallback)
+ * - community: joined communities' relays (kind 10222)
+ * Returns a getter for RelayOption[].
  */
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -11,7 +15,8 @@ import { getAllCommunityRelays } from '$lib/helpers/communityRelays.js';
 import { getCommunikeyRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { addressLoader } from '$lib/loaders/base.js';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
-import { buildRelayOptions } from '$lib/helpers/relay-feed.js';
+import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { buildRelayOptions, resolveFeedRelaySources } from '$lib/helpers/relay-feed.js';
 
 /**
  * @returns {() => import('$lib/helpers/relay-feed.js').RelayOption[]}
@@ -26,8 +31,10 @@ export function useRelayFeedOptions() {
   // User's kind 10002 relay list. Raw r-tags (read ∪ write; no marker = both) —
   // deliberately NOT getReadRelays(), which falls back to app default relays.
   $effect(() => {
+    // Read all reactive deps before any early return (dead-effect gotcha)
+    const enabled = resolveFeedRelaySources(runtimeConfig.feed).has('nip65');
     const pubkey = getActiveUser()?.pubkey;
-    if (!pubkey) {
+    if (!enabled || !pubkey) {
       nip65Relays = [];
       return;
     }
@@ -47,8 +54,9 @@ export function useRelayFeedOptions() {
 
   // Joined communities' relays from their kind 10222 events.
   $effect(() => {
+    const enabled = resolveFeedRelaySources(runtimeConfig.feed).has('community');
     const joined = getJoinedCommunities();
-    if (joined.length === 0) {
+    if (!enabled || joined.length === 0) {
       communityRelays = [];
       return;
     }
@@ -75,5 +83,15 @@ export function useRelayFeedOptions() {
     return () => cleanups.forEach((fn) => fn());
   });
 
-  return () => buildRelayOptions(nip65Relays, communityRelays, appSettings.dashboardCustomRelays);
+  return () => {
+    const sources = resolveFeedRelaySources(runtimeConfig.feed);
+    return buildRelayOptions(
+      [
+        ...(sources.has('config') ? (runtimeConfig.feed?.relays ?? []) : []),
+        ...(sources.has('nip65') ? nip65Relays : [])
+      ],
+      sources.has('community') ? communityRelays : [],
+      sources.has('custom') ? appSettings.dashboardCustomRelays : []
+    );
+  };
 }

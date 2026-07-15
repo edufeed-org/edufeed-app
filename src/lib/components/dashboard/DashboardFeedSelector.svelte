@@ -1,14 +1,15 @@
 <!--
   DashboardFeedSelector — Clickable heading that opens a dropdown to switch feed sources.
-  Base sources (communities/following/combined) plus a "Relays" section listing the
-  user's NIP-65 relays, joined-community relays, and user-added custom relays.
+  Base sources (communities/following/combined) plus a "Relays" section whose entries
+  are deployment-gated via FEED_RELAY_SOURCES (see relay-feed-options.svelte.js).
   Reads/writes appSettings.dashboardFeedSource / dashboardFeedRelay / dashboardCustomRelays.
 -->
 
 <script>
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import { useRelayFeedOptions } from '$lib/stores/relay-feed-options.svelte.js';
-  import { relayHostLabel } from '$lib/helpers/relay-feed.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { relayHostLabel, resolveFeedRelaySources } from '$lib/helpers/relay-feed.js';
   import {
     PeopleIcon,
     UserIcon,
@@ -30,6 +31,8 @@
 
   const getRelayOptions = useRelayFeedOptions();
   let relayOptions = $derived(getRelayOptions());
+  let customAllowed = $derived(resolveFeedRelaySources(runtimeConfig.feed).has('custom'));
+  let showRelaySection = $derived(relayOptions.length > 0 || customAllowed);
   let addRelayOpen = $state(false);
 
   let isRelayFeed = $derived(
@@ -106,7 +109,9 @@
       </li>
     {/each}
 
-    <li class="mt-1 menu-title">{m.dashboard_feed_selector_relays_label()}</li>
+    {#if showRelaySection}
+      <li class="mt-1 menu-title">{m.dashboard_feed_selector_relays_label()}</li>
+    {/if}
     {#each relayOptions as relay (relay.url)}
       <li>
         <div class="flex items-center gap-0 p-0">
@@ -130,19 +135,27 @@
         </div>
       </li>
     {/each}
-    <li>
-      <button
-        class="flex items-center gap-2"
-        onclick={() => {
-          closeDropdown();
-          addRelayOpen = true;
-        }}
-      >
-        <PlusIcon class_="w-4 h-4" />
-        {m.dashboard_feed_selector_add_relay()}
-      </button>
-    </li>
+    {#if customAllowed}
+      <li>
+        <button
+          class="flex items-center gap-2"
+          onclick={() => {
+            closeDropdown();
+            addRelayOpen = true;
+          }}
+        >
+          <PlusIcon class_="w-4 h-4" />
+          {m.dashboard_feed_selector_add_relay()}
+        </button>
+      </li>
+    {/if}
   </ul>
 </div>
 
-<AddRelayModal open={addRelayOpen} onadd={handleAddRelay} onclose={() => (addRelayOpen = false)} />
+{#if customAllowed}
+  <AddRelayModal
+    open={addRelayOpen}
+    onadd={handleAddRelay}
+    onclose={() => (addRelayOpen = false)}
+  />
+{/if}

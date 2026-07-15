@@ -44,11 +44,23 @@ vi.mock('$lib/stores/relay-feed-options.svelte.js', () => ({
   ]
 }));
 
+/** @type {{ feed: { relays: string[], relaySources?: string[] } }} */
+const mockConfig = {
+  feed: { relays: [], relaySources: ['config', 'custom', 'nip65', 'community'] }
+};
+
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  get runtimeConfig() {
+    return mockConfig;
+  }
+}));
+
 describe('DashboardFeedSelector', () => {
   beforeEach(() => {
     mockSettings.dashboardFeedSource = 'communities';
     mockSettings.dashboardFeedRelay = '';
     mockSettings.dashboardCustomRelays = ['wss://custom.example/'];
+    mockConfig.feed = { relays: [], relaySources: ['config', 'custom', 'nip65', 'community'] };
   });
 
   it('renders the three base feed options', () => {
@@ -99,5 +111,25 @@ describe('DashboardFeedSelector', () => {
     const { container } = render(DashboardFeedSelector);
     const button = container.querySelector('.dropdown > button');
     expect(button?.textContent).toContain('relay.example.org');
+  });
+
+  it('hides the Add relay row and modal when the custom source is disabled', () => {
+    mockConfig.feed = { relays: ['wss://relay.edufeed.org/'], relaySources: ['config'] };
+    const { queryByText, container } = render(DashboardFeedSelector);
+    expect(queryByText('Add relay…')).toBeNull();
+    expect(container.querySelector('dialog')).toBeNull();
+  });
+
+  it('shows the Add relay row when the custom source is enabled', () => {
+    mockConfig.feed = { relays: [], relaySources: ['config', 'custom'] };
+    const { getByText } = render(DashboardFeedSelector);
+    expect(getByText('Add relay…')).toBeTruthy();
+  });
+
+  it('falls back to the restricted default when relaySources is missing', () => {
+    mockConfig.feed = { relays: [] };
+    const { getByText } = render(DashboardFeedSelector);
+    // default is config+custom → Add relay row present
+    expect(getByText('Add relay…')).toBeTruthy();
   });
 });

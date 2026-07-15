@@ -6,6 +6,22 @@
 import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
 import { getNip10References } from 'applesauce-common/helpers';
 
+/** Valid picker source tokens; unknown tokens are ignored. */
+const FEED_RELAY_SOURCE_TOKENS = ['config', 'custom', 'nip65', 'community'];
+
+/**
+ * Resolve the enabled relay-picker sources from runtime config.
+ * @param {{ relaySources?: string[] } | undefined} feedConfig - runtimeConfig.feed
+ * @returns {Set<string>} enabled tokens; defaults to config+custom (restricted mode)
+ */
+export function resolveFeedRelaySources(feedConfig) {
+  const raw = feedConfig?.relaySources;
+  const tokens = (raw?.length ? raw : ['config', 'custom']).filter((t) =>
+    FEED_RELAY_SOURCE_TOKENS.includes(t)
+  );
+  return new Set(tokens.length ? tokens : ['config', 'custom']);
+}
+
 /**
  * Normalize free-text relay input to a canonical relay URL.
  * Lenient: bare hostnames get wss:// prepended. Only ws/wss allowed.

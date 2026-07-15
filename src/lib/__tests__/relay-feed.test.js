@@ -8,7 +8,8 @@ import {
   normalizeRelayInput,
   relayHostLabel,
   buildRelayOptions,
-  filterEventsForRelay
+  filterEventsForRelay,
+  resolveFeedRelaySources
 } from '../helpers/relay-feed.js';
 
 /** @param {Partial<any>} overrides */
@@ -174,5 +175,37 @@ describe('filterEventsForRelay', () => {
     const event = makeEvent();
     addSeenRelay(event, RELAY);
     expect(filterEventsForRelay([event], 'garbage')).toEqual([]);
+  });
+});
+
+describe('resolveFeedRelaySources', () => {
+  it('defaults to config+custom when feed config is undefined', () => {
+    expect(resolveFeedRelaySources(undefined)).toEqual(new Set(['config', 'custom']));
+  });
+
+  it('defaults to config+custom when relaySources is empty', () => {
+    expect(resolveFeedRelaySources({ relaySources: [] })).toEqual(new Set(['config', 'custom']));
+  });
+
+  it('parses explicit tokens', () => {
+    expect(
+      resolveFeedRelaySources({ relaySources: ['config', 'custom', 'nip65', 'community'] })
+    ).toEqual(new Set(['config', 'custom', 'nip65', 'community']));
+  });
+
+  it('supports a restricted single-source list', () => {
+    expect(resolveFeedRelaySources({ relaySources: ['config'] })).toEqual(new Set(['config']));
+  });
+
+  it('drops unknown tokens', () => {
+    expect(resolveFeedRelaySources({ relaySources: ['config', 'relaysets', 'bogus'] })).toEqual(
+      new Set(['config'])
+    );
+  });
+
+  it('falls back to the default when only unknown tokens are given', () => {
+    expect(resolveFeedRelaySources({ relaySources: ['bogus'] })).toEqual(
+      new Set(['config', 'custom'])
+    );
   });
 });
