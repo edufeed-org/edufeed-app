@@ -32,6 +32,12 @@ const defaultConfig = {
     longform: [], // kind 30023
     kanban: [] // kinds 30301, 30302, 8571
   },
+  // Dashboard relay feed picker: deployment-curated relays + enabled sources
+  // (tokens: config | custom | nip65 | community)
+  feed: {
+    relays: /** @type {string[]} */ ([]),
+    relaySources: /** @type {string[]} */ (['config', 'custom'])
+  },
   // Gated mode: when enabled, fetch only from app relays (exclude fallback relays)
   gatedMode: {
     default: false, // Default state for new users
@@ -226,6 +232,10 @@ export function initializeConfig(runtimeConfig) {
       longform: runtimeConfig.longformContentRelays || defaultConfig.appRelays.longform,
       kanban: runtimeConfig.kanbanRelays || defaultConfig.appRelays.kanban
     },
+    feed: {
+      relays: runtimeConfig.feed?.relays || defaultConfig.feed.relays,
+      relaySources: runtimeConfig.feed?.relaySources || defaultConfig.feed.relaySources
+    },
     gatedMode: {
       default: runtimeConfig.gatedMode?.default ?? defaultConfig.gatedMode.default,
       force: runtimeConfig.gatedMode?.force ?? defaultConfig.gatedMode.force
@@ -365,6 +375,9 @@ export const runtimeConfig = {
   },
   get appRelays() {
     return config.appRelays;
+  },
+  get feed() {
+    return config.feed;
   },
   get defaultBlossomServers() {
     return config.defaultBlossomServers;

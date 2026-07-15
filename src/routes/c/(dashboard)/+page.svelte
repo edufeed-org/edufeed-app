@@ -6,6 +6,7 @@
   import DashboardHome from '$lib/components/dashboard/DashboardHome.svelte';
   import DashboardCommunityFeed from '$lib/components/dashboard/DashboardCommunityFeed.svelte';
   import DashboardFollowsFeed from '$lib/components/dashboard/DashboardFollowsFeed.svelte';
+  import DashboardRelayFeed from '$lib/components/dashboard/DashboardRelayFeed.svelte';
   import DashboardMyStuff from '$lib/components/dashboard/DashboardMyStuff.svelte';
   import DashboardCommunities from '$lib/components/dashboard/DashboardCommunities.svelte';
 
@@ -26,6 +27,8 @@
   {:else if activeSection === 'feed'}
     {#if appSettings.dashboardFeedSource === 'following'}
       <DashboardFollowsFeed />
+    {:else if appSettings.dashboardFeedSource === 'relay' && appSettings.dashboardFeedRelay}
+      <DashboardRelayFeed relay={appSettings.dashboardFeedRelay} />
     {:else}
       <DashboardCommunityFeed includeFollows={appSettings.dashboardFeedSource === 'combined'} />
     {/if}

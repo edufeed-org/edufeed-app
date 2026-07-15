@@ -17,7 +17,9 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {'light' | 'dark' | 'system'} colorMode
  * @property {boolean} gatedMode
  * @property {boolean} includeClientTag
- * @property {'communities' | 'following' | 'combined'} dashboardFeedSource
+ * @property {'communities' | 'following' | 'combined' | 'relay'} dashboardFeedSource
+ * @property {string} dashboardFeedRelay
+ * @property {string[]} dashboardCustomRelays
  * @property {boolean} linkPreviewsEnabled
  */
 
@@ -93,6 +95,8 @@ function getDefaultSettings() {
     gatedMode: runtimeConfig.gatedMode?.default ?? false,
     includeClientTag: true,
     dashboardFeedSource: 'communities',
+    dashboardFeedRelay: '',
+    dashboardCustomRelays: [],
     linkPreviewsEnabled: true
   };
 }
@@ -114,6 +118,10 @@ function migrateSettings(stored) {
       gatedMode: stored.gatedMode ?? defaults.gatedMode,
       includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
       dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource,
+      dashboardFeedRelay: stored.dashboardFeedRelay ?? defaults.dashboardFeedRelay,
+      dashboardCustomRelays: Array.isArray(stored.dashboardCustomRelays)
+        ? stored.dashboardCustomRelays
+        : defaults.dashboardCustomRelays,
       linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
     };
   }
@@ -153,6 +161,10 @@ function migrateSettings(stored) {
     gatedMode: stored.gatedMode ?? defaults.gatedMode,
     includeClientTag: stored.includeClientTag ?? defaults.includeClientTag,
     dashboardFeedSource: stored.dashboardFeedSource ?? defaults.dashboardFeedSource,
+    dashboardFeedRelay: stored.dashboardFeedRelay ?? defaults.dashboardFeedRelay,
+    dashboardCustomRelays: Array.isArray(stored.dashboardCustomRelays)
+      ? stored.dashboardCustomRelays
+      : defaults.dashboardCustomRelays,
     linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
   };
 }
@@ -384,7 +396,7 @@ export const appSettings = {
 
   /**
    * Get dashboard feed source
-   * @returns {'communities' | 'following' | 'combined'}
+   * @returns {'communities' | 'following' | 'combined' | 'relay'}
    */
   get dashboardFeedSource() {
     return settings.dashboardFeedSource;
@@ -392,10 +404,44 @@ export const appSettings = {
 
   /**
    * Set dashboard feed source
-   * @param {'communities' | 'following' | 'combined'} value
+   * @param {'communities' | 'following' | 'combined' | 'relay'} value
    */
   set dashboardFeedSource(value) {
     settings.dashboardFeedSource = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get the relay URL for the relay-based dashboard feed
+   * @returns {string}
+   */
+  get dashboardFeedRelay() {
+    return settings.dashboardFeedRelay;
+  },
+
+  /**
+   * Set the relay URL for the relay-based dashboard feed
+   * @param {string} value
+   */
+  set dashboardFeedRelay(value) {
+    settings.dashboardFeedRelay = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get user-added custom feed relays
+   * @returns {string[]}
+   */
+  get dashboardCustomRelays() {
+    return settings.dashboardCustomRelays;
+  },
+
+  /**
+   * Replace the user-added custom feed relays (always assign a new array)
+   * @param {string[]} value
+   */
+  set dashboardCustomRelays(value) {
+    settings.dashboardCustomRelays = value;
     saveSettings(settings);
   },
 
