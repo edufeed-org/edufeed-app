@@ -233,6 +233,22 @@ describe('LicensedFileInput — defer upload', () => {
     expect(mocks.modalProps.url).toBe('https://blossom.example/abc.pdf');
     expect(mocks.uploadBlob).not.toHaveBeenCalled();
   });
+
+  it('skips the metadata cleaner entirely when config disables it', async () => {
+    // This suite's config mock (above) has no `metadataCleaner` key, so
+    // `runtimeConfig.metadataCleaner?.enabled` is falsy and picking a file
+    // must go straight to the license modal path with no cleaner UI.
+    const { container, queryByText } = render(LicensedFileInput, { props: { files: [] } });
+    const fileInput = container.querySelector('input[type="file"]');
+
+    const file = new File(['payload'], 'doc.pdf', { type: 'application/pdf' });
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
+    expect(mocks.sha256Hex).toHaveBeenCalledWith(file);
+    expect(queryByText('Check metadata')).toBeNull();
+  });
 });
 
 describe('LicensedFileInput — duplicate content', () => {
