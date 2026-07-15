@@ -172,7 +172,9 @@ export function getAMBDateCreated(event) {
  * @returns {string[]} Array of creator names
  */
 export function getAMBCreatorNames(event) {
-  return getNestedTagValues(event.tags, 'creator:name');
+  // Deduped: events in the wild repeat the whole creator run, and the names
+  // feed keyed {#each} blocks where duplicates crash the page.
+  return [...new Set(getNestedTagValues(event.tags, 'creator:name'))];
 }
 
 /**

@@ -1917,6 +1917,7 @@
   "amb_creator_label_orcid": "ORCID iD (optional)",
   "amb_creator_placeholder_orcid": "0000-0002-1825-0097 or https://orcid.org/...",
   "amb_creator_error_orcid_invalid": "Invalid ORCID iD. Please check the 16-digit identifier.",
+  "amb_creator_error_pubkey_invalid": "Invalid Nostr identity. Enter an npub or hex public key — never a private key (nsec).",
   "amb_creator_placeholder_search": "Search follows or enter npub...",
   "amb_creator_placeholder_name": "Enter name",
   "amb_creator_placeholder_title": "Dr., Prof., etc.",

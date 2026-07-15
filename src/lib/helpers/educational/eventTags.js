@@ -7,13 +7,17 @@
  * and preserve the exact tag shapes the inline code produced.
  */
 
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
+
 /**
  * @typedef {import('$lib/stores/educational-actions.svelte.js').Creator} Creator
  */
 
 /**
  * Append one `["p", pubkey, relayHint, "creator"]` tag per creator that has a
- * Nostr pubkey. Creators without a pubkey are skipped.
+ * valid Nostr pubkey (hex or npub, normalized to hex). Creators without one
+ * are skipped — anything that doesn't normalize (nsec, typos) must never end
+ * up in a public tag.
  *
  * @param {string[][]} tags - Mutated
  * @param {Creator[] | undefined} creators
@@ -24,8 +28,10 @@ export async function appendCreatorPTags(tags, creators, resolveRelayHint) {
   if (!creators || creators.length === 0) return;
   for (const creator of creators) {
     if (!creator.pubkey) continue;
-    const relayHint = await resolveRelayHint(creator.pubkey);
-    tags.push(['p', creator.pubkey, relayHint, 'creator']);
+    const hexPubkey = normalizePubkey(creator.pubkey);
+    if (!hexPubkey) continue;
+    const relayHint = await resolveRelayHint(hexPubkey);
+    tags.push(['p', hexPubkey, relayHint, 'creator']);
   }
 }
 

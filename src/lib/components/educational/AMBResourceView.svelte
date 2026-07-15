@@ -212,14 +212,16 @@
     );
   });
 
-  // Parse creators from event tags (p-tags)
+  // Parse creators from event tags (p-tags). Only valid hex pubkeys, deduped:
+  // malformed events carry duplicate p-tags (crashes the keyed {#each}) or
+  // non-pubkey values (one even leaked an nsec) that must never render.
   const creators = $derived.by(() => {
     const creatorPubkeys =
       event.tags
-        ?.filter((/** @type {any} */ t) => t[0] === 'p')
-        .map((/** @type {any} */ t) => t[1]) || [];
+        ?.filter((/** @type {any} */ t) => t[0] === 'p' && /^[0-9a-f]{64}$/i.test(t[1] || ''))
+        .map((/** @type {any} */ t) => t[1].toLowerCase()) || [];
 
-    return creatorPubkeys.map((/** @type {string} */ pubkey) => ({
+    return [...new Set(creatorPubkeys)].map((/** @type {string} */ pubkey) => ({
       pubkey,
       hasProfile: true
     }));

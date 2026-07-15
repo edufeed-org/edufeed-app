@@ -38,6 +38,7 @@
   let editingIndex = $state(/** @type {number | null} */ (null));
   let isLoadingProfile = $state(false);
   let orcidInvalid = $state(false);
+  let pubkeyInvalid = $state(false);
 
   /**
    * Create an empty creator object
@@ -68,8 +69,19 @@
       return;
     }
 
+    // Normalize the Nostr identity to a hex pubkey; block save on anything
+    // that doesn't normalize (nsec, typos) so no secret/garbage gets published
+    const pubkeyInput = newCreator.pubkey?.trim();
+    const normalizedPubkey = pubkeyInput ? normalizeToHex(pubkeyInput) : '';
+    pubkeyInvalid = Boolean(pubkeyInput && !normalizedPubkey);
+    if (pubkeyInvalid) return;
+
     /** @type {Creator} */
-    const creatorToAdd = { ...newCreator, orcid: normalizedOrcid || '' };
+    const creatorToAdd = {
+      ...newCreator,
+      pubkey: normalizedPubkey || '',
+      orcid: normalizedOrcid || ''
+    };
     // Clean up empty optional fields
     if (!creatorToAdd.pubkey?.trim()) delete creatorToAdd.pubkey;
     if (!creatorToAdd.affiliationName?.trim()) delete creatorToAdd.affiliationName;
@@ -120,6 +132,7 @@
     editingIndex = null;
     showAddForm = false;
     orcidInvalid = false;
+    pubkeyInvalid = false;
   }
 
   /**
@@ -280,14 +293,20 @@
           bind:value={newCreator.pubkey}
           id="creator-pubkey"
           placeholder={m.amb_creator_placeholder_search()}
-          inputClass="input-sm"
+          inputClass="input-sm {pubkeyInvalid ? 'input-error' : ''}"
           exclude={creators.map((c) => c.pubkey || '').filter((p) => p !== '')}
           onselect={(contact) => {
+            pubkeyInvalid = false;
             newCreator.pubkey = contact.pubkey;
             newCreator.name = contact.display_name || contact.name || '';
           }}
           onblur={handlePubkeyBlur}
         />
+        {#if pubkeyInvalid}
+          <p class="creator-pubkey-error mt-1 text-xs text-error">
+            {m.amb_creator_error_pubkey_invalid()}
+          </p>
+        {/if}
       </div>
 
       <!-- Name -->
