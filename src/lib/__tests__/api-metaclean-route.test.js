@@ -125,3 +125,51 @@ describe('/api/metaclean without METADATA_CLEANER_URL', () => {
     expect(res.status).toBe(503);
   });
 });
+
+describe('/api/metaclean body size cap', () => {
+  it('rejects an oversized content-length header with 413 without reading the body', async () => {
+    vi.resetModules();
+    vi.doMock('$env/dynamic/private', () => ({
+      env: { METADATA_CLEANER_URL: 'https://cleaner.example', BLOSSOM_MAX_FILE_SIZE: '10' }
+    }));
+    const mod = await import('../../routes/api/metaclean/[...path]/+server.js');
+    const localFetchMock = vi.fn(async () => upstreamResponse());
+    const headers = new Headers();
+    headers.set('content-type', 'multipart/form-data; boundary=x');
+    headers.set('content-length', String(10 + 64 * 1024 + 1));
+    const event = {
+      params: { path: 'files' },
+      request: new Request('http://localhost/api/metaclean/files', {
+        method: 'POST',
+        headers,
+        body: 'irrelevant'
+      }),
+      fetch: localFetchMock
+    };
+    const res = await mod.POST(event);
+    expect(res.status).toBe(413);
+    expect(localFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized body with no content-length with 413 without calling upstream', async () => {
+    vi.resetModules();
+    vi.doMock('$env/dynamic/private', () => ({
+      env: { METADATA_CLEANER_URL: 'https://cleaner.example', BLOSSOM_MAX_FILE_SIZE: '10' }
+    }));
+    const mod = await import('../../routes/api/metaclean/[...path]/+server.js');
+    const localFetchMock = vi.fn(async () => upstreamResponse());
+    const oversizedBody = 'x'.repeat(10 + 64 * 1024 + 1);
+    const event = {
+      params: { path: 'files' },
+      request: new Request('http://localhost/api/metaclean/files', {
+        method: 'POST',
+        headers: { 'content-type': 'multipart/form-data; boundary=x' },
+        body: oversizedBody
+      }),
+      fetch: localFetchMock
+    };
+    const res = await mod.POST(event);
+    expect(res.status).toBe(413);
+    expect(localFetchMock).not.toHaveBeenCalled();
+  });
+});
