@@ -11,6 +11,7 @@
   import BookmarkButton from '$lib/components/bookmarks/BookmarkButton.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
@@ -126,6 +127,7 @@
   <!-- Note Content -->
   <div class="mb-3 text-base-content/80">
     <NostrContentRenderer event={note} />
+    <LinkPreviewList event={note} />
   </div>
 
   <!-- Actions -->
