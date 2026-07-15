@@ -219,4 +219,78 @@ describe('LicensedFileInput metadata cleaner integration', () => {
     expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
     expect(mocks.sha256Hex).toHaveBeenCalledWith(zip);
   });
+
+  it('routes an oversized PDF into the cleaner instead of rejecting it', async () => {
+    const file = pdfFile('big.pdf');
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+
+    const { container, getByText, queryByText } = render(LicensedFileInput, {
+      props: { files: [] }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(getByText('Check metadata')).toBeTruthy());
+    expect(queryByText(/exceeds maximum size/)).toBeNull();
+  });
+
+  it('rejects an oversized PDF only after keep-original resolves it unchanged', async () => {
+    const file = pdfFile('big.pdf');
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+
+    const { container, getByText, queryByTestId } = render(LicensedFileInput, {
+      props: { files: [] }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(getByText('Continue with original')).toBeTruthy());
+    await fireEvent.click(getByText('Continue with original'));
+
+    await waitFor(() => expect(getByText(/exceeds maximum size/)).toBeTruthy());
+    expect(queryByTestId('license-modal')).toBeNull();
+    expect(mocks.sha256Hex).not.toHaveBeenCalled();
+  });
+
+  it('accepts an oversized PDF once the cleaned copy fits the limit', async () => {
+    const file = pdfFile('big.pdf');
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+    metacleanMocks.downloadCleaned
+      .mockReset()
+      .mockResolvedValue(new File(['clean'], 'big.pdf', { type: 'application/pdf' }));
+
+    const { container, getByTestId } = render(LicensedFileInput, {
+      props: { files: [] }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(getByTestId('metaclean-apply')).toBeTruthy());
+    await fireEvent.click(getByTestId('metaclean-apply'));
+    await waitFor(() => expect(getByTestId('metaclean-use-cleaned')).toBeTruthy());
+    await fireEvent.click(getByTestId('metaclean-use-cleaned'));
+
+    await waitFor(() => expect(getByTestId('license-modal')).toBeTruthy());
+    expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
+    expect(await mocks.sha256Hex.mock.calls[0][0].text()).toBe('clean');
+  });
+
+  it('rejects an oversized unsupported file immediately without the interstitial', async () => {
+    const zip = new File(['payload'], 'big.zip', { type: 'application/zip' });
+    Object.defineProperty(zip, 'size', { value: 6 * 1024 * 1024 });
+
+    const { container, getByText, queryByText, queryByTestId } = render(LicensedFileInput, {
+      props: { files: [] }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    await fireEvent.change(fileInput, { target: { files: [zip] } });
+
+    await waitFor(() => expect(getByText(/exceeds maximum size/)).toBeTruthy());
+    expect(queryByText('Check metadata')).toBeNull();
+    expect(queryByTestId('license-modal')).toBeNull();
+  });
 });

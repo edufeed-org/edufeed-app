@@ -22,7 +22,7 @@
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
   import MetadataCleanerModal from './MetadataCleanerModal.svelte';
-  import { isSupportedFile } from '$lib/helpers/metaclean.js';
+  import { isPdfFile, isSupportedFile } from '$lib/helpers/metaclean.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -239,20 +239,30 @@
 
     try {
       for (const file of filesToUpload) {
-        if (file.size > maxSize) {
+        const cleanerEligible = runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file);
+        // An oversized PDF may still fit after the cleaner's compression, so
+        // its size check moves to the resolved file below. Everything else
+        // fails fast — the cleaner can't shrink standalone images.
+        if (file.size > maxSize && !(cleanerEligible && isPdfFile(file))) {
           throw new Error(`File "${file.name}" exceeds maximum size of ${formatFileSize(maxSize)}`);
         }
 
         // Optional metadata review step (metadata-cleaner service). Resolves
         // with the original file when skipped/closed, or the cleaned copy.
         let fileToUpload = file;
-        if (runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file)) {
+        if (cleanerEligible) {
           cleanerFile = file;
           cleanerOpen = true;
           fileToUpload = await new Promise((resolve) => {
             cleanerResolve = resolve;
           });
           cleanerFile = null;
+        }
+
+        if (fileToUpload.size > maxSize) {
+          throw new Error(
+            `File "${fileToUpload.name}" exceeds maximum size of ${formatFileSize(maxSize)}`
+          );
         }
 
         const hash = await sha256Hex(fileToUpload);
@@ -629,6 +639,7 @@
 <MetadataCleanerModal
   bind:open={cleanerOpen}
   file={cleanerFile}
+  {maxSize}
   ondone={(/** @type {File} */ f) => {
     cleanerResolve?.(f);
     cleanerResolve = null;

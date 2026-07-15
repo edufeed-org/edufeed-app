@@ -19,8 +19,8 @@
     groupFieldsByStore
   } from '$lib/helpers/metaclean.js';
 
-  /** @type {{ open?: boolean, file: File | null, ondone?: (file: File) => void }} */
-  let { open = $bindable(false), file = null, ondone = () => {} } = $props();
+  /** @type {{ open?: boolean, file: File | null, ondone?: (file: File) => void, maxSize?: number | null }} */
+  let { open = $bindable(false), file = null, ondone = () => {}, maxSize = null } = $props();
 
   /** @type {'inspecting' | 'review' | 'applying' | 'done' | 'error'} */
   let phase = $state('inspecting');
@@ -40,6 +40,13 @@
   let doneFired = false;
 
   const isPdf = $derived(file ? isPdfFile(file) : false);
+  const oversized = $derived(Boolean(file && maxSize && file.size > maxSize));
+
+  /** @param {import('$lib/helpers/metaclean.js').ApplyResult | null} result */
+  function resultExceedsLimit(result) {
+    return Boolean(maxSize && result && result.sizeAfter > maxSize);
+  }
+  const cleanedStillOversized = $derived(resultExceedsLimit(applyResult));
   const groupedFields = $derived(groupFieldsByStore(fields));
   const stripFieldLabels = $derived(
     stripOps.map((op) => (op.type === 'delete' ? op.fieldId : null)).filter((id) => id !== null)
@@ -154,6 +161,14 @@
         </div>
       {:else if phase === 'review' || phase === 'applying'}
         <p class="mt-1 text-sm text-base-content/70">{m.metaclean_subtitle()}</p>
+
+        {#if oversized}
+          <div class="mt-3 alert py-2 alert-warning">
+            <span class="text-sm">
+              {m.metaclean_oversized_hint({ limit: formatFileSize(maxSize ?? 0) })}
+            </span>
+          </div>
+        {/if}
 
         {#if fields.length === 0}
           <p class="py-6 text-sm text-base-content/70">{m.metaclean_no_fields()}</p>
@@ -278,6 +293,13 @@
             </div>
           {:else}
             <p class="text-sm text-success">{m.metaclean_leaks_clean()}</p>
+          {/if}
+          {#if cleanedStillOversized}
+            <div class="alert py-2 alert-warning">
+              <span class="text-sm">
+                {m.metaclean_still_oversized({ limit: formatFileSize(maxSize ?? 0) })}
+              </span>
+            </div>
           {/if}
         </div>
 

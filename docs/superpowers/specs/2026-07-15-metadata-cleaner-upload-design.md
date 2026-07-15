@@ -50,6 +50,16 @@ The shared **`MetadataCleanerModal`**:
 as today. If the service is unreachable or errors, the modal shows a
 friendly error; uploading the original still works (graceful degradation).
 
+**Oversized PDFs:** a PDF over the Blossom upload limit
+(`BLOSSOM_MAX_FILE_SIZE`, default 5 MB — an app-side limit only; the
+Blossom server itself enforces none) is NOT rejected up front when the
+cleaner is enabled: it goes into the review modal (with a hint that it
+exceeds the limit) so compression can shrink it, and the size check runs
+on the resolved file instead. Oversized images and unsupported files still
+fail fast — the service cannot compress those. The proxy's own body cap is
+therefore independent: `METADATA_CLEANER_MAX_UPLOAD_MB` (default 200,
+matching the service).
+
 All user-facing strings go through Paraglide (DE + EN).
 
 ## Scope: which uploaders

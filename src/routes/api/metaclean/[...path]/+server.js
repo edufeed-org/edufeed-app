@@ -53,16 +53,17 @@ async function proxy(event) {
     // Cap the buffered body: this route is a public endpoint reachable
     // directly (not just through the UI pickers' max-file-size), so an
     // unbounded arrayBuffer() read is a memory-exhaustion DoS vector.
-    // Reuse the same env var the upload pickers use, plus a fixed
-    // allowance for multipart framing overhead.
-    const maxBytes = (parseInt(env.BLOSSOM_MAX_FILE_SIZE ?? '', 10) || 5 * 1024 * 1024) + 64 * 1024;
+    // Deliberately independent of BLOSSOM_MAX_FILE_SIZE — an oversized PDF
+    // must still reach the cleaner so its compression can shrink it below
+    // the upload limit. Default mirrors the service's own -max-upload-mb.
+    const maxBytes = (parseInt(env.METADATA_CLEANER_MAX_UPLOAD_MB ?? '', 10) || 200) * 1024 * 1024;
     const contentLength = event.request.headers.get('content-length');
     if (contentLength && Number(contentLength) > maxBytes) {
       return json({ error: 'Request body too large' }, { status: 413 });
     }
 
-    // Buffer the body: uploads are bounded by the Blossom max-file-size the
-    // pickers already enforce, and buffering avoids undici duplex quirks.
+    // Buffer the body (avoids undici duplex quirks), re-checking the size in
+    // case content-length was absent or dishonest.
     const buffer = await event.request.arrayBuffer();
     if (buffer.byteLength > maxBytes) {
       return json({ error: 'Request body too large' }, { status: 413 });

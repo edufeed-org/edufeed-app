@@ -2739,6 +2739,8 @@
   "metaclean_result_title": "Verified result",
   "metaclean_fields_before_after": "Metadata fields: {before} before, {after} after",
   "metaclean_size_before_after": "File size: {before} to {after}",
+  "metaclean_oversized_hint": "This file is larger than the upload limit of {limit}. Compression may shrink it below the limit.",
+  "metaclean_still_oversized": "The cleaned file is still larger than the upload limit of {limit}. Try the stronger compression preset.",
   "metaclean_leaks_clean": "Leak scan: no removed values found in the output.",
   "metaclean_leaks_found": "Warning: some removed values are still detectable in the file.",
   "metaclean_use_cleaned": "Use cleaned file",

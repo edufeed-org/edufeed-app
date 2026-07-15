@@ -40,6 +40,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   metaclean_result_title: () => 'Verified result',
   metaclean_fields_before_after: ({ before, after }) => `Fields: ${before} -> ${after}`,
   metaclean_size_before_after: ({ before, after }) => `Size: ${before} -> ${after}`,
+  metaclean_oversized_hint: ({ limit }) => `Over upload limit of ${limit}`,
+  metaclean_still_oversized: ({ limit }) => `Still over upload limit of ${limit}`,
   metaclean_leaks_clean: () => 'Leak scan: clean',
   metaclean_leaks_found: () => 'Leaks found',
   metaclean_use_cleaned: () => 'Use cleaned file',
@@ -171,6 +173,43 @@ describe('MetadataCleanerModal', () => {
     expect(ondone).toHaveBeenCalledOnce();
     expect(ondone.mock.calls[0][0]).toBe(file);
     expect(mocks.applyOps).not.toHaveBeenCalled();
+  });
+
+  it('shows an oversized hint in the review phase when the file exceeds maxSize', async () => {
+    const file = pdfFile();
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+    const { getByText } = render(MetadataCleanerModal, {
+      props: { open: true, file, ondone: vi.fn(), maxSize: 5 * 1024 * 1024 }
+    });
+    await waitFor(() => expect(getByText('Canva')).toBeTruthy());
+    expect(getByText('Over upload limit of 5 MB')).toBeTruthy();
+  });
+
+  it('shows no oversized hint when the file fits maxSize', async () => {
+    const { getByText, queryByText } = render(MetadataCleanerModal, {
+      props: { open: true, file: pdfFile(), ondone: vi.fn(), maxSize: 5 * 1024 * 1024 }
+    });
+    await waitFor(() => expect(getByText('Canva')).toBeTruthy());
+    expect(queryByText(/Over upload limit/)).toBeNull();
+  });
+
+  it('warns in the result phase when the cleaned file still exceeds maxSize', async () => {
+    mocks.applyOps.mockResolvedValue({
+      before: FIELDS,
+      after: [FIELDS[1]],
+      leaks: [],
+      sizeBefore: 7 * 1024 * 1024,
+      sizeAfter: 6 * 1024 * 1024
+    });
+    const file = pdfFile();
+    Object.defineProperty(file, 'size', { value: 7 * 1024 * 1024 });
+    const { getByText, getByTestId } = render(MetadataCleanerModal, {
+      props: { open: true, file, ondone: vi.fn(), maxSize: 5 * 1024 * 1024 }
+    });
+    await waitFor(() => expect(getByTestId('metaclean-apply')).toBeTruthy());
+    await fireEvent.click(getByTestId('metaclean-apply'));
+    await waitFor(() => expect(getByText('Verified result')).toBeTruthy());
+    expect(getByText('Still over upload limit of 5 MB')).toBeTruthy();
   });
 
   it('shows an error state with retry and keep-original when inspect fails', async () => {
