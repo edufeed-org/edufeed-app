@@ -78,6 +78,9 @@ export function createRelayPageLoader({ timeout = 4000, onChange }) {
     cancel();
     loading = false;
     exhausted = false;
+    // Every state transition goes through onChange — external mirrors must
+    // see the un-exhaust even if no loadPage follows.
+    onChange({ loading, exhausted, settled: false });
   }
 
   return { loadPage, reset, cancel };

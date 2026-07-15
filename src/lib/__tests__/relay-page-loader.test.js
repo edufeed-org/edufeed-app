@@ -129,6 +129,18 @@ describe('createRelayPageLoader', () => {
     expect(settles()).toHaveLength(1);
   });
 
+  it('reset() after natural exhaustion notifies onChange so external mirrors clear', () => {
+    const { pager, changes } = setup();
+    const subject = new Subject();
+    pager.loadPage(() => subject.asObservable());
+    vi.advanceTimersByTime(4000); // zero events → settled with exhausted=true
+
+    changes.length = 0;
+    pager.reset();
+    // The un-exhaust transition must reach onChange even with no loadPage after
+    expect(changes).toEqual([{ loading: false, exhausted: false, settled: false }]);
+  });
+
   it('cancel() mid-flight clears loading without settling or exhausting', () => {
     const { pager, changes, settles } = setup();
     const subject = new Subject();
