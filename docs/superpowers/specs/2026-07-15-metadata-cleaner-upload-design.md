@@ -15,12 +15,20 @@ requested access to it from inside the app's upload flow.
 ## UX: optional review step
 
 After a file is selected in a supported upload component — and **before** the
-Blossom upload happens — a **"Check metadata"** button is shown when:
+Blossom upload happens — the review step opens automatically as an
+**interstitial modal** when:
 
 - the feature is enabled (deployment has `METADATA_CLEANER_URL` set), and
 - the file type is supported: PDF, JPG/JPEG, PNG, TIF/TIFF, WebP.
 
-Clicking it opens a new shared **`MetadataCleanerModal`**:
+(The upload components have no resting "picked but not uploaded" UI state
+where a separate "Check metadata" button could live — picking a file
+immediately enters the license-modal pipeline — so the review step is shown
+as the first modal in that pipeline instead. Cleaning stays strictly
+opt-in: nothing is modified without an explicit action, and **"Continue
+with original"** is a single click.)
+
+The shared **`MetadataCleanerModal`**:
 
 1. The file is uploaded to the cleaner (via the app's server proxy). All
    metadata is displayed, grouped by store (DocInfo / XMP / EXIF / IPTC / PNG /
@@ -38,9 +46,9 @@ Clicking it opens a new shared **`MetadataCleanerModal`**:
    downstream from it as usual. **"Keep original"** closes the modal with no
    changes.
 
-Not clicking the button = exactly today's behavior. If the service is
-unreachable or errors, the modal shows a friendly error; uploading the
-original still works (graceful degradation).
+"Continue with original" (also Escape or a backdrop click) proceeds exactly
+as today. If the service is unreachable or errors, the modal shows a
+friendly error; uploading the original still works (graceful degradation).
 
 All user-facing strings go through Paraglide (DE + EN).
 
@@ -111,9 +119,10 @@ compress select (PDF only) → apply → result view → use/keep buttons.
 
 Integration points:
 
-- `LicensedFileInput.svelte`: per selected pending file, a "Check metadata"
-  action when supported; on `onUseCleaned`, the pending file entry is replaced.
-- `LicensedImageInput.svelte`: same action for a chosen upload file before the
+- `LicensedFileInput.svelte`: per selected pending file (inside the
+  sequential upload loop), the interstitial opens when supported; the resolved
+  file replaces the pending entry before hashing.
+- `LicensedImageInput.svelte`: same interstitial for a chosen upload file before the
   license modal runs `performUpload()`.
 
 ## Error handling
