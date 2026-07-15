@@ -23,7 +23,7 @@
     kindToFeedCategory,
     entryVisible,
     isEntryPinned,
-    toggleSoloCategory,
+    toggleSelectedCategory,
     toggleHiddenCategory
   } from '$lib/helpers/profile-feed.js';
   import { mergeRepostsIntoFeed } from '$lib/helpers/repost-feed.js';
@@ -104,14 +104,20 @@
   let resolvedTargets = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let displayLimit = $state(untrack(() => savedFeedState)?.displayLimit ?? DISPLAY_BATCH);
-  // Solo/hide chip selection (issue #35). Without the chip UI there is
-  // nothing to toggle — ignore any cached selection and show every category.
+  // Select/hide chip selection (issue #35, multi-select). Without the chip
+  // UI there is nothing to toggle — ignore any cached selection and show
+  // every category. Cached state from before the multi-select change may
+  // still carry the old {solo, hidden} shape — normalize defensively.
   /** @type {import('$lib/helpers/profile-feed.js').CategorySelection} */
   let categorySelection = $state(
-    untrack(() => (showFilters ? savedFeedState?.categorySelection : null)) ?? {
-      solo: null,
-      hidden: []
-    }
+    untrack(() => {
+      const cached = showFilters ? savedFeedState?.categorySelection : null;
+      if (!cached) return { selected: [], hidden: [] };
+      return {
+        selected: Array.isArray(cached.selected) ? cached.selected : [],
+        hidden: Array.isArray(cached.hidden) ? cached.hidden : []
+      };
+    })
   );
   // Derive pubkeys from all sources for profile loading (items + reposters + resolved targets)
   const itemPubkeys = $derived.by(() => {
@@ -376,13 +382,16 @@
   function saveFeedState() {
     feedStateCache.set(feedCacheKey, {
       displayLimit,
-      categorySelection: { solo: categorySelection.solo, hidden: [...categorySelection.hidden] }
+      categorySelection: {
+        selected: [...categorySelection.selected],
+        hidden: [...categorySelection.hidden]
+      }
     });
   }
 
   /** @param {string} id */
-  function soloFilter(id) {
-    categorySelection = toggleSoloCategory(categorySelection, id);
+  function selectFilter(id) {
+    categorySelection = toggleSelectedCategory(categorySelection, id);
     displayLimit = DISPLAY_BATCH;
     saveFeedState();
   }
@@ -420,8 +429,9 @@
 
 <div class="py-4">
   {#if showFilters}
-    <!-- Filter chips — chart-legend convention (issue #35): body click solos
-         the content type, the eye button hides/unhides it. -->
+    <!-- Filter chips — chart-legend convention (issue #35): body click
+         toggles the content type in the multi-select set, the eye button
+         hides/unhides it. -->
     <div class="relative pb-4">
       <!-- Layout follows the INPUT, not just the width: swipe-scroll is only
            natural on coarse pointers (touch), so narrow touch screens get the
@@ -435,23 +445,23 @@
         {#each FILTER_CHIPS as chip (chip.id)}
           {@const Icon = chip.icon}
           {@const isHidden = categorySelection.hidden.includes(chip.id)}
-          {@const isSolo = categorySelection.solo === chip.id}
-          {@const dimmed = isHidden || (categorySelection.solo !== null && !isSolo)}
+          {@const isSelected = categorySelection.selected.includes(chip.id)}
+          {@const dimmed = isHidden || (categorySelection.selected.length > 0 && !isSelected)}
           <span
             class="join {dimmed ? 'opacity-45' : ''}"
             data-testid="feed-filter-chip"
             data-category={chip.id}
           >
             <button
-              class="btn join-item gap-1 btn-xs {isSolo ? 'btn-primary' : 'btn-outline'}"
-              onclick={() => soloFilter(chip.id)}
-              aria-pressed={isSolo}
-              aria-label={isSolo
-                ? m.feed_filter_unsolo_aria()
-                : m.feed_filter_solo_aria({ name: chip.label() })}
-              title={isSolo
-                ? m.feed_filter_unsolo_aria()
-                : m.feed_filter_solo_aria({ name: chip.label() })}
+              class="btn join-item gap-1 btn-xs {isSelected ? 'btn-primary' : 'btn-outline'}"
+              onclick={() => selectFilter(chip.id)}
+              aria-pressed={isSelected}
+              aria-label={isSelected
+                ? m.feed_filter_deselect_aria({ name: chip.label() })
+                : m.feed_filter_select_aria({ name: chip.label() })}
+              title={isSelected
+                ? m.feed_filter_deselect_aria({ name: chip.label() })
+                : m.feed_filter_select_aria({ name: chip.label() })}
             >
               <Icon class_="w-3 h-3" title="" />
               <span class={isHidden ? 'line-through' : ''}>{chip.label()}</span>

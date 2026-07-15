@@ -40,43 +40,47 @@ export function kindToFeedCategory(kind) {
 }
 
 /**
- * Solo/hide selection for the feed category chips (issue #35), following the
- * chart-legend convention of the calendar top-publishers filter: chip body
- * click = solo ("only this"), eye button = hide/exclude. Solo takes
- * precedence over the hidden list, which stays intact for restore.
+ * Select/hide selection for the feed category chips (issue #35, extended to
+ * multi-select), following the chart-legend convention of the calendar
+ * top-publishers filter: chip body click = toggle in/out of the selected
+ * set, eye button = hide/exclude. A non-empty selection takes precedence
+ * over the hidden list, which stays intact for restore.
  *
  * @typedef {Object} CategorySelection
- * @property {string | null} solo
+ * @property {string[]} selected
  * @property {string[]} hidden
  */
 
 /**
- * Toggle solo mode for a category: set on first click, back to normal on
- * the second. Soloing a hidden category also un-hides it.
+ * Toggle a category in the selected set: add on first click, remove on the
+ * second. Selecting a hidden category also un-hides it.
  * @param {CategorySelection} selection
  * @param {string} id
  * @returns {CategorySelection}
  */
-export function toggleSoloCategory(selection, id) {
-  if (selection.solo === id) {
-    return { solo: null, hidden: [...selection.hidden] };
+export function toggleSelectedCategory(selection, id) {
+  if (selection.selected.includes(id)) {
+    return { selected: selection.selected.filter((s) => s !== id), hidden: [...selection.hidden] };
   }
-  return { solo: id, hidden: selection.hidden.filter((h) => h !== id) };
+  return {
+    selected: [...selection.selected, id],
+    hidden: selection.hidden.filter((h) => h !== id)
+  };
 }
 
 /**
- * Toggle a category on the hidden list. Hiding the solo'd category would
- * contradict the solo — the solo is cleared instead.
+ * Toggle a category on the hidden list. Hiding a selected category would
+ * contradict the selection — it is removed from the selected set instead.
  * @param {CategorySelection} selection
  * @param {string} id
  * @returns {CategorySelection}
  */
 export function toggleHiddenCategory(selection, id) {
-  const solo = selection.solo === id ? null : selection.solo;
+  const selected = selection.selected.filter((s) => s !== id);
   const hidden = selection.hidden.includes(id)
     ? selection.hidden.filter((h) => h !== id)
     : [...selection.hidden, id];
-  return { solo, hidden };
+  return { selected, hidden };
 }
 
 /**
@@ -98,27 +102,30 @@ export function entryMatchesCategory(entry, categoryId) {
 }
 
 /**
- * Dual-membership visibility: with a solo set, the entry must match the solo
- * category (hidden list ignored — solo wins, mirroring the calendar filter);
- * without one, the entry is hidden when ANY of its categories is hidden.
+ * Dual-membership visibility: with a non-empty selection, the entry must
+ * match ANY selected category (hidden list ignored — selection wins,
+ * mirroring the calendar filter); without one, the entry is hidden when ANY
+ * of its categories is hidden.
  * @param {{type: string, repost?: object}} entry
  * @param {CategorySelection} selection
  * @returns {boolean}
  */
 export function entryVisible(entry, selection) {
-  if (selection.solo) return entryMatchesCategory(entry, selection.solo);
+  if (selection.selected.length > 0) {
+    return selection.selected.some((id) => entryMatchesCategory(entry, id));
+  }
   return !selection.hidden.some((id) => entryMatchesCategory(entry, id));
 }
 
 /**
- * Resolve a selection to the set of active category ids: only the solo
- * category when solo is set, otherwise all ids minus the hidden ones.
+ * Resolve a selection to the set of active category ids: the selected set
+ * when non-empty, otherwise all ids minus the hidden ones.
  * @param {CategorySelection} selection
  * @param {string[]} allIds
  * @returns {Set<string>}
  */
 export function effectiveActiveCategories(selection, allIds) {
-  if (selection.solo) return new Set([selection.solo]);
+  if (selection.selected.length > 0) return new Set(selection.selected);
   return new Set(allIds.filter((id) => !selection.hidden.includes(id)));
 }
 

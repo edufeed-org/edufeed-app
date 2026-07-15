@@ -42,10 +42,11 @@ class CalendarFiltersStore {
   // Their events are removed from the displayed set client-side.
   hiddenAuthorPubkeys = $state(/** @type {string[]} */ ([]));
 
-  // Solo publisher: when set, ONLY this author's events are displayed
-  // (chart-legend convention: chip click = solo, eye = hide). Solo takes
-  // precedence over hiddenAuthorPubkeys, which stays intact for restore.
-  soloAuthorPubkey = $state(/** @type {string | null} */ (null));
+  // Selected publishers: when non-empty, ONLY these authors' events are
+  // displayed (chart-legend convention: chip click = toggle selection,
+  // eye = hide). A non-empty selection takes precedence over
+  // hiddenAuthorPubkeys, which stays intact for restore.
+  selectedAuthorPubkeys = $state(/** @type {string[]} */ ([]));
 
   // Getter for current observable values (for convenience)
   get selectedCalendar() {
@@ -220,14 +221,13 @@ class CalendarFiltersStore {
   }
 
   /**
-   * Toggle an author on the hidden-publishers list. Hiding the solo'd
-   * author would contradict the solo — the solo is cleared instead.
+   * Toggle an author on the hidden-publishers list. Hiding a selected
+   * author would contradict the selection — it is removed from the
+   * selected set instead.
    * @param {string} pubkey
    */
   toggleHiddenAuthor(pubkey) {
-    if (this.soloAuthorPubkey === pubkey) {
-      this.soloAuthorPubkey = null;
-    }
+    this.selectedAuthorPubkeys = this.selectedAuthorPubkeys.filter((p) => p !== pubkey);
     if (this.hiddenAuthorPubkeys.includes(pubkey)) {
       this.hiddenAuthorPubkeys = this.hiddenAuthorPubkeys.filter((p) => p !== pubkey);
     } else {
@@ -236,25 +236,25 @@ class CalendarFiltersStore {
   }
 
   /**
-   * Toggle solo mode for an author: set on first click, back to normal on
-   * the second. Soloing a hidden author also unhides it.
+   * Toggle an author in the selected set: add on first click, remove on
+   * the second. Selecting a hidden author also unhides it.
    * @param {string} pubkey
    */
-  toggleSoloAuthor(pubkey) {
-    if (this.soloAuthorPubkey === pubkey) {
-      this.soloAuthorPubkey = null;
+  toggleSelectedAuthor(pubkey) {
+    if (this.selectedAuthorPubkeys.includes(pubkey)) {
+      this.selectedAuthorPubkeys = this.selectedAuthorPubkeys.filter((p) => p !== pubkey);
       return;
     }
-    this.soloAuthorPubkey = pubkey;
+    this.selectedAuthorPubkeys = [...this.selectedAuthorPubkeys, pubkey];
     this.hiddenAuthorPubkeys = this.hiddenAuthorPubkeys.filter((p) => p !== pubkey);
   }
 
   /**
-   * Clear all hidden publishers and the solo selection.
+   * Clear all hidden publishers and the selection.
    */
   clearHiddenAuthors() {
     this.hiddenAuthorPubkeys = [];
-    this.soloAuthorPubkey = null;
+    this.selectedAuthorPubkeys = [];
   }
 
   /**
@@ -334,7 +334,7 @@ class CalendarFiltersStore {
     this.userFollowPubkeys = [];
     this.featuredAuthorPubkeys = [];
     this.hiddenAuthorPubkeys = [];
-    this.soloAuthorPubkey = null;
+    this.selectedAuthorPubkeys = [];
   }
 }
 

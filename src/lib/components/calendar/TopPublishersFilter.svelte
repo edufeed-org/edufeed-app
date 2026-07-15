@@ -1,8 +1,8 @@
 <!--
   TopPublishersFilter — quick chips for the most active event publishers in
   the current calendar view (issue #28). Chart-legend convention:
-    - clicking the chip body SOLOs the publisher (only their events show;
-      click again to restore),
+    - clicking the chip body toggles the publisher in the multi-select set
+      (only selected publishers' events show; empty set = all),
     - the eye button toggles hiding that publisher.
 
   `events` must be the view-scoped event set BEFORE the hidden/solo filter
@@ -21,7 +21,7 @@
 
   const topPublishers = $derived(topEventPublishers(events, limit));
   const hidden = $derived(calendarFilters.hiddenAuthorPubkeys);
-  const solo = $derived(calendarFilters.soloAuthorPubkey);
+  const selected = $derived(calendarFilters.selectedAuthorPubkeys);
 
   const getProfiles = useProfileMap(() => topPublishers.map((p) => p.pubkey));
 
@@ -36,8 +36,8 @@
     <span class="text-xs text-base-content/60">{m.calendar_top_publishers_label()}:</span>
     {#each topPublishers as publisher (publisher.pubkey)}
       {@const isHidden = hidden.includes(publisher.pubkey)}
-      {@const isSolo = solo === publisher.pubkey}
-      {@const dimmed = isHidden || (solo !== null && !isSolo)}
+      {@const isSelected = selected.includes(publisher.pubkey)}
+      {@const dimmed = isHidden || (selected.length > 0 && !isSelected)}
       {@const picture = getProfilePicture(getProfiles().get(publisher.pubkey))}
       <span
         class="join rounded-full {dimmed ? 'opacity-45' : ''}"
@@ -46,15 +46,17 @@
       >
         <button
           type="button"
-          class="btn join-item h-auto gap-1 pr-1 pl-2 btn-xs {isSolo ? 'btn-primary' : 'btn-ghost'}"
-          onclick={() => calendarFilters.toggleSoloAuthor(publisher.pubkey)}
-          aria-pressed={isSolo}
-          aria-label={isSolo
-            ? m.calendar_top_publishers_unsolo_aria({ name: nameFor(publisher.pubkey) })
-            : m.calendar_top_publishers_solo_aria({ name: nameFor(publisher.pubkey) })}
-          title={isSolo
-            ? m.calendar_top_publishers_unsolo_aria({ name: nameFor(publisher.pubkey) })
-            : m.calendar_top_publishers_solo_aria({ name: nameFor(publisher.pubkey) })}
+          class="btn join-item h-auto gap-1 pr-1 pl-2 btn-xs {isSelected
+            ? 'btn-primary'
+            : 'btn-ghost'}"
+          onclick={() => calendarFilters.toggleSelectedAuthor(publisher.pubkey)}
+          aria-pressed={isSelected}
+          aria-label={isSelected
+            ? m.calendar_top_publishers_deselect_aria({ name: nameFor(publisher.pubkey) })
+            : m.calendar_top_publishers_select_aria({ name: nameFor(publisher.pubkey) })}
+          title={isSelected
+            ? m.calendar_top_publishers_deselect_aria({ name: nameFor(publisher.pubkey) })
+            : m.calendar_top_publishers_select_aria({ name: nameFor(publisher.pubkey) })}
         >
           {#if picture}
             <img src={picture} alt="" class="h-4 w-4 rounded-full object-cover" />

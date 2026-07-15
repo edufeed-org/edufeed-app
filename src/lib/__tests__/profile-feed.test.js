@@ -14,7 +14,7 @@ import {
   FEED_CATEGORIES,
   pinnedPointersFromEvent,
   isEntryPinned,
-  toggleSoloCategory,
+  toggleSelectedCategory,
   toggleHiddenCategory,
   effectiveActiveCategories,
   entryMatchesCategory,
@@ -118,40 +118,47 @@ describe('entryVisible', () => {
   const note = { type: 'notes', data: { kind: 1 } };
   const sharedNote = { type: 'notes', data: { kind: 1 }, repost: { sharers: ['a'] } };
   const sharedArticle = { type: 'articles', data: { kind: 30023 }, repost: { sharers: ['a'] } };
-  const none = { solo: null, hidden: [] };
+  const none = { selected: [], hidden: [] };
 
   it('shows everything with the empty selection', () => {
     expect(entryVisible(note, none)).toBe(true);
     expect(entryVisible(sharedArticle, none)).toBe(true);
   });
 
-  it('solo on a content category includes shared entries of that category', () => {
-    const sel = { solo: 'articles', hidden: [] };
+  it('selecting a content category includes shared entries of that category', () => {
+    const sel = { selected: ['articles'], hidden: [] };
     expect(entryVisible(sharedArticle, sel)).toBe(true);
     expect(entryVisible(note, sel)).toBe(false);
   });
 
-  it("solo 'shared' shows only repost entries, any target kind", () => {
-    const sel = { solo: 'shared', hidden: [] };
+  it('shows entries matching ANY of multiple selected categories', () => {
+    const sel = { selected: ['notes', 'articles'], hidden: [] };
+    expect(entryVisible(note, sel)).toBe(true);
+    expect(entryVisible(sharedArticle, sel)).toBe(true);
+    expect(entryVisible({ type: 'polls', data: { kind: 1068 } }, sel)).toBe(false);
+  });
+
+  it("selecting 'shared' shows only repost entries, any target kind", () => {
+    const sel = { selected: ['shared'], hidden: [] };
     expect(entryVisible(sharedNote, sel)).toBe(true);
     expect(entryVisible(sharedArticle, sel)).toBe(true);
     expect(entryVisible(note, sel)).toBe(false);
   });
 
-  it('solo wins over hidden (hidden list ignored while solo is set)', () => {
-    const sel = { solo: 'articles', hidden: ['shared'] };
+  it('selection wins over hidden (hidden list ignored while a selection exists)', () => {
+    const sel = { selected: ['articles'], hidden: ['shared'] };
     expect(entryVisible(sharedArticle, sel)).toBe(true);
   });
 
   it('hiding a content category also hides shared entries of it', () => {
-    const sel = { solo: null, hidden: ['notes'] };
+    const sel = { selected: [], hidden: ['notes'] };
     expect(entryVisible(note, sel)).toBe(false);
     expect(entryVisible(sharedNote, sel)).toBe(false);
     expect(entryVisible(sharedArticle, sel)).toBe(true);
   });
 
   it("hiding 'shared' hides every repost entry but keeps authored content", () => {
-    const sel = { solo: null, hidden: ['shared'] };
+    const sel = { selected: [], hidden: ['shared'] };
     expect(entryVisible(sharedNote, sel)).toBe(false);
     expect(entryVisible(sharedArticle, sel)).toBe(false);
     expect(entryVisible(note, sel)).toBe(true);
@@ -218,67 +225,75 @@ describe('isEntryPinned', () => {
   });
 });
 
-describe('category solo/hide selection (issue #35)', () => {
+describe('category select/hide selection (issues #35, multi-select)', () => {
   const ALL_IDS = FEED_CATEGORIES.map((c) => c.id);
-  const EMPTY = { solo: null, hidden: [] };
+  const EMPTY = { selected: [], hidden: [] };
 
-  describe('toggleSoloCategory', () => {
-    it('solos a category from the empty state', () => {
-      expect(toggleSoloCategory(EMPTY, 'notes')).toEqual({ solo: 'notes', hidden: [] });
+  describe('toggleSelectedCategory', () => {
+    it('selects a category from the empty state', () => {
+      expect(toggleSelectedCategory(EMPTY, 'notes')).toEqual({ selected: ['notes'], hidden: [] });
     });
 
-    it('un-solos when toggling the solo category again', () => {
-      expect(toggleSoloCategory({ solo: 'notes', hidden: [] }, 'notes')).toEqual(EMPTY);
+    it('deselects when toggling a selected category again', () => {
+      expect(toggleSelectedCategory({ selected: ['notes'], hidden: [] }, 'notes')).toEqual(EMPTY);
     });
 
-    it('switches solo to another category', () => {
-      expect(toggleSoloCategory({ solo: 'notes', hidden: [] }, 'polls')).toEqual({
-        solo: 'polls',
+    it('adds a second category to the selection (multi-select)', () => {
+      expect(toggleSelectedCategory({ selected: ['notes'], hidden: [] }, 'polls')).toEqual({
+        selected: ['notes', 'polls'],
         hidden: []
       });
     });
 
-    it('un-hides a hidden category when soloing it', () => {
-      expect(toggleSoloCategory({ solo: null, hidden: ['notes', 'polls'] }, 'notes')).toEqual({
-        solo: 'notes',
-        hidden: ['polls']
-      });
+    it('removes only the toggled category from a multi-selection', () => {
+      expect(toggleSelectedCategory({ selected: ['notes', 'polls'], hidden: [] }, 'notes')).toEqual(
+        { selected: ['polls'], hidden: [] }
+      );
+    });
+
+    it('un-hides a hidden category when selecting it', () => {
+      expect(toggleSelectedCategory({ selected: [], hidden: ['notes', 'polls'] }, 'notes')).toEqual(
+        {
+          selected: ['notes'],
+          hidden: ['polls']
+        }
+      );
     });
 
     it('does not mutate the input selection', () => {
-      const input = { solo: null, hidden: ['polls'] };
-      toggleSoloCategory(input, 'notes');
-      expect(input).toEqual({ solo: null, hidden: ['polls'] });
+      const input = { selected: [], hidden: ['polls'] };
+      toggleSelectedCategory(input, 'notes');
+      expect(input).toEqual({ selected: [], hidden: ['polls'] });
     });
   });
 
   describe('toggleHiddenCategory', () => {
     it('hides a visible category', () => {
-      expect(toggleHiddenCategory(EMPTY, 'notes')).toEqual({ solo: null, hidden: ['notes'] });
+      expect(toggleHiddenCategory(EMPTY, 'notes')).toEqual({ selected: [], hidden: ['notes'] });
     });
 
     it('un-hides a hidden category', () => {
-      expect(toggleHiddenCategory({ solo: null, hidden: ['notes'] }, 'notes')).toEqual(EMPTY);
+      expect(toggleHiddenCategory({ selected: [], hidden: ['notes'] }, 'notes')).toEqual(EMPTY);
     });
 
-    it('clears the solo when hiding the solo category', () => {
-      expect(toggleHiddenCategory({ solo: 'notes', hidden: [] }, 'notes')).toEqual({
-        solo: null,
+    it('removes the category from the selection when hiding it', () => {
+      expect(toggleHiddenCategory({ selected: ['notes', 'polls'], hidden: [] }, 'notes')).toEqual({
+        selected: ['polls'],
         hidden: ['notes']
       });
     });
 
-    it('keeps an unrelated solo intact', () => {
-      expect(toggleHiddenCategory({ solo: 'polls', hidden: [] }, 'notes')).toEqual({
-        solo: 'polls',
+    it('keeps unrelated selections intact', () => {
+      expect(toggleHiddenCategory({ selected: ['polls'], hidden: [] }, 'notes')).toEqual({
+        selected: ['polls'],
         hidden: ['notes']
       });
     });
 
     it('does not mutate the input selection', () => {
-      const input = { solo: 'notes', hidden: [] };
+      const input = { selected: ['notes'], hidden: [] };
       toggleHiddenCategory(input, 'notes');
-      expect(input).toEqual({ solo: 'notes', hidden: [] });
+      expect(input).toEqual({ selected: ['notes'], hidden: [] });
     });
   });
 
@@ -287,20 +302,23 @@ describe('category solo/hide selection (issue #35)', () => {
       expect([...effectiveActiveCategories(EMPTY, ALL_IDS)]).toEqual(ALL_IDS);
     });
 
-    it('returns only the solo category when solo is set', () => {
-      expect([...effectiveActiveCategories({ solo: 'notes', hidden: [] }, ALL_IDS)]).toEqual([
-        'notes'
-      ]);
+    it('returns only the selected categories when a selection exists', () => {
+      expect([
+        ...effectiveActiveCategories({ selected: ['notes', 'polls'], hidden: [] }, ALL_IDS)
+      ]).toEqual(['notes', 'polls']);
     });
 
-    it('solo wins over the hidden list', () => {
-      expect([...effectiveActiveCategories({ solo: 'notes', hidden: ['polls'] }, ALL_IDS)]).toEqual(
-        ['notes']
+    it('selection wins over the hidden list', () => {
+      expect([
+        ...effectiveActiveCategories({ selected: ['notes'], hidden: ['polls'] }, ALL_IDS)
+      ]).toEqual(['notes']);
+    });
+
+    it('excludes hidden categories when nothing is selected', () => {
+      const active = effectiveActiveCategories(
+        { selected: [], hidden: ['notes', 'polls'] },
+        ALL_IDS
       );
-    });
-
-    it('excludes hidden categories when no solo is set', () => {
-      const active = effectiveActiveCategories({ solo: null, hidden: ['notes', 'polls'] }, ALL_IDS);
       expect([...active]).toEqual(['calendar', 'resources', 'articles', 'bookmarks', 'highlights']);
     });
   });
