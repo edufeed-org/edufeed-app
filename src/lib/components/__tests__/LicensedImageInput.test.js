@@ -113,6 +113,25 @@ describe('LicensedImageInput — defer upload', () => {
     expect(mocks.findExistingLicense).toHaveBeenCalledTimes(1);
     expect(mocks.uploadBlob).not.toHaveBeenCalled();
   });
+
+  it('skips the metadata cleaner entirely when config disables it', async () => {
+    // This suite's config mock (above) has no `metadataCleaner` key, so
+    // `runtimeConfig.metadataCleaner?.enabled` is falsy and picking a file
+    // must go straight to the license modal path with no cleaner UI.
+    const { getByTestId, queryByText } = render(LicensedImageInput, {
+      props: { imageUrl: '', imageWasUploaded: false, licenseEvent: null }
+    });
+
+    const fileInput = getByTestId('licensed-image-file-input');
+    const file = new File(['payload'], 'photo.jpg', { type: 'image/jpeg' });
+
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
+    expect(mocks.sha256Hex).toHaveBeenCalledWith(file);
+    expect(queryByText('Check metadata')).toBeNull();
+  });
 });
 
 describe('LicensedImageInput — stale re-pick', () => {
