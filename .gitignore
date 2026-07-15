@@ -47,7 +47,6 @@ project.inlang
 .direnv/
 
 .claude/
-CLAUDE.md
 .mcp.json
 
 # Playwright
