@@ -80,6 +80,9 @@ export function buildRelayOptions(nip65Relays, communityRelays, customRelays) {
       } catch {
         continue;
       }
+      // Only websocket relays — a malformed r-tag (e.g. https://) in someone's
+      // kind 10002 must not become a selectable dead relay.
+      if (!/^wss?:\/\//i.test(url)) continue;
       const existing = options.get(url);
       if (existing) {
         if (isCustom) existing.isCustom = true;

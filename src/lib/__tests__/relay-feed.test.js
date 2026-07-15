@@ -121,6 +121,10 @@ describe('buildRelayOptions', () => {
   it('returns [] for empty sources', () => {
     expect(buildRelayOptions([], [], [])).toEqual([]);
   });
+
+  it('drops non-websocket schemes (e.g. a malformed https r-tag in a kind 10002)', () => {
+    expect(buildRelayOptions(['https://not-a-relay.example/'], [], [])).toEqual([]);
+  });
 });
 
 describe('filterEventsForRelay', () => {
