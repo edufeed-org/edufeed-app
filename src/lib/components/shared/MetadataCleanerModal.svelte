@@ -296,5 +296,6 @@
         </div>
       {/if}
     </div>
+    <button class="modal-backdrop" onclick={handleKeepOriginal} aria-label="Close">close</button>
   </dialog>
 {/if}

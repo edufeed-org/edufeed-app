@@ -160,6 +160,19 @@ describe('MetadataCleanerModal', () => {
     expect(mocks.applyOps).not.toHaveBeenCalled();
   });
 
+  it('dismisses on backdrop click, returning the original file', async () => {
+    const ondone = vi.fn();
+    const file = pdfFile();
+    const { getByText, getByLabelText } = render(MetadataCleanerModal, {
+      props: { open: true, file, ondone }
+    });
+    await waitFor(() => expect(getByText('Canva')).toBeTruthy());
+    await fireEvent.click(getByLabelText('Close'));
+    expect(ondone).toHaveBeenCalledOnce();
+    expect(ondone.mock.calls[0][0]).toBe(file);
+    expect(mocks.applyOps).not.toHaveBeenCalled();
+  });
+
   it('shows an error state with retry and keep-original when inspect fails', async () => {
     mocks.inspectFile.mockRejectedValueOnce(new Error('service down'));
     const ondone = vi.fn();
