@@ -54,6 +54,17 @@ describe('normalizeRelayInput', () => {
   it('trims surrounding whitespace', () => {
     expect(normalizeRelayInput('  relay.example.org  ')).toBe('wss://relay.example.org/');
   });
+
+  it('rejects hostnames containing percent-encoding', () => {
+    expect(normalizeRelayInput('not%20a%20relay')).toBeNull();
+    expect(normalizeRelayInput('wss://not%20a%20relay')).toBeNull();
+  });
+
+  it('rejects input with internal whitespace even if the URL parser accepts it', () => {
+    expect(normalizeRelayInput('wss://not a relay')).toBeNull();
+    // WHATWG parsers (Node AND browsers) silently strip tabs/newlines
+    expect(normalizeRelayInput('wss://not\ta\trelay')).toBeNull();
+  });
 });
 
 describe('relayHostLabel', () => {

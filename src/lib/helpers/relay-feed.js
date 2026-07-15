@@ -14,7 +14,9 @@ import { getNip10References } from 'applesauce-common/helpers';
  */
 export function normalizeRelayInput(input) {
   const trimmed = (input || '').trim();
-  if (!trimmed) return null;
+  // Internal whitespace is never valid — WHATWG parsers strip tabs/newlines
+  // and browsers percent-encode spaces instead of throwing.
+  if (!trimmed || /\s/.test(trimmed)) return null;
 
   // Check if input already has a scheme
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
@@ -26,7 +28,9 @@ export function normalizeRelayInput(input) {
   try {
     const url = new URL(withScheme);
     if (url.protocol !== 'wss:' && url.protocol !== 'ws:') return null;
-    if (!url.hostname) return null;
+    // Browsers percent-encode invalid host characters instead of throwing
+    // (Node throws) — a % in the hostname means the input was never a hostname.
+    if (!url.hostname || url.hostname.includes('%')) return null;
     return normalizeURL(url.toString());
   } catch {
     return null;
