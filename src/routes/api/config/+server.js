@@ -376,6 +376,12 @@ export function GET() {
     // Only exposes whether it's enabled — the proxy URL stays server-side.
     oer: {
       enabled: Boolean(env.OER_PROXY_URL)
+    },
+
+    // Metadata cleaner (inspect/strip file metadata, compress PDFs before
+    // upload). Only exposes whether it's enabled — the URL stays server-side.
+    metadataCleaner: {
+      enabled: Boolean(env.METADATA_CLEANER_URL)
     }
   };
 

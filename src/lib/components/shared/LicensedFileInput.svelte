@@ -21,6 +21,8 @@
   import { SvelteMap } from 'svelte/reactivity';
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
+  import MetadataCleanerModal from './MetadataCleanerModal.svelte';
+  import { isPdfFile, isSupportedFile } from '$lib/helpers/metaclean.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -78,6 +80,14 @@
   // ---------------------------------------------------------------------------
   let modalOpen = $state(false);
   let modalTargetIndex = $state(/** @type {number | null} */ (null));
+
+  // Optional metadata review interstitial (metadata-cleaner service), run
+  // per-file inside the handleFiles loop before hashing.
+  let cleanerOpen = $state(false);
+  /** @type {File | null} */
+  let cleanerFile = $state(null);
+  /** @type {((file: File) => void) | null} */
+  let cleanerResolve = null;
 
   // Snapshot of `files` taken just before a brand-new upload appends/replaces.
   // Set ONLY when the modal is being opened for a mandatory (upload-loop) flow.
@@ -229,12 +239,35 @@
 
     try {
       for (const file of filesToUpload) {
-        if (file.size > maxSize) {
+        const cleanerEligible = runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file);
+        // An oversized PDF may still fit after the cleaner's compression, so
+        // its size check moves to the resolved file below. Everything else
+        // fails fast — the cleaner can't shrink standalone images.
+        if (file.size > maxSize && !(cleanerEligible && isPdfFile(file))) {
           throw new Error(`File "${file.name}" exceeds maximum size of ${formatFileSize(maxSize)}`);
         }
-        const hash = await sha256Hex(file);
+
+        // Optional metadata review step (metadata-cleaner service). Resolves
+        // with the original file when skipped/closed, or the cleaned copy.
+        let fileToUpload = file;
+        if (cleanerEligible) {
+          cleanerFile = file;
+          cleanerOpen = true;
+          fileToUpload = await new Promise((resolve) => {
+            cleanerResolve = resolve;
+          });
+          cleanerFile = null;
+        }
+
+        if (fileToUpload.size > maxSize) {
+          throw new Error(
+            `File "${fileToUpload.name}" exceeds maximum size of ${formatFileSize(maxSize)}`
+          );
+        }
+
+        const hash = await sha256Hex(fileToUpload);
         if (files.some((f) => f.sha256 === hash)) {
-          uploadError = m.licensed_file_input_duplicate_file({ name: file.name });
+          uploadError = m.licensed_file_input_duplicate_file({ name: fileToUpload.name });
           preparedCount++;
           uploadProgress = Math.round((preparedCount / totalFiles) * 100);
           continue;
@@ -248,9 +281,9 @@
         /** @type {UploadedFileWithLicense} */
         const descriptor = {
           url: reuseUrl ?? '',
-          name: file.name,
-          type: file.type || 'application/octet-stream',
-          size: file.size,
+          name: fileToUpload.name,
+          type: fileToUpload.type || 'application/octet-stream',
+          size: fileToUpload.size,
           sha256: hash,
           licenseEvent: null
         };
@@ -269,7 +302,7 @@
         // to reuse. With no stash, the modal's beforeAttest prop stays null and
         // neither Save path uploads.
         if (!reuseUrl) {
-          pendingFilesByIndex.set(targetIndex, file);
+          pendingFilesByIndex.set(targetIndex, fileToUpload);
         }
 
         preparedCount++;
@@ -600,5 +633,15 @@
     preFileSnapshot = null;
     modalTargetIndex = null;
     notifyModalClosed();
+  }}
+/>
+
+<MetadataCleanerModal
+  bind:open={cleanerOpen}
+  file={cleanerFile}
+  {maxSize}
+  ondone={(/** @type {File} */ f) => {
+    cleanerResolve?.(f);
+    cleanerResolve = null;
   }}
 />

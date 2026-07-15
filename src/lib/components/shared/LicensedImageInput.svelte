@@ -12,6 +12,8 @@
   import LicenseModal from './LicenseModal.svelte';
   import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
   import ImageLibraryPickerModal from './ImageLibraryPickerModal.svelte';
+  import MetadataCleanerModal from './MetadataCleanerModal.svelte';
+  import { isSupportedFile } from '$lib/helpers/metaclean.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
@@ -29,6 +31,13 @@
   let modalOpen = $state(false);
   let chooserOpen = $state(false);
   let libraryOpen = $state(false);
+
+  // Optional metadata review interstitial (metadata-cleaner service).
+  let cleanerOpen = $state(false);
+  /** @type {File | null} */
+  let cleanerFile = $state(null);
+  /** @type {((file: File) => void) | null} */
+  let cleanerResolve = null;
 
   /** @type {any} */
   let pendingExistingLicense = $state(null);
@@ -100,13 +109,26 @@
     uploading = true;
 
     try {
-      const hash = await sha256Hex(file);
+      // Optional metadata review step (metadata-cleaner service). Resolves
+      // with the original file when skipped/closed, or the cleaned copy.
+      let fileToUse = file;
+      if (runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file)) {
+        cleanerFile = file;
+        cleanerOpen = true;
+        fileToUse = await new Promise((resolve) => {
+          cleanerResolve = resolve;
+        });
+        cleanerFile = null;
+        if (myToken !== pickToken) return; // a newer pick superseded us
+      }
+
+      const hash = await sha256Hex(fileToUse);
       if (myToken !== pickToken) return; // a newer pick superseded us
 
-      pendingFile = file;
+      pendingFile = fileToUse;
       currentHash = hash;
-      modalMime = file.type;
-      modalSize = file.size;
+      modalMime = fileToUse.type;
+      modalSize = fileToUse.size;
 
       pendingExistingLicense = await findExistingLicense(hash);
       if (myToken !== pickToken) return;
@@ -242,6 +264,15 @@
     licenseEvent = null;
     pendingExistingLicense = null;
     pendingFile = null;
+  }}
+/>
+
+<MetadataCleanerModal
+  bind:open={cleanerOpen}
+  file={cleanerFile}
+  ondone={(/** @type {File} */ f) => {
+    cleanerResolve?.(f);
+    cleanerResolve = null;
   }}
 />
 

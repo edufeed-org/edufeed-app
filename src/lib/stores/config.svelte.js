@@ -177,6 +177,10 @@ const defaultConfig = {
   // OER media-library search availability (proxy URL stays server-side)
   oer: {
     enabled: false
+  },
+  // Metadata cleaner availability (service URL stays server-side)
+  metadataCleaner: {
+    enabled: false
   }
 };
 
@@ -327,6 +331,10 @@ export function initializeConfig(runtimeConfig) {
     oer: {
       ...defaultConfig.oer,
       ...runtimeConfig.oer
+    },
+    metadataCleaner: {
+      ...defaultConfig.metadataCleaner,
+      ...runtimeConfig.metadataCleaner
     }
   };
 
@@ -426,5 +434,8 @@ export const runtimeConfig = {
   },
   get oer() {
     return config.oer;
+  },
+  get metadataCleaner() {
+    return config.metadataCleaner;
   }
 };
