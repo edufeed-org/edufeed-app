@@ -18,6 +18,8 @@
   import TypoCover from './TypoCover.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
@@ -109,14 +111,34 @@
   const title = $derived(resource?.name ?? '');
 
   // Author attribution for the CC BY footer line.
-  // Prefers the resource's own creator:name tags (the *actual* author of the
-  // metadata, e.g. "Constanze von Kitzing") over the Nostr publisher.
+  // Prefers the resource's own creators over the Nostr publisher: creator:name
+  // tags (persons without a Nostr identity, e.g. "Constanze von Kitzing")
+  // followed by `["p", pk, relay, "creator"]` creators resolved via their
+  // kind:0 profile (NIP-AMB: the p-tag is their sole representation).
   // Falls back to the publisher profile's display name, then a shortened pubkey.
   // The display order matters: the first author is the primary attribution.
   const creatorNames = $derived(getAMBCreatorNames({ tags: resource?.tags ?? [] }).filter(Boolean));
+  const creatorPubkeys = $derived(
+    unique(
+      (resource?.tags ?? [])
+        .filter(
+          (/** @type {string[]} */ t) =>
+            t[0] === 'p' && t[3] === 'creator' && /^[0-9a-f]{64}$/i.test(t[1] || '')
+        )
+        .map((/** @type {string[]} */ t) => t[1].toLowerCase())
+    )
+  );
+  const getCreatorProfiles = useProfileMap(() => creatorPubkeys);
   const publisherProfile = useUserProfile(() => resource?.pubkey);
   const authors = $derived.by(() => {
-    if (creatorNames.length > 0) return creatorNames;
+    const profiles = getCreatorProfiles();
+    const pTagNames = creatorPubkeys
+      .map((pubkey) => getDisplayName(profiles.get(pubkey), ''))
+      .filter(Boolean);
+    // unique(): legacy dual-write events carry the same person as a
+    // creator:name run AND a p-tag — don't count them twice.
+    const names = unique([...creatorNames, ...pTagNames]);
+    if (names.length > 0) return names;
     const profile = publisherProfile();
     if (profile) {
       const name = getDisplayName(profile, '');

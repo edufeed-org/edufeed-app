@@ -35,6 +35,104 @@ const fullForm = {
   ]
 };
 
+// NIP-AMB single-representation rule: creators with a Nostr identity are
+// represented by a `["p", pk, relay, "creator"]` tag (appended by
+// appendCreatorPTags in publication-actions), never by a creator:* run as
+// well. NKBIP-01 `author` tags are index metadata, kept for ALL creators.
+describe('buildPublicationTags — creators with Nostr identity', () => {
+  const ALICE_HEX = 'a'.repeat(64);
+  const withPubkeyCreator = {
+    ...fullForm,
+    creators: [
+      { name: 'No Nostr', type: /** @type {'Person'} */ ('Person') },
+      { name: 'Alice', type: /** @type {'Person'} */ ('Person'), pubkey: ALICE_HEX }
+    ]
+  };
+
+  it('keeps the author tag but skips the creator:* run for a pubkey creator', () => {
+    const tags = buildPublicationTags(withPubkeyCreator, 'pub-slug');
+    expect(tagValues(tags, 'author')).toEqual(['No Nostr', 'Alice']);
+    expect(tagValues(tags, 'creator:name')).toEqual(['No Nostr']);
+  });
+
+  it('keeps the creator:* run when the pubkey does not normalize', () => {
+    const tags = buildPublicationTags(
+      { ...fullForm, creators: [{ name: 'Typo', type: 'Person', pubkey: 'not-a-key' }] },
+      'pub-slug'
+    );
+    expect(tagValues(tags, 'creator:name')).toEqual(['Typo']);
+  });
+});
+
+describe('parsePublicationEvent — creator p-tags', () => {
+  const ALICE_HEX = 'a'.repeat(64);
+  const BOB_HEX = 'b'.repeat(64);
+
+  it('re-attaches p-tag pubkeys, pairing names from unclaimed author tags in order', () => {
+    const event = {
+      tags: [
+        ['d', 'x'],
+        ['title', 'T'],
+        ['author', 'No Nostr'],
+        ['author', 'Alice'],
+        ['author', 'Bob'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'No Nostr'],
+        ['p', ALICE_HEX, 'wss://hint', 'creator'],
+        ['p', BOB_HEX, 'wss://hint', 'creator']
+      ]
+    };
+    expect(parsePublicationEvent(event).creators).toEqual([
+      { name: 'No Nostr', type: 'Person' },
+      { name: 'Alice', type: 'Person', pubkey: ALICE_HEX },
+      { name: 'Bob', type: 'Person', pubkey: BOB_HEX }
+    ]);
+  });
+
+  it('falls back to an empty name when no unclaimed author tag remains', () => {
+    const event = {
+      tags: [
+        ['d', 'x'],
+        ['title', 'T'],
+        ['p', ALICE_HEX, 'wss://hint', 'creator']
+      ]
+    };
+    expect(parsePublicationEvent(event).creators).toEqual([
+      { name: '', type: 'Person', pubkey: ALICE_HEX }
+    ]);
+  });
+
+  it('ignores p-tags with other roles or invalid pubkeys, and dedupes', () => {
+    const event = {
+      tags: [
+        ['d', 'x'],
+        ['title', 'T'],
+        ['author', 'Alice'],
+        ['p', ALICE_HEX, 'wss://hint', 'creator'],
+        ['p', ALICE_HEX, 'wss://hint', 'creator'],
+        ['p', BOB_HEX, 'wss://hint', 'about'],
+        ['p', 'not-a-key', 'wss://hint', 'creator']
+      ]
+    };
+    expect(parsePublicationEvent(event).creators).toEqual([
+      { name: 'Alice', type: 'Person', pubkey: ALICE_HEX }
+    ]);
+  });
+
+  it('still falls back to plain author tags for foreign events without p/creator tags', () => {
+    const event = {
+      tags: [
+        ['d', 'x'],
+        ['title', 'T'],
+        ['author', 'Solo Author']
+      ]
+    };
+    expect(parsePublicationEvent(event).creators).toEqual([
+      { name: 'Solo Author', type: 'Person' }
+    ]);
+  });
+});
+
 describe('PUBLICATION_KIND', () => {
   it('is NKBIP-01 kind 30040', () => {
     expect(PUBLICATION_KIND).toBe(30040);
