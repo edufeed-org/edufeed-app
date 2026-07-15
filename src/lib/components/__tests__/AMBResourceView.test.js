@@ -51,7 +51,8 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_license: () => 'License',
   amb_resource_view_license: () => 'View License',
   amb_resource_topics_keywords: () => 'Topics',
-  amb_resource_all_contributors: () => 'Contributors',
+  amb_resource_creators_heading: () => 'Creators',
+  amb_resource_role_creator: () => 'Creator',
   amb_resource_related_resources: () => 'Related',
   amb_resource_uploaded_files: () => 'Uploaded Files',
   amb_resource_open_pdf_inline_fallback: () => 'Open PDF in a new tab',
@@ -309,11 +310,18 @@ describe('AMBResourceView', () => {
   it('renders contributor placeholders without broken robohash images', () => {
     // Anti-regression: name-only contributors used to point <img> at
     // robohash.org, which left a broken-image icon when robohash failed.
+    const eventWithCreators = {
+      ...mockEvent,
+      tags: [
+        ...mockEvent.tags,
+        ['creator:name', 'John Sankey'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Bernd Ost'],
+        ['creator:type', 'Person']
+      ]
+    };
     const { container } = render(AMBResourceView, {
-      props: {
-        event: mockEvent,
-        resource: { ...mockResource, creatorNames: ['John Sankey', 'Bernd Ost'] }
-      }
+      props: { event: eventWithCreators, resource: mockResource }
     });
 
     // No contributor avatar should rely on robohash.
@@ -325,6 +333,62 @@ describe('AMBResourceView', () => {
     expect(fallbacks.length).toBe(2);
     expect(fallbacks[0].textContent?.trim()).toBe('J');
     expect(fallbacks[1].textContent?.trim()).toBe('B');
+  });
+
+  describe('creators & roles section', () => {
+    const CREATOR_PK = 'f'.repeat(64);
+    const singleCreatorEvent = {
+      ...mockEvent,
+      tags: [
+        ['d', 'test-resource'],
+        ['name', 'Test Resource'],
+        ['creator:name', 'Corinna Link'],
+        ['creator:type', 'Person'],
+        ['creator:honorificPrefix', 'Dr.'],
+        ['creator:id', 'https://orcid.org/0000-0002-1825-0097'],
+        ['creator:affiliation:name', 'Comenius-Institut'],
+        ['p', CREATOR_PK, 'wss://x', 'creator']
+      ]
+    };
+
+    it('renders for a single creator (no more >1 gate)', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: singleCreatorEvent, resource: mockResource }
+      });
+
+      const names = [...container.querySelectorAll('.ed-contrib .name')].map((e) =>
+        e.textContent?.trim()
+      );
+      expect(names).toContain('Dr. Corinna Link');
+    });
+
+    it('shows role, affiliation, and ORCID for a creator', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: singleCreatorEvent, resource: mockResource }
+      });
+
+      const section = container.querySelector('.ed-contrib-grid');
+      expect(section?.textContent).toContain('Creator');
+      expect(section?.textContent).toContain('Comenius-Institut');
+      const orcidLink = section?.querySelector('a[href="https://orcid.org/0000-0002-1825-0097"]');
+      expect(orcidLink).toBeTruthy();
+    });
+
+    it('links the sole creator to their Nostr profile when a creator p-tag exists', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: singleCreatorEvent, resource: mockResource }
+      });
+
+      const profileAnchor = container.querySelector(`.ed-contrib a[href="/p/${CREATOR_PK}"]`);
+      expect(profileAnchor).toBeTruthy();
+    });
+
+    it('renders nothing when the event has no creator data', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: mockEvent, resource: mockResource }
+      });
+      expect(container.querySelector('.ed-contrib-grid')).toBeNull();
+    });
   });
 
   it('mounts the PDF inline viewer for PDF encodings', () => {

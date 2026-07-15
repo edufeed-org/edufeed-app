@@ -1072,7 +1072,6 @@
   "amb_resource_license": "License",
   "amb_resource_view_license": "View license details →",
   "amb_resource_topics_keywords": "Topics & Keywords",
-  "amb_resource_all_contributors": "All Contributors",
   "amb_resource_related_resources": "Related Resources",
   "amb_resource_uploaded_files": "Uploaded Files",
   "amb_resource_discussion": "Discussion",
@@ -2704,5 +2703,7 @@
   "profile_tab_shared": "Shared",
   "render_error_title": "This page hit an error",
   "render_error_description": "Something on this page could not be displayed — possibly caused by malformed content from the network. The rest of the app keeps working.",
-  "render_error_retry": "Try again"
+  "render_error_retry": "Try again",
+  "amb_resource_creators_heading": "Creators",
+  "amb_resource_role_creator": "Creator"
 }

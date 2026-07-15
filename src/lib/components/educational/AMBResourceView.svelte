@@ -7,7 +7,8 @@
 <script>
   import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
-  import { unique } from '$lib/helpers/unique.js';
+  import { unique, uniqueBy } from '$lib/helpers/unique.js';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -228,15 +229,40 @@
     }));
   });
 
-  // ORCID URIs by creator name (from the flattened creator:* tags)
-  const creatorOrcids = $derived.by(() => {
-    /** @type {Record<string, string>} */
-    const byName = {};
-    for (const c of getAMBCreators(event)) {
-      if (c.name && c.id?.startsWith(ORCID_URI_PREFIX)) byName[c.name] = c.id;
+  // Creators & roles: structured creator:* runs merged with creator p-tag
+  // identities. When exactly one of each exists they are almost certainly
+  // the same person (the form writes both from one entry), so render a
+  // single merged card; otherwise list them side by side.
+  const contributorEntries = $derived.by(() => {
+    const structured = uniqueBy(getAMBCreators(event), (c) => `${c.name ?? ''}|${c.id ?? ''}`);
+    const roleByPubkey = new Map(
+      (event.tags || [])
+        .filter((/** @type {any} */ t) => t[0] === 'p' && /^[0-9a-f]{64}$/i.test(t[1] || ''))
+        .map((/** @type {any} */ t) => [t[1].toLowerCase(), t[3] || ''])
+    );
+    /** @type {any[]} */
+    const entries = [];
+    if (structured.length === 1 && creators.length === 1) {
+      entries.push({
+        ...structured[0],
+        pubkey: creators[0].pubkey,
+        role: roleByPubkey.get(creators[0].pubkey) || 'creator'
+      });
+    } else {
+      for (const c of structured) entries.push({ ...c, role: 'creator' });
+      for (const c of creators)
+        entries.push({ pubkey: c.pubkey, role: roleByPubkey.get(c.pubkey) || '' });
     }
-    return byName;
+    return entries.map((e, i) => ({ ...e, key: `${i}:${e.pubkey || e.name || ''}` }));
   });
+
+  /**
+   * Localize known role markers; show unknown markers verbatim.
+   * @param {string} role
+   */
+  function roleLabel(role) {
+    return role === 'creator' ? m.amb_resource_role_creator() : role;
+  }
 
   // Published date
   const publishedAt = $derived(
@@ -704,45 +730,65 @@
     </section>
   {/if}
 
-  <!-- ALL CONTRIBUTORS LIST -->
-  {#if creators.length > 1 || resource.creatorNames.length > 1}
+  <!-- CREATORS & ROLES -->
+  {#if contributorEntries.length > 0}
     <section class="ed-sect-plain">
-      <h3 class="ed-block-head">{m.amb_resource_all_contributors()}</h3>
-      {#snippet initialAvatar(/** @type {string} */ name)}
+      <h3 class="ed-block-head">{m.amb_resource_creators_heading()}</h3>
+      {#snippet initialAvatar(/** @type {string} */ name, /** @type {string | undefined} */ type)}
         <div class="av av-fallback" aria-hidden="true">
-          {(name?.trim()?.charAt(0) || '?').toUpperCase()}
+          {type === 'Organization' ? '🏢' : (name?.trim()?.charAt(0) || '?').toUpperCase()}
         </div>
       {/snippet}
+      {#snippet contribMeta(/** @type {any} */ entry)}
+        <span class="sub">
+          {#if entry.role}
+            <span class="role-badge">{roleLabel(entry.role)}</span>
+          {/if}
+          {#if entry.affiliationName}
+            <span class="affiliation">{entry.affiliationName}</span>
+          {/if}
+          {#if entry.id?.startsWith(ORCID_URI_PREFIX)}
+            <a
+              class="badge badge-outline badge-xs"
+              href={entry.id}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="ORCID"
+            >
+              ORCID
+            </a>
+          {/if}
+        </span>
+      {/snippet}
       <div class="ed-contrib-grid">
-        {#each creators as creator (creator.pubkey)}
-          {@const getCreatorProfile = useUserProfile(creator.pubkey)}
-          {@const creatorProfile = getCreatorProfile()}
-          {@const picture = getProfilePicture(creatorProfile)}
-          {@const name = getDisplayName(creatorProfile, creator.pubkey.slice(0, 8) + '...')}
+        {#each contributorEntries as entry (entry.key)}
           <div class="ed-contrib">
-            {#if picture}
-              <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
+            {#if entry.pubkey}
+              {@const getCreatorProfile = useUserProfile(entry.pubkey)}
+              {@const creatorProfile = getCreatorProfile()}
+              {@const picture = getProfilePicture(creatorProfile)}
+              {@const displayName = [
+                entry.honorificPrefix,
+                entry.name || getDisplayName(creatorProfile, entry.pubkey.slice(0, 8) + '…')
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              {#if picture}
+                <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
+              {:else}
+                {@render initialAvatar(displayName, entry.type)}
+              {/if}
+              <div class="ed-contrib-body">
+                <a class="name" href={profileLink(entry.pubkey)}>{displayName}</a>
+                {@render contribMeta(entry)}
+              </div>
             {:else}
-              {@render initialAvatar(name)}
-            {/if}
-            <span class="name">{name}</span>
-          </div>
-        {/each}
-
-        {#each resource.creatorNames as name (name)}
-          <div class="ed-contrib">
-            {@render initialAvatar(name)}
-            <span class="name">{name}</span>
-            {#if creatorOrcids[name]}
-              <a
-                class="badge badge-outline badge-xs"
-                href={creatorOrcids[name]}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="ORCID"
-              >
-                ORCID
-              </a>
+              {@const displayName = [entry.honorificPrefix, entry.name].filter(Boolean).join(' ')}
+              {@render initialAvatar(displayName, entry.type)}
+              <div class="ed-contrib-body">
+                <span class="name">{displayName}</span>
+                {@render contribMeta(entry)}
+              </div>
             {/if}
           </div>
         {/each}
@@ -1221,6 +1267,34 @@
     font-size: 14px;
     font-weight: 600;
     color: var(--c-ink);
+  }
+  .ed-contrib a.name {
+    text-decoration: none;
+  }
+  .ed-contrib a.name:hover {
+    text-decoration: underline;
+  }
+  .ed-contrib-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .ed-contrib .sub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--c-ink-soft);
+  }
+  .ed-contrib .role-badge {
+    background: var(--c-band);
+    color: var(--c-ink);
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
   }
 
   /* ── RELATED ──────────────────────────────────────────────────────── */

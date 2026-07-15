@@ -1047,7 +1047,6 @@
   "amb_resource_license": "Lizenz",
   "amb_resource_view_license": "Lizenzdetails anzeigen →",
   "amb_resource_topics_keywords": "Themen & Schlagwörter",
-  "amb_resource_all_contributors": "Alle Mitwirkenden",
   "amb_resource_related_resources": "Verwandte Ressourcen",
   "amb_resource_uploaded_files": "Hochgeladene Dateien",
   "amb_resource_discussion": "Diskussion",
@@ -2704,5 +2703,7 @@
   "profile_tab_shared": "Geteilt",
   "render_error_title": "Diese Seite hat einen Fehler",
   "render_error_description": "Etwas auf dieser Seite konnte nicht angezeigt werden — möglicherweise durch fehlerhafte Inhalte aus dem Netzwerk. Der Rest der App funktioniert weiter.",
-  "render_error_retry": "Erneut versuchen"
+  "render_error_retry": "Erneut versuchen",
+  "amb_resource_creators_heading": "Urheber:innen",
+  "amb_resource_role_creator": "Urheber:in"
 }
