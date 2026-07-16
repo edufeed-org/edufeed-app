@@ -267,6 +267,12 @@ async function initializeAccountPersistence() {
       });
     }
 
+    // Prefetch the user's NIP-65 relay list (kind 10002) so the session's
+    // first publish resolves write relays from EventStore instead of racing
+    // a cold network lookup — a miss silently falls back to fallbackRelays
+    // and misroutes the event (2026-07-16 follow-set incident).
+    addressLoader({ kind: 10002, pubkey: account.pubkey, relays: lookupRelays }).subscribe();
+
     // Load user's communities follow set (kind 30000, d="communities")
     addressLoader({
       kind: 30000,
