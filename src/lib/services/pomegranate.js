@@ -176,7 +176,14 @@ export async function getPomegranateAccount(central, token) {
   if (res.ok && res.data && res.data.pubkey) {
     return res.data;
   }
-  return null;
+  if (res.ok || res.status === 404) {
+    // Deliberate "no account" responses: a 200 without a pubkey, or an
+    // explicit 404. Anything else below is a transient/server failure and
+    // must NOT be treated as "no account" — that would route an existing
+    // user into new-account creation and orphan their real identity.
+    return null;
+  }
+  throw new Error('Could not check your account status, please try again');
 }
 
 /**

@@ -22,7 +22,10 @@ vi.mock('$lib/helpers/bunker-connection.js', () => mockBunker);
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ pool: {} }));
 
-const mockManager = vi.hoisted(() => ({ getAccountForPubkey: vi.fn(() => null) }));
+const mockManager = vi.hoisted(() => ({
+  getAccountForPubkey: vi.fn(() => null),
+  toJSON: vi.fn(() => [{ id: 'x' }])
+}));
 vi.mock('$lib/stores/accounts.svelte', () => ({ manager: mockManager }));
 vi.mock('$lib/stores/accounts.svelte.js', () => ({ manager: mockManager }));
 
@@ -54,7 +57,6 @@ vi.mock('$lib/paraglide/messages', () => {
     'auth_login_google_intro',
     'auth_login_google_start',
     'auth_login_google_status_authenticating',
-    'auth_login_google_status_checking',
     'auth_login_google_status_creating',
     'auth_login_google_status_connecting',
     'auth_login_google_backup_title',
@@ -78,6 +80,8 @@ describe('LoginWithGoogle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockManager.getAccountForPubkey.mockReturnValue(null);
+    mockManager.toJSON.mockReturnValue([{ id: 'x' }]);
+    localStorage.clear();
   });
 
   it('existing account: logs straight in via the bunker path', async () => {
@@ -110,6 +114,11 @@ describe('LoginWithGoogle', () => {
     // account is tagged as a pomegranate account
     expect(fakeAccount.metadata).toEqual({ pomegranateCentral: 'https://central.test' });
     expect(mockModalStore.closeModal).toHaveBeenCalled();
+    // manager.accounts$ never emits for a metadata-only mutation, so the
+    // component must persist manually after tagging the account — otherwise
+    // the Google tag is lost on reload (see LoginWithGoogle.svelte comment).
+    expect(mockManager.toJSON).toHaveBeenCalled();
+    expect(localStorage.getItem('accounts')).toBe(JSON.stringify([{ id: 'x' }]));
   });
 
   it('new account: shows the backup step before creating', async () => {

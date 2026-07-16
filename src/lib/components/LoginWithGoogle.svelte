@@ -91,6 +91,15 @@
     const { signer, pubkey } = await connectWithBunkerUrl(bunkerUrl, { pool });
     const { account } = registerBunkerAccount(manager, pubkey, signer);
     account.metadata = { ...(account.metadata || {}), pomegranateCentral: central };
+    // manager.accounts$ only emits on account add/remove, not on metadata
+    // mutation, so localStorage persistence (subscribed in AccountManager.svelte)
+    // never fires for this change — save manually or the Google tag (and the
+    // badge/export UI that reads it) is lost on reload.
+    try {
+      localStorage.setItem('accounts', JSON.stringify(manager.toJSON()));
+    } catch (err) {
+      console.warn('Failed to persist account metadata:', err);
+    }
     newSecretKey = null;
     newNsec = '';
     if (isNew) {

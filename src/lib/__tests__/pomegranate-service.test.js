@@ -47,14 +47,24 @@ describe('getPomegranateAccount', () => {
     });
   });
 
-  it('returns null when no account exists', async () => {
+  it('returns null when no account exists (404)', async () => {
     fetchMock.mockResolvedValueOnce(res(404, undefined));
+    expect(await getPomegranateAccount(CENTRAL, token)).toBeNull();
+  });
+
+  it('returns null when the server responds 200 with an empty body', async () => {
+    fetchMock.mockResolvedValueOnce(res(200, undefined));
     expect(await getPomegranateAccount(CENTRAL, token)).toBeNull();
   });
 
   it('throws on 401 (expired session)', async () => {
     fetchMock.mockResolvedValueOnce(res(401, undefined));
     await expect(getPomegranateAccount(CENTRAL, token)).rejects.toThrow(/expired/);
+  });
+
+  it('throws (not "no account") on a server error like 500', async () => {
+    fetchMock.mockResolvedValueOnce(res(500, undefined));
+    await expect(getPomegranateAccount(CENTRAL, token)).rejects.toThrow(/account status/);
   });
 });
 
