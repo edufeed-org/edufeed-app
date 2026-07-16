@@ -83,6 +83,29 @@ describe('FeedCard indexed resource attribution', () => {
     expect(container.querySelector('[data-testid="metadata-attribution"]')).toBeFalsy();
   });
 
+  it('stacks avatars and joins names with +N for multi-author resources', () => {
+    const multiEvent = {
+      ...indexedEvent,
+      tags: [
+        ['d', 'https://www.rpi-ekkw-ekhn.de/some/article.pdf'],
+        ['creator:name', 'Institut RPI'],
+        ['creator:type', 'Organization'],
+        ['creator:name', 'Julia Gerth'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Nadine Hofmann-Driesch'],
+        ['creator:type', 'Person']
+      ]
+    };
+    const { container } = render(FeedCard, {
+      props: { ...baseProps, event: multiEvent }
+    });
+    expect(container.textContent).toContain('Institut RPI, Julia Gerth +1');
+    // 3 creators fit within max 3 → three avatars, no overflow circle
+    const stack = container.querySelector('[data-testid="creator-avatar-stack"]');
+    expect(stack?.querySelectorAll('[data-testid="metadata-avatar"]').length).toBe(3);
+    expect(stack?.querySelector('[data-testid="creator-overflow"]')).toBeFalsy();
+  });
+
   it('keeps the publisher for own content (creator p-tag = pubkey)', () => {
     const ownEvent = {
       ...indexedEvent,

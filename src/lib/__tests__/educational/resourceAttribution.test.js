@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   getResourceAttribution,
-  creatorInitials
+  creatorInitials,
+  formatCreatorNames
 } from '$lib/helpers/educational/resourceAttribution.js';
 
 const PUBKEY = 'f0a28f62394c4fb487f1bc58fdd13c8ceaf96a2c878922cdb3ceab914c5d0744';
@@ -21,7 +22,7 @@ describe('getResourceAttribution', () => {
     ]);
     const result = getResourceAttribution(event, null);
     expect(result.indexed).toBe(false);
-    expect(result.creator).toBeNull();
+    expect(result.creators).toEqual([]);
   });
 
   it('marks a resource with a metadata-only creator as indexed', () => {
@@ -33,7 +34,61 @@ describe('getResourceAttribution', () => {
     ]);
     const result = getResourceAttribution(event, { name: 'Colibri' });
     expect(result.indexed).toBe(true);
-    expect(result.creator).toEqual({ name: 'Regina Polak', type: 'Person' });
+    expect(result.creators).toEqual([{ name: 'Regina Polak', type: 'Person' }]);
+  });
+
+  it('returns all creators in tag order for multi-author resources', () => {
+    // Real-world shape: RPI-Impulse article with an institute + two authors
+    const event = makeEvent([
+      ['d', 'https://www.rpi-ekkw-ekhn.de/some/article.pdf'],
+      ['creator:name', 'Religionspädagogisches Institut von EKKW und EKHN'],
+      ['creator:type', 'Person'],
+      ['creator:name', 'Julia Gerth'],
+      ['creator:type', 'Person'],
+      ['creator:name', 'Nadine Hofmann-Driesch'],
+      ['creator:type', 'Person']
+    ]);
+    const result = getResourceAttribution(event, { name: 'rpi-impulse' });
+    expect(result.indexed).toBe(true);
+    expect(result.creators.map((c) => c.name)).toEqual([
+      'Religionspädagogisches Institut von EKKW und EKHN',
+      'Julia Gerth',
+      'Nadine Hofmann-Driesch'
+    ]);
+  });
+
+  it('dedupes repeated creator runs and duplicate p-tags (real-world dirty events)', () => {
+    // Real event shape (d=u5mfchck): the whole creator run was duplicated
+    const event = makeEvent([
+      ['creator:name', 'Corinna Link'],
+      ['creator:type', 'Person'],
+      ['creator:name', 'Corinna Link'],
+      ['creator:type', 'Person'],
+      ['creator:name', 'Second Author'],
+      ['creator:type', 'Person'],
+      ['p', OTHER_PUBKEY, '', 'creator'],
+      ['p', OTHER_PUBKEY, '', 'creator']
+    ]);
+    const result = getResourceAttribution(event, null);
+    expect(result.creators).toEqual([
+      { name: 'Corinna Link', type: 'Person' },
+      { name: 'Second Author', type: 'Person' },
+      { pubkey: OTHER_PUBKEY }
+    ]);
+  });
+
+  it('appends foreign p-tag creators after structured creators', () => {
+    const event = makeEvent([
+      ['creator:name', 'Regina Polak'],
+      ['creator:type', 'Person'],
+      ['p', OTHER_PUBKEY, '', 'creator']
+    ]);
+    const result = getResourceAttribution(event, null);
+    expect(result.indexed).toBe(true);
+    expect(result.creators).toEqual([
+      { name: 'Regina Polak', type: 'Person' },
+      { pubkey: OTHER_PUBKEY }
+    ]);
   });
 
   it('treats content as own when a creator p-tag matches the event pubkey', () => {
@@ -67,18 +122,7 @@ describe('getResourceAttribution', () => {
     const event = makeEvent([['p', OTHER_PUBKEY, '', 'creator']]);
     const result = getResourceAttribution(event, null);
     expect(result.indexed).toBe(true);
-    expect(result.creator).toEqual({ pubkey: OTHER_PUBKEY });
-  });
-
-  it('prefers a named structured creator over a foreign p-tag creator for display', () => {
-    const event = makeEvent([
-      ['creator:name', 'Regina Polak'],
-      ['creator:type', 'Person'],
-      ['p', OTHER_PUBKEY, '', 'creator']
-    ]);
-    const result = getResourceAttribution(event, null);
-    expect(result.indexed).toBe(true);
-    expect(result.creator?.name).toBe('Regina Polak');
+    expect(result.creators).toEqual([{ pubkey: OTHER_PUBKEY }]);
   });
 
   it('ignores p-tags with non-creator markers for attribution', () => {
@@ -114,7 +158,26 @@ describe('getResourceAttribution', () => {
 
   it('handles a null event gracefully', () => {
     const result = getResourceAttribution(null, null);
-    expect(result).toEqual({ indexed: false, creator: null, sourceDomain: null });
+    expect(result).toEqual({ indexed: false, creators: [], sourceDomain: null });
+  });
+});
+
+describe('formatCreatorNames', () => {
+  it('joins up to two names with a comma', () => {
+    expect(formatCreatorNames(['Julia Gerth'])).toBe('Julia Gerth');
+    expect(formatCreatorNames(['Julia Gerth', 'Nadine Hofmann-Driesch'])).toBe(
+      'Julia Gerth, Nadine Hofmann-Driesch'
+    );
+  });
+
+  it('caps at two names and appends +N', () => {
+    expect(formatCreatorNames(['A', 'B', 'C'])).toBe('A, B +1');
+    expect(formatCreatorNames(['A', 'B', 'C', 'D', 'E'])).toBe('A, B +3');
+  });
+
+  it('skips empty names', () => {
+    expect(formatCreatorNames(['A', '', 'B'])).toBe('A, B');
+    expect(formatCreatorNames([])).toBe('');
   });
 });
 

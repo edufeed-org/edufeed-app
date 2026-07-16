@@ -10,14 +10,23 @@
  */
 
 import { getAMBCreators, getAMBIdentifier } from './ambHelpers.js';
+import { unique, uniqueBy } from '$lib/helpers/unique.js';
 
 const HEX_PUBKEY = /^[0-9a-f]{64}$/i;
 
 /**
+ * @typedef {Object} DisplayCreator
+ * @property {string} [name] - Creator name from metadata
+ * @property {string} [pubkey] - Nostr identity (from a creator p-tag)
+ * @property {string} [type] - 'Person' | 'Organization'
+ */
+
+/**
  * @typedef {Object} ResourceAttribution
  * @property {boolean} indexed - true when the event pubkey is only the indexer
- * @property {{name?: string, pubkey?: string, type?: string} | null} creator
- *   The creator to display instead of the publisher (null when not indexed)
+ * @property {DisplayCreator[]} creators - Creators to display instead of the
+ *   publisher: structured creator:* runs in tag order, then foreign p-tag
+ *   creators. Empty when not indexed.
  * @property {string | null} sourceDomain - Hostname of the d-tag URL, if any
  */
 
@@ -55,25 +64,32 @@ function getSourceDomain(event) {
  * @returns {ResourceAttribution}
  */
 export function getResourceAttribution(event, publisherProfile = null) {
-  if (!event) return { indexed: false, creator: null, sourceDomain: null };
+  if (!event) return { indexed: false, creators: [], sourceDomain: null };
 
   const sourceDomain = getSourceDomain(event);
 
   // Creator identities from p-tags: marker "creator" (or none, for legacy
   // events written before markers) — other markers are mentions/contributors.
-  const pTagCreators = (event.tags || [])
-    .filter(
-      (/** @type {string[]} */ t) =>
-        t[0] === 'p' && HEX_PUBKEY.test(t[1] || '') && (!t[3] || t[3] === 'creator')
-    )
-    .map((/** @type {string[]} */ t) => t[1].toLowerCase());
+  const pTagCreators = unique(
+    (event.tags || [])
+      .filter(
+        (/** @type {string[]} */ t) =>
+          t[0] === 'p' && HEX_PUBKEY.test(t[1] || '') && (!t[3] || t[3] === 'creator')
+      )
+      .map((/** @type {string[]} */ t) => t[1].toLowerCase())
+  );
 
   const publisherPubkey = (event.pubkey || '').toLowerCase();
   if (pTagCreators.includes(publisherPubkey)) {
-    return { indexed: false, creator: null, sourceDomain };
+    return { indexed: false, creators: [], sourceDomain };
   }
 
-  const structuredCreators = getAMBCreators(event).filter((c) => !!c.name);
+  // Deduped: events in the wild repeat whole creator runs, and duplicates
+  // would both mislead and crash keyed {#each} blocks downstream.
+  const structuredCreators = uniqueBy(
+    getAMBCreators(event).filter((c) => !!c.name),
+    (c) => `${normalizeName(c.name)}|${c.id ?? ''}`
+  );
 
   const profileNames = [
     publisherProfile?.name,
@@ -86,24 +102,37 @@ export function getResourceAttribution(event, publisherProfile = null) {
     profileNames.includes(normalizeName(c.name))
   );
   if (publisherIsCreator) {
-    return { indexed: false, creator: null, sourceDomain };
+    return { indexed: false, creators: [], sourceDomain };
   }
 
-  const foreignPTagCreator = pTagCreators.find(
-    (/** @type {string} */ pk) => pk !== publisherPubkey
-  );
-  if (structuredCreators.length === 0 && !foreignPTagCreator) {
-    return { indexed: false, creator: null, sourceDomain };
+  /** @type {DisplayCreator[]} */
+  const creators = [
+    ...structuredCreators.map((c) => ({
+      name: c.name,
+      ...(c.type ? { type: c.type } : {})
+    })),
+    ...pTagCreators
+      .filter((/** @type {string} */ pk) => pk !== publisherPubkey)
+      .map((/** @type {string} */ pk) => ({ pubkey: pk }))
+  ];
+  if (creators.length === 0) {
+    return { indexed: false, creators: [], sourceDomain };
   }
 
-  // Prefer a named structured creator for display; fall back to the first
-  // foreign p-tag creator (has a real, linkable profile).
-  const structured = structuredCreators[0];
-  const creator = structured
-    ? { name: structured.name, ...(structured.type ? { type: structured.type } : {}) }
-    : { pubkey: /** @type {string} */ (foreignPTagCreator) };
+  return { indexed: true, creators, sourceDomain };
+}
 
-  return { indexed: true, creator, sourceDomain };
+/**
+ * Joins creator names for a card byline: up to `max` names comma-separated,
+ * remaining count as "+N".
+ * @param {(string | undefined)[]} names
+ * @param {number} [max]
+ * @returns {string}
+ */
+export function formatCreatorNames(names, max = 2) {
+  const clean = names.filter(Boolean);
+  if (clean.length <= max) return clean.join(', ');
+  return `${clean.slice(0, max).join(', ')} +${clean.length - max}`;
 }
 
 /**
