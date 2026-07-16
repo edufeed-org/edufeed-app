@@ -1,5 +1,6 @@
 <script>
-  let { modalId, onNSECTransition, onBunkerTransition, onNpubTransition } = $props();
+  let { modalId, onNSECTransition, onBunkerTransition, onNpubTransition, onGoogleTransition } =
+    $props();
 
   import * as m from '$lib/paraglide/messages';
   import { ExtensionSigner } from 'applesauce-signers';
@@ -143,6 +144,16 @@
           </ul>
         </div>
         <div class="divider">{m.auth_login_modal_or()}</div>
+      {/if}
+
+      {#if runtimeConfig.googleLogin?.enabled}
+        <button
+          data-testid="login-method-google"
+          class="btn w-full btn-lg"
+          onclick={() => onGoogleTransition?.()}
+        >
+          {m.auth_login_modal_google()}
+        </button>
       {/if}
 
       <div class="text-center">
