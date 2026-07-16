@@ -26,6 +26,13 @@
 
   const visible = $derived(creators.length > max ? creators.slice(0, max - 1) : creators);
   const overflow = $derived(creators.length - visible.length);
+  const hiddenNames = $derived(
+    creators
+      .slice(visible.length)
+      .map((c) => c.name ?? c.pubkey?.slice(0, 8) + '…')
+      .filter(Boolean)
+      .join(', ')
+  );
 
   const sizeClasses = {
     xs: 'h-6 w-6 text-[9px]',
@@ -56,6 +63,7 @@
         size
       ]} flex-shrink-0 place-items-center rounded-full bg-base-200 font-semibold text-base-content/70 ring-2 ring-base-100"
       data-testid="creator-overflow"
+      title={hiddenNames}
     >
       +{overflow}
     </span>

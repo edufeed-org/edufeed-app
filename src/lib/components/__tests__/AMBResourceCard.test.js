@@ -391,6 +391,39 @@ describe('AMBResourceCard', () => {
       expect(header?.querySelector('a')).toBeFalsy();
     });
 
+    it('shows all creator names in hover titles (name line + overflow circle)', () => {
+      const multiTags = [
+        ['d', 'https://example.org/x'],
+        ['name', 'Multi'],
+        ['creator:name', 'Judith Noa'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Konstantin Falahati'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Anna Krause'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Vierte Person'],
+        ['creator:type', 'Person']
+      ];
+      const multiResource = {
+        ...indexedResource,
+        tags: multiTags,
+        rawEvent: { ...mockResource.rawEvent, tags: multiTags }
+      };
+      const { container } = render(AMBResourceCard, {
+        props: { resource: multiResource, authorProfile: indexerProfile }
+      });
+      // Full list on the (truncated) name line
+      const nameEl = [...container.querySelectorAll('[title]')].find((el) =>
+        el.getAttribute('title')?.startsWith('Judith Noa,')
+      );
+      expect(nameEl?.getAttribute('title')).toBe(
+        'Judith Noa, Konstantin Falahati, Anna Krause, Vierte Person'
+      );
+      // The +N circle names exactly the hidden creators
+      const overflow = container.querySelector('[data-testid="creator-overflow"]');
+      expect(overflow?.getAttribute('title')).toBe('Anna Krause, Vierte Person');
+    });
+
     it('shows the creator in the list variant byline', () => {
       const { container } = render(AMBResourceCard, {
         props: { resource: indexedResource, authorProfile: indexerProfile, variant: 'list' }
