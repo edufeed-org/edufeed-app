@@ -110,6 +110,11 @@
   // generating a new keypair.
   $effect(() => {
     if (externalSignup) {
+      // `manager.active` is read non-reactively here (a plain getter, not a
+      // store subscription). This relies on LoginWithGoogle calling
+      // registerBunkerAccount (which internally calls manager.setActive)
+      // BEFORE transitionModal — so by the time this component mounts, the
+      // account is already active and this read always sees it.
       const active = manager.active;
       if (active && !userData.publicKey) {
         userData.publicKey = active.pubkey;

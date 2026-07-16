@@ -2778,7 +2778,6 @@
   "auth_login_google_intro": "Sign in with your Google account. Your key is split across independent servers — Google only proves who you are and never sees your key.",
   "auth_login_google_start": "Sign in with Google",
   "auth_login_google_status_authenticating": "Waiting for Google sign-in…",
-  "auth_login_google_status_checking": "Checking your account…",
   "auth_login_google_status_creating": "Setting up your account…",
   "auth_login_google_status_connecting": "Connecting to the signer…",
   "auth_login_google_backup_title": "Your recovery key",

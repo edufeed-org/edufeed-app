@@ -2778,7 +2778,6 @@
   "auth_login_google_intro": "Melde dich mit deinem Google-Konto an. Dein Schlüssel wird auf unabhängige Server aufgeteilt — Google bestätigt nur deine Identität und sieht deinen Schlüssel nie.",
   "auth_login_google_start": "Mit Google anmelden",
   "auth_login_google_status_authenticating": "Warte auf Google-Anmeldung…",
-  "auth_login_google_status_checking": "Konto wird geprüft…",
   "auth_login_google_status_creating": "Konto wird eingerichtet…",
   "auth_login_google_status_connecting": "Verbinde mit dem Signierdienst…",
   "auth_login_google_backup_title": "Dein Wiederherstellungsschlüssel",
