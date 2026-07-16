@@ -62,17 +62,28 @@ async function followSetExistsOnNetwork(pubkey) {
       if (event) settle(true);
     });
 
-    loaderSub = addressLoader({
-      kind: 30000,
-      pubkey,
-      identifier: COMMUNITIES_SET_ID,
-      relays
-    }).subscribe({
-      complete: () => settle(found()),
-      error: () => settle(found())
-    });
+    if (!settled) {
+      loaderSub = addressLoader({
+        kind: 30000,
+        pubkey,
+        identifier: COMMUNITIES_SET_ID,
+        relays
+      }).subscribe({
+        complete: () => settle(found()),
+        error: (/** @type {unknown} */ err) => {
+          // A loader error is NOT confirmed absence — leave the decision to a
+          // store emission or the timeout instead of bootstrapping instantly.
+          console.warn('[community] follow-set lookup errored; waiting for timeout', err);
+        }
+      });
+    }
   });
 }
+
+/** @type {Promise<void> | null} */
+let ensureInflight = null;
+/** @type {string | null} */
+let ensureInflightPubkey = null;
 
 /**
  * Ensure the kind 30000 follow set with d="communities" exists in EventStore.
@@ -84,17 +95,40 @@ async function followSetExistsOnNetwork(pubkey) {
  * miss must first be confirmed against the network (see
  * followSetExistsOnNetwork) — that's the one path where blocking is cheaper
  * than data loss.
+ *
+ * Single-flight per pubkey: two concurrent first-joins (e.g. two tabs, or two
+ * calls before the network check resolves) share one in-flight confirmation
+ * + bootstrap instead of each racing to create its own empty follow set.
  */
 export async function ensureFollowSetExists() {
   if (!manager.active) return;
   const pubkey = manager.active.pubkey;
 
+  if (ensureInflight && ensureInflightPubkey === pubkey) return ensureInflight;
+
+  ensureInflightPubkey = pubkey;
+  ensureInflight = ensureFollowSetExistsInner(pubkey).finally(() => {
+    ensureInflight = null;
+    ensureInflightPubkey = null;
+  });
+  return ensureInflight;
+}
+
+/**
+ * @param {string} pubkey
+ */
+async function ensureFollowSetExistsInner(pubkey) {
   // Synchronous lookup — no subscription, no microtask hop.
   if (eventStore.getReplaceable(30000, pubkey, COMMUNITIES_SET_ID)) return;
 
   // Local miss ≠ absence. Confirm before creating a replaceable that would
   // overwrite the user's real list on every relay.
   if (await followSetExistsOnNetwork(pubkey)) return;
+
+  // The network check awaited above can take seconds — if the active account
+  // changed meanwhile, bootstrapping now would sign an empty follow set for
+  // the NEW account, whose absence was never confirmed (data-loss risk).
+  if (manager.active?.pubkey !== pubkey) return;
 
   const factory = createAppEventFactory({ signer: manager.active.signer });
   const template = await factory.build({ kind: 30000, tags: [['d', COMMUNITIES_SET_ID]] });

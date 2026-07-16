@@ -61,8 +61,6 @@ export async function fetchRelayList(pubkey) {
     let subscription;
     /** @type {import('rxjs').Subscription | undefined} */
     let loaderSub;
-    /** @type {{writeRelays: string[], readRelays: string[]} | null} */
-    let latest = null;
 
     /** @param {{writeRelays: string[], readRelays: string[]} | null} relayList */
     const settle = (relayList) => {
@@ -90,7 +88,7 @@ export async function fetchRelayList(pubkey) {
         `[relay-service] kind 10002 lookup timed out for ${pubkey.slice(0, 8)}… — ` +
           'callers will fall back to default relays'
       );
-      settle(latest);
+      settle(null);
     }, FETCH_RELAY_LIST_TIMEOUT);
 
     // Emits synchronously when the 10002 is already in EventStore (IDB
@@ -100,7 +98,6 @@ export async function fetchRelayList(pubkey) {
     const model$ = /** @type {any} */ (eventStore).model(RelayListModel, pubkey);
     subscription = model$.subscribe((/** @type {any} */ relayList) => {
       if (relayList) {
-        latest = relayList;
         settle(relayList);
       }
     });
@@ -111,10 +108,18 @@ export async function fetchRelayList(pubkey) {
     // addressLoader (unlike a timeline loader) completes after its
     // cache→relays→lookup sequence — measured ~1.3s for a confirmed miss —
     // and dedupes concurrent requests for the same pointer.
-    loaderSub = addressLoader({ kind: 10002, pubkey, relays: getLookupRelays() }).subscribe({
-      complete: () => settle(latest),
-      error: () => settle(latest)
-    });
+    if (!resolved) {
+      loaderSub = addressLoader({ kind: 10002, pubkey, relays: getLookupRelays() }).subscribe({
+        complete: () => settle(null),
+        error: (/** @type {unknown} */ err) => {
+          console.warn(
+            `[relay-service] kind 10002 lookup errored for ${pubkey.slice(0, 8)}… — falling back to default relays`,
+            err
+          );
+          settle(null);
+        }
+      });
+    }
   });
 }
 

@@ -20,8 +20,7 @@ const mockModelSubscribe = vi.fn();
 vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
   eventStore: {
     model: () => ({ subscribe: (/** @type {any} */ cb) => mockModelSubscribe(cb) })
-  },
-  pool: {}
+  }
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
@@ -120,5 +119,42 @@ describe('fetchRelayList', () => {
       pubkey: 'd'.repeat(64),
       relays: ['wss://lookup.example']
     });
+  });
+
+  it('resolves null and warns when the loader errors', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockLoaderSubscribe.mockImplementation((observer) => {
+      observer?.error?.(new Error('boom'));
+      return { unsubscribe: () => {} };
+    });
+
+    const result = await fetchRelayList('e'.repeat(64));
+
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('resolves the list when the model emits and ignores a subsequent loader completion', async () => {
+    // Model emits asynchronously so the loader subscription (guarded by
+    // `!resolved`) is still created — exercising the real double-resolve path
+    // rather than one skipped entirely by that guard.
+    /** @type {any} */
+    let loaderObserver;
+    mockModelSubscribe.mockImplementation((cb) => {
+      queueMicrotask(() => cb(RELAY_LIST));
+      return { unsubscribe: () => {} };
+    });
+    mockLoaderSubscribe.mockImplementation((observer) => {
+      loaderObserver = observer;
+      return { unsubscribe: () => {} };
+    });
+
+    const result = await fetchRelayList('f'.repeat(64));
+
+    expect(result?.writeRelays).toEqual(['wss://write.example']);
+    // Double-resolve safety: a late loader completion after the model already
+    // settled the promise must not throw or produce an unhandled rejection.
+    expect(() => loaderObserver?.complete?.()).not.toThrow();
   });
 });

@@ -306,4 +306,71 @@ describe('ensureFollowSetExists', () => {
 
     errSpy.mockRestore();
   });
+
+  it('does not bootstrap when the active account changed while the network check was pending', async () => {
+    // The network confirmation can take seconds. If the user switches
+    // accounts mid-flight, bootstrapping now would sign an empty follow set
+    // for the NEW account, whose absence was never confirmed.
+    vi.useFakeTimers();
+    mockGetReplaceable.mockReturnValue(undefined);
+    mockAddressLoader.mockImplementation(() => hangingLoader());
+    // Store never emits an event either.
+    mockReplaceableSubscribe.mockImplementation((/** @type {any} */ cb) => {
+      cb(undefined);
+      return { unsubscribe: () => {} };
+    });
+
+    const promise = ensureFollowSetExists();
+    mockManager.active = {
+      pubkey: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+      signer: { signEvent: vi.fn() }
+    };
+    await vi.advanceTimersByTimeAsync(10_000);
+    await promise;
+
+    expect(mockBuild).not.toHaveBeenCalled();
+    expect(mockSign).not.toHaveBeenCalled();
+    expect(mockPublishEvent).not.toHaveBeenCalled();
+    expect(mockEventStoreAdd).not.toHaveBeenCalled();
+  });
+
+  it('single-flights concurrent calls for the same pubkey', async () => {
+    mockGetReplaceable.mockReturnValue(undefined);
+
+    await Promise.all([ensureFollowSetExists(), ensureFollowSetExists()]);
+
+    expect(mockSign).toHaveBeenCalledTimes(1);
+    expect(mockPublishEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bootstrap on an immediate loader error, only after the timeout confirms absence', async () => {
+    // An error can fire near-instantly (offline, malformed relay URL) — that
+    // must NOT count as confirmed absence.
+    vi.useFakeTimers();
+    mockGetReplaceable.mockReturnValue(undefined);
+    mockAddressLoader.mockImplementation(() => ({
+      subscribe: (/** @type {any} */ observer) => {
+        observer?.error?.(new Error('offline'));
+        return { unsubscribe: () => {} };
+      }
+    }));
+    mockReplaceableSubscribe.mockImplementation((/** @type {any} */ cb) => {
+      cb(undefined);
+      return { unsubscribe: () => {} };
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const promise = ensureFollowSetExists();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(mockSign).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(4_500);
+    await promise;
+
+    expect(mockSign).toHaveBeenCalledTimes(1);
+    expect(mockEventStoreAdd).toHaveBeenCalledWith(SIGNED_FOLLOW_SET);
+
+    warnSpy.mockRestore();
+  });
 });
