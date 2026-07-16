@@ -77,6 +77,9 @@
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, resource.pubkey.slice(0, 8) + '...'));
 
+  // Get published date
+  const publishedAt = $derived(new Date(resource.publishedDate * 1000));
+
   // Indexer vs. author: when the AMB creator metadata names someone other
   // than the event pubkey, the pubkey is only the indexer — the author slot
   // shows the metadata creator instead and the indexer stays off the card.
@@ -91,12 +94,11 @@
           getDisplayName(getIndexedCreatorProfile(), indexedCreator.pubkey?.slice(0, 8) + '…'))
       : authorName
   );
+  // Indexed byline: source domain + date (dashed avatar alone marks the
+  // metadata origin — no extra hint text).
   const attributionLine = $derived(
-    [attribution.sourceDomain, m.amb_card_author_from_metadata()].filter(Boolean).join(' · ')
+    [attribution.sourceDomain, formatCalendarDate(publishedAt, 'short')].filter(Boolean).join(' · ')
   );
-
-  // Get published date
-  const publishedAt = $derived(new Date(resource.publishedDate * 1000));
 
   // Reactive SKOS concepts for URI-to-label resolution
   const resourceTypeConcepts = $derived(getCachedConcepts('learningResourceType'));
@@ -328,9 +330,6 @@
         {#if indexedCreator && !indexedCreator.pubkey}
           <span class="block truncate font-medium text-base-content">
             {displayedAuthorName}
-            <span class="text-sm font-normal text-base-content/60">
-              · {formatCalendarDate(publishedAt, 'short')}
-            </span>
           </span>
         {:else}
           <a

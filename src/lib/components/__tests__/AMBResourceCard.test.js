@@ -30,7 +30,6 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_free: () => 'Free',
   amb_resource_view_content: () => 'View Content',
   amb_resource_open_content: () => 'Open Content',
-  amb_card_author_from_metadata: () => 'Author from metadata',
   event_tags_view_all_tooltip: () => '',
   event_tags_more_count: () => '',
   debug_panel_raw_nostr_event: () => '',
@@ -325,13 +324,14 @@ describe('AMBResourceCard', () => {
       expect(avatar?.className).toContain('border-dashed');
     });
 
-    it('shows the source domain and metadata-attribution hint', () => {
+    it('shows the source domain and date, without hint text', () => {
       const { container } = render(AMBResourceCard, {
         props: { resource: indexedResource, authorProfile: indexerProfile }
       });
       const line = container.querySelector('[data-testid="metadata-attribution"]');
       expect(line?.textContent).toContain('oerf-journal.eu');
-      expect(line?.textContent).toContain('Author from metadata');
+      expect(line?.textContent).toContain('Jan 15'); // mocked formatCalendarDate
+      expect(line?.textContent).not.toContain('metadata');
     });
 
     it('does not link the creator name when there is no Nostr profile', () => {

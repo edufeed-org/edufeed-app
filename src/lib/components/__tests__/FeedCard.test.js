@@ -16,12 +16,8 @@ vi.mock('$app/paths', () => ({
   resolve: (/** @type {string} */ path) => path
 }));
 vi.mock('$lib/paraglide/messages', async (importOriginal) => {
-  // Real compiled messages, with a stable English label for the one we assert on.
-  const actual = /** @type {any} */ (await importOriginal());
-  return {
-    ...actual,
-    amb_card_author_from_metadata: () => 'Author from metadata'
-  };
+  // Real compiled messages (locale defaults to English in tests).
+  return /** @type {any} */ (await importOriginal());
 });
 vi.mock('$lib/helpers/calendar.js', () => ({
   formatRelativeTime: () => '19h ago'
@@ -64,13 +60,27 @@ describe('FeedCard indexed resource attribution', () => {
     expect(avatar?.textContent?.trim()).toBe('RP');
   });
 
-  it('shows the source domain and metadata hint line', () => {
+  it('shows the source domain line (domain only, no hint text)', () => {
     const { container } = render(FeedCard, {
       props: { ...baseProps, event: indexedEvent }
     });
     const line = container.querySelector('[data-testid="metadata-attribution"]');
-    expect(line?.textContent).toContain('oerf-journal.eu');
-    expect(line?.textContent).toContain('Author from metadata');
+    expect(line?.textContent?.trim()).toBe('oerf-journal.eu');
+  });
+
+  it('omits the source line when the d-tag is not a URL', () => {
+    const noUrlEvent = {
+      ...indexedEvent,
+      tags: [
+        ['d', 'abc123'],
+        ['creator:name', 'Regina Polak'],
+        ['creator:type', 'Person']
+      ]
+    };
+    const { container } = render(FeedCard, {
+      props: { ...baseProps, event: noUrlEvent }
+    });
+    expect(container.querySelector('[data-testid="metadata-attribution"]')).toBeFalsy();
   });
 
   it('keeps the publisher for own content (creator p-tag = pubkey)', () => {

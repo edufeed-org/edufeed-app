@@ -77,9 +77,6 @@
   const shownAuthorName = $derived(
     indexedCreator ? (indexedCreator.name ?? indexedCreator.pubkey?.slice(0, 8) + '…') : authorName
   );
-  const attributionLine = $derived(
-    [attribution.sourceDomain, m.amb_card_author_from_metadata()].filter(Boolean).join(' · ')
-  );
 
   /** @type {Record<string, { label: () => string, icon: any }>} */
   const typeMeta = {
@@ -184,12 +181,12 @@
           </span>
         {/if}
       </div>
-      {#if indexedCreator}
+      {#if indexedCreator && attribution.sourceDomain}
         <div
           class="truncate font-mono text-xs text-base-content/60"
           data-testid="metadata-attribution"
         >
-          {attributionLine}
+          {attribution.sourceDomain}
         </div>
       {/if}
     {:else if timestamp}
