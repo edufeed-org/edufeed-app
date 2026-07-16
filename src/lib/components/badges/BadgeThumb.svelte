@@ -8,6 +8,8 @@
   Pass `class` to control size + shape (e.g. "h-8 w-8 rounded-lg border-2 ...").
 -->
 <script>
+  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
+
   /**
    * @typedef {Object} Props
    * @property {string} [thumb] - Preferred image (small)
@@ -22,9 +24,7 @@
   const src = $derived(thumb || image);
 </script>
 
-{#if src}
-  <img {src} {alt} class="object-cover {className}" />
-{:else}
+{#snippet placeholder()}
   <div
     class="flex items-center justify-center bg-gradient-to-br from-primary/30 to-secondary/30 {className}"
     aria-label={alt}
@@ -40,4 +40,16 @@
       <path d="M15.477 12.89L17 22l-5-3l-5 3l1.523-9.11" />
     </svg>
   </div>
+{/snippet}
+
+{#if src}
+  <ImageWithFallback
+    {src}
+    {alt}
+    fallbackType="badge"
+    class="object-cover {className}"
+    fallback={placeholder}
+  />
+{:else}
+  {@render placeholder()}
 {/if}
