@@ -7,6 +7,7 @@ import { ambToNostr } from 'amb-nostr-converter';
 import { getSha256FromURL } from 'applesauce-common/helpers';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
+import { canSign } from '$lib/helpers/signing-guard.js';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -198,6 +199,11 @@ export function createEducationalActions() {
       if (!currentAccount) {
         throw new Error('No account selected. Please log in to create resources.');
       }
+      if (!canSign(currentAccount)) {
+        throw new Error(
+          'This account is read-only. Log in with a signing method to create resources.'
+        );
+      }
 
       // Validate required fields
       if (!formData.name?.trim()) {
@@ -292,6 +298,11 @@ export function createEducationalActions() {
       const currentAccount = manager.active;
       if (!currentAccount) {
         throw new Error('No account selected. Please log in to update resources.');
+      }
+      if (!canSign(currentAccount)) {
+        throw new Error(
+          'This account is read-only. Log in with a signing method to update resources.'
+        );
       }
 
       // Extract the original d-tag

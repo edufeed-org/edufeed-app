@@ -1,5 +1,5 @@
 /**
- * @typedef {'none' | 'login' | 'privateKey' | 'bunker' | 'settings' | 'profile' | 'eventDetails' | 'createCalendar' | 'calendarEvent' | 'signup' | 'createCommunity' | 'editCommunity' | 'deleteCommunity' | 'webcalQRCode' | 'communityMigration' | 'addBookmark' | 'shareByNaddr' | 'reportMetadata' | 'createRoom' | 'joinRoom' | 'createPoll' | 'createNote' | 'recovery-download' | 'resourceVariantPicker' | 'inviteToEvent'} ModalType
+ * @typedef {'none' | 'login' | 'privateKey' | 'bunker' | 'npubLogin' | 'googleLogin' | 'settings' | 'profile' | 'eventDetails' | 'createCalendar' | 'calendarEvent' | 'signup' | 'createCommunity' | 'editCommunity' | 'deleteCommunity' | 'webcalQRCode' | 'communityMigration' | 'addBookmark' | 'shareByNaddr' | 'reportMetadata' | 'createRoom' | 'joinRoom' | 'createPoll' | 'createNote' | 'recovery-download' | 'resourceVariantPicker' | 'inviteToEvent'} ModalType
  */
 
 /**

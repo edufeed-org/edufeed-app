@@ -9,6 +9,8 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { manager } from '$lib/stores/accounts.svelte';
+  import { requireSigningOrToast } from '$lib/helpers/signing-guard.js';
   import * as m from '$lib/paraglide/messages';
   import {
     CREATE_ACTIONS,
@@ -125,6 +127,12 @@
 
   /** @param {import('$lib/config/create-actions.js').CreateAction} action */
   function runAction(action) {
+    // Readonly accounts get the upgrade prompt; anonymous users keep the
+    // existing per-action behavior (login prompts inside the flows).
+    if (manager.active && !requireSigningOrToast(manager.active)) {
+      close();
+      return;
+    }
     action.run({
       communityPubkey,
       openModal: (name, props) =>

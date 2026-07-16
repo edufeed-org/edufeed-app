@@ -312,6 +312,17 @@ Lets users apply for a memorable `name@<domain>` handle during signup. Requires 
 - `NIP05_SERVICE_URL`: **SECRET** — Base URL of the standalone nip-05-service. Server-only (never sent to the browser)
 - `NIP05_SERVICE_API_KEY`: **SECRET** — Bearer token for the nip-05-service admin API. Server-only
 
+**Login Methods**
+
+| Variable                    | Default                      | Purpose                                                                                                                   |
+| --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `NPUB_LOGIN_ENABLED`        | `false`                      | Read-only "browse as npub" login method                                                                                   |
+| `GOOGLE_LOGIN_ENABLED`      | `false`                      | "Continue with Google" via the Pomegranate FROST threshold signer ([promenade](https://pkg.go.dev/fiatjaf.com/promenade)) |
+| `POMEGRANATE_CENTRAL_URL`   | `https://auth.njump.me`      | Central server (Google OAuth + NIP-46 relay + FROST coordinator)                                                          |
+| `POMEGRANATE_OPERATOR_URLS` | 5 public community operators | Comma-separated shard-operator servers; ≥2 required, signing threshold is ceil(7n/12)                                     |
+
+The Google flow generates a random key client-side, splits it into FROST shards across the operators, and signs via NIP-46 — no server ever holds the whole key. Self-hosting promenade later only requires changing these two URLs.
+
 **Media Uploads (Blossom)**
 
 - `BLOSSOM_UPLOAD_ENDPOINT`: Blossom server upload endpoint

@@ -20,7 +20,7 @@
   import EducatorContextFields from './shared/EducatorContextFields.svelte';
   import MembershipApplicationForm from './membership/MembershipApplicationForm.svelte';
 
-  let { modalId } = $props();
+  let { modalId, externalSignup = false } = $props();
 
   // Educator-friendly wizard:
   //   Step 1 = name → creates SimpleAccount and activates it (user is logged in)
@@ -105,7 +105,24 @@
 
   // Generate keypair on mount so Step 2's AvatarUploader has a working signer
   // immediately. Re-runs after resetState() clears privateKey on modal reopen.
+  // In externalSignup mode (Google/Pomegranate) the account already exists
+  // and is active in `manager` — adopt its pubkey + signer instead of
+  // generating a new keypair.
   $effect(() => {
+    if (externalSignup) {
+      // `manager.active` is read non-reactively here (a plain getter, not a
+      // store subscription). This relies on LoginWithGoogle calling
+      // registerBunkerAccount (which internally calls manager.setActive)
+      // BEFORE transitionModal — so by the time this component mounts, the
+      // account is already active and this read always sees it.
+      const active = manager.active;
+      if (active && !userData.publicKey) {
+        userData.publicKey = active.pubkey;
+        userData.npub = nip19.npubEncode(active.pubkey);
+        _signer = /** @type {any} */ (active.signer);
+      }
+      return;
+    }
     if (!privateKey) {
       try {
         const generated = generateSignupKeypair();
@@ -184,25 +201,32 @@
       errors.name = 'Name is required';
       return;
     }
-    if (!privateKey || !userData.publicKey || !_signer) {
-      errors.keyGeneration = 'Keys not ready. Please wait a moment and try again.';
+    if (!externalSignup) {
+      if (!privateKey || !userData.publicKey || !_signer) {
+        errors.keyGeneration = 'Keys not ready. Please wait a moment and try again.';
+        return;
+      }
+
+      // Idempotent: if somehow this fires twice, don't double-add the account.
+      if (!manager.getAccountForPubkey(userData.publicKey)) {
+        const account = new SimpleAccount(userData.publicKey, _signer);
+        manager.addAccount(account);
+        manager.setActive(account);
+      }
+
+      // Marks this pubkey as a wizard graduate. Backup + suggested-follows
+      // banners only appear for users with this flag, so existing accounts
+      // (extension, paste-in nsec, returning sessions) aren't bothered. Bunker
+      // signers (externalSignup) have no `.key`, so the nsec-backup banner
+      // that reads this flag would have nothing to back up — skip it there.
+      try {
+        localStorage.setItem(`signed-up-here:${userData.publicKey}`, '1');
+      } catch {
+        /* localStorage may be unavailable in some embeds; banners simply won't show */
+      }
+    } else if (!userData.publicKey || !_signer) {
+      errors.keyGeneration = 'Account not ready. Please wait a moment and try again.';
       return;
-    }
-
-    // Idempotent: if somehow this fires twice, don't double-add the account.
-    if (!manager.getAccountForPubkey(userData.publicKey)) {
-      const account = new SimpleAccount(userData.publicKey, _signer);
-      manager.addAccount(account);
-      manager.setActive(account);
-    }
-
-    // Marks this pubkey as a wizard graduate. Backup + suggested-follows
-    // banners only appear for users with this flag, so existing accounts
-    // (extension, paste-in nsec, returning sessions) aren't bothered.
-    try {
-      localStorage.setItem(`signed-up-here:${userData.publicKey}`, '1');
-    } catch {
-      /* localStorage may be unavailable in some embeds; banners simply won't show */
     }
 
     currentStep = 2;

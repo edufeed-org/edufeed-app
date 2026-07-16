@@ -415,6 +415,7 @@ Top-level shape:
 - `blossom.serverUrl` — file upload server
 - `ui.{defaultLightTheme,defaultDarkTheme}` — theme defaults (dark is inert)
 - `educational` — search debounce, vocabulary choices, `schemeNaddrs` (kind 39737 ConceptScheme naddrs from `SCHEME_NADDR_*` env vars)
+- `npubLogin.enabled` / `googleLogin.{enabled,centralUrl,operatorUrls}` — login methods (`NPUB_LOGIN_ENABLED`, `GOOGLE_LOGIN_ENABLED`, `POMEGRANATE_CENTRAL_URL`, `POMEGRANATE_OPERATOR_URLS`); Google = Pomegranate/promenade FROST bunker, accounts tagged via `account.metadata.pomegranateCentral`
 - Whitelabel: `APP_LOGO`, hero images (`LANDING_HERO_IMAGE`, `DISCOVER_HERO_IMAGE`), favicons, imprint vars
 
 ### Server API Endpoints

@@ -32,6 +32,7 @@
   import LocalCachePanel from '$lib/components/settings/LocalCachePanel.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import MembershipCard from '$lib/components/membership/MembershipCard.svelte';
+  import PomegranateExportCard from '$lib/components/settings/PomegranateExportCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // Use $state + $effect for reactive RxJS subscription bridge (Svelte 5 pattern)
@@ -1233,6 +1234,8 @@
           </div>
         </div>
       {/if}
+
+      <PomegranateExportCard />
 
       <!-- Developer Settings Card -->
       <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>

@@ -39,6 +39,16 @@
     {#if account.type === 'nostr-connect'}
       <span class="ml-1 badge badge-outline badge-sm">{m.auth_bunker_account_type()}</span>
     {/if}
+    {#if account.type === 'readonly'}
+      <span class="ml-1 badge badge-outline badge-sm badge-warning"
+        >{m.auth_readonly_account_type()}</span
+      >
+    {/if}
+    {#if account.metadata?.pomegranateCentral}
+      <span class="ml-1 badge badge-outline badge-sm badge-info"
+        >{m.auth_google_account_badge()}</span
+      >
+    {/if}
     {#if account === activeAccount}
       {m.account_profile_active_status()}
     {/if}
