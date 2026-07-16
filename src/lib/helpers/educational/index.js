@@ -4,15 +4,8 @@
  * Exports both library-ready transformation functions and app-specific helpers.
  */
 
-// Library-ready transformation functions (can be extracted to npm package)
-export {
-  unflattenNostrTagsToAMB,
-  flattenAMBToNostrTags,
-  getTagValue,
-  getTagValues,
-  getNestedTagValues,
-  getTagsByPrefix
-} from './ambTransform.js';
+// Low-level tag readers (full AMB <-> Nostr conversion lives in amb-nostr-converter)
+export { getTagValue, getTagValues, getNestedTagValues, getTagsByPrefix } from './ambTransform.js';
 
 // App-specific helper functions
 export {

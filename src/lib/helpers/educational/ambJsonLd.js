@@ -51,7 +51,9 @@ export function buildAMBJsonLd(event, resource, pageUrl) {
 
   // Override id based on resource type:
   // - External resources (d-tag is URL): use that URL as canonical ID
-  // - Nostr-native: use page URL
+  // - Nostr-native (slug d-tag): the library derives a nostr:<naddr> id; per
+  //   NIP-AMB consumers MAY substitute a dereferenceable landing-page URL,
+  //   which is what we do here (AMB prefers dereferenceable HTTP URIs).
   const isExternalResource =
     resource.identifier?.startsWith('http://') || resource.identifier?.startsWith('https://');
   jsonLd.id = isExternalResource ? resource.identifier : pageUrl;
