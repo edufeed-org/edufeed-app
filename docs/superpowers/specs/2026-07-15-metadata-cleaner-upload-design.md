@@ -12,55 +12,66 @@ carry EXIF (potentially GPS). The edufeed metadata-cleaner service inspects and
 strips this metadata and can recompress images embedded in PDFs. A user
 requested access to it from inside the app's upload flow.
 
-## UX: optional review step
+## UX: quiet opt-in flow (revised 2026-07-16)
 
-After a file is selected in a supported upload component — and **before** the
-Blossom upload happens — the review step opens automatically as an
-**interstitial modal** when:
+> **Revision note:** the first shipped iteration auto-opened a full metadata
+> review modal for every supported file. User feedback: too prominent and
+> confusing for non-technical users. Revised to the quiet flow below — the
+> upload pipeline is uninterrupted except for the one case where
+> interrupting genuinely helps (oversized PDFs).
 
-- the feature is enabled (deployment has `METADATA_CLEANER_URL` set), and
-- the file type is supported: PDF, JPG/JPEG, PNG, TIF/TIFF, WebP.
+The feature is active when the deployment has `METADATA_CLEANER_URL` set and
+the file type is supported: PDF, JPG/JPEG, PNG, TIF/TIFF, WebP. It has two
+faces:
 
-(The upload components have no resting "picked but not uploaded" UI state
-where a separate "Check metadata" button could live — picking a file
-immediately enters the license-modal pipeline — so the review step is shown
-as the first modal in that pipeline instead. Cleaning stays strictly
-opt-in: nothing is modified without an explicit action, and **"Continue
-with original"** is a single click.)
+### 1. Normal files: checkbox in the license modal, silent cleaning
 
-The shared **`MetadataCleanerModal`**:
+Picking a file goes straight into the license modal, exactly as it did
+before the feature existed — no interstitial. For supported files the
+license modal shows a compact opt-in block (injected by the Licensed*Input
+components as a snippet; `LicenseModal` itself stays generic):
 
-1. The file is uploaded to the cleaner (via the app's server proxy). All
-   metadata is displayed, grouped by store (DocInfo / XMP / EXIF / IPTC / PNG /
-   Other), with sensitive fields visually flagged (the service marks them).
-2. The user can enable **"Remove tool provenance"** — the service's `strip`
-   preset, shown as the concrete list of fields that will be deleted — and,
-   **for PDFs only**, pick a compression preset: off (default) / balanced /
-   strong.
-3. **Apply** runs the operations (`flatten: true`, `preserveDates: true`, like
-   the service's own UI) and shows the verified result: metadata before/after,
-   file size before/after, and the leak-scan result.
-4. **"Use cleaned file"** downloads the cleaned copy and replaces the pending
-   `File` in the upload component; the normal flow (license attestation →
-   Blossom upload) continues with the cleaned copy — sha256/size are computed
-   downstream from it as usual. **"Keep original"** closes the modal with no
-   changes.
+- ☐ **"Remove hidden file metadata (e.g. creator software) before upload"**
+  — plain language, **unchecked by default**.
+- For PDFs additionally a small compress select: off (default) / balanced /
+  strong.
+- A **"show details"** link opening `MetadataCleanerModal` in **inspect-only
+  mode**: the metadata table grouped by store with sensitive badges plus the
+  list of fields the strip would remove — read-only, just a Close button.
 
-"Continue with original" (also Escape or a backdrop click) proceeds exactly
-as today. If the service is unreachable or errors, the modal shows a
-friendly error; uploading the original still works (graceful degradation).
+On license **Save**, if the checkbox is ticked (and/or compression chosen),
+cleaning runs **silently inside the deferred upload step** (`beforeAttest`):
+inspect → strip ops → apply (`flatten: true`, `preserveDates: true`) →
+download cleaned copy → the **cleaned bytes** go to Blossom, so the kind
+1063 attestation references the cleaned file's hash. Afterwards a subtle
+confirmation appears on the file row / image field ("hidden metadata
+removed (N fields)"). If the cleaner service fails, the **original uploads
+anyway** with a small non-blocking note — cleaning never breaks an upload.
 
-**Oversized PDFs:** a PDF over the Blossom upload limit
-(`BLOSSOM_MAX_FILE_SIZE`, default 5 MB — an app-side limit only; the
-Blossom server itself enforces none) is NOT rejected up front when the
-cleaner is enabled: it goes into the review modal (with a hint that it
-exceeds the limit) so compression can shrink it, and the size check runs
-on the resolved file instead. Oversized images and unsupported files still
-fail fast — the service cannot compress those. The proxy's own body cap is
-therefore independent: `METADATA_CLEANER_MAX_UPLOAD_MB` (default 200,
-matching the service).
+### 2. Oversized PDFs: compression-first rescue modal
 
-All user-facing strings go through Paraglide (DE + EN).
+A PDF over the Blossom upload limit (`BLOSSOM_MAX_FILE_SIZE`, default 5 MB —
+an app-side limit only; the Blossom server itself enforces none) is NOT
+rejected up front: `MetadataCleanerModal` auto-opens **before** the pipeline,
+framed around the user's actual problem:
+
+- Lead message: the file's size vs. the upload limit, and that compression
+  may fix it. Compression picker front and center, **balanced preselected**.
+- The metadata table and the strip toggle are collapsed behind a
+  "show file metadata" toggle (strip stays available, default on, but
+  secondary).
+- Apply → verified result (sizes, leak scan, still-oversized warning if
+  applicable) → "Use cleaned file" continues into the license modal; the
+  size check runs on the resolved file. "Continue with original" (also
+  Escape/backdrop) proceeds and then fails the size check as before.
+
+Oversized images and unsupported files still fail fast — the service cannot
+compress those. The proxy's own body cap is therefore independent:
+`METADATA_CLEANER_MAX_UPLOAD_MB` (default 200, matching the service).
+
+All user-facing strings go through Paraglide (DE + EN). Discoverability of
+the quiet checkbox may later be helped by a Termi hint card (per the
+project's no-page-banners rule) — out of scope here.
 
 ## Scope: which uploaders
 

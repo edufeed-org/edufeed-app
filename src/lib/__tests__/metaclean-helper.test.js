@@ -121,3 +121,103 @@ describe('groupFieldsByStore', () => {
     ]);
   });
 });
+
+describe('cleanFileQuietly', () => {
+  it('(a) full clean path: strip + download returns cleaned file with metadata preserved', async () => {
+    const { cleanFileQuietly } = await import('../helpers/metaclean.js');
+    const file = new File(['original'], 'doc.pdf', { type: 'application/pdf' });
+
+    let applyBody;
+    const fetchMock = vi.fn(async (url, init) => {
+      if (url === '/api/metaclean/files' && init?.method === 'POST') {
+        return jsonResponse({ sessionId: 's1', filename: 'doc.pdf', fields: [] });
+      }
+      if (url === '/api/metaclean/files/s1/ops/strip') {
+        return jsonResponse({ ops: [{ type: 'delete', fieldId: 'pdf.docinfo./Producer' }] });
+      }
+      if (url === '/api/metaclean/files/s1/apply' && init?.method === 'POST') {
+        applyBody = JSON.parse(init.body);
+        return jsonResponse({ before: [], after: [], leaks: [] });
+      }
+      if (url === '/api/metaclean/files/s1/download') {
+        return new Response(new Blob(['clean']), { status: 200 });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await cleanFileQuietly(file, { strip: true, compress: 'off' }, fetchMock);
+
+    expect(result.removedCount).toBe(1);
+    expect(result.cleaned).toBe(true);
+    expect(result.file).toBeInstanceOf(File);
+    expect(result.file.name).toBe('doc.pdf');
+    expect(result.file.type).toBe('application/pdf');
+    expect(await result.file.text()).toBe('clean');
+    expect(applyBody.flatten).toBe(true);
+    expect(applyBody.preserveDates).toBe(true);
+    expect(applyBody).not.toHaveProperty('compress');
+  });
+
+  it('(b) strip:false with compress balanced calls apply with empty ops and compress', async () => {
+    const { cleanFileQuietly } = await import('../helpers/metaclean.js');
+    const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
+
+    let applyBody;
+    const fetchMock = vi.fn(async (url, init) => {
+      if (url === '/api/metaclean/files' && init?.method === 'POST') {
+        return jsonResponse({ sessionId: 's2', filename: 'doc.pdf', fields: [] });
+      }
+      if (url === '/api/metaclean/files/s2/ops/strip') {
+        return jsonResponse({ ops: [] });
+      }
+      if (url === '/api/metaclean/files/s2/apply' && init?.method === 'POST') {
+        applyBody = JSON.parse(init.body);
+        return jsonResponse({ before: [], after: [], leaks: [] });
+      }
+      if (url === '/api/metaclean/files/s2/download') {
+        return new Response(new Blob(['cleaned']), { status: 200 });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await cleanFileQuietly(file, { strip: false, compress: 'balanced' }, fetchMock);
+
+    expect(result.cleaned).toBe(true);
+    expect(applyBody.ops).toEqual([]);
+    expect(applyBody.compress).toBe('balanced');
+  });
+
+  it('(c) nothing to do: empty ops and compress off returns original file without apply/download', async () => {
+    const { cleanFileQuietly } = await import('../helpers/metaclean.js');
+    const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
+
+    const fetchMock = vi.fn(async (url, init) => {
+      if (url === '/api/metaclean/files' && init?.method === 'POST') {
+        return jsonResponse({ sessionId: 's3', filename: 'doc.pdf', fields: [] });
+      }
+      if (url === '/api/metaclean/files/s3/ops/strip') {
+        return jsonResponse({ ops: [] });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await cleanFileQuietly(file, { strip: true, compress: 'off' }, fetchMock);
+
+    expect(result).toEqual({ file, removedCount: 0, cleaned: false });
+    expect(result.file).toBe(file); // same object identity
+    expect(fetchMock).toHaveBeenCalledTimes(2); // inspect + getStripOps only
+  });
+
+  it('(d) failure: inspect rejects returns null silently', async () => {
+    const { cleanFileQuietly } = await import('../helpers/metaclean.js');
+    const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
+
+    const fetchMock = vi.fn(async () => {
+      throw new Error('Network error');
+    });
+
+    const result = await cleanFileQuietly(file, { strip: true }, fetchMock);
+
+    expect(result).toBe(null);
+  });
+});

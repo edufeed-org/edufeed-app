@@ -40,7 +40,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   metaclean_result_title: () => 'Verified result',
   metaclean_fields_before_after: ({ before, after }) => `Fields: ${before} -> ${after}`,
   metaclean_size_before_after: ({ before, after }) => `Size: ${before} -> ${after}`,
-  metaclean_oversized_hint: ({ limit }) => `Over upload limit of ${limit}`,
+  metaclean_oversized_lead: ({ size, limit }) => `File is ${size}, limit ${limit}`,
+  metaclean_show_metadata: () => 'Show file metadata',
+  metaclean_inspect_title: () => 'File metadata',
+  metaclean_inspect_removes: () => 'Selecting "remove hidden metadata" would remove these fields:',
+  metaclean_close: () => 'Close',
   metaclean_still_oversized: ({ limit }) => `Still over upload limit of ${limit}`,
   metaclean_leaks_clean: () => 'Leak scan: clean',
   metaclean_leaks_found: () => 'Leaks found',
@@ -175,22 +179,39 @@ describe('MetadataCleanerModal', () => {
     expect(mocks.applyOps).not.toHaveBeenCalled();
   });
 
-  it('shows an oversized hint in the review phase when the file exceeds maxSize', async () => {
+  it('shows the oversized lead text in the review phase when the file exceeds maxSize', async () => {
     const file = pdfFile();
     Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
-    const { getByText } = render(MetadataCleanerModal, {
+    const { getByText, getByTestId } = render(MetadataCleanerModal, {
       props: { open: true, file, ondone: vi.fn(), maxSize: 5 * 1024 * 1024 }
     });
-    await waitFor(() => expect(getByText('Canva')).toBeTruthy());
-    expect(getByText('Over upload limit of 5 MB')).toBeTruthy();
+    await waitFor(() => expect(getByTestId('metaclean-compress')).toBeTruthy());
+    expect(getByText('File is 6 MB, limit 5 MB')).toBeTruthy();
   });
 
-  it('shows no oversized hint when the file fits maxSize', async () => {
-    const { getByText, queryByText } = render(MetadataCleanerModal, {
+  it('preselects balanced compression and collapses the metadata table for an oversized PDF', async () => {
+    const file = pdfFile();
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+    const { getByTestId, container } = render(MetadataCleanerModal, {
+      props: { open: true, file, ondone: vi.fn(), maxSize: 5 * 1024 * 1024 }
+    });
+    await waitFor(() => expect(getByTestId('metaclean-compress')).toBeTruthy());
+    expect(getByTestId('metaclean-compress').value).toBe('balanced');
+
+    const details = container.querySelector('details');
+    expect(details).toBeTruthy();
+    expect(details.hasAttribute('open')).toBe(false);
+    expect(getByTestId('metaclean-details-toggle')).toBeTruthy();
+  });
+
+  it('shows no oversized lead text when the file fits maxSize', async () => {
+    const { getByText, queryByText, container } = render(MetadataCleanerModal, {
       props: { open: true, file: pdfFile(), ondone: vi.fn(), maxSize: 5 * 1024 * 1024 }
     });
     await waitFor(() => expect(getByText('Canva')).toBeTruthy());
-    expect(queryByText(/Over upload limit/)).toBeNull();
+    expect(queryByText(/File is .*, limit/)).toBeNull();
+    // Non-oversized review keeps the table visible without a <details> wrapper.
+    expect(container.querySelector('details')).toBeNull();
   });
 
   it('warns in the result phase when the cleaned file still exceeds maxSize', async () => {
@@ -223,5 +244,36 @@ describe('MetadataCleanerModal', () => {
     expect(getByText('service down')).toBeTruthy();
     await fireEvent.click(getByText('Continue with original'));
     expect(ondone).toHaveBeenCalledWith(file);
+  });
+
+  describe('inspect mode', () => {
+    it('shows the field table and would-remove list, no strip/compress/apply controls', async () => {
+      const ondone = vi.fn();
+      const { getByText, queryByTestId } = render(MetadataCleanerModal, {
+        props: { open: true, file: pdfFile(), ondone, mode: 'inspect' }
+      });
+      await waitFor(() => expect(getByText('Canva')).toBeTruthy());
+      expect(getByText('File metadata')).toBeTruthy();
+      expect(
+        getByText('Selecting "remove hidden metadata" would remove these fields:')
+      ).toBeTruthy();
+      expect(getByText('pdf.docinfo./Producer')).toBeTruthy();
+      expect(queryByTestId('metaclean-apply')).toBeNull();
+      expect(queryByTestId('metaclean-compress')).toBeNull();
+      expect(queryByTestId('metaclean-strip-toggle')).toBeNull();
+    });
+
+    it('closes and calls ondone once with the original file, without applying anything', async () => {
+      const ondone = vi.fn();
+      const file = pdfFile();
+      const { getByText, getByTestId } = render(MetadataCleanerModal, {
+        props: { open: true, file, ondone, mode: 'inspect' }
+      });
+      await waitFor(() => expect(getByText('Canva')).toBeTruthy());
+      await fireEvent.click(getByTestId('metaclean-inspect-close'));
+      expect(ondone).toHaveBeenCalledOnce();
+      expect(ondone.mock.calls[0][0]).toBe(file);
+      expect(mocks.applyOps).not.toHaveBeenCalled();
+    });
   });
 });

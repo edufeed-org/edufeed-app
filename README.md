@@ -319,7 +319,7 @@ Lets users apply for a memorable `name@<domain>` handle during signup. Requires 
 
 **Metadata Cleaner (optional)**
 
-Optional pre-upload review step backed by a [metadata-cleaner](https://git.edufeed.org/edufeed/metadata-cleaner) service instance: before a file goes to Blossom, users can inspect all metadata it carries, strip tool provenance (Creator/Producer etc.), and — for PDFs — compress embedded images. PDFs over `BLOSSOM_MAX_FILE_SIZE` are routed through the cleaner first so compression can bring them under the limit.
+Optional quiet opt-in backed by a [metadata-cleaner](https://git.edufeed.org/edufeed/metadata-cleaner) service instance. For supported files (PDF, JPG/JPEG, PNG, TIF/TIFF, WebP), the license modal shows an unchecked "remove hidden file metadata" checkbox (plus a compress select for PDFs) and a "show details" link into a read-only inspect view — no interstitial interrupts the normal upload flow. If ticked, stripping (and compression) happens silently during the deferred upload step and the cleaned bytes go to Blossom; a subtle confirmation note appears on the file row afterwards, and the cleaner failing never blocks the upload. The one interruption is a PDF over `BLOSSOM_MAX_FILE_SIZE`: it auto-opens a compression-first rescue modal (balanced preselected) before the upload proceeds, since compression may bring it under the limit.
 
 - `METADATA_CLEANER_URL`: **SECRET** — Base URL of the metadata-cleaner service (e.g. `https://cleaner.edufeed.org`). Server-only, proxied via `/api/metaclean`; when unset the feature is hidden entirely
 - `METADATA_CLEANER_MAX_UPLOAD_MB`: Maximum body size the `/api/metaclean` proxy accepts, in MB (default 200, matching the service's own limit). Deliberately independent of `BLOSSOM_MAX_FILE_SIZE`
