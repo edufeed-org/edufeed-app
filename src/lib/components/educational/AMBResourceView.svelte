@@ -43,6 +43,7 @@
   } from '$lib/helpers/educational/resourceDetailView.js';
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
   import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
+  import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
   import { ORCID_URI_PREFIX } from '$lib/helpers/educational/orcid.js';
   import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
   import { page } from '$app/stores';
@@ -115,6 +116,12 @@
 
   // Check if current user owns this resource
   const isOwner = $derived(activeUser?.pubkey === event.pubkey);
+
+  // Indexer vs. author: when the AMB creator metadata names someone other than
+  // the event pubkey, the pubkey is only the indexer. The byline then shows the
+  // metadata creator and the indexer gets its own "Indexed by" provenance row.
+  const getPublisherProfile = useUserProfile(() => event.pubkey);
+  const attribution = $derived(getResourceAttribution(event, getPublisherProfile()));
 
   /**
    * Handle edit button click - navigate to edit page
@@ -571,6 +578,7 @@
   <DetailHeader
     {event}
     authorPubkey={event.pubkey}
+    displayAuthor={attribution.indexed ? (attribution.creator ?? undefined) : undefined}
     date={publishedAt ? formatCalendarDate(publishedAt, 'short') : undefined}
     dateLabel={publishedAt ? m.amb_resource_published_label() : undefined}
     onEdit={isOwner ? handleEditClick : undefined}
@@ -725,10 +733,11 @@
     </section>
   {/if}
 
-  <!-- CREATORS & ROLES -->
-  {#if contributorEntries.length > 0}
+  <!-- CREATORS & ROLES + INDEXED BY — one wrapping row: provenance credit for
+       the publisher of an indexed resource sits next to the creators and only
+       wraps below them when there are many. Kept off the cards entirely. -->
+  {#if contributorEntries.length > 0 || attribution.indexed}
     <section class="ed-sect-plain">
-      <h3 class="ed-block-head">{m.amb_resource_creators_heading()}</h3>
       {#snippet initialAvatar(/** @type {string} */ name, /** @type {string | undefined} */ type)}
         <div class="av av-fallback" aria-hidden="true">
           {type === 'Organization' ? '🏢' : (name?.trim()?.charAt(0) || '?').toUpperCase()}
@@ -755,40 +764,85 @@
           {/if}
         </span>
       {/snippet}
-      <div class="ed-contrib-grid">
-        {#each contributorEntries as entry (entry.key)}
-          <div class="ed-contrib">
-            {#if entry.pubkey}
-              {@const getCreatorProfile = useUserProfile(entry.pubkey)}
-              {@const creatorProfile = getCreatorProfile()}
-              {@const picture = getProfilePicture(creatorProfile)}
-              {@const displayName = [
-                entry.honorificPrefix,
-                entry.name || getDisplayName(creatorProfile, entry.pubkey.slice(0, 8) + '…')
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              <a class="av-link" href={resolve(profileLink(entry.pubkey))} aria-label={displayName}>
-                {#if picture}
-                  <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
-                {:else}
-                  {@render initialAvatar(displayName, entry.type)}
-                {/if}
-              </a>
-              <div class="ed-contrib-body">
-                <a class="name" href={resolve(profileLink(entry.pubkey))}>{displayName}</a>
-                {@render contribMeta(entry)}
-              </div>
-            {:else}
-              {@const displayName = [entry.honorificPrefix, entry.name].filter(Boolean).join(' ')}
-              {@render initialAvatar(displayName, entry.type)}
-              <div class="ed-contrib-body">
-                <span class="name">{displayName}</span>
-                {@render contribMeta(entry)}
-              </div>
-            {/if}
+      <div class="ed-contrib-columns">
+        {#if contributorEntries.length > 0}
+          <div class="ed-contrib-col">
+            <h3 class="ed-block-head">{m.amb_resource_creators_heading()}</h3>
+            <div class="ed-contrib-grid">
+              {#each contributorEntries as entry (entry.key)}
+                <div class="ed-contrib">
+                  {#if entry.pubkey}
+                    {@const getCreatorProfile = useUserProfile(entry.pubkey)}
+                    {@const creatorProfile = getCreatorProfile()}
+                    {@const picture = getProfilePicture(creatorProfile)}
+                    {@const displayName = [
+                      entry.honorificPrefix,
+                      entry.name || getDisplayName(creatorProfile, entry.pubkey.slice(0, 8) + '…')
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    <a
+                      class="av-link"
+                      href={resolve(profileLink(entry.pubkey))}
+                      aria-label={displayName}
+                    >
+                      {#if picture}
+                        <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
+                      {:else}
+                        {@render initialAvatar(displayName, entry.type)}
+                      {/if}
+                    </a>
+                    <div class="ed-contrib-body">
+                      <a class="name" href={resolve(profileLink(entry.pubkey))}>{displayName}</a>
+                      {@render contribMeta(entry)}
+                    </div>
+                  {:else}
+                    {@const displayName = [entry.honorificPrefix, entry.name]
+                      .filter(Boolean)
+                      .join(' ')}
+                    {@render initialAvatar(displayName, entry.type)}
+                    <div class="ed-contrib-body">
+                      <span class="name">{displayName}</span>
+                      {@render contribMeta(entry)}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
           </div>
-        {/each}
+        {/if}
+
+        {#if attribution.indexed}
+          {@const publisherProfile = getPublisherProfile()}
+          {@const publisherPicture = getProfilePicture(publisherProfile)}
+          {@const publisherName = getDisplayName(publisherProfile, event.pubkey.slice(0, 8) + '…')}
+          <div class="ed-contrib-col" data-testid="indexed-by-section">
+            <h3 class="ed-block-head">{m.amb_resource_indexed_by()}</h3>
+            <div class="ed-contrib-grid">
+              <div class="ed-contrib">
+                <a
+                  class="av-link"
+                  href={resolve(profileLink(event.pubkey))}
+                  aria-label={publisherName}
+                >
+                  {#if publisherPicture}
+                    <img class="av" src={publisherPicture} alt={publisherName} />
+                  {:else}
+                    <div class="av av-fallback" aria-hidden="true">
+                      {(publisherName?.trim()?.charAt(0) || '?').toUpperCase()}
+                    </div>
+                  {/if}
+                </a>
+                <div class="ed-contrib-body">
+                  <a class="name" href={resolve(profileLink(event.pubkey))}>{publisherName}</a>
+                  <span class="sub">
+                    {formatCalendarDate(new Date(event.created_at * 1000), 'short')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
     </section>
   {/if}
@@ -1235,6 +1289,17 @@
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+  }
+  /* Creators + "Indexed by" share one row; the provenance column wraps
+     below only when many creators need the width. */
+  .ed-contrib-columns {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px 48px;
+  }
+  .ed-contrib-col {
+    min-width: 0;
   }
   .ed-contrib {
     display: flex;

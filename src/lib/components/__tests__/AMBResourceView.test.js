@@ -53,6 +53,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_topics_keywords: () => 'Topics',
   amb_resource_creators_heading: () => 'Creators',
   amb_resource_role_creator: () => 'Creator',
+  amb_resource_indexed_by: () => 'Indexed by',
   amb_resource_related_resources: () => 'Related',
   amb_resource_uploaded_files: () => 'Uploaded Files',
   amb_resource_open_pdf_inline_fallback: () => 'Open PDF in a new tab',
@@ -329,7 +330,10 @@ describe('AMBResourceView', () => {
     expect(robohashImgs.length).toBe(0);
 
     // Each name-only contributor renders an initial-letter placeholder.
-    const fallbacks = container.querySelectorAll('.av-fallback');
+    // (Scoped: the "Indexed by" provenance row renders its own fallback.)
+    const fallbacks = Array.from(container.querySelectorAll('.av-fallback')).filter(
+      (el) => !el.closest('[data-testid="indexed-by-section"]')
+    );
     expect(fallbacks.length).toBe(2);
     expect(fallbacks[0].textContent?.trim()).toBe('J');
     expect(fallbacks[1].textContent?.trim()).toBe('B');
@@ -383,7 +387,10 @@ describe('AMBResourceView', () => {
         props: { event: singleCreatorEvent, resource: mockResource }
       });
 
-      const entries = container.querySelectorAll('.ed-contrib');
+      // Scoped: the "Indexed by" provenance row renders its own .ed-contrib.
+      const entries = Array.from(container.querySelectorAll('.ed-contrib')).filter(
+        (e) => !e.closest('[data-testid="indexed-by-section"]')
+      );
       expect(entries.length).toBe(2);
 
       // The p-tag person links to their Nostr profile…
@@ -400,6 +407,60 @@ describe('AMBResourceView', () => {
         props: { event: mockEvent, resource: mockResource }
       });
       expect(container.querySelector('.ed-contrib-grid')).toBeNull();
+    });
+  });
+
+  describe('indexed resource provenance (indexer ≠ creator)', () => {
+    const indexedEvent = {
+      ...mockEvent,
+      tags: [
+        ['d', 'https://oerf-journal.eu/index.php/oerf/article/view/605'],
+        ['name', 'Aufbruch ins Unbekannte'],
+        ['creator:name', 'Regina Polak'],
+        ['creator:type', 'Person']
+      ]
+    };
+
+    it('renders an "Indexed by" section crediting the publisher', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: indexedEvent, resource: mockResource }
+      });
+      const section = container.querySelector('[data-testid="indexed-by-section"]');
+      expect(section).toBeTruthy();
+      expect(section?.textContent).toContain('Indexed by');
+      // Publisher (profile not loaded in tests) falls back to the pubkey slice, linked
+      const link = section?.querySelector(`a[href="/p/${mockEvent.pubkey}"]`);
+      expect(link).toBeTruthy();
+    });
+
+    it('lists the metadata creator without extra hint text', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: indexedEvent, resource: mockResource }
+      });
+      const grid = container.querySelector('.ed-contrib-grid');
+      expect(grid?.textContent).toContain('Regina Polak');
+      expect(grid?.textContent).not.toContain('from metadata');
+    });
+
+    it('shows the metadata creator in the DetailHeader byline instead of the indexer', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: indexedEvent, resource: mockResource }
+      });
+      const toolbar = container.querySelector('[data-testid="metadata-avatar"]');
+      expect(toolbar).toBeTruthy();
+      expect(toolbar?.textContent?.trim()).toBe('RP');
+    });
+
+    it('renders no "Indexed by" section for own content (creator p-tag = pubkey)', () => {
+      const ownEvent = {
+        ...indexedEvent,
+        tags: [...indexedEvent.tags, ['p', mockEvent.pubkey, '', 'creator']]
+      };
+      const { container } = render(AMBResourceView, {
+        props: { event: ownEvent, resource: mockResource }
+      });
+      expect(container.querySelector('[data-testid="indexed-by-section"]')).toBeNull();
+      expect(container.querySelector('[data-testid="metadata-avatar"]')).toBeNull();
     });
   });
 

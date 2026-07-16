@@ -2682,6 +2682,7 @@
   "publication_form_help_file": "Or upload the file — an upload replaces the link.",
   "publication_view_open_file": "Open file",
   "publication_view_highlights": "Highlights",
+  "amb_resource_indexed_by": "Indexed by",
   "amb_card_linked_materials": "{count} linked materials",
   "event_invite_button": "Invite",
   "invite_modal_title": "Invite to event",
