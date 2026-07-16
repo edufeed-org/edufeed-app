@@ -17,6 +17,8 @@
       shards = [];
       nsec = '';
       errorMessage = '';
+      busy = false;
+      copied = false;
     });
     return () => sub.unsubscribe();
   });
@@ -34,6 +36,7 @@
 
   /** Each recover step opens ONE popup (user gesture per operator). */
   async function step() {
+    if (busy) return;
     errorMessage = '';
     busy = true;
     try {
