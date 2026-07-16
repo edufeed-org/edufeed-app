@@ -2750,5 +2750,9 @@
   "metaclean_keep_original": "Continue with original",
   "metaclean_close": "Close",
   "metaclean_error_title": "Metadata check failed",
-  "metaclean_retry": "Retry"
+  "metaclean_retry": "Retry",
+  "metaclean_license_checkbox": "Remove hidden file metadata (e.g. creator software) before upload",
+  "metaclean_license_details": "Show details",
+  "metaclean_removed_note": "Hidden metadata removed ({count} fields)",
+  "metaclean_clean_failed_note": "Metadata could not be removed — the original file was uploaded."
 }

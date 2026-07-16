@@ -2750,5 +2750,9 @@
   "metaclean_keep_original": "Mit Original fortfahren",
   "metaclean_close": "Schließen",
   "metaclean_error_title": "Metadaten-Prüfung fehlgeschlagen",
-  "metaclean_retry": "Erneut versuchen"
+  "metaclean_retry": "Erneut versuchen",
+  "metaclean_license_checkbox": "Versteckte Datei-Metadaten (z. B. Erstellungssoftware) vor dem Hochladen entfernen",
+  "metaclean_license_details": "Details anzeigen",
+  "metaclean_removed_note": "Versteckte Metadaten entfernt ({count} Felder)",
+  "metaclean_clean_failed_note": "Metadaten konnten nicht entfernt werden — die Originaldatei wurde hochgeladen."
 }
