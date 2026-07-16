@@ -7,6 +7,7 @@
   import LoginModal from './LoginModal.svelte';
   import LoginWithPrivateKey from './LoginWithPrivateKey.svelte';
   import LoginWithBunker from './LoginWithBunker.svelte';
+  import LoginWithNpub from './LoginWithNpub.svelte';
   import SignupModal from './SignupModal.svelte';
   import CalendarEventDetailsModal from './calendar/CalendarEventDetailsModal.svelte';
   import CalendarCreationModal from './calendar/CalendarCreationModal.svelte';
@@ -47,6 +48,7 @@
   const loginModalId = 'global-login-modal';
   const privateKeyModalId = 'global-private-key-modal';
   const bunkerModalId = 'global-bunker-modal';
+  const npubLoginModalId = 'global-npub-login-modal';
   const signupModalId = 'global-signup-modal';
   const createCommunityModalId = 'create-community-modal';
   const editCommunityModalId = 'edit-community-modal';
@@ -92,6 +94,12 @@
       const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
       if (bunkerModal && bunkerModal.open) {
         bunkerModal.close();
+      }
+      const npubLoginModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(npubLoginModalId)
+      );
+      if (npubLoginModal && npubLoginModal.open) {
+        npubLoginModal.close();
       }
       if (signupModal && signupModal.open) {
         signupModal.close();
@@ -165,6 +173,13 @@
       const bunkerModal = /** @type {HTMLDialogElement} */ (document.getElementById(bunkerModalId));
       if (bunkerModal && !bunkerModal.open) {
         bunkerModal.showModal();
+      }
+    } else if (currentModal === 'npubLogin') {
+      const npubLoginModal = /** @type {HTMLDialogElement} */ (
+        document.getElementById(npubLoginModalId)
+      );
+      if (npubLoginModal && !npubLoginModal.open) {
+        npubLoginModal.showModal();
       }
     } else if (currentModal === 'signup') {
       // Open signup modal
@@ -277,6 +292,14 @@
     modal.transitionModal('bunker', 'login');
   }
 
+  function handleNpubTransition() {
+    modal.transitionModal('login', 'npubLogin');
+  }
+
+  function handleNpubAccountCreated() {
+    modal.transitionModal('npubLogin', 'login');
+  }
+
   let pollCommunityPubkey = $derived(
     /** @type {string} */ (/** @type {any} */ (modal.modalProps)?.communityPubkey) || ''
   );
@@ -300,6 +323,7 @@
     modalId={loginModalId}
     onNSECTransition={handleNSECTransition}
     onBunkerTransition={handleBunkerTransition}
+    onNpubTransition={handleNpubTransition}
   />
 {:else if modal.activeModal === 'privateKey'}
   <LoginWithPrivateKey modalId={privateKeyModalId} onAccountCreated={handleAccountCreated} />
@@ -309,6 +333,8 @@
     onAccountCreated={handleBunkerAccountCreated}
     onBack={handleBunkerBack}
   />
+{:else if modal.activeModal === 'npubLogin'}
+  <LoginWithNpub modalId={npubLoginModalId} onAccountCreated={handleNpubAccountCreated} />
 {:else if modal.activeModal === 'signup'}
   <SignupModal modalId={signupModalId} />
 {:else if modal.activeModal === 'eventDetails'}

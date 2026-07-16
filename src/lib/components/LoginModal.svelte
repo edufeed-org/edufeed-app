@@ -1,5 +1,5 @@
 <script>
-  let { modalId, onNSECTransition, onBunkerTransition } = $props();
+  let { modalId, onNSECTransition, onBunkerTransition, onNpubTransition } = $props();
 
   import * as m from '$lib/paraglide/messages';
   import { ExtensionSigner } from 'applesauce-signers';
@@ -10,6 +10,7 @@
   import AccountProfile from './AccountProfile.svelte';
   import { useAccounts } from '$lib/stores/accounts.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
   const getAccounts = useAccounts();
 
@@ -114,6 +115,11 @@
           onBunkerTransition();
         }
         return null;
+      case 'Npub':
+        if (onNpubTransition) {
+          onNpubTransition();
+        }
+        return null;
       default:
         throw new Error('Unknown signer');
     }
@@ -182,6 +188,15 @@
           >
             {m.auth_login_modal_extension()}
           </button>
+          {#if runtimeConfig.npubLogin?.enabled}
+            <button
+              data-testid="login-method-npub"
+              onclick={() => createSigner('Npub')}
+              class="btn join-item"
+            >
+              {m.auth_login_modal_npub()}
+            </button>
+          {/if}
         </div>
       </section>
     </div>
