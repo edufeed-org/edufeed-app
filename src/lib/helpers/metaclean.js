@@ -144,3 +144,28 @@ export function groupFieldsByStore(fields) {
   }
   return [...byStore.entries()].map(([store, storeFields]) => ({ store, fields: storeFields }));
 }
+
+/**
+ * One-shot silent clean for the license-modal opt-in: strip provenance
+ * and/or compress, returning the cleaned File. Never throws — any service
+ * failure returns null and the caller uploads the original instead.
+ * @param {File} file
+ * @param {{ strip?: boolean, compress?: 'off' | 'balanced' | 'strong' }} [options]
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ file: File, removedCount: number, cleaned: boolean } | null>}
+ */
+export async function cleanFileQuietly(file, { strip = true, compress } = {}, fetchImpl = fetch) {
+  try {
+    const { sessionId } = await inspectFile(file, fetchImpl);
+    const ops = strip ? ((await getStripOps(sessionId, fetchImpl)).ops ?? []) : [];
+    const wantsCompress = Boolean(compress && compress !== 'off');
+    if (ops.length === 0 && !wantsCompress) {
+      return { file, removedCount: 0, cleaned: false };
+    }
+    await applyOps(sessionId, { ops, compress }, fetchImpl);
+    const cleaned = await downloadCleaned(sessionId, file.name, file.type, fetchImpl);
+    return { file: cleaned, removedCount: ops.length, cleaned: true };
+  } catch {
+    return null;
+  }
+}
