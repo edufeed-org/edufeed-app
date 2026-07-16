@@ -1,11 +1,14 @@
 /** @vitest-environment node */
 // @ts-nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateSecretKey, getPublicKey } from 'nostr-tools';
+import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { trustedKeyDeal, hexShard } from '@fiatjaf/promenade-trusted-dealer';
 import {
   getPomegranateAccount,
   createPomegranateAccount,
   ensureProfile,
+  aggregateNsec,
   KIND_ACCOUNT_REGISTRATION,
   KIND_OPERATOR_REGISTRATION
 } from '../services/pomegranate.js';
@@ -73,6 +76,9 @@ describe('createPomegranateAccount', () => {
     expect(regEvent.pubkey).toBe(getPublicKey(secretKey));
     expect(regEvent.tags.find((t) => t[0] === 'threshold')?.[1]).toBe('2');
     expect(regEvent.tags.filter((t) => t[0] === 'operator')).toHaveLength(3);
+    expect(centralInit.headers['Authorization']).toBe(`Token ${token.raw}`);
+    expect(centralInit.headers['X-Pomegranate-Session']).toEqual(expect.any(String));
+    expect(centralInit.headers['X-Pomegranate-Session'].length).toBeGreaterThan(0);
 
     const [opUrl, opInit] = fetchMock.mock.calls[1];
     expect(opUrl).toBe('https://op1.test/po/register');
@@ -122,6 +128,41 @@ describe('createPomegranateAccount', () => {
         secretKey: generateSecretKey()
       })
     ).rejects.toThrow(/At least 2 operators/);
+  });
+});
+
+describe('aggregateNsec', () => {
+  // Note: trustedKeyDeal normalizes the key to an even-y pubkey (BIP340), so
+  // the recovered secret bytes may be the negation of the input — the x-only
+  // pubkey is what round-trips. Compare via getPublicKey, not raw key bytes.
+  it('round-trips 2-of-3 shards back to the account key', () => {
+    const sk = generateSecretKey();
+    const pubkey = getPublicKey(sk);
+    const { shards } = trustedKeyDeal(BigInt('0x' + bytesToHex(sk)), 2, 3);
+    const hexShards = shards.slice(0, 2).map(hexShard);
+
+    const nsec = aggregateNsec(hexShards, pubkey);
+
+    expect(nsec).toMatch(/^nsec1/);
+    const decoded = nip19.decode(nsec);
+    expect(decoded.type).toBe('nsec');
+    expect(getPublicKey(/** @type {Uint8Array} */ (decoded.data))).toBe(pubkey);
+  });
+
+  it('aggregates any >=threshold subset (shards 2+3)', () => {
+    const sk = generateSecretKey();
+    const pubkey = getPublicKey(sk);
+    const { shards } = trustedKeyDeal(BigInt('0x' + bytesToHex(sk)), 2, 3);
+    const hexShards = shards.slice(1, 3).map(hexShard);
+    expect(aggregateNsec(hexShards, pubkey)).toMatch(/^nsec1/);
+  });
+
+  it('rejects when the shards resolve to a different pubkey', () => {
+    const sk = generateSecretKey();
+    const { shards } = trustedKeyDeal(BigInt('0x' + bytesToHex(sk)), 2, 3);
+    const hexShards = shards.slice(0, 2).map(hexShard);
+    const otherPubkey = getPublicKey(generateSecretKey());
+    expect(() => aggregateNsec(hexShards, otherPubkey)).toThrow(/does not match/);
   });
 });
 
