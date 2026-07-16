@@ -5,13 +5,13 @@
 
 <script>
   import { parseEventContent } from '$lib/helpers/nostrContent.js';
-  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
   import { getImetaByUrl, parseImetaDimensions } from '$lib/helpers/media-meta.js';
   import { nostrIdFromUrl, truncateMiddle, splitNostrIds } from '$lib/helpers/link-render.js';
   import * as m from '$lib/paraglide/messages';
   import NostrIdentifier from './NostrIdentifier.svelte';
   import MediaLightbox from './MediaLightbox.svelte';
   import MediaVideo from './MediaVideo.svelte';
+  import ImageWithFallback from './ImageWithFallback.svelte';
 
   let { event, class: className = '', depth = 0 } = $props();
 
@@ -105,10 +105,12 @@
           {/if}
         {/each}
       {:else if node.type === 'emoji'}
-        <img
-          src={getProxiedImageUrl(node.url, 'emoji') || node.url}
+        <ImageWithFallback
+          src={node.url}
           alt=":{node.code}:"
           title=":{node.code}:"
+          size="emoji"
+          fallbackType="generic"
           class="inline h-5 w-5 align-text-bottom"
         />
       {:else if node.type === 'mention'}
@@ -125,12 +127,14 @@
               class="block max-w-full cursor-zoom-in p-0 text-left"
               onclick={(e) => openLightbox(e, imageStartIndex[i] ?? 0)}
             >
-              <img
-                src={getProxiedImageUrl(node.href, 'content') || node.href}
+              <ImageWithFallback
+                src={node.href}
                 alt={meta?.alt || ''}
                 loading="lazy"
                 width={dims?.width}
                 height={dims?.height}
+                size="content"
+                fallbackType="generic"
                 class="block h-auto max-h-[480px] w-auto max-w-full rounded-xl"
               />
             </button>
@@ -179,10 +183,12 @@
                 : ''}"
               onclick={(e) => openLightbox(e, start + j)}
             >
-              <img
-                src={getProxiedImageUrl(link, 'content') || link}
+              <ImageWithFallback
+                src={link}
                 alt={imetaFor(link)?.alt || ''}
                 loading="lazy"
+                size="content"
+                fallbackType="generic"
                 class="h-full w-full object-cover"
               />
               {#if j === 3 && count > 4}

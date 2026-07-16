@@ -17,6 +17,7 @@
   import MarkdownRenderer from '../MarkdownRenderer.svelte';
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   let { identifier, decoded: _decoded, inline: _inline = false } = $props();
 
@@ -114,9 +115,10 @@
       <div class="card-body p-4">
         <div class="flex items-start gap-3">
           {#if event.image}
-            <img
+            <ImageWithFallback
               src={event.image}
               alt={event.title}
+              fallbackType="event"
               class="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
             />
           {/if}

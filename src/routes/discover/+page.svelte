@@ -1,6 +1,6 @@
 <script>
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { untrack } from 'svelte';
   import { onMount } from 'svelte';
@@ -1480,10 +1480,12 @@
     </div>
   {:else if runtimeConfig.ui?.discoverHeroImage}
     <div class="relative overflow-hidden py-12 text-primary-content">
-      <img
-        src={getProxiedImageUrl(runtimeConfig.ui.discoverHeroImage, 'hero') ||
-          runtimeConfig.ui.discoverHeroImage}
+      <ImageWithFallback
+        src={runtimeConfig.ui.discoverHeroImage}
         alt=""
+        size="hero"
+        loading="eager"
+        fallbackType="banner"
         class="absolute inset-0 h-full w-full object-cover"
       />
       <div class="relative z-10 container mx-auto px-4">

@@ -7,6 +7,7 @@
   import { resolve } from '$app/paths';
   import { getDisplayName } from 'applesauce-core/helpers';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
@@ -36,7 +37,12 @@
   <!-- Header -->
   <div class="mb-2 flex items-center gap-1.5 text-sm font-medium text-base-content">
     {#if emojiUrl}
-      <img src={emojiUrl} alt={emoji} class="inline h-5 w-5 object-contain" />
+      <ImageWithFallback
+        src={emojiUrl}
+        alt={emoji}
+        fallbackType="generic"
+        class="inline h-5 w-5 object-contain"
+      />
     {:else}
       <span class="text-base">{emoji}</span>
     {/if}
