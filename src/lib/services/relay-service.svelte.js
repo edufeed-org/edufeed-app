@@ -30,8 +30,20 @@ function getDefaultRelays() {
 const relayListCache = new SvelteMap();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Hard cap for the kind 10002 lookup. With completion-aware resolution the
+// healthy paths settle at model-emission (instant when cached/prefetched) or
+// loader EOSE (confirmed absence) — this cap only bites when lookup relays
+// hang, and it is logged because the caller will silently fall back to
+// fallbackRelays, misrouting the publish (2026-07-16 incident).
+const FETCH_RELAY_LIST_TIMEOUT = 8_000;
+
 /**
- * Fetch relay list for a pubkey (with caching)
+ * Fetch relay list for a pubkey (with caching).
+ *
+ * Resolution order: cached entry → model emission (kind 10002 already in or
+ * arriving into EventStore) → loader completion with nothing found (confirmed
+ * absence, resolves null fast) → hard timeout (resolves null, warns).
+ *
  * @param {string} pubkey - User's public key
  * @returns {Promise<{writeRelays: string[], readRelays: string[]} | null>}
  */
@@ -51,40 +63,55 @@ export async function fetchRelayList(pubkey) {
     let subscription;
     /** @type {import('rxjs').Subscription | undefined} */
     let loaderSub;
+    /** @type {{writeRelays: string[], readRelays: string[]} | null} */
+    let latest = null;
 
-    const cleanup = () => {
-      subscription?.unsubscribe();
-      loaderSub?.unsubscribe();
+    /** @param {{writeRelays: string[], readRelays: string[]} | null} relayList */
+    const settle = (relayList) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      // Defer teardown: settle() can fire synchronously inside subscribe(),
+      // before the subscription variables are assigned.
+      queueMicrotask(() => {
+        subscription?.unsubscribe();
+        loaderSub?.unsubscribe();
+      });
+      if (relayList) {
+        /** @type {any} */
+        const cacheEntry = { ...relayList, fetchedAt: Date.now() };
+        relayListCache.set(pubkey, cacheEntry);
+        resolve(cacheEntry);
+      } else {
+        resolve(null);
+      }
     };
 
     const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        cleanup();
-        resolve(null);
-      }
-    }, 3000); // 3 second timeout
+      console.warn(
+        `[relay-service] kind 10002 lookup timed out for ${pubkey.slice(0, 8)}… — ` +
+          'callers will fall back to default relays'
+      );
+      settle(latest);
+    }, FETCH_RELAY_LIST_TIMEOUT);
 
-    // Subscribe to model for parsed relay list
+    // Emits synchronously when the 10002 is already in EventStore (IDB
+    // warm-up or login prefetch) — the common fast path.
     // @ts-ignore - applesauce model type mismatch
     subscription = eventStore.model(RelayListModel, pubkey).subscribe((relayList) => {
-      if (relayList && !resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        cleanup();
-
-        /** @type {any} */
-        const cacheEntry = {
-          ...relayList,
-          fetchedAt: Date.now()
-        };
-        relayListCache.set(pubkey, cacheEntry);
-        resolve(cacheEntry);
+      if (relayList) {
+        latest = relayList;
+        settle(relayList);
       }
     });
 
-    // Start loading kind 10002 events
-    loaderSub = loader()().subscribe();
+    // Loader completion = lookup relays EOSEd. If the model produced nothing
+    // by then, the pubkey has no kind 10002 (the legit new-user case) —
+    // resolve fast instead of burning the timeout.
+    loaderSub = loader()().subscribe({
+      complete: () => settle(latest),
+      error: () => settle(latest)
+    });
   });
 }
 
