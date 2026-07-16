@@ -106,6 +106,44 @@ describe('FeedCard indexed resource attribution', () => {
     expect(stack?.querySelector('[data-testid="creator-overflow"]')).toBeFalsy();
   });
 
+  it('renders the type badge in flex flow so long names truncate before it', () => {
+    // Regression: the badge was absolutely positioned, so a long author name
+    // ran underneath it instead of truncating.
+    const { container } = render(FeedCard, {
+      props: { ...baseProps, event: indexedEvent }
+    });
+    const badge = [...container.querySelectorAll('div.rounded-full')]
+      .filter((el) => el.textContent?.includes('Learning'))
+      .pop();
+    expect(badge).toBeTruthy();
+    expect(badge?.className).not.toContain('absolute');
+    expect(badge?.className).toContain('self-start');
+  });
+
+  it('shows all creator names in a hover title on the name line', () => {
+    const multiEvent = {
+      ...indexedEvent,
+      tags: [
+        ['d', 'https://example.org/x'],
+        ['creator:name', 'Judith Noa'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Konstantin Falahati'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Anna Krause'],
+        ['creator:type', 'Person']
+      ]
+    };
+    const { container } = render(FeedCard, {
+      props: { ...baseProps, event: multiEvent }
+    });
+    // Full list on the name line (individual avatars carry single-name titles)
+    const nameEl = container.querySelector(
+      '[title="Judith Noa, Konstantin Falahati, Anna Krause"]'
+    );
+    expect(nameEl).toBeTruthy();
+    expect(nameEl?.textContent).toContain('+1');
+  });
+
   it('keeps the publisher for own content (creator p-tag = pubkey)', () => {
     const ownEvent = {
       ...indexedEvent,

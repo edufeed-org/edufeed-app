@@ -82,10 +82,13 @@
     indexedCreators.length === 1 ? indexedCreators[0].pubkey : undefined
   );
   const shownAuthorPubkey = $derived(indexedCreators.length ? singleCreatorPubkey : authorPubkey);
+  const creatorNames = $derived(indexedCreators.map((c) => c.name ?? c.pubkey?.slice(0, 8) + '…'));
   const shownAuthorName = $derived(
-    indexedCreators.length
-      ? formatCreatorNames(indexedCreators.map((c) => c.name ?? c.pubkey?.slice(0, 8) + '…'))
-      : authorName
+    indexedCreators.length ? formatCreatorNames(creatorNames) : authorName
+  );
+  // Full author list as hover title — the visible line truncates/caps at +N.
+  const fullCreatorNames = $derived(
+    indexedCreators.length ? creatorNames.filter(Boolean).join(', ') : undefined
   );
 
   /** @type {Record<string, { label: () => string, icon: any }>} */
@@ -181,12 +184,15 @@
           <a
             href={resolve(profileLink(shownAuthorPubkey))}
             class="truncate text-sm font-medium text-base-content hover:underline"
+            title={fullCreatorNames}
             onclick={(e) => e.stopPropagation()}
           >
             {shownAuthorName}
           </a>
         {:else}
-          <span class="truncate text-sm font-medium text-base-content">{shownAuthorName}</span>
+          <span class="truncate text-sm font-medium text-base-content" title={fullCreatorNames}>
+            {shownAuthorName}
+          </span>
         {/if}
         {#if timestamp}
           <span class="text-base-content/30">&middot;</span>
@@ -279,8 +285,10 @@
 
   {#if meta}
     {@const Icon = meta.icon}
+    <!-- In flex flow (not absolute) so long author names/titles truncate
+         before the badge instead of running underneath it. -->
     <div
-      class="absolute top-2 right-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium backdrop-blur-sm {kindColor
+      class="flex flex-shrink-0 items-center gap-1 self-start rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap backdrop-blur-sm {kindColor
         ? ''
         : 'bg-base-300/80 text-base-content/70'}"
       style:background-color={kindColor

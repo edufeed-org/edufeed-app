@@ -104,6 +104,12 @@
       ? formatCreatorNames(indexedCreators.map(creatorDisplayName))
       : authorName
   );
+  // Full author list as hover title — the visible line truncates/caps at +N.
+  const fullCreatorNames = $derived(
+    indexedCreators.length
+      ? indexedCreators.map(creatorDisplayName).filter(Boolean).join(', ')
+      : undefined
+  );
   // The creator name links to a profile only for a single pubkey creator —
   // mixed/multiple author groups stay plain text (the card itself navigates).
   const singleCreatorPubkey = $derived(
@@ -253,7 +259,7 @@
           >
         {/if}
       </div>
-      <div class="truncate text-sm text-base-content/60">
+      <div class="truncate text-sm text-base-content/60" title={fullCreatorNames}>
         {displayedAuthorName} · {formatCalendarDate(publishedAt, 'short')}
         {#if resource.license}
           · {resource.license.label}
@@ -335,13 +341,14 @@
       </div>
       <div class="min-w-0 flex-1">
         {#if indexedCreators.length && !singleCreatorPubkey}
-          <span class="block truncate font-medium text-base-content">
+          <span class="block truncate font-medium text-base-content" title={fullCreatorNames}>
             {displayedAuthorName}
           </span>
         {:else}
           <a
             href={resolve(profileLink(singleCreatorPubkey ?? resource.pubkey))}
             class="block truncate font-medium text-base-content hover:underline"
+            title={fullCreatorNames}
             onclick={(e) => e.stopPropagation()}
           >
             {displayedAuthorName}
