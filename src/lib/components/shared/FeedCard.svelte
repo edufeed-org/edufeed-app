@@ -14,9 +14,12 @@
     PollIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import MetadataAvatar from '$lib/components/shared/MetadataAvatar.svelte';
+  import CreatorAvatarStack from '$lib/components/shared/CreatorAvatarStack.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
-  import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
+  import {
+    getResourceAttribution,
+    formatCreatorNames
+  } from '$lib/helpers/educational/resourceAttribution.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { activeDateLocale } from '$lib/helpers/dates.js';
   import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
@@ -70,12 +73,19 @@
   const attribution = $derived(
     event?.kind === 30142
       ? getResourceAttribution(event, { name: authorName })
-      : { indexed: false, creator: null, sourceDomain: null }
+      : { indexed: false, creators: [], sourceDomain: null }
   );
-  const indexedCreator = $derived(attribution.indexed ? attribution.creator : null);
-  const shownAuthorPubkey = $derived(indexedCreator ? indexedCreator.pubkey : authorPubkey);
+  const indexedCreators = $derived(attribution.indexed ? attribution.creators : []);
+  // The creator name links to a profile only for a single pubkey creator —
+  // mixed/multiple author groups stay plain text (the card itself navigates).
+  const singleCreatorPubkey = $derived(
+    indexedCreators.length === 1 ? indexedCreators[0].pubkey : undefined
+  );
+  const shownAuthorPubkey = $derived(indexedCreators.length ? singleCreatorPubkey : authorPubkey);
   const shownAuthorName = $derived(
-    indexedCreator ? (indexedCreator.name ?? indexedCreator.pubkey?.slice(0, 8) + '…') : authorName
+    indexedCreators.length
+      ? formatCreatorNames(indexedCreators.map((c) => c.name ?? c.pubkey?.slice(0, 8) + '…'))
+      : authorName
   );
 
   /** @type {Record<string, { label: () => string, icon: any }>} */
@@ -139,8 +149,12 @@
     ? `rgb(${kindColor.r},${kindColor.g},${kindColor.b})`
     : undefined}
 >
-  {#if indexedCreator && !indexedCreator.pubkey}
-    <MetadataAvatar name={indexedCreator.name} size="md" />
+  {#if indexedCreators.length}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+      <CreatorAvatarStack creators={indexedCreators} size="md" />
+    </div>
   {:else if shownAuthorPubkey}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -181,7 +195,7 @@
           </span>
         {/if}
       </div>
-      {#if indexedCreator && attribution.sourceDomain}
+      {#if indexedCreators.length && attribution.sourceDomain}
         <div
           class="truncate font-mono text-xs text-base-content/60"
           data-testid="metadata-attribution"

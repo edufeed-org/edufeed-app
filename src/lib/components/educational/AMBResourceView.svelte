@@ -578,7 +578,7 @@
   <DetailHeader
     {event}
     authorPubkey={event.pubkey}
-    displayAuthor={attribution.indexed ? (attribution.creator ?? undefined) : undefined}
+    displayAuthor={attribution.indexed ? attribution.creators[0] : undefined}
     date={publishedAt ? formatCalendarDate(publishedAt, 'short') : undefined}
     dateLabel={publishedAt ? m.amb_resource_published_label() : undefined}
     onEdit={isOwner ? handleEditClick : undefined}

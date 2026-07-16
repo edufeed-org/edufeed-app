@@ -24,9 +24,12 @@
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
-  import MetadataAvatar from '../shared/MetadataAvatar.svelte';
-  import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
-  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import CreatorAvatarStack from '../shared/CreatorAvatarStack.svelte';
+  import {
+    getResourceAttribution,
+    formatCreatorNames
+  } from '$lib/helpers/educational/resourceAttribution.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
@@ -86,13 +89,25 @@
   const attribution = $derived(
     getResourceAttribution(resource.rawEvent ?? resource, authorProfile)
   );
-  const indexedCreator = $derived(attribution.indexed ? attribution.creator : null);
-  const getIndexedCreatorProfile = useUserProfile(() => indexedCreator?.pubkey);
+  const indexedCreators = $derived(attribution.indexed ? attribution.creators : []);
+  const getCreatorProfiles = useProfileMap(() =>
+    indexedCreators.flatMap((c) => (c.pubkey ? [c.pubkey] : []))
+  );
+  /** @param {import('$lib/helpers/educational/resourceAttribution.js').DisplayCreator} c */
+  function creatorDisplayName(c) {
+    if (c.name) return c.name;
+    if (!c.pubkey) return '';
+    return getDisplayName(getCreatorProfiles().get(c.pubkey), c.pubkey.slice(0, 8) + '…');
+  }
   const displayedAuthorName = $derived(
-    indexedCreator
-      ? (indexedCreator.name ??
-          getDisplayName(getIndexedCreatorProfile(), indexedCreator.pubkey?.slice(0, 8) + '…'))
+    indexedCreators.length
+      ? formatCreatorNames(indexedCreators.map(creatorDisplayName))
       : authorName
+  );
+  // The creator name links to a profile only for a single pubkey creator —
+  // mixed/multiple author groups stay plain text (the card itself navigates).
+  const singleCreatorPubkey = $derived(
+    indexedCreators.length === 1 ? indexedCreators[0].pubkey : undefined
   );
   // Indexed byline: source domain + date (dashed avatar alone marks the
   // metadata origin — no extra hint text).
@@ -305,16 +320,8 @@
     <div class="mb-3 flex items-center gap-3">
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
       <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
-        {#if indexedCreator?.pubkey}
-          <ProfileAvatar
-            pubkey={indexedCreator.pubkey}
-            size="md"
-            linkToProfile
-            showHoverCard
-            fallbackType="robohash"
-          />
-        {:else if indexedCreator}
-          <MetadataAvatar name={indexedCreator.name} size="md" />
+        {#if indexedCreators.length}
+          <CreatorAvatarStack creators={indexedCreators} size="md" />
         {:else}
           <ProfileAvatar
             pubkey={resource.pubkey}
@@ -327,20 +334,20 @@
         {/if}
       </div>
       <div class="min-w-0 flex-1">
-        {#if indexedCreator && !indexedCreator.pubkey}
+        {#if indexedCreators.length && !singleCreatorPubkey}
           <span class="block truncate font-medium text-base-content">
             {displayedAuthorName}
           </span>
         {:else}
           <a
-            href={resolve(profileLink(indexedCreator?.pubkey ?? resource.pubkey))}
+            href={resolve(profileLink(singleCreatorPubkey ?? resource.pubkey))}
             class="block truncate font-medium text-base-content hover:underline"
             onclick={(e) => e.stopPropagation()}
           >
             {displayedAuthorName}
           </a>
         {/if}
-        {#if indexedCreator}
+        {#if indexedCreators.length}
           <div
             class="truncate font-mono text-xs text-base-content/60"
             data-testid="metadata-attribution"

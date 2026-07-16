@@ -356,6 +356,41 @@ describe('AMBResourceCard', () => {
       expect(container.querySelector('[data-testid="metadata-avatar"]')).toBeFalsy();
     });
 
+    it('stacks avatars and joins names with +N for multi-author resources', () => {
+      const multiTags = [
+        ['d', 'https://www.rpi-ekkw-ekhn.de/some/article.pdf'],
+        ['name', 'Wunder-Artikel'],
+        ['creator:name', 'Institut RPI'],
+        ['creator:type', 'Organization'],
+        ['creator:name', 'Julia Gerth'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Nadine Hofmann-Driesch'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Vierte Person'],
+        ['creator:type', 'Person']
+      ];
+      const multiResource = {
+        ...indexedResource,
+        tags: multiTags,
+        rawEvent: { ...mockResource.rawEvent, tags: multiTags }
+      };
+      const { container } = render(AMBResourceCard, {
+        props: { resource: multiResource, authorProfile: indexerProfile }
+      });
+      // Name line: first two names + count of the remaining two
+      expect(container.textContent).toContain('Institut RPI, Julia Gerth +2');
+      // Avatar stack: 4 creators > max 3 → two avatars + "+2" overflow circle
+      const stack = container.querySelector('[data-testid="creator-avatar-stack"]');
+      expect(stack).toBeTruthy();
+      expect(stack?.querySelectorAll('[data-testid="metadata-avatar"]').length).toBe(2);
+      expect(stack?.querySelector('[data-testid="creator-overflow"]')?.textContent?.trim()).toBe(
+        '+2'
+      );
+      // Multi-author name line is plain text, not a profile link
+      const header = container.querySelector('.amb-card > div');
+      expect(header?.querySelector('a')).toBeFalsy();
+    });
+
     it('shows the creator in the list variant byline', () => {
       const { container } = render(AMBResourceCard, {
         props: { resource: indexedResource, authorProfile: indexerProfile, variant: 'list' }
