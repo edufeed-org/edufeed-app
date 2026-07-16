@@ -96,17 +96,14 @@ export async function fetchRelayList(pubkey) {
     // Emits synchronously when the 10002 is already in EventStore (IDB
     // warm-up or login prefetch) — the common fast path.
     // @ts-ignore - applesauce model type mismatch
-    subscription = eventStore.model(RelayListModel, pubkey).subscribe(
-      (
-        // @ts-ignore - parameter type narrowing on applesauce model callback
-        /** @type {{writeRelays: string[], readRelays: string[]} | undefined} */ relayList
-      ) => {
+    subscription = eventStore
+      .model(RelayListModel, pubkey)
+      .subscribe((/** @type {any} */ relayList) => {
         if (relayList) {
           latest = relayList;
           settle(relayList);
         }
-      }
-    );
+      });
 
     // Loader completion = lookup relays EOSEd. If the model produced nothing
     // by then, the pubkey has no kind 10002 (the legit new-user case) —
