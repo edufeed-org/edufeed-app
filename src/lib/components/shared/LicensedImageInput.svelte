@@ -77,6 +77,11 @@
     currentHash = picked.hash;
     // library-picked images already carry a licenseEvent; skip the upload gate
     imageWasUploaded = false;
+    // The picked image was never run through the quiet-clean pipeline — any
+    // note left over from a previously uploaded/cleaned image no longer
+    // applies to this image.
+    metaCleanedFields = 0;
+    metaCleanFailed = false;
     // Add to EventStore so the reactive useLicenseForHash ($effect) resolves
     // licenseEvent for us — avoids a race with the imperative write.
     // EventStore.add is idempotent: duplicates return the existing event without throwing.
@@ -188,6 +193,11 @@
   }
 
   function handleUrlBlur() {
+    // Any note about a previously uploaded/cleaned image no longer applies
+    // once the URL field is edited or cleared — it no longer points at that
+    // file.
+    metaCleanedFields = 0;
+    metaCleanFailed = false;
     if (!imageUrl) {
       currentHash = null;
       imageWasUploaded = false;

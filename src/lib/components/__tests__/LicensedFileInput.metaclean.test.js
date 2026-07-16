@@ -306,6 +306,49 @@ describe('LicensedFileInput metadata cleaner integration (quiet flow)', () => {
     await waitFor(() => expect(getByText(/This file is.*upload limit is/)).toBeTruthy());
   });
 
+  it('rejects an oversized PDF only after keep-original resolves it unchanged', async () => {
+    const file = pdfFile('big.pdf');
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+
+    const { container, getByText, queryByTestId } = render(LicensedFileInput, {
+      props: { files: [] }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(getByText('Continue with original')).toBeTruthy());
+    await fireEvent.click(getByText('Continue with original'));
+
+    await waitFor(() => expect(getByText(/exceeds maximum size/)).toBeTruthy());
+    expect(queryByTestId('license-modal')).toBeNull();
+    expect(mocks.sha256Hex).not.toHaveBeenCalled();
+  });
+
+  it('accepts an oversized PDF once the cleaned copy fits the limit', async () => {
+    const file = pdfFile('big.pdf');
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+    metacleanMocks.downloadCleaned
+      .mockReset()
+      .mockResolvedValue(new File(['clean'], 'big.pdf', { type: 'application/pdf' }));
+
+    const { container, getByTestId } = render(LicensedFileInput, {
+      props: { files: [] }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]');
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(getByTestId('metaclean-apply')).toBeTruthy());
+    await fireEvent.click(getByTestId('metaclean-apply'));
+    await waitFor(() => expect(getByTestId('metaclean-use-cleaned')).toBeTruthy());
+    await fireEvent.click(getByTestId('metaclean-use-cleaned'));
+
+    await waitFor(() => expect(getByTestId('license-modal')).toBeTruthy());
+    expect(mocks.sha256Hex).toHaveBeenCalledTimes(1);
+    expect(await mocks.sha256Hex.mock.calls[0][0].text()).toBe('clean');
+  });
+
   it('shows no metaclean checkbox in the license modal for an unsupported file', async () => {
     const { container, getByTestId, queryByTestId } = render(LicensedFileInput, {
       props: { files: [] }

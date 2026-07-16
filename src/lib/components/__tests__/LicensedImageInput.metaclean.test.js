@@ -224,6 +224,39 @@ describe('LicensedImageInput metadata cleaner integration (quiet flow)', () => {
     );
   });
 
+  it('clears the "hidden metadata removed" note once the URL field is edited to a different image', async () => {
+    metacleanMocks.cleanFileQuietly.mockResolvedValue({
+      file: new File(['clean'], 'pic.png', { type: 'image/png' }),
+      removedCount: 3,
+      cleaned: true
+    });
+
+    const file = pngFile();
+    const screen = render(LicensedImageInput, {
+      props: { imageUrl: '', imageWasUploaded: false, licenseEvent: null }
+    });
+    const { getByTestId } = screen;
+
+    const fileInput = getByTestId('licensed-image-file-input');
+    await fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(getByTestId('license-modal')).toBeTruthy());
+    await fireEvent.click(getByTestId('metaclean-license-checkbox'));
+    await fillAndSaveLicenseForm(screen);
+
+    await waitFor(() =>
+      expect(screen.getByText('Hidden metadata removed (3 fields)')).toBeTruthy()
+    );
+
+    // Replacing the image via the URL field points at a different (never
+    // cleaned) image — the stale note must not survive.
+    const urlInput = getByTestId('licensed-image-url-input');
+    await fireEvent.input(urlInput, { target: { value: 'https://example.com/other.png' } });
+    await fireEvent.blur(urlInput);
+
+    expect(screen.queryByText('Hidden metadata removed (3 fields)')).toBeNull();
+  });
+
   it('does not clean and uploads the original when the checkbox is left unticked', async () => {
     const file = pngFile();
     const screen = render(LicensedImageInput, {
