@@ -172,6 +172,7 @@
                 size="xs"
                 linkToProfile
                 showHoverCard={false}
+                title={commenter.name}
                 class="rounded-full border-2 border-base-100"
               />
             {/each}

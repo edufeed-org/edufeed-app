@@ -24,6 +24,7 @@
    * @property {boolean} [showHoverCard] - Show profile hover card on hover (defaults to linkToProfile && !!pubkey)
    * @property {string} [class] - Additional CSS classes
    * @property {'lazy' | 'eager'} [loading] - Image loading strategy (eager inside popovers)
+   * @property {string} [title] - Native title tooltip applied to the avatar wrapper
    */
 
   /** @type {Props} */
@@ -35,7 +36,8 @@
     linkToProfile = false,
     showHoverCard = undefined,
     class: className = '',
-    loading = /** @type {'lazy' | 'eager'} */ ('lazy')
+    loading = /** @type {'lazy' | 'eager'} */ ('lazy'),
+    title = undefined
   } = $props();
 
   let effectiveShowHoverCard = $derived(showHoverCard ?? (linkToProfile && !!pubkey));
@@ -138,7 +140,7 @@
 {#if effectiveShowHoverCard && pubkey}
   <HoverCard fixed>
     {#snippet trigger()}
-      <div class="avatar {className}">
+      <div class="avatar {className}" {title}>
         {@render avatarContent()}
       </div>
     {/snippet}
@@ -147,11 +149,11 @@
     {/snippet}
   </HoverCard>
 {:else if linkToProfile && pubkey}
-  <a href={resolve(profileLink(pubkey))} class="avatar {className}">
+  <a href={resolve(profileLink(pubkey))} class="avatar {className}" {title}>
     {@render avatarContent()}
   </a>
 {:else}
-  <div class="avatar {className}">
+  <div class="avatar {className}" {title}>
     {@render avatarContent()}
   </div>
 {/if}

@@ -74,3 +74,18 @@ describe('ProfileAvatar with a broken picture URL', () => {
     expect(container.textContent).toContain('S');
   });
 });
+
+describe('ProfileAvatar title prop', () => {
+  it('applies the title tooltip to the profile-link wrapper', () => {
+    const { container } = render(ProfileAvatar, {
+      props: {
+        pubkey: 'abc123',
+        profile: PROFILE,
+        linkToProfile: true,
+        showHoverCard: false,
+        title: 'Alice'
+      }
+    });
+    expect(container.querySelector('a')?.getAttribute('title')).toBe('Alice');
+  });
+});
