@@ -13,7 +13,7 @@
   import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
   import ImageLibraryPickerModal from './ImageLibraryPickerModal.svelte';
   import MetadataCleanerModal from './MetadataCleanerModal.svelte';
-  import { isSupportedFile } from '$lib/helpers/metaclean.js';
+  import { isSupportedFile, cleanFileQuietly } from '$lib/helpers/metaclean.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
@@ -32,12 +32,15 @@
   let chooserOpen = $state(false);
   let libraryOpen = $state(false);
 
-  // Optional metadata review interstitial (metadata-cleaner service).
-  let cleanerOpen = $state(false);
-  /** @type {File | null} */
-  let cleanerFile = $state(null);
-  /** @type {((file: File) => void) | null} */
-  let cleanerResolve = null;
+  // Quiet metaclean opt-in, surfaced as extra options inside the license
+  // modal (see metacleanOptions snippet below) instead of a blocking
+  // interstitial. Images can't be compressed (only PDFs), so there's no
+  // compression select here — just the strip checkbox + inspect link.
+  let cleanMetadata = $state(false);
+  let inspectOpen = $state(false);
+  // Display-only: hidden metadata fields removed on upload / clean failure.
+  let metaCleanedFields = $state(0);
+  let metaCleanFailed = $state(false);
 
   /** @type {any} */
   let pendingExistingLicense = $state(null);
@@ -107,28 +110,22 @@
     uploadError = '';
     const myToken = ++pickToken;
     uploading = true;
+    // Reset quiet-metaclean opt-in state for the new pick — a re-opened
+    // modal for a fresh file must never inherit a previous file's checkbox
+    // state or clean/failure note.
+    cleanMetadata = false;
+    inspectOpen = false;
+    metaCleanedFields = 0;
+    metaCleanFailed = false;
 
     try {
-      // Optional metadata review step (metadata-cleaner service). Resolves
-      // with the original file when skipped/closed, or the cleaned copy.
-      let fileToUse = file;
-      if (runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file)) {
-        cleanerFile = file;
-        cleanerOpen = true;
-        fileToUse = await new Promise((resolve) => {
-          cleanerResolve = resolve;
-        });
-        cleanerFile = null;
-        if (myToken !== pickToken) return; // a newer pick superseded us
-      }
-
-      const hash = await sha256Hex(fileToUse);
+      const hash = await sha256Hex(file);
       if (myToken !== pickToken) return; // a newer pick superseded us
 
-      pendingFile = fileToUse;
+      pendingFile = file;
       currentHash = hash;
-      modalMime = fileToUse.type;
-      modalSize = fileToUse.size;
+      modalMime = file.type;
+      modalSize = file.size;
 
       pendingExistingLicense = await findExistingLicense(hash);
       if (myToken !== pickToken) return;
@@ -156,10 +153,27 @@
     }
     const signer = manager.active;
     if (!signer) throw new Error('No active account');
+
+    // Quiet clean: only runs when the user opted in via the license modal's
+    // checkbox. Never throws — a failed clean falls back to uploading the
+    // original file, noted under the field. Operates on a local variable so
+    // pendingFile stays untouched on failure (matches LicensedFileInput).
+    let uploadFile = pendingFile;
+    if (cleanMetadata) {
+      const result = await cleanFileQuietly(uploadFile, { strip: true });
+      if (result) {
+        uploadFile = result.file;
+        metaCleanedFields = result.cleaned ? result.removedCount : 0;
+        metaCleanFailed = false;
+      } else {
+        metaCleanFailed = true; // service down — upload the original, note it
+      }
+    }
+
     const signerFn = async (/** @type {any} */ template) => signer.signEvent(template);
     const serverUrl = getActiveBlossomServer(signer.pubkey || '', eventStore);
     const client = new BlossomClient(serverUrl, signerFn);
-    const blob = await client.uploadBlob(pendingFile);
+    const blob = await client.uploadBlob(uploadFile);
 
     const finalUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
     imageUrl = finalUrl;
@@ -168,8 +182,8 @@
     return {
       url: finalUrl,
       hash: blob.sha256,
-      mime: blob.type || pendingFile.type,
-      size: blob.size ?? pendingFile.size
+      mime: blob.type || uploadFile.type,
+      size: blob.size ?? uploadFile.size
     };
   }
 
@@ -234,10 +248,38 @@
     </div>
   {/if}
 
+  {#if metaCleanedFields}
+    <p class="mt-1 text-xs text-success">
+      {m.metaclean_removed_note({ count: String(metaCleanedFields) })}
+    </p>
+  {:else if metaCleanFailed}
+    <p class="mt-1 text-xs text-warning">{m.metaclean_clean_failed_note()}</p>
+  {/if}
+
   {#if uploadError || errors.image}
     <p class="mt-1 text-xs text-error">{uploadError || errors.image}</p>
   {/if}
 </div>
+
+{#snippet metacleanOptions()}
+  <label class="flex cursor-pointer items-start gap-2 text-sm">
+    <input
+      type="checkbox"
+      class="checkbox mt-0.5 checkbox-sm"
+      bind:checked={cleanMetadata}
+      data-testid="metaclean-license-checkbox"
+    />
+    <span class="whitespace-normal">{m.metaclean_license_checkbox()}</span>
+  </label>
+  <button
+    type="button"
+    class="btn mt-1 btn-ghost btn-xs"
+    data-testid="metaclean-license-details"
+    onclick={() => (inspectOpen = true)}
+  >
+    {m.metaclean_license_details()}
+  </button>
+{/snippet}
 
 <LicenseModal
   bind:open={modalOpen}
@@ -248,6 +290,11 @@
   fileName={pendingFile?.name ?? ''}
   {activeUserDisplayName}
   existingLicense={pendingExistingLicense}
+  extraOptions={runtimeConfig.metadataCleaner?.enabled &&
+  pendingFile &&
+  isSupportedFile(pendingFile)
+    ? metacleanOptions
+    : null}
   beforeAttest={pendingFile ? performUpload : null}
   onsave={(/** @type {any} */ license) => {
     licenseEvent = license;
@@ -267,14 +314,7 @@
   }}
 />
 
-<MetadataCleanerModal
-  bind:open={cleanerOpen}
-  file={cleanerFile}
-  ondone={(/** @type {File} */ f) => {
-    cleanerResolve?.(f);
-    cleanerResolve = null;
-  }}
-/>
+<MetadataCleanerModal bind:open={inspectOpen} file={pendingFile} mode="inspect" />
 
 <ImageSourceChooserModal
   bind:open={chooserOpen}
