@@ -751,9 +751,6 @@
           {#if entry.affiliationName}
             <span class="affiliation">{entry.affiliationName}</span>
           {/if}
-          {#if !entry.pubkey && attribution.indexed}
-            <span class="affiliation">{m.amb_resource_from_metadata()}</span>
-          {/if}
           {#if entry.id?.startsWith(ORCID_URI_PREFIX)}
             <a
               class="badge badge-outline badge-xs"

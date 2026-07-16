@@ -54,7 +54,6 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_creators_heading: () => 'Creators',
   amb_resource_role_creator: () => 'Creator',
   amb_resource_indexed_by: () => 'Indexed by',
-  amb_resource_from_metadata: () => 'from metadata',
   amb_resource_related_resources: () => 'Related',
   amb_resource_uploaded_files: () => 'Uploaded Files',
   amb_resource_open_pdf_inline_fallback: () => 'Open PDF in a new tab',
@@ -434,13 +433,13 @@ describe('AMBResourceView', () => {
       expect(link).toBeTruthy();
     });
 
-    it('annotates metadata-only creators with "from metadata"', () => {
+    it('lists the metadata creator without extra hint text', () => {
       const { container } = render(AMBResourceView, {
         props: { event: indexedEvent, resource: mockResource }
       });
       const grid = container.querySelector('.ed-contrib-grid');
       expect(grid?.textContent).toContain('Regina Polak');
-      expect(grid?.textContent).toContain('from metadata');
+      expect(grid?.textContent).not.toContain('from metadata');
     });
 
     it('shows the metadata creator in the DetailHeader byline instead of the indexer', () => {
