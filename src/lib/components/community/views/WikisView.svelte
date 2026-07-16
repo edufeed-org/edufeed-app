@@ -10,7 +10,7 @@
   import WikiCard from '$lib/components/wiki/WikiCard.svelte';
   import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
-  import { RepostIcon } from '$lib/components/icons';
+  import { RepostIcon, WikipediaIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -32,8 +32,11 @@
   formatCount={(count) => m.community_wikis_count({ count })}
   searchable
   searchPlaceholder={m.community_wikis_search_placeholder()}
-  emptyIconPath="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
 >
+  {#snippet emptyIcon()}
+    <WikipediaIcon class_="h-10 w-10" />
+  {/snippet}
+
   {#snippet headerAction()}
     {#if manager.active}
       <button

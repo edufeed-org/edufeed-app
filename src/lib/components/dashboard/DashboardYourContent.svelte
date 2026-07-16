@@ -36,7 +36,7 @@
   import {
     CalendarIcon,
     GraduationCapIcon,
-    BookIcon,
+    WikipediaIcon,
     ScrollTextIcon,
     FilesIcon,
     PollIcon,
@@ -70,7 +70,7 @@
       label: () => m.feed_badge_article(),
       cta: () => m.article_fab_write()
     },
-    wiki: { icon: BookIcon, label: () => m.feed_badge_wiki(), cta: () => m.wiki_fab_write() },
+    wiki: { icon: WikipediaIcon, label: () => m.feed_badge_wiki(), cta: () => m.wiki_fab_write() },
     form: {
       icon: FilesIcon,
       label: () => m.dashboard_content_forms(),

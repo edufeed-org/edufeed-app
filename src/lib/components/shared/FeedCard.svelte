@@ -3,7 +3,7 @@
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import {
     CalendarIcon,
-    BookIcon,
+    WikipediaIcon,
     GraduationCapIcon,
     KanbanIcon,
     ScrollTextIcon,
@@ -94,7 +94,7 @@
     learning: { label: () => m.feed_badge_learning(), icon: GraduationCapIcon },
     article: { label: () => m.feed_badge_article(), icon: ScrollTextIcon },
     board: { label: () => m.feed_badge_board(), icon: KanbanIcon },
-    wiki: { label: () => m.feed_badge_wiki(), icon: BookIcon },
+    wiki: { label: () => m.feed_badge_wiki(), icon: WikipediaIcon },
     thread: { label: () => m.feed_badge_thread(), icon: ForumIcon },
     bookmark: { label: () => m.feed_badge_bookmark(), icon: BookmarkIcon },
     highlight: { label: () => m.feed_badge_highlight(), icon: BookmarkIcon },

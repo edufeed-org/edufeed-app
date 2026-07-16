@@ -39,7 +39,7 @@ vi.mock('$lib/components/icons', () => ({
   Calendar3Icon: {},
   GraduationCapIcon: {},
   ArticleIcon: {},
-  BookIcon: {},
+  WikipediaIcon: {},
   BookOpenIcon: {},
   ScrollTextIcon: {},
   PollIcon: {},

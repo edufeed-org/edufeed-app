@@ -14,7 +14,7 @@ import {
   Calendar3Icon,
   GraduationCapIcon,
   ArticleIcon,
-  BookIcon,
+  WikipediaIcon,
   BookOpenIcon,
   ScrollTextIcon,
   PollIcon,
@@ -123,7 +123,7 @@ export const CREATE_ACTIONS = [
     kinds: [30818],
     label: m.wiki_fab_write,
     ariaLabel: m.wiki_fab_write,
-    icon: BookIcon,
+    icon: WikipediaIcon,
     run(ctx) {
       ctx.goto(ctx.resolve(withCommunity('/create/wiki', ctx)));
     }
