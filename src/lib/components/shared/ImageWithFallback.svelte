@@ -47,13 +47,14 @@
   // Track current image source (primary or fallback)
   let currentSrc = $state('');
   // All source stages failed → render the local placeholder
-  let exhausted = $state(!src);
+  let exhausted = $state(false);
 
   // 0 = proxy, 1 = original, 2 = robohash
   let fallbackStage = 0;
 
   // Track initialized src to detect prop changes
-  let initializedSrc = '';
+  /** @type {any} */
+  let initializedSrc = Symbol('uninitialized');
 
   function handleError() {
     if (fallbackStage === 0) {
