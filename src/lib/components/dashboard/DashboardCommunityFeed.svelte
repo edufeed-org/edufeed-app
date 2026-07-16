@@ -384,6 +384,7 @@
                 authorName={profile ? getDisplayName(profile) : undefined}
                 authorAvatar={profile ? getProfilePicture(profile) : undefined}
                 authorPubkey={event.pubkey}
+                {event}
                 communityName={community.name}
                 communityAvatar={community.avatar}
                 communityPubkey={community.pubkey}

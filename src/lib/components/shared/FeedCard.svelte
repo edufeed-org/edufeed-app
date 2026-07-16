@@ -14,7 +14,9 @@
     PollIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import MetadataAvatar from '$lib/components/shared/MetadataAvatar.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { activeDateLocale } from '$lib/helpers/dates.js';
   import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
@@ -36,6 +38,7 @@
    *   communityAvatar?: string,
    *   communityPubkey?: string,
    *   timestamp: number,
+   *   event?: any,
    *   onclick?: () => void
    * }}
    */
@@ -54,10 +57,29 @@
     communityAvatar,
     communityPubkey,
     timestamp,
+    event = undefined,
     onclick
   } = $props();
 
   let kindColor = $derived(kind != null ? generateKindColorRGB(kind) : undefined);
+
+  // Indexer vs. author (kind 30142): when the AMB creator metadata names
+  // someone other than the event pubkey, the pubkey is only the indexer —
+  // the author slot shows the metadata creator instead (mirrors
+  // AMBResourceCard). Callers opt in by passing the raw `event`.
+  const attribution = $derived(
+    event?.kind === 30142
+      ? getResourceAttribution(event, { name: authorName })
+      : { indexed: false, creator: null, sourceDomain: null }
+  );
+  const indexedCreator = $derived(attribution.indexed ? attribution.creator : null);
+  const shownAuthorPubkey = $derived(indexedCreator ? indexedCreator.pubkey : authorPubkey);
+  const shownAuthorName = $derived(
+    indexedCreator ? (indexedCreator.name ?? indexedCreator.pubkey?.slice(0, 8) + '…') : authorName
+  );
+  const attributionLine = $derived(
+    [attribution.sourceDomain, m.amb_card_author_from_metadata()].filter(Boolean).join(' · ')
+  );
 
   /** @type {Record<string, { label: () => string, icon: any }>} */
   const typeMeta = {
@@ -120,11 +142,13 @@
     ? `rgb(${kindColor.r},${kindColor.g},${kindColor.b})`
     : undefined}
 >
-  {#if authorPubkey}
+  {#if indexedCreator && !indexedCreator.pubkey}
+    <MetadataAvatar name={indexedCreator.name} size="md" />
+  {:else if shownAuthorPubkey}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
-      <ProfileAvatar pubkey={authorPubkey} size="md" linkToProfile showHoverCard />
+      <ProfileAvatar pubkey={shownAuthorPubkey} size="md" linkToProfile showHoverCard />
     </div>
   {:else if authorAvatar}
     <div class="avatar flex-shrink-0">
@@ -140,18 +164,18 @@
   {/if}
 
   <div class="min-w-0 flex-1">
-    {#if authorName}
+    {#if shownAuthorName}
       <div class="flex items-center gap-1.5">
-        {#if authorPubkey}
+        {#if shownAuthorPubkey}
           <a
-            href={resolve(profileLink(authorPubkey))}
+            href={resolve(profileLink(shownAuthorPubkey))}
             class="truncate text-sm font-medium text-base-content hover:underline"
             onclick={(e) => e.stopPropagation()}
           >
-            {authorName}
+            {shownAuthorName}
           </a>
         {:else}
-          <span class="truncate text-sm font-medium text-base-content">{authorName}</span>
+          <span class="truncate text-sm font-medium text-base-content">{shownAuthorName}</span>
         {/if}
         {#if timestamp}
           <span class="text-base-content/30">&middot;</span>
@@ -160,6 +184,14 @@
           </span>
         {/if}
       </div>
+      {#if indexedCreator}
+        <div
+          class="truncate font-mono text-xs text-base-content/60"
+          data-testid="metadata-attribution"
+        >
+          {attributionLine}
+        </div>
+      {/if}
     {:else if timestamp}
       <span class="text-xs text-base-content/50">
         {formatRelativeTime(timestamp)}
