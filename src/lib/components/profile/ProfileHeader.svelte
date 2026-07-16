@@ -8,6 +8,7 @@
   import { resolve } from '$app/paths';
   import WaveButton from '$lib/components/waves/WaveButton.svelte';
   import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import {
     CheckIcon,
     AlertIcon,
@@ -88,13 +89,12 @@
 <div class="pf-head" class:no-banner={!bannerUrl}>
   <div class="pf-head-row">
     <div class="pf-avatar">
-      <img
+      <ImageWithFallback
         src={profile?.picture || `https://robohash.org/${pubkey}`}
         alt={displayName}
-        onerror={(e) => {
-          const img = /** @type {HTMLImageElement} */ (e.currentTarget);
-          if (!img.src.includes('robohash.org')) img.src = `https://robohash.org/${pubkey}`;
-        }}
+        fallbackType="avatar"
+        robohash={false}
+        class="block h-full w-full object-cover"
       />
     </div>
 
@@ -269,13 +269,6 @@
     border: 5px solid var(--c-bg);
     box-shadow: 0 16px 34px -16px rgba(0, 0, 0, 0.45);
   }
-  .pf-avatar img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
   .pf-identity {
     flex: 1;
     min-width: 0;

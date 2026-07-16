@@ -24,6 +24,7 @@
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { UserIcon } from '../icons';
   import SearchInput from './SearchInput.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @typedef {Object} Props
@@ -308,7 +309,12 @@
                 <div class="avatar">
                   <div class="w-10 rounded-full bg-base-300">
                     {#if avatarUrl(pubkey)}
-                      <img src={avatarUrl(pubkey)} alt="" />
+                      <ImageWithFallback
+                        src={avatarUrl(pubkey)}
+                        alt=""
+                        fallbackType="avatar"
+                        class="h-full w-full rounded-full object-cover"
+                      />
                     {/if}
                   </div>
                 </div>

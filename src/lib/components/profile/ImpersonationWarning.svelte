@@ -17,6 +17,7 @@
   import { hexToNpub } from '$lib/helpers/nostrUtils';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { AlertIcon, CheckIcon, ChevronRightIcon } from '$lib/components/icons';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -112,10 +113,20 @@
             data-testid="impersonation-match"
             href={resolve(`/p/${hexToNpub(match.pubkey) || match.pubkey}`)}
           >
+            {#snippet mavFallback()}
+              <span class="mav fallback">{match?.name[0]?.toUpperCase()}</span>
+            {/snippet}
             {#if match.picture}
-              <img class="mav" src={match.picture} alt="" />
+              <ImageWithFallback
+                src={match.picture}
+                alt=""
+                fallbackType="avatar"
+                robohash={false}
+                class="h-8 w-8 shrink-0 rounded-full object-cover"
+                fallback={mavFallback}
+              />
             {:else}
-              <span class="mav fallback">{match.name[0]?.toUpperCase()}</span>
+              {@render mavFallback()}
             {/if}
             <span class="mtext">
               <span class="mn">

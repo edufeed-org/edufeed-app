@@ -166,20 +166,14 @@
         {#if displayCommenters.length > 0}
           <div class="flex -space-x-2">
             {#each displayCommenters as commenter (commenter.pubkey)}
-              <a
-                href={resolve(profileLink(commenter.pubkey))}
-                class="avatar rounded-full border-2 border-base-100"
-                title={commenter.name}
-              >
-                <div class="h-6 w-6 rounded-full">
-                  <img
-                    src={commenter.avatar}
-                    alt={commenter.name}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </div>
-              </a>
+              <ProfileAvatar
+                pubkey={commenter.pubkey}
+                profile={{ picture: commenter.avatar, name: commenter.name }}
+                size="xs"
+                linkToProfile
+                showHoverCard={false}
+                class="rounded-full border-2 border-base-100"
+              />
             {/each}
           </div>
         {/if}
