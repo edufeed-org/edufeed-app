@@ -3,7 +3,7 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 import ImageWithFallback from '../shared/ImageWithFallback.svelte';
@@ -89,5 +89,34 @@ describe('ImageWithFallback', () => {
     expect(container.querySelector('img')).toBeNull();
     await rerender({ src: 'https://img.example/other.jpg' });
     expect(container.querySelector('img')?.src).toBe('https://img.example/other.jpg');
+  });
+
+  describe('loading skeleton', () => {
+    /** @param {Element} container */
+    const getImg = (container) => /** @type {HTMLImageElement} */ (container.querySelector('img'));
+
+    it('shows the skeleton tone until the image loads, then drops it', async () => {
+      const { container } = render(ImageWithFallback, { props: { src: SRC, alt: 'pic' } });
+      expect(getImg(container).className).toContain('bg-base-200');
+      await fireEvent.load(getImg(container));
+      expect(getImg(container).className).not.toContain('bg-base-200');
+    });
+
+    it('forwards onload to the caller', async () => {
+      const onload = vi.fn();
+      const { container } = render(ImageWithFallback, { props: { src: SRC, alt: 'pic', onload } });
+      await fireEvent.load(getImg(container));
+      expect(onload).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-applies the skeleton tone when src changes', async () => {
+      const { container, rerender } = render(ImageWithFallback, {
+        props: { src: SRC, alt: 'pic' }
+      });
+      await fireEvent.load(getImg(container));
+      expect(getImg(container).className).not.toContain('bg-base-200');
+      await rerender({ src: 'https://img.example/other.jpg' });
+      expect(getImg(container).className).toContain('bg-base-200');
+    });
   });
 });

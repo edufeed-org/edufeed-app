@@ -5,6 +5,10 @@
   Fallback chain: proxy URL → original URL → robohash (avatars only) → local placeholder
   The terminal placeholder is local (icon on bg-base-200) and can never fail;
   pass a `fallback` snippet to render something richer (e.g. an initial letter).
+  All chain state derives synchronously from props, so SSR and the first client
+  paint are already correct (an empty src renders the placeholder, never a bare
+  <img src="">). While a source is downloading the img carries a bg-base-200
+  skeleton tone that clears on load.
 -->
 
 <script>
@@ -44,45 +48,53 @@
 
   const useRobohash = $derived(robohash ?? fallbackType === 'avatar');
 
-  // Track current image source (primary or fallback)
-  let currentSrc = $state('');
-  // All source stages failed → render the local placeholder
-  let exhausted = $state(false);
+  // Source stages in order: proxy URL (when distinct) → original → robohash (avatars only).
+  // Derived from props so SSR and the first paint already show the right thing.
+  const stages = $derived.by(() => {
+    if (!src) return [];
+    const list = [];
+    const proxied = getProxiedImageUrl(src, size);
+    if (proxied && proxied !== src) list.push(proxied);
+    list.push(src);
+    if (useRobohash) list.push(`https://robohash.org/${src}`);
+    return list;
+  });
 
-  // 0 = proxy, 1 = original, 2 = robohash
-  let fallbackStage = 0;
+  // How many stages have errored for the current src
+  let failedStages = $state(0);
+  // Whether the current source finished loading (drives the skeleton tone)
+  let imageLoaded = $state(false);
+  /** @type {HTMLImageElement | null} */
+  let imgEl = $state(null);
 
-  // Track initialized src to detect prop changes
-  /** @type {any} */
-  let initializedSrc = Symbol('uninitialized');
+  const currentSrc = $derived(stages[failedStages] ?? '');
+  const exhausted = $derived(!currentSrc);
 
   function handleError() {
-    if (fallbackStage === 0) {
-      // Proxy failed → try original URL
-      fallbackStage = 1;
-      currentSrc = src;
-    } else if (fallbackStage === 1 && useRobohash) {
-      // Compute robohash URL inline (no $derived) so this handler is safe
-      // to fire after the owning $effect has been destroyed.
-      fallbackStage = 2;
-      currentSrc = `https://robohash.org/${src}`;
-    } else {
-      exhausted = true;
-    }
+    failedStages += 1;
   }
 
-  // Initialize and reset when src changes
+  /** @param {Event} event */
+  function handleLoad(event) {
+    imageLoaded = true;
+    onload?.(event);
+  }
+
+  // Reset the chain and skeleton when the src prop changes
+  /** @type {any} */
+  let lastSrc = Symbol('uninitialized');
   $effect(() => {
-    const proxied = getProxiedImageUrl(src, size);
-    const effectiveSrc = proxied || src;
-    // Only reset if the base src changed
-    if (src !== initializedSrc) {
-      // If proxy produced a different URL, start at stage 0
-      fallbackStage = effectiveSrc !== src ? 0 : 1;
-      currentSrc = effectiveSrc || '';
-      exhausted = !src;
-      initializedSrc = src;
+    if (src !== lastSrc) {
+      lastSrc = src;
+      failedStages = 0;
+      imageLoaded = false;
     }
+  });
+
+  // Images that finished loading before hydration attached the load listener
+  // (e.g. cached logo in SSR'd HTML) would otherwise keep the skeleton tone.
+  $effect(() => {
+    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) imageLoaded = true;
   });
 
   const PLACEHOLDER_ICONS = {
@@ -113,6 +125,7 @@
   {/if}
 {:else}
   <img
+    bind:this={imgEl}
     src={currentSrc}
     {alt}
     {loading}
@@ -120,8 +133,8 @@
     {height}
     {title}
     decoding="async"
-    class={className}
+    class="{imageLoaded ? '' : 'bg-base-200'} {className}"
     onerror={handleError}
-    {onload}
+    onload={handleLoad}
   />
 {/if}
