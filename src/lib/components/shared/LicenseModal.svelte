@@ -29,7 +29,14 @@
     /** @type {() => void} */
     oncancel = () => {},
     /** @type {(() => Promise<{ url: string, hash: string, mime: string, size: number }>) | null} */
-    beforeAttest = null
+    beforeAttest = null,
+    /**
+     * Optional snippet rendered in the create-own-license form, directly above
+     * the disclosure checkbox. Lets callers inject deployment-specific extra
+     * options without forking the modal. Not rendered on the accept-existing view.
+     * @type {import('svelte').Snippet | null}
+     */
+    extraOptions = null
   } = $props();
 
   let modalLicense = $state('https://creativecommons.org/licenses/by/4.0/');
@@ -377,6 +384,12 @@
             bind:value={modalDescription}
           ></textarea>
         </div>
+
+        {#if extraOptions}
+          <div class="mt-4 mb-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
+            {@render extraOptions()}
+          </div>
+        {/if}
 
         <div class="mt-4 mb-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
           <label class="flex cursor-pointer items-start gap-2 text-sm">
