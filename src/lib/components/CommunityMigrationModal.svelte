@@ -206,6 +206,7 @@
                   <ImageWithFallback
                     src={getCommunityAvatar(pubkey)}
                     alt=""
+                    fallbackType="community"
                     size="avatar_sm"
                     class="h-full w-full rounded-full object-cover"
                   />

@@ -9,16 +9,16 @@
 
 <script>
   import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
-  import { PersonIcon, PeopleIcon, BadgeIcon, PhotoIcon } from '$lib/components/icons';
+  import { PersonIcon, PeopleIcon, BadgeIcon, PhotoIcon, ArticleIcon } from '$lib/components/icons';
 
   /**
    * @typedef {Object} Props
    * @property {string} src - Primary image source URL
    * @property {string} alt - Alt text for accessibility
-   * @property {'avatar' | 'event' | 'community' | 'banner' | 'badge' | 'generic'} [fallbackType] - Drives the robohash stage and the placeholder icon
+   * @property {'avatar' | 'event' | 'community' | 'banner' | 'badge' | 'article' | 'generic'} [fallbackType] - Drives the robohash stage and the placeholder icon
    * @property {boolean} [robohash] - Include the robohash stage; defaults to fallbackType === 'avatar'
    * @property {string | {w: number, h: number}} [size] - Proxy size preset or custom dimensions
-   * @property {string} [class] - Additional CSS classes (applied to the img and the placeholder)
+   * @property {string} [class] - Additional CSS classes (applied to the img and the placeholder). Callers must provide dimension classes — the placeholder has no intrinsic size.
    * @property {'lazy' | 'eager'} [loading] - Loading attribute
    * @property {number} [width] - Intrinsic width hint, passed to the img
    * @property {number} [height] - Intrinsic height hint, passed to the img
@@ -71,7 +71,7 @@
     }
   }
 
-  // Initialize and reset when src or size changes
+  // Initialize and reset when src changes
   $effect(() => {
     const proxied = getProxiedImageUrl(src, size);
     const effectiveSrc = proxied || src;
@@ -91,6 +91,7 @@
     badge: BadgeIcon,
     event: PhotoIcon,
     banner: PhotoIcon,
+    article: ArticleIcon,
     generic: PhotoIcon
   };
   const PlaceholderIcon = $derived(PLACEHOLDER_ICONS[fallbackType] ?? PhotoIcon);

@@ -48,6 +48,7 @@
         <ImageWithFallback
           src={avatar}
           alt={name}
+          fallbackType="avatar"
           size="avatar_sm"
           class="h-full w-full rounded-full object-cover"
         />

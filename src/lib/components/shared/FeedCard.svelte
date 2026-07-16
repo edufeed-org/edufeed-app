@@ -170,6 +170,7 @@
         <ImageWithFallback
           src={authorAvatar}
           alt={authorName || ''}
+          fallbackType="avatar"
           size="avatar_md"
           class="h-full w-full rounded-full object-cover"
         />

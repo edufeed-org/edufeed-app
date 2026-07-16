@@ -27,6 +27,7 @@
       <ImageWithFallback
         src={badge.badgeImage}
         alt={badge.badgeName || 'Badge'}
+        fallbackType="badge"
         size="card"
         class="h-full w-full object-contain p-4"
       />
