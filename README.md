@@ -315,7 +315,15 @@ Lets users apply for a memorable `name@<domain>` handle during signup. Requires 
 **Media Uploads (Blossom)**
 
 - `BLOSSOM_UPLOAD_ENDPOINT`: Blossom server upload endpoint
-- `BLOSSOM_MAX_FILE_SIZE`: Maximum file size in bytes
+- `BLOSSOM_MAX_FILE_SIZE`: Maximum file size in bytes (app-side limit; not enforced by the Blossom server itself)
+
+**Metadata Cleaner (optional)**
+
+Optional pre-upload review step backed by a [metadata-cleaner](https://git.edufeed.org/edufeed/metadata-cleaner) service instance: before a file goes to Blossom, users can inspect all metadata it carries, strip tool provenance (Creator/Producer etc.), and — for PDFs — compress embedded images. PDFs over `BLOSSOM_MAX_FILE_SIZE` are routed through the cleaner first so compression can bring them under the limit.
+
+- `METADATA_CLEANER_URL`: **SECRET** — Base URL of the metadata-cleaner service (e.g. `https://cleaner.edufeed.org`). Server-only, proxied via `/api/metaclean`; when unset the feature is hidden entirely
+- `METADATA_CLEANER_MAX_UPLOAD_MB`: Maximum body size the `/api/metaclean` proxy accepts, in MB (default 200, matching the service's own limit). Deliberately independent of `BLOSSOM_MAX_FILE_SIZE`
+- Deployment note: with adapter-node, `BODY_SIZE_LIMIT` (default 512K) must be raised above the proxy cap, or uploads to `/api/metaclean` are rejected before the route runs
 
 **Geocoding (OpenCage API)**
 
