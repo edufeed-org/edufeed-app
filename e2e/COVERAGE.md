@@ -1452,6 +1452,15 @@ and never hits the network.)
 
 **Components exercised:** LoginModal (npub method gate), LoginWithNpub, ModalManager transitions, ReadonlyNotice on the inbox page.
 
+## Google login (Pomegranate) — manual checklist (no E2E: external OAuth)
+
+- [ ] New account: Google popup → backup step → wizard → kind 0 signed via bunker
+- [ ] Existing account: fresh browser → Google popup → same npub restored, no wizard
+- [ ] Event signing round-trips via wss://<central> (NIP-46)
+- [ ] Popup blocked → inline error; popup closed early → inline error
+- [ ] Settings → export private key recovers the matching nsec (threshold popups)
+- [ ] Flag off → no Google button in the login modal
+
 ## Maintenance Guidelines
 
 ### When to Update This Document
