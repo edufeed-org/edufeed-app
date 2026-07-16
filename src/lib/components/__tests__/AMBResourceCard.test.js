@@ -30,6 +30,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_free: () => 'Free',
   amb_resource_view_content: () => 'View Content',
   amb_resource_open_content: () => 'Open Content',
+  amb_card_author_from_metadata: () => 'Author from metadata',
   event_tags_view_all_tooltip: () => '',
   event_tags_more_count: () => '',
   debug_panel_raw_nostr_event: () => '',
@@ -284,6 +285,83 @@ describe('AMBResourceCard', () => {
       const listItem = container.querySelector('.amb-card-list');
       expect(listItem?.getAttribute('role')).toBe('button');
       expect(listItem?.getAttribute('tabindex')).toBe('0');
+    });
+  });
+
+  describe('indexed resource attribution (creator ≠ pubkey)', () => {
+    // Real-world shape: Colibri indexes an ÖRF journal article — the event
+    // pubkey is only the indexer, the author lives in creator:* metadata.
+    const indexedTags = [
+      ['d', 'https://oerf-journal.eu/index.php/oerf/article/view/605'],
+      ['name', 'Aufbruch ins Unbekannte'],
+      ['creator:name', 'Regina Polak'],
+      ['creator:type', 'Person'],
+      ['t', 'Jugendreligiosität']
+    ];
+    const indexedResource = {
+      ...mockResource,
+      name: 'Aufbruch ins Unbekannte',
+      identifier: 'https://oerf-journal.eu/index.php/oerf/article/view/605',
+      tags: indexedTags,
+      rawEvent: { ...mockResource.rawEvent, tags: indexedTags }
+    };
+    const indexerProfile = { name: 'Colibri', picture: 'https://example.com/colibri.jpg' };
+
+    it('shows the metadata creator instead of the indexer in the card header', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      expect(container.textContent).toContain('Regina Polak');
+      expect(container.textContent).not.toContain('Colibri');
+    });
+
+    it('renders a dashed initials avatar for creators without a Nostr profile', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      const avatar = container.querySelector('[data-testid="metadata-avatar"]');
+      expect(avatar).toBeTruthy();
+      expect(avatar?.textContent?.trim()).toBe('RP');
+      expect(avatar?.className).toContain('border-dashed');
+    });
+
+    it('shows the source domain and metadata-attribution hint', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      const line = container.querySelector('[data-testid="metadata-attribution"]');
+      expect(line?.textContent).toContain('oerf-journal.eu');
+      expect(line?.textContent).toContain('Author from metadata');
+    });
+
+    it('does not link the creator name when there is no Nostr profile', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      const header = container.querySelector('.amb-card > div');
+      expect(header?.querySelector('a')).toBeFalsy();
+    });
+
+    it('keeps the publisher header when the creator p-tag matches the event pubkey', () => {
+      const ownTags = [...indexedTags, ['p', mockResource.pubkey, '', 'creator']];
+      const ownResource = {
+        ...indexedResource,
+        tags: ownTags,
+        rawEvent: { ...mockResource.rawEvent, tags: ownTags }
+      };
+      const { container } = render(AMBResourceCard, {
+        props: { resource: ownResource, authorProfile: indexerProfile }
+      });
+      expect(container.textContent).toContain('Colibri');
+      expect(container.querySelector('[data-testid="metadata-avatar"]')).toBeFalsy();
+    });
+
+    it('shows the creator in the list variant byline', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile, variant: 'list' }
+      });
+      expect(container.textContent).toContain('Regina Polak');
+      expect(container.textContent).not.toContain('Colibri');
     });
   });
 

@@ -24,6 +24,9 @@
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import MetadataAvatar from '../shared/MetadataAvatar.svelte';
+  import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
@@ -73,6 +76,24 @@
 
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, resource.pubkey.slice(0, 8) + '...'));
+
+  // Indexer vs. author: when the AMB creator metadata names someone other
+  // than the event pubkey, the pubkey is only the indexer — the author slot
+  // shows the metadata creator instead and the indexer stays off the card.
+  const attribution = $derived(
+    getResourceAttribution(resource.rawEvent ?? resource, authorProfile)
+  );
+  const indexedCreator = $derived(attribution.indexed ? attribution.creator : null);
+  const getIndexedCreatorProfile = useUserProfile(() => indexedCreator?.pubkey);
+  const displayedAuthorName = $derived(
+    indexedCreator
+      ? (indexedCreator.name ??
+          getDisplayName(getIndexedCreatorProfile(), indexedCreator.pubkey?.slice(0, 8) + '…'))
+      : authorName
+  );
+  const attributionLine = $derived(
+    [attribution.sourceDomain, m.amb_card_author_from_metadata()].filter(Boolean).join(' · ')
+  );
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
@@ -216,7 +237,7 @@
         {/if}
       </div>
       <div class="truncate text-sm text-base-content/60">
-        {authorName} · {formatCalendarDate(publishedAt, 'short')}
+        {displayedAuthorName} · {formatCalendarDate(publishedAt, 'short')}
         {#if resource.license}
           · {resource.license.label}
         {/if}
@@ -276,30 +297,62 @@
     onclick={preview ? undefined : navigateToDetail}
     onkeydown={preview ? undefined : handleKeydown}
   >
-    <!-- Author Header -->
+    <!-- Author Header — for indexed resources the metadata creator takes the
+         author slot (dashed avatar = no Nostr profile); the indexer only
+         appears on the detail page ("Indexed by"). -->
     <div class="mb-3 flex items-center gap-3">
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
       <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
-        <ProfileAvatar
-          pubkey={resource.pubkey}
-          profile={authorProfile}
-          size="md"
-          linkToProfile
-          showHoverCard
-          fallbackType="robohash"
-        />
+        {#if indexedCreator?.pubkey}
+          <ProfileAvatar
+            pubkey={indexedCreator.pubkey}
+            size="md"
+            linkToProfile
+            showHoverCard
+            fallbackType="robohash"
+          />
+        {:else if indexedCreator}
+          <MetadataAvatar name={indexedCreator.name} size="md" />
+        {:else}
+          <ProfileAvatar
+            pubkey={resource.pubkey}
+            profile={authorProfile}
+            size="md"
+            linkToProfile
+            showHoverCard
+            fallbackType="robohash"
+          />
+        {/if}
       </div>
       <div class="min-w-0 flex-1">
-        <a
-          href={resolve(profileLink(resource.pubkey))}
-          class="block truncate font-medium text-base-content hover:underline"
-          onclick={(e) => e.stopPropagation()}
-        >
-          {authorName}
-        </a>
-        <div class="text-sm text-base-content/60">
-          {formatCalendarDate(publishedAt, 'short')}
-        </div>
+        {#if indexedCreator && !indexedCreator.pubkey}
+          <span class="block truncate font-medium text-base-content">
+            {displayedAuthorName}
+            <span class="text-sm font-normal text-base-content/60">
+              · {formatCalendarDate(publishedAt, 'short')}
+            </span>
+          </span>
+        {:else}
+          <a
+            href={resolve(profileLink(indexedCreator?.pubkey ?? resource.pubkey))}
+            class="block truncate font-medium text-base-content hover:underline"
+            onclick={(e) => e.stopPropagation()}
+          >
+            {displayedAuthorName}
+          </a>
+        {/if}
+        {#if indexedCreator}
+          <div
+            class="truncate font-mono text-xs text-base-content/60"
+            data-testid="metadata-attribution"
+          >
+            {attributionLine}
+          </div>
+        {:else}
+          <div class="text-sm text-base-content/60">
+            {formatCalendarDate(publishedAt, 'short')}
+          </div>
+        {/if}
       </div>
       <!-- Resource Type Badge -->
       {#if localizedLearningResourceTypes.length > 0}

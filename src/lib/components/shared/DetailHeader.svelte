@@ -14,6 +14,7 @@
   import { getHasHistory, getFallbackRoute } from '$lib/helpers/navigationHistory.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
+  import MetadataAvatar from './MetadataAvatar.svelte';
   import EventContextMenu from './EventContextMenu.svelte';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
 
@@ -23,6 +24,10 @@
    * @property {string} [subtitle] - Optional subtitle
    * @property {import('nostr-tools').NostrEvent} event - For context menu
    * @property {string} authorPubkey - For avatar + name in toolbar
+   * @property {{name?: string, pubkey?: string}} [displayAuthor] - Byline override:
+   *   a metadata author (e.g. AMB creator on an indexed resource) shown instead of
+   *   authorPubkey's profile. With pubkey → that profile; without → dashed initials
+   *   avatar + unlinked name.
    * @property {string} [date] - Formatted date string
    * @property {string} [dateLabel] - Prefix before date (e.g. "Published")
    * @property {string} [stats] - e.g. "2 bookmarks, 1 highlight"
@@ -41,6 +46,7 @@
     subtitle = undefined,
     event,
     authorPubkey,
+    displayAuthor = undefined,
     date = undefined,
     dateLabel = undefined,
     stats = undefined,
@@ -53,11 +59,18 @@
     metadata = undefined
   } = $props();
 
+  // Byline identity: displayAuthor (metadata author) wins over authorPubkey.
+  const bylinePubkey = $derived(displayAuthor ? displayAuthor.pubkey : authorPubkey);
+
   // Load author profile for the toolbar (skip if no pubkey)
-  const getAuthorProfile = useUserProfile(() => (authorPubkey ? authorPubkey : undefined));
+  const getAuthorProfile = useUserProfile(() => (bylinePubkey ? bylinePubkey : undefined));
   const authorProfile = $derived(getAuthorProfile());
   const authorName = $derived(
-    authorPubkey ? getDisplayName(authorProfile ?? undefined, authorPubkey.slice(0, 8) + '...') : ''
+    displayAuthor && !displayAuthor.pubkey
+      ? displayAuthor.name || ''
+      : bylinePubkey
+        ? getDisplayName(authorProfile ?? undefined, bylinePubkey.slice(0, 8) + '...')
+        : ''
   );
 </script>
 
@@ -78,13 +91,21 @@
       <ChevronLeftIcon class_="w-5 h-5" />
     </button>
 
-    {#if authorPubkey}
+    {#if bylinePubkey || displayAuthor?.name}
       <div class="order-2 flex min-w-0 flex-1 items-center gap-2 sm:flex-initial">
-        <ProfileAvatar pubkey={authorPubkey} size="xs" linkToProfile />
+        {#if bylinePubkey}
+          <ProfileAvatar pubkey={bylinePubkey} size="xs" linkToProfile />
+        {:else}
+          <MetadataAvatar name={displayAuthor?.name} size="xs" />
+        {/if}
         <span class="truncate text-xs">
-          <a href={resolve(profileLink(authorPubkey))} class="font-medium hover:underline">
-            {authorName}
-          </a>
+          {#if bylinePubkey}
+            <a href={resolve(profileLink(bylinePubkey))} class="font-medium hover:underline">
+              {authorName}
+            </a>
+          {:else}
+            <span class="font-medium">{authorName}</span>
+          {/if}
           {#if date}
             <span class="opacity-50">
               {#if dateLabel}
