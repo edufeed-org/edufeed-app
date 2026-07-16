@@ -131,6 +131,8 @@
   "calendar_management_edit": "Kalender bearbeiten",
   "calendar_management_delete": "Kalender löschen",
   "calendar_management_share": "Kalender teilen",
+  "readonly_sign_prompt": "Du bist im Nur-Lese-Modus — melde dich mit einer Signaturmethode an, um das zu tun.",
+  "auth_readonly_account_type": "nur lesen",
   "auth_login_title": "Anmelden",
   "auth_login_with_private_key": "Mit privatem Schlüssel anmelden",
   "auth_login_with_extension": "Mit Browser Extension anmelden",

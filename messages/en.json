@@ -131,6 +131,8 @@
   "calendar_management_edit": "Edit Calendar",
   "calendar_management_delete": "Delete Calendar",
   "calendar_management_share": "Share Calendar",
+  "readonly_sign_prompt": "You are browsing read-only — log in with a signing method to do this.",
+  "auth_readonly_account_type": "read-only",
   "auth_login_title": "Login",
   "auth_login_with_private_key": "Login with Private Key",
   "auth_login_with_extension": "Login with Extension",
