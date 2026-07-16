@@ -27,6 +27,7 @@
   import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { nip19 } from 'nostr-tools';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$paraglide/messages';
 
   // Props
@@ -243,11 +244,12 @@
                       <PeopleIcon class_="h-4 w-4 text-primary flex-shrink-0" />
                       <div class="avatar">
                         <div class="h-5 w-5 rounded-full ring-1 ring-base-300">
-                          <img
+                          <ImageWithFallback
                             src={getProfilePicture(communityProfile) ||
                               `https://robohash.org/${communityPubkey}`}
                             alt={getDisplayName(communityProfile)}
-                            class="rounded-full object-cover"
+                            fallbackType="community"
+                            class="h-full w-full rounded-full object-cover"
                           />
                         </div>
                       </div>

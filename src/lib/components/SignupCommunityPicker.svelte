@@ -6,6 +6,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   let { selected = $bindable(new SvelteSet()) } = $props();
 
@@ -117,7 +118,13 @@
               <div class="avatar">
                 <div class="h-8 w-8 rounded-full bg-base-300">
                   {#if profile?.picture}
-                    <img src={profile.picture} alt="" loading="lazy" />
+                    <ImageWithFallback
+                      src={profile.picture}
+                      alt=""
+                      loading="lazy"
+                      fallbackType="community"
+                      class="h-full w-full rounded-full object-cover"
+                    />
                   {/if}
                 </div>
               </div>
@@ -166,7 +173,13 @@
               <div class="avatar">
                 <div class="h-8 w-8 rounded-full bg-base-300">
                   {#if profile?.picture}
-                    <img src={profile.picture} alt="" loading="lazy" />
+                    <ImageWithFallback
+                      src={profile.picture}
+                      alt=""
+                      loading="lazy"
+                      fallbackType="community"
+                      class="h-full w-full rounded-full object-cover"
+                    />
                   {/if}
                 </div>
               </div>
@@ -203,7 +216,13 @@
                 <div class="avatar">
                   <div class="h-8 w-8 rounded-full bg-base-300">
                     {#if profile?.picture}
-                      <img src={profile.picture} alt="" loading="lazy" />
+                      <ImageWithFallback
+                        src={profile.picture}
+                        alt=""
+                        loading="lazy"
+                        fallbackType="community"
+                        class="h-full w-full rounded-full object-cover"
+                      />
                     {/if}
                   </div>
                 </div>
