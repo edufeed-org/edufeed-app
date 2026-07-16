@@ -87,3 +87,4 @@ export { default as LinkedinIcon } from './social/LinkedinIcon.svelte';
 export { default as FacebookIcon } from './social/FacebookIcon.svelte';
 export { default as TwitterXIcon } from './social/TwitterXIcon.svelte';
 export { default as WhatsappIcon } from './social/WhatsappIcon.svelte';
+export { default as GoogleIcon } from './social/GoogleIcon.svelte';

@@ -7,6 +7,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { connectWithBunkerUrl, registerBunkerAccount } from '$lib/helpers/bunker-connection.js';
   import { downloadRecoveryFile } from '$lib/helpers/recoveryFile.js';
+  import { GoogleIcon } from '$lib/components/icons';
   import {
     startGoogleLogin,
     finishGoogleLogin,
@@ -142,6 +143,7 @@
         <div class="mb-4 alert alert-error"><span class="text-sm">{errorMessage}</span></div>
       {/if}
       <button data-testid="google-login-start" class="btn w-full btn-primary" onclick={start}>
+        <GoogleIcon />
         {m.auth_login_google_start()}
       </button>
     {:else if status === 'backup'}

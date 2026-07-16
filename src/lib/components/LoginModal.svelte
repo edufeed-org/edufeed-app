@@ -12,6 +12,7 @@
   import { useAccounts } from '$lib/stores/accounts.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { GoogleIcon } from '$lib/components/icons';
 
   const getAccounts = useAccounts();
 
@@ -152,6 +153,7 @@
           class="btn w-full btn-lg"
           onclick={() => onGoogleTransition?.()}
         >
+          <GoogleIcon />
           {m.auth_login_modal_google()}
         </button>
       {/if}
