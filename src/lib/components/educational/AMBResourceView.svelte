@@ -49,6 +49,7 @@
   import { page } from '$app/stores';
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
+  import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
@@ -787,7 +788,17 @@
                       aria-label={displayName}
                     >
                       {#if picture}
-                        <img class="av" src={picture} alt={m.amb_resource_creator_alt()} />
+                        <ImageWithFallback
+                          class="av"
+                          src={picture}
+                          alt={m.amb_resource_creator_alt()}
+                          fallbackType="avatar"
+                          robohash={false}
+                        >
+                          {#snippet fallback()}
+                            {@render initialAvatar(displayName, entry.type)}
+                          {/snippet}
+                        </ImageWithFallback>
                       {:else}
                         {@render initialAvatar(displayName, entry.type)}
                       {/if}
@@ -825,12 +836,22 @@
                   href={resolve(profileLink(event.pubkey))}
                   aria-label={publisherName}
                 >
-                  {#if publisherPicture}
-                    <img class="av" src={publisherPicture} alt={publisherName} />
-                  {:else}
+                  {#snippet publisherInitial()}
                     <div class="av av-fallback" aria-hidden="true">
                       {(publisherName?.trim()?.charAt(0) || '?').toUpperCase()}
                     </div>
+                  {/snippet}
+                  {#if publisherPicture}
+                    <ImageWithFallback
+                      class="av"
+                      src={publisherPicture}
+                      alt={publisherName}
+                      fallbackType="avatar"
+                      robohash={false}
+                      fallback={publisherInitial}
+                    />
+                  {:else}
+                    {@render publisherInitial()}
                   {/if}
                 </a>
                 <div class="ed-contrib-body">
@@ -1314,7 +1335,7 @@
     display: flex;
     flex-shrink: 0;
   }
-  .ed-contrib .av {
+  .ed-contrib :global(.av) {
     width: 32px;
     height: 32px;
     border-radius: 999px;

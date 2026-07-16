@@ -12,6 +12,7 @@
   import { normalizeToHex } from '$lib/helpers/nostrUtils.js';
   import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   /**
    * @typedef {Object} Creator
@@ -248,6 +249,13 @@
   {/if}
 
   <!-- Existing Creators List -->
+  {#snippet creatorFallback(/** @type {any} */ creator)}
+    {#if creator.type === 'Organization'}
+      <span class="text-lg">🏢</span>
+    {:else}
+      <span class="text-lg">{creator.name[0]?.toUpperCase() || '?'}</span>
+    {/if}
+  {/snippet}
   {#if creators.length > 0}
     <div class="mb-3 space-y-2">
       {#each creators as creator, index (index)}
@@ -259,20 +267,22 @@
               {#if creator.pubkey}
                 {@const getProfile = useUserProfile(creator.pubkey)}
                 {#if getProfile() && getProfilePicture(getProfile())}
-                  <img
+                  <ImageWithFallback
                     src={getProfilePicture(getProfile())}
                     alt={creator.name}
+                    fallbackType="avatar"
+                    robohash={false}
                     class="h-full w-full object-cover"
-                  />
-                {:else if creator.type === 'Organization'}
-                  <span class="text-lg">🏢</span>
+                  >
+                    {#snippet fallback()}
+                      {@render creatorFallback(creator)}
+                    {/snippet}
+                  </ImageWithFallback>
                 {:else}
-                  <span class="text-lg">{creator.name[0]?.toUpperCase() || '?'}</span>
+                  {@render creatorFallback(creator)}
                 {/if}
-              {:else if creator.type === 'Organization'}
-                <span class="text-lg">🏢</span>
               {:else}
-                <span class="text-lg">{creator.name[0]?.toUpperCase() || '?'}</span>
+                {@render creatorFallback(creator)}
               {/if}
             </div>
           </div>

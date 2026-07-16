@@ -107,6 +107,7 @@
             <ImageWithFallback
               src={communityAvatarUrl}
               alt={communityDisplayName}
+              fallbackType="community"
               size="avatar_md"
               class="h-full w-full rounded-full object-cover"
             />

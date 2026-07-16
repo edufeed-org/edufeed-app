@@ -12,6 +12,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import ReactionReactorsList from './ReactionReactorsList.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {any} */
@@ -98,7 +99,13 @@
         : 'border-base-content/20'}"
     >
       {#if emojiUrl}
-        <img src={emojiUrl} alt={emoji} title={emoji} class="inline h-4 w-4 object-contain" />
+        <ImageWithFallback
+          src={emojiUrl}
+          alt={emoji}
+          title={emoji}
+          fallbackType="generic"
+          class="inline h-4 w-4 object-contain"
+        />
       {:else}
         <span class="text-sm leading-none">{emoji}</span>
       {/if}

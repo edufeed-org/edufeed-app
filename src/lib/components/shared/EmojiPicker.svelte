@@ -7,6 +7,7 @@
    */
   import { emojiMetadata } from '$lib/data/emojiMetadata.js';
   import * as m from '$lib/paraglide/messages';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   /**
    * @typedef {{ shortcode: string, url: string }} CustomEmoji
@@ -724,11 +725,12 @@
             title=":{emoji.shortcode}:"
             data-testid="custom-emoji-option"
           >
-            <img
+            <ImageWithFallback
               src={emoji.url}
               alt=":{emoji.shortcode}:"
-              class="inline h-6 w-6 object-contain"
               loading="lazy"
+              fallbackType="generic"
+              class="inline h-6 w-6 object-contain"
             />
           </button>
         {/each}

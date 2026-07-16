@@ -170,6 +170,7 @@
         <ImageWithFallback
           src={authorAvatar}
           alt={authorName || ''}
+          fallbackType="avatar"
           size="avatar_md"
           class="h-full w-full rounded-full object-cover"
         />
@@ -252,9 +253,10 @@
     {#if communityName}
       <div class="mt-0.5 flex items-center gap-1.5">
         {#if communityAvatar}
-          <img
+          <ImageWithFallback
             src={communityAvatar}
             alt={communityName}
+            fallbackType="community"
             class="h-4 w-4 rounded-full object-cover"
           />
         {/if}

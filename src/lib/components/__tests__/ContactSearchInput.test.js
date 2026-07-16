@@ -227,9 +227,11 @@ describe('ContactSearchInput', () => {
     const input = container.querySelector('input');
     await fireEvent.input(input, { target: { value: 'bo' } });
 
-    // Bob has no picture — ImageWithFallback renders a robohash fallback img
-    const img = container.querySelector('.absolute.z-50 img');
-    expect(img).toBeTruthy();
+    // Bob has no picture — ImageWithFallback renders the local avatar placeholder
+    const placeholder = container.querySelector(
+      '.absolute.z-50 [data-testid="image-fallback-placeholder"]'
+    );
+    expect(placeholder).toBeTruthy();
   });
 });
 

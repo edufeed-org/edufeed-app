@@ -282,13 +282,13 @@ Replace `src/lib/components/shared/ImageWithFallback.svelte` entirely with:
     {@render fallback()}
   {:else}
     <div
-      class="inline-flex min-h-8 min-w-8 items-center justify-center overflow-hidden bg-base-200 text-base-content/30 {className}"
+      class="inline-flex items-center justify-center overflow-hidden bg-base-200 text-base-content/30 {className}"
       role="img"
       aria-label={alt || undefined}
       aria-hidden={alt ? undefined : true}
       data-testid="image-fallback-placeholder"
     >
-      <PlaceholderIcon class_="h-1/2 max-h-8 w-1/2 max-w-8" />
+      <PlaceholderIcon class_="h-1/2 max-h-8 w-1/2 max-w-8" title="" />
     </div>
   {/if}
 {:else}

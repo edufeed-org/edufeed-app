@@ -77,6 +77,7 @@
   import CoverColorPicker from './CoverColorPicker.svelte';
   import SmartFillBadge from './SmartFillBadge.svelte';
   import EuropeanDateInput from '$lib/components/shared/EuropeanDateInput.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import EnrichmentStatusBanner from './EnrichmentStatusBanner.svelte';
   import AMBResourceCard from './AMBResourceCard.svelte';
   import { fly } from 'svelte/transition';
@@ -2960,9 +2961,10 @@
                       onchange={() => toggleCommunity(pubkey)}
                     />
                     {#if picture}
-                      <img
+                      <ImageWithFallback
                         src={picture}
                         alt=""
+                        fallbackType="community"
                         class="h-8 w-8 rounded-full border border-base-300 object-cover"
                       />
                     {:else}

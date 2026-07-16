@@ -11,6 +11,7 @@
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
   import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
   import RenderErrorCard from '$lib/components/shared/RenderErrorCard.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import TermiAssistant from '$lib/components/assistant/TermiAssistant.svelte';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
@@ -388,7 +389,14 @@
 <!-- Loading overlay with quote — fixed position so it's visible despite parent opacity:0 -->
 {#if !curatedReady}
   <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 bg-base-100">
-    <img src={runtimeConfig.appLogo || '/icon-192x192.png'} alt="" width="64" height="64" />
+    <ImageWithFallback
+      src={runtimeConfig.appLogo || '/icon-192x192.png'}
+      alt=""
+      width={64}
+      height={64}
+      fallbackType="generic"
+      class="h-16 w-16"
+    />
     <div class="loading loading-lg loading-spinner text-primary"></div>
     <figure class="max-w-sm px-4 text-center">
       <blockquote class="text-base-content/60 italic">

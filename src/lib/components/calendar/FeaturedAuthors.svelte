@@ -1,6 +1,7 @@
 <script>
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getProfilePicture } from 'applesauce-core/helpers';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   /**
    * @typedef {Object} Props
@@ -50,7 +51,12 @@
         <div class="avatar">
           <div class="w-12 rounded-full bg-base-300">
             {#if avatarUrl(pubkey)}
-              <img src={avatarUrl(pubkey)} alt="" />
+              <ImageWithFallback
+                src={avatarUrl(pubkey)}
+                alt=""
+                fallbackType="avatar"
+                class="h-full w-full rounded-full object-cover"
+              />
             {/if}
           </div>
         </div>

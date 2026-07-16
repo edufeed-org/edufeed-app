@@ -10,6 +10,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import BadgeThumb from '$lib/components/badges/BadgeThumb.svelte';
   import EducatorContextDisplay from '$lib/components/shared/EducatorContextDisplay.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import {
     PeopleIcon,
@@ -151,10 +152,20 @@
       <div class="pf-mini-comm">
         {#each miniCommunities as communityPubkey (communityPubkey)}
           <a href={resolve(`/c/${communityPubkey}`)}>
-            {#if communityPicture(communityPubkey)}
-              <img class="ic" src={communityPicture(communityPubkey)} alt="" />
-            {:else}
+            {#snippet icFallback()}
               <span class="ic fallback">{communityName(communityPubkey)[0]?.toUpperCase()}</span>
+            {/snippet}
+            {#if communityPicture(communityPubkey)}
+              <ImageWithFallback
+                src={communityPicture(communityPubkey)}
+                alt=""
+                fallbackType="community"
+                robohash={false}
+                class="h-[34px] w-[34px] shrink-0 rounded-[10px] object-cover"
+                fallback={icFallback}
+              />
+            {:else}
+              {@render icFallback()}
             {/if}
             <span class="nm">{communityName(communityPubkey)}</span>
             <span class="go"><ChevronRightIcon class_="w-4 h-4" /></span>

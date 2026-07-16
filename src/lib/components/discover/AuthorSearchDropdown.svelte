@@ -1,6 +1,7 @@
 <script>
   import { searchProfileMap } from '$lib/helpers/contentSearch.js';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   /**
    * @typedef {{pubkey: string, name: string, display_name: string, picture?: string, nip05?: string}} AuthorResult
@@ -103,19 +104,25 @@
         onclick={() => onselect(match)}
         data-testid="author-option"
       >
-        {#if match.picture}
-          <img
-            src={match.picture}
-            alt=""
-            class="h-8 w-8 rounded-full object-cover"
-            loading="lazy"
-          />
-        {:else}
+        {#snippet authorInitial()}
           <div
             class="flex h-8 w-8 items-center justify-center rounded-full bg-neutral text-sm text-neutral-content"
           >
             {(match.display_name || match.name || '?')[0]?.toUpperCase()}
           </div>
+        {/snippet}
+        {#if match.picture}
+          <ImageWithFallback
+            src={match.picture}
+            alt=""
+            loading="lazy"
+            fallbackType="avatar"
+            robohash={false}
+            class="h-8 w-8 rounded-full object-cover"
+            fallback={authorInitial}
+          />
+        {:else}
+          {@render authorInitial()}
         {/if}
         <div class="min-w-0 flex-1">
           <div class="truncate text-sm font-medium">

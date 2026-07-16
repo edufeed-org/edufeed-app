@@ -25,6 +25,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ExpandableListCard from './ExpandableListCard.svelte';
   import NewListModal from '$lib/components/lists/NewListModal.svelte';
@@ -372,7 +373,12 @@
   <div class="flex flex-wrap gap-3">
     {#each emojis as emoji (emoji.shortcode)}
       <div class="flex items-center gap-2 rounded border border-base-300 bg-base-100 px-2 py-1">
-        <img src={emoji.url} alt={emoji.shortcode} class="h-6 w-6 object-contain" />
+        <ImageWithFallback
+          src={emoji.url}
+          alt={emoji.shortcode}
+          fallbackType="generic"
+          class="h-6 w-6 object-contain"
+        />
         <span class="font-mono text-xs">:{emoji.shortcode}:</span>
       </div>
     {/each}

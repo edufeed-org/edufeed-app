@@ -3,7 +3,7 @@
   import * as m from '$lib/paraglide/messages';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   // Note: These functions are kept for future CTA buttons
   function _handleGetStarted() {
@@ -25,10 +25,12 @@
     : 'bg-gradient-to-br from-primary to-secondary'}"
 >
   {#if runtimeConfig.ui?.landingHeroImage}
-    <img
-      src={getProxiedImageUrl(runtimeConfig.ui.landingHeroImage, 'hero') ||
-        runtimeConfig.ui.landingHeroImage}
+    <ImageWithFallback
+      src={runtimeConfig.ui.landingHeroImage}
       alt=""
+      size="hero"
+      loading="eager"
+      fallbackType="banner"
       class="absolute inset-0 h-full w-full object-cover"
     />
   {/if}

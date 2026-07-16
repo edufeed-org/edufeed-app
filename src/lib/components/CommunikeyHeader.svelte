@@ -3,6 +3,7 @@
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { joinCommunity as joinCommunityHelper } from '$lib/helpers/community';
   import { onMount } from 'svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { profile, communikeyEvent, communikeyContentTypes, activeTab, onTabChange } = $props();
@@ -76,10 +77,11 @@
   <div class="flex items-center gap-2 p-3">
     <div class="avatar">
       <div class="mask w-12 mask-hexagon-2 ring-2 ring-base-300">
-        <img
+        <ImageWithFallback
           src={getProfilePicture(profile)}
           alt={m.communikey_header_profile_alt()}
-          class="object-cover"
+          fallbackType="community"
+          class="h-full w-full object-cover"
         />
       </div>
     </div>

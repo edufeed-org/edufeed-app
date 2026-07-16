@@ -184,6 +184,7 @@
               alt=""
               size="avatar_sm"
               class="h-8 w-8 rounded-full object-cover"
+              fallbackType="avatar"
             />
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm font-medium">

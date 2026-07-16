@@ -4,6 +4,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const getProfile = useUserProfile(() => account.pubkey);
@@ -23,9 +24,12 @@
 <div class="flex w-full items-center rounded-md border border-primary/40 p-2">
   <div tabindex="0" role="button" class="btn avatar btn-circle btn-ghost">
     <div class="w-10 rounded-full">
-      <img
-        alt=""
+      <ImageWithFallback
         src={getProfilePicture(getProfile()) || `https://robohash.org/${account.pubkey}`}
+        alt=""
+        fallbackType="avatar"
+        robohash={false}
+        class="h-full w-full rounded-full object-cover"
       />
     </div>
   </div>

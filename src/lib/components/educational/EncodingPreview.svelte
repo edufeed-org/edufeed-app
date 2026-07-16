@@ -20,6 +20,7 @@
 <script>
   import * as m from '$lib/paraglide/messages.js';
   import PdfInlineViewer from './PdfInlineViewer.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   /**
    * @typedef {Object} Props
@@ -84,10 +85,11 @@
   </div>
 {:else if kind === 'image' && embedSrc}
   <div class="mt-2 mb-1 overflow-hidden rounded-lg border border-base-300 bg-base-200/30">
-    <img
+    <ImageWithFallback
       src={embedSrc}
       alt={name}
       loading="lazy"
+      fallbackType="generic"
       class="block max-h-[80vh] w-full object-contain"
     />
   </div>

@@ -14,6 +14,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { EyeIcon, EyeOffIcon } from '$lib/components/icons';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ events: Array<{pubkey: string}>, limit?: number }} */
@@ -59,7 +60,12 @@
             : m.calendar_top_publishers_select_aria({ name: nameFor(publisher.pubkey) })}
         >
           {#if picture}
-            <img src={picture} alt="" class="h-4 w-4 rounded-full object-cover" />
+            <ImageWithFallback
+              src={picture}
+              alt=""
+              fallbackType="avatar"
+              class="h-4 w-4 rounded-full object-cover"
+            />
           {/if}
           <span class={isHidden ? 'line-through' : ''}>{nameFor(publisher.pubkey)}</span>
           <span class="badge badge-ghost badge-xs">{publisher.count}</span>

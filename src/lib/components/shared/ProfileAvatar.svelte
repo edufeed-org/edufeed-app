@@ -24,6 +24,7 @@
    * @property {boolean} [showHoverCard] - Show profile hover card on hover (defaults to linkToProfile && !!pubkey)
    * @property {string} [class] - Additional CSS classes
    * @property {'lazy' | 'eager'} [loading] - Image loading strategy (eager inside popovers)
+   * @property {string} [title] - Native title tooltip applied to the avatar wrapper
    */
 
   /** @type {Props} */
@@ -35,7 +36,8 @@
     linkToProfile = false,
     showHoverCard = undefined,
     class: className = '',
-    loading = /** @type {'lazy' | 'eager'} */ ('lazy')
+    loading = /** @type {'lazy' | 'eager'} */ ('lazy'),
+    title = undefined
   } = $props();
 
   let effectiveShowHoverCard = $derived(showHoverCard ?? (linkToProfile && !!pubkey));
@@ -91,18 +93,19 @@
   // Get display name for fallback
   let displayName = $derived(getDisplayName(loadedProfile));
 
-  // Get fallback content
-  let fallbackContent = $derived.by(() => {
-    if (fallbackType === 'robohash' && pubkey) {
-      return `https://robohash.org/${pubkey}`;
-    }
-    // Use initial letter fallback
-    return displayName?.charAt(0).toUpperCase() || '?';
-  });
-
-  let showInitialFallback = $derived(fallbackType === 'initial' && !avatarUrl);
-  let showRobohashFallback = $derived(fallbackType === 'robohash' && !avatarUrl);
+  // First letter of the display name — the unfailable terminal fallback
+  let initialLetter = $derived(
+    displayName?.trim()?.charAt(0)?.toUpperCase() || m.profile_avatar_fallback()
+  );
 </script>
+
+{#snippet initialFallback()}
+  <div
+    class="flex h-full w-full items-center justify-center bg-primary text-sm font-semibold text-primary-content"
+  >
+    {initialLetter}
+  </div>
+{/snippet}
 
 {#snippet avatarContent()}
   <div class="not-prose {sizeClasses[size]} rounded-full">
@@ -111,25 +114,25 @@
         src={avatarUrl}
         alt={displayName || m.profile_avatar_alt()}
         fallbackType="avatar"
+        robohash={fallbackType === 'robohash'}
         size={sizeToProxy[size]}
         {loading}
         class="h-full w-full rounded-full object-cover"
+        fallback={initialFallback}
       />
-    {:else if showRobohashFallback}
+    {:else if fallbackType === 'robohash' && pubkey}
       <ImageWithFallback
-        src={fallbackContent}
+        src={`https://robohash.org/${pubkey}`}
         alt={displayName || m.profile_avatar_alt()}
         fallbackType="avatar"
+        robohash={false}
         size={sizeToProxy[size]}
         {loading}
         class="h-full w-full rounded-full object-cover"
+        fallback={initialFallback}
       />
-    {:else if showInitialFallback}
-      <div
-        class="flex h-full w-full items-center justify-center bg-primary text-sm font-semibold text-primary-content"
-      >
-        {m.profile_avatar_fallback()}
-      </div>
+    {:else}
+      {@render initialFallback()}
     {/if}
   </div>
 {/snippet}
@@ -137,7 +140,7 @@
 {#if effectiveShowHoverCard && pubkey}
   <HoverCard fixed>
     {#snippet trigger()}
-      <div class="avatar {className}">
+      <div class="avatar {className}" {title}>
         {@render avatarContent()}
       </div>
     {/snippet}
@@ -146,11 +149,11 @@
     {/snippet}
   </HoverCard>
 {:else if linkToProfile && pubkey}
-  <a href={resolve(profileLink(pubkey))} class="avatar {className}">
+  <a href={resolve(profileLink(pubkey))} class="avatar {className}" {title}>
     {@render avatarContent()}
   </a>
 {:else}
-  <div class="avatar {className}">
+  <div class="avatar {className}" {title}>
     {@render avatarContent()}
   </div>
 {/if}

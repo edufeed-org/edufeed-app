@@ -3,6 +3,7 @@
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { merge, Subject, Subscription } from 'rxjs';
   import { manager } from '$lib/stores/accounts.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {any[]} */
@@ -124,9 +125,11 @@
         class:border-2={activeAccount && activeAccount.id === account.id}
       >
         <figure class="px-4 pt-4">
-          <img
+          <ImageWithFallback
             src={'https://robohash.org/' + account.pubkey + '.png'}
             alt="Account avatar"
+            fallbackType="avatar"
+            robohash={false}
             class="h-24 w-24 rounded-full"
           />
         </figure>
