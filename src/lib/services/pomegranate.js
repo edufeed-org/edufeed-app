@@ -12,7 +12,16 @@
  * Spec: docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md
  */
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
+import { nsecEncode } from 'nostr-tools/nip19';
+import {
+  aggregateSecretKeyShards,
+  decodeShard,
+  hexPubShard,
+  hexShard,
+  trustedKeyDeal
+} from '@fiatjaf/promenade-trusted-dealer';
 
 /** A Google auth token is valid for 24h on the central server. */
 const TOKEN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -127,3 +136,332 @@ export function buildBunkerUrl(central, profile) {
 export function operatorToken(session, operatorUrl) {
   return bytesToHex(sha256(utf8.encode(`${session}:${operatorUrl}`)));
 }
+
+/** How long to wait for a popup (Google sign-in / shard recovery) to post back. */
+const POPUP_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * @param {string} url
+ * @param {RequestInit} [options]
+ * @returns {Promise<{ ok: boolean, status: number, data: any }>}
+ */
+async function apiJson(url, options = {}) {
+  const res = await fetch(url, options);
+  let data = null;
+  const text = await res.text().catch(() => '');
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
+  return { ok: res.ok, status: res.status, data };
+}
+
+/**
+ * GET /account — the pomegranate account registered for this Google identity,
+ * or null when none exists yet.
+ * @param {string} central - massaged origin
+ * @param {GoogleToken} token
+ * @returns {Promise<PomegranateAccount | null>}
+ */
+export async function getPomegranateAccount(central, token) {
+  const res = await apiJson(`${central}/account`, {
+    headers: { Authorization: `Token ${token.raw}` }
+  });
+  if (res.status === 401) {
+    throw new Error('Google session expired, please sign in again');
+  }
+  if (res.ok && res.data && res.data.pubkey) {
+    return res.data;
+  }
+  return null;
+}
+
+/**
+ * Create a new account: split the key into FROST shards (trusted dealer) and
+ * register with the central server + every operator. The key signs the
+ * registration events but is never persisted here.
+ * @param {string} central - massaged origin
+ * @param {GoogleToken} token
+ * @param {{ operators: string[], threshold: number, secretKey: Uint8Array }} config
+ */
+export async function createPomegranateAccount(central, token, config) {
+  const operators = config.operators.map(massageURL);
+  if (operators.length < 2) {
+    throw new Error('At least 2 operators are required');
+  }
+  const threshold = config.threshold;
+  if (!Number.isInteger(threshold) || threshold < 1 || threshold > operators.length) {
+    throw new Error('Invalid signing threshold');
+  }
+  const session = crypto.randomUUID();
+
+  const secretKey = config.secretKey;
+  const masterSk = BigInt('0x' + bytesToHex(secretKey));
+  const { shards } = trustedKeyDeal(masterSk, threshold, operators.length);
+
+  // Register the account with the central server (kind 20445).
+  const regEvent = finalizeEvent(
+    {
+      kind: KIND_ACCOUNT_REGISTRATION,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ['threshold', String(threshold)],
+        ...operators.map((op, i) => ['operator', op, hexPubShard(shards[i].pubShard)])
+      ],
+      content: ''
+    },
+    secretKey
+  );
+  const regRes = await fetch(`${central}/register`, {
+    method: 'POST',
+    body: JSON.stringify(regEvent),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Token ${token.raw}`,
+      'X-Pomegranate-Session': session
+    }
+  });
+  if (regRes.status !== 200) {
+    throw new Error('Central server registration failed');
+  }
+
+  // Register with every operator in parallel (kind 20444, one shard each).
+  // A few may fail; the account works while ≥ threshold operators hold shards.
+  const failed = (
+    await Promise.all(
+      operators.map(async (operator, i) => {
+        const event = finalizeEvent(
+          {
+            kind: KIND_OPERATOR_REGISTRATION,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ['central', central],
+              ['email', token.email]
+            ],
+            content: hexShard(shards[i])
+          },
+          secretKey
+        );
+        try {
+          const opRes = await fetch(`${operator}/po/register`, {
+            method: 'POST',
+            body: JSON.stringify(event),
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Pomegranate-Operator-Token': operatorToken(session, operator)
+            }
+          });
+          if (opRes.ok) return null;
+          console.warn(`[pomegranate] operator registration failed: ${operator} (${opRes.status})`);
+          return operator;
+        } catch (err) {
+          console.warn(`[pomegranate] operator registration error: ${operator}`, err);
+          return operator;
+        }
+      })
+    )
+  ).filter((url) => url !== null);
+
+  const registered = operators.length - failed.length;
+  if (registered < threshold) {
+    throw new Error(
+      `Could not register with enough operators (${registered}/${threshold}). Please try again.`
+    );
+  }
+}
+
+/**
+ * GET /profiles, creating a "default" one when none exists.
+ * @param {string} central
+ * @param {GoogleToken} token
+ * @returns {Promise<PomegranateProfile>}
+ */
+export async function ensureProfile(central, token) {
+  const list = await apiJson(`${central}/profiles`, {
+    headers: { Authorization: `Token ${token.raw}` }
+  });
+  if (!list.ok || !Array.isArray(list.data)) {
+    throw new Error('Failed to load signing profiles');
+  }
+  if (list.data.length > 0) return list.data[0];
+
+  const created = await fetch(`${central}/profiles`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Token ${token.raw}`
+    },
+    body: JSON.stringify({ name: 'default' })
+  });
+  if (!created.ok) {
+    throw new Error('Signing profile creation failed');
+  }
+  let profile = null;
+  try {
+    profile = JSON.parse(await created.text());
+  } catch {
+    /* fall through */
+  }
+  if (!profile?.handler_pubkey || !/^[0-9a-f]{64}$/i.test(profile.handler_pubkey)) {
+    throw new Error('Signing profile creation did not complete');
+  }
+  return profile;
+}
+
+/**
+ * First login half: open the Google popup at the central server (call from a
+ * user gesture) and report whether an account already exists.
+ * @param {string} centralUrl
+ * @returns {Promise<{ token: GoogleToken, hasAccount: boolean }>}
+ */
+export async function startGoogleLogin(centralUrl) {
+  const central = massageURL(centralUrl);
+  const popup = openPopup(`${central}/login/google`, 'PomegranateLogin');
+  const raw = await awaitPopupMessage(popup, central, (data) =>
+    data && typeof data === 'object' && typeof data.token === 'string' ? data.token : undefined
+  );
+  const token = decodeGoogleToken(raw);
+  const account = await getPomegranateAccount(central, token);
+  return { token, hasAccount: !!account };
+}
+
+/**
+ * Second login half. Pass `config` ({operators, threshold, secretKey}) to
+ * create a new account, or null for an existing one. Opens no popup.
+ * @param {string} centralUrl
+ * @param {GoogleToken} token
+ * @param {{ operators: string[], threshold: number, secretKey: Uint8Array } | null} config
+ * @returns {Promise<{ bunkerUrl: string, central: string }>}
+ */
+export async function finishGoogleLogin(centralUrl, token, config) {
+  const central = massageURL(centralUrl);
+  if (config) {
+    await createPomegranateAccount(central, token, config);
+  }
+  const profile = await ensureProfile(central, token);
+  return { bunkerUrl: buildBunkerUrl(central, profile), central };
+}
+
+/**
+ * Authenticate with Google and load the pomegranate account for the nsec
+ * export flow. Throws PomegranatePubkeyMismatchError when the Google account
+ * maps to a different pubkey than the locally active one.
+ * @param {string} centralUrl
+ * @param {string} expectedPubkey
+ * @returns {Promise<{ token: GoogleToken, account: PomegranateAccount }>}
+ */
+export async function startRecovery(centralUrl, expectedPubkey) {
+  const central = massageURL(centralUrl);
+  const popup = openPopup(`${central}/login/google`, 'PomegranateLogin');
+  const raw = await awaitPopupMessage(popup, central, (data) =>
+    data && typeof data === 'object' && typeof data.token === 'string' ? data.token : undefined
+  );
+  const token = decodeGoogleToken(raw);
+  const account = await getPomegranateAccount(central, token);
+  if (!account) {
+    throw new Error('No pomegranate account found for this Google login');
+  }
+  if (account.pubkey !== expectedPubkey) {
+    throw new PomegranatePubkeyMismatchError();
+  }
+  return { token, account };
+}
+
+/**
+ * Recover one secret-key shard from one operator (popup re-proves the Google
+ * identity to that operator). Call from a user gesture.
+ * @param {PomegranateOperator} operator
+ * @returns {Promise<string>}
+ */
+export async function recoverShard(operator) {
+  const operatorURL = massageURL(operator.url);
+  const popup = openPopup(`${operatorURL}/po/recover/google`, 'PomegranateRecover');
+  const shard = await awaitPopupMessage(popup, operatorURL, (data) =>
+    typeof data === 'string' ? data : undefined
+  );
+  if (!shard.startsWith(operator.pubshard)) {
+    throw new Error('Recovered shard does not match the operator');
+  }
+  return shard;
+}
+
+/**
+ * Aggregate ≥threshold recovered shards back into the secret key.
+ * @param {string[]} shards
+ * @param {string} expectedPubkey
+ * @returns {string} nsec
+ */
+export function aggregateNsec(shards, expectedPubkey) {
+  const secret = aggregateSecretKeyShards(shards.map(hexToBytes).map(decodeShard));
+  const secretKey = hexToBytes(secret.toString(16).padStart(64, '0'));
+  if (getPublicKey(secretKey) !== expectedPubkey) {
+    throw new Error('Recovered key does not match the account');
+  }
+  return nsecEncode(secretKey);
+}
+
+/**
+ * @param {string} url
+ * @param {string} name
+ * @returns {Window}
+ */
+function openPopup(url, name) {
+  const width = 600;
+  const height = 700;
+  const left = window.screenX + Math.max(0, (window.outerWidth - width) / 2);
+  const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2);
+  const popup = window.open(
+    url,
+    name,
+    `popup=yes,width=${width},height=${height},left=${left},top=${top}`
+  );
+  if (!popup) throw new PomegranatePopupBlockedError();
+  return popup;
+}
+
+/**
+ * Resolve with the first message posted by `popup` from `expectedOrigin` for
+ * which `extract` returns a defined value. Rejects on close or timeout.
+ * @template T
+ * @param {Window} popup
+ * @param {string} expectedOrigin
+ * @param {(data: any) => T | undefined} extract
+ * @returns {Promise<T>}
+ */
+function awaitPopupMessage(popup, expectedOrigin, extract) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      window.removeEventListener('message', onMessage);
+      window.clearInterval(closeMonitor);
+      window.clearTimeout(timer);
+    };
+    /** @param {MessageEvent} event */
+    const onMessage = (event) => {
+      if (event.origin !== expectedOrigin || event.source !== popup) return;
+      const value = extract(event.data);
+      if (value === undefined) return;
+      cleanup();
+      popup.close();
+      resolve(value);
+    };
+    const closeMonitor = window.setInterval(() => {
+      if (popup.closed) {
+        cleanup();
+        reject(new PomegranatePopupClosedError());
+      }
+    }, 300);
+    const timer = window.setTimeout(() => {
+      cleanup();
+      popup.close();
+      reject(new Error('Timed out waiting for the popup'));
+    }, POPUP_TIMEOUT_MS);
+    window.addEventListener('message', onMessage);
+  });
+}
+
+// generateSecretKey is re-exported for the login UI so it doesn't import
+// nostr-tools separately for this one call.
+export { generateSecretKey };
