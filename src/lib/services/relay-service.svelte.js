@@ -3,10 +3,10 @@
  * Manages relay list fetching, caching, and selection for outbox model
  */
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte.js';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { RelayListModel } from '$lib/models/relay-list-model.js';
-import { createRelayListLoader } from '$lib/loaders/relay-list-loader.js';
+import { addressLoader } from '$lib/loaders/base.js';
 
 /**
  * Get relay list lookup relays from runtime config
@@ -56,8 +56,6 @@ export async function fetchRelayList(pubkey) {
 
   // Fetch from relays
   return new Promise((resolve) => {
-    const loader = createRelayListLoader(pool, getLookupRelays(), eventStore, pubkey);
-
     let resolved = false;
     /** @type {import('rxjs').Subscription | undefined} */
     let subscription;
@@ -113,7 +111,10 @@ export async function fetchRelayList(pubkey) {
     // Loader completion = lookup relays EOSEd. If the model produced nothing
     // by then, the pubkey has no kind 10002 (the legit new-user case) —
     // resolve fast instead of burning the timeout.
-    loaderSub = loader()().subscribe({
+    // addressLoader (unlike a timeline loader) completes after its
+    // cache→relays→lookup sequence — measured ~1.3s for a confirmed miss —
+    // and dedupes concurrent requests for the same pointer.
+    loaderSub = addressLoader({ kind: 10002, pubkey, relays: getLookupRelays() }).subscribe({
       complete: () => settle(latest),
       error: () => settle(latest)
     });

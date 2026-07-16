@@ -34,11 +34,13 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 vi.mock('$lib/models/relay-list-model.js', () => ({ RelayListModel: vi.fn() }));
 
 const mockLoaderSubscribe = vi.fn();
+const mockAddressLoader = vi.fn();
 
-vi.mock('$lib/loaders/relay-list-loader.js', () => ({
-  createRelayListLoader: () => () => () => ({
-    subscribe: (/** @type {any} */ observer) => mockLoaderSubscribe(observer)
-  })
+vi.mock('$lib/loaders/base.js', () => ({
+  addressLoader: (/** @type {any} */ pointer) => {
+    mockAddressLoader(pointer);
+    return { subscribe: (/** @type {any} */ observer) => mockLoaderSubscribe(observer) };
+  }
 }));
 
 const { fetchRelayList, clearRelayListCache } = await import('../services/relay-service.svelte.js');
@@ -103,5 +105,20 @@ describe('fetchRelayList', () => {
     expect(result).toBeNull();
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  it('requests the kind 10002 via addressLoader with the lookup relays', async () => {
+    mockLoaderSubscribe.mockImplementation((observer) => {
+      observer?.complete?.();
+      return { unsubscribe: () => {} };
+    });
+
+    await fetchRelayList('d'.repeat(64));
+
+    expect(mockAddressLoader).toHaveBeenCalledWith({
+      kind: 10002,
+      pubkey: 'd'.repeat(64),
+      relays: ['wss://lookup.example']
+    });
   });
 });
