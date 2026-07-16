@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-06-09
-**Total tests:** 306
+**Last updated:** 2026-07-16
+**Total tests:** 309
 
 ## Quick Summary
 
@@ -44,6 +44,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
 | `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                     |
 | `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                 |
+| `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                     |
 
 ## Detailed Coverage
 
@@ -1412,6 +1413,44 @@ unintended config bleed-through.
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | signup wizard shows the handle step only when membership is enabled | 4 steps + no membership/handle text when disabled; 5 steps when enabled |
 | /admin/membership shows login-required when membership is disabled  | Route renders, login alert shown for unauthenticated visit              |
+
+---
+
+### npub-login.test.js (3 tests)
+
+**Routes:** `/` (login modal), `/inbox` (redirects to `/c/inbox`)
+**Auth required:** No (the login under test creates a readonly account)
+
+Read-only npub login (`NPUB_LOGIN_ENABLED` / `runtimeConfig.npubLogin.enabled`).
+Input normalization, add-or-activate logic, and the readonly notice component
+are unit-tested (`src/lib/components/__tests__/LoginWithNpub.test.js`,
+`ReadonlyNotice.test.js`); this file covers the full modal chain + navigation.
+
+`npub-login.test.js` — read-only npub login: flag-off hides the method; flag-on
+login via npub → readonly notice on /inbox; invalid input error. (Flag injected
+via /api/config route interception — plus rewriting the SSR-inlined
+`data-sveltekit-fetched` config in the document response, since the root
+layout's universal load fetch is served from that inline cache on first load
+and never hits the network.)
+
+| Test                                          | What it verifies                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| npub method hidden when flag disabled         | Without the flag, `login-method-npub` is absent from the login modal                                          |
+| login with npub, see readonly notice in inbox | Flag on → npub modal → submit → login modal re-opens (transition) → `/inbox` redirects to `/c/inbox` → notice |
+| invalid input shows inline error              | Malformed npub → `.alert-error` inside `#global-npub-login-modal`                                             |
+
+**Nuances:**
+
+- `/inbox` is a client-side redirect stub; the real page (and the mounted
+  `<ReadonlyNotice />`) lives at `/c/inbox` — the test waits for
+  `page.waitForURL('**/c/inbox')` before asserting.
+- The notice locator needs `.first()`: the `c/(dashboard)` layout renders
+  children more than once for its responsive desktop/mobile variants.
+- After a successful npub add, `onAccountCreated` transitions back to the
+  `'login'` modal — the test asserts that re-open and closes it with Escape
+  instead of racing the npub modal's close.
+
+**Components exercised:** LoginModal (npub method gate), LoginWithNpub, ModalManager transitions, ReadonlyNotice on the inbox page.
 
 ## Maintenance Guidelines
 
