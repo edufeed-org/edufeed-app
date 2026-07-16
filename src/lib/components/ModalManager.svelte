@@ -358,7 +358,10 @@
 {:else if modal.activeModal === 'googleLogin'}
   <LoginWithGoogle modalId={googleLoginModalId} />
 {:else if modal.activeModal === 'signup'}
-  <SignupModal modalId={signupModalId} />
+  <SignupModal
+    modalId={signupModalId}
+    externalSignup={!!(/** @type {any} */ (modal.modalProps)?.externalSignup)}
+  />
 {:else if modal.activeModal === 'eventDetails'}
   <CalendarEventDetailsModal />
 {:else if modal.activeModal === 'createCommunity'}
