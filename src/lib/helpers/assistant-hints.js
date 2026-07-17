@@ -2,6 +2,8 @@
 // wiring (loaders, flag stores, actions) lives in
 // $lib/stores/assistant-hints.svelte.js — this module holds the testable core.
 
+import { canSign } from '$lib/helpers/signing-guard.js';
+
 /**
  * @typedef {'open' | 'doing' | 'done'} HintStatus
  */
@@ -59,4 +61,21 @@ export function matchSuggestion(input, suggestions) {
   const needle = input.trim().toLowerCase();
   if (!needle) return null;
   return suggestions.find((s) => s.q.trim().toLowerCase() === needle) ?? null;
+}
+
+/**
+ * Whether the "set up your profile" hint should show. Pure so the matrix is
+ * unit-testable; the reactive store feeds it live values.
+ *
+ * @param {{
+ *   user: { type?: string } | null | undefined,
+ *   settled: boolean,
+ *   hasProfile: boolean,
+ *   dismissed: boolean,
+ *   signupOpen: boolean
+ * }} input
+ * @returns {boolean}
+ */
+export function isProfileHintApplicable({ user, settled, hasProfile, dismissed, signupOpen }) {
+  return canSign(user) && settled && !hasProfile && !dismissed && !signupOpen;
 }
