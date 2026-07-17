@@ -55,9 +55,9 @@ describe('pomegranate pure helpers', () => {
     );
   });
 
-  it('operatorToken is a 64-char hex digest and varies by input', () => {
-    const t1 = operatorToken('session-a', 'https://op1');
-    const t2 = operatorToken('session-a', 'https://op2');
+  it('operatorToken is a 64-char hex digest and varies by input', async () => {
+    const t1 = await operatorToken('session-a', 'https://op1');
+    const t2 = await operatorToken('session-a', 'https://op2');
     expect(t1).toMatch(/^[0-9a-f]{64}$/);
     expect(t1).not.toBe(t2);
   });

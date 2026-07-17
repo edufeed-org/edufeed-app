@@ -11,8 +11,13 @@
  *
  * Spec: docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md
  */
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+// NOTE: do not add a top-level `@noble/hashes` dependency here. A hoisted
+// @noble/hashes v2 shadows the bare `@noble/hashes/utils` imports that
+// bundled SSR chunks (via nostr-tools/applesauce) resolve at runtime — v2
+// only exports .js-suffixed subpaths, which 500s the whole server (CI smoke
+// test caught this). Hex helpers come from nostr-tools' re-export instead,
+// and sha256 uses WebCrypto.
+import { bytesToHex, hexToBytes } from 'nostr-tools/utils';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 import { nsecEncode } from 'nostr-tools/nip19';
 import {
@@ -129,12 +134,14 @@ export function buildBunkerUrl(central, profile) {
 
 /**
  * Correlation token sent to each operator during registration.
+ * Async because it hashes via WebCrypto (see the note on the imports above).
  * @param {string} session
  * @param {string} operatorUrl
- * @returns {string}
+ * @returns {Promise<string>}
  */
-export function operatorToken(session, operatorUrl) {
-  return bytesToHex(sha256(utf8.encode(`${session}:${operatorUrl}`)));
+export async function operatorToken(session, operatorUrl) {
+  const digest = await crypto.subtle.digest('SHA-256', utf8.encode(`${session}:${operatorUrl}`));
+  return bytesToHex(new Uint8Array(digest));
 }
 
 /** How long to wait for a popup (Google sign-in / shard recovery) to post back. */
@@ -258,7 +265,7 @@ export async function createPomegranateAccount(central, token, config) {
             body: JSON.stringify(event),
             headers: {
               'Content-Type': 'application/json',
-              'X-Pomegranate-Operator-Token': operatorToken(session, operator)
+              'X-Pomegranate-Operator-Token': await operatorToken(session, operator)
             }
           });
           if (opRes.ok) return null;

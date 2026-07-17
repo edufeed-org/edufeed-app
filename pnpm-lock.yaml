@@ -31,9 +31,6 @@ importers:
       '@napi-rs/canvas':
         specifier: ^1.0.2
         version: 1.0.2
-      '@noble/hashes':
-        specifier: ^2.2.0
-        version: 2.2.0
       applesauce-common:
         specifier: ^6.2.0
         version: 6.2.0(typescript@5.9.3)
