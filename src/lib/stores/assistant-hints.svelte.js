@@ -58,7 +58,7 @@ import { runtimeConfig } from '$lib/stores/config.svelte.js';
 /** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
-export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'nip05', 'profile']);
+export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'profile', 'nip05']);
 
 /**
  * Reactive hook for the assistant's hints. Must be called during component
