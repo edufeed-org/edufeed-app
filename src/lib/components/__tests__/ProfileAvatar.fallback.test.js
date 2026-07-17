@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ProfileAvatar broken-picture fallback tests
  * Renders the REAL ImageWithFallback (not mocked) to exercise the chain.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ImageWithFallback Component Tests
  *

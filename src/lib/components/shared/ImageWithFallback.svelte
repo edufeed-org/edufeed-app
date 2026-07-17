@@ -106,7 +106,9 @@
     article: ArticleIcon,
     generic: PhotoIcon
   };
-  const PlaceholderIcon = $derived(PLACEHOLDER_ICONS[fallbackType] ?? PhotoIcon);
+  const PlaceholderIcon = $derived(
+    PLACEHOLDER_ICONS[/** @type {keyof typeof PLACEHOLDER_ICONS} */ (fallbackType)] ?? PhotoIcon
+  );
 </script>
 
 {#if exhausted}

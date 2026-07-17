@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * BadgeThumb fallback tests
  *
