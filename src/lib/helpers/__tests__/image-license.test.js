@@ -38,7 +38,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
 });
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: () => ['wss://relay.example', 'wss://relay.other']
+  getAllLookupRelays: () => ['wss://relay.example', 'wss://relay.other'],
+  // loaders/base.js reads this via an import-time getter since cd1a6a25
+  getEventLoaderLookupRelays: () => []
 }));
 
 const { findExistingLicense } = await import('../image-license.js');

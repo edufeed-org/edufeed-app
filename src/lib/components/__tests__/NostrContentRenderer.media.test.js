@@ -72,9 +72,11 @@ describe('single image', () => {
     expect(img?.className).toContain('max-h-[480px]');
     expect(img?.className).toContain('max-w-full');
     expect(img?.className).toContain('rounded-xl');
-    // the old letterbox treatment is gone
+    // the old letterbox treatment is gone: no fill-box WRAPPER around the img.
+    // (The img itself may carry a transient bg-base-200 skeleton tone while
+    // loading — added by ImageWithFallback — which never resolves in jsdom.)
     expect(img?.className).not.toContain('object-contain');
-    expect(container.querySelector('.bg-base-200')).toBeFalsy();
+    expect(container.querySelector('div.bg-base-200')).toBeFalsy();
     expect(container.querySelector('.aspect-video')).toBeFalsy();
   });
 

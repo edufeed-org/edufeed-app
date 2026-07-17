@@ -60,7 +60,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
         return { unsubscribe: () => {} };
       }
     })
-  }
+  },
+  // Imported through the shared profile-loading chain since cd1a6a25.
+  pool: {}
 }));
 
 vi.mock('$lib/loaders/community.js', () => ({

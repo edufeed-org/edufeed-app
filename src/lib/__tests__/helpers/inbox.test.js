@@ -8,7 +8,9 @@ vi.mock('$lib/helpers/event-factory.js', () => ({
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getCommunikeyRelays: () => []
+  getCommunikeyRelays: () => [],
+  // loaders/base.js reads this via an import-time getter since cd1a6a25
+  getEventLoaderLookupRelays: () => []
 }));
 
 import {
