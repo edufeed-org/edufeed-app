@@ -1,6 +1,7 @@
 <script>
   import FormConceptPicker from './FormConceptPicker.svelte';
   import CustomValueAffordance from './CustomValueAffordance.svelte';
+  import { getFieldComponent } from '$lib/config/form-field-types.js';
 
   /**
    * @type {{
@@ -54,7 +55,16 @@
             onchange={(v) => oncustomchange(field.id, v)}
           />
         {/if}
-      {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
+      {:else if getFieldComponent(field.type)}
+        {@const FieldComponent = getFieldComponent(field.type)}
+        <FieldComponent
+          {field}
+          value={values[field.id] ?? ''}
+          error={errors[field.id] ?? null}
+          {readonly}
+          onchange={(/** @type {any} */ v) => onchange(field.id, v)}
+        />
+      {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number'}
         <input
           id={field.id}
           type={field.type}
@@ -186,6 +196,18 @@
             </label>
           {/each}
         </div>
+      {:else}
+        <input
+          id={field.id}
+          type="text"
+          class="input-bordered input w-full"
+          class:input-error={errors[field.id]}
+          placeholder={field.options?.placeholder || ''}
+          disabled={readonly}
+          value={values[field.id] ?? ''}
+          oninput={(e) =>
+            onchange(field.id, /** @type {HTMLInputElement} */ (e.currentTarget).value)}
+        />
       {/if}
 
       {#if errors[field.id]}
