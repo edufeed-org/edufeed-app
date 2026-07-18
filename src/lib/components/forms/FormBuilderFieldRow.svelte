@@ -3,7 +3,7 @@
   import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
   import { useSchemeConcepts, useConceptSchemes } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-  import { generateFieldId } from '$lib/helpers/forms.js';
+  import { generateFieldId, generateOptionId } from '$lib/helpers/forms.js';
   import {
     schemeEventsToSkosConcepts,
     pickSchemeDescription,
@@ -23,7 +23,7 @@
    * @property {string} placeholder
    * @property {number | undefined} min
    * @property {number | undefined} max
-   * @property {string[]} selectOptions
+   * @property {import('$lib/helpers/forms.js').FormFieldOption[]} selectOptions
    * @property {boolean} multiple
    * @property {{ address: string, relay: string } | undefined} [vocab]
    * @property {string} [output]
@@ -313,9 +313,9 @@
           {m.form_builder_field_options_label()}
         </div>
         <div class="flex flex-wrap gap-2">
-          {#each field.selectOptions as opt, j (opt + '-' + j)}
+          {#each field.selectOptions as opt, j (opt.id)}
             <span class="badge gap-1 badge-outline">
-              {opt}
+              {opt.label}
               <button
                 class="text-xs opacity-50 hover:opacity-100"
                 onclick={() => field.selectOptions.splice(j, 1)}>×</button
@@ -329,7 +329,13 @@
               placeholder={m.form_builder_field_option_new()}
               onkeydown={(e) => {
                 if (e.key === 'Enter' && e.currentTarget.value) {
-                  field.selectOptions.push(e.currentTarget.value);
+                  field.selectOptions.push({
+                    id: generateOptionId(
+                      e.currentTarget.value,
+                      field.selectOptions.map((o) => o.id)
+                    ),
+                    label: e.currentTarget.value
+                  });
                   e.currentTarget.value = '';
                 }
               }}
@@ -342,7 +348,13 @@
                   e.currentTarget.previousElementSibling
                 );
                 if (input?.value) {
-                  field.selectOptions.push(input.value);
+                  field.selectOptions.push({
+                    id: generateOptionId(
+                      input.value,
+                      field.selectOptions.map((o) => o.id)
+                    ),
+                    label: input.value
+                  });
                   input.value = '';
                   input.focus();
                 }

@@ -30,6 +30,24 @@
 
   const parsed = $derived(parseFormTemplate(formEvent));
 
+  /**
+   * Map stored optionIds back to labels for display. Non-option fields and
+   * unknown ids pass through unchanged (covers legacy label-valued responses).
+   * @param {import('$lib/helpers/forms.js').FormField} field
+   * @param {string | undefined} raw
+   */
+  function displayValue(field, raw) {
+    if (!raw) return raw;
+    /** @type {import('$lib/helpers/forms.js').FormFieldOption[] | undefined} */
+    const opts = field.options?.options;
+    if (!opts?.length) return raw;
+    const byId = new Map(opts.map((o) => [o.id, o.label]));
+    return raw
+      .split(';')
+      .map((v) => byId.get(v) ?? v)
+      .join(', ');
+  }
+
   /** @type {import('nostr-tools').NostrEvent[]} */
   let responses = $state.raw([]);
   let isLoading = $state(true);
@@ -346,7 +364,7 @@
               {#each parsed.fields as field (field.id)}
                 <div>
                   <div class="text-xs text-base-content/50">{field.label}</div>
-                  <div>{values[field.id] || '\u2014'}</div>
+                  <div>{displayValue(field, values[field.id]) || '\u2014'}</div>
                 </div>
               {/each}
               <!-- Show unknown fields (from older form versions) -->

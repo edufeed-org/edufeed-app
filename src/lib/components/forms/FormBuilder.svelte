@@ -57,7 +57,7 @@
    * @property {string} placeholder
    * @property {number | undefined} min
    * @property {number | undefined} max
-   * @property {string[]} selectOptions
+   * @property {import('$lib/helpers/forms.js').FormFieldOption[]} selectOptions
    * @property {boolean} multiple
    * @property {{ address: string, relay: string } | undefined} [vocab]
    * @property {string} [output]

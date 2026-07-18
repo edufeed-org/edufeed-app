@@ -467,7 +467,10 @@ describe('FormBuilderFieldRow source switch (manual ↔ vocab)', () => {
     /** @type {any} */
     let latest;
     const initialField = makeField();
-    initialField.selectOptions = ['Ja', 'Nein']; // pre-seeded manual mode
+    initialField.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ]; // pre-seeded manual mode
     const { container } = render(FormBuilderFieldRowTestWrapper, {
       props: {
         initialField,

@@ -13,6 +13,7 @@ export {
 import { FORM_TEMPLATE_KIND, FORM_RESPONSE_KIND, buildFormTemplateTags } from './forms/format.js';
 
 /** @typedef {import('./forms/format.js').FormField} FormField */
+/** @typedef {import('./forms/format.js').FormFieldOption} FormFieldOption */
 
 /**
  * Find kind 30000 events that link to a specific form via ['form', formAddress] tag.
