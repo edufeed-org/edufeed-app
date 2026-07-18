@@ -167,8 +167,7 @@
     {/if}
   {:else if submitted}
     <div class="mb-4 alert alert-success">
-      {formEvent?.tags.find((t) => t[0] === 'confirmation_message')?.[1] ||
-        m.forms_submit_success()}
+      {parsedTemplate?.confirmationMessage || m.forms_submit_success()}
     </div>
     {#if returnTo}
       <a href={returnTo} class="btn btn-primary">{m.forms_back_to_community()}</a>
