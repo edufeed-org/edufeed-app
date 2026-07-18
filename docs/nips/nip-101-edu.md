@@ -96,13 +96,13 @@ its `options` array (the option list above) stripped out, plus:
 
 The `settings` tag's JSON value carries template-level configuration:
 
-| key                   | type          | meaning                                              |
-| --------------------- | ------------- | ----------------------------------------------------- |
-| `description`         | string        | template description                                  |
-| `publicForm`           | boolean       | `true` if responses are submitted in cleartext        |
-| `confirmationMessage` | string        | shown to the responder after submit                   |
-| `autoResponse`        | boolean       | reserved for auto-acknowledgement behavior            |
-| `sections`            | `FormSection[]` | see [Sections](#sections)                           |
+| key                   | type            | meaning                                        |
+| --------------------- | --------------- | ---------------------------------------------- |
+| `description`         | string          | template description                           |
+| `publicForm`          | boolean         | `true` if responses are submitted in cleartext |
+| `confirmationMessage` | string          | shown to the responder after submit            |
+| `autoResponse`        | boolean         | reserved for auto-acknowledgement behavior     |
+| `sections`            | `FormSection[]` | see [Sections](#sections)                      |
 
 Keys are omitted from the JSON object when empty/false — the parser treats
 a missing key the same as its falsy default.
@@ -171,14 +171,18 @@ kind 30142 AMB resource (`buildAMBResourceTags` /
 `src/lib/helpers/form-to-amb.js`):
 
 - **`amb:<property>`** — the answer is emitted under the named top-level
-  AMB/DC-derived tag key (e.g. `amb:name`, `amb:description`,
-  `amb:learningResourceType`).
+  AMB/DC-derived property. The `amb:` prefix is a `field-output` namespace
+  marker only and is **stripped before emission**: the tag key on the
+  kind 30142 event is the bare `<property>` (e.g. `field-output` value
+  `amb:name` → tag key `name`; `amb:learningResourceType` → tag key
+  `learningResourceType`).
 - **`ext`** — the answer is emitted as a namespaced extension tag scoped to
   this specific form, so unrelated forms/apps never collide on the same
   tag key: `ext:<formCoord>:<fieldId>` where `formCoord` is
   `30168:<formAuthorPubkey>:<formDTag>`.
 - When a field has **no** `field-output` tag, it defaults to `amb:<fieldId>`
-  (the field's own id used as the AMB property name).
+  (the field's own id used as the AMB property name — so the emitted tag
+  key is the bare field id).
 
 **Concept-valued fields** (bound via `field-vocab`) emit a `:id`/
 `:prefLabel:<lang>`/`:type` tag triad per selected concept, plus an `a` tag
@@ -195,12 +199,14 @@ where `keyBase` is `<property>` for `amb:` output or `ext:<formCoord>:<fieldId>`
 for `ext` output, and `role` on the `a` tag mirrors that same key
 (`<property>` or `ext:<fieldId>`).
 
-**Scalar fields** are emitted as one flat tag per value under `keyBase`.
+**Scalar fields** (everything without a `field-vocab` binding — vocab
+fields always take the concept branch above and never reach scalar
+emission) are emitted as one flat tag per value under `keyBase`.
 Option-field values (radio/select) are resolved from the wire's optionId
 back to the option's **label** before emission — the AMB resource carries
 human-readable labels, never internal optionIds. Multi-value answers (a
-`";"`-joined optionId string, or a real array for `text-array`/vocab
-fields) are split/expanded into one tag per value.
+`";"`-joined optionId string, or a real array for `text-array` fields)
+are split/expanded into one tag per value.
 
 The resource carries an informative back-reference to the form that
 produced it (`a` tag, role `form`, MAY per NIP-101 base — always emitted
@@ -229,11 +235,11 @@ via `field-vocab` to a HCRT scheme, and answer concept
   "kind": 30142,
   "tags": [
     ["d", "9c1e2a..."],
-    ["amb:learningResourceType:id", "https://w3id.org/kim/hcrt/worksheet"],
-    ["amb:learningResourceType:prefLabel:de", "Arbeitsblatt"],
-    ["amb:learningResourceType:prefLabel:en", "Worksheet"],
-    ["amb:learningResourceType:type", "Concept"],
-    ["a", "39738:2b3c...:hcrt-worksheet", "wss://amb.edufeed.org", "amb:learningResourceType"],
+    ["learningResourceType:id", "https://w3id.org/kim/hcrt/worksheet"],
+    ["learningResourceType:prefLabel:de", "Arbeitsblatt"],
+    ["learningResourceType:prefLabel:en", "Worksheet"],
+    ["learningResourceType:type", "Concept"],
+    ["a", "39738:2b3c...:hcrt-worksheet", "wss://amb.edufeed.org", "learningResourceType"],
     ["ext:30168:3f770d65...abcd:workshop-feedback:comments", "Really enjoyed the session"],
     ["a", "30168:3f770d65...abcd:workshop-feedback", "wss://relay.edufeed.org", "form"]
   ],
