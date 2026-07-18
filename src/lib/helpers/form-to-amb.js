@@ -129,7 +129,16 @@ export function parseAMBResourceForForm(event, form) {
       // Scalar: collect flat tag values
       const vals = event.tags.filter((t) => t[0] === keyBase && t[1]).map((t) => t[1]);
       if (vals.length === 0) continue;
-      values[field.id] = vals.length === 1 ? vals[0] : vals;
+      const optionList = /** @type {import('./forms/format.js').FormFieldOption[] | undefined} */ (
+        field.options?.options
+      );
+      if (optionList?.length) {
+        // emission writes labels — map back to optionIds (';'-joined) for the renderer
+        const byLabel = new Map(optionList.map((o) => [o.label, o.id]));
+        values[field.id] = vals.map((v) => byLabel.get(v) ?? v).join(';');
+      } else {
+        values[field.id] = vals.length === 1 ? vals[0] : vals;
+      }
     }
   }
 

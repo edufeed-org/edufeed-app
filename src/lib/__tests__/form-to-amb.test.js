@@ -222,4 +222,43 @@ describe('buildAMBResourceTags', () => {
     expect(tags).toContainEqual(['educationalLevel', 'Sekundarstufe']);
     expect(tags.some((t) => t[1] === 'primary')).toBe(false);
   });
+
+  it('round-trips scalar option fields: emitted labels parse back to optionIds', () => {
+    const form = {
+      pubkey: 'pk',
+      dTag: 'f',
+      fields: [
+        {
+          id: 'level',
+          type: 'select',
+          label: 'Level',
+          output: 'amb:educationalLevel',
+          options: {
+            multiple: true,
+            options: [
+              { id: 'primary', label: 'Primarstufe' },
+              { id: 'secondary', label: 'Sekundarstufe' }
+            ]
+          }
+        }
+      ]
+    };
+    const tags = buildAMBResourceTags({
+      form,
+      formRelay: '',
+      values: { level: 'primary;secondary' },
+      selectedConcepts: {}
+    });
+    const event = {
+      id: 'evt',
+      pubkey: 'pk2',
+      kind: 30142,
+      created_at: 0,
+      sig: '',
+      content: '',
+      tags: [['d', 'x'], ...tags]
+    };
+    const { values } = parseAMBResourceForForm(event, form);
+    expect(values.level).toBe('primary;secondary');
+  });
 });
