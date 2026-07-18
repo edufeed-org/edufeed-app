@@ -179,10 +179,13 @@ function emitForTarget(out, propOrFieldId, field, raw, concepts, isExt, formCoor
     return;
   }
 
-  // scalar field — emit as single flat tag
-  const vals = Array.isArray(raw) ? raw : [raw];
+  // scalar field — emit as flat tag(s); option fields resolve ids → labels
+  /** @type {import('./forms/format.js').FormFieldOption[] | undefined} */
+  const optionList = field.options?.options;
+  const byId = optionList?.length ? new Map(optionList.map((o) => [o.id, o.label])) : null;
+  const vals = Array.isArray(raw) ? raw : byId ? String(raw).split(';') : [raw];
   for (const v of vals) {
     if (v === undefined || v === null || v === '') continue;
-    out.push([keyBase, String(v)]);
+    out.push([keyBase, byId ? (byId.get(String(v)) ?? String(v)) : String(v)]);
   }
 }

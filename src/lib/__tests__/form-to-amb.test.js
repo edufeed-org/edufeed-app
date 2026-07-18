@@ -191,4 +191,35 @@ describe('buildAMBResourceTags', () => {
     expect(tags.some((t) => t[0] === 'ext:30168:edupub:amb-basic:klassenstufe')).toBe(false);
     expect(tags).toContainEqual(['name', 'Only name']);
   });
+
+  it('maps optionIds back to labels for scalar option fields', () => {
+    const form = {
+      pubkey: 'pk',
+      dTag: 'f',
+      fields: [
+        {
+          id: 'level',
+          type: 'select',
+          label: 'Level',
+          output: 'amb:educationalLevel',
+          options: {
+            multiple: true,
+            options: [
+              { id: 'primary', label: 'Primarstufe' },
+              { id: 'secondary', label: 'Sekundarstufe' }
+            ]
+          }
+        }
+      ]
+    };
+    const tags = buildAMBResourceTags({
+      form,
+      formRelay: '',
+      values: { level: 'primary;secondary' },
+      selectedConcepts: {}
+    });
+    expect(tags).toContainEqual(['educationalLevel', 'Primarstufe']);
+    expect(tags).toContainEqual(['educationalLevel', 'Sekundarstufe']);
+    expect(tags.some((t) => t[1] === 'primary')).toBe(false);
+  });
 });
