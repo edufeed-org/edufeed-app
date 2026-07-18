@@ -25,79 +25,18 @@ import { hexToBytes } from 'nostr-tools/utils';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { nip19 } from 'nostr-tools';
 import { RelayPool } from 'applesauce-relay';
-import {
-  FORM_TEMPLATE_KIND,
-  buildFormTemplateTags
-} from '../src/lib/helpers/forms/format.js';
+// Pure tag building lives in scripts/lib so it's unit-testable without this
+// module's side effects (dotenv credential loading, relay pool).
+import { req, buildFormTemplate } from './lib/publish-forms-build.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FORMS_DATA_PATH = resolve(__dirname, 'data/edufeed-forms.json');
-
-function req(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env: ${name}`);
-  return v;
-}
 
 function sign(template, skHex) {
   return finalizeEvent(
     { ...template, created_at: Math.floor(Date.now() / 1000) },
     hexToBytes(skHex)
   );
-}
-
-function vocabEnvName(d) {
-  return `SCHEME_NADDR_${d.toUpperCase().replace(/-/g, '_')}`;
-}
-
-function naddrToCoord(naddr) {
-  const { type, data } = nip19.decode(naddr);
-  if (type !== 'naddr') throw new Error('expected naddr');
-  return {
-    address: `${data.kind}:${data.pubkey}:${data.identifier}`,
-    relay: (data.relays || [])[0] || ''
-  };
-}
-
-/**
- * Map a JSON field definition (flat required/min/max/… keys) to the FormField
- * shape expected by buildFormTemplateTags (constraints nested under options).
- */
-function toFormField(field, vocabCoord) {
-  const options = {};
-  if (field.required) options.required = true;
-  if (field.multiple) options.multiple = true;
-  if (field.min !== undefined) options.min = field.min;
-  if (field.max !== undefined) options.max = field.max;
-  if (field.pattern) options.pattern = field.pattern;
-  if (field.placeholder) options.placeholder = field.placeholder;
-  const formField = {
-    id: field.id,
-    type: field.type,
-    label: field.label,
-    defaultValue: field.defaultValue || '',
-    options
-  };
-  if (vocabCoord) formField.vocab = vocabCoord;
-  if (field.output) formField.output = field.output;
-  return formField;
-}
-
-/**
- * Build a kind-30168 form template from a form definition, resolving each
- * field's vocabRef via env. Tag encoding (NIP-101 settings tag, field tags,
- * field-vocab/field-output extensions) comes from the shared app builder.
- */
-export function buildFormTemplate(form) {
-  const fields = form.fields.map((field) => {
-    const vocabCoord = field.vocabRef ? naddrToCoord(req(vocabEnvName(field.vocabRef))) : undefined;
-    return toFormField(field, vocabCoord);
-  });
-  const tags = buildFormTemplateTags(form.d, fields, {
-    name: form.name,
-    description: form.description
-  });
-  return { kind: FORM_TEMPLATE_KIND, tags, content: '' };
 }
 
 async function publishAll(pool, relays, events) {
