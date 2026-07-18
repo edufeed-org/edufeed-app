@@ -240,8 +240,8 @@ describe('forms — response tags', () => {
   it('builds response tags from field values', () => {
     const values = { 'full-name': 'Bob', reason: 'I want in' };
     const tags = buildResponseTags(values);
-    expect(tags).toContainEqual(['response', 'full-name', 'Bob']);
-    expect(tags).toContainEqual(['response', 'reason', 'I want in']);
+    expect(tags).toContainEqual(['response', 'full-name', 'Bob', '{}']);
+    expect(tags).toContainEqual(['response', 'reason', 'I want in', '{}']);
   });
 
   it('parses response tags back to values', () => {

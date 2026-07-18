@@ -20,7 +20,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { formResponseLoader } from '$lib/loaders/community.js';
-  import { parseResponseTags, parseFormTemplate } from '$lib/helpers/forms.js';
+  import { parseResponseTags, parseFormTemplate, nip44DecryptWith } from '$lib/helpers/forms.js';
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import { SendWrappedMessage } from 'applesauce-actions/actions';
@@ -193,7 +193,8 @@
     let values;
     try {
       if (isEncrypted) {
-        const plaintext = await manager.active.signer.nip44.decrypt(
+        const plaintext = await nip44DecryptWith(
+          manager.active.signer,
           response.pubkey,
           response.content
         );

@@ -6,7 +6,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-  import { parseResponseTags, parseFormTemplate } from '$lib/helpers/forms.js';
+  import { parseResponseTags, parseFormTemplate, nip44DecryptWith } from '$lib/helpers/forms.js';
   import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
@@ -267,7 +267,8 @@
     }
 
     try {
-      const plaintext = await manager.active.signer.nip44.decrypt(
+      const plaintext = await nip44DecryptWith(
+        manager.active.signer,
         response.pubkey,
         response.content
       );

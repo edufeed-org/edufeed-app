@@ -10,6 +10,7 @@ export {
   generateFieldId,
   generateOptionId
 } from './forms/format.js';
+export { nip44EncryptWith, nip44DecryptWith, signerHasNip44 } from './forms/crypto.js';
 import { FORM_TEMPLATE_KIND, FORM_RESPONSE_KIND, buildFormTemplateTags } from './forms/format.js';
 
 /** @typedef {import('./forms/format.js').FormField} FormField */
@@ -114,7 +115,7 @@ export function validateField(field, value) {
  * @returns {string[][]}
  */
 export function buildResponseTags(values) {
-  return Object.entries(values).map(([id, value]) => ['response', id, value]);
+  return Object.entries(values).map(([id, value]) => ['response', id, String(value ?? ''), '{}']);
 }
 
 /**

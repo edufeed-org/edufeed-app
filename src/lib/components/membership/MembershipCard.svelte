@@ -3,7 +3,12 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { buildUserResponseFilter, parseResponseTags } from '$lib/helpers/forms.js';
+  import {
+    buildUserResponseFilter,
+    parseResponseTags,
+    nip44DecryptWith,
+    signerHasNip44
+  } from '$lib/helpers/forms.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import { timedPool } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -94,8 +99,8 @@
         const isEncrypted = response.tags.some((/** @type {string[]} */ t) => t[0] === 'encrypted');
         let tags;
         if (isEncrypted) {
-          if (!adminPubkey || !active.signer?.nip44?.decrypt) return;
-          const plaintext = await active.signer.nip44.decrypt(adminPubkey, response.content);
+          if (!adminPubkey || !signerHasNip44(active.signer)) return;
+          const plaintext = await nip44DecryptWith(active.signer, adminPubkey, response.content);
           tags = JSON.parse(plaintext);
         } else {
           tags = response.tags.filter((/** @type {string[]} */ t) => t[0] === 'response');

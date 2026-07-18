@@ -10,9 +10,11 @@
   import {
     buildResponseTags,
     decodeFormNaddr,
-    buildUserResponseFilter
+    buildUserResponseFilter,
+    parseFormTemplate,
+    nip44EncryptWith,
+    signerHasNip44
   } from '$lib/helpers/forms.js';
-  import { hasNip44 } from '$lib/helpers/nip44.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -32,6 +34,7 @@
 
   let returnTo = $derived($page.url.searchParams.get('returnTo'));
   let communityId = $derived($page.url.searchParams.get('communityId'));
+  let parsedTemplate = $derived(formEvent ? parseFormTemplate(formEvent) : null);
 
   // Decode naddr and load form template
   $effect(() => {
@@ -101,7 +104,7 @@
       const formAddress = `30168:${creatorPubkey}:${identifier}`;
 
       const responseTags = buildResponseTags(values);
-      const isPublic = formEvent.tags.some((t) => t[0] === 'public');
+      const isPublic = !!parsedTemplate?.isPublic;
 
       /** @type {string[][]} */
       const tags = [
@@ -116,7 +119,7 @@
       } else {
         // Encrypt response tags with NIP-44
         const plaintext = JSON.stringify(responseTags);
-        content = await manager.active.signer.nip44.encrypt(creatorPubkey, plaintext);
+        content = await nip44EncryptWith(manager.active.signer, creatorPubkey, plaintext);
         tags.push(['encrypted']);
       }
 
@@ -151,7 +154,7 @@
     <div class="alert alert-error">{error}</div>
   {:else if !manager.active}
     <div class="alert alert-warning">{m.forms_submit_login_required()}</div>
-  {:else if formEvent && !formEvent.tags.some((t) => t[0] === 'public') && !hasNip44(manager.active?.signer)}
+  {:else if formEvent && !parsedTemplate?.isPublic && !signerHasNip44(manager.active?.signer)}
     <div class="alert alert-warning">
       {m.forms_submit_no_encryption()}
     </div>
