@@ -32,6 +32,15 @@ describe('evaluateDisplayIf', () => {
     expect(evaluateDisplayIf(d, { q1: 'a;c' })).toBe(false);
   });
 
+  it('contains does not substring-match across joined optionIds', () => {
+    const d = /** @type {{ rules: any[] }} */ ({
+      rules: [{ questionId: 'q1', operator: 'contains', value: 'sci' }]
+    });
+    expect(evaluateDisplayIf(d, { q1: 'science;math' })).toBe(false); // no id 'sci' selected
+    expect(evaluateDisplayIf(d, { q1: 'sci;math' })).toBe(true);
+    expect(evaluateDisplayIf(d, { q1: 'my science essay' })).toBe(true); // free text keeps substring
+  });
+
   it('numeric operators coerce', () => {
     const d = /** @type {{ rules: any[] }} */ ({
       rules: [{ questionId: 'age', operator: 'greaterThanEqual', value: '18' }]

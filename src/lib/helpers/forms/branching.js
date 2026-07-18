@@ -28,8 +28,13 @@ function evaluateLeaf(rule, values) {
       return answer === expected;
     case 'notEquals':
       return answer !== expected;
-    case 'contains':
-      return answer.split(';').includes(expected) || answer.includes(expected);
+    case 'contains': {
+      // multi-select answers are ';'-joined optionIds → exact membership;
+      // plain text answers keep substring semantics
+      const parts = answer.split(';');
+      if (parts.length > 1) return parts.includes(expected);
+      return answer.includes(expected);
+    }
     case 'startsWith':
       return answer.startsWith(expected);
     case 'endsWith':
