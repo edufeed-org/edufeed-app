@@ -80,6 +80,20 @@ describe('FormRenderer sections mode', () => {
     expect(screen.getByText(/required/i)).toBeTruthy();
   });
 
+  it('readonly renders all sections flat with titles and no navigation', () => {
+    render(FormRenderer, { formEvent: templateEvent(), readonly: true });
+    // fields from ALL sections visible at once
+    expect(screen.getByLabelText('Schulfach')).toBeTruthy();
+    expect(screen.getByLabelText('Zielgruppe')).toBeTruthy();
+    // section titles render (h3 selector: 'Konfi' is also a radio option label)
+    expect(screen.getByText('Start', { selector: 'h3' })).toBeTruthy();
+    expect(screen.getByText('Konfi', { selector: 'h3' })).toBeTruthy();
+    // no wizard chrome or submit
+    expect(screen.queryByRole('button', { name: /weiter|next/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /zurück|back/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /submit/i })).toBeNull();
+  });
+
   it('submits from the last reached section and Back returns along history', async () => {
     const onsubmit = vi.fn();
     render(FormRenderer, { formEvent: templateEvent(), onsubmit });

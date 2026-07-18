@@ -76,12 +76,18 @@
   const currentSection = $derived(sections.find((s) => s.id === currentSectionId));
   const currentIndex = $derived(sections.findIndex((s) => s.id === currentSectionId));
 
+  /** displayIf-filtered fields belonging to one section. */
+  function sectionFields(
+    /** @type {import('$lib/helpers/forms/format.js').FormSection} */ section
+  ) {
+    const inSection = new Set(section.questionIds || []);
+    return visibleFields(form?.fields || [], values).filter((f) => inSection.has(f.id));
+  }
+
   /** Fields of the current section, displayIf-filtered (all fields when no sections). */
   const currentFields = $derived.by(() => {
-    const all = visibleFields(form?.fields || [], values);
-    if (!hasSections || !currentSection) return all;
-    const inSection = new Set(currentSection.questionIds || []);
-    return all.filter((f) => inSection.has(f.id));
+    if (!hasSections || !currentSection) return visibleFields(form?.fields || [], values);
+    return sectionFields(currentSection);
   });
 
   const nextSectionId = $derived(
@@ -150,25 +156,44 @@
     {/if}
   </div>
 
-  {#if hasSections && currentSection}
-    <div class="flex items-center justify-between">
-      <h3 class="font-semibold">{currentSection.title}</h3>
-      <span class="text-sm text-base-content/50"
-        >{m.form_section_progress({ current: currentIndex + 1, total: sections.length })}</span
-      >
-    </div>
-    {#if currentSection.description}
-      <p class="text-sm text-base-content/60">{currentSection.description}</p>
+  {#if readonly && hasSections}
+    <!-- readonly preview: all sections flat, no wizard chrome -->
+    {#each sections as section (section.id)}
+      {#if section.title}
+        <h3 class="font-semibold">{section.title}</h3>
+      {/if}
+      {#if section.description}
+        <p class="text-sm text-base-content/60">{section.description}</p>
+      {/if}
+      <FieldsRenderer
+        fields={sectionFields(section)}
+        {values}
+        {errors}
+        {readonly}
+        onchange={handleFieldChange}
+      />
+    {/each}
+  {:else}
+    {#if hasSections && currentSection}
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold">{currentSection.title}</h3>
+        <span class="text-sm text-base-content/50"
+          >{m.form_section_progress({ current: currentIndex + 1, total: sections.length })}</span
+        >
+      </div>
+      {#if currentSection.description}
+        <p class="text-sm text-base-content/60">{currentSection.description}</p>
+      {/if}
     {/if}
-  {/if}
 
-  <FieldsRenderer
-    fields={currentFields}
-    {values}
-    {errors}
-    {readonly}
-    onchange={handleFieldChange}
-  />
+    <FieldsRenderer
+      fields={currentFields}
+      {values}
+      {errors}
+      {readonly}
+      onchange={handleFieldChange}
+    />
+  {/if}
 
   {#if !readonly}
     {#if hasSections && !isLastSection}
