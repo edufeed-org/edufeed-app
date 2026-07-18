@@ -54,6 +54,19 @@ describe('forms — getEdufeedMembershipForm', () => {
       ['affiliation', 'full_name', 'motivation', 'role', 'wished_handle'].sort()
     );
   });
+
+  it('emits the NIP-101 encoding (settings tag, field settings with renderElement)', () => {
+    const { dTag, fields } = getEdufeedMembershipForm();
+    const tags = buildFormTemplateTags(dTag, fields, { name: 'x' });
+    expect(tags.some((t) => t[0] === 'settings')).toBe(true);
+    const motivation = /** @type {string[]} */ (
+      tags.find((t) => t[0] === 'field' && t[1] === 'motivation')
+    );
+    expect(motivation[2]).toBe('text');
+    expect(JSON.parse(motivation[4])).toEqual([]);
+    expect(JSON.parse(motivation[5]).renderElement).toBe('textarea');
+    expect(JSON.parse(motivation[5]).required).toBe(true);
+  });
 });
 
 describe('forms — createEdufeedMembershipForm', () => {
