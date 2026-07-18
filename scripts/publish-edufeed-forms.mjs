@@ -25,6 +25,10 @@ import { hexToBytes } from 'nostr-tools/utils';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { nip19 } from 'nostr-tools';
 import { RelayPool } from 'applesauce-relay';
+import {
+  FORM_TEMPLATE_KIND,
+  buildFormTemplateTags
+} from '../src/lib/helpers/forms/format.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FORMS_DATA_PATH = resolve(__dirname, 'data/edufeed-forms.json');
@@ -56,9 +60,10 @@ function naddrToCoord(naddr) {
 }
 
 /**
- * Emit tags for a single form field, including optional vocab + output tags.
+ * Map a JSON field definition (flat required/min/max/… keys) to the FormField
+ * shape expected by buildFormTemplateTags (constraints nested under options).
  */
-function emitFieldTags(field, vocabCoord) {
+function toFormField(field, vocabCoord) {
   const options = {};
   if (field.required) options.required = true;
   if (field.multiple) options.multiple = true;
@@ -66,32 +71,33 @@ function emitFieldTags(field, vocabCoord) {
   if (field.max !== undefined) options.max = field.max;
   if (field.pattern) options.pattern = field.pattern;
   if (field.placeholder) options.placeholder = field.placeholder;
-  const tags = [
-    ['field', field.id, field.type, field.label, field.defaultValue || '', JSON.stringify(options)]
-  ];
-  if (vocabCoord) tags.push(['field-vocab', field.id, 'a', vocabCoord.address, vocabCoord.relay]);
-  if (field.output) tags.push(['field-output', field.id, field.output]);
-  return tags;
+  const formField = {
+    id: field.id,
+    type: field.type,
+    label: field.label,
+    defaultValue: field.defaultValue || '',
+    options
+  };
+  if (vocabCoord) formField.vocab = vocabCoord;
+  if (field.output) formField.output = field.output;
+  return formField;
 }
 
 /**
- * Build a kind-30168 form template from a form definition, resolving
- * each field's vocabRef via env.
+ * Build a kind-30168 form template from a form definition, resolving each
+ * field's vocabRef via env. Tag encoding (NIP-101 settings tag, field tags,
+ * field-vocab/field-output extensions) comes from the shared app builder.
  */
-function buildFormTemplate(form) {
-  /** @type {string[][]} */
-  const tags = [
-    ['d', form.d],
-    ['name', form.name]
-  ];
-  if (form.description) tags.push(['description', form.description]);
-
-  for (const field of form.fields) {
+export function buildFormTemplate(form) {
+  const fields = form.fields.map((field) => {
     const vocabCoord = field.vocabRef ? naddrToCoord(req(vocabEnvName(field.vocabRef))) : undefined;
-    for (const t of emitFieldTags(field, vocabCoord)) tags.push(t);
-  }
-
-  return { kind: 30168, tags, content: '' };
+    return toFormField(field, vocabCoord);
+  });
+  const tags = buildFormTemplateTags(form.d, fields, {
+    name: form.name,
+    description: form.description
+  });
+  return { kind: FORM_TEMPLATE_KIND, tags, content: '' };
 }
 
 async function publishAll(pool, relays, events) {
@@ -140,7 +146,11 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only publish when executed directly (allows importing buildFormTemplate
+// for verification without touching live relays).
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

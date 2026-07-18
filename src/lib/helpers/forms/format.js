@@ -1,4 +1,6 @@
-import { unique } from '$lib/helpers/unique.js';
+// Relative import (not $lib) so this module stays importable from plain
+// node scripts (scripts/publish-edufeed-forms.mjs) outside the Vite alias.
+import { unique } from '../unique.js';
 
 /** Kind for form template events */
 export const FORM_TEMPLATE_KIND = 30168;
