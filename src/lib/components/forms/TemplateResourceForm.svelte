@@ -2,7 +2,11 @@
   import { goto } from '$app/navigation';
   import { nip19 } from 'nostr-tools';
   import { decodeFormNaddr, parseFormTemplate } from '$lib/helpers/forms.js';
-  import { buildAMBResourceTags, parseAMBResourceForForm } from '$lib/helpers/form-to-amb.js';
+  import {
+    buildAMBResourceTags,
+    parseAMBResourceForForm,
+    resolveResourceDTag
+  } from '$lib/helpers/form-to-amb.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -132,11 +136,6 @@
         }
       }
 
-      // Edit mode reuses the resource's d-tag so the publish is an addressable replacement
-      const dTag =
-        isEditMode && resourceEvent
-          ? resourceEvent.tags.find((t) => t[0] === 'd')?.[1] || crypto.randomUUID()
-          : crypto.randomUUID();
       const formRelay = (decoded.relays && decoded.relays[0]) || '';
       const builtTags = buildAMBResourceTags({
         form: { pubkey: decoded.pubkey, dTag: decoded.identifier, fields: parsed.fields },
@@ -144,7 +143,20 @@
         values: rawValues,
         selectedConcepts
       });
-      // buildAMBResourceTags never emits a 'd' tag — the caller owns the identifier.
+      // buildAMBResourceTags MAY emit a 'd' tag itself (e.g. a url field mapped
+      // to amb:id via dtagEmitter). Edit mode keeps the resource's existing
+      // d-tag for addressable stability; create mode honors the emitted d
+      // (the user's typed identifier) and only falls back to a UUID when none
+      // was provided — see resolveResourceDTag for why this must not clobber it.
+      const emittedD = builtTags.find((t) => t[0] === 'd')?.[1];
+      const dTag = resolveResourceDTag({
+        isEditMode,
+        existingDTag:
+          isEditMode && resourceEvent
+            ? resourceEvent.tags.find((t) => t[0] === 'd')?.[1]
+            : undefined,
+        emittedD
+      });
       const tags = [['d', dTag], ...builtTags.filter((t) => t[0] !== 'd')];
       // The description field's value (not a tag) becomes the event content.
       const descFieldId = parsed.fields.find((f) => f.output === 'amb:description')?.id;

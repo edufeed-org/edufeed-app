@@ -72,6 +72,36 @@ export function parseAMBResourceForForm(event, form) {
 }
 
 /**
+ * Resolve the identifier (`d` tag) for a kind-30142 resource being published
+ * from a template-form submission. `buildAMBResourceTags` may emit a `['d', …]`
+ * tag itself (e.g. an `amb:id`-mapped `url` field via `dtagEmitter`) — the
+ * caller must NOT blindly overwrite it with a fresh UUID, or the user-entered
+ * identifier is silently dropped (lands on no tag at all).
+ *
+ * - Edit mode: keep the resource's existing `d` tag for addressable
+ *   stability, ignoring any emitted `d` (the url field isn't the identity
+ *   source once a resource already exists).
+ * - Create mode: use the emitted `d` tag when the form produced one, else
+ *   generate a fresh identifier.
+ *
+ * @param {Object} args
+ * @param {boolean} args.isEditMode
+ * @param {string} [args.existingDTag] - resource's current `d` tag (edit mode)
+ * @param {string} [args.emittedD] - `d` tag value emitted by buildAMBResourceTags (create mode)
+ * @param {() => string} [args.generateId] - defaults to crypto.randomUUID
+ * @returns {string}
+ */
+export function resolveResourceDTag({
+  isEditMode,
+  existingDTag,
+  emittedD,
+  generateId = () => crypto.randomUUID()
+}) {
+  if (isEditMode) return existingDTag || generateId();
+  return emittedD || generateId();
+}
+
+/**
  * Extract the informative form back-reference from a resource event.
  *
  * @param {import('nostr-tools').NostrEvent} event

@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   buildAMBResourceTags,
   parseAMBResourceForForm,
-  getFormReferenceFromResource
+  getFormReferenceFromResource,
+  resolveResourceDTag
 } from '../helpers/form-to-amb.js';
 
 describe('buildAMBResourceTags', () => {
@@ -262,5 +263,63 @@ describe('buildAMBResourceTags', () => {
     };
     const { values } = parseAMBResourceForForm(event, form);
     expect(values.level).toBe('primary;secondary');
+  });
+
+  it('emits a d tag from a url field mapped to amb:id (dtagEmitter)', () => {
+    const form = {
+      pubkey: 'pk',
+      dTag: 'amb-basic',
+      fields: [{ id: 'url', type: 'url', label: 'URL', output: 'amb:id' }]
+    };
+    const tags = buildAMBResourceTags({
+      form,
+      formRelay: '',
+      values: { url: 'https://x/1' },
+      selectedConcepts: {}
+    });
+    expect(tags).toContainEqual(['d', 'https://x/1']);
+  });
+});
+
+describe('resolveResourceDTag', () => {
+  it('create mode: uses the emitted d tag (e.g. from an amb:id url field) when present', () => {
+    expect(
+      resolveResourceDTag({
+        isEditMode: false,
+        emittedD: 'https://x/1',
+        generateId: () => 'unused-uuid'
+      })
+    ).toBe('https://x/1');
+  });
+
+  it('create mode: falls back to a generated id when no d tag was emitted', () => {
+    expect(
+      resolveResourceDTag({
+        isEditMode: false,
+        emittedD: undefined,
+        generateId: () => 'fresh-uuid'
+      })
+    ).toBe('fresh-uuid');
+  });
+
+  it('edit mode: keeps the resource existing d tag, ignoring any emitted d (addressable stability)', () => {
+    expect(
+      resolveResourceDTag({
+        isEditMode: true,
+        existingDTag: 'existing-resource-id',
+        emittedD: 'https://x/1',
+        generateId: () => 'unused-uuid'
+      })
+    ).toBe('existing-resource-id');
+  });
+
+  it('edit mode: falls back to a generated id when the resource somehow has no existing d tag', () => {
+    expect(
+      resolveResourceDTag({
+        isEditMode: true,
+        existingDTag: undefined,
+        generateId: () => 'fresh-uuid'
+      })
+    ).toBe('fresh-uuid');
   });
 });
