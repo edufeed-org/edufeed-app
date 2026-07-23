@@ -26,11 +26,11 @@
     needed. Accept for the latter case is effectively just a dismiss.
 
   Imports getConcordClient/useObservable DIRECTLY from their submodules (not
-  the $lib/concord barrel): this modal is statically imported by
-  PrivateChannelsView, part of the /c/[pubkey] page tree, so the barrel's
-  re-export of storage.js (a static `applesauce-core-concord` import) would
-  otherwise pull that dependency tree into the page's SSR chunk — see
-  index.js's header comment and community.svelte.js's identical rule.
+  the $lib/concord barrel) — the convention every Concord component follows
+  (see CLAUDE.md's Concord section and index.js's header comment): the barrel
+  is reserved for non-component/dynamic-import call sites, and deliberately
+  does not re-export storage.js (which statically imports
+  applesauce-core-concord) to stay SSR-clean.
 -->
 <script>
   import { getConcordClient } from '$lib/concord/client.svelte.js';

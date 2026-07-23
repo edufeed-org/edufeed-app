@@ -276,10 +276,14 @@
 
   // Start the Concord private-channels session lifecycle (no-op unless
   // CONCORD_ENABLED). Idempotent — safe even though $effect can re-run.
-  // Dynamic import (not a static top-of-file import): the $lib/concord
-  // barrel statically re-exports storage.js, which imports the
-  // applesauce-core-concord package at module scope — a static import
-  // here would pull that into the server bundle (see CLAUDE.md SSR note).
+  // Dynamic import of the $lib/concord barrel (this is the barrel's intended
+  // non-component call site — see index.js's header comment): the barrel
+  // itself is SSR-clean (it deliberately does not re-export storage.js), but
+  // client.svelte.js's own internal dynamic imports pull in
+  // applesauce-concord/applesauce-core-concord once initConcordService()
+  // actually runs, so this stays a dynamic import rather than a static
+  // top-of-file one to keep that whole dependency tree out of the server
+  // bundle regardless (see CLAUDE.md's Concord SSR note).
   $effect(() => {
     if (!browser) return;
     import('$lib/concord').then(({ initConcordService }) => {

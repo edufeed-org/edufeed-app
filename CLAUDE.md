@@ -409,14 +409,19 @@ lockstep and review diffs; run the package's own vitest suite as a canary:
 `cd $(mktemp -d) && npm pack applesauce-concord@concord` or test in the
 applesauce repo's concord branch).
 
-- All app access goes through `src/lib/concord/` (lint-enforced). EXCEPTION:
-  components rendered during SSR (e.g. ContentNavSidebar, BottomTabBar) must
-  import `shouldShowChannelsTab` and `useConcordCommunity` directly from
-  `src/lib/concord/community.svelte.js` instead of the barrel — the barrel
-  re-exports storage.js, which statically imports applesauce-core-concord
-  and would otherwise pull that dependency tree into server chunks;
-  community.svelte.js is SSR-clean because it only imports submodules.
-  Never import `applesauce-concord` or `applesauce-core-concord` elsewhere.
+- All app access goes through `src/lib/concord/` (lint-enforced): never
+  import `applesauce-concord` or `applesauce-core-concord` outside it.
+  Within that, the actual rule (not an exception): every component imports
+  Concord submodules DIRECTLY (e.g. `community.svelte.js`, `moderation.js`,
+  `bridge.svelte.js`) rather than through the `src/lib/concord/index.js`
+  barrel. The barrel serves non-component/dynamic-import call sites (e.g.
+  `src/routes/+layout.svelte`'s `import('$lib/concord')` that boots
+  `initConcordService`) and is the canonical export list for the directory.
+  `storage.js` is intentionally NOT re-exported from the barrel — it
+  statically imports `applesauce-core-concord`, and re-exporting it would
+  pull that dependency tree into every barrel consumer's chunk (including
+  server chunks); reach it via `client.svelte.js`'s internal dynamic
+  `import('./storage.js')` or a direct test import instead.
 - One Concord community per Communikey community; pointer tag
   `["concord", <id>, <relay>]` on kind 10222. Kanäle = CORD-03 private channels.
 - Kind 1059 traffic goes ONLY to `CONCORD_RELAYS` (never outbox/category

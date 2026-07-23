@@ -1,23 +1,27 @@
-// Single entry point for all Concord functionality. Everything outside
-// src/lib/concord/ must import from here (enforced by no-restricted-imports)
-// so pre-1.0 package churn stays contained in this directory.
-// Exports grow as the wrapper modules land.
-// EXCEPTION: components rendered during SSR (e.g. ContentNavSidebar,
-// BottomTabBar) must import shouldShowChannelsTab/useConcordCommunity
-// directly from './community.svelte.js' instead of this barrel — the
-// barrel also re-exports storage.js, which statically imports
-// applesauce-core-concord/nostr-tools and would otherwise pull that
-// dependency tree into server chunks. community.svelte.js itself only
-// imports pointer.js/client.svelte.js/bridge.svelte.js, none of which have
-// top-level package imports, so the direct submodule import is SSR-clean.
+// Entry point for Concord functionality that isn't reached via a direct
+// submodule import (enforced by no-restricted-imports: everything outside
+// src/lib/concord/ must go through './' or a named submodule under it, never
+// `applesauce-concord`/`applesauce-core-concord` directly).
+//
+// THE ACTUAL RULE (final review — this comment used to describe an
+// "EXCEPTION" that was really the norm): every component in this codebase
+// imports Concord submodules DIRECTLY (e.g. `$lib/concord/community.svelte.js`,
+// `$lib/concord/bridge.svelte.js`, `$lib/concord/moderation.js`) rather than
+// through this barrel — none of them currently import from here at all. This
+// barrel exists for non-component / dynamic-import call sites (and as the
+// canonical list of what the concord/ directory offers). `storage.js` is
+// deliberately NOT re-exported here: it statically imports
+// applesauce-core-concord, and re-exporting it would make importing ANYTHING
+// from this barrel pull that dependency tree into server chunks. Every
+// consumer of storage.js already reaches it via a dynamic `import('./storage.js')`
+// (see client.svelte.js) or a direct test import — keep it that way; do not
+// add it back.
 export { parseConcordPointer, buildConcordPointerTag, withConcordPointer } from './pointer.js';
-export { concordDbName, createConcordStorage, createConcordStoreFactory } from './storage.js';
 export { deleteConcordDb } from './idb-database.js';
 export {
   initConcordService,
   getConcordState,
   getConcordClient,
-  signerHasNip44,
   wipeConcordData
 } from './client.svelte.js';
 export { useObservable } from './bridge.svelte.js';

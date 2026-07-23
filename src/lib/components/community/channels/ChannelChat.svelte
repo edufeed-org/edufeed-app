@@ -2,8 +2,10 @@
   import { onMount } from 'svelte';
   // Imports directly from the concord submodule (not the barrel) — same
   // convention as PrivateChannelsView.svelte: bridge.svelte.js has no
-  // top-level package imports, so this stays SSR-clean even though the
-  // c/[pubkey] community route disables SSR anyway (see c/+layout.js).
+  // top-level package imports, so this stays SSR-clean. The c/[pubkey]
+  // community route already disables SSR (see src/routes/c/+layout.js), so
+  // this buys defense-in-depth + consistency with the rest of channels/, not
+  // a load-bearing SSR requirement for this component specifically.
   import { useObservable } from '$lib/concord/bridge.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -68,12 +70,20 @@
   // track — an effect that only assigns from a non-reactive read trips
   // eslint's svelte/prefer-writable-derived, and a $derived can't also be
   // set imperatively from dismissKeyBar() below.
+  //
+  // Namespaced per pubkey (final review, MINOR): a shared 'concord:keybar-
+  // dismissed' key would leak across accounts on a shared browser profile —
+  // account B would silently inherit account A's dismissal (or vice versa).
+  // Undefined pubkey (no active user) skips the bar entirely rather than
+  // falling back to an unnamespaced key.
   let showKeyBar = $state(false);
   onMount(() => {
-    showKeyBar = !localStorage.getItem('concord:keybar-dismissed');
+    const pubkey = getActiveUser()?.pubkey;
+    showKeyBar = !!pubkey && !localStorage.getItem(`concord:keybar-dismissed:${pubkey}`);
   });
   function dismissKeyBar() {
-    localStorage.setItem('concord:keybar-dismissed', '1');
+    const pubkey = getActiveUser()?.pubkey;
+    if (pubkey) localStorage.setItem(`concord:keybar-dismissed:${pubkey}`, '1');
     showKeyBar = false;
   }
 

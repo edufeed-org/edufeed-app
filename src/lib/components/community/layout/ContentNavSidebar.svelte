@@ -92,9 +92,14 @@
         isMember: concord.membership === 'member'
       })
     ) {
-      // insert after 'chat' to sit next to the public channels
+      // Insert after 'chat' to sit next to the public channels — but a
+      // strict-content community may not have a chat tab at all
+      // (getCommunityTabs can omit it), in which case chatIndex is -1 and
+      // `chatIndex + 1` would insert at index 0, BEFORE Home. Insert before
+      // 'settings' (the last tab) instead so Home always stays first.
       const chatIndex = base.findIndex((t) => t.id === 'chat');
-      base.splice(chatIndex + 1, 0, {
+      const insertAt = chatIndex === -1 ? base.length - 1 : chatIndex + 1;
+      base.splice(insertAt, 0, {
         id: 'channels',
         label: m.concord_tab_label(),
         icon: LockIcon

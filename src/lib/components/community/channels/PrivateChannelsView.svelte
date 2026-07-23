@@ -1,9 +1,11 @@
 <script>
-  // Imports directly from the concord submodule (not the barrel):
-  // community.svelte.js has no top-level package imports, so this stays
-  // SSR-clean even though the c/[pubkey] community route renders server-side
-  // — see community.svelte.js's header comment and Task 7's report for the
-  // verified import-path decision. Signer capability comes reactively from
+  // Imports directly from the concord submodule (not the barrel) — the
+  // convention every Concord component follows (see CLAUDE.md's Concord
+  // section): community.svelte.js has no top-level package imports, so this
+  // stays SSR-clean. The c/[pubkey] community route is ssr=false anyway (see
+  // src/routes/c/+layout.js), so this is defense-in-depth + consistency with
+  // the rest of the components under channels/, not a load-bearing SSR
+  // requirement for THIS route. Signer capability comes reactively from
   // the hook (concord.signerHasNip44), NOT client.svelte.js's raw
   // signerHasNip44() helper — that one reads a plain module variable, so a
   // template call evaluates once at mount and misses a client that finishes

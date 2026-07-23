@@ -1,9 +1,9 @@
 <script>
-  // Imports founding.js DIRECTLY (never the barrel): founding.js only pulls
-  // pointer.js + client.svelte.js at the top level (both SSR-clean), but the
-  // barrel (index.js) also re-exports storage.js, which statically imports
-  // applesauce-core-concord/nostr-tools — see index.js's header comment and
-  // PrivateChannelsView's identical rule for community.svelte.js.
+  // Imports founding.js DIRECTLY (never the barrel) — the convention every
+  // Concord component follows (see CLAUDE.md's Concord section and index.js's
+  // header comment): the barrel is reserved for non-component/dynamic-import
+  // call sites and deliberately never re-exports storage.js (a static
+  // applesauce-core-concord import) to stay SSR-clean.
   import { foundConcordArea } from '$lib/concord/founding.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';

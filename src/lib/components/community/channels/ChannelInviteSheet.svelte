@@ -17,15 +17,16 @@
   - `client.invites.forCommunity(id)` returns ALL entries (live + revoked) —
     filtering is our job, extracted as pickLatestChannelInvite().
 
-  Imports getConcordClient DIRECTLY from client.svelte.js (not the $lib/concord
-  barrel): this component is statically imported by PrivateChannelsView, which
-  is part of the /c/[pubkey] page tree, so the barrel's re-export of
-  storage.js (a static `applesauce-core-concord` import) would otherwise pull
-  that dependency tree into the page's SSR chunk — see index.js's header
-  comment and the project's prior @noble/hashes v2 SSR-chunk incident (commit
-  a9af9c87: a hoisted top-level dep resolving to the wrong subpath export
-  took down every route with a 500). invite-helpers.js has no package
-  imports at all, so importing it directly is SSR-safe regardless.
+  Imports getConcordClient DIRECTLY from client.svelte.js (not the
+  $lib/concord barrel) — the convention every Concord component follows (see
+  CLAUDE.md's Concord section and index.js's header comment): the barrel is
+  reserved for non-component/dynamic-import call sites and deliberately never
+  re-exports storage.js (a static `applesauce-core-concord` import), to stay
+  SSR-clean regardless of which route imports it (see the project's prior
+  @noble/hashes v2 SSR-chunk incident, commit a9af9c87: a hoisted top-level
+  dep resolving to the wrong subpath export took down every route with a
+  500). invite-helpers.js has no package imports at all, so importing it
+  directly is SSR-safe regardless.
 -->
 <script>
   import QRCode from 'qrcode';

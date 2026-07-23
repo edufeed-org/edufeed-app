@@ -2,12 +2,14 @@
   /invite/[naddr] — Concord join-by-link landing page (Task 12).
 
   Imports getConcordClient/getConcordState DIRECTLY from client.svelte.js,
-  not the $lib/concord barrel: the barrel re-exports storage.js, which
-  imports the applesauce-core-concord package at module scope. This route
-  has ssr=false, but the import graph is still analyzed at build time, so
-  we follow the same submodule-import convention as
-  ChannelInviteSheet.svelte / PrivateChannelsView (see index.js's header
-  comment and the @noble/hashes v2 SSR-chunk incident, commit a9af9c87).
+  not the $lib/concord barrel — the convention every Concord component
+  follows (see CLAUDE.md's Concord section and index.js's header comment):
+  the barrel is reserved for non-component/dynamic-import call sites and
+  deliberately never re-exports storage.js (a static applesauce-core-concord
+  import), to stay SSR-clean. This route has ssr=false, but the import graph
+  is still analyzed at build time, so we follow the same submodule-import
+  convention as ChannelInviteSheet.svelte / PrivateChannelsView regardless
+  (see the @noble/hashes v2 SSR-chunk incident, commit a9af9c87).
 
   joinByLink error shapes — verified against
   node_modules/applesauce-concord/dist/client/client.js (package version
