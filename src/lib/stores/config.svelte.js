@@ -174,6 +174,11 @@ const defaultConfig = {
     formAddress: '',
     adminPubkeys: /** @type {string[]} */ ([])
   },
+  // Concord private channels
+  concord: {
+    enabled: false,
+    relays: /** @type {string[]} */ ([])
+  },
   // Read-only npub login
   npubLogin: {
     enabled: false
@@ -345,6 +350,10 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.membership,
       ...runtimeConfig.membership
     },
+    concord: {
+      ...defaultConfig.concord,
+      ...runtimeConfig.concord
+    },
     npubLogin: {
       ...defaultConfig.npubLogin,
       ...runtimeConfig.npubLogin
@@ -456,6 +465,9 @@ export const runtimeConfig = {
   },
   get membership() {
     return config.membership;
+  },
+  get concord() {
+    return config.concord;
   },
   get npubLogin() {
     return config.npubLogin;

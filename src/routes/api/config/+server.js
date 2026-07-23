@@ -372,6 +372,13 @@ export function GET() {
       adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
     },
 
+    // Concord E2E-encrypted private channels (Beta). Dedicated relay set —
+    // NEVER unioned with outbox/category relays.
+    concord: {
+      enabled: parseBool(env.CONCORD_ENABLED, false),
+      relays: parseArray(env.CONCORD_RELAYS)
+    },
+
     // Read-only npub login ("browse as") — see docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md
     npubLogin: {
       enabled: parseBool(env.NPUB_LOGIN_ENABLED, false)
