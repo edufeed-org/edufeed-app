@@ -2793,5 +2793,6 @@
   "auth_login_google_error_popup_blocked": "Das Anmeldefenster wurde blockiert. Bitte erlaube Popups für diese Seite und versuche es erneut.",
   "auth_login_google_error_popup_closed": "Das Anmeldefenster wurde geschlossen, bevor die Anmeldung abgeschlossen war. Bitte versuche es erneut.",
   "auth_login_google_error_generic": "Google-Anmeldung fehlgeschlagen. Bitte versuche es erneut.",
-  "auth_google_account_badge": "Google"
+  "auth_google_account_badge": "Google",
+  "concord_tab_label": "Kanäle"
 }

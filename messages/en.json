@@ -2793,5 +2793,6 @@
   "auth_login_google_error_popup_blocked": "The sign-in popup was blocked. Please allow popups for this site and try again.",
   "auth_login_google_error_popup_closed": "The sign-in window was closed before completing. Please try again.",
   "auth_login_google_error_generic": "Google sign-in failed. Please try again.",
-  "auth_google_account_badge": "Google"
+  "auth_google_account_badge": "Google",
+  "concord_tab_label": "Channels"
 }

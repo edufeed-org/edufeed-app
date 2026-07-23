@@ -16,6 +16,8 @@
     LockOpenIcon
   } from '$lib/components/icons';
   import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
+  import { shouldShowChannelsTab, useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -31,6 +33,9 @@
 
   import { getProfilePicture } from 'applesauce-core/helpers';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
+
+  const getConcord = useConcordCommunity(() => communityEvent);
+  const getActiveUser = useActiveUser();
 
   let communityDisplayName = $derived(
     communityProfile?.name || communityProfile?.display_name || 'Community'
@@ -50,7 +55,8 @@
     'social-bookmarks': BookmarkShareIcon,
     meet: MeetIcon,
     polls: PollIcon,
-    settings: SettingsIcon
+    settings: SettingsIcon,
+    channels: LockIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -66,16 +72,36 @@
     'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
     meet: () => m.community_layout_bottom_tab_bar_meet(),
     polls: () => m.community_layout_bottom_tab_bar_polls(),
-    settings: () => m.community_layout_bottom_tab_bar_settings()
+    settings: () => m.community_layout_bottom_tab_bar_settings(),
+    channels: () => m.concord_tab_label()
   };
 
-  let contentTypes = $derived(
-    getCommunityTabs(communityEvent).map((id) => ({
+  let contentTypes = $derived.by(() => {
+    const base = getCommunityTabs(communityEvent).map((id) => ({
       id,
       label: labelMap[id]?.() ?? id,
       icon: iconMap[id] ?? ChatIcon
-    }))
-  );
+    }));
+    const concord = getConcord();
+    const isOwner = !!communityEvent?.pubkey && communityEvent.pubkey === getActiveUser()?.pubkey;
+    if (
+      shouldShowChannelsTab({
+        enabled: concord.enabled,
+        pointer: concord.pointer,
+        isOwner,
+        isMember: concord.membership === 'member'
+      })
+    ) {
+      // insert after 'chat' to sit next to the public channels
+      const chatIndex = base.findIndex((t) => t.id === 'chat');
+      base.splice(chatIndex + 1, 0, {
+        id: 'channels',
+        label: m.concord_tab_label(),
+        icon: LockIcon
+      });
+    }
+    return base;
+  });
 
   /**
    * Handle content type selection
