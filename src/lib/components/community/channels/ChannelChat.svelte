@@ -11,6 +11,13 @@
     getUserDisplayName,
     groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
+  // NOTE: message-utils.js's getReplyParentId() is NOT used here. It expects
+  // the NIP-10 marked-`e`-tag convention (`["e", id, relay, "reply"]`) used by
+  // the public Chat.svelte kind-9 flow. Concord's ChatMessageFactory#replyTo
+  // (applesauce-common/factories/chat-message.js → includeChatReply →
+  // ensureQuoteEventPointerTag) instead writes a NIP-C7 `q` tag
+  // (`["q", id, relay, author]`) — verified in the concord-pinned
+  // applesauce-common dist. Read that tag directly below.
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -36,9 +43,45 @@
   const grouped = $derived(groupMessagesByDate(messages));
   const getMembers = useObservable(() => community?.members$, new Set());
 
+  // Kind-7 reaction rumors live in the same per-channel store as kind-9
+  // messages (community.react() publishes to the same {plane:'channel'}
+  // target as sendMessage — verified in
+  // applesauce-concord/dist/client/community.js).
+  const getReactions = useObservable(
+    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [7] }]),
+    /** @type {any[]} */ ([])
+  );
+  // ReactionFactory (applesauce-common/factories/reaction.js) writes a plain
+  // NIP-25 "e" tag via ensureEventPointerTag (no marker) — `t[0] === 'e'` is
+  // the target, matching the brief's aggregation exactly.
+  /** message id → Map<emoji, count>. Plain Map rebuilt fresh on every recompute
+   *  (never mutated in place) — same convention as ReactionBar.svelte's
+   *  aggregateReactions(); SvelteMap isn't needed and can cause reactivity loops here. */
+  const reactionsByTarget = $derived.by(() => {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const map = new Map();
+    for (const reaction of getReactions()) {
+      const target = reaction.tags?.find((/** @type {string[]} */ t) => t[0] === 'e')?.[1];
+      if (!target) continue;
+      const emoji = reaction.content || '👍';
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const perMessage = map.get(target) ?? new Map();
+      perMessage.set(emoji, (perMessage.get(emoji) ?? 0) + 1);
+      map.set(target, perMessage);
+    }
+    return map;
+  });
+
+  /** @param {any} message @returns {string | null} */
+  function getConcordReplyParentId(message) {
+    return message.tags?.find((/** @type {string[]} */ t) => t[0] === 'q')?.[1] || null;
+  }
+
   let text = $state('');
   let sending = $state(false);
   let menuOpen = $state(false);
+  /** @type {{id: string, author: string, preview: string}|null} */
+  let replyTo = $state(null);
   /** @type {HTMLElement|undefined} */
   let scrollContainer;
 
@@ -55,8 +98,9 @@
     if (!body || sending) return;
     sending = true;
     try {
-      await community.sendMessage(channel.channel_id, body);
+      await community.sendMessage(channel.channel_id, body, replyTo ?? undefined);
       text = '';
+      replyTo = null;
     } catch (error) {
       // The dist (applesauce-concord/dist/helpers/keys.js `planeKeyFor`)
       // throws a plain `Error("unknown channel")` when the caller doesn't
@@ -71,6 +115,15 @@
       console.error('concord: send failed', error);
     } finally {
       sending = false;
+    }
+  }
+
+  /** @param {any} message @param {string} emoji */
+  async function react(message, emoji) {
+    try {
+      await community.react(channel.channel_id, { id: message.id, author: message.pubkey }, emoji);
+    } catch (error) {
+      console.error('concord: react failed', error);
     }
   }
 </script>
@@ -174,8 +227,37 @@
             >
           </div>
         {/if}
+        {#if getConcordReplyParentId(message)}
+          {@const parentId = getConcordReplyParentId(message)}
+          {@const parent = messages.find((p) => p.id === parentId)}
+          {#if parent}
+            <div class="mb-0.5 truncate text-xs text-base-content/50">
+              ↩ {parent.content.slice(0, 80)}
+            </div>
+          {/if}
+        {/if}
         <div class="chat-bubble {mine ? 'chat-bubble-primary' : ''}">
           <NostrContentRenderer event={message} />
+        </div>
+        <div class="mt-0.5 flex gap-1 {mine ? 'justify-end' : ''}">
+          {#each [...(reactionsByTarget.get(message.id) ?? new Map())] as [emoji, count] (emoji)}
+            <span class="badge badge-ghost badge-sm">{emoji} {count}</span>
+          {/each}
+          <button
+            class="btn btn-circle opacity-40 btn-ghost btn-xs hover:opacity-100"
+            onclick={() => react(message, '👍')}
+            title={m.concord_react()}>🙂</button
+          >
+          <button
+            class="btn btn-circle opacity-40 btn-ghost btn-xs hover:opacity-100"
+            onclick={() =>
+              (replyTo = {
+                id: message.id,
+                author: message.pubkey,
+                preview: message.content.slice(0, 80)
+              })}
+            title={m.concord_reply()}>↩</button
+          >
         </div>
       </div>
     {/if}
@@ -189,6 +271,12 @@
     🔒 {m.concord_read_only()}
   </div>
 {:else}
+  {#if replyTo}
+    <div class="mx-4 flex items-center gap-2 rounded-t-xl bg-base-200 px-3 py-1.5 text-xs">
+      ↩ <span class="flex-1 truncate">{replyTo.preview}</span>
+      <button class="btn btn-circle btn-ghost btn-xs" onclick={() => (replyTo = null)}>✕</button>
+    </div>
+  {/if}
   <form
     class="m-4 mt-0 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-100 p-1.5"
     onsubmit={(e) => {
