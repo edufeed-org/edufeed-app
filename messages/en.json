@@ -2794,5 +2794,19 @@
   "auth_login_google_error_popup_closed": "The sign-in window was closed before completing. Please try again.",
   "auth_login_google_error_generic": "Google sign-in failed. Please try again.",
   "auth_google_account_badge": "Google",
-  "concord_tab_label": "Channels"
+  "concord_tab_label": "Channels",
+  "concord_rail_private": "Private channels",
+  "concord_new_channel": "New private channel",
+  "concord_invites": "Invitations",
+  "concord_found_title": "Set up the private area",
+  "concord_found_body": "Create the first end-to-end encrypted channel for this community.",
+  "concord_no_membership_title": "Private channels",
+  "concord_no_membership_body": "Open your invitation to join.",
+  "concord_sync_title": "Loading history",
+  "concord_sync_body": "Messages arrive encrypted from the relays and are decrypted on this device.",
+  "concord_removed_title": "You are no longer a member",
+  "concord_removed_body": "Messages you already received stay readable on this device — new ones no longer reach you.",
+  "concord_removed_small": "If this was a mistake, an admin can simply invite you again.",
+  "concord_no_channels_title": "No channels yet",
+  "concord_no_channels_body": "Channels you get access to appear here."
 }

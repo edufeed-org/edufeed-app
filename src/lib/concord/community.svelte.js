@@ -4,6 +4,8 @@
 // (pointer.js, client.svelte.js, bridge.svelte.js) so components can import
 // this file directly (not the barrel) without pulling applesauce-core-concord
 // / nostr-tools into SSR chunks — see storage.js, which the barrel reaches.
+import { of } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 import { parseConcordPointer } from './pointer.js';
 import { getConcordState, getConcordClient } from './client.svelte.js';
 import { useObservable } from './bridge.svelte.js';
@@ -45,10 +47,29 @@ export function useConcordCommunity(getCommunikeyEvent) {
     const _tick = getConcordState().communities;
     return pointer && getConcordClient()?.getCommunity(pointer.communityId)?.dissolved$;
   }, false);
+  // CARRY-FORWARD FIX (Task 7 review): `community.material.channels` is
+  // mutated in place by `receiveChannelKeys()` when a Direct Invite grants a
+  // channel key mid-session, but that path never touches `state$`/`channels$`
+  // — so `accessible` below would stay stale until an unrelated re-render.
+  // The client's own `onDirectInvite` handler (which calls
+  // `receiveChannelKeys()`) runs synchronously inside its `invites$`
+  // subscription callback (see applesauce-concord's ConcordClient
+  // constructor), so re-subscribing to that same observable here — after
+  // `receiveChannelKeys()` has already run — gives a tick exactly when a
+  // grant lands, no polling required. `directInviteWatcher$` itself is a
+  // BehaviorSubject the client fills in asynchronously after `start()`, so we
+  // flatten through it with `switchMap` rather than reading `.invites$` once.
+  const getInviteTick = useObservable(() => {
+    const _tick = getConcordState().communities; // re-subscribe when the client (re)starts
+    return getConcordClient()?.directInviteWatcher$?.pipe(
+      switchMap((/** @type {any} */ watcher) => watcher?.invites$ ?? of(/** @type {any[]} */ ([])))
+    );
+  }, /** @type {any[]} */ ([]));
 
   return () => {
     const pointer = parseConcordPointer(getCommunikeyEvent());
     const _tick = getConcordState().communities;
+    const _inviteTick = getInviteTick(); // re-derive `accessible` when a channel key grant lands
     const community = pointer ? getConcordClient()?.getCommunity(pointer.communityId) : undefined;
     // A channel is "accessible" when we hold its key (material.channels) —
     // metadata for private channels we're not a member of still folds into

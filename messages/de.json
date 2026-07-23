@@ -2794,5 +2794,19 @@
   "auth_login_google_error_popup_closed": "Das Anmeldefenster wurde geschlossen, bevor die Anmeldung abgeschlossen war. Bitte versuche es erneut.",
   "auth_login_google_error_generic": "Google-Anmeldung fehlgeschlagen. Bitte versuche es erneut.",
   "auth_google_account_badge": "Google",
-  "concord_tab_label": "Kanäle"
+  "concord_tab_label": "Kanäle",
+  "concord_rail_private": "Private Kanäle",
+  "concord_new_channel": "Neuer privater Kanal",
+  "concord_invites": "Einladungen",
+  "concord_found_title": "Privaten Bereich einrichten",
+  "concord_found_body": "Erstelle den ersten Ende-zu-Ende-verschlüsselten Kanal für diese Community.",
+  "concord_no_membership_title": "Private Kanäle",
+  "concord_no_membership_body": "Öffne deine Einladung, um beizutreten.",
+  "concord_sync_title": "Verlauf wird geladen",
+  "concord_sync_body": "Die Nachrichten kommen verschlüsselt von den Relays und werden auf diesem Gerät entschlüsselt.",
+  "concord_removed_title": "Du bist kein Mitglied mehr",
+  "concord_removed_body": "Nachrichten, die du bereits erhalten hast, bleiben auf diesem Gerät lesbar — neue erreichen dich nicht mehr.",
+  "concord_removed_small": "Wenn das ein Versehen war, kann dich ein Admin einfach neu einladen.",
+  "concord_no_channels_title": "Noch keine Kanäle",
+  "concord_no_channels_body": "Kanäle, auf die du Zugriff bekommst, erscheinen hier."
 }
