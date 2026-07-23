@@ -49,10 +49,10 @@ export function getConcordClient() {
   return currentClient;
 }
 
-/** True when the active signer supports NIP-44 (needed for list save / direct invites / rotation). */
-export function signerHasNip44() {
-  return !!currentClient?.signer?.nip44;
-}
+// NOTE: nip44 capability is exposed reactively as `signerHasNip44` on
+// useConcordCommunity's return value (community.svelte.js) — a raw helper
+// here would read the untracked `currentClient` and go stale in templates
+// (the exact bug fixed in Task 8); deliberately no such helper exists.
 
 function teardown() {
   for (const sub of clientSubs) sub.unsubscribe();

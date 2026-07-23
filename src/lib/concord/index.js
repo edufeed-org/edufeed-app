@@ -8,8 +8,10 @@
 // imports Concord submodules DIRECTLY (e.g. `$lib/concord/community.svelte.js`,
 // `$lib/concord/bridge.svelte.js`, `$lib/concord/moderation.js`) rather than
 // through this barrel — none of them currently import from here at all. This
-// barrel exists for non-component / dynamic-import call sites (and as the
-// canonical list of what the concord/ directory offers). `storage.js` is
+// barrel exists for non-component / dynamic-import call sites. It is NOT an
+// exhaustive listing: `chat-helpers.js` (component-only) and
+// `account-removal-watcher.js` (internal to client.svelte.js) are deliberately
+// not re-exported. `storage.js` is
 // deliberately NOT re-exported here: it statically imports
 // applesauce-core-concord, and re-exporting it would make importing ANYTHING
 // from this barrel pull that dependency tree into server chunks. Every
