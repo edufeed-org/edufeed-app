@@ -2830,5 +2830,20 @@
   "concord_default_area_name": "Privater Bereich",
   "concord_channel_created": "Kanal „{name}“ erstellt — {count} Einladung(en) verschickt",
   "concord_channel_created_partial": "Kanal „{name}“ erstellt — {failed} von {total} Einladung(en) konnten nicht verschickt werden",
-  "concord_channel_create_failed": "Kanal konnte nicht erstellt werden"
+  "concord_channel_create_failed": "Kanal konnte nicht erstellt werden",
+  "concord_locked_title": "Kein Schlüssel für diesen Kanal",
+  "concord_locked_body": "Du hast für diesen Kanal noch keinen Zugang erhalten. Bitte eine:n Admin um eine Einladung.",
+  "concord_chat_subtitle": "Ende-zu-Ende-verschlüsselt · nur Mitglieder können mitlesen",
+  "concord_how_it_works": "Wie funktioniert das?",
+  "concord_menu_invite": "Einladen",
+  "concord_menu_members": "Mitglieder",
+  "concord_menu_backup": "Schlüssel sichern",
+  "concord_menu_dissolve": "Kanal auflösen…",
+  "concord_dissolved_banner": "Dieser Bereich wurde aufgelöst. Der Verlauf bleibt für Mitglieder lesbar, neue Nachrichten sind nicht mehr möglich.",
+  "concord_genesis_title": "Beginn von „{name}“",
+  "concord_genesis_body": "Nachrichten hier sind Ende-zu-Ende-verschlüsselt — nur Mitglieder besitzen den Schlüssel.",
+  "concord_read_only": "Nur noch Lesen möglich",
+  "concord_input_placeholder": "Verschlüsselte Nachricht an „{name}“…",
+  "concord_no_key_error": "Du besitzt den Schlüssel dieses Kanals nicht",
+  "concord_send_failed": "Senden fehlgeschlagen"
 }

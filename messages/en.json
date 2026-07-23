@@ -2830,5 +2830,20 @@
   "concord_default_area_name": "Private area",
   "concord_channel_created": "Channel \"{name}\" created — {count} invitation(s) sent",
   "concord_channel_created_partial": "Channel \"{name}\" created — {failed} of {total} invitation(s) could not be sent",
-  "concord_channel_create_failed": "Could not create the channel"
+  "concord_channel_create_failed": "Could not create the channel",
+  "concord_locked_title": "No key for this channel",
+  "concord_locked_body": "You haven't received access to this channel yet. Ask an admin for an invitation.",
+  "concord_chat_subtitle": "End-to-end encrypted · only members can read",
+  "concord_how_it_works": "How does that work?",
+  "concord_menu_invite": "Invite",
+  "concord_menu_members": "Members",
+  "concord_menu_backup": "Back up key",
+  "concord_menu_dissolve": "Dissolve channel…",
+  "concord_dissolved_banner": "This area was dissolved. History stays readable for members; new messages are no longer possible.",
+  "concord_genesis_title": "Beginning of \"{name}\"",
+  "concord_genesis_body": "Messages here are end-to-end encrypted — only members hold the key.",
+  "concord_read_only": "Read-only",
+  "concord_input_placeholder": "Encrypted message to \"{name}\"…",
+  "concord_no_key_error": "You don't hold this channel's key",
+  "concord_send_failed": "Sending failed"
 }

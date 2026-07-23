@@ -11,8 +11,7 @@
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
-  // TODO(task-10): channel chat pane — uncomment once ChannelChat.svelte exists.
-  // import ChannelChat from './ChannelChat.svelte';
+  import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
   // TODO(task-11): invite sheet + inbox — uncomment once ChannelInviteSheet.svelte exists.
   // import ChannelInviteSheet from './ChannelInviteSheet.svelte';
@@ -82,9 +81,8 @@
             selectedChannelId = channel.channel_id;
             mobileChat = true;
           }}
-          disabled={!channel.accessible}
         >
-          🔒 <span class="truncate">{channel.name}</span>
+          🔒 <span class="truncate {channel.accessible ? '' : 'opacity-50'}">{channel.name}</span>
         </button>
       {/each}
       {#if concord.community && isOwner && !concord.dissolved}
@@ -127,16 +125,20 @@
           small={m.concord_removed_small()}
         />
       {:else if activeChannel?.accessible}
-        <!-- TODO(task-10): swap for the real ChannelChat pane once it exists:
-          <ChannelChat
-            community={concord.community}
-            channel={activeChannel}
-            dissolved={concord.dissolved}
-            {isOwner}
-            openOverlay={(name) => (overlay = name)}
-            onBack={() => (mobileChat = false)}
-          /> -->
-        <ChannelStatePane title={activeChannel.name} />
+        <ChannelChat
+          community={concord.community}
+          channel={activeChannel}
+          dissolved={concord.dissolved}
+          {isOwner}
+          openOverlay={(/** @type {string} */ name) => (overlay = name)}
+          onBack={() => (mobileChat = false)}
+        />
+      {:else if activeChannel}
+        <!-- Task 8 carry-forward: the channel exists (it folded into channels$
+          from public metadata) but we don't hold its key — give this an
+          honest "locked" message instead of the generic "no channels yet"
+          copy, which would otherwise wrongly imply no channel was selected. -->
+        <ChannelStatePane title={m.concord_locked_title()} body={m.concord_locked_body()} />
       {:else}
         <ChannelStatePane
           title={m.concord_no_channels_title()}
