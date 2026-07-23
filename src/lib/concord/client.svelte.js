@@ -98,31 +98,20 @@ async function setup(account) {
     await client.start();
   } catch (/** @type {any} */ error) {
     console.error('concord: client start failed', error);
-    state = { ...state, phase: 'error', error: String(error?.message || error) };
+    // A failed start must not leave a half-started client behind: drop the
+    // subs, stop the client, and clear it so getConcordClient() returns
+    // undefined. Keep phase/error (a plain teardown() would reset to 'off').
+    for (const sub of clientSubs) sub.unsubscribe();
+    clientSubs = [];
+    currentClient?.stop();
+    currentClient = undefined;
+    state = {
+      phase: 'error',
+      client: undefined,
+      communities: [],
+      error: String(error?.message || error)
+    };
   }
-}
-
-/**
- * Watch for accounts disappearing from the manager (a real logout/removal,
- * as opposed to switching `active$` between existing accounts) and wipe
- * that pubkey's local Concord data. Guards against the same pubkey still
- * being logged in under a second account instance (e.g. extension + bunker).
- * @param {any} manager
- */
-function watchAccountRemovals(manager) {
-  /** @type {{id: string, pubkey: string}[]} */
-  let previous = manager.accounts.map((/** @type {any} */ a) => ({ id: a.id, pubkey: a.pubkey }));
-  manager.accounts$.subscribe((/** @type {any[]} */ accounts) => {
-    const current = accounts.map((a) => ({ id: a.id, pubkey: a.pubkey }));
-    const removed = previous.filter((prev) => !current.some((c) => c.id === prev.id));
-    previous = current;
-    for (const { pubkey } of removed) {
-      if (current.some((c) => c.pubkey === pubkey)) continue; // still logged in under another account instance
-      wipeConcordData(pubkey).catch((error) => {
-        console.error('concord: failed to wipe local data on logout', error);
-      });
-    }
-  });
 }
 
 /** Idempotent; call once from the root layout (browser only). */
@@ -143,5 +132,14 @@ export async function initConcordService() {
     teardown();
     if (account?.signer) await setup(account);
   });
-  watchAccountRemovals(manager);
+  // Wipe local Concord data when an account is genuinely removed (logout),
+  // never on a mere active-account switch. Logic + guards live in the
+  // extracted, unit-tested watcher; wipeConcordData itself no-ops unless
+  // runtimeConfig.concord.enabled.
+  const { watchAccountRemovals } = await import('./account-removal-watcher.js');
+  watchAccountRemovals({
+    getAccounts: () => manager.accounts,
+    accounts$: manager.accounts$,
+    wipe: wipeConcordData
+  });
 }
