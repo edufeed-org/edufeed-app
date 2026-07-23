@@ -71,7 +71,8 @@ export function buildFormTemplate(form) {
   });
   const tags = buildFormTemplateTags(form.d, fields, {
     name: form.name,
-    description: form.description
+    description: form.description,
+    sections: form.sections
   });
   return { kind: FORM_TEMPLATE_KIND, tags, content: '' };
 }
