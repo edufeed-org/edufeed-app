@@ -134,6 +134,24 @@ describe('orderedSections / resolveNextSectionId', () => {
     expect(orderedSections({ sections: [], fields: bildungsbereich.fields })).toEqual([]);
   });
 
+  it('dedupes duplicate section ids, keeping first occurrence', () => {
+    const t = {
+      sections: [
+        { id: 's1', title: 'First', questionIds: ['f1'] },
+        { id: 's1', title: 'Second', questionIds: ['f2'] }
+      ],
+      fields: [
+        { id: 'f1', type: 'text', label: '', options: {} },
+        { id: 'f2', type: 'text', label: '', options: {} }
+      ]
+    };
+    const secs = orderedSections(t);
+    // second 's1' is dropped, so its field ('f2') becomes an unassigned stray
+    expect(secs.map((s) => s.id)).toEqual(['s1', '__rest']);
+    expect(secs[0].title).toBe('First');
+    expect(secs[0].questionIds).toEqual(['f1']);
+  });
+
   it('routes by the selected option nextSection, else linear, null at end', () => {
     const secs = orderedSections(bildungsbereich);
     expect(resolveNextSectionId('start', secs, bildungsbereich.fields, { bereich: 'konfi' })).toBe(

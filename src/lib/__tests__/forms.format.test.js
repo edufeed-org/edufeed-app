@@ -181,4 +181,53 @@ describe('NIP-101 encoding', () => {
     // empty slug falls back exactly like generateFieldId ('field-1' behavior)
     expect(generateOptionId('äöü', [])).toBe('option-1');
   });
+
+  it('dedupes duplicate option ids in a select field (NIP-101 path), keeping first', () => {
+    const broken = evt([
+      ['d', 'b'],
+      ['settings', '{}'],
+      ['field', 'x', 'option', 'X', '[["x","X"],["x","X2"]]', '{"renderElement":"select"}']
+    ]);
+    const parsed = parseFormTemplate(broken);
+    expect(parsed.fields[0].options?.options).toEqual([{ id: 'x', label: 'X' }]);
+  });
+
+  it('dedupes duplicate option ids in the legacy dialect', () => {
+    const legacy = evt([
+      ['d', 'old'],
+      ['name', 'Old form'],
+      ['field', 'role', 'radio', 'Role?', '', '{"options":["Teacher","Teacher"]}']
+    ]);
+    const parsed = parseFormTemplate(legacy);
+    expect(parsed.fields[0].options?.options).toEqual([{ id: 'Teacher', label: 'Teacher' }]);
+  });
+
+  it('dedupes duplicate section ids in settings.sections, keeping first', () => {
+    const broken = evt([
+      ['d', 'b'],
+      [
+        'settings',
+        JSON.stringify({
+          sections: [
+            { id: 's1', title: 'First', questionIds: [] },
+            { id: 's1', title: 'Second', questionIds: [] }
+          ]
+        })
+      ]
+    ]);
+    const parsed = parseFormTemplate(broken);
+    expect(parsed.sections).toEqual([{ id: 's1', title: 'First', questionIds: [] }]);
+  });
+
+  it('dedupes duplicate field ids, keeping first', () => {
+    const broken = evt([
+      ['d', 'b'],
+      ['settings', '{}'],
+      ['field', 'dup', 'text', 'First', '', '{}'],
+      ['field', 'dup', 'text', 'Second', '', '{}']
+    ]);
+    const parsed = parseFormTemplate(broken);
+    expect(parsed.fields).toHaveLength(1);
+    expect(parsed.fields[0].label).toBe('First');
+  });
 });

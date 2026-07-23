@@ -1,6 +1,6 @@
 // Relative import (not $lib) so this module stays importable from plain
 // node scripts (scripts/publish-edufeed-forms.mjs) outside the Vite alias.
-import { unique } from '../unique.js';
+import { unique, uniqueBy } from '../unique.js';
 
 /** Kind for form template events */
 export const FORM_TEMPLATE_KIND = 30168;
@@ -172,7 +172,7 @@ export function parseFormTemplate(event) {
       /** @type {Record<string, any>} */
       const opts = { ...rest };
       if (Array.isArray(rawOptions) && rawOptions.length > 0) {
-        opts.options = rawOptions
+        const parsedOptions = rawOptions
           .filter((o) => Array.isArray(o) && o[0] !== undefined)
           .map((o) => {
             /** @type {FormFieldOption} */
@@ -181,6 +181,7 @@ export function parseFormTemplate(event) {
             if (cfg?.nextSection) entry.nextSection = String(cfg.nextSection);
             return entry;
           });
+        opts.options = uniqueBy(parsedOptions, (o) => o.id);
       }
       return {
         id: t[1],
@@ -198,11 +199,11 @@ export function parseFormTemplate(event) {
     dTag,
     name,
     description: settings.description || '',
-    fields,
+    fields: uniqueBy(fields, (f) => f.id),
     isPublic: !!settings.publicForm,
     confirmationMessage: settings.confirmationMessage || '',
     autoResponse: !!settings.autoResponse,
-    sections: Array.isArray(settings.sections) ? settings.sections : [],
+    sections: uniqueBy(Array.isArray(settings.sections) ? settings.sections : [], (s) => s.id),
     forkOf: forkTag ? { address: forkTag[1], relay: forkTag[2] || '' } : undefined
   };
 }
@@ -248,7 +249,7 @@ function parseLegacyFormTemplate(event) {
     dTag: tags.find((t) => t[0] === 'd')?.[1] || '',
     name: tags.find((t) => t[0] === 'name')?.[1] || '',
     description: tags.find((t) => t[0] === 'description')?.[1] || '',
-    fields,
+    fields: uniqueBy(fields, (f) => f.id),
     isPublic: tags.some((t) => t[0] === 'public'),
     confirmationMessage: tags.find((t) => t[0] === 'confirmation_message')?.[1] || '',
     autoResponse: tags.find((t) => t[0] === 'auto_response')?.[1] === 'true',

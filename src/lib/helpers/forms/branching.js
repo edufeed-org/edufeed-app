@@ -103,8 +103,16 @@ export function visibleFields(fields, values) {
  * @returns {import('./format.js').FormSection[]}
  */
 export function orderedSections(template) {
-  const sections = template.sections || [];
-  if (sections.length === 0) return [];
+  const rawSections = template.sections || [];
+  if (rawSections.length === 0) return [];
+  // Defense-in-depth: parseFormTemplate already dedupes, but callers may pass
+  // a hand-built template, and a duplicate id would crash a keyed {#each}.
+  const seen = new Set();
+  const sections = rawSections.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
   const sorted = [...sections].sort(
     (a, b) => (a.order ?? sections.indexOf(a)) - (b.order ?? sections.indexOf(b))
   );
