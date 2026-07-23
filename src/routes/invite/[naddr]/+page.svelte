@@ -101,6 +101,7 @@
       <p class="mt-2 text-sm text-base-content/60">{m.concord_join_body()}</p>
       <button
         class="btn mt-4 btn-neutral"
+        data-testid="concord-join-button"
         onclick={join}
         disabled={phase === 'joining' || concordState.phase !== 'ready'}
       >

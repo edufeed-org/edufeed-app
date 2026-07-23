@@ -133,11 +133,18 @@
       >
     </p>
   </div>
-  <button class="btn btn-ghost btn-sm" onclick={() => openOverlay('members')}>
+  <button
+    class="btn btn-ghost btn-sm"
+    data-testid="concord-members-button"
+    onclick={() => openOverlay('members')}
+  >
     👥 {getMembers().size}
   </button>
   <div class="dropdown dropdown-end">
-    <button class="btn btn-circle btn-ghost btn-sm" onclick={() => (menuOpen = !menuOpen)}>⋯</button
+    <button
+      class="btn btn-circle btn-ghost btn-sm"
+      data-testid="concord-chat-menu"
+      onclick={() => (menuOpen = !menuOpen)}>⋯</button
     >
     {#if menuOpen}
       <ul
@@ -146,6 +153,7 @@
         {#if !dissolved}
           <li>
             <button
+              data-testid="concord-menu-invite"
               onclick={() => {
                 menuOpen = false;
                 openOverlay('invite');
@@ -288,6 +296,7 @@
   >
     <input
       class="input flex-1 input-ghost focus:outline-none"
+      data-testid="concord-chat-input"
       bind:value={text}
       placeholder={m.concord_input_placeholder({ name: channel.name })}
     />

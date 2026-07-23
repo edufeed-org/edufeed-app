@@ -140,6 +140,7 @@
         <span class="label-text mb-1 font-bold">{m.concord_wizard_name_label()}</span>
         <input
           class="input-bordered input"
+          data-testid="concord-channel-name-input"
           bind:value={name}
           placeholder={m.concord_wizard_name_placeholder()}
         />
@@ -168,7 +169,12 @@
         <p><b>{m.concord_wizard_backup_title()}</b><br />{m.concord_wizard_backup_body()}</p>
       </div>
       <label class="flex cursor-pointer items-start gap-2 text-sm font-semibold">
-        <input type="checkbox" class="checkbox mt-0.5 checkbox-sm" bind:checked={acknowledged} />
+        <input
+          type="checkbox"
+          class="checkbox mt-0.5 checkbox-sm"
+          data-testid="concord-wizard-ack-checkbox"
+          bind:checked={acknowledged}
+        />
         {m.concord_wizard_ack()}
       </label>
     {/if}
@@ -182,11 +188,17 @@
       {#if step < 2}
         <button
           class="btn btn-neutral"
+          data-testid="concord-wizard-next"
           disabled={step === 0 && !name.trim()}
           onclick={() => (step += 1)}>{m.concord_next()}</button
         >
       {:else}
-        <button class="btn btn-neutral" disabled={!acknowledged || busy} onclick={create}>
+        <button
+          class="btn btn-neutral"
+          data-testid="concord-wizard-create"
+          disabled={!acknowledged || busy}
+          onclick={create}
+        >
           {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}
           🔒 {m.concord_wizard_create()}
         </button>

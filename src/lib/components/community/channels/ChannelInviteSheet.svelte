@@ -172,7 +172,8 @@
       {/if}
       {#if invite}
         <div class="mb-3 flex items-center gap-2 rounded-xl border border-base-300 p-2 pl-3">
-          <code class="flex-1 truncate text-xs">{invite.url}</code>
+          <code class="flex-1 truncate text-xs" data-testid="concord-invite-link">{invite.url}</code
+          >
           <button class="btn btn-ghost btn-xs" onclick={copy}
             >{copied ? m.concord_copied() : m.concord_copy()}</button
           >

@@ -108,6 +108,7 @@
             >
             <button
               class="btn text-error btn-ghost btn-xs"
+              data-testid="concord-member-ban"
               title={signerHasNip44 ? m.concord_ban() : m.concord_moderate_needs_nip44()}
               disabled={!signerHasNip44}
               onclick={() => (confirm = { kind: 'ban', pubkey })}>⦸</button
@@ -143,6 +144,7 @@
         <button class="btn btn-ghost" onclick={() => (confirm = null)}>{m.concord_cancel()}</button>
         <button
           class="btn {confirm.kind === 'ban' ? 'btn-error' : 'btn-neutral'}"
+          data-testid="concord-confirm-action"
           disabled={busy}
           onclick={run}
         >

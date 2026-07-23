@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-07-16
-**Total tests:** 309
+**Last updated:** 2026-07-23
+**Total tests:** 310
 
 ## Quick Summary
 
@@ -45,6 +45,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                     |
 | `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                 |
 | `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                     |
+| `concord-channels.test.js`           | 1     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                |
 
 ## Detailed Coverage
 
@@ -1451,6 +1452,40 @@ and never hits the network.)
   instead of racing the npub modal's close.
 
 **Components exercised:** LoginModal (npub method gate), LoginWithNpub, ModalManager transitions, ReadonlyNotice on the inbox page.
+
+---
+
+### concord-channels.test.js (1 test)
+
+**Routes:** `/c/[pubkey]?view=channels`, `/invite/[naddr]#fragment`
+**Auth required:** Yes (two fresh nsec accounts in two isolated browser contexts)
+
+`concord-channels.test.js` — private channels: create wizard, invite link,
+join-by-link, two-context message exchange, ban + key-rotation severance.
+Not covered: direct invites (needs second seeded profile with DM relays),
+dissolve, key backup.
+
+One long two-context test over the real strfry relay (`CONCORD_RELAYS` wired
+in `playwright.config.js`): the owner creates a community (Use Current
+Keypair flow), founds the private area + channel through the 3-step wizard,
+mints an invite link; the guest joins via the link, both exchange encrypted
+messages; the owner bans the guest and the test asserts a post-rotation
+message renders for the owner but never for the banned guest (bounded
+negative wait). Doubles as the runtime smoke test for passing the app's
+applesauce-relay@6.2.1 pool into the concord fork's ConcordClient.
+
+**Nuances:**
+
+- Community-page selectors go through a `vis()` helper
+  (`.filter({ visible: true }).first()`): the `/c/[pubkey]` layout renders
+  its children up to 3× for responsive variants, so every testid matches
+  multiple nodes.
+- Modal ✕ buttons must be scoped to `.modal-box` — the chat pane's
+  key-backup bar has its own ✕.
+- e2e Chromium reports `en-US`, so text assertions use the English catalog
+  despite `de` being the base locale.
+
+**Components exercised:** PrivateChannelsView, ChannelCreateWizard, ChannelChat, ChannelInviteSheet, ChannelMembersModal, the `/invite/[naddr]` join page, CreateCommunityModal.
 
 ## Google login (Pomegranate) — manual checklist (no E2E: external OAuth)
 

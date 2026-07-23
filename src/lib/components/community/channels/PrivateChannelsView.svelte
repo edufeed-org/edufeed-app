@@ -108,6 +108,7 @@
       {#if concord.community && isOwner && !concord.dissolved}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
+          data-testid="concord-new-channel"
           onclick={() => (overlay = 'create')}
         >
           + {m.concord_new_channel()}
@@ -127,7 +128,11 @@
     <section class="flex min-w-0 flex-1 flex-col {mobileChat ? 'flex' : 'hidden md:flex'}">
       {#if !concord.community && isOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
-          <button class="btn mt-4 btn-neutral" onclick={() => (overlay = 'create')}>
+          <button
+            class="btn mt-4 btn-neutral"
+            data-testid="concord-new-channel"
+            onclick={() => (overlay = 'create')}
+          >
             🔒 {m.concord_new_channel()}
           </button>
         </ChannelStatePane>
