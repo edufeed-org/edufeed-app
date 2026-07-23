@@ -6,10 +6,15 @@
   import { resolve as _resolve } from '$app/paths';
   import { ChevronLeftIcon } from '$lib/components/icons';
   import ResourceFormWizard from '$lib/components/educational/ResourceFormWizard.svelte';
+  import TemplateResourceForm from '$lib/components/forms/TemplateResourceForm.svelte';
   import { fetchEventById } from '$lib/helpers/nostrUtils';
   import { formatAMBResource } from '$lib/helpers/educational';
   import { runtimeConfig, configReady } from '$lib/stores/config.svelte.js';
-  import { getEnabledVariants, getDefaultVariantId } from '$lib/config/resource-form-variants.js';
+  import {
+    getEnabledVariants,
+    getDefaultVariantId,
+    getVariantById
+  } from '$lib/config/resource-form-variants.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {(path: string) => string} */
@@ -29,6 +34,10 @@
   let isResolvingVariant = $state(true);
 
   const isEditMode = $derived(!!data.editNaddr);
+  // Set when the resolved variant is deployment-configured with a published
+  // kind-30168 form template — routes to the generic TemplateResourceForm
+  // instead of the hardcoded ResourceFormWizard.
+  const templateNaddr = $derived(getVariantById(data.variantId)?.templateNaddr);
 
   onMount(async () => {
     // Wait for runtime config to load. Skip the subscription entirely when
@@ -64,9 +73,12 @@
     isResolvingVariant = false;
   });
 
-  // Resolve edit naddr to event
+  // Resolve edit naddr to event. Skipped when the variant routes to
+  // TemplateResourceForm — that component handles edit prefill itself via
+  // the editNaddr prop (parseAMBResourceForForm), so the wizard's edit-event
+  // fetch would be redundant.
   $effect(() => {
-    if (!data.editNaddr) return;
+    if (!data.editNaddr || templateNaddr) return;
 
     isLoadingEdit = true;
     editError = '';
@@ -132,6 +144,12 @@
       </div>
       <button class="btn mt-4 btn-outline" onclick={handleBack}>{m.create_go_back()}</button>
     </div>
+  {:else if templateNaddr}
+    <TemplateResourceForm
+      {templateNaddr}
+      communityPubkey={data.communityPubkey}
+      editNaddr={data.editNaddr}
+    />
   {:else}
     <ResourceFormWizard
       communityPubkey={data.communityPubkey}

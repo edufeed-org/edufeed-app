@@ -32,6 +32,10 @@ import { BILDUNGSBEREICH_KEYS } from '$lib/helpers/educational/bildungsbereich.j
  *   Paraglide message key used as the section heading; `facets` maps facet
  *   ids (the segment after `ext:<ns>:`) to Paraglide message keys for their
  *   per-row labels.
+ * @property {string} [templateNaddr] - naddr of a published kind-30168 form
+ *   template. When set, the variant renders via the generic template-driven
+ *   form (`TemplateResourceForm`) instead of the hardcoded `ResourceFormWizard`.
+ *   Deployment config only — never baked into `ALL_VARIANTS`.
  */
 
 /** @type {ResourceFormVariant[]} */
@@ -83,8 +87,9 @@ export function filterVariantsByIds(enabledIds) {
  */
 export function getEnabledVariants() {
   const enabled = runtimeConfig.resourceFormVariants?.enabled;
-  if (!enabled || enabled.length === 0) return filterVariantsByIds(['amb']);
-  return filterVariantsByIds(enabled);
+  const variants = filterVariantsByIds(!enabled || enabled.length === 0 ? ['amb'] : enabled);
+  const templateNaddrs = runtimeConfig.resourceFormVariants?.templateNaddrs;
+  return variants.map((v) => ({ ...v, templateNaddr: templateNaddrs?.[v.id] }));
 }
 
 /**
