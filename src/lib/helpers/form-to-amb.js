@@ -1,3 +1,5 @@
+import { resolveEmitter, fieldProp } from './forms/amb-emitters.js';
+
 /**
  * @typedef {Object} SelectedConcept
  * @property {string} id - external URI of the concept
@@ -17,6 +19,10 @@
  * Build the tag array for a kind-30142 event produced from a form submission.
  * Does NOT include the `d` tag — the caller (route) decides the resource identifier.
  *
+ * Delegates per-field serialization to the NIP-AMB emitter registry
+ * (`./forms/amb-emitters.js`). Concept-valued fields (vocab-bound) emit
+ * `:id`/`:prefLabel:<lang>`/`:type` tags with NO a-tag, per NIP-AMB.
+ *
  * @param {Object} args
  * @param {ParsedFormForSerialization} args.form
  * @param {string} args.formRelay - relay hint for the form back-reference
@@ -27,26 +33,14 @@
 export function buildAMBResourceTags({ form, formRelay, values, selectedConcepts }) {
   /** @type {string[][]} */
   const out = [];
-  const formCoord = `30168:${form.pubkey}:${form.dTag}`;
-
   for (const field of form.fields) {
-    const raw = values[field.id];
-    if (raw === undefined || raw === null || raw === '') continue;
-    if (Array.isArray(raw) && raw.length === 0) continue;
-
-    const output = field.output || `amb:${field.id}`;
-
-    if (output.startsWith('amb:')) {
-      const prop = output.slice(4);
-      emitForTarget(out, prop, field, raw, selectedConcepts[field.id], false, formCoord);
-    } else if (output === 'ext') {
-      emitForTarget(out, field.id, field, raw, selectedConcepts[field.id], true, formCoord);
-    }
+    const emitter = resolveEmitter(field);
+    const value = field.vocab ? selectedConcepts[field.id] : values[field.id];
+    const ctx = { field, prop: fieldProp(field), formDTag: form.dTag, defaultLang: 'de' };
+    for (const tag of emitter.emit(value, ctx)) out.push(tag);
   }
-
   // Informative form back-reference (spec: MAY)
-  out.push(['a', formCoord, formRelay, 'form']);
-
+  out.push(['a', `30168:${form.pubkey}:${form.dTag}`, formRelay, 'form']);
   return out;
 }
 
@@ -61,87 +55,19 @@ export function buildAMBResourceTags({ form, formRelay, values, selectedConcepts
  * @returns {{ values: Record<string, string|string[]>, selectedConcepts: Record<string, SelectedConcept[]> }}
  */
 export function parseAMBResourceForForm(event, form) {
-  const formCoord = `30168:${form.pubkey}:${form.dTag}`;
   /** @type {Record<string, string|string[]>} */
   const values = {};
   /** @type {Record<string, SelectedConcept[]>} */
   const selectedConcepts = {};
-
-  // Index a-tags by role for concept metadata (nostrCoord + relay)
-  /** @type {Map<string, { nostrCoord: string, relay: string }[]>} */
-  const aTagsByRole = new Map();
-  for (const t of event.tags) {
-    if (t[0] !== 'a' || !t[1] || !t[3]) continue;
-    const role = t[3];
-    if (role === 'form' || role === 'forkOf') continue;
-    const list = aTagsByRole.get(role) || [];
-    list.push({ nostrCoord: t[1], relay: t[2] || '' });
-    aTagsByRole.set(role, list);
-  }
-
   for (const field of form.fields) {
-    const output = field.output || `amb:${field.id}`;
-    let keyBase;
-    let role;
-    if (output.startsWith('amb:')) {
-      keyBase = output.slice(4);
-      role = keyBase;
-    } else if (output === 'ext') {
-      keyBase = `ext:${formCoord}:${field.id}`;
-      role = `ext:${field.id}`;
-    } else {
-      continue;
-    }
-
-    if (field.vocab) {
-      // Concept-valued: collect :id occurrences + matching prefLabel tags
-      /** @type {{ id: string, labels: Record<string,string> }[]} */
-      const entries = [];
-      for (const t of event.tags) {
-        if (t[0] === `${keyBase}:id` && t[1]) {
-          entries.push({ id: t[1], labels: {} });
-        }
-      }
-      if (entries.length === 0) continue;
-
-      // Collect prefLabels; if multiple concepts share the same keyBase the
-      // spec doesn't disambiguate by position, so attach all prefLabels to
-      // each concept — round-trip is lossy here for multi-concept fields, but
-      // adequate for single-concept fields (the common case).
-      /** @type {Record<string,string>} */
-      const sharedLabels = {};
-      for (const t of event.tags) {
-        if (t[0]?.startsWith(`${keyBase}:prefLabel:`) && t[1]) {
-          const lang = t[0].slice(`${keyBase}:prefLabel:`.length);
-          sharedLabels[lang] = t[1];
-        }
-      }
-      const aRefs = aTagsByRole.get(role) || [];
-
-      values[field.id] = entries.map((e) => e.id);
-      selectedConcepts[field.id] = entries.map((entry, i) => ({
-        id: entry.id,
-        nostrCoord: aRefs[i]?.nostrCoord || '',
-        relay: aRefs[i]?.relay || '',
-        labels: { ...sharedLabels }
-      }));
-    } else {
-      // Scalar: collect flat tag values
-      const vals = event.tags.filter((t) => t[0] === keyBase && t[1]).map((t) => t[1]);
-      if (vals.length === 0) continue;
-      const optionList = /** @type {import('./forms/format.js').FormFieldOption[] | undefined} */ (
-        field.options?.options
-      );
-      if (optionList?.length) {
-        // emission writes labels — map back to optionIds (';'-joined) for the renderer
-        const byLabel = new Map(optionList.map((o) => [o.label, o.id]));
-        values[field.id] = vals.map((v) => byLabel.get(v) ?? v).join(';');
-      } else {
-        values[field.id] = vals.length === 1 ? vals[0] : vals;
-      }
+    const emitter = resolveEmitter(field);
+    const ctx = { field, prop: fieldProp(field), formDTag: form.dTag, defaultLang: 'de' };
+    const { value, concepts } = emitter.parse(event, ctx);
+    if (concepts) selectedConcepts[field.id] = concepts;
+    if (value !== undefined && value !== '' && !(Array.isArray(value) && value.length === 0)) {
+      values[field.id] = value;
     }
   }
-
   return { values, selectedConcepts };
 }
 
@@ -158,43 +84,4 @@ export function getFormReferenceFromResource(event) {
     }
   }
   return null;
-}
-
-/**
- * @param {string[][]} out
- * @param {string} propOrFieldId
- * @param {import('./forms.js').FormField} field
- * @param {string | string[]} raw
- * @param {SelectedConcept[] | undefined} concepts
- * @param {boolean} isExt
- * @param {string} formCoord
- */
-function emitForTarget(out, propOrFieldId, field, raw, concepts, isExt, formCoord) {
-  const keyBase = isExt ? `ext:${formCoord}:${propOrFieldId}` : propOrFieldId;
-
-  const isConceptField = !!field.vocab;
-  if (isConceptField) {
-    const list = Array.isArray(concepts) ? concepts : [];
-    if (list.length === 0) return;
-    for (const c of list) {
-      out.push([`${keyBase}:id`, c.id]);
-      for (const [lang, label] of Object.entries(c.labels || {})) {
-        out.push([`${keyBase}:prefLabel:${lang}`, label]);
-      }
-      out.push([`${keyBase}:type`, 'Concept']);
-      const role = isExt ? `ext:${propOrFieldId}` : propOrFieldId;
-      out.push(['a', c.nostrCoord, c.relay, role]);
-    }
-    return;
-  }
-
-  // scalar field — emit as flat tag(s); option fields resolve ids → labels
-  /** @type {import('./forms/format.js').FormFieldOption[] | undefined} */
-  const optionList = field.options?.options;
-  const byId = optionList?.length ? new Map(optionList.map((o) => [o.id, o.label])) : null;
-  const vals = Array.isArray(raw) ? raw : byId ? String(raw).split(';') : [raw];
-  for (const v of vals) {
-    if (v === undefined || v === null || v === '') continue;
-    out.push([keyBase, byId ? (byId.get(String(v)) ?? String(v)) : String(v)]);
-  }
 }

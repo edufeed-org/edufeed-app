@@ -78,28 +78,22 @@ describe('buildAMBResourceTags', () => {
     expect(tags).toContainEqual(['about:type', 'Concept']);
   });
 
-  it('dual-emits an a-tag for each concept-valued amb field', () => {
+  it('does not emit an a-tag for concept-valued amb fields (NIP-AMB compliance)', () => {
     const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
-    expect(tags).toContainEqual(['a', '39737:edupub:s1017', 'wss://vocab.example', 'about']);
+    expect(tags.some((t) => t[0] === 'a' && t[3] === 'about')).toBe(false);
   });
 
-  it('emits ext tags namespaced by the form coordinate for concept-valued ext fields', () => {
+  it('emits ext tags namespaced by the form d-tag (colon-free, no pubkey) for concept-valued ext fields', () => {
     const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
-    expect(tags).toContainEqual([
-      'ext:30168:edupub:amb-basic:kompetenz:id',
-      'https://example.org/komp/arg'
-    ]);
-    expect(tags).toContainEqual([
-      'ext:30168:edupub:amb-basic:kompetenz:prefLabel:de',
-      'Argumentieren'
-    ]);
-    expect(tags).toContainEqual(['ext:30168:edupub:amb-basic:kompetenz:type', 'Concept']);
-    expect(tags).toContainEqual(['a', '39737:mbi:arg', 'wss://vocab.example', 'ext:kompetenz']);
+    expect(tags).toContainEqual(['ext:amb-basic:kompetenz:id', 'https://example.org/komp/arg']);
+    expect(tags).toContainEqual(['ext:amb-basic:kompetenz:prefLabel:de', 'Argumentieren']);
+    expect(tags).toContainEqual(['ext:amb-basic:kompetenz:type', 'Concept']);
+    expect(tags.some((t) => t[0] === 'a' && t[3] === 'ext:kompetenz')).toBe(false);
   });
 
   it('emits a flat ext tag (no :id sub-path) for scalar ext fields', () => {
     const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
-    expect(tags).toContainEqual(['ext:30168:edupub:amb-basic:klassenstufe', '7']);
+    expect(tags).toContainEqual(['ext:amb-basic:klassenstufe', '7']);
   });
 
   it('emits the informative form back-reference a-tag', () => {
@@ -129,15 +123,18 @@ describe('buildAMBResourceTags', () => {
 
     expect(sc.about).toHaveLength(1);
     expect(sc.about[0].id).toBe('https://w3id.org/kim/schulfaecher/s1017');
-    expect(sc.about[0].nostrCoord).toBe('39737:edupub:s1017');
-    expect(sc.about[0].relay).toBe('wss://vocab.example');
     expect(sc.about[0].labels.de).toBe('Mathematik');
     expect(sc.about[0].labels.en).toBe('Mathematics');
+    // NIP-AMB compliance dropped the concept a-tag, so nostrCoord/relay are no
+    // longer recoverable from the resource event itself (only from a fresh
+    // vocab lookup) — the round-trip now yields empty strings for these.
+    expect(sc.about[0].nostrCoord).toBe('');
+    expect(sc.about[0].relay).toBe('');
 
     expect(sc.kompetenz).toHaveLength(1);
     expect(sc.kompetenz[0].id).toBe('https://example.org/komp/arg');
-    expect(sc.kompetenz[0].nostrCoord).toBe('39737:mbi:arg');
     expect(sc.kompetenz[0].labels.de).toBe('Argumentieren');
+    expect(sc.kompetenz[0].nostrCoord).toBe('');
   });
 
   it('getFormReferenceFromResource extracts the form back-reference a-tag', () => {
@@ -187,8 +184,8 @@ describe('buildAMBResourceTags', () => {
       selectedConcepts: {}
     });
     expect(tags.some((t) => t[0] === 'about:id')).toBe(false);
-    expect(tags.some((t) => t[0]?.startsWith('ext:30168:edupub:amb-basic:kompetenz'))).toBe(false);
-    expect(tags.some((t) => t[0] === 'ext:30168:edupub:amb-basic:klassenstufe')).toBe(false);
+    expect(tags.some((t) => t[0]?.startsWith('ext:amb-basic:kompetenz'))).toBe(false);
+    expect(tags.some((t) => t[0] === 'ext:amb-basic:klassenstufe')).toBe(false);
     expect(tags).toContainEqual(['name', 'Only name']);
   });
 
