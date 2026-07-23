@@ -63,6 +63,7 @@
    * @property {string} [output]
    * @property {string} [vocabNaddrInput]
    * @property {string} [vocabError]
+   * @property {any} [displayIf] - conditional-visibility rules, passed through unchanged (no authoring UI yet)
    */
 
   /**
@@ -102,9 +103,14 @@
       vocab: f.vocab,
       output: f.output,
       vocabNaddrInput: vocabToNaddr(f.vocab),
-      vocabError: ''
+      vocabError: '',
+      displayIf: f.options?.displayIf
     })) || []
   );
+
+  // Sections aren't authorable yet (no branching UI) — carry the loaded
+  // template's sections through unchanged so re-saving doesn't wipe grouping.
+  let templateSections = $state(existing?.sections || []);
 
   let isPublishing = $state(false);
   let error = $state('');
@@ -231,8 +237,10 @@
         vocab: f.vocab,
         output: f.output,
         vocabNaddrInput: vocabToNaddr(f.vocab),
-        vocabError: ''
+        vocabError: '',
+        displayIf: f.options?.displayIf
       }));
+      templateSections = parsed.sections || [];
 
       // Pre-fill metadata when empty
       if (!formName) formName = parsed.name ? `${parsed.name} (fork)` : '';
@@ -282,7 +290,8 @@
           ...(f.max !== undefined && { max: f.max }),
           ...((f.type === 'select' || f.type === 'radio') &&
             f.selectOptions.length > 0 && { options: f.selectOptions }),
-          ...(f.multiple && { multiple: true })
+          ...(f.multiple && { multiple: true }),
+          ...(f.displayIf ? { displayIf: f.displayIf } : {})
         },
         ...(f.vocab?.address ? { vocab: f.vocab } : {}),
         ...(f.output ? { output: f.output } : {})
@@ -293,7 +302,8 @@
         description: formDescription,
         public: isPublic,
         confirmationMessage,
-        ...(forkOf ? { forkOf } : {})
+        ...(forkOf ? { forkOf } : {}),
+        ...(templateSections.length > 0 ? { sections: templateSections } : {})
       });
 
       const factory = createAppEventFactory({ signer: manager.active.signer });

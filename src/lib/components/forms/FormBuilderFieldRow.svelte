@@ -29,6 +29,7 @@
    * @property {string} [output]
    * @property {string} [vocabNaddrInput]
    * @property {string} [vocabError]
+   * @property {any} [displayIf] - conditional-visibility rules, passed through unchanged (no authoring UI yet)
    *
    * @typedef {Object} Props
    * @property {FieldState} field
