@@ -274,6 +274,19 @@
     hydrateDeletions();
   });
 
+  // Start the Concord private-channels session lifecycle (no-op unless
+  // CONCORD_ENABLED). Idempotent — safe even though $effect can re-run.
+  // Dynamic import (not a static top-of-file import): the $lib/concord
+  // barrel statically re-exports storage.js, which imports the
+  // applesauce-core-concord package at module scope — a static import
+  // here would pull that into the server bundle (see CLAUDE.md SSR note).
+  $effect(() => {
+    if (!browser) return;
+    import('$lib/concord').then(({ initConcordService }) => {
+      initConcordService();
+    });
+  });
+
   // Initialize inbox + wave toasts on login, cleanup on logout
   // Also warm the persistent event cache with identity data
   $effect(() => {

@@ -5,3 +5,11 @@
 export { parseConcordPointer, buildConcordPointerTag, withConcordPointer } from './pointer.js';
 export { concordDbName, createConcordStorage, createConcordStoreFactory } from './storage.js';
 export { deleteConcordDb } from './idb-database.js';
+export {
+  initConcordService,
+  getConcordState,
+  getConcordClient,
+  signerHasNip44,
+  wipeConcordData
+} from './client.svelte.js';
+export { useObservable } from './bridge.svelte.js';
