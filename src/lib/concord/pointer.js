@@ -16,7 +16,7 @@ export function buildConcordPointerTag(communityId, relay) {
 /**
  * Parse the concord pointer from a kind 10222 event. Tag values are untrusted
  * network input — the id is validated as 64-char lowercase hex.
- * @param {{ tags?: string[][] } | null | undefined} event
+ * @param {{ tags?: string[][], [key: string]: any } | null | undefined} event
  * @returns {{ communityId: string, relay: string|undefined } | undefined}
  */
 export function parseConcordPointer(event) {
