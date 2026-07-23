@@ -125,14 +125,21 @@
           small={m.concord_removed_small()}
         />
       {:else if activeChannel?.accessible}
-        <ChannelChat
-          community={concord.community}
-          channel={activeChannel}
-          dissolved={concord.dissolved}
-          {isOwner}
-          openOverlay={(/** @type {string} */ name) => (overlay = name)}
-          onBack={() => (mobileChat = false)}
-        />
+        <!-- Keyed so switching channels remounts ChannelChat: per-channel
+          composer state (draft text, replyTo) must not leak — a reply started
+          in channel A would otherwise be sent into channel B with a q tag
+          pointing at a message from a different channel/plane. A full remount
+          also resets scroll position naturally. -->
+        {#key activeChannel.channel_id}
+          <ChannelChat
+            community={concord.community}
+            channel={activeChannel}
+            dissolved={concord.dissolved}
+            {isOwner}
+            openOverlay={(/** @type {string} */ name) => (overlay = name)}
+            onBack={() => (mobileChat = false)}
+          />
+        {/key}
       {:else if activeChannel}
         <!-- Task 8 carry-forward: the channel exists (it folded into channels$
           from public metadata) but we don't hold its key — give this an

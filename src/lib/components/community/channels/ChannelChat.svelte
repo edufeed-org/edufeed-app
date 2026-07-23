@@ -11,13 +11,10 @@
     getUserDisplayName,
     groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
-  // NOTE: message-utils.js's getReplyParentId() is NOT used here. It expects
-  // the NIP-10 marked-`e`-tag convention (`["e", id, relay, "reply"]`) used by
-  // the public Chat.svelte kind-9 flow. Concord's ChatMessageFactory#replyTo
-  // (applesauce-common/factories/chat-message.js → includeChatReply →
-  // ensureQuoteEventPointerTag) instead writes a NIP-C7 `q` tag
-  // (`["q", id, relay, author]`) — verified in the concord-pinned
-  // applesauce-common dist. Read that tag directly below.
+  // NOTE: message-utils.js's getReplyParentId() is NOT used here — concord
+  // replies carry a NIP-C7 `q` tag, not a NIP-10 marked `e` tag. See the
+  // rationale (with dist references) in chat-helpers.js.
+  import { aggregateChannelReactions, getConcordReplyParentId } from '$lib/concord/chat-helpers.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -51,31 +48,9 @@
     () => community?.channelStore(channel.channel_id).timeline([{ kinds: [7] }]),
     /** @type {any[]} */ ([])
   );
-  // ReactionFactory (applesauce-common/factories/reaction.js) writes a plain
-  // NIP-25 "e" tag via ensureEventPointerTag (no marker) — `t[0] === 'e'` is
-  // the target, matching the brief's aggregation exactly.
-  /** message id → Map<emoji, count>. Plain Map rebuilt fresh on every recompute
-   *  (never mutated in place) — same convention as ReactionBar.svelte's
-   *  aggregateReactions(); SvelteMap isn't needed and can cause reactivity loops here. */
-  const reactionsByTarget = $derived.by(() => {
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const map = new Map();
-    for (const reaction of getReactions()) {
-      const target = reaction.tags?.find((/** @type {string[]} */ t) => t[0] === 'e')?.[1];
-      if (!target) continue;
-      const emoji = reaction.content || '👍';
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const perMessage = map.get(target) ?? new Map();
-      perMessage.set(emoji, (perMessage.get(emoji) ?? 0) + 1);
-      map.set(target, perMessage);
-    }
-    return map;
-  });
-
-  /** @param {any} message @returns {string | null} */
-  function getConcordReplyParentId(message) {
-    return message.tags?.find((/** @type {string[]} */ t) => t[0] === 'q')?.[1] || null;
-  }
+  /** message id → Map<emoji, count> — pure aggregation, tested in
+   *  concord-chat-helpers.test.js */
+  const reactionsByTarget = $derived(aggregateChannelReactions(getReactions()));
 
   let text = $state('');
   let sending = $state(false);
