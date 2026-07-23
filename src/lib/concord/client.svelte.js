@@ -59,7 +59,11 @@ async function setup(account) {
   if (!runtimeConfig.concord?.enabled) return;
   const relays = runtimeConfig.concord.relays;
   if (!relays?.length) {
+    // Surface misconfiguration as an error state — leaving phase at 'off'
+    // strands flag-gated UI (e.g. the /invite join button) on an
+    // indefinite disabled spinner (Task 12 review finding).
     console.warn('concord: CONCORD_ENABLED without CONCORD_RELAYS — feature disabled');
+    state = { ...state, phase: 'error', error: 'CONCORD_RELAYS is not configured' };
     return;
   }
   state = { ...state, phase: 'starting' };
