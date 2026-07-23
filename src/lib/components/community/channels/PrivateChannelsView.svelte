@@ -15,18 +15,16 @@
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
   import ChannelInviteSheet from './ChannelInviteSheet.svelte';
   import ChannelMembersModal from './ChannelMembersModal.svelte';
-  // TODO(task-14): explainer/backup/dissolve — uncomment once ChannelExplainer.svelte exists.
-  // import ChannelExplainer from './ChannelExplainer.svelte';
-  // TODO(task-14): explainer/backup/dissolve — uncomment once KeyBackupModal.svelte exists.
-  // import KeyBackupModal from './KeyBackupModal.svelte';
+  import ChannelExplainer from './ChannelExplainer.svelte';
+  import KeyBackupModal from './KeyBackupModal.svelte';
   import InviteInboxModal from './InviteInboxModal.svelte';
+  import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
-  // communityPubkey is unused until Tasks 11/13/14 uncomment the overlay
-  // components that need it (see TODOs above and the commented overlay block
-  // below) — kept in the prop list so MainContentArea doesn't need to change
-  // again when those land. communityProfile is used by the create wizard
-  // (Task 9) to name the Concord area after the community.
+  // communityPubkey is currently unused by this component — kept in the
+  // prop list so MainContentArea doesn't need to change if a future overlay
+  // needs it. communityProfile is used by the create wizard (Task 9) to
+  // name the Concord area after the community.
   let {
     communikeyEvent,
     communityProfile = null,
@@ -49,6 +47,31 @@
   const activeChannel = $derived(
     channels.find((c) => c.channel_id === selectedChannelId) ?? channels[0]
   );
+
+  // community.dissolve() (dist/client/community.js) throws a plain
+  // Error("only the owner can dissolve") when the caller isn't
+  // material.owner — a defensive backstop behind the isOwner-gated menu
+  // item that triggers this. It publishes a tombstone rumor to the
+  // community-wide "dissolved" plane (NOT per-channel — there is no
+  // per-channel hard delete exposed in this UI) with an optimistic local
+  // echo, so `concord.dissolved` (backed by `dissolved$`) flips before any
+  // relay round-trip completes; Tasks 8/10 already render the resulting
+  // tombstone banner + read-only composer off that same flag.
+  let dissolving = $state(false);
+  async function dissolve() {
+    if (dissolving) return;
+    dissolving = true;
+    try {
+      await concord.community.dissolve();
+      showToast(m.concord_dissolved_toast(), 'success');
+      overlay = null;
+    } catch (error) {
+      console.error('concord: dissolve failed', error);
+      showToast(m.concord_dissolve_failed(), 'error');
+    } finally {
+      dissolving = false;
+    }
+  }
 </script>
 
 <!-- Flag off must hide the UI entirely (global constraint): the tab is
@@ -182,16 +205,28 @@
       signerHasNip44={concord.signerHasNip44}
       onClose={() => (overlay = null)}
     />
-  {:else if overlay}
-    <!-- The remaining overlay branches stay commented until each task's
-      component exists; uncomment the matching branch as each task lands.
-    {#if overlay === 'explainer'}
-      TODO(task-14): ChannelExplainer — uncomment once it exists.
-      <ChannelExplainer onClose={() => (overlay = null)} />
-    {:else if overlay === 'backup'}
-      TODO(task-14): KeyBackupModal — uncomment once it exists.
-      <KeyBackupModal onClose={() => (overlay = null)} />
-    {/if}
-    -->
+  {:else if overlay === 'explainer'}
+    <ChannelExplainer onClose={() => (overlay = null)} />
+  {:else if overlay === 'backup'}
+    <KeyBackupModal onClose={() => (overlay = null)} />
+  {:else if overlay === 'dissolve' && concord.community}
+    <!-- Same confirm skeleton as Task 13's ChannelMembersModal kick/ban
+      dialog. Scope is honest in the copy: dissolve() is community-level (it
+      tombstones the whole private area, all channels), matching the dist —
+      there is no per-channel hard delete surfaced in Phase 1. -->
+    <div class="modal-open modal" role="dialog">
+      <div class="modal-box max-w-sm text-center">
+        <h3 class="text-lg font-extrabold">{m.concord_dissolve_title()}</h3>
+        <p class="my-3 text-sm text-base-content/70">{m.concord_dissolve_body()}</p>
+        <div class="modal-action justify-center">
+          <button class="btn btn-ghost" onclick={() => (overlay = null)}
+            >{m.concord_cancel()}</button
+          >
+          <button class="btn btn-error" disabled={dissolving} onclick={dissolve}
+            >{m.concord_dissolve_action()}</button
+          >
+        </div>
+      </div>
+    </div>
   {/if}
 {/if}

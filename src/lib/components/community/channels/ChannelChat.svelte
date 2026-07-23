@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte';
   // Imports directly from the concord submodule (not the barrel) — same
   // convention as PrivateChannelsView.svelte: bridge.svelte.js has no
   // top-level package imports, so this stays SSR-clean even though the
@@ -59,6 +60,22 @@
   let replyTo = $state(null);
   /** @type {HTMLElement|undefined} */
   let scrollContainer;
+
+  // Dismissible "back up your key" bar. localStorage is read inside
+  // onMount (not module scope), which only runs client-side post-mount —
+  // belt and suspenders even though the c/[pubkey] route already disables
+  // SSR. onMount (not $effect) because there's no reactive dependency to
+  // track — an effect that only assigns from a non-reactive read trips
+  // eslint's svelte/prefer-writable-derived, and a $derived can't also be
+  // set imperatively from dismissKeyBar() below.
+  let showKeyBar = $state(false);
+  onMount(() => {
+    showKeyBar = !localStorage.getItem('concord:keybar-dismissed');
+  });
+  function dismissKeyBar() {
+    localStorage.setItem('concord:keybar-dismissed', '1');
+    showKeyBar = false;
+  }
 
   $effect(() => {
     // Read the reactive dep BEFORE any early return (project gotcha: an
@@ -171,6 +188,16 @@
 {#if dissolved}
   <div class="border-b border-base-300 bg-base-200 px-4 py-2 text-sm text-base-content/70">
     {m.concord_dissolved_banner()}
+  </div>
+{:else if showKeyBar}
+  <div
+    class="flex shrink-0 items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
+  >
+    🔑 <span class="flex-1"><b>{m.concord_keybar_title()}</b> {m.concord_keybar_body()}</span>
+    <button class="btn btn-xs btn-neutral" onclick={() => openOverlay('backup')}
+      >{m.concord_keybar_action()}</button
+    >
+    <button class="btn btn-circle btn-ghost btn-xs" onclick={dismissKeyBar}>✕</button>
   </div>
 {/if}
 
