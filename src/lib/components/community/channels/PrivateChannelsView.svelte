@@ -13,16 +13,14 @@
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
-  // TODO(task-11): invite sheet + inbox — uncomment once ChannelInviteSheet.svelte exists.
-  // import ChannelInviteSheet from './ChannelInviteSheet.svelte';
+  import ChannelInviteSheet from './ChannelInviteSheet.svelte';
   // TODO(task-13): members modal + moderation — uncomment once ChannelMembersModal.svelte exists.
   // import ChannelMembersModal from './ChannelMembersModal.svelte';
   // TODO(task-14): explainer/backup/dissolve — uncomment once ChannelExplainer.svelte exists.
   // import ChannelExplainer from './ChannelExplainer.svelte';
   // TODO(task-14): explainer/backup/dissolve — uncomment once KeyBackupModal.svelte exists.
   // import KeyBackupModal from './KeyBackupModal.svelte';
-  // TODO(task-11): invite sheet + inbox — uncomment once InviteInboxModal.svelte exists.
-  // import InviteInboxModal from './InviteInboxModal.svelte';
+  import InviteInboxModal from './InviteInboxModal.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // communityPubkey is unused until Tasks 11/13/14 uncomment the overlay
@@ -167,14 +165,20 @@
         mobileChat = true;
       }}
     />
+  {:else if overlay === 'invite' && concord.community && activeChannel}
+    <ChannelInviteSheet
+      {communikeyEvent}
+      community={concord.community}
+      channel={activeChannel}
+      canDirect={concord.signerHasNip44}
+      onClose={() => (overlay = null)}
+    />
+  {:else if overlay === 'inbox'}
+    <InviteInboxModal onClose={() => (overlay = null)} />
   {:else if overlay}
-    <!-- Real (uncommented) so `overlay` stays a genuine read, not just a write —
-      the per-modal branches themselves stay commented until each task's
+    <!-- The remaining overlay branches stay commented until each task's
       component exists; uncomment the matching branch as each task lands.
-    {#if overlay === 'invite' && concord.community && activeChannel}
-      TODO(task-11): ChannelInviteSheet — uncomment once it exists.
-      <ChannelInviteSheet community={concord.community} channel={activeChannel} onClose={() => (overlay = null)} />
-    {:else if overlay === 'members' && concord.community && activeChannel}
+    {#if overlay === 'members' && concord.community && activeChannel}
       TODO(task-13): ChannelMembersModal — uncomment once it exists.
       <ChannelMembersModal community={concord.community} channel={activeChannel} {isOwner} onClose={() => (overlay = null)} />
     {:else if overlay === 'explainer'}
@@ -183,9 +187,6 @@
     {:else if overlay === 'backup'}
       TODO(task-14): KeyBackupModal — uncomment once it exists.
       <KeyBackupModal onClose={() => (overlay = null)} />
-    {:else if overlay === 'inbox'}
-      TODO(task-11): InviteInboxModal — uncomment once it exists.
-      <InviteInboxModal onClose={() => (overlay = null)} />
     {/if}
     -->
   {/if}

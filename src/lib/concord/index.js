@@ -23,3 +23,4 @@ export {
 export { useObservable } from './bridge.svelte.js';
 export { shouldShowChannelsTab, useConcordCommunity } from './community.svelte.js';
 export { foundConcordArea, buildPointerUpdate } from './founding.js';
+export { pickLatestChannelInvite, createChannelInviteOnce } from './invite-helpers.js';
