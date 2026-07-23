@@ -23,6 +23,45 @@ describe('channelMemberList', () => {
   it('returns an empty array when everything is empty', () => {
     expect(channelMemberList({ observed: [], granted: [], self: undefined })).toEqual([]);
   });
+
+  // Banlist-aware roster (final review, CRITICAL): a banned member must
+  // disappear from the roster so a later rotateChannel never re-delivers a
+  // fresh channel key to them — see moderation.js's rotateChannel trail.
+  it('previously banned member is excluded from roster', () => {
+    expect(
+      channelMemberList({
+        observed: ['a', 'evil', 'b'],
+        granted: ['evil'],
+        self: 'me',
+        banned: ['evil']
+      })
+    ).toEqual(['me', 'a', 'b']);
+  });
+
+  it('accepts banned as a Set, not just an array', () => {
+    expect(
+      channelMemberList({
+        observed: ['a', 'evil'],
+        granted: [],
+        self: 'me',
+        banned: new Set(['evil'])
+      })
+    ).toEqual(['me', 'a']);
+  });
+
+  it('never subtracts self even if self were somehow banned', () => {
+    expect(channelMemberList({ observed: ['a'], granted: [], self: 'me', banned: ['me'] })).toEqual(
+      ['me', 'a']
+    );
+  });
+
+  it('defaults banned to empty when omitted (backward compatible)', () => {
+    expect(channelMemberList({ observed: ['a'], granted: ['b'], self: 'me' })).toEqual([
+      'me',
+      'a',
+      'b'
+    ]);
+  });
 });
 
 describe('kickFromChannel / banFromChannel', () => {
@@ -82,5 +121,43 @@ describe('kickFromChannel / banFromChannel', () => {
     );
     expect(c.ban).not.toHaveBeenCalled();
     expect(c.rotateChannel).not.toHaveBeenCalled();
+  });
+
+  // Belt and suspenders (final review, CRITICAL): even if a future caller
+  // passes a stale `currentMembers` roster that still contains a banned
+  // pubkey (e.g. the caller forgot to filter it out of the roster it built),
+  // kick/ban must defensively strip `banned` from `keep` themselves — a
+  // rotation must never re-deliver the fresh channel key to someone already
+  // on the community banlist.
+  it('kick never lets a banned member into keep, even if currentMembers still lists them', async () => {
+    const c = community();
+    await kickFromChannel(c, 'chan1', 'target', ['me', 'target', 'previously-banned'], 'me', [
+      'previously-banned'
+    ]);
+    expect(c.rotateChannel).toHaveBeenCalledWith('chan1', {
+      keep: ['me'],
+      exclude: ['target']
+    });
+  });
+
+  it('ban never lets a (different, already-)banned member into keep', async () => {
+    const c = community();
+    await banFromChannel(c, 'chan1', 'target', ['me', 'target', 'previously-banned'], 'me', [
+      'previously-banned'
+    ]);
+    expect(c.ban).toHaveBeenCalledWith('target');
+    expect(c.rotateChannel).toHaveBeenCalledWith('chan1', {
+      keep: ['me'],
+      exclude: ['target']
+    });
+  });
+
+  it('kick/ban default banned to empty (backward compatible call signature)', async () => {
+    const c = community();
+    await kickFromChannel(c, 'chan1', 'evil', ['me', 'evil', 'friend'], 'me');
+    expect(c.rotateChannel).toHaveBeenCalledWith('chan1', {
+      keep: ['me', 'friend'],
+      exclude: ['evil']
+    });
   });
 });

@@ -8,11 +8,16 @@
 
   - There is no authoritative per-channel roster (key possession IS
     membership) — the list here is `channelMemberList()`'s approximation:
-    authors observed writing in the channel (any kind — `.timeline([{}])`) ∪
-    self. We pass `granted: []`: this app has no local record of channel
-    grants independent of what's already observable, so it's an honest no-op
-    input rather than a fabricated one. `concord_members_note` tells the user
-    the list can lag.
+    (authors observed writing in the channel (any kind — `.timeline([{}])`) ∪
+    self) − banlist (spec §3.3). We pass `granted: []`: this app has no local
+    record of channel grants independent of what's already observable, so
+    it's an honest no-op input rather than a fabricated one.
+    `concord_members_note` tells the user the list can lag.
+  - `community.banlist$` (Observable<Set<string>>) is bridged reactively and
+    subtracted both from the displayed roster AND from the `keep` list passed
+    to kick/ban (final-review fix: a banned member must never re-receive a
+    fresh channel key on a later rotation) — banned members simply disappear
+    from this modal, there is no "unban" affordance in Phase 1.
   - `rotateChannel`/`ban` both require the phase-1 moderator to be the
     community owner in this UI (the `isOwner` prop, same gate the rest of
     PrivateChannelsView uses) — `rotateChannel` itself also throws if the
@@ -43,11 +48,19 @@
     () => community?.channelStore(channel.channel_id).timeline([{}]),
     /** @type {any[]} */ ([])
   );
+  // community.banlist$ (Observable<Set<string>>, verified in
+  // node_modules/applesauce-concord/dist/client/community.js) — subtracted
+  // from both the displayed roster and the keep-list passed to kick/ban.
+  const getBanlist = useObservable(
+    () => community?.banlist$,
+    /** @type {Set<string>} */ (new Set())
+  );
   const members = $derived(
     channelMemberList({
       observed: getRumors().map((/** @type {any} */ r) => r.pubkey),
       granted: [],
-      self: getActiveUser()?.pubkey
+      self: getActiveUser()?.pubkey,
+      banned: getBanlist()
     })
   );
   const getProfiles = useProfileMap(() => members);
@@ -66,8 +79,23 @@
     const callerPubkey = getActiveUser()?.pubkey;
     try {
       if (kind === 'ban')
-        await banFromChannel(community, channel.channel_id, pubkey, members, callerPubkey);
-      else await kickFromChannel(community, channel.channel_id, pubkey, members, callerPubkey);
+        await banFromChannel(
+          community,
+          channel.channel_id,
+          pubkey,
+          members,
+          callerPubkey,
+          getBanlist()
+        );
+      else
+        await kickFromChannel(
+          community,
+          channel.channel_id,
+          pubkey,
+          members,
+          callerPubkey,
+          getBanlist()
+        );
       showToast(kind === 'ban' ? m.concord_banned_toast() : m.concord_kicked_toast(), 'success');
       confirm = null;
     } catch (error) {

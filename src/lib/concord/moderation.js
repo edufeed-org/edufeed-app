@@ -53,8 +53,9 @@
 //   here.
 
 /**
- * Approximate member list of a private channel: authors observed writing in
- * the channel ∪ members we (locally) know we granted access to ∪ self.
+ * Approximate member list of a private channel: (authors observed writing in
+ * the channel ∪ members we (locally) know we granted access to) − banlist,
+ * plus self (spec §3.3: guestbook ∪ observed − banlist).
  *
  * There is no authoritative per-channel roster in CORD Phase 1 — channel
  * membership is defined by key possession, which isn't directly observable
@@ -62,14 +63,19 @@
  * access in a PAST session we didn't witness, is invisible to us). The UI
  * labels this list as approximate for that reason.
  *
- * @param {{observed: string[], granted: string[], self: string|undefined}} args
+ * `self` is NEVER subtracted by `banned` — display honesty (and a banned
+ * self can't happen in practice: only owners drive this UI, and `ban()`
+ * throws on a self-target, see kickFromChannel/banFromChannel below).
+ *
+ * @param {{observed: string[], granted: string[], self: string|undefined, banned?: Set<string>|string[]}} args
  * @returns {string[]} self first (when present), then observed/granted in
- *   first-seen order, deduped
+ *   first-seen order, deduped, with any `banned` pubkeys excluded (self excepted)
  */
-export function channelMemberList({ observed, granted, self }) {
+export function channelMemberList({ observed, granted, self, banned = [] }) {
+  const bannedSet = banned instanceof Set ? banned : new Set(banned);
   const set = new Set(self ? [self] : []);
-  for (const p of observed) set.add(p);
-  for (const p of granted) set.add(p);
+  for (const p of observed) if (!bannedSet.has(p)) set.add(p);
+  for (const p of granted) if (!bannedSet.has(p)) set.add(p);
   return [...set];
 }
 
@@ -92,11 +98,23 @@ export function channelMemberList({ observed, granted, self }) {
  * @param {string} callerPubkey - the acting user's pubkey; `member === callerPubkey` throws
  *   (an OWNER self-exclude passes rotateChannel's guards and silently loses the key —
  *   see the header comment; self-leave is `community.leaveChannel()`, not a rotation)
+ * @param {Set<string>|string[]} [banned] - defensive re-filter of `keep` against the
+ *   community banlist — belt and suspenders on top of the caller already having
+ *   subtracted `banned` when it built `currentMembers` (see {@link channelMemberList}),
+ *   so no future caller can regress a banned member back into key delivery
  * @returns {Promise<void>}
  */
-export async function kickFromChannel(community, channelId, member, currentMembers, callerPubkey) {
+export async function kickFromChannel(
+  community,
+  channelId,
+  member,
+  currentMembers,
+  callerPubkey,
+  banned = []
+) {
   if (member === callerPubkey) throw new Error('refusing to remove self from channel');
-  const keep = currentMembers.filter((p) => p !== member);
+  const bannedSet = banned instanceof Set ? banned : new Set(banned);
+  const keep = currentMembers.filter((p) => p !== member && !bannedSet.has(p));
   await community.rotateChannel(channelId, { keep, exclude: [member] });
 }
 
@@ -123,11 +141,22 @@ export async function kickFromChannel(community, channelId, member, currentMembe
  * @param {string[]} currentMembers - approximate roster, see {@link channelMemberList}
  * @param {string} callerPubkey - the acting user's pubkey; `member === callerPubkey` throws
  *   (see {@link kickFromChannel} — an owner self-exclude silently loses the channel key)
+ * @param {Set<string>|string[]} [banned] - defensive re-filter of `keep` against the
+ *   community banlist, same belt-and-suspenders rationale as {@link kickFromChannel}
+ *   (this ban's own target is already excluded via `member`, independent of `banned`)
  * @returns {Promise<void>}
  */
-export async function banFromChannel(community, channelId, member, currentMembers, callerPubkey) {
+export async function banFromChannel(
+  community,
+  channelId,
+  member,
+  currentMembers,
+  callerPubkey,
+  banned = []
+) {
   if (member === callerPubkey) throw new Error('refusing to remove self from channel');
   await community.ban(member);
-  const keep = currentMembers.filter((p) => p !== member);
+  const bannedSet = banned instanceof Set ? banned : new Set(banned);
+  const keep = currentMembers.filter((p) => p !== member && !bannedSet.has(p));
   await community.rotateChannel(channelId, { keep, exclude: [member] });
 }
