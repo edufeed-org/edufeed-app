@@ -4,6 +4,13 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { ConcordIdbEventDatabase, deleteConcordDb } from '$lib/concord/idb-database.js';
 
 const DB = 'concord-test';
+/**
+ * @param {string} id
+ * @param {number} [kind]
+ * @param {number} [created_at]
+ * @param {string[][]} [tags]
+ * @param {string} [pubkey]
+ */
 const rumor = (id, kind = 9, created_at = 100, tags = [], pubkey = 'p'.repeat(64)) => ({
   id: id.repeat(64).slice(0, 64),
   kind,
@@ -74,5 +81,17 @@ describe('ConcordIdbEventDatabase', () => {
     const history = await db.getReplaceableHistory(33301, pk, 'x');
     expect(history?.map((e) => e.created_at)).toEqual([200, 100]);
     expect(await db.getReplaceable(33301, pk, 'other')).toBeUndefined();
+  });
+
+  it('replaceable tie-break on equal created_at picks the lowest id', async () => {
+    const db = new ConcordIdbEventDatabase(DB, 'c1/control');
+    const pk = 'f'.repeat(64);
+    // Insert higher id first so primary-key/store order cannot mask a missing tie-break
+    await db.add(rumor('c', 33301, 200, [['d', 'x']], pk));
+    await db.add(rumor('b', 33301, 200, [['d', 'x']], pk));
+    const winner = await db.getReplaceable(33301, pk, 'x');
+    expect(winner?.id).toBe('b'.repeat(64));
+    const history = await db.getReplaceableHistory(33301, pk, 'x');
+    expect(history?.map((e) => e.id[0])).toEqual(['b', 'c']);
   });
 });

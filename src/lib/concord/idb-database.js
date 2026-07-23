@@ -8,8 +8,18 @@
 // A `#vsk` filter against matchFilters() never matches, verified directly against the
 // installed package. `matchFilters` below is a local equivalent that also supports
 // arbitrary-length tag names; ids/kinds/authors/since/until semantics are unchanged.
+// Known difference: the local matcher does NOT implement upstream's NIP-91 `&`-prefixed
+// AND-tag filters (unused anywhere in applesauce-concord today).
 
-/** @param {import('applesauce-core-concord/helpers').Filter} filter @param {any} event */
+/** @typedef {import('applesauce-core-concord/helpers').Rumor} Rumor */
+/** @typedef {import('applesauce-core-concord/helpers').Filter} Filter */
+/** @typedef {{ key: string, plane: string, event: Rumor }} RumorRecord */
+
+/**
+ * @param {Filter} filter
+ * @param {Rumor} event
+ * @returns {boolean}
+ */
 function matchFilter(filter, event) {
   if (filter.ids && !filter.ids.includes(event.id)) return false;
   if (filter.kinds && !filter.kinds.includes(event.kind)) return false;
@@ -18,7 +28,7 @@ function matchFilter(filter, event) {
   if (filter.until !== undefined && event.created_at > filter.until) return false;
   for (const key of Object.keys(filter)) {
     if (key[0] !== '#') continue;
-    const values = filter[key];
+    const values = filter[/** @type {`#${string}`} */ (key)];
     if (!values || values.length === 0) continue;
     const tagName = key.slice(1);
     const tagValues = event.tags.filter((t) => t[0] === tagName).map((t) => t[1]);
@@ -27,7 +37,11 @@ function matchFilter(filter, event) {
   return true;
 }
 
-/** @param {import('applesauce-core-concord/helpers').Filter[]} filters @param {any} event */
+/**
+ * @param {Filter[]} filters
+ * @param {Rumor} event
+ * @returns {boolean}
+ */
 function matchFilters(filters, event) {
   return filters.some((f) => matchFilter(f, event));
 }
@@ -72,7 +86,11 @@ export async function deleteConcordDb(dbName) {
   });
 }
 
-/** @param {IDBRequest} req @returns {Promise<any>} */
+/**
+ * @template T
+ * @param {IDBRequest<T>} req
+ * @returns {Promise<T>}
+ */
 const promisify = (req) =>
   new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
@@ -93,23 +111,28 @@ export class ConcordIdbEventDatabase {
     return db.transaction('rumors', mode).objectStore('rumors');
   }
 
+  /** @param {string} id @returns {string} */
   key(id) {
     return `${this.plane}:${id}`;
   }
 
-  /** All rumors of this plane. @returns {Promise<any[]>} */
+  /** All rumors of this plane. @returns {Promise<Rumor[]>} */
   async all() {
     const store = await this.store('readonly');
-    const records = await promisify(store.index('byPlane').getAll(this.plane));
+    const records = /** @type {RumorRecord[]} */ (
+      await promisify(store.index('byPlane').getAll(this.plane))
+    );
     return records.map((r) => r.event);
   }
 
+  /** @param {Rumor} event @returns {Promise<Rumor>} */
   async add(event) {
     const store = await this.store('readwrite');
     await promisify(store.put({ key: this.key(event.id), plane: this.plane, event }));
     return event;
   }
 
+  /** @param {string | Rumor} event @returns {Promise<boolean>} */
   async remove(event) {
     const id = typeof event === 'string' ? event : event.id;
     const store = await this.store('readwrite');
@@ -119,6 +142,7 @@ export class ConcordIdbEventDatabase {
     return true;
   }
 
+  /** @param {Filter | Filter[]} filters @returns {Promise<number>} */
   async removeByFilters(filters) {
     const list = Array.isArray(filters) ? filters : [filters];
     const matching = (await this.all()).filter((e) => matchFilters(list, e));
@@ -127,28 +151,42 @@ export class ConcordIdbEventDatabase {
     return matching.length;
   }
 
+  /** @param {string} id @returns {Promise<boolean>} */
   async hasEvent(id) {
     const store = await this.store('readonly');
     return (await promisify(store.getKey(this.key(id)))) !== undefined;
   }
 
+  /** @param {string} id @returns {Promise<Rumor | undefined>} */
   async getEvent(id) {
     const store = await this.store('readonly');
-    const record = await promisify(store.get(this.key(id)));
+    const record = /** @type {RumorRecord | undefined} */ (
+      await promisify(store.get(this.key(id)))
+    );
     return record?.event;
   }
 
+  /** @param {Filter | Filter[]} filters @returns {Promise<Rumor[]>} */
   async getByFilters(filters) {
     const list = Array.isArray(filters) ? filters : [filters];
     return (await this.all()).filter((e) => matchFilters(list, e));
   }
 
+  /** @param {Filter | Filter[]} filters @returns {Promise<Rumor[]>} */
   async getTimeline(filters) {
     const events = await this.getByFilters(filters);
     return events.sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1));
   }
 
-  /** @param {any[]} events @param {number} kind @param {string} pubkey @param {string} [identifier] */
+  /**
+   * Newest-first versions of one replaceable coordinate; NIP-01 tie-break on
+   * equal created_at — the lowest id wins, so it sorts first.
+   * @param {Rumor[]} events
+   * @param {number} kind
+   * @param {string} pubkey
+   * @param {string} [identifier]
+   * @returns {Rumor[]}
+   */
   #replaceableSet(events, kind, pubkey, identifier) {
     return events
       .filter((e) => {
@@ -156,17 +194,20 @@ export class ConcordIdbEventDatabase {
         const d = e.tags?.find((t) => t[0] === 'd')?.[1] ?? '';
         return d === (identifier ?? '');
       })
-      .sort((a, b) => b.created_at - a.created_at);
+      .sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1));
   }
 
+  /** @param {number} kind @param {string} pubkey @param {string} [identifier] @returns {Promise<boolean>} */
   async hasReplaceable(kind, pubkey, identifier) {
     return this.#replaceableSet(await this.all(), kind, pubkey, identifier).length > 0;
   }
 
+  /** @param {number} kind @param {string} pubkey @param {string} [identifier] @returns {Promise<Rumor | undefined>} */
   async getReplaceable(kind, pubkey, identifier) {
     return this.#replaceableSet(await this.all(), kind, pubkey, identifier)[0];
   }
 
+  /** @param {number} kind @param {string} pubkey @param {string} [identifier] @returns {Promise<Rumor[] | undefined>} */
   async getReplaceableHistory(kind, pubkey, identifier) {
     const set = this.#replaceableSet(await this.all(), kind, pubkey, identifier);
     return set.length ? set : undefined;
