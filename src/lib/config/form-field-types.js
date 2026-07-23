@@ -8,12 +8,14 @@
 import DateField from '$lib/components/forms/fields/DateField.svelte';
 import CreatorFieldAdapter from '$lib/components/forms/fields/CreatorFieldAdapter.svelte';
 import RelationFieldAdapter from '$lib/components/forms/fields/RelationFieldAdapter.svelte';
+import ExternalUrlFieldAdapter from '$lib/components/forms/fields/ExternalUrlFieldAdapter.svelte';
 
 /** @type {Record<string, any>} */
 export const FIELD_TYPE_REGISTRY = {
   date: DateField,
   creator: CreatorFieldAdapter,
-  'amb-relation': RelationFieldAdapter
+  'amb-relation': RelationFieldAdapter,
+  'external-urls': ExternalUrlFieldAdapter
 };
 
 /** @param {string} type */

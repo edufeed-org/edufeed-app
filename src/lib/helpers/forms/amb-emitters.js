@@ -277,6 +277,16 @@ export const relationEmitter = {
 };
 registerCompositeEmitter('amb-relation', relationEmitter);
 
+/** External references → Nostr-native r tags (NIP-24). @type {AmbEmitter} */
+export const rTagEmitter = {
+  emit: (value) =>
+    asArray(value)
+      .filter(Boolean)
+      .map((/** @type {any} */ u) => ['r', String(u)]),
+  parse: (event) => ({ value: event.tags.filter((t) => t[0] === 'r' && t[1]).map((t) => t[1]) })
+};
+registerCompositeEmitter('external-urls', rTagEmitter);
+
 /**
  * Derive the AMB prop for a field ('amb:<prop>' → <prop>, else field id).
  * @param {import('./format.js').FormField} field
