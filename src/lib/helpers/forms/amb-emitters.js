@@ -206,6 +206,63 @@ export function registerCompositeEmitter(type, emitter) {
   COMPOSITE_EMITTERS[type] = emitter;
 }
 
+/** NIP-AMB creator/contributor: p-tag when pubkey present, else flattened creator:*. @type {AmbEmitter} */
+export const creatorEmitter = {
+  emit: (value, { prop }) => {
+    const role = prop === 'contributor' ? 'contributor' : 'creator';
+    const key = role;
+    /** @type {string[][]} */
+    const out = [];
+    for (const c of asArray(value)) {
+      if (!c) continue;
+      if (c.pubkey) {
+        out.push(['p', c.pubkey, c.relayHint || '', role]);
+        continue;
+      }
+      if (c.orcid) out.push([`${key}:id`, c.orcid]);
+      out.push([`${key}:name`, c.name || '']);
+      out.push([`${key}:type`, c.type || 'Person']);
+      if (c.honorificPrefix) out.push([`${key}:honorificPrefix`, c.honorificPrefix]);
+      if (c.affiliationName) {
+        out.push([`${key}:affiliation:name`, c.affiliationName]);
+        out.push([`${key}:affiliation:type`, 'Organization']);
+      }
+    }
+    return out;
+  },
+  parse: (event, { prop }) => {
+    const role = prop === 'contributor' ? 'contributor' : 'creator';
+    const key = role;
+    /** @type {any[]} */
+    const creators = [];
+    for (const t of event.tags) {
+      if (t[0] === 'p' && t[3] === role) {
+        creators.push({ name: '', type: 'Person', pubkey: t[1], relayHint: t[2] || '' });
+      }
+    }
+    /** @type {any} */
+    let current = null;
+    /** @type {string | null} */
+    let pendingOrcid = null;
+    for (const t of event.tags) {
+      if (t[0] === `${key}:id`) {
+        pendingOrcid = t[1];
+      } else if (t[0] === `${key}:name`) {
+        current = { name: t[1] || '', type: 'Person' };
+        if (pendingOrcid) {
+          current.orcid = pendingOrcid;
+          pendingOrcid = null;
+        }
+        creators.push(current);
+      } else if (current && t[0] === `${key}:type`) current.type = t[1];
+      else if (current && t[0] === `${key}:honorificPrefix`) current.honorificPrefix = t[1];
+      else if (current && t[0] === `${key}:affiliation:name`) current.affiliationName = t[1];
+    }
+    return { value: creators };
+  }
+};
+registerCompositeEmitter('creator', creatorEmitter);
+
 /**
  * Derive the AMB prop for a field ('amb:<prop>' → <prop>, else field id).
  * @param {import('./format.js').FormField} field

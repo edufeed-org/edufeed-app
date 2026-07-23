@@ -6,10 +6,12 @@
  * plain text input (NIP-101: everything derives from text).
  */
 import DateField from '$lib/components/forms/fields/DateField.svelte';
+import CreatorFieldAdapter from '$lib/components/forms/fields/CreatorFieldAdapter.svelte';
 
 /** @type {Record<string, any>} */
 export const FIELD_TYPE_REGISTRY = {
-  date: DateField
+  date: DateField,
+  creator: CreatorFieldAdapter
 };
 
 /** @param {string} type */
