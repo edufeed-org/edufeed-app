@@ -263,6 +263,20 @@ export const creatorEmitter = {
 };
 registerCompositeEmitter('creator', creatorEmitter);
 
+/** NIP-AMB relation (isPartOf/hasPart/isBasedOn) → a-tag to a 30142 coordinate. @type {AmbEmitter} */
+export const relationEmitter = {
+  emit: (value, { prop }) =>
+    asArray(value)
+      .filter((r) => r?.coordinate)
+      .map((r) => ['a', r.coordinate, r.relayHint || '', prop]),
+  parse: (event, { prop }) => ({
+    value: event.tags
+      .filter((t) => t[0] === 'a' && t[3] === prop && t[1]?.startsWith('30142:'))
+      .map((t) => ({ coordinate: t[1], relayHint: t[2] || '' }))
+  })
+};
+registerCompositeEmitter('amb-relation', relationEmitter);
+
 /**
  * Derive the AMB prop for a field ('amb:<prop>' → <prop>, else field id).
  * @param {import('./format.js').FormField} field
