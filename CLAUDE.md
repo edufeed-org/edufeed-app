@@ -294,24 +294,23 @@ src/
 
 ### Core Kinds
 
-| Kind        | NIP            | Description                                                                                     |
-| ----------- | -------------- | ----------------------------------------------------------------------------------------------- |
-| 0           | NIP-01         | User profile (metadata)                                                                         |
-| 1           | NIP-01         | Text note / post (`NoteCard`, `NoteCreateModal`)                                                |
-| 3           | NIP-02         | Contact list                                                                                    |
-| 5           | NIP-09         | Deletion event                                                                                  |
-| 7           | NIP-25         | Reaction (also "waves": reactions targeting kind 0 profiles)                                    |
-| 8           | NIP-58         | Badge award                                                                                     |
-| 9           | —              | Chat message (with `#h` tag for community chat)                                                 |
-| 11          | —              | Forum discussion (`ForumView`)                                                                  |
-| 1111        | NIP-22         | Comment (uses `#A` tag for root scope)                                                          |
-| 1068        | NIP-88         | Poll (`PollsView`)                                                                              |
-| 1018        | NIP-88         | Poll response                                                                                   |
-| 1059        | NIP-59/CORD-01 | Gift wrap (private DMs; see `dm-service.svelte.js`); also Concord streams (see Concord section) |
-| 1069        | —              | Form response (membership application, encrypted)                                               |
-| 3313        | CORD-05        | Concord direct invite (rumor)                                                                   |
-| 13302/13303 | CORD           | Concord community/invite lists (self-encrypted)                                                 |
-| 9802        | NIP-84         | Highlight (social bookmarks)                                                                    |
+| Kind | NIP            | Description                                                                                     |
+| ---- | -------------- | ----------------------------------------------------------------------------------------------- |
+| 0    | NIP-01         | User profile (metadata)                                                                         |
+| 1    | NIP-01         | Text note / post (`NoteCard`, `NoteCreateModal`)                                                |
+| 3    | NIP-02         | Contact list                                                                                    |
+| 5    | NIP-09         | Deletion event                                                                                  |
+| 7    | NIP-25         | Reaction (also "waves": reactions targeting kind 0 profiles)                                    |
+| 8    | NIP-58         | Badge award                                                                                     |
+| 9    | —              | Chat message (with `#h` tag for community chat)                                                 |
+| 11   | —              | Forum discussion (`ForumView`)                                                                  |
+| 1111 | NIP-22         | Comment (uses `#A` tag for root scope)                                                          |
+| 1068 | NIP-88         | Poll (`PollsView`)                                                                              |
+| 1018 | NIP-88         | Poll response                                                                                   |
+| 1059 | NIP-59/CORD-01 | Gift wrap (private DMs; see `dm-service.svelte.js`); also Concord streams (see Concord section) |
+| 1069 | —              | Form response (membership application, encrypted)                                               |
+| 3313 | CORD-05        | Concord direct invite (rumor)                                                                   |
+| 9802 | NIP-84         | Highlight (social bookmarks)                                                                    |
 
 ### Replaceable / Parameterized Kinds
 
@@ -322,6 +321,7 @@ src/
 | 10050 | NIP-17     | DM relay list (published as a default at signup, `DM_RELAYS` env)                                     |
 | 10063 | —          | Blossom server list (preferred file upload servers)                                                   |
 | 10222 | Communikey | Community definition                                                                                  |
+| 13302 | CORD       | Concord community list (self-encrypted; kind 13303 = invite list)                                     |
 | 30002 | NIP-51     | Relay set (user app relay overrides per category)                                                     |
 | 30009 | NIP-58     | Badge definition — **legacy access control**, read/delete only, no longer written                     |
 | 30023 | NIP-23     | Long-form article (`ArticlesView`, article editor)                                                    |
