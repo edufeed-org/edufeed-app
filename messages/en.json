@@ -2829,5 +2829,6 @@
   "concord_next": "Next",
   "concord_default_area_name": "Private area",
   "concord_channel_created": "Channel \"{name}\" created — {count} invitation(s) sent",
+  "concord_channel_created_partial": "Channel \"{name}\" created — {failed} of {total} invitation(s) could not be sent",
   "concord_channel_create_failed": "Could not create the channel"
 }

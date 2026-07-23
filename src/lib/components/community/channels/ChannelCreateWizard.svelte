@@ -80,13 +80,34 @@
         }));
       }
       const channelId = await target.createChannel(name.trim(), { private: true });
+      // Past this point the channel EXISTS — a retry must never re-create it,
+      // and the wizard must always close onto the channel. Each grant fails
+      // in isolation (failed invitees can be re-invited later via the invite
+      // sheet); only a founding/createChannel failure keeps the wizard open.
+      let failed = 0;
       for (const pubkey of selected) {
-        await target.grantChannelAccess(channelId, pubkey);
+        try {
+          await target.grantChannelAccess(channelId, pubkey);
+        } catch (error) {
+          console.error('concord: grantChannelAccess failed for', pubkey, error);
+          failed++;
+        }
       }
-      showToast(
-        m.concord_channel_created({ name: name.trim(), count: selected.length }),
-        'success'
-      );
+      if (failed > 0) {
+        showToast(
+          m.concord_channel_created_partial({
+            name: name.trim(),
+            failed,
+            total: selected.length
+          }),
+          'warning'
+        );
+      } else {
+        showToast(
+          m.concord_channel_created({ name: name.trim(), count: selected.length }),
+          'success'
+        );
+      }
       onCreated(channelId);
     } catch (error) {
       console.error('concord: channel creation failed', error);
