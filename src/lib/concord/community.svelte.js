@@ -28,7 +28,7 @@ export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember }) {
  * Concord client being absent (flag off / logged out) — every accessor
  * chain uses optional chaining and getters return safe defaults.
  * @param {() => any} getCommunikeyEvent kind 10222 event getter
- * @returns {() => { enabled: boolean, pointer: {communityId: string, relay: string|undefined}|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean }}
+ * @returns {() => { enabled: boolean, pointer: {communityId: string, relay: string|undefined}|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean }}
  */
 export function useConcordCommunity(getCommunikeyEvent) {
   const getChannels = useObservable(() => {
@@ -87,7 +87,15 @@ export function useConcordCommunity(getCommunikeyEvent) {
         .filter((c) => c.private && !c.deleted)
         .map((c) => ({ ...c, accessible: heldChannelIds.includes(c.channel_id) })),
       phase: getPhase(),
-      dissolved: getDissolved()
+      dissolved: getDissolved(),
+      // Read via getConcordState() (a reassigned $state.raw), NOT the plain
+      // module-level `currentClient` behind client.svelte.js's raw
+      // signerHasNip44() helper — a template reading that helper carries no
+      // rune dependency and never re-evaluates after mount, so a component
+      // mounted before the async client setup finished would miss the
+      // capability forever. state.client is set/cleared in the same
+      // reassignments as the rest of the client lifecycle.
+      signerHasNip44: !!getConcordState().client?.signer?.nip44
     };
   };
 }
