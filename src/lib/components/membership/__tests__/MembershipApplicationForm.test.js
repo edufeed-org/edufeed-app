@@ -107,9 +107,22 @@ vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
-}));
+// The new FieldsRenderer field-type registry (form-field-types.js) statically
+// imports CreatorFieldAdapter → CreatorInput → profile-subscription.js →
+// loaders/profile.js and RelationFieldAdapter → AMBResourceSearchInput →
+// loaders/amb-search.js, which (with the barrel) evaluate createAddressLoader/
+// createReactionsLoader at module init. Same test-mock-completeness class as
+// c640a759 / e0455525 — complete the loader mock so collection succeeds.
+// NB: vi.mock is hoisted, so the noop factory must be inlined (no top-level ref).
+vi.mock('applesauce-loaders/loaders', () => {
+  const noopLoader = () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) });
+  return {
+    createTimelineLoader: noopLoader,
+    createAddressLoader: noopLoader,
+    createEventLoader: noopLoader,
+    createReactionsLoader: noopLoader
+  };
+});
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: {
@@ -124,7 +137,16 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://communikey.example'],
-  getAllLookupRelays: () => ['wss://lookup.example']
+  getAllLookupRelays: () => ['wss://lookup.example'],
+  // Barrel community loaders + profile/amb-search chain read these at module
+  // init once the FieldsRenderer registry pulls the new adapters in.
+  getArticleRelays: () => [],
+  getEducationalRelays: () => [],
+  getCalendarRelays: () => [],
+  getKanbanRelays: () => [],
+  getProfileLookupRelays: () => [],
+  getEventLoaderLookupRelays: () => [],
+  getFallbackRelays: () => []
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
