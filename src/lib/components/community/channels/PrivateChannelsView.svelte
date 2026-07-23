@@ -13,8 +13,7 @@
   import ChannelStatePane from './ChannelStatePane.svelte';
   // TODO(task-10): channel chat pane — uncomment once ChannelChat.svelte exists.
   // import ChannelChat from './ChannelChat.svelte';
-  // TODO(task-9): create wizard + founding flow — uncomment once ChannelCreateWizard.svelte exists.
-  // import ChannelCreateWizard from './ChannelCreateWizard.svelte';
+  import ChannelCreateWizard from './ChannelCreateWizard.svelte';
   // TODO(task-11): invite sheet + inbox — uncomment once ChannelInviteSheet.svelte exists.
   // import ChannelInviteSheet from './ChannelInviteSheet.svelte';
   // TODO(task-13): members modal + moderation — uncomment once ChannelMembersModal.svelte exists.
@@ -27,13 +26,14 @@
   // import InviteInboxModal from './InviteInboxModal.svelte';
   import * as m from '$lib/paraglide/messages';
 
-  // communityProfile/communityPubkey are unused until Tasks 9/11/13/14
-  // uncomment the overlay components that need them (see TODOs above and the
-  // commented overlay block below) — kept in the prop list so MainContentArea
-  // doesn't need to change again when those land.
+  // communityPubkey is unused until Tasks 11/13/14 uncomment the overlay
+  // components that need it (see TODOs above and the commented overlay block
+  // below) — kept in the prop list so MainContentArea doesn't need to change
+  // again when those land. communityProfile is used by the create wizard
+  // (Task 9) to name the Concord area after the community.
   let {
     communikeyEvent,
-    communityProfile: _communityProfile = null,
+    communityProfile = null,
     communityPubkey: _communityPubkey = ''
   } = $props();
 
@@ -146,16 +146,23 @@
     </section>
   </div>
 
-  {#if overlay}
+  {#if overlay === 'create'}
+    <ChannelCreateWizard
+      {communikeyEvent}
+      {communityProfile}
+      community={concord.community}
+      onClose={() => (overlay = null)}
+      onCreated={(/** @type {string} */ channelId) => {
+        overlay = null;
+        selectedChannelId = channelId;
+        mobileChat = true;
+      }}
+    />
+  {:else if overlay}
     <!-- Real (uncommented) so `overlay` stays a genuine read, not just a write —
       the per-modal branches themselves stay commented until each task's
       component exists; uncomment the matching branch as each task lands.
-    {#if overlay === 'create'}
-      TODO(task-9): ChannelCreateWizard — uncomment once it exists.
-      <ChannelCreateWizard {communikeyEvent} communityProfile={_communityProfile} community={concord.community}
-        onClose={() => (overlay = null)}
-        onCreated={(channelId) => { overlay = null; selectedChannelId = channelId; mobileChat = true; }} />
-    {:else if overlay === 'invite' && concord.community && activeChannel}
+    {#if overlay === 'invite' && concord.community && activeChannel}
       TODO(task-11): ChannelInviteSheet — uncomment once it exists.
       <ChannelInviteSheet community={concord.community} channel={activeChannel} onClose={() => (overlay = null)} />
     {:else if overlay === 'members' && concord.community && activeChannel}

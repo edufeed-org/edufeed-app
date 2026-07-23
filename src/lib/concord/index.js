@@ -22,3 +22,4 @@ export {
 } from './client.svelte.js';
 export { useObservable } from './bridge.svelte.js';
 export { shouldShowChannelsTab, useConcordCommunity } from './community.svelte.js';
+export { foundConcordArea, buildPointerUpdate } from './founding.js';
