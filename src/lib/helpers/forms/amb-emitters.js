@@ -88,15 +88,15 @@ export const booleanEmitter = {
   }
 };
 
-/** @type {AmbEmitter} */
+/**
+ * Emits only the ["description", value] tag. The event `content` field is the
+ * publishing route's responsibility (it already sets content from the raw
+ * description value) — the emitter must NOT emit a ['content', …] pseudo-tag,
+ * which would otherwise land as a malformed tag on the signed kind-30142 event.
+ * @type {AmbEmitter}
+ */
 export const descriptionEmitter = {
-  emit: (value, { prop }) =>
-    value
-      ? [
-          [prop, String(value)],
-          ['content', String(value)]
-        ]
-      : [],
+  emit: (value, { prop }) => (value ? [[prop, String(value)]] : []),
   parse: (event, { prop }) => {
     const t = event.tags.find((t) => t[0] === prop);
     return { value: t ? t[1] : event.content || '' };

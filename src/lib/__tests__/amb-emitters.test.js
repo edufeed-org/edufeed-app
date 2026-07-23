@@ -62,7 +62,7 @@ describe('boolean / description / dtag / license emitters', () => {
         .value
     ).toBe(true);
   });
-  it('description emits description + content marker', () => {
+  it('description emits ONLY the description tag (no content pseudo-tag)', () => {
     const field = /** @type {any} */ ({
       id: 'desc',
       type: 'textarea',
@@ -70,12 +70,14 @@ describe('boolean / description / dtag / license emitters', () => {
       options: {}
     });
     const em = resolveEmitter(field);
-    // description emitter returns the description tag AND a sentinel ['content', v]
-    // that buildAMBResourceTags lifts into the event content field.
+    // The emitter must NOT emit a ['content', …] pseudo-tag — the event content
+    // field is set by the publishing route, not carried as a tag.
     expect(em.emit('A video', ctx({ field, prop: 'description' }))).toEqual([
-      ['description', 'A video'],
-      ['content', 'A video']
+      ['description', 'A video']
     ]);
+    expect(
+      em.emit('A video', ctx({ field, prop: 'description' })).some((t) => t[0] === 'content')
+    ).toBe(false);
   });
   it('id maps to d tag', () => {
     const field = /** @type {any} */ ({ id: 'ident', type: 'text', output: 'amb:id', options: {} });

@@ -70,6 +70,11 @@ describe('buildAMBResourceTags', () => {
     expect(tags).toContainEqual(['description', 'Ein Video zum Satz des Pythagoras.']);
   });
 
+  it('never emits a content-keyed tag (content is the event field, not a tag)', () => {
+    const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
+    expect(tags.some((t) => t[0] === 'content')).toBe(false);
+  });
+
   it('emits amb:about as about:id / about:prefLabel:de / about:type tags', () => {
     const tags = buildAMBResourceTags({ form: baseForm, formRelay, values, selectedConcepts });
     expect(tags).toContainEqual(['about:id', 'https://w3id.org/kim/schulfaecher/s1017']);
