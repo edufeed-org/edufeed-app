@@ -2838,7 +2838,7 @@
   "concord_menu_invite": "Invite",
   "concord_menu_members": "Members",
   "concord_menu_backup": "Back up key",
-  "concord_menu_dissolve": "Dissolve channel…",
+  "concord_menu_dissolve": "Dissolve private area…",
   "concord_dissolved_banner": "This area was dissolved. History stays readable for members; new messages are no longer possible.",
   "concord_genesis_title": "Beginning of \"{name}\"",
   "concord_genesis_body": "Messages here are end-to-end encrypted — only members hold the key.",

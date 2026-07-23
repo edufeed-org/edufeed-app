@@ -2838,7 +2838,7 @@
   "concord_menu_invite": "Einladen",
   "concord_menu_members": "Mitglieder",
   "concord_menu_backup": "Schlüssel sichern",
-  "concord_menu_dissolve": "Kanal auflösen…",
+  "concord_menu_dissolve": "Privaten Bereich auflösen…",
   "concord_dissolved_banner": "Dieser Bereich wurde aufgelöst. Der Verlauf bleibt für Mitglieder lesbar, neue Nachrichten sind nicht mehr möglich.",
   "concord_genesis_title": "Beginn von „{name}“",
   "concord_genesis_body": "Nachrichten hier sind Ende-zu-Ende-verschlüsselt — nur Mitglieder besitzen den Schlüssel.",
