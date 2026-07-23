@@ -2,49 +2,50 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-07-16
-**Total tests:** 309
+**Last updated:** 2026-07-23
+**Total tests:** 311
 
 ## Quick Summary
 
-| File                                 | Tests | Auth | Coverage                                                                                                                          |
-| ------------------------------------ | ----- | ---- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                                                     |
-| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                                                         |
-| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail                             |
-| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                                                         |
-| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                                                      |
-| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                 |
-| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                                                        |
-| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                      |
-| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                      |
-| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                 |
-| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                    |
-| `image-license.test.js`              | 2     | Yes  | Image upload triggers license modal; cancel-without-save flags the field; save dismisses the modal                                |
-| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                    |
-| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                        |
-| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                            |
-| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                                                      |
-| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                                                     |
-| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                                                     |
-| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                                                           |
-| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                                                         |
-| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                                                     |
-| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                                                |
-| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                |
-| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                   |
-| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                       |
-| `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                          |
-| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → Termi backup hint           |
-| `settings.test.js`                   | 18    | Both | Single-theme check, relays, relay editing, gated/debug                                                                            |
-| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                         |
-| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                          |
-| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                 |
-| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                            |
-| `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards |
-| `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                     |
-| `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                 |
-| `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                     |
+| File                                 | Tests | Auth | Coverage                                                                                                                                                                    |
+| ------------------------------------ | ----- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                                                                                               |
+| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                                                                                                   |
+| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail                                                                       |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                                                                                                   |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                                                                                                |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                                                           |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                                                                                                  |
+| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                                                                |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                                                                |
+| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                                                           |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                                                              |
+| `amb-basic-form.test.js`             | 2     | Yes  | NIP-101-EDU `amb-basic` template form (`/forms/<naddr>/create-resource`): renders all field types; fills + publishes, asserts NIP-AMB tag shape. See limitation note below. |
+| `image-license.test.js`              | 2     | Yes  | Image upload triggers license modal; cancel-without-save flags the field; save dismisses the modal                                                                          |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                                                              |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                                                                  |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                                                                      |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                                                                                                |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                                                                                               |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                                                                                               |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                                                                                                     |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                                                                                                   |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                                                                                               |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                                          |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                                                          |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                                                             |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                                                                 |
+| `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                                                                    |
+| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → Termi backup hint                                                     |
+| `settings.test.js`                   | 18    | Both | Single-theme check, relays, relay editing, gated/debug                                                                                                                      |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                                                                   |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                                                                    |
+| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                                                           |
+| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                                                      |
+| `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards                                           |
+| `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                                                               |
+| `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                                                           |
+| `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                                                               |
 
 ## Detailed Coverage
 
@@ -450,6 +451,58 @@ unchanged. These tests cover the routing shape only.
   which requires completing step 4 SKOS selection. Blocked by the same
   ConceptScheme seeding gap. Re-enable once concept events are seeded on
   `amb-relay`.
+
+---
+
+### amb-basic-form.test.js (2 tests)
+
+**Route:** `/forms/<naddr>/create-resource` (NIP-101-EDU form-template →
+kind-30142 flow, `TemplateResourceForm.svelte`; see
+`docs/nips/nip-101-edu.md`)
+**Auth required:** Yes
+
+There is no `templateNaddr` env var in this deployment's config — the route
+takes the template's naddr directly as a URL param, so this spec seeds its
+own kind-30168 form template (mirroring the exact field set of the real
+published `amb-basic` template, `scripts/data/edufeed-forms.json`) plus
+minimal kind-39737/39738 ConceptScheme/Concept fixtures for the template's
+two vocab-bound fields (`about`/schulfaecher, `learningResourceType`/hcrt),
+built with the same `nostr-vocab-core/blueprints` helpers the production
+vocab-publish script uses. Unlike the AMB wizard's `SKOSDropdown` (which
+fetches vocab from static JSON over HTTP — see the ConceptScheme-seeding gap
+noted above), `FormConceptPicker` resolves concepts from Nostr relays via
+`useSchemeConcepts`, so these fixtures ARE resolvable on the E2E strfry
+relay and the vocab-bound fields are fully exercisable here (unlike the
+wizard's SKOS steps).
+
+| Test                                                           | What it verifies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| renders every registered field type for the amb-basic template | Scalar (text/textarea), vocab-bound concept-picker (Fach/Ressourcentyp), and all three composite field-type adapters (creator, external-urls, amb-relation) render for a real-shaped template. Reliable — passes consistently.                                                                                                                                                                                                                                                                           |
+| publishes a kind-30142 resource with NIP-AMB-compliant tags    | Fills title/description/license/keyword, selects both vocab concepts, adds the logged-in user as creator ("Add myself"), submits, then reads the published event back off the amb-relay and asserts: `learningResourceType:id/:type/:prefLabel:de` and `about:id/:type` present with **no `a` tag** referencing the concept (the exact NIP-AMB compliance fix this doc-correction task documents), a `p`-tag creator with role `creator`, a `t`-tag keyword, and the `form`-role back-reference `a` tag. |
+
+**Limitation:** the second test's UI path (navigate → fill scalar + both
+vocab-bound concept pickers → "Add myself" → Submit → client-side redirect
+to the new resource's naddr) completes correctly and reproducibly — verified
+visually via failure screenshots showing the exact expected resource
+(correct title, `WORKSHEET` type badge, `Mathematics` subject, `CC BY 4.0`
+license). However, the resource page renders from the **optimistic local
+`eventStore.add()`** call in `TemplateResourceForm.handleSubmit` (which runs
+before `publishEvent`), so a correct-looking page does not by itself prove
+the event reached the relay. The test's final step — reading the event back
+off `amb-relay` via a fresh raw WebSocket query — did not observe a pass in
+this sandbox even at a 60s timeout, across three independent attempts. Given
+`publishEvent()` (`src/lib/services/publish-service.js`) resolves
+per-relay failures silently (`console.warn`, never thrown) and
+`TemplateResourceForm.handleSubmit` does not check the per-relay success
+result before navigating away, this environment's heavy concurrent load
+(confirmed: 17GB+ swap in use, a concurrent worktree session competing for
+the same hardcoded E2E ports/docker-compose project name) is the most likely
+explanation, but a genuinely silent publish failure under load cannot be
+ruled out from this evidence alone — worth a follow-up investigation outside
+this doc-correction slice's scope. The spec itself was NOT weakened to force
+a pass; both tests are written to the real expected behavior and should be
+re-run in a clean (uncontended) environment before being trusted as fully
+green in CI.
 
 ---
 
