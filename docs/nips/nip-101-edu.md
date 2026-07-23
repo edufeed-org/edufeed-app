@@ -168,7 +168,11 @@ fields to the same or different schemes.
 
 Declares where a field's answer lands when a response is turned into a
 kind 30142 AMB resource (`buildAMBResourceTags` /
-`src/lib/helpers/form-to-amb.js`):
+`src/lib/helpers/form-to-amb.js`, delegating per-field serialization to the
+NIP-AMB emitter registry in `src/lib/helpers/forms/amb-emitters.js`).
+**NIP-AMB is the authoritative grammar for kind-30142 tag emission** — this
+section only maps `field-output`/`field-vocab` to the NIP-AMB shapes; where
+they differ, NIP-AMB wins.
 
 - **`amb:<property>`** — the answer is emitted under the named top-level
   AMB/DC-derived property. The `amb:` prefix is a `field-output` namespace
@@ -178,26 +182,28 @@ kind 30142 AMB resource (`buildAMBResourceTags` /
   `learningResourceType`).
 - **`ext`** — the answer is emitted as a namespaced extension tag scoped to
   this specific form, so unrelated forms/apps never collide on the same
-  tag key: `ext:<formCoord>:<fieldId>` where `formCoord` is
-  `30168:<formAuthorPubkey>:<formDTag>`.
+  tag key: `ext:<formDTag>:<fieldId>` where `formDTag` is the form
+  template's own `d` tag value (colon-free) — **not** the full `30168:…`
+  coordinate, and no author pubkey is embedded.
 - When a field has **no** `field-output` tag, it defaults to `amb:<fieldId>`
   (the field's own id used as the AMB property name — so the emitted tag
   key is the bare field id).
 
 **Concept-valued fields** (bound via `field-vocab`) emit a `:id`/
-`:prefLabel:<lang>`/`:type` tag triad per selected concept, plus an `a` tag
-pointing at the concept's own addressable coordinate:
+`:prefLabel:<lang>`/`:type` tag triad per selected concept, per NIP-AMB —
+**no `a` tag** to the concept's own kind-39738 coordinate is emitted (the
+external URI in `:id` is the only cross-reference NIP-AMB requires):
 
 ```
 ["<keyBase>:id", "<conceptExternalUri>"]
 ["<keyBase>:prefLabel:<lang>", "<label>"]        // one per known language
 ["<keyBase>:type", "Concept"]
-["a", "<39738 concept coordinate>", "<relay>", "<role>"]
 ```
 
-where `keyBase` is `<property>` for `amb:` output or `ext:<formCoord>:<fieldId>`
-for `ext` output, and `role` on the `a` tag mirrors that same key
-(`<property>` or `ext:<fieldId>`).
+where `keyBase` is `<property>` for `amb:` output or `ext:<formDTag>:<fieldId>`
+for `ext` output (e.g. `ext:workshop-feedback:rating:id`,
+`ext:workshop-feedback:rating:prefLabel:de`, `ext:workshop-feedback:rating:type`
+— the `<facet>` here is the field id, `<sub>` is `id`/`prefLabel:<lang>`/`type`).
 
 **Scalar fields** (everything without a `field-vocab` binding — vocab
 fields always take the concept branch above and never reach scalar
@@ -207,6 +213,23 @@ back to the option's **label** before emission — the AMB resource carries
 human-readable labels, never internal optionIds. Multi-value answers (a
 `";"`-joined optionId string, or a real array for `text-array` fields)
 are split/expanded into one tag per value.
+
+**Composite field types** bypass the `amb:`/`ext` scalar/concept split above
+and emit their own fixed NIP-AMB tag shapes regardless of `field-output`:
+
+- **`creator`** (also used for `contributor`) — a Nostr author emits a `p`
+  tag (`["p", "<pubkey>", "<relayHint>", "creator" | "contributor"]`); an
+  unlinked person/org emits flattened `creator:name` / `creator:type` /
+  `creator:id` (ORCID) / `creator:honorificPrefix` /
+  `creator:affiliation:name` / `creator:affiliation:type` tags (or the
+  `contributor:*` equivalents).
+- **`amb-relation`** (`isPartOf` / `hasPart` / `isBasedOn`) — an `a` tag
+  per related resource, pointing at the related kind-30142 coordinate, with
+  the relation name in the role position: `["a", "30142:<pubkey>:<d>",
+  "<relayHint>", "isPartOf" | "hasPart" | "isBasedOn"]`.
+- **`external-urls`** — plain `["r", "<url>"]` tags (NIP-24), one per URL.
+- **keyword-valued fields** (`field-output` resolving to the `keywords`
+  property) emit plain `["t", "<keyword>"]` tags, one per value.
 
 The resource carries an informative back-reference to the form that
 produced it (`a` tag, role `form`, MAY per NIP-101 base — always emitted
@@ -226,9 +249,10 @@ solely via the `form`-role `a` tag above.
 
 ### Example: response → AMB resource
 
-Given a "rating" field with `field-output = amb:learningResourceType` bound
-via `field-vocab` to a HCRT scheme, and answer concept
-`https://w3id.org/kim/hcrt/worksheet` selected:
+Given a form with `d` tag `workshop-feedback`, a "rating" field with
+`field-output = amb:learningResourceType` bound via `field-vocab` to a HCRT
+scheme (answer concept `https://w3id.org/kim/hcrt/worksheet` selected), and
+a "comments" field with `field-output = ext` (no vocab binding):
 
 ```json
 {
@@ -239,8 +263,7 @@ via `field-vocab` to a HCRT scheme, and answer concept
     ["learningResourceType:prefLabel:de", "Arbeitsblatt"],
     ["learningResourceType:prefLabel:en", "Worksheet"],
     ["learningResourceType:type", "Concept"],
-    ["a", "39738:2b3c...:hcrt-worksheet", "wss://amb.edufeed.org", "learningResourceType"],
-    ["ext:30168:3f770d65...abcd:workshop-feedback:comments", "Really enjoyed the session"],
+    ["ext:workshop-feedback:comments", "Really enjoyed the session"],
     ["a", "30168:3f770d65...abcd:workshop-feedback", "wss://relay.edufeed.org", "form"]
   ],
   "content": ""
