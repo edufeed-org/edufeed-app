@@ -294,22 +294,24 @@ src/
 
 ### Core Kinds
 
-| Kind | NIP    | Description                                                  |
-| ---- | ------ | ------------------------------------------------------------ |
-| 0    | NIP-01 | User profile (metadata)                                      |
-| 1    | NIP-01 | Text note / post (`NoteCard`, `NoteCreateModal`)             |
-| 3    | NIP-02 | Contact list                                                 |
-| 5    | NIP-09 | Deletion event                                               |
-| 7    | NIP-25 | Reaction (also "waves": reactions targeting kind 0 profiles) |
-| 8    | NIP-58 | Badge award                                                  |
-| 9    | —      | Chat message (with `#h` tag for community chat)              |
-| 11   | —      | Forum discussion (`ForumView`)                               |
-| 1111 | NIP-22 | Comment (uses `#A` tag for root scope)                       |
-| 1068 | NIP-88 | Poll (`PollsView`)                                           |
-| 1018 | NIP-88 | Poll response                                                |
-| 1059 | NIP-17 | Gift wrap (private DMs; see `dm-service.svelte.js`)          |
-| 1069 | —      | Form response (membership application, encrypted)            |
-| 9802 | NIP-84 | Highlight (social bookmarks)                                 |
+| Kind        | NIP            | Description                                                                                     |
+| ----------- | -------------- | ----------------------------------------------------------------------------------------------- |
+| 0           | NIP-01         | User profile (metadata)                                                                         |
+| 1           | NIP-01         | Text note / post (`NoteCard`, `NoteCreateModal`)                                                |
+| 3           | NIP-02         | Contact list                                                                                    |
+| 5           | NIP-09         | Deletion event                                                                                  |
+| 7           | NIP-25         | Reaction (also "waves": reactions targeting kind 0 profiles)                                    |
+| 8           | NIP-58         | Badge award                                                                                     |
+| 9           | —              | Chat message (with `#h` tag for community chat)                                                 |
+| 11          | —              | Forum discussion (`ForumView`)                                                                  |
+| 1111        | NIP-22         | Comment (uses `#A` tag for root scope)                                                          |
+| 1068        | NIP-88         | Poll (`PollsView`)                                                                              |
+| 1018        | NIP-88         | Poll response                                                                                   |
+| 1059        | NIP-59/CORD-01 | Gift wrap (private DMs; see `dm-service.svelte.js`); also Concord streams (see Concord section) |
+| 1069        | —              | Form response (membership application, encrypted)                                               |
+| 3313        | CORD-05        | Concord direct invite (rumor)                                                                   |
+| 13302/13303 | CORD           | Concord community/invite lists (self-encrypted)                                                 |
+| 9802        | NIP-84         | Highlight (social bookmarks)                                                                    |
 
 ### Replaceable / Parameterized Kinds
 
@@ -336,6 +338,7 @@ src/
 | 31923 | NIP-52     | Time-based calendar event                                                                             |
 | 31924 | NIP-52     | Calendar collection                                                                                   |
 | 31925 | NIP-52     | Calendar RSVP                                                                                         |
+| 33301 | CORD-05    | Concord invite bundle                                                                                 |
 | 39701 | NIP-B0     | Web bookmark (social bookmarks)                                                                       |
 | 39737 | NIP-VOCAB  | SKOS ConceptScheme (vocabularies for resource forms, published via `pnpm run publish:vocabs`)         |
 
@@ -397,6 +400,36 @@ This app implements the Communikey community specification. Use `/communikey` sk
 
 - Enforced relay content filtering (read side — trusting enforced relays instead of client-side author filtering)
 - Kind 30222 read removal once enough time passed (kind 30009 badge definitions are likewise legacy: read/delete only)
+
+## Concord Private Channels (CORD, Beta)
+
+E2E-encrypted channels inside communities via `applesauce-concord` (pre-release,
+exact-pinned together with the `applesauce-core-concord` alias — bump both in
+lockstep and review diffs; run the package's own vitest suite as a canary:
+`cd $(mktemp -d) && npm pack applesauce-concord@concord` or test in the
+applesauce repo's concord branch).
+
+- All app access goes through `src/lib/concord/` (lint-enforced). EXCEPTION:
+  components rendered during SSR (e.g. ContentNavSidebar, BottomTabBar) must
+  import `shouldShowChannelsTab` and `useConcordCommunity` directly from
+  `src/lib/concord/community.svelte.js` instead of the barrel — the barrel
+  re-exports storage.js, which statically imports applesauce-core-concord
+  and would otherwise pull that dependency tree into server chunks;
+  community.svelte.js is SSR-clean because it only imports submodules.
+  Never import `applesauce-concord` or `applesauce-core-concord` elsewhere.
+- One Concord community per Communikey community; pointer tag
+  `["concord", <id>, <relay>]` on kind 10222. Kanäle = CORD-03 private channels.
+- Kind 1059 traffic goes ONLY to `CONCORD_RELAYS` (never outbox/category
+  relays; never through curated/WoT filtering).
+- Feature flag `CONCORD_ENABLED` (default off). Spec:
+  `docs/superpowers/specs/2026-07-23-concord-private-channels-design.md`.
+- Concord code must never enter SSR chunks (dep tree has @noble/hashes v2 —
+  see commit a9af9c87); the wrapper uses browser-guarded dynamic imports.
+- Curated/WoT/gated modes need no Concord-specific code: Concord traffic never
+  flows through the app's loaders or feed queries (the client subscribes
+  directly with stream-author filters on its own relays), so author filtering
+  cannot touch it. Do not "fix" this by adding kind-1059 exclusions to feed
+  code.
 
 ## Configuration
 
