@@ -14,8 +14,7 @@
   import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
   import ChannelInviteSheet from './ChannelInviteSheet.svelte';
-  // TODO(task-13): members modal + moderation — uncomment once ChannelMembersModal.svelte exists.
-  // import ChannelMembersModal from './ChannelMembersModal.svelte';
+  import ChannelMembersModal from './ChannelMembersModal.svelte';
   // TODO(task-14): explainer/backup/dissolve — uncomment once ChannelExplainer.svelte exists.
   // import ChannelExplainer from './ChannelExplainer.svelte';
   // TODO(task-14): explainer/backup/dissolve — uncomment once KeyBackupModal.svelte exists.
@@ -175,13 +174,18 @@
     />
   {:else if overlay === 'inbox'}
     <InviteInboxModal onClose={() => (overlay = null)} />
+  {:else if overlay === 'members' && concord.community && activeChannel}
+    <ChannelMembersModal
+      community={concord.community}
+      channel={activeChannel}
+      {isOwner}
+      signerHasNip44={concord.signerHasNip44}
+      onClose={() => (overlay = null)}
+    />
   {:else if overlay}
     <!-- The remaining overlay branches stay commented until each task's
       component exists; uncomment the matching branch as each task lands.
-    {#if overlay === 'members' && concord.community && activeChannel}
-      TODO(task-13): ChannelMembersModal — uncomment once it exists.
-      <ChannelMembersModal community={concord.community} channel={activeChannel} {isOwner} onClose={() => (overlay = null)} />
-    {:else if overlay === 'explainer'}
+    {#if overlay === 'explainer'}
       TODO(task-14): ChannelExplainer — uncomment once it exists.
       <ChannelExplainer onClose={() => (overlay = null)} />
     {:else if overlay === 'backup'}

@@ -28,3 +28,4 @@ export {
   createChannelInviteOnce,
   resolveInviteWrap
 } from './invite-helpers.js';
+export { channelMemberList, kickFromChannel, banFromChannel } from './moderation.js';
