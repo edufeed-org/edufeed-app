@@ -47,6 +47,8 @@
   let qrDataUrl = $state('');
   let copied = $state(false);
   let revokedNotice = $state(false);
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let revokedNoticeTimer;
   /** @type {string[]} */
   let sent = $state.raw([]);
 
@@ -95,17 +97,29 @@
     try {
       await client.invites.revoke(invite);
       invite = undefined; // effect creates a fresh link
+      // Transient notice: shown alongside the (re-armed) revoke button, then
+      // auto-cleared — a sticky notice that REPLACED the button would lock
+      // the fresh replacement link out of ever being revoked in this mount.
       revokedNotice = true;
+      clearTimeout(revokedNoticeTimer);
+      revokedNoticeTimer = setTimeout(() => (revokedNotice = false), 8000);
     } catch (error) {
       console.error('concord: revoke failed', error);
       showToast(m.concord_revoke_failed(), 'error');
     }
   }
 
+  $effect(() => () => clearTimeout(revokedNoticeTimer));
+
   /** @param {string} pubkey */
   async function directInvite(pubkey) {
     try {
       await community.grantChannelAccess(channel.channel_id, pubkey);
+      // "Sent", not "invited": grantChannelAccess resolves as soon as the
+      // gift wrap is built — its relay publish is best-effort and failures
+      // are swallowed internally (community.js: `.catch((err) =>
+      // console.warn("channel grant publish failed", err))`), so delivery is
+      // unobservable from here. Only permission errors reject (caught below).
       sent = [...sent, pubkey];
     } catch (error) {
       console.error('concord: direct invite failed', error);
@@ -149,6 +163,13 @@
 
     {#if tab === 'link'}
       <p class="mb-3 text-sm text-base-content/60">{m.concord_invite_link_lead()}</p>
+      {#if !canDirect}
+        <!-- Without nip44, ConcordInviteManager.save() silently no-ops (see
+          header comment): the link works, but is never persisted to the
+          private Invite List — after a reload it can no longer be revoked
+          from this UI. Warn so the user can revoke while it's still held. -->
+        <div class="mb-3 alert text-sm alert-warning">{m.concord_link_no_persist_warning()}</div>
+      {/if}
       {#if invite}
         <div class="mb-3 flex items-center gap-2 rounded-xl border border-base-300 p-2 pl-3">
           <code class="flex-1 truncate text-xs">{invite.url}</code>
@@ -162,13 +183,12 @@
           </div>
         {/if}
         {#if revokedNotice}
-          <div class="alert text-sm alert-success">{m.concord_revoked_notice()}</div>
-        {:else}
-          <button class="btn w-full justify-start btn-outline btn-sm btn-error" onclick={revoke}>
-            {m.concord_revoke_link()}
-            <span class="block text-xs font-normal opacity-70">{m.concord_revoke_hint()}</span>
-          </button>
+          <div class="mb-3 alert text-sm alert-success">{m.concord_revoked_notice()}</div>
         {/if}
+        <button class="btn w-full justify-start btn-outline btn-sm btn-error" onclick={revoke}>
+          {m.concord_revoke_link()}
+          <span class="block text-xs font-normal opacity-70">{m.concord_revoke_hint()}</span>
+        </button>
       {:else}
         <div class="grid place-items-center py-6">
           <span class="loading loading-spinner"></span>

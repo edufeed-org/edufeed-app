@@ -1,6 +1,10 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
-import { pickLatestChannelInvite, createChannelInviteOnce } from '$lib/concord/invite-helpers.js';
+import {
+  pickLatestChannelInvite,
+  createChannelInviteOnce,
+  resolveInviteWrap
+} from '$lib/concord/invite-helpers.js';
 
 describe('pickLatestChannelInvite', () => {
   it('returns undefined for an empty or missing link list', () => {
@@ -97,5 +101,39 @@ describe('createChannelInviteOnce', () => {
       url: 'retry-ok'
     });
     expect(createInvite).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('resolveInviteWrap', () => {
+  // Mirrors applesauce-common's gift-wrap.js global-registry symbol contract:
+  // rumor —Symbol.for('seal')→ Set<seal> —Symbol.for('gift-wrap')→ wrap.
+  // The end-to-end proof against the real watcher/decrypt path lives in
+  // concord-invite-dismiss.test.js; these cover the pure edge cases.
+  const SealSymbol = Symbol.for('seal');
+  const GiftWrapSymbol = Symbol.for('gift-wrap');
+
+  it('walks rumor → seal → wrap and returns the wrap', () => {
+    const wrap = { id: 'w'.repeat(64), kind: 1059 };
+    const seal = { [GiftWrapSymbol]: wrap };
+    const rumor = { id: 'r'.repeat(64), [SealSymbol]: new Set([seal]) };
+    expect(resolveInviteWrap({ rumor })).toBe(wrap);
+  });
+
+  it('skips seals without a wrap backlink and finds one that has it', () => {
+    const wrap = { id: 'w'.repeat(64), kind: 1059 };
+    const orphanSeal = {};
+    const linkedSeal = { [GiftWrapSymbol]: wrap };
+    const rumor = { id: 'r'.repeat(64), [SealSymbol]: new Set([orphanSeal, linkedSeal]) };
+    expect(resolveInviteWrap({ rumor })).toBe(wrap);
+  });
+
+  it('returns undefined for missing backlinks, missing rumor, and nullish input', () => {
+    expect(resolveInviteWrap({ rumor: { id: 'r'.repeat(64) } })).toBeUndefined();
+    expect(
+      resolveInviteWrap({ rumor: { id: 'r'.repeat(64), [SealSymbol]: new Set([{}]) } })
+    ).toBeUndefined();
+    expect(resolveInviteWrap({})).toBeUndefined();
+    expect(resolveInviteWrap(undefined)).toBeUndefined();
+    expect(resolveInviteWrap(null)).toBeUndefined();
   });
 });

@@ -38,6 +38,40 @@ export function pickLatestChannelInvite(links, channelId) {
 const inFlightCreates = new Map();
 
 /**
+ * Resolve the OUTER kind-1059 gift-wrap event for a decrypted Direct Invite.
+ *
+ * Why this exists: `InviteWatcher.dismiss(event)` keys its dismissal set by
+ * the WRAP id (`record.wrap.id` in `recompute()`), and `resolveWrap()` returns
+ * any non-string argument as-is — so passing the decrypted kind-3313 rumor
+ * (whose id differs from the wrap id) adds a never-matching id and the invite
+ * never leaves `invites$`/`pending$`. The `ConcordDirectInvite` cast exposes
+ * only the rumor, but applesauce-common's gift-wrap helpers (gift-wrap.js in
+ * the concord-pinned fork) maintain GLOBAL-REGISTRY Symbol backlinks that the
+ * watcher's own `decrypt()` path populates via `getGiftWrapRumor(wrap)`:
+ *   rumor —Symbol.for('seal')→ Set<seal> —Symbol.for('gift-wrap')→ wrap
+ * (`addParentSealReference` sets the first, `getGiftWrapSeal` the second).
+ * Because they use `Symbol.for(...)` (the cross-realm/cross-package symbol
+ * registry), we can walk the chain here without importing the package — which
+ * also keeps this module free of package imports (SSR-clean by construction).
+ *
+ * Returns undefined when the backlinks are absent (e.g. an invite object that
+ * never went through a gift-wrap decode) — callers should treat that as
+ * "cannot dismiss" rather than passing the rumor and silently no-opping.
+ *
+ * @param {{ rumor?: any } | undefined | null} invite - a ConcordDirectInvite (or anything with a `.rumor`)
+ * @returns {any | undefined} the outer kind-1059 wrap event, or undefined
+ */
+export function resolveInviteWrap(invite) {
+  const seals = invite?.rumor?.[Symbol.for('seal')];
+  if (!seals) return undefined;
+  for (const seal of seals) {
+    const wrap = seal?.[Symbol.for('gift-wrap')];
+    if (wrap?.id) return wrap;
+  }
+  return undefined;
+}
+
+/**
  * Create a channel invite link, deduping concurrent callers for the same
  * community+channel onto a single in-flight promise.
  * @param {{ communityId: string, createInvite: (options: any) => Promise<any> }} community

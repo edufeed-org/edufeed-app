@@ -35,6 +35,7 @@
 <script>
   import { getConcordClient } from '$lib/concord/client.svelte.js';
   import { useObservable } from '$lib/concord/bridge.svelte.js';
+  import { resolveInviteWrap } from '$lib/concord/invite-helpers.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -58,13 +59,34 @@
     }
   }
 
+  // Dismissal MUST pass the OUTER kind-1059 wrap, not the decrypted rumor:
+  // InviteWatcher keys its dismissed-set by `record.wrap.id` (recompute()),
+  // and resolveWrap() returns a non-string argument as-is — so dismissing
+  // with the rumor adds a never-matching id and the invite never leaves
+  // invites$ (Decline would visibly do nothing; accepted invites would
+  // reappear on reopen). resolveInviteWrap() walks the gift-wrap Symbol
+  // backlinks the watcher's own decrypt() populated — see its JSDoc and the
+  // regression test in concord-invite-dismiss.test.js.
+  /** @param {any} invite */
+  async function dismissInvite(invite) {
+    if (!watcher) return;
+    const wrap = resolveInviteWrap(invite);
+    if (wrap) {
+      await watcher.dismiss(wrap);
+    } else {
+      // Should not happen for watcher-decrypted invites; don't fall back to
+      // the rumor (a silent no-op) — surface the anomaly instead.
+      console.warn('concord: could not resolve gift wrap for invite dismissal', invite?.rumor?.id);
+    }
+  }
+
   /** @param {any} invite */
   async function accept(invite) {
     if (!watcher || !client) return;
     acceptingId = invite.rumor?.id ?? invite.communityId;
     try {
       if (invite.bundle) await client.joinByBundle(invite.bundle);
-      await watcher.dismiss(invite.rumor ?? invite);
+      await dismissInvite(invite);
       showToast(m.concord_invite_accepted(), 'success');
       onClose();
     } catch (error) {
@@ -77,8 +99,7 @@
 
   /** @param {any} invite */
   async function decline(invite) {
-    if (!watcher) return;
-    await watcher.dismiss(invite.rumor ?? invite);
+    await dismissInvite(invite);
   }
 </script>
 
