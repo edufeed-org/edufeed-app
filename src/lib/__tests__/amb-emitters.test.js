@@ -54,6 +54,12 @@ describe('boolean / description / dtag / license emitters', () => {
     expect(em.emit(true, ctx({ field, prop: 'isAccessibleForFree' }))).toEqual([
       ['isAccessibleForFree', 'true']
     ]);
+    expect(em.emit('true', ctx({ field, prop: 'isAccessibleForFree' }))).toEqual([
+      ['isAccessibleForFree', 'true']
+    ]);
+    expect(em.emit(false, ctx({ field, prop: 'isAccessibleForFree' }))).toEqual([
+      ['isAccessibleForFree', 'false']
+    ]);
     expect(em.emit('false', ctx({ field, prop: 'isAccessibleForFree' }))).toEqual([
       ['isAccessibleForFree', 'false']
     ]);
@@ -61,6 +67,18 @@ describe('boolean / description / dtag / license emitters', () => {
       em.parse(evt([['isAccessibleForFree', 'true']]), ctx({ field, prop: 'isAccessibleForFree' }))
         .value
     ).toBe(true);
+  });
+  it('boolean isAccessibleForFree skips emission when untouched (empty/undefined/null)', () => {
+    const field = /** @type {any} */ ({
+      id: 'free',
+      type: 'checkbox',
+      output: 'amb:isAccessibleForFree',
+      options: {}
+    });
+    const em = resolveEmitter(field);
+    expect(em.emit('', ctx({ field, prop: 'isAccessibleForFree' }))).toEqual([]);
+    expect(em.emit(undefined, ctx({ field, prop: 'isAccessibleForFree' }))).toEqual([]);
+    expect(em.emit(null, ctx({ field, prop: 'isAccessibleForFree' }))).toEqual([]);
   });
   it('description emits ONLY the description tag (no content pseudo-tag)', () => {
     const field = /** @type {any} */ ({

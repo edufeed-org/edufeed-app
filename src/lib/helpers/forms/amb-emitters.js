@@ -81,7 +81,10 @@ export const extScalarEmitter = flatEmitter(({ field, formDTag }) => `ext:${form
 
 /** @type {AmbEmitter} */
 export const booleanEmitter = {
-  emit: (value, { prop }) => [[prop, value === true || value === 'true' ? 'true' : 'false']],
+  emit: (value, { prop }) =>
+    value === undefined || value === null || value === ''
+      ? []
+      : [[prop, value === true || value === 'true' ? 'true' : 'false']],
   parse: (event, { prop }) => {
     const t = event.tags.find((t) => t[0] === prop);
     return { value: t ? t[1] === 'true' : false };
