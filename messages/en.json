@@ -2895,7 +2895,7 @@
   "concord_kick_confirm_title": "Remove {name}?",
   "concord_kick_confirm_body": "{name} loses access to new messages in this channel. With a new invitation they can rejoin anytime.",
   "concord_ban_confirm_title": "Ban {name}?",
-  "concord_ban_confirm_body": "Banning swaps the channel's lock: all other members automatically receive a new key. {name} can't read anything new — not even with an invite link.",
+  "concord_ban_confirm_body": "Banning swaps the channel's lock: all other members automatically receive a new key. {name} can't read anything new — existing invite links no longer work for them either.",
   "concord_ban_confirm_note": "Messages {name} already received stay readable on their devices. That cannot technically be undone.",
   "concord_cancel": "Cancel",
   "concord_kicked_toast": "Removed",

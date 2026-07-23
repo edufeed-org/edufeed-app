@@ -60,9 +60,14 @@
     if (!confirm || busy) return;
     busy = true;
     const { kind, pubkey } = confirm;
+    // callerPubkey backs moderation.js's self-target guard — the `!self`
+    // button gating below is UI convenience only, not the defense (an owner
+    // self-exclude would pass rotateChannel's checks and lose the key).
+    const callerPubkey = getActiveUser()?.pubkey;
     try {
-      if (kind === 'ban') await banFromChannel(community, channel.channel_id, pubkey, members);
-      else await kickFromChannel(community, channel.channel_id, pubkey, members);
+      if (kind === 'ban')
+        await banFromChannel(community, channel.channel_id, pubkey, members, callerPubkey);
+      else await kickFromChannel(community, channel.channel_id, pubkey, members, callerPubkey);
       showToast(kind === 'ban' ? m.concord_banned_toast() : m.concord_kicked_toast(), 'success');
       confirm = null;
     } catch (error) {

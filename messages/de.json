@@ -2895,7 +2895,7 @@
   "concord_kick_confirm_title": "{name} entfernen?",
   "concord_kick_confirm_body": "{name} verliert den Zugang zu neuen Nachrichten in diesem Kanal. Mit einer neuen Einladung kann {name} jederzeit wieder beitreten.",
   "concord_ban_confirm_title": "{name} sperren?",
-  "concord_ban_confirm_body": "Beim Sperren wird das Schloss des Kanals ausgetauscht: Alle anderen Mitglieder erhalten automatisch einen neuen Schlüssel. {name} kann nichts Neues mehr lesen — auch nicht mit einem Einladungslink.",
+  "concord_ban_confirm_body": "Beim Sperren wird das Schloss des Kanals ausgetauscht: Alle anderen Mitglieder erhalten automatisch einen neuen Schlüssel. {name} kann nichts Neues mehr lesen — auch bestehende Einladungslinks funktionieren für {name} nicht mehr.",
   "concord_ban_confirm_note": "Nachrichten, die {name} bereits erhalten hat, bleiben auf ihren Geräten lesbar. Das lässt sich technisch nicht zurückholen.",
   "concord_cancel": "Abbrechen",
   "concord_kicked_toast": "Entfernt",

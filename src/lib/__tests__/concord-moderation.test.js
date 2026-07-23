@@ -33,7 +33,7 @@ describe('kickFromChannel / banFromChannel', () => {
 
   it('kick rotates keeping everyone but the member, without banning', async () => {
     const c = community();
-    await kickFromChannel(c, 'chan1', 'evil', ['me', 'evil', 'friend']);
+    await kickFromChannel(c, 'chan1', 'evil', ['me', 'evil', 'friend'], 'me');
     expect(c.rotateChannel).toHaveBeenCalledWith('chan1', {
       keep: ['me', 'friend'],
       exclude: ['evil']
@@ -43,7 +43,7 @@ describe('kickFromChannel / banFromChannel', () => {
 
   it('ban banlists AND rotates', async () => {
     const c = community();
-    await banFromChannel(c, 'chan1', 'evil', ['me', 'evil']);
+    await banFromChannel(c, 'chan1', 'evil', ['me', 'evil'], 'me');
     expect(c.ban).toHaveBeenCalledWith('evil');
     expect(c.rotateChannel).toHaveBeenCalledWith('chan1', { keep: ['me'], exclude: ['evil'] });
   });
@@ -58,7 +58,29 @@ describe('kickFromChannel / banFromChannel', () => {
         order.push('rotate');
       })
     };
-    await banFromChannel(c, 'chan1', 'evil', ['me', 'evil']);
+    await banFromChannel(c, 'chan1', 'evil', ['me', 'evil'], 'me');
     expect(order).toEqual(['ban', 'rotate']);
+  });
+
+  // Self-target guard: for the OWNER, rotateChannel's outrank check
+  // short-circuits (canActOn: actor.isOwner → true, no self-check), so an
+  // owner in `exclude` would pass the dist's guards and silently lose the
+  // channel key. moderation.js must refuse before reaching the dist.
+  it('kick throws on self-target without touching the community', async () => {
+    const c = community();
+    await expect(kickFromChannel(c, 'chan1', 'me', ['me', 'friend'], 'me')).rejects.toThrow(
+      'refusing to remove self from channel'
+    );
+    expect(c.rotateChannel).not.toHaveBeenCalled();
+    expect(c.ban).not.toHaveBeenCalled();
+  });
+
+  it('ban throws on self-target without banlisting or rotating', async () => {
+    const c = community();
+    await expect(banFromChannel(c, 'chan1', 'me', ['me', 'friend'], 'me')).rejects.toThrow(
+      'refusing to remove self from channel'
+    );
+    expect(c.ban).not.toHaveBeenCalled();
+    expect(c.rotateChannel).not.toHaveBeenCalled();
   });
 });

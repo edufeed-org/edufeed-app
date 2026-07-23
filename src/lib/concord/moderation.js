@@ -7,16 +7,21 @@
 // - `rotateChannel(channelId, {keep, exclude})` (dist/client/community.js):
 //   `recipients = [...new Set([this.pubkey, ...opts.keep])].filter(pk =>
 //   !excluded.has(pk))` — the ROTATOR'S OWN pubkey is unconditionally unioned
-//   into recipients before the exclude-filter runs. So the moderator can
-//   never lock themselves out of a channel they still hold MANAGE_CHANNELS
-//   for, even if `keep` happened to omit them — self does NOT need special
-//   handling here. (In this module `keep` is `currentMembers` minus the
-//   target, and `currentMembers` already includes self via
-//   `channelMemberList`, so self is passed explicitly anyway — belt and
-//   braces, not a requirement.) `rotateChannel` itself throws synchronously
-//   if the caller lacks `MANAGE_CHANNELS`, or tries to exclude someone they
-//   don't strictly outrank (CORD-04) — both surface as a rejected promise
-//   here, which the modal's try/catch turns into a toast.
+//   into recipients before the exclude-filter runs. The real scope of that
+//   guarantee: OMITTING self from `keep` is safe (the union restores it), but
+//   putting self in `exclude` is NOT — the exclude-filter runs AFTER the
+//   union and strips the rotator's own pubkey from key delivery. For a
+//   non-owner that path is unreachable (the per-target outrank check throws:
+//   you never strictly outrank yourself), but for the OWNER `canActOn`
+//   (dist/helpers/permissions.js:44) short-circuits `actor.isOwner → true`
+//   with no self-check — an owner in `exclude` sails through the guard and
+//   silently loses the channel key. Hence the explicit `callerPubkey`
+//   self-target guard in kickFromChannel/banFromChannel below; the modal's
+//   `!self` button gating is UI convenience, not the defense.
+//   `rotateChannel` itself throws synchronously if the caller lacks
+//   `MANAGE_CHANNELS`, or tries to exclude someone they don't strictly
+//   outrank (CORD-04) — both surface as a rejected promise here, which the
+//   modal's try/catch turns into a toast.
 // - `rotateChannel` publishes the rekey wraps with `pool.publish(...).catch
 //   (err => console.warn(...))` per-wrap — i.e. relay-ack failures are
 //   swallowed internally and never reject the returned promise. There is no
@@ -84,17 +89,30 @@ export function channelMemberList({ observed, granted, self }) {
  * @param {string} channelId
  * @param {string} member - pubkey to remove
  * @param {string[]} currentMembers - approximate roster, see {@link channelMemberList}
+ * @param {string} callerPubkey - the acting user's pubkey; `member === callerPubkey` throws
+ *   (an OWNER self-exclude passes rotateChannel's guards and silently loses the key —
+ *   see the header comment; self-leave is `community.leaveChannel()`, not a rotation)
  * @returns {Promise<void>}
  */
-export async function kickFromChannel(community, channelId, member, currentMembers) {
+export async function kickFromChannel(community, channelId, member, currentMembers, callerPubkey) {
+  if (member === callerPubkey) throw new Error('refusing to remove self from channel');
   const keep = currentMembers.filter((p) => p !== member);
   await community.rotateChannel(channelId, { keep, exclude: [member] });
 }
 
 /**
- * Ban `member` community-wide (banlist entry — blocks rejoining via any
- * invite link, once enforced by a future Refounding per CORD-06) AND rotate
- * this channel's key to sever their access to new messages immediately.
+ * Ban `member`: community-wide banlist entry AND rotate this channel's key
+ * to sever their access to new messages immediately.
+ *
+ * Honest scope of the banlist half: it is a member-list projection only
+ * (foldMembers drops banned pubkeys from members$) — nothing in the dist
+ * blocks a FUTURE `grantChannelAccess` or a fresh invite link handed to a
+ * banned pubkey. Full enforcement requires a CORD-06 Refounding, per the
+ * dist's own note in ConcordCommunityAdmin.ban (admin.js:184: "NOTE: full
+ * enforcement also requires a Refounding (rekey) — CORD-06"). EXISTING
+ * invite links do stop working for the banned member's purposes here: the
+ * rotation makes the channel key inside every already-minted bundle stale
+ * (bundles are only refreshed on refound, not on a channel rotate).
  *
  * Same `currentMembers` approximation caveat as {@link kickFromChannel}
  * applies to the rotation half of this call.
@@ -103,9 +121,12 @@ export async function kickFromChannel(community, channelId, member, currentMembe
  * @param {string} channelId
  * @param {string} member - pubkey to ban
  * @param {string[]} currentMembers - approximate roster, see {@link channelMemberList}
+ * @param {string} callerPubkey - the acting user's pubkey; `member === callerPubkey` throws
+ *   (see {@link kickFromChannel} — an owner self-exclude silently loses the channel key)
  * @returns {Promise<void>}
  */
-export async function banFromChannel(community, channelId, member, currentMembers) {
+export async function banFromChannel(community, channelId, member, currentMembers, callerPubkey) {
+  if (member === callerPubkey) throw new Error('refusing to remove self from channel');
   await community.ban(member);
   const keep = currentMembers.filter((p) => p !== member);
   await community.rotateChannel(channelId, { keep, exclude: [member] });
