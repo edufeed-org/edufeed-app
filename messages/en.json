@@ -2873,5 +2873,17 @@
   "concord_decline": "Decline",
   "concord_accept": "Accept",
   "concord_invite_accepted": "Invitation accepted",
-  "concord_invite_accept_failed": "Could not accept the invitation"
+  "concord_invite_accept_failed": "Could not accept the invitation",
+  "concord_join_overline": "Invitation to a private channel",
+  "concord_join_title": "Join private channel",
+  "concord_join_body": "By joining you receive this channel's key. Messages are end-to-end encrypted — only members can read them.",
+  "concord_join_action": "Join",
+  "concord_join_success": "Joined — history is loading",
+  "concord_join_revoked_title": "This invite link is no longer valid",
+  "concord_join_revoked_body": "The link was withdrawn by the channel admins. Just ask for a new invitation.",
+  "concord_join_error_title": "Joining failed",
+  "concord_join_login_title": "Log in first",
+  "concord_join_login_body": "You need to be logged in to accept this invitation.",
+  "concord_join_disabled_title": "Private channels are not enabled",
+  "concord_join_disabled_body": "This deployment has private channels switched off."
 }

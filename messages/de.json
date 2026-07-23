@@ -2873,5 +2873,17 @@
   "concord_decline": "Ablehnen",
   "concord_accept": "Annehmen",
   "concord_invite_accepted": "Einladung angenommen",
-  "concord_invite_accept_failed": "Einladung konnte nicht angenommen werden"
+  "concord_invite_accept_failed": "Einladung konnte nicht angenommen werden",
+  "concord_join_overline": "Einladung in einen privaten Kanal",
+  "concord_join_title": "Privatem Kanal beitreten",
+  "concord_join_body": "Mit dem Beitritt erhältst du den Schlüssel dieses Kanals. Nachrichten sind Ende-zu-Ende-verschlüsselt — nur Mitglieder können sie lesen.",
+  "concord_join_action": "Beitreten",
+  "concord_join_success": "Beigetreten — der Verlauf wird geladen",
+  "concord_join_revoked_title": "Dieser Einladungslink ist nicht mehr gültig",
+  "concord_join_revoked_body": "Der Link wurde von den Kanal-Admins zurückgezogen. Frag einfach nach einer neuen Einladung.",
+  "concord_join_error_title": "Beitritt fehlgeschlagen",
+  "concord_join_login_title": "Bitte zuerst anmelden",
+  "concord_join_login_body": "Um diese Einladung anzunehmen, musst du angemeldet sein.",
+  "concord_join_disabled_title": "Private Kanäle sind nicht aktiviert",
+  "concord_join_disabled_body": "In dieser Installation sind private Kanäle deaktiviert."
 }
