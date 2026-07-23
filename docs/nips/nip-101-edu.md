@@ -189,6 +189,18 @@ they differ, NIP-AMB wins.
   (the field's own id used as the AMB property name — so the emitted tag
   key is the bare field id).
 
+  Four `amb:<property>` values are special-cased by the emitter registry
+  (`src/lib/helpers/forms/amb-emitters.js`) instead of following the
+  bare-`<property>` rule above — a foreign client that only strips the
+  `amb:` prefix will diverge on these:
+
+  | `field-output`             | Emitted tag                          | Notes                                    |
+  | --------------------------- | ------------------------------------- | ----------------------------------------- |
+  | `amb:id`                    | `["d", "<value>"]`                    | the resource's own identifier, not `id`   |
+  | `amb:license`                | `["license:id", "<value>"]`           | not `license`                             |
+  | `amb:isAccessibleForFree`    | `["isAccessibleForFree", "true"\|"false"]` | boolean; **no tag at all** when the field is untouched (empty/unset) |
+  | `amb:description`            | `["description", "<value>"]`          | plus the same value mirrored into the event's `content` field |
+
 **Concept-valued fields** (bound via `field-vocab`) emit a `:id`/
 `:prefLabel:<lang>`/`:type` tag triad per selected concept, per NIP-AMB —
 **no `a` tag** to the concept's own kind-39738 coordinate is emitted (the
