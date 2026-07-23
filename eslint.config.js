@@ -42,5 +42,27 @@ export default [
       // Disable until base path support is needed — widespread pre-existing violations
       'svelte/no-navigation-without-resolve': 'off'
     }
+  },
+  {
+    files: ['src/**/*.{js,svelte}'],
+    ignores: ['src/lib/concord/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'applesauce-concord',
+                'applesauce-concord/*',
+                'applesauce-core-concord',
+                'applesauce-core-concord/*'
+              ],
+              message: 'Import Concord APIs via $lib/concord only (wrapper contains pre-1.0 churn).'
+            }
+          ]
+        }
+      ]
+    }
   }
 ];
