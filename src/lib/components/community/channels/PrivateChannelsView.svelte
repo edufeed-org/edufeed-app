@@ -73,7 +73,13 @@
   const isConcordOwner = $derived(
     !!concord.community && concord.community.material?.owner === getActiveUser()?.pubkey
   );
-  const channels = $derived(concord.channels);
+  // Alphabetical, locale-aware (Armada-parity cleanup: the rail used to keep
+  // insertion order, which drifts from creation order once channels are
+  // renamed). 'de' as the compare locale matches this app's base locale;
+  // German/English channel names sort sensibly either way under it.
+  const channels = $derived(
+    [...(concord.channels ?? [])].sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? '', 'de'))
+  );
   const activeChannel = $derived(
     channels.find((c) => c.channel_id === selectedChannelId) ?? channels[0]
   );
@@ -117,23 +123,30 @@
     >
       <div class="flex items-center justify-between px-2 pt-2 pb-1">
         <span class="text-xs font-bold tracking-wider text-base-content/60 uppercase"
-          >{m.concord_rail_private()}</span
+          >{m.concord_rail_channels()}</span
         >
         <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
       </div>
+      <!-- Tighter, list-style rows (Armada-parity cleanup) — deliberately NOT
+        `btn` (its min-height/border/shadow chrome reads as a toolbar, not a
+        channel list). Active state reuses the app's existing subtle
+        active-nav treatment (BottomTabBar.svelte: bg-primary/10 text-primary)
+        instead of the previous btn-active fill. -->
       {#each channels as channel (channel.channel_id)}
         <button
-          class="btn justify-start gap-2 btn-ghost btn-sm {activeChannel?.channel_id ===
+          class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-150 {activeChannel?.channel_id ===
           channel.channel_id
-            ? 'btn-active font-bold'
-            : ''}"
+            ? 'bg-primary/10 font-semibold text-primary'
+            : 'text-base-content/80 hover:bg-base-300/60'}"
           onclick={() => {
             selectedChannelId = channel.channel_id;
             mobileChat = true;
           }}
         >
-          {channel.private ? '🔒' : '#'}
-          <span class="truncate {channel.accessible ? '' : 'opacity-50'}">{channel.name}</span>
+          <span aria-hidden="true">{channel.private ? '🔒' : '#'}</span>
+          <span class="min-w-0 flex-1 truncate {channel.accessible ? '' : 'opacity-50'}"
+            >{channel.name}</span
+          >
         </button>
       {/each}
       {#if concord.community && isConcordOwner && !concord.dissolved}
