@@ -249,7 +249,11 @@
   </div>
 {/if}
 
-<div class="flex flex-1 flex-col gap-3 overflow-y-auto p-4" bind:this={scrollContainer}>
+<!-- min-h-0 is load-bearing: without it, a flex-col child's default
+  min-height:auto lets this grow to full message-list content height instead
+  of shrinking to the pane's allotted space, pushing the composer off-screen
+  and leaking scroll up to the page/main level on long chats. -->
+<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" bind:this={scrollContainer}>
   <div class="mx-auto max-w-md py-3 text-center text-sm text-base-content/60">
     <div class="text-lg">🔒</div>
     <b>{m.concord_genesis_title({ name: channel.name })}</b>

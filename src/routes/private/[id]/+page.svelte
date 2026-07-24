@@ -56,38 +56,50 @@
   <title>{areaName} – {runtimeConfig.appName}</title>
 </svelte:head>
 
-<div class="mx-auto flex h-[calc(100vh-4rem)] max-w-5xl flex-col p-4">
+<!-- Full-viewport shell (design prototype, approved 2026-07-23): `main`
+  (src/routes/+layout.svelte) already sizes this route to the viewport minus
+  the app topbar via its own flex-col/overflow-y-auto chain — h-full here
+  resolves against that, same convention as the DM messages page
+  (src/routes/c/(dashboard)/messages/+page.svelte). overflow-hidden keeps
+  this route from ever needing ITS OWN scrollbar; only PrivateChannelsView's
+  internal panes (rail list / chat messages) scroll. -->
+<div class="flex h-full w-full flex-col overflow-hidden">
   {#if gate === 'disabled'}
-    <div class="grid flex-1 place-items-center">
+    <div class="grid flex-1 place-items-center p-4">
       <div class="max-w-md rounded-2xl border border-base-300 bg-base-100 p-8 text-center">
         <h3 class="text-lg font-extrabold">{m.concord_join_disabled_title()}</h3>
         <p class="mt-2 text-sm text-base-content/60">{m.concord_join_disabled_body()}</p>
       </div>
     </div>
   {:else if gate === 'invalid'}
-    <div class="grid flex-1 place-items-center">
+    <div class="grid flex-1 place-items-center p-4">
       <div class="max-w-md rounded-2xl border border-base-300 bg-base-100 p-8 text-center">
         <h3 class="text-lg font-extrabold">{m.concord_area_invalid_title()}</h3>
         <p class="mt-2 text-sm text-base-content/60">{m.concord_area_invalid_body()}</p>
       </div>
     </div>
   {:else if gate === 'login'}
-    <div class="grid flex-1 place-items-center">
+    <div class="grid flex-1 place-items-center p-4">
       <div class="max-w-md rounded-2xl border border-base-300 bg-base-100 p-8 text-center">
         <h3 class="text-lg font-extrabold">{m.concord_join_login_title()}</h3>
         <p class="mt-2 text-sm text-base-content/60">{m.concord_area_login_body()}</p>
       </div>
     </div>
   {:else}
-    <div class="mb-3 shrink-0">
-      <div class="flex items-center gap-2">
-        <span class="text-lg">🔒</span>
-        <h1 class="truncate text-lg font-extrabold">{areaName}</h1>
-        <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+    <!-- Slim header bar (title/lock/Beta/unlinked note) — same header
+      treatment as ChannelChat's own bar, so the standalone page reads as one
+      continuous shell rather than a page wrapped around a boxed widget. -->
+    <header class="flex shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 py-3">
+      <span class="text-lg">🔒</span>
+      <div class="min-w-0 flex-1">
+        <h1 class="flex items-center gap-2 truncate text-lg font-extrabold">
+          {areaName}
+          <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+        </h1>
+        <p class="truncate text-xs text-base-content/50">{m.concord_unlinked_note()}</p>
       </div>
-      <p class="mt-1 text-xs text-base-content/50">{m.concord_unlinked_note()}</p>
-    </div>
-    <div class="min-h-0 flex-1 overflow-hidden rounded-2xl border border-base-300 bg-base-100">
+    </header>
+    <div class="min-h-0 flex-1">
       <PrivateChannelsView communityId={data.communityId} />
     </div>
   {/if}

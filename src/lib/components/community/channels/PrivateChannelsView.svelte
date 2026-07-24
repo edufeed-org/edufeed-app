@@ -115,9 +115,12 @@
   nothing when the feature is disabled. -->
 {#if concord.enabled}
   <div class="flex h-full min-h-0">
-    <!-- rail -->
+    <!-- rail — full width in mobile single-column mode (below md, only one
+      of rail/pane is ever visible at once via mobileChat), fixed 288px once
+      both show side by side. A bare `w-72` here would leave the remainder
+      of a narrow viewport blank instead of the visible pane filling it. -->
     <aside
-      class="flex w-72 shrink-0 flex-col gap-1 overflow-y-auto border-r border-base-300 bg-base-100 p-3 {mobileChat
+      class="flex w-full shrink-0 flex-col gap-1 overflow-y-auto border-r border-base-300 bg-base-100 p-3 md:w-72 {mobileChat
         ? 'hidden md:flex'
         : 'flex'}"
     >
@@ -168,8 +171,12 @@
       {/if}
     </aside>
 
-    <!-- pane -->
-    <section class="flex min-w-0 flex-1 flex-col {mobileChat ? 'flex' : 'hidden md:flex'}">
+    <!-- pane — bg-base-200 (vs. the rail's bg-base-100) matches the approved
+      prototype's fluid chat pane treatment: rail reads as a paper card, the
+      chat area sits on the page's ambient background. -->
+    <section
+      class="flex min-w-0 flex-1 flex-col bg-base-200 {mobileChat ? 'flex' : 'hidden md:flex'}"
+    >
       {#if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
           <button
