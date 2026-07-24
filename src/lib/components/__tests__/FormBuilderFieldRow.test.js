@@ -77,6 +77,17 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_output_amb_license: () => 'License (amb:license)',
   form_builder_field_output_amb_inLanguage: () => 'Language (amb:inLanguage)',
   form_builder_field_output_amb_keywords: () => 'Keywords (amb:keywords)',
+  form_builder_field_output_amb_id: () => 'Identifier (amb:id)',
+  form_builder_field_output_amb_image: () => 'Image (amb:image)',
+  form_builder_field_output_amb_datePublished: () => 'Date published (amb:datePublished)',
+  form_builder_field_output_amb_dateCreated: () => 'Date created (amb:dateCreated)',
+  form_builder_field_output_amb_isAccessibleForFree: () =>
+    'Free to access (amb:isAccessibleForFree)',
+  form_builder_field_output_amb_creator: () => 'Creator (amb:creator)',
+  form_builder_field_output_amb_hasPart: () => 'Has part (amb:hasPart)',
+  form_builder_field_output_amb_isPartOf: () => 'Is part of (amb:isPartOf)',
+  form_builder_field_output_amb_refs: () => 'References (amb:refs)',
+  form_builder_field_output_relation_unset: () => 'Choose a relation…',
   form_builder_field_output_ext: () => 'Custom field / non-AMB (ext)',
   form_builder_field_source_prompt: () => 'How should options be configured?',
   form_builder_field_source_manual: () => 'Add options manually',
@@ -359,10 +370,11 @@ describe('FormBuilderFieldRow vocab picker', () => {
         )
       ).toBe(false);
 
-      // No vocab picker, no vocab naddr input, no output selector
+      // No vocab picker, no vocab naddr input — but the output select DOES
+      // render for every field type now (not just choice/vocab fields).
       expect(container.querySelector('[role="combobox"]')).toBeFalsy();
       expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
-      expect(container.querySelector('[data-testid="field-output-select"]')).toBeFalsy();
+      expect(container.querySelector('[data-testid="field-output-select"]')).toBeTruthy();
 
       // Placeholder input DOES render for non-choice types — it's meaningful
       // for text-like inputs.
@@ -613,6 +625,117 @@ async function renderAndPickHochschul(initialField) {
 
   return { container, getField: () => latestField };
 }
+
+describe('FormBuilderFieldRow output picker (every field type)', () => {
+  it('shows the output picker for a non-choice text field', async () => {
+    const field = makeField();
+    field.type = 'text';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    expect(container.querySelector('[data-testid="field-output-select"]')).toBeTruthy();
+  });
+
+  it('lists the extended AMB outputs including amb:id and amb:image', async () => {
+    const field = makeField();
+    field.type = 'text';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toContain('amb:name');
+    expect(values).toContain('amb:id');
+    expect(values).toContain('amb:image');
+    expect(values).toContain('amb:datePublished');
+    expect(values).toContain('amb:isAccessibleForFree');
+  });
+});
+
+describe('FormBuilderFieldRow rich field types (creator/amb-relation/external-urls)', () => {
+  it('shows a locked, disabled output select for creator with amb:creator selected', async () => {
+    const field = makeField();
+    field.type = 'creator';
+    field.output = 'amb:creator';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe('amb:creator');
+  });
+
+  it('shows a locked, disabled output select for external-urls with amb:refs selected', async () => {
+    const field = makeField();
+    field.type = 'external-urls';
+    field.output = 'amb:refs';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe('amb:refs');
+  });
+
+  it('offers only amb:hasPart / amb:isPartOf for amb-relation', async () => {
+    const field = makeField();
+    field.type = 'amb-relation';
+    field.output = '';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(false);
+    const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toEqual(['', 'amb:hasPart', 'amb:isPartOf']);
+  });
+
+  it('renders only label + required + output for rich types (no options/vocab/min-max UI)', async () => {
+    for (const type of ['creator', 'amb-relation', 'external-urls']) {
+      cleanup();
+      const field = makeField();
+      field.type = type;
+      const { container } = render(FormBuilderFieldRow, {
+        props: { field, fields: [field], fieldIndex: 0, existing: false }
+      });
+      await Promise.resolve();
+
+      expect(container.querySelector('[data-testid="field-output-select"]')).toBeTruthy();
+      expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
+      expect(container.querySelector('[role="combobox"]')).toBeFalsy();
+      expect(
+        Array.from(container.querySelectorAll('button')).some((b) =>
+          (b.textContent || '').includes('Add options manually')
+        )
+      ).toBe(false);
+      const placeholderInput = Array.from(container.querySelectorAll('input')).find(
+        (i) => i.placeholder === 'Placeholder'
+      );
+      expect(placeholderInput).toBeFalsy();
+    }
+  });
+});
 
 describe('FormBuilderFieldRow vocab preview (post-selection)', () => {
   it('renders the scheme description after selection', async () => {

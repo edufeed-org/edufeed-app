@@ -65,7 +65,19 @@
     },
     { value: 'amb:license', label: () => m.form_builder_field_output_amb_license() },
     { value: 'amb:inLanguage', label: () => m.form_builder_field_output_amb_inLanguage() },
-    { value: 'amb:keywords', label: () => m.form_builder_field_output_amb_keywords() }
+    { value: 'amb:keywords', label: () => m.form_builder_field_output_amb_keywords() },
+    { value: 'amb:id', label: () => m.form_builder_field_output_amb_id() },
+    { value: 'amb:image', label: () => m.form_builder_field_output_amb_image() },
+    { value: 'amb:datePublished', label: () => m.form_builder_field_output_amb_datePublished() },
+    { value: 'amb:dateCreated', label: () => m.form_builder_field_output_amb_dateCreated() },
+    {
+      value: 'amb:isAccessibleForFree',
+      label: () => m.form_builder_field_output_amb_isAccessibleForFree()
+    },
+    { value: 'amb:creator', label: () => m.form_builder_field_output_amb_creator() },
+    { value: 'amb:hasPart', label: () => m.form_builder_field_output_amb_hasPart() },
+    { value: 'amb:isPartOf', label: () => m.form_builder_field_output_amb_isPartOf() },
+    { value: 'amb:refs', label: () => m.form_builder_field_output_amb_refs() }
   ];
 
   // Concept-count preview — reactive via useSchemeConcepts
@@ -215,6 +227,22 @@
   const CHOICE_TYPES = ['select', 'checkbox', 'radio'];
   const isChoiceType = $derived(CHOICE_TYPES.includes(field.type));
 
+  // Rich composite field types (creator/amb-relation/external-urls) render
+  // via their own adapters (prior phase) — the builder only shows
+  // label + required + output for them, never the choice/vocab/min-max UI.
+  const RICH_TYPES = ['creator', 'amb-relation', 'external-urls'];
+  const isRichType = $derived(RICH_TYPES.includes(field.type));
+
+  // creator/external-urls have exactly one sensible AMB output — lock it so
+  // the author can't pick something incompatible with the adapter.
+  const LOCKED_OUTPUTS = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
+
+  // amb-relation always targets one of these two coordinate-relation props.
+  const RELATION_OUTPUTS = [
+    { value: 'amb:hasPart', label: () => m.form_builder_field_output_amb_hasPart() },
+    { value: 'amb:isPartOf', label: () => m.form_builder_field_output_amb_isPartOf() }
+  ];
+
   /**
    * Three-state source chooser: `unset` (show CTA pair), `manual` (show badge
    * editor), `vocab` (show combobox + preview + output). Seed from persisted
@@ -265,7 +293,7 @@
       <input type="checkbox" class="checkbox checkbox-xs" bind:checked={field.required} />
       <span class="label-text text-xs">{m.form_builder_field_required()}</span>
     </label>
-    {#if !isChoiceType}
+    {#if !isChoiceType && !isRichType}
       <input
         type="text"
         class="input-bordered input input-xs flex-1"
@@ -275,7 +303,50 @@
     {/if}
   </div>
 
-  {#if field.type === 'text' || field.type === 'textarea' || field.type === 'number'}
+  <!-- Output picker: every field type can map to an AMB (or ext) property. -->
+  <div class="flex items-center gap-2 text-sm">
+    <span class="text-xs text-base-content/50">{m.form_builder_field_output_label()}</span>
+    {#if field.type === 'creator' || field.type === 'external-urls'}
+      {@const lockedValue = LOCKED_OUTPUTS[field.type]}
+      <select
+        class="select-bordered select flex-1 select-xs"
+        data-testid="field-output-select"
+        value={lockedValue}
+        disabled
+      >
+        <option value={lockedValue}>
+          {AMB_OUTPUTS.find((out) => out.value === lockedValue)?.label() ?? lockedValue}
+        </option>
+      </select>
+    {:else if field.type === 'amb-relation'}
+      <select
+        class="select-bordered select flex-1 select-xs"
+        data-testid="field-output-select"
+        value={field.output || ''}
+        onchange={handleOutputChange}
+      >
+        <option value="" disabled>{m.form_builder_field_output_relation_unset()}</option>
+        {#each RELATION_OUTPUTS as out (out.value)}
+          <option value={out.value}>{out.label()}</option>
+        {/each}
+      </select>
+    {:else}
+      <select
+        class="select-bordered select flex-1 select-xs"
+        data-testid="field-output-select"
+        value={field.output || ''}
+        onchange={handleOutputChange}
+      >
+        <option value="">{m.form_builder_field_output_auto({ id: field.id || 'id' })}</option>
+        {#each AMB_OUTPUTS as out (out.value)}
+          <option value={out.value}>{out.label()}</option>
+        {/each}
+        <option value="ext">{m.form_builder_field_output_ext()}</option>
+      </select>
+    {/if}
+  </div>
+
+  {#if !isRichType && (field.type === 'text' || field.type === 'textarea' || field.type === 'number')}
     {@const isNumeric = field.type === 'number'}
     <div class="flex items-center gap-2 text-sm">
       <span
@@ -293,7 +364,7 @@
     </div>
   {/if}
 
-  {#if isChoiceType}
+  {#if isChoiceType && !isRichType}
     {#if fieldMode === 'unset'}
       <div class="rounded bg-base-200/30 p-2 text-sm">
         <div class="mb-2 text-xs text-base-content/60">
@@ -436,21 +507,6 @@
             >
           </div>
         {/if}
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-base-content/50">{m.form_builder_field_output_label()}</span>
-          <select
-            class="select-bordered select flex-1 select-xs"
-            data-testid="field-output-select"
-            value={field.output || ''}
-            onchange={handleOutputChange}
-          >
-            <option value="">{m.form_builder_field_output_auto({ id: field.id || 'id' })}</option>
-            {#each AMB_OUTPUTS as out (out.value)}
-              <option value={out.value}>{out.label()}</option>
-            {/each}
-            <option value="ext">{m.form_builder_field_output_ext()}</option>
-          </select>
-        </div>
         <div class="mt-1">
           <button type="button" class="btn px-0 text-xs btn-link btn-xs" onclick={switchToManual}>
             {m.form_builder_field_source_switch_to_manual()}

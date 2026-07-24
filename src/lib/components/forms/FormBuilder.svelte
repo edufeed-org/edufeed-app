@@ -31,8 +31,17 @@
     'select',
     'checkbox',
     'radio',
-    'date'
+    'date',
+    'creator',
+    'amb-relation',
+    'external-urls'
   ];
+
+  // Rich composite field types get a sensible default output so the author
+  // doesn't have to pick one manually (amb-relation is deliberately excluded
+  // — hasPart vs isPartOf is a meaningful choice the author must make).
+  /** @type {Record<string, string>} */
+  const IMPLIED_OUTPUT = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
 
   // existingEvent is only used for initial population — it won't change after mount
   // svelte-ignore state_referenced_locally
@@ -181,7 +190,7 @@
       selectOptions: [],
       multiple: false,
       vocab: undefined,
-      output: '',
+      output: IMPLIED_OUTPUT[type] || '',
       vocabNaddrInput: '',
       vocabError: ''
     });

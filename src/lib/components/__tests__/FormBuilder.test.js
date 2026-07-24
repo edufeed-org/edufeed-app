@@ -147,3 +147,35 @@ describe('FormBuilder: vocab + output authoring', () => {
     expect(outputTag[2]).toBe('amb:about');
   });
 });
+
+describe('FormBuilder: rich field palette (creator/amb-relation/external-urls)', () => {
+  beforeEach(() => {
+    buildSpy.mockClear();
+    signSpy.mockClear();
+    publishEventSpy.mockClear();
+    eventStoreAddSpy.mockClear();
+    gotoSpy.mockClear();
+  });
+
+  it('offers creator, amb-relation and external-urls as addable field types', () => {
+    const { getByText } = render(FormBuilder);
+    expect(getByText('creator')).toBeTruthy();
+    expect(getByText('amb-relation')).toBeTruthy();
+    expect(getByText('external-urls')).toBeTruthy();
+  });
+
+  it('gives creator/external-urls an implied output and leaves amb-relation blank', async () => {
+    const { container, getByText } = render(FormBuilder);
+
+    await fireEvent.click(getByText('creator'));
+    await fireEvent.click(getByText('external-urls'));
+    await fireEvent.click(getByText('amb-relation'));
+
+    const selects = Array.from(container.querySelectorAll('[data-testid="field-output-select"]'));
+    expect(selects).toHaveLength(3);
+    const values = selects.map((s) => /** @type {HTMLSelectElement} */ (s).value);
+    expect(values).toContain('amb:creator');
+    expect(values).toContain('amb:refs');
+    expect(values).toContain('');
+  });
+});
