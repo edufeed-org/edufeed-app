@@ -312,6 +312,31 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(sparql).not.toMatch(/lp:LP_0000008/);
   });
 
+  it('get_node_children: labels nodes from rdfs:label OR skos:prefLabel', async () => {
+    // Source graphs disagree on the label predicate: the ISB (BY) / RP / SN
+    // imports use rdfs:label, but the yovisto import (BE, BB) uses
+    // skos:prefLabel. Reading only rdfs:label left every Berlin node
+    // unlabelled → bindingsToItems dropped them → empty tree. Coalesce both,
+    // and GROUP BY the child so a node with multiple prefLabels collapses to a
+    // single row (duplicate ?child rows would crash the keyed {#each}).
+    queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel', 'hasChildren'], []));
+    const { POST } = await import('../../routes/api/curricula/+server.js');
+    await POST(
+      ev(
+        postRequest({
+          tool: 'get_node_children',
+          args: { nodeUri: 'https://lehrplan.yovisto.com/resource/lp/be/curriculum/15' }
+        })
+      )
+    );
+    const sparql = queryMock.mock.calls[0][0].sparql;
+    expect(sparql).toMatch(/PREFIX\s+skos:/);
+    expect(sparql).toMatch(/skos:prefLabel/);
+    expect(sparql).toMatch(/rdfs:label/);
+    expect(sparql).toMatch(/COALESCE/i);
+    expect(sparql).toMatch(/GROUP\s+BY\s+\?child/i);
+  });
+
   it('get_node_children: filters transitive BFO_0000051 over-assertion', async () => {
     // State data over-asserts has-part transitively: a Lehrplan with 5
     // chapters and 100 leaves emits all 105 nodes as direct BFO_0000051

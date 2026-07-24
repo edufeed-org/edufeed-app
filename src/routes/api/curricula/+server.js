@@ -26,7 +26,8 @@ const CACHE_HEADER = 'public, max-age=86400';
 const PREFIXES = `PREFIX lp: <https://w3id.org/lehrplan/ontology/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX obo: <http://purl.obolibrary.org/obo/>`;
+PREFIX obo: <http://purl.obolibrary.org/obo/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>`;
 
 /**
  * Resolve the optional Schulart filter clause used by list_schulfaecher and
@@ -147,9 +148,17 @@ SELECT DISTINCT ?s ?label WHERE {
       // children of the Lehrplan. We want only the truly-direct children
       // (the 5 chapters), so we exclude any ?child that's also reachable
       // via an intermediate has-part hop from the same parent.
+      //
+      // Nodes carry their text under different predicates depending on the
+      // source graph: the ISB (BY) / RP / SN imports use rdfs:label, while the
+      // yovisto import (BE, BB) uses skos:prefLabel. Coalesce both — reading
+      // only rdfs:label left every Berlin node unlabelled, so bindingsToItems
+      // dropped them and the tree came back empty. SAMPLE + GROUP BY collapses
+      // the row per child to one (a node with de+en prefLabels would otherwise
+      // emit duplicate rows → duplicate keys crash the keyed {#each} in
+      // CurriculumTree).
       return `${PREFIXES}
-SELECT DISTINCT ?child ?childLabel
-  (EXISTS { ?child obo:BFO_0000051 ?gc } AS ?hasChildren)
+SELECT ?child (SAMPLE(?lbl) AS ?childLabel) (MAX(?hc) AS ?hasChildren)
 WHERE {
   <${node}> obo:BFO_0000051 ?child .
   FILTER NOT EXISTS {
@@ -157,8 +166,11 @@ WHERE {
     ?intermediate obo:BFO_0000051 ?child .
     FILTER(?intermediate != ?child)
   }
-  OPTIONAL { ?child rdfs:label ?childLabel . }
-} ORDER BY DESC(?hasChildren) ?childLabel`;
+  OPTIONAL { ?child rdfs:label ?rl . }
+  OPTIONAL { ?child skos:prefLabel ?pl . }
+  BIND(COALESCE(?rl, ?pl) AS ?lbl)
+  BIND(IF(EXISTS { ?child obo:BFO_0000051 ?gc }, 1, 0) AS ?hc)
+} GROUP BY ?child ORDER BY DESC(?hasChildren) ?childLabel`;
     }
 
     default:
