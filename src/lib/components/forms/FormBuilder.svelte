@@ -83,7 +83,7 @@
    * @property {string} [output]
    * @property {string} [vocabNaddrInput]
    * @property {string} [vocabError]
-   * @property {any} [displayIf] - conditional-visibility rules, passed through unchanged (no authoring UI yet)
+   * @property {{ rules: { questionId: string, operator: string, value: string }[] } | undefined} [displayIf] - single-condition show-if rule, authored via FormBuilderConditionRow
    * @property {string} [title] - only used when type === 'section'
    * @property {string} [description] - only used when type === 'section'
    */
@@ -567,6 +567,15 @@
               sections={fields
                 .filter((f) => f.type === 'section')
                 .map((f) => ({ id: f.id, title: f.title || '' }))}
+              earlierQuestions={fields
+                .slice(0, i)
+                .filter((f) => f.type !== 'section')
+                .map((f) => ({
+                  id: f.id,
+                  label: f.label || f.id,
+                  type: f.type,
+                  selectOptions: f.selectOptions
+                }))}
             />
           {/if}
 

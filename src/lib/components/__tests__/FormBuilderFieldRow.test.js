@@ -95,7 +95,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_source_manual: () => 'Add options manually',
   form_builder_field_source_vocab: () => 'Use a vocabulary',
   form_builder_field_source_switch_to_manual: () => 'Add options manually instead',
-  form_builder_field_source_switch_to_vocab: () => 'Use a vocabulary instead'
+  form_builder_field_source_switch_to_vocab: () => 'Use a vocabulary instead',
+  form_builder_showif_label: () => 'Show only if',
+  form_builder_showif_always: () => 'always',
+  form_builder_showif_equals: () => 'equals',
+  form_builder_showif_notEquals: () => 'is not',
+  form_builder_showif_contains: () => 'contains'
 }));
 
 vi.mock('$lib/helpers/educational/skosLoader.js', () => ({

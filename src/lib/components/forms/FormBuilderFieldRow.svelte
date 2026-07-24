@@ -11,6 +11,7 @@
   } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
+  import FormBuilderConditionRow from './FormBuilderConditionRow.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -29,7 +30,7 @@
    * @property {string} [output]
    * @property {string} [vocabNaddrInput]
    * @property {string} [vocabError]
-   * @property {any} [displayIf] - conditional-visibility rules, passed through unchanged (no authoring UI yet)
+   * @property {{ rules: { questionId: string, operator: string, value: string }[] } | undefined} [displayIf] - single-condition show-if rule authored via FormBuilderConditionRow
    *
    * @typedef {Object} Props
    * @property {FieldState} field
@@ -37,10 +38,18 @@
    * @property {number} fieldIndex
    * @property {boolean} existing
    * @property {{ id: string, title: string }[]} [sections]
+   * @property {{id: string, label: string, type: string, selectOptions?: {id:string,label:string}[]}[]} [earlierQuestions]
    */
 
   /** @type {Props} */
-  let { field = $bindable(), fields, fieldIndex, existing, sections = [] } = $props();
+  let {
+    field = $bindable(),
+    fields,
+    fieldIndex,
+    existing,
+    sections = [],
+    earlierQuestions = []
+  } = $props();
 
   // Common AMB output targets — human-readable label + machine value.
   const AMB_OUTPUTS = [
@@ -533,4 +542,10 @@
       </div>
     {/if}
   {/if}
+
+  <FormBuilderConditionRow
+    value={field.displayIf}
+    availableQuestions={earlierQuestions}
+    onchange={(v) => (field.displayIf = v)}
+  />
 </div>
