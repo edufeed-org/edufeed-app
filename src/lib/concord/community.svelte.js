@@ -23,6 +23,26 @@ export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember }) {
 }
 
 /**
+ * Which of a community's channels a member can see, and whether they can
+ * currently read it. PUBLIC channels (`private: false`) are visible to
+ * every member and always accessible — membership itself grants access,
+ * because public channels derive their keys from `community_root` (CORD-03),
+ * not from a per-channel key in `material.channels`. PRIVATE channels stay
+ * gated on `heldChannelIds` as before: metadata for a private channel we're
+ * not in still folds into `channels$` (its existence is public knowledge),
+ * but we can't decrypt it without the key. Deleted channels are always
+ * dropped, regardless of privacy.
+ * @param {Array<{channel_id: string, private: boolean, deleted?: boolean}>} channels
+ * @param {string[]} heldChannelIds
+ * @returns {Array<any & {accessible: boolean}>}
+ */
+export function deriveVisibleChannels(channels, heldChannelIds) {
+  return channels
+    .filter((c) => !c.deleted)
+    .map((c) => ({ ...c, accessible: !c.private || heldChannelIds.includes(c.channel_id) }));
+}
+
+/**
  * Reactive Concord context for one Concord community, keyed on a raw
  * community id rather than a Communikey pointer — the core `useConcordCommunity`
  * used to inline directly. Extracted (Concord follow-up 1) so a standalone
@@ -87,9 +107,7 @@ export function useConcordArea(getCommunityId) {
       communityId,
       community,
       membership: /** @type {'none'|'member'} */ (community ? 'member' : 'none'),
-      channels: getChannels()
-        .filter((c) => c.private && !c.deleted)
-        .map((c) => ({ ...c, accessible: heldChannelIds.includes(c.channel_id) })),
+      channels: deriveVisibleChannels(getChannels(), heldChannelIds),
       phase: getPhase(),
       dissolved: getDissolved(),
       // Read via getConcordState() (a reassigned $state.raw), NOT the plain

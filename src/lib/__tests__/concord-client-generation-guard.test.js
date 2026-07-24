@@ -111,7 +111,7 @@ vi.mock('applesauce-concord', () => {
       this.stopped = true;
     }
   }
-  return { ConcordClient: FakeConcordClient };
+  return { ConcordClient: FakeConcordClient, Helpers: { STOCK_RELAYS: [] } };
 });
 
 const { initConcordService, getConcordClient, getConcordState } = await import(

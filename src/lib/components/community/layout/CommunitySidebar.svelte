@@ -6,8 +6,12 @@
   // Directly from the concord submodule, never the $lib/concord barrel —
   // convention every Concord call site follows (see CLAUDE.md's Concord
   // section) so this stays SSR-clean.
-  import { useUnlinkedConcordAreas } from '$lib/concord/unlinked-areas.svelte.js';
-  import { HomeIcon, LockIcon } from '$lib/components/icons';
+  import {
+    useUnlinkedConcordAreas,
+    useConcordListLocked
+  } from '$lib/concord/unlinked-areas.svelte.js';
+  import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
+  import { HomeIcon, LockIcon, LockOpenIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -24,6 +28,22 @@
   const unlinkedAreas = $derived(
     runtimeConfig.concord?.enabled ? getUnlinkedAreas() : /** @type {any[]} */ ([])
   );
+
+  // "Sync private areas" affordance (Fix 2) — see the matching comment in
+  // Sidebar.svelte for the full rationale. Shown even with zero unlinked
+  // areas: a locked list is exactly why the list looks empty.
+  const getListLocked = useConcordListLocked();
+  const listLocked = $derived(runtimeConfig.concord?.enabled ? getListLocked() : false);
+  const concordReady = $derived(getConcordState().phase === 'ready');
+  const signerHasNip44 = $derived(!!getConcordState().client?.signer?.nip44);
+  const unlocking = $derived(getConcordState().unlocking);
+  const showUnlockAffordance = $derived(
+    runtimeConfig.concord?.enabled && concordReady && listLocked
+  );
+
+  async function handleUnlockAreas() {
+    await unlockConcordLists();
+  }
 
   /**
    * Handle community selection - uses route-based navigation
@@ -82,8 +102,27 @@
       </div>
     {/each}
 
-    {#if unlinkedAreas.length > 0}
+    {#if unlinkedAreas.length > 0 || showUnlockAffordance}
       <div class="w-8 border-b border-base-300"></div>
+      {#if showUnlockAffordance}
+        <div
+          class="tooltip tooltip-right"
+          data-tip={signerHasNip44 ? m.concord_unlock_areas() : m.concord_direct_needs_nip44()}
+        >
+          <button
+            class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
+            data-testid="concord_unlock_areas"
+            disabled={!signerHasNip44 || unlocking}
+            onclick={handleUnlockAreas}
+          >
+            {#if unlocking}
+              <span class="loading loading-sm loading-spinner"></span>
+            {:else}
+              <LockOpenIcon class_="h-5 w-5" />
+            {/if}
+          </button>
+        </div>
+      {/if}
       {#each unlinkedAreas as area (area.communityId)}
         <div class="tooltip tooltip-right" data-tip={area.name}>
           <a
@@ -167,11 +206,27 @@
       </div>
     {/if}
 
-    {#if unlinkedAreas.length > 0}
+    {#if unlinkedAreas.length > 0 || showUnlockAffordance}
       <div class="border-b border-base-300"></div>
       <p class="px-3 pt-1 text-xs font-semibold tracking-wider text-base-content/50 uppercase">
         {m.concord_sidebar_private_areas()}
       </p>
+      {#if showUnlockAffordance}
+        <button
+          class="btn btn-block gap-2 btn-outline btn-sm"
+          data-testid="concord_unlock_areas"
+          disabled={!signerHasNip44 || unlocking}
+          title={signerHasNip44 ? undefined : m.concord_direct_needs_nip44()}
+          onclick={handleUnlockAreas}
+        >
+          {#if unlocking}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            <LockOpenIcon class_="h-4 w-4" />
+          {/if}
+          {m.concord_unlock_areas()}
+        </button>
+      {/if}
       {#each unlinkedAreas as area (area.communityId)}
         <a
           href={resolve(`/private/${area.communityId}`)}

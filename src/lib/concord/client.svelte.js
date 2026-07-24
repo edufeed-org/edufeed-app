@@ -3,12 +3,22 @@
 // chunks), torn down on logout/account switch. autoUnlock stays false: zero
 // signer calls during initial sync (CORD lists unlock on user action).
 import { browser } from '$app/environment';
+// Pure merge helper (no package deps beyond the app's own applesauce-core) —
+// safe to import statically, unlike 'applesauce-concord' itself.
+import { mergeRelaySets } from './relay-sets.js';
 
 let state = $state.raw({
   phase: /** @type {'off'|'starting'|'ready'|'error'} */ ('off'),
   client: /** @type {any} */ (undefined),
   communities: /** @type {any[]} */ ([]),
-  error: /** @type {string|null} */ (null)
+  error: /** @type {string|null} */ (null),
+  // Bookkeeping for the unlockConcordLists() affordance below — NOT the
+  // same thing as a list's own `.unlocked` (that's reactive, per-cast, and
+  // exposed to sidebars via useConcordListLocked() in
+  // unlinked-areas.svelte.js). These two just let a "Sync private areas"
+  // button show a spinner and reflect whether its last run succeeded.
+  unlocking: false,
+  unlocked: false
 });
 
 let initialized = false;
@@ -61,7 +71,14 @@ function teardown() {
   // node_modules/applesauce-concord/dist/client/client.d.ts.
   currentClient?.stop();
   currentClient = undefined;
-  state = { phase: 'off', client: undefined, communities: [], error: null };
+  state = {
+    phase: 'off',
+    client: undefined,
+    communities: [],
+    error: null,
+    unlocking: false,
+    unlocked: false
+  };
 }
 
 /**
@@ -80,6 +97,76 @@ export async function wipeConcordData(pubkey) {
 }
 
 /**
+ * Resolve an Observable's next (often already-buffered/synchronous) value
+ * and unsubscribe. `communityList$`/`inviteList$` are switchMap chains over
+ * BehaviorSubjects (see applesauce-concord's client.js), so they replay
+ * their current value to a new subscriber — no need to pull in rxjs's
+ * firstValueFrom for this. Declared-then-assigned per CLAUDE.md's RxJS
+ * subscription ordering rule (a synchronous emission inside `subscribe()`
+ * would otherwise read `sub` before it's initialized).
+ * @template T
+ * @param {import('rxjs').Observable<T>} observable
+ * @returns {Promise<T>}
+ */
+function firstValue(observable) {
+  return new Promise((resolve, reject) => {
+    /** @type {import('rxjs').Subscription | undefined} */
+    let sub;
+    sub = observable.subscribe({
+      next: (value) => {
+        resolve(value);
+        sub?.unsubscribe();
+      },
+      error: (error) => {
+        reject(error);
+        sub?.unsubscribe();
+      }
+    });
+  });
+}
+
+/**
+ * Decrypt the user's Community List (kind 13302) and Invite List (kind
+ * 13303) with their signer. `autoUnlock: false` means these stay encrypted
+ * after initial sync until the app calls this explicitly — there is
+ * otherwise no way for a remote-only membership (created on another client,
+ * synced via a CORD-05 stock relay per Fix 1 above) to ever hydrate into
+ * `communities$`.
+ *
+ * No manual reconcile is needed after unlocking: `.unlock(signer)` caches
+ * the decrypted plaintext on the event and calls `notifyEventUpdate`, which
+ * makes the cast's `communities$` re-emit; the client's own internal
+ * `watchLists()` subscription (wired up during `client.start()`, still live
+ * here) reacts to that re-emission by merging the memberships and running
+ * `reconcileCommunities()` — which updates the `communities$` BehaviorSubject
+ * this module already subscribes to in `setup()`. That in turn reassigns
+ * `state.communities`, so UI reading `getConcordState()` updates on its own.
+ * @returns {Promise<boolean>} true on success, false on any guard failure or error
+ */
+export async function unlockConcordLists() {
+  const client = currentClient;
+  const signer = client?.signer;
+  if (!client || !signer?.nip44) return false;
+  state = { ...state, unlocking: true };
+  try {
+    const [communityList, inviteList] = await Promise.all([
+      firstValue(client.communityList$),
+      firstValue(client.inviteList$)
+    ]);
+    await Promise.all([
+      communityList && !communityList.unlocked ? communityList.unlock(signer) : undefined,
+      inviteList && !inviteList.unlocked ? inviteList.unlock(signer) : undefined
+    ]);
+    state = { ...state, unlocking: false, unlocked: true };
+    return true;
+  } catch (/** @type {any} */ error) {
+    console.error('concord: unlock failed', error);
+    state = { ...state, unlocking: false };
+    return false;
+  }
+}
+
+/**
  * @param {any} account
  * @param {number} myGeneration - captured from the module-level `generation`
  *   counter by the caller BEFORE this async function starts; re-checked
@@ -89,6 +176,10 @@ async function setup(account, myGeneration) {
   const { runtimeConfig } = await import('$lib/stores/config.svelte.js');
   if (myGeneration !== generation) return; // superseded while importing config
   if (!runtimeConfig.concord?.enabled) return;
+  // The app's own configured relays — required (a misconfigured deployment
+  // with the flag on but no relays is an error state, checked below). CORD
+  // stock relays (added below, once the dynamic import resolves) are purely
+  // additive on top of this.
   const relays = runtimeConfig.concord.relays;
   if (!relays?.length) {
     // Surface misconfiguration as an error state — leaving phase at 'off'
@@ -107,13 +198,23 @@ async function setup(account, myGeneration) {
   /** @type {import('rxjs').Subscription[]} */
   const localSubs = [];
   try {
-    const [{ ConcordClient }, { pool }, storageModule] = await Promise.all([
+    const [{ ConcordClient, Helpers }, { pool }, storageModule] = await Promise.all([
       import('applesauce-concord'),
       import('$lib/stores/nostr-infrastructure.svelte'),
       import('./storage.js')
     ]);
     if (myGeneration !== generation) return; // superseded while importing deps — never build a client for a stale account
     const dbName = storageModule.concordDbName(account.pubkey);
+    // Include CORD-05 §3's stock relays alongside our configured ones. The
+    // package's kind-13302/13303 list sync (and invite-link fallback) reads
+    // and writes these by default, and spec-compliant clients (e.g. Armada)
+    // publish/expect the user's Community List there — without them, a list
+    // created on another client is invisible to us (and vice versa). The
+    // lists are NIP-44 self-encrypted to the owning user, so content stays
+    // private even on these public relays; only list *existence*/metadata is
+    // exposed, an accepted trade-off for cross-client interop. Configured
+    // relays are preferred (listed first) when both sets overlap.
+    const relaysWithStock = mergeRelaySets(relays, Helpers?.STOCK_RELAYS);
     client = new ConcordClient({
       signer: account.signer,
       // The app's `pool` is `applesauce-relay@^6.2.1`; applesauce-concord
@@ -122,7 +223,7 @@ async function setup(account, myGeneration) {
       // RelayPool classes here. Intentional per the design doc ("existing
       // app RelayPool instance") — cast bridges the type-only mismatch.
       pool: /** @type {any} */ (pool),
-      relays,
+      relays: relaysWithStock,
       storage: storageModule.createConcordStorage(dbName),
       storeFactory: storageModule.createConcordStoreFactory(dbName),
       autoUnlock: false,
@@ -167,7 +268,9 @@ async function setup(account, myGeneration) {
       phase: 'error',
       client: undefined,
       communities: [],
-      error: String(error?.message || error)
+      error: String(error?.message || error),
+      unlocking: false,
+      unlocked: false
     };
   }
 }

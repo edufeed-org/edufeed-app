@@ -134,7 +134,8 @@
   <button class="btn btn-circle btn-ghost btn-sm md:hidden" onclick={onBack}>←</button>
   <div class="min-w-0 flex-1">
     <h2 class="flex items-center gap-2 font-extrabold">
-      🔒 {channel.name} <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+      {channel.private ? '🔒' : '#'}
+      {channel.name} <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
     </h2>
     <p class="truncate text-xs text-base-content/60">
       {m.concord_chat_subtitle()}

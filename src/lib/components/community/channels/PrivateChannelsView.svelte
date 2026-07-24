@@ -132,7 +132,8 @@
             mobileChat = true;
           }}
         >
-          🔒 <span class="truncate {channel.accessible ? '' : 'opacity-50'}">{channel.name}</span>
+          {channel.private ? '🔒' : '#'}
+          <span class="truncate {channel.accessible ? '' : 'opacity-50'}">{channel.name}</span>
         </button>
       {/each}
       {#if concord.community && isConcordOwner && !concord.dissolved}

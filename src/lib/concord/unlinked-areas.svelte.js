@@ -3,8 +3,11 @@
 // submodules directly (client.svelte.js has no top-level package imports) —
 // the convention every Concord call site follows (see CLAUDE.md's Concord
 // section) — so components stay SSR-clean.
-import { getConcordState } from './client.svelte.js';
+import { of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
+import { getConcordState, getConcordClient } from './client.svelte.js';
 import { unlinkedConcordAreas, linkedConcordIds } from './unlinked-areas.js';
+import { useObservable } from './bridge.svelte.js';
 import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
@@ -95,4 +98,39 @@ export function useUnlinkedConcordAreas() {
       communities: getConcordState().communities,
       linkedIds: linkedConcordIds(communikeyEvents)
     });
+}
+
+/**
+ * Whether the user's Concord Community List (kind 13302) is still locked —
+ * present in the event store but not yet decrypted with the signer
+ * (`autoUnlock: false` means this is the normal state right after sync).
+ * Sidebars use this to show the "Sync private areas" unlock affordance
+ * (client.svelte.js's `unlockConcordLists()`), which must be offered even
+ * when `useUnlinkedConcordAreas()` currently reports zero areas — a locked
+ * list is exactly the case where remote-only memberships haven't hydrated
+ * yet, so the area list looks empty until the user unlocks.
+ *
+ * Mirrors applesauce-concord's own internal `watchLists()` reconcile chain
+ * (dist/client/client.js) rather than the outer `communityList$` alone:
+ * `.unlock()` re-emits via the cast's OWN `communities$`, not necessarily a
+ * new cast instance from the outer switchMap, so subscribing one level
+ * deeper is what actually observes the unlock.
+ * @returns {() => boolean}
+ */
+export function useConcordListLocked() {
+  const getCast = useObservable(() => {
+    const _tick = getConcordState().communities; // re-subscribe when the client (re)starts
+    const client = getConcordClient();
+    if (!client) return undefined;
+    return client.communityList$.pipe(
+      switchMap((/** @type {any} */ cast) =>
+        cast ? cast.communities$.pipe(map(() => cast)) : of(undefined)
+      )
+    );
+  }, /** @type {any} */ (undefined));
+
+  return () => {
+    const cast = getCast();
+    return !!cast && !cast.unlocked;
+  };
 }

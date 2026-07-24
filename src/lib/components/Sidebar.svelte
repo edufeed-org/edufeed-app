@@ -11,8 +11,12 @@
   // convention every Concord call site follows (see CLAUDE.md's Concord
   // section) so this stays SSR-clean (Sidebar renders on every route,
   // including SSR ones).
-  import { useUnlinkedConcordAreas } from '$lib/concord/unlinked-areas.svelte.js';
-  import { LockIcon } from '$lib/components/icons';
+  import {
+    useUnlinkedConcordAreas,
+    useConcordListLocked
+  } from '$lib/concord/unlinked-areas.svelte.js';
+  import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
+  import { LockIcon, LockOpenIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -22,6 +26,26 @@
 
   const getUnlinkedAreas = useUnlinkedConcordAreas();
   const unlinkedAreas = $derived(getUnlinkedAreas());
+
+  // "Sync private areas" affordance (Fix 2): with autoUnlock:false the
+  // Community List (kind 13302) stays encrypted after initial sync — with
+  // no unlock action anywhere, a remote-only membership (e.g. one created on
+  // another CORD client, only visible once Fix 1's stock relays sync the
+  // list) never hydrates. Shown even when unlinkedAreas is currently empty —
+  // that's exactly the locked-list case.
+  const getListLocked = useConcordListLocked();
+  const listLocked = $derived(getListLocked());
+  const concordReady = $derived(getConcordState().phase === 'ready');
+  // Read via getConcordState() (reactive $state.raw), not a raw module
+  // variable — see client.svelte.js's comment on why signerHasNip44 must be
+  // sourced this way (a template read of a plain variable never re-evaluates
+  // after the async client finishes setup).
+  const signerHasNip44 = $derived(!!getConcordState().client?.signer?.nip44);
+  const unlocking = $derived(getConcordState().unlocking);
+
+  async function handleUnlockAreas() {
+    await unlockConcordLists();
+  }
 </script>
 
 <!-- Sidebar -->
@@ -112,9 +136,25 @@
   {/if}
 </div>
 
-{#if runtimeConfig.concord?.enabled && unlinkedAreas.length > 0}
+{#if runtimeConfig.concord?.enabled && (unlinkedAreas.length > 0 || (concordReady && listLocked))}
   <div class="mt-4 space-y-2">
     <h2 class="text-base font-semibold text-base-content">{m.concord_sidebar_private_areas()}</h2>
+    {#if listLocked}
+      <button
+        class="btn btn-block gap-2 btn-outline btn-sm"
+        data-testid="concord_unlock_areas"
+        disabled={!signerHasNip44 || unlocking}
+        title={signerHasNip44 ? undefined : m.concord_direct_needs_nip44()}
+        onclick={handleUnlockAreas}
+      >
+        {#if unlocking}
+          <span class="loading loading-xs loading-spinner"></span>
+        {:else}
+          <LockOpenIcon class_="h-4 w-4" />
+        {/if}
+        {m.concord_unlock_areas()}
+      </button>
+    {/if}
     <div class="space-y-2">
       {#each unlinkedAreas as area (area.communityId)}
         <a
