@@ -2929,5 +2929,6 @@
   "concord_sidebar_private_areas": "Private Bereiche",
   "concord_unlinked_note": "Dieser private Bereich gehört zu keiner Community auf dieser Plattform.",
   "concord_area_invalid_title": "Ungültiger Link",
-  "concord_area_invalid_body": "Dieser Link zu einem privaten Bereich ist fehlerhaft."
+  "concord_area_invalid_body": "Dieser Link zu einem privaten Bereich ist fehlerhaft.",
+  "concord_area_login_body": "Um diesen privaten Bereich zu öffnen, musst du angemeldet sein."
 }

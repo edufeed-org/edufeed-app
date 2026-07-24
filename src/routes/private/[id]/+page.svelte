@@ -19,7 +19,7 @@
 <script>
   import { getConcordState } from '$lib/concord/client.svelte.js';
   import { isConcordCommunityId } from '$lib/concord/pointer.js';
-  import { concordAreaDisplayName } from '$lib/concord/unlinked-areas.js';
+  import { concordAreaDisplayName, privateAreaGate } from '$lib/concord/unlinked-areas.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import PrivateChannelsView from '$lib/components/community/channels/PrivateChannelsView.svelte';
@@ -29,6 +29,16 @@
 
   const getActiveUser = useActiveUser();
   const valid = $derived(isConcordCommunityId(data.communityId));
+  // Cascading gate (flag off > invalid id > logged out > render), pulled
+  // into a pure/unit-tested function — see privateAreaGate's doc comment for
+  // why the order matters.
+  const gate = $derived(
+    privateAreaGate({
+      enabled: !!runtimeConfig.concord?.enabled,
+      id: data.communityId,
+      loggedIn: !!getActiveUser()
+    })
+  );
 
   const communityState = $derived(
     valid
@@ -47,25 +57,25 @@
 </svelte:head>
 
 <div class="mx-auto flex h-[calc(100vh-4rem)] max-w-5xl flex-col p-4">
-  {#if !runtimeConfig.concord?.enabled}
+  {#if gate === 'disabled'}
     <div class="grid flex-1 place-items-center">
       <div class="max-w-md rounded-2xl border border-base-300 bg-base-100 p-8 text-center">
         <h3 class="text-lg font-extrabold">{m.concord_join_disabled_title()}</h3>
         <p class="mt-2 text-sm text-base-content/60">{m.concord_join_disabled_body()}</p>
       </div>
     </div>
-  {:else if !valid}
+  {:else if gate === 'invalid'}
     <div class="grid flex-1 place-items-center">
       <div class="max-w-md rounded-2xl border border-base-300 bg-base-100 p-8 text-center">
         <h3 class="text-lg font-extrabold">{m.concord_area_invalid_title()}</h3>
         <p class="mt-2 text-sm text-base-content/60">{m.concord_area_invalid_body()}</p>
       </div>
     </div>
-  {:else if !getActiveUser()}
+  {:else if gate === 'login'}
     <div class="grid flex-1 place-items-center">
       <div class="max-w-md rounded-2xl border border-base-300 bg-base-100 p-8 text-center">
         <h3 class="text-lg font-extrabold">{m.concord_join_login_title()}</h3>
-        <p class="mt-2 text-sm text-base-content/60">{m.concord_join_login_body()}</p>
+        <p class="mt-2 text-sm text-base-content/60">{m.concord_area_login_body()}</p>
       </div>
     </div>
   {:else}

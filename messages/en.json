@@ -2929,5 +2929,6 @@
   "concord_sidebar_private_areas": "Private areas",
   "concord_unlinked_note": "This private area isn't linked to a community on this platform.",
   "concord_area_invalid_title": "Invalid link",
-  "concord_area_invalid_body": "This private-area link is malformed."
+  "concord_area_invalid_body": "This private-area link is malformed.",
+  "concord_area_login_body": "You need to be logged in to open this private area."
 }

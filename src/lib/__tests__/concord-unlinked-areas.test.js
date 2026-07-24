@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   unlinkedConcordAreas,
   linkedConcordIds,
-  concordAreaDisplayName
+  concordAreaDisplayName,
+  privateAreaGate
 } from '$lib/concord/unlinked-areas.js';
 
 const A = 'a'.repeat(64);
@@ -129,5 +130,27 @@ describe('linkedConcordIds', () => {
   it('handles empty/missing input', () => {
     expect(linkedConcordIds([])).toEqual(new Set());
     expect(linkedConcordIds(undefined)).toEqual(new Set());
+  });
+});
+
+describe('privateAreaGate', () => {
+  const validId = A;
+
+  it('returns "disabled" when the flag is off, regardless of id/login', () => {
+    expect(privateAreaGate({ enabled: false, id: validId, loggedIn: true })).toBe('disabled');
+    expect(privateAreaGate({ enabled: false, id: 'not-hex', loggedIn: false })).toBe('disabled');
+  });
+
+  it('returns "invalid" when enabled but the id is malformed, even if logged in', () => {
+    expect(privateAreaGate({ enabled: true, id: 'not-hex', loggedIn: true })).toBe('invalid');
+    expect(privateAreaGate({ enabled: true, id: undefined, loggedIn: true })).toBe('invalid');
+  });
+
+  it('returns "login" when enabled + valid id but logged out', () => {
+    expect(privateAreaGate({ enabled: true, id: validId, loggedIn: false })).toBe('login');
+  });
+
+  it('returns "render" when enabled + valid id + logged in', () => {
+    expect(privateAreaGate({ enabled: true, id: validId, loggedIn: true })).toBe('render');
   });
 });

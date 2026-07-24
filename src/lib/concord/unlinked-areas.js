@@ -3,7 +3,7 @@
 // community (joined via another client like Armada, or via a bare invite
 // link with no 10222 pointer on this platform). No package imports — safe
 // for node-env unit tests and any SSR-adjacent call site.
-import { parseConcordPointer } from './pointer.js';
+import { parseConcordPointer, isConcordCommunityId } from './pointer.js';
 
 /**
  * @typedef {{communityId: string, name: string, dissolved: boolean}} UnlinkedArea
@@ -11,9 +11,12 @@ import { parseConcordPointer } from './pointer.js';
 
 /**
  * Concord community ids that a followed Communikey community's kind 10222
- * event already points at, via the `concord` pointer tag. Best-effort: only
- * reflects 10222 events the caller actually passed in (e.g. whatever is
- * already resident in the EventStore) — it does not fetch anything.
+ * event already points at, via the `concord` pointer tag. Pure: only
+ * reflects 10222 events the caller actually passed in — it does not fetch
+ * anything itself. The caller, `useUnlinkedConcordAreas` (unlinked-areas.svelte.js),
+ * proactively fetches each joined pubkey's 10222 (bounded, once per session)
+ * so this function's input is populated within a relay round-trip rather
+ * than whenever something else happens to load it.
  * @param {any[] | null | undefined} communikeyEvents kind 10222 events
  * @returns {Set<string>}
  */
@@ -66,4 +69,24 @@ export function unlinkedConcordAreas({ communities, linkedIds }) {
     });
   }
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** @typedef {'disabled'|'invalid'|'login'|'render'} PrivateAreaGate */
+
+/**
+ * Gate decision for the standalone `/private/<id>` route, extracted from the
+ * page's cascading `{#if}` so the ordering is unit-testable without mounting
+ * a Svelte page (Concord follow-up 1 review, Task 2). Order matters and is
+ * deliberate: the flag gate beats id validation (no point validating an id
+ * for a feature that's off), id validation beats the login gate (a
+ * malformed id should never prompt a login), and login gates the final
+ * render.
+ * @param {{enabled: boolean, id: string | null | undefined, loggedIn: boolean}} args
+ * @returns {PrivateAreaGate}
+ */
+export function privateAreaGate({ enabled, id, loggedIn }) {
+  if (!enabled) return 'disabled';
+  if (!isConcordCommunityId(id)) return 'invalid';
+  if (!loggedIn) return 'login';
+  return 'render';
 }
