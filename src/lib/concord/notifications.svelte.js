@@ -17,7 +17,11 @@ import {
   shouldToast
 } from './notification-helpers.js';
 import { deriveVisibleChannels } from './community.svelte.js';
-import { getActiveConcordChannel } from './active-channel.svelte.js';
+import {
+  getActiveConcordChannel,
+  selectConcordChannel,
+  clearConcordSelections
+} from './active-channel.svelte.js';
 import { goto } from '$app/navigation';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -159,6 +163,12 @@ function maybeToast(communityId, channelId, rumors, prev, summary) {
   );
   notification.onclick = () => {
     window.focus();
+    // Set the shared selection BEFORE navigating: PrivateChannelsView's
+    // deep-link seeding only applies `?channel=` when there's no existing
+    // same-session selection (see active-channel.svelte.js), so without
+    // this a toast for channel X can land on a previously-selected
+    // channel Y. Keep the query param too — it's what seeds a cold start.
+    selectConcordChannel(communityId, channelId);
     goto(`/private/${communityId}?channel=${channelId}`);
   };
 }
@@ -372,6 +382,7 @@ export function stopConcordNotifications() {
   toastsEnabled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal throttle bookkeeping, not reactive state
   lastToastAt = new Map();
+  clearConcordSelections();
 }
 
 /**

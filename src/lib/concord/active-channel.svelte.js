@@ -45,3 +45,11 @@ export function getSelectedConcordChannel(communityId) {
   if (!communityId) return '';
   return selections[communityId] ?? '';
 }
+
+// Reset on account switch (called from stopConcordNotifications): without
+// this, account B inherits account A's per-community selections, and a
+// stale entry for a shared community blocks B's own deep-link seeding in
+// PrivateChannelsView (guarded by `!getSelectedConcordChannel(cid)`).
+export function clearConcordSelections() {
+  selections = {};
+}

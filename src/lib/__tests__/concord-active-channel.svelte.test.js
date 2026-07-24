@@ -4,7 +4,10 @@ import { describe, it, expect } from 'vitest';
 import {
   setActiveConcordChannel,
   clearActiveConcordChannel,
-  getActiveConcordChannel
+  getActiveConcordChannel,
+  selectConcordChannel,
+  getSelectedConcordChannel,
+  clearConcordSelections
 } from '$lib/concord/active-channel.svelte.js';
 
 describe('active concord channel', () => {
@@ -17,5 +20,12 @@ describe('active concord channel', () => {
     expect(getActiveConcordChannel()).toEqual({ communityId: 'cid', channelId: 'other' });
     clearActiveConcordChannel();
     expect(getActiveConcordChannel()).toBeNull();
+  });
+
+  it('clearConcordSelections resets every per-community selection', () => {
+    selectConcordChannel('cid', 'chid');
+    expect(getSelectedConcordChannel('cid')).toBe('chid');
+    clearConcordSelections();
+    expect(getSelectedConcordChannel('cid')).toBe('');
   });
 });

@@ -20,8 +20,11 @@ import {
 } from '$lib/concord/notifications.svelte.js';
 import {
   setActiveConcordChannel,
-  clearActiveConcordChannel
+  clearActiveConcordChannel,
+  selectConcordChannel,
+  getSelectedConcordChannel
 } from '$lib/concord/active-channel.svelte.js';
+import { goto } from '$app/navigation';
 
 const ME = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
@@ -282,6 +285,41 @@ describe('concord notifications service', () => {
     client.timeline$.next([rumor({ created_at: fresh }), rumor({ created_at: 100 })]);
     expect(created).toHaveLength(1);
     expect(created[0].options.tag).toBe(`concord-${CH}`);
+    vi.unstubAllGlobals();
+  });
+
+  it('toast click sets the shared channel selection before navigating', async () => {
+    const instances = [];
+    class FakeNotification {
+      static permission = 'granted';
+      constructor(title, options) {
+        this.title = title;
+        this.options = options;
+        instances.push(this);
+      }
+    }
+    vi.stubGlobal('Notification', FakeNotification);
+    vi.spyOn(window, 'focus').mockImplementation(() => {});
+    const client = fakeClient();
+    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    await startConcordNotifications({ client, storage, pubkey: ME });
+    await flush();
+    // A DIFFERENT channel is already selected (mirrors a previously-viewed
+    // channel winning PrivateChannelsView's deep-link seed guard).
+    selectConcordChannel(CID, CH2);
+    // Baseline fold — must NOT toast (cache replay analog).
+    client.timeline$.next([rumor({ created_at: 100 })]);
+    const fresh = Math.floor(Date.now() / 1000) + 10;
+    client.timeline$.next([rumor({ created_at: fresh }), rumor({ created_at: 100 })]);
+    expect(instances).toHaveLength(1);
+
+    instances[0].onclick();
+    expect(window.focus).toHaveBeenCalled();
+    expect(goto).toHaveBeenCalledWith(`/private/${CID}?channel=${CH}`);
+    expect(getSelectedConcordChannel(CID)).toBe(CH);
+
+    stopConcordNotifications();
+    expect(getSelectedConcordChannel(CID)).toBe('');
     vi.unstubAllGlobals();
   });
 
