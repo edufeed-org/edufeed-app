@@ -35,3 +35,17 @@ export {
   resolveInviteWrap
 } from './invite-helpers.js';
 export { channelMemberList, kickFromChannel, banFromChannel } from './moderation.js';
+export {
+  markChannelRead,
+  channelUnreadState,
+  areaUnreadState,
+  getChannelLevel,
+  setChannelLevel,
+  getToastsEnabled,
+  setToastsEnabled
+} from './notifications.svelte.js';
+export {
+  getActiveConcordChannel,
+  setActiveConcordChannel,
+  clearActiveConcordChannel
+} from './active-channel.svelte.js';

@@ -83,6 +83,21 @@ vi.mock('../concord/storage.js', () => ({
 
 vi.mock('../concord/account-removal-watcher.js', () => ({ watchAccountRemovals: vi.fn() }));
 
+// notifications.svelte.js pulls in community.svelte.js, which statically
+// imports client.svelte.js (getConcordState/getConcordClient) — a real cycle
+// back into the very module under test. Leaving the dynamic
+// import('./notifications.svelte.js') unmocked here left it never resolving
+// in this harness (the module graph deadlocks on the circular re-entry into
+// client.svelte.js while it's still mid-setup()), which silently defeated
+// the intended start()-gate interleaving below without failing any
+// assertion. Mock it so setup() actually reaches `await client.start()`.
+const startConcordNotifications = vi.fn(async (/** @type {any} */ _args) => {});
+const stopConcordNotifications = vi.fn();
+vi.mock('../concord/notifications.svelte.js', () => ({
+  startConcordNotifications: (/** @type {any} */ args) => startConcordNotifications(args),
+  stopConcordNotifications: () => stopConcordNotifications()
+}));
+
 vi.mock('applesauce-concord', () => {
   class FakeConcordClient {
     /** @param {any} opts */
@@ -122,6 +137,8 @@ describe('client.svelte.js setup() generation guard', () => {
   beforeEach(() => {
     startGates.clear();
     createdClients.length = 0;
+    startConcordNotifications.mockClear();
+    stopConcordNotifications.mockClear();
   });
 
   it('a slow setup for an old account never overwrites a fast setup for the new account', async () => {
@@ -132,6 +149,12 @@ describe('client.svelte.js setup() generation guard', () => {
 
     active$.next({ pubkey: 'bob', signer: { pubkey: 'bob', nip44: {} } });
     await flush();
+
+    // B superseding A must have torn down A's notifications service (via
+    // teardown()'s `notificationsModule?.stop()`) rather than leaving it
+    // running for the wrong (stale) account.
+    expect(stopConcordNotifications).toHaveBeenCalled();
+
     startGates.get('bob')?.resolve(); // bob resolves fast, while alice is still pending
     await flush();
 

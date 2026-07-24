@@ -27,6 +27,11 @@ let state = $state.raw({
 let initialized = false;
 /** @type {any} */ let currentClient;
 /** @type {import('rxjs').Subscription[]} */ let clientSubs = [];
+// Held reference to the notifications service module (Task 4), set once
+// setup() resolves its dynamic import — teardown() is sync, so it cannot
+// dynamically import the module itself; it stops the service via this
+// held reference instead.
+/** @type {{ start: Function, stop: Function } | undefined} */ let notificationsModule;
 
 // Generation guard against stale async setup() resumption (final review,
 // IMPORTANT). The combineLatest subscriber below is `async`, and RxJS never
@@ -68,6 +73,7 @@ export function getConcordClient() {
 // (the exact bug fixed in Task 8); deliberately no such helper exists.
 
 function teardown() {
+  notificationsModule?.stop();
   for (const sub of clientSubs) sub.unsubscribe();
   clientSubs = [];
   // ConcordClient exposes stop(), not dispose() — verified against
@@ -251,6 +257,29 @@ async function setup(account, myGeneration) {
     currentClient = client;
     clientSubs = localSubs;
     state = { ...state, client };
+    // Start the notifications service alongside the client (spec §2). Dynamic
+    // import keeps module-load order unchanged; the service reuses the same
+    // ConcordStorage the client got, so markers live in the same per-account
+    // DB and are wiped together on logout.
+    const notifications = await import('./notifications.svelte.js');
+    if (myGeneration !== generation) return; // superseded while importing the notifications module
+    notificationsModule = {
+      start: notifications.startConcordNotifications,
+      stop: notifications.stopConcordNotifications
+    };
+    await notifications.startConcordNotifications({
+      client,
+      storage: storageModule.createConcordStorage(dbName),
+      pubkey: account.pubkey
+    });
+    if (myGeneration !== generation) {
+      // A newer generation already ran teardown() (which stopped whatever
+      // notificationsModule pointed at then) while the service was starting.
+      // Stop THIS invocation's own service start directly — don't touch the
+      // shared notificationsModule, which may already belong to the successor.
+      notifications.stopConcordNotifications();
+      return;
+    }
     await client.start();
     if (myGeneration !== generation) {
       // A newer generation already ran teardown() (and may have installed
@@ -266,6 +295,7 @@ async function setup(account, myGeneration) {
     // A failed start must not leave a half-started client behind: drop the
     // subs, stop the client, and clear it so getConcordClient() returns
     // undefined. Keep phase/error (a plain teardown() would reset to 'off').
+    notificationsModule?.stop();
     for (const sub of localSubs) sub.unsubscribe();
     client?.stop();
     currentClient = undefined;
