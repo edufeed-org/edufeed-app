@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { nip19 } from 'nostr-tools';
   // Imports directly from the concord submodule (not the barrel) — same
   // convention as PrivateChannelsView.svelte: bridge.svelte.js has no
@@ -113,16 +113,19 @@
   }
 
   /** @param {string} pubkey */
-  function pickMention(pubkey) {
+  async function pickMention(pubkey) {
     if (!mention || !inputEl) return;
     const caret = inputEl.selectionStart ?? text.length;
     const result = applyMention(text, mention.start, caret, nip19.npubEncode(pubkey));
     text = result.text;
     mention = null;
     inputEl.focus();
-    // restore caret after Svelte flushes the value
-    const nextCaret = result.caret;
-    requestAnimationFrame(() => inputEl?.setSelectionRange(nextCaret, nextCaret));
+    // Restore the caret via tick(), which resolves on the microtask queue
+    // right after Svelte flushes the new value into the DOM — ahead of any
+    // next keystroke. A rAF-deferred restore demonstrably loses that race
+    // (Task 11 live smoke: 0/8 restored with instant typing after a pick).
+    await tick();
+    inputEl?.setSelectionRange(result.caret, result.caret);
   }
 
   /** @param {KeyboardEvent} event */

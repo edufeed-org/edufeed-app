@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { of, BehaviorSubject } from 'rxjs';
 import { nip19 } from 'nostr-tools';
+import { tick } from 'svelte';
 
 if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = /** @type {any} */ (
@@ -297,5 +298,32 @@ describe('ChannelChat mention composer', () => {
     expect(input.value).toBe(`hi nostr:${nip19.npubEncode(OTHER_PUBKEY)} `);
     expect(container.querySelector('[role="listbox"]')).toBeNull();
     expect(sendChannelMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('restores the caret right after the inserted mention by the next microtask (Task 11 race)', async () => {
+    memberProfiles.set(OTHER_PUBKEY, { name: 'alice' });
+    const community = makeCommunity([]);
+    const { container, input } = await renderChat(community);
+
+    // Mid-string mention with a trailing tail, so the expected caret is NOT
+    // end-of-value (where bind:value's DOM write parks it) — the exact shape
+    // of Task 11's live repro. Caret is placed after "@ali" and refreshMention
+    // re-runs via the composer's onclick handler.
+    await fireEvent.input(input, { target: { value: 'hi @ali yy' } });
+    input.setSelectionRange(7, 7);
+    await fireEvent.click(input);
+    expect(container.querySelector('[role="listbox"]')).toBeTruthy();
+
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    await tick();
+
+    const inserted = `nostr:${nip19.npubEncode(OTHER_PUBKEY)} `;
+    expect(input.value).toBe(`hi ${inserted} yy`);
+    // By the time the DOM has flushed (tick), the caret must already sit
+    // right after the mention — a rAF-deferred restore loses this race to
+    // the user's next keystroke (0/8 restored in Task 11's live smoke).
+    const expectedCaret = 3 + inserted.length;
+    expect(input.selectionStart).toBe(expectedCaret);
+    expect(input.selectionEnd).toBe(expectedCaret);
   });
 });
