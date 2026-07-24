@@ -111,6 +111,38 @@
           "label": "Teil von (isPartOf)",
           "output": "amb:isPartOf"
         }
+      ],
+      "sections": [
+        {
+          "id": "sec-basics",
+          "title": "Grunddaten",
+          "questionIds": ["name", "description", "url", "inLanguage", "image", "datePublished"],
+          "order": 0
+        },
+        {
+          "id": "sec-classification",
+          "title": "Einordnung",
+          "questionIds": ["about", "learningResourceType", "educationalLevel", "keywords"],
+          "order": 1
+        },
+        {
+          "id": "sec-rights",
+          "title": "Rechte",
+          "questionIds": ["license", "isAccessibleForFree"],
+          "order": 2
+        },
+        {
+          "id": "sec-content",
+          "title": "Inhalt & Urheber",
+          "questionIds": ["creators", "externalUrls"],
+          "order": 3
+        },
+        {
+          "id": "sec-relations",
+          "title": "Beziehungen",
+          "questionIds": ["hasPart", "isPartOf"],
+          "order": 4
+        }
       ]
     },
     {

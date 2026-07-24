@@ -68,4 +68,26 @@ describe('amb-basic template', () => {
       expect(parsed.fields.some((f) => f.type === 'date')).toBe(true);
     });
   });
+
+  it('groups amb-basic fields into sections that round-trip', () => {
+    const tags = buildFormTemplate(amb).tags;
+    const parsed = parseFormTemplate({
+      kind: 30168,
+      pubkey: PUBKEY,
+      content: '',
+      created_at: 0,
+      tags
+    });
+
+    // amb-basic should have at least 3 sections
+    expect(parsed.sections.length).toBeGreaterThanOrEqual(3);
+
+    // every field id referenced by a section exists among the parsed fields
+    const fieldIds = new Set(parsed.fields.map((f) => f.id));
+    for (const section of parsed.sections) {
+      for (const questionId of section.questionIds) {
+        expect(fieldIds.has(questionId)).toBe(true);
+      }
+    }
+  });
 });
