@@ -992,10 +992,10 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 
 #### Authenticated (2 tests)
 
-| Test                                                | What it verifies                                                                  |
-| --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| add-reaction button is hidden until message hovered | `addButtonOnHover`: "+" button is display:none until the message group is hovered |
-| authenticated user can react to a chat message      | Hover → add → picker opens → pick emoji → reaction button appears on the message  |
+| Test                                                                 | What it verifies                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| add-reaction button is faded until hovered, without shifting the row | `addButtonOnHover`: "+" wrapper reveals via opacity (not display:none) so the row's bounding box is identical hovered vs. not — regression test for a hover-flicker bug where a display swap collapsed/expanded the footer and shifted rows below it |
+| authenticated user can react to a chat message                       | Hover → add → picker opens → pick emoji → reaction button appears on the message                                                                                                                                                                     |
 
 **Components exercised:** Chat, ReactionBar, AddReactionButton, ReactionPicker, EmojiPicker, ReactionButton
 
