@@ -564,6 +564,9 @@
               {fields}
               fieldIndex={i}
               existing={!!existing}
+              sections={fields
+                .filter((f) => f.type === 'section')
+                .map((f) => ({ id: f.id, title: f.title || '' }))}
             />
           {/if}
 

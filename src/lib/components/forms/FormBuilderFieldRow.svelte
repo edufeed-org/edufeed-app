@@ -36,10 +36,11 @@
    * @property {FieldState[]} fields
    * @property {number} fieldIndex
    * @property {boolean} existing
+   * @property {{ id: string, title: string }[]} [sections]
    */
 
   /** @type {Props} */
-  let { field = $bindable(), fields, fieldIndex, existing } = $props();
+  let { field = $bindable(), fields, fieldIndex, existing, sections = [] } = $props();
 
   // Common AMB output targets — human-readable label + machine value.
   const AMB_OUTPUTS = [
@@ -388,6 +389,23 @@
           {#each field.selectOptions as opt, j (opt.id)}
             <span class="badge gap-1 badge-outline">
               {opt.label}
+              {#if sections.length > 0}
+                <select
+                  class="select-bordered select select-xs"
+                  value={opt.nextSection || ''}
+                  onchange={(e) =>
+                    (field.selectOptions[j] = {
+                      ...opt,
+                      nextSection: e.currentTarget.value || undefined
+                    })}
+                  aria-label={m.form_builder_option_route_label()}
+                >
+                  <option value="">{m.form_builder_option_route_none()}</option>
+                  {#each sections as s (s.id)}
+                    <option value={s.id}>{s.title || s.id}</option>
+                  {/each}
+                </select>
+              {/if}
               <button
                 class="text-xs opacity-50 hover:opacity-100"
                 onclick={() => field.selectOptions.splice(j, 1)}>×</button

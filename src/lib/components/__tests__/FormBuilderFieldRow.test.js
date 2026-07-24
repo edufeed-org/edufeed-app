@@ -46,6 +46,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_option_new: () => 'New option',
   form_builder_add_option: () => 'Add option',
   form_builder_field_allow_multiple: () => 'Allow multiple',
+  form_builder_option_route_label: () => 'Go to section',
+  form_builder_option_route_none: () => '— continue —',
   form_builder_min_value: () => 'Min',
   form_builder_max_value: () => 'Max',
   form_builder_min_length: () => 'Min length',
@@ -779,5 +781,80 @@ describe('FormBuilderFieldRow vocab preview (post-selection)', () => {
     });
     expect(getField().vocabNaddrInput).toBe('');
     expect(getField().vocabError).toBe('');
+  });
+});
+
+describe('FormBuilderFieldRow option → section routing', () => {
+  const sections = [
+    { id: 'sec-1', title: 'Section One' },
+    { id: 'sec-2', title: 'Section Two' }
+  ];
+
+  it('renders a "→ section" select for each option when sections are available', async () => {
+    const field = makeField();
+    field.type = 'radio';
+    field.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ];
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false, sections }
+    });
+    await Promise.resolve();
+
+    const routeSelects = container.querySelectorAll('select[aria-label="Go to section"]');
+    expect(routeSelects.length).toBe(2);
+    for (const select of routeSelects) {
+      const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+      expect(values).toEqual(['', 'sec-1', 'sec-2']);
+    }
+  });
+
+  it('does not render routing selects when there are no sections', async () => {
+    const field = makeField();
+    field.type = 'radio';
+    field.selectOptions = [{ id: 'ja', label: 'Ja' }];
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false, sections: [] }
+    });
+    await Promise.resolve();
+
+    expect(container.querySelectorAll('select[aria-label="Go to section"]').length).toBe(0);
+  });
+
+  it('selecting a section sets option.nextSection on the bound field', async () => {
+    /** @type {any} */
+    let latest;
+    const initialField = makeField();
+    initialField.type = 'radio';
+    initialField.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ];
+    const { container } = render(FormBuilderFieldRowTestWrapper, {
+      props: {
+        initialField,
+        fieldIndex: 0,
+        existing: false,
+        sections,
+        onUpdate: (/** @type {any} */ f) => {
+          latest = f;
+        }
+      }
+    });
+
+    const routeSelects = /** @type {HTMLSelectElement[]} */ (
+      Array.from(container.querySelectorAll('select[aria-label="Go to section"]'))
+    );
+    expect(routeSelects.length).toBe(2);
+
+    await fireEvent.change(routeSelects[1], { target: { value: 'sec-2' } });
+
+    await waitFor(() => {
+      if (latest.selectOptions[1].nextSection !== 'sec-2')
+        throw new Error('nextSection not set yet');
+    });
+    expect(latest.selectOptions[0].nextSection).toBeUndefined();
+    expect(latest.selectOptions[1].label).toBe('Nein');
   });
 });

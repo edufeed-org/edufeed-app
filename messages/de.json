@@ -1986,6 +1986,8 @@
   "form_builder_field_option_new": "Neue Option",
   "form_builder_field_options_label": "Optionen:",
   "form_builder_field_allow_multiple": "Mehrfachauswahl erlauben",
+  "form_builder_option_route_label": "Zu Abschnitt springen",
+  "form_builder_option_route_none": "— weiter —",
   "form_builder_field_required": "Pflichtfeld",
   "form_builder_add_field": "Feld hinzufügen",
   "form_builder_add_section": "+ Abschnitt hinzufügen",

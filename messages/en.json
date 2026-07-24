@@ -1986,6 +1986,8 @@
   "form_builder_field_option_new": "New option",
   "form_builder_field_options_label": "Options:",
   "form_builder_field_allow_multiple": "Allow multiple selections",
+  "form_builder_option_route_label": "Go to section",
+  "form_builder_option_route_none": "— continue —",
   "form_builder_field_required": "Required",
   "form_builder_add_field": "Add Field",
   "form_builder_add_section": "+ Add section",
