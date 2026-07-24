@@ -7,6 +7,7 @@
   // this buys defense-in-depth + consistency with the rest of channels/, not
   // a load-bearing SSR requirement for this component specifically.
   import { useObservable } from '$lib/concord/bridge.svelte.js';
+  import { sendChannelMessage } from '$lib/concord/send-message.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import {
@@ -105,7 +106,13 @@
     if (!body || sending) return;
     sending = true;
     try {
-      await community.sendMessage(channel.channel_id, body, replyTo ?? undefined);
+      await sendChannelMessage(
+        community,
+        channel.channel_id,
+        body,
+        replyTo ?? undefined,
+        getActiveUser()?.pubkey ?? ''
+      );
       text = '';
       replyTo = null;
     } catch (error) {

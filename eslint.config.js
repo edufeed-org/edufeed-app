@@ -56,7 +56,9 @@ export default [
                 'applesauce-concord',
                 'applesauce-concord/*',
                 'applesauce-core-concord',
-                'applesauce-core-concord/*'
+                'applesauce-core-concord/*',
+                'applesauce-common-concord',
+                'applesauce-common-concord/*'
               ],
               message: 'Import Concord APIs via $lib/concord only (wrapper contains pre-1.0 churn).'
             }

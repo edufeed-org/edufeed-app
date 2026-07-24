@@ -90,6 +90,7 @@
     "@mozilla/readability": "^0.6.0",
     "@napi-rs/canvas": "^1.0.2",
     "applesauce-common": "^6.2.0",
+    "applesauce-common-concord": "npm:applesauce-common@0.0.0-concord-20260714212055",
     "applesauce-concord": "0.0.0-concord-20260714212055",
     "applesauce-core-concord": "npm:applesauce-core@0.0.0-concord-20260714212055",
     "bible-passage-reference-parser": "^3.2.0",
