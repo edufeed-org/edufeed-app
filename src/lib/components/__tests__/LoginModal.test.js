@@ -4,9 +4,9 @@
  *
  * Covers:
  *  - Extension login branch's duplicate handling
- *  - Restructured normie-friendly layout: saved accounts on top, primary
- *    "Create your account" CTA, then a divider + section with the three
- *    legacy methods all visible (no disclosure to expand).
+ *  - Cleaned-up layout (issue #49): saved accounts on top, primary "Create your account" CTA,
+ *    Google below, then a divider + 3-column icon-card grid (extension hidden on mobile UAs
+ *    without window.nostr) and an npub ghost row.
  *
  * @vitest-environment jsdom
  */

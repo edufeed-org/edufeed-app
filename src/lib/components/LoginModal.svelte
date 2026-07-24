@@ -206,7 +206,7 @@
               onclick={() => createSigner('Extension')}
               class="btn h-auto flex-col gap-2 py-4 font-normal"
             >
-              <PuzzleIcon class_="h-6 w-6" />
+              <PuzzleIcon class_="h-6 w-6" title="" />
               <span class="text-xs leading-tight">{m.auth_login_modal_extension_short()}</span>
             </button>
           {/if}
@@ -216,7 +216,7 @@
             onclick={() => createSigner('Bunker')}
             class="btn h-auto flex-col gap-2 py-4 font-normal"
           >
-            <SmartphoneIcon class_="h-6 w-6" />
+            <SmartphoneIcon class_="h-6 w-6" title="" />
             <span class="text-xs leading-tight">{m.auth_login_modal_bunker_short()}</span>
           </button>
           <button
@@ -225,7 +225,7 @@
             onclick={() => createSigner('NSEC')}
             class="btn h-auto flex-col gap-2 py-4 font-normal"
           >
-            <KeyIcon class_="h-6 w-6" />
+            <KeyIcon class_="h-6 w-6" title="" />
             <span class="text-xs leading-tight">{m.auth_login_modal_nsec_short()}</span>
           </button>
         </div>
