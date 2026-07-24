@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { nip19 } from 'nostr-tools';
   // Imports directly from the concord submodule (not the barrel) — same
   // convention as PrivateChannelsView.svelte: bridge.svelte.js has no
   // top-level package imports, so this stays SSR-clean. The c/[pubkey]
@@ -18,10 +19,16 @@
   // NOTE: message-utils.js's getReplyParentId() is NOT used here — concord
   // replies carry a NIP-C7 `q` tag, not a NIP-10 marked `e` tag. See the
   // rationale (with dist references) in chat-helpers.js.
-  import { aggregateChannelReactions, getConcordReplyParentId } from '$lib/concord/chat-helpers.js';
+  import {
+    aggregateChannelReactions,
+    getConcordReplyParentId,
+    detectMentionQuery,
+    applyMention
+  } from '$lib/concord/chat-helpers.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
+  import MentionAutocomplete from './MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -68,6 +75,63 @@
   let replyTo = $state(null);
   /** @type {HTMLElement|undefined} */
   let scrollContainer;
+
+  /** @type {HTMLInputElement | undefined} */
+  let inputEl = $state(undefined);
+  let mention = $state(/** @type {{start: number, query: string} | null} */ (null));
+  let mentionIndex = $state(0);
+  // Member profiles for the @-picker (getProfiles above only covers message
+  // authors; lurkers must be mentionable too).
+  const getMemberProfiles = useProfileMap(() => [...getMembers()]);
+  const mentionCandidates = $derived.by(() => {
+    if (!mention) return [];
+    const q = mention.query.toLowerCase();
+    const me = getActiveUser()?.pubkey;
+    return [...getMembers()]
+      .filter((pubkey) => pubkey !== me)
+      .map((pubkey) => ({
+        pubkey,
+        name: getUserDisplayName(pubkey, getMemberProfiles().get(pubkey)),
+        profile: getMemberProfiles().get(pubkey)
+      }))
+      .filter((c) => !q || c.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  });
+
+  function refreshMention() {
+    mention = inputEl ? detectMentionQuery(text, inputEl.selectionStart ?? text.length) : null;
+    mentionIndex = 0;
+  }
+
+  /** @param {string} pubkey */
+  function pickMention(pubkey) {
+    if (!mention || !inputEl) return;
+    const caret = inputEl.selectionStart ?? text.length;
+    const result = applyMention(text, mention.start, caret, nip19.npubEncode(pubkey));
+    text = result.text;
+    mention = null;
+    inputEl.focus();
+    // restore caret after Svelte flushes the value
+    const nextCaret = result.caret;
+    requestAnimationFrame(() => inputEl?.setSelectionRange(nextCaret, nextCaret));
+  }
+
+  /** @param {KeyboardEvent} event */
+  function onComposerKeydown(event) {
+    if (!mention || mentionCandidates.length === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      mentionIndex = (mentionIndex + 1) % mentionCandidates.length;
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      mentionIndex = (mentionIndex - 1 + mentionCandidates.length) % mentionCandidates.length;
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      pickMention(mentionCandidates[mentionIndex].pubkey);
+    } else if (event.key === 'Escape') {
+      mention = null;
+    }
+  }
 
   // Dismissible "back up your key" bar. localStorage is read inside
   // onMount (not module scope), which only runs client-side post-mount —
@@ -316,23 +380,35 @@
       <button class="btn btn-circle btn-ghost btn-xs" onclick={() => (replyTo = null)}>✕</button>
     </div>
   {/if}
-  <form
-    class="m-4 mt-0 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-100 p-1.5"
-    onsubmit={(e) => {
-      e.preventDefault();
-      send();
-    }}
-  >
-    <input
-      class="input flex-1 input-ghost focus:outline-none"
-      data-testid="concord-chat-input"
-      bind:value={text}
-      placeholder={m.concord_input_placeholder({ name: channel.name })}
+  <div class="relative">
+    <MentionAutocomplete
+      candidates={mentionCandidates}
+      highlightIndex={mentionIndex}
+      onSelect={pickMention}
     />
-    <button
-      class="btn btn-circle btn-sm btn-neutral"
-      type="submit"
-      disabled={sending || !text.trim()}>➤</button
+    <form
+      class="m-4 mt-0 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-100 p-1.5"
+      onsubmit={(e) => {
+        e.preventDefault();
+        if (mention && mentionCandidates.length > 0) return; // Enter picked a mention
+        send();
+      }}
     >
-  </form>
+      <input
+        class="input flex-1 input-ghost focus:outline-none"
+        data-testid="concord-chat-input"
+        bind:this={inputEl}
+        bind:value={text}
+        oninput={refreshMention}
+        onclick={refreshMention}
+        onkeydown={onComposerKeydown}
+        placeholder={m.concord_input_placeholder({ name: channel.name })}
+      />
+      <button
+        class="btn btn-circle btn-sm btn-neutral"
+        type="submit"
+        disabled={sending || !text.trim()}>➤</button
+      >
+    </form>
+  </div>
 {/if}

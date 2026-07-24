@@ -105,3 +105,37 @@ export function aggregateChannelReactions(reactions, currentUserPubkey) {
   }
   return map;
 }
+
+/**
+ * Detect an in-progress `@query` immediately before the caret (spec §5).
+ * The `@` must sit at the text start or after whitespace so emails/handles
+ * mid-word never trigger; the query itself contains no whitespace.
+ * @param {string} text
+ * @param {number} caret cursor position (selectionStart)
+ * @returns {{start: number, query: string} | null}
+ */
+export function detectMentionQuery(text, caret) {
+  const upToCaret = text.slice(0, caret);
+  const at = upToCaret.lastIndexOf('@');
+  if (at === -1) return null;
+  if (at > 0 && !/\s/.test(upToCaret[at - 1])) return null;
+  const query = upToCaret.slice(at + 1);
+  if (/\s/.test(query)) return null;
+  return { start: at, query };
+}
+
+/**
+ * Replace the `@query` span with a NIP-27 `nostr:npub…` reference plus a
+ * trailing space. The send pipeline (setShortTextContent → tagPubkeyMentions
+ * in the pinned dist) turns the reference into a `p` tag at publish time.
+ * @param {string} text
+ * @param {number} start index of the `@`
+ * @param {number} caret current cursor position (end of the query)
+ * @param {string} npub bech32 npub of the selected member
+ * @returns {{text: string, caret: number}}
+ */
+export function applyMention(text, start, caret, npub) {
+  const inserted = `nostr:${npub} `;
+  const nextText = text.slice(0, start) + inserted + text.slice(caret);
+  return { text: nextText, caret: start + inserted.length };
+}

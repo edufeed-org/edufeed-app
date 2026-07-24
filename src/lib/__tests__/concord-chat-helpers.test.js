@@ -1,6 +1,11 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { getConcordReplyParentId, aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
+import {
+  getConcordReplyParentId,
+  aggregateChannelReactions,
+  detectMentionQuery,
+  applyMention
+} from '$lib/concord/chat-helpers.js';
 
 describe('getConcordReplyParentId', () => {
   it('returns the q-tag value (NIP-C7 chat reply)', () => {
@@ -153,5 +158,39 @@ describe('aggregateChannelReactions', () => {
     };
     const result = aggregateChannelReactions([customReaction]);
     expect(result.get('msg-1')?.get(':zap:')?.emojiUrl).toBe('https://example.com/zap.png');
+  });
+});
+
+describe('detectMentionQuery', () => {
+  it('finds @query at the caret', () => {
+    expect(detectMentionQuery('hello @ali', 10)).toEqual({ start: 6, query: 'ali' });
+  });
+
+  it('requires @ at start or after whitespace (emails do not trigger)', () => {
+    expect(detectMentionQuery('mail me a@b', 11)).toBeNull();
+    expect(detectMentionQuery('@a', 2)).toEqual({ start: 0, query: 'a' });
+  });
+
+  it('stops at whitespace and closes after a space', () => {
+    expect(detectMentionQuery('hey @ali how', 8)).toEqual({ start: 4, query: 'ali' });
+    expect(detectMentionQuery('hey @ali how', 12)).toBeNull();
+  });
+
+  it('returns null with no @ before the caret', () => {
+    expect(detectMentionQuery('plain text', 5)).toBeNull();
+  });
+});
+
+describe('applyMention', () => {
+  it('replaces @query with nostr:npub + trailing space and reports the new caret', () => {
+    const npub = 'npub1xyz';
+    const result = applyMention('hey @ali how', 4, 8, npub);
+    expect(result.text).toBe('hey nostr:npub1xyz  how');
+    expect(result.caret).toBe(4 + `nostr:${npub} `.length);
+  });
+
+  it('works at the end of the text', () => {
+    const result = applyMention('hey @ali', 4, 8, 'npub1xyz');
+    expect(result.text).toBe('hey nostr:npub1xyz ');
   });
 });
