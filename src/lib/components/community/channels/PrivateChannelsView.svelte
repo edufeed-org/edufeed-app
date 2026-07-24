@@ -10,7 +10,8 @@
   // signerHasNip44() helper — that one reads a plain module variable, so a
   // template call evaluates once at mount and misses a client that finishes
   // its async setup afterwards.
-  import { useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { useConcordArea } from '$lib/concord/community.svelte.js';
+  import { parseConcordPointer } from '$lib/concord/pointer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelChat from './ChannelChat.svelte';
@@ -27,13 +28,22 @@
   // prop list so MainContentArea doesn't need to change if a future overlay
   // needs it. communityProfile is used by the create wizard (Task 9) to
   // name the Concord area after the community.
+  //
+  // communikeyEvent is optional (Concord follow-up 1): the standalone
+  // `/private/<id>` route for UNLINKED memberships (no Communikey community
+  // points at them) has no 10222 event to pass and instead passes
+  // `communityId` directly. Exactly one of the two should be set by any
+  // given caller; `communityId` wins if somehow both are.
   let {
-    communikeyEvent,
+    communikeyEvent = null,
+    communityId = undefined,
     communityProfile = null,
     communityPubkey: _communityPubkey = ''
   } = $props();
 
-  const getConcord = useConcordCommunity(() => communikeyEvent);
+  const getConcord = useConcordArea(
+    () => communityId ?? parseConcordPointer(communikeyEvent)?.communityId
+  );
   const getActiveUser = useActiveUser();
 
   let selectedChannelId = $state('');
@@ -42,8 +52,26 @@
   let mobileChat = $state(false);
 
   const concord = $derived(getConcord());
-  const isOwner = $derived(
+  // Two distinct owner questions conflated as one variable would be wrong:
+  // "is the active user the Communikey community's own keypair holder"
+  // (relevant ONLY to the founding affordance below — you can't found a
+  // Concord area before one exists, so there's no `concord.community` yet
+  // to read an owner off) vs. "is the active user the Concord community's
+  // own owner" (relevant to everything else: new-channel, moderation,
+  // dissolve — all of which only apply once `concord.community` exists).
+  // These agree once a community IS founded (founding.js: the Concord owner
+  // IS the personal key of whoever founds it, i.e. the same human who must
+  // pass the communikey check to see the founding button in the first
+  // place) but diverge on the standalone route, where there is no
+  // communikeyEvent at all: isCommunikeyOwner is always false there (no
+  // founding pane — correct, you can't found an unlinked area from here),
+  // while isConcordOwner still resolves correctly from `material.owner` so
+  // the real owner keeps their moderation/dissolve/new-channel controls.
+  const isCommunikeyOwner = $derived(
     !!communikeyEvent?.pubkey && communikeyEvent.pubkey === getActiveUser()?.pubkey
+  );
+  const isConcordOwner = $derived(
+    !!concord.community && concord.community.material?.owner === getActiveUser()?.pubkey
   );
   const channels = $derived(concord.channels);
   const activeChannel = $derived(
@@ -52,7 +80,7 @@
 
   // community.dissolve() (dist/client/community.js) throws a plain
   // Error("only the owner can dissolve") when the caller isn't
-  // material.owner — a defensive backstop behind the isOwner-gated menu
+  // material.owner — a defensive backstop behind the isConcordOwner-gated menu
   // item that triggers this. It publishes a tombstone rumor to the
   // community-wide "dissolved" plane (NOT per-channel — there is no
   // per-channel hard delete exposed in this UI) with an optimistic local
@@ -107,7 +135,7 @@
           🔒 <span class="truncate {channel.accessible ? '' : 'opacity-50'}">{channel.name}</span>
         </button>
       {/each}
-      {#if concord.community && isOwner && !concord.dissolved}
+      {#if concord.community && isConcordOwner && !concord.dissolved}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
           data-testid="concord-new-channel"
@@ -128,7 +156,7 @@
 
     <!-- pane -->
     <section class="flex min-w-0 flex-1 flex-col {mobileChat ? 'flex' : 'hidden md:flex'}">
-      {#if !concord.community && isOwner}
+      {#if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
           <button
             class="btn mt-4 btn-neutral"
@@ -162,7 +190,7 @@
             community={concord.community}
             channel={activeChannel}
             dissolved={concord.dissolved}
-            {isOwner}
+            isOwner={isConcordOwner}
             openOverlay={(/** @type {string} */ name) => (overlay = name)}
             onBack={() => (mobileChat = false)}
           />
@@ -208,7 +236,7 @@
     <ChannelMembersModal
       community={concord.community}
       channel={activeChannel}
-      {isOwner}
+      isOwner={isConcordOwner}
       signerHasNip44={concord.signerHasNip44}
       onClose={() => (overlay = null)}
     />

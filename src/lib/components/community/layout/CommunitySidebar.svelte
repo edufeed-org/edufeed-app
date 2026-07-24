@@ -2,7 +2,12 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
-  import { HomeIcon } from '$lib/components/icons';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  // Directly from the concord submodule, never the $lib/concord barrel —
+  // convention every Concord call site follows (see CLAUDE.md's Concord
+  // section) so this stays SSR-clean.
+  import { useUnlinkedConcordAreas } from '$lib/concord/unlinked-areas.svelte.js';
+  import { HomeIcon, LockIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -14,6 +19,11 @@
 
   // Create non-mutating copy to avoid Svelte 5 state mutation error
   const sortedCommunities = $derived([...joinedCommunities]);
+
+  const getUnlinkedAreas = useUnlinkedConcordAreas();
+  const unlinkedAreas = $derived(
+    runtimeConfig.concord?.enabled ? getUnlinkedAreas() : /** @type {any[]} */ ([])
+  );
 
   /**
    * Handle community selection - uses route-based navigation
@@ -71,6 +81,22 @@
         </button>
       </div>
     {/each}
+
+    {#if unlinkedAreas.length > 0}
+      <div class="w-8 border-b border-base-300"></div>
+      {#each unlinkedAreas as area (area.communityId)}
+        <div class="tooltip tooltip-right" data-tip={area.name}>
+          <a
+            href={resolve(`/private/${area.communityId}`)}
+            class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {area.dissolved
+              ? 'opacity-50'
+              : ''}"
+          >
+            <LockIcon class_="h-5 w-5" />
+          </a>
+        </div>
+      {/each}
+    {/if}
   </div>
 </div>
 
@@ -139,6 +165,24 @@
           {m.community_layout_sidebar_discover_button()}
         </a>
       </div>
+    {/if}
+
+    {#if unlinkedAreas.length > 0}
+      <div class="border-b border-base-300"></div>
+      <p class="px-3 pt-1 text-xs font-semibold tracking-wider text-base-content/50 uppercase">
+        {m.concord_sidebar_private_areas()}
+      </p>
+      {#each unlinkedAreas as area (area.communityId)}
+        <a
+          href={resolve(`/private/${area.communityId}`)}
+          class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300 {area.dissolved
+            ? 'opacity-50'
+            : ''}"
+        >
+          <LockIcon class_="h-5 w-5 shrink-0 text-base-content/60" />
+          <span class="flex-1 truncate text-left text-sm font-medium">{area.name}</span>
+        </a>
+      {/each}
     {/if}
   </div>
 </div>

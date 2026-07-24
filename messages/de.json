@@ -2925,5 +2925,9 @@
   "concord_dissolve_body": "Damit werden ALLE privaten Kanäle dieser Community aufgelöst. Der Verlauf bleibt für Mitglieder lesbar, neue Nachrichten sind nicht mehr möglich. Das kann nicht rückgängig gemacht werden.",
   "concord_dissolve_action": "Auflösen",
   "concord_dissolved_toast": "Privater Bereich aufgelöst",
-  "concord_dissolve_failed": "Auflösen fehlgeschlagen"
+  "concord_dissolve_failed": "Auflösen fehlgeschlagen",
+  "concord_sidebar_private_areas": "Private Bereiche",
+  "concord_unlinked_note": "Dieser private Bereich gehört zu keiner Community auf dieser Plattform.",
+  "concord_area_invalid_title": "Ungültiger Link",
+  "concord_area_invalid_body": "Dieser Link zu einem privaten Bereich ist fehlerhaft."
 }

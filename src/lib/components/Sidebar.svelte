@@ -6,12 +6,22 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  // Directly from the concord submodule, never the $lib/concord barrel —
+  // convention every Concord call site follows (see CLAUDE.md's Concord
+  // section) so this stays SSR-clean (Sidebar renders on every route,
+  // including SSR ones).
+  import { useUnlinkedConcordAreas } from '$lib/concord/unlinked-areas.svelte.js';
+  import { LockIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const activeUser = useActiveUser();
   const getJoinedCommunities = useJoinedCommunitiesList(); // gets the getter function
   const joinedCommunities = $derived(getJoinedCommunities()); // reactive value
+
+  const getUnlinkedAreas = useUnlinkedConcordAreas();
+  const unlinkedAreas = $derived(getUnlinkedAreas());
 </script>
 
 <!-- Sidebar -->
@@ -101,3 +111,26 @@
     </div>
   {/if}
 </div>
+
+{#if runtimeConfig.concord?.enabled && unlinkedAreas.length > 0}
+  <div class="mt-4 space-y-2">
+    <h2 class="text-base font-semibold text-base-content">{m.concord_sidebar_private_areas()}</h2>
+    <div class="space-y-2">
+      {#each unlinkedAreas as area (area.communityId)}
+        <a
+          href={resolve(`/private/${area.communityId}`)}
+          class="flex transform cursor-pointer items-center gap-2 rounded-lg border border-base-200 bg-base-100 p-3 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:border-primary/20 hover:shadow-md"
+        >
+          <LockIcon class_="h-4 w-4 shrink-0 text-base-content/60" />
+          <p
+            class="min-w-0 flex-1 truncate text-sm font-medium text-base-content transition-colors duration-300 hover:text-primary {area.dissolved
+              ? 'opacity-50'
+              : ''}"
+          >
+            {area.name}
+          </p>
+        </a>
+      {/each}
+    </div>
+  </div>
+{/if}
