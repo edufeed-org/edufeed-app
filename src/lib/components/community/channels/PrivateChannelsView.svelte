@@ -21,7 +21,9 @@
   } from '$lib/concord/notifications.svelte.js';
   import {
     setActiveConcordChannel,
-    clearActiveConcordChannel
+    clearActiveConcordChannel,
+    selectConcordChannel,
+    getSelectedConcordChannel
   } from '$lib/concord/active-channel.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
@@ -59,17 +61,39 @@
   );
   const getActiveUser = useActiveUser();
 
-  // ?channel= deep link (spec §6: toast click target; also makes channels
-  // linkable). Read once at init — subsequent selection is user-driven.
-  // Optional-chained: component tests that render this component without a
-  // SvelteKit page context (see PrivateChannelsView.test.js) get `{}` back
-  // from `get(page)`, not a populated page object.
-  let selectedChannelId = $state(get(page)?.url?.searchParams.get('channel') ?? '');
   /** @type {string|null} */
   let overlay = $state(null);
   let mobileChat = $state(false);
 
   const concord = $derived(getConcord());
+
+  // Shared per-community selection (final review, IMPORTANT — see
+  // active-channel.svelte.js's doc comment). Component-local $state here
+  // used to diverge across the community layout's 2-3 responsive
+  // double-mounted instances: hidden instances never receive row clicks,
+  // stayed at the default channels[0], and could overwrite the shared
+  // active-channel store back to that stale default on any channels$
+  // re-emission — losing unread truth for the channel actually on screen.
+  // Reading it as a $derived means every mounted instance agrees.
+  const selectedChannelId = $derived(getSelectedConcordChannel(concord.communityId));
+
+  // ?channel= deep link (spec §6: toast click target; also makes channels
+  // linkable) — applied once per communityId, and only if no selection is
+  // stored yet, so double-mounted instances don't fight over seeding it (the
+  // second instance to run this effect finds a selection already present and
+  // no-ops). Optional-chained: component tests that render this component
+  // without a SvelteKit page context (see PrivateChannelsView.test.js) get
+  // `{}` back from `get(page)`, not a populated page object.
+  let deepLinkChecked = false;
+  $effect(() => {
+    const cid = concord.communityId;
+    if (!cid || deepLinkChecked) return;
+    deepLinkChecked = true;
+    const channelParam = get(page)?.url?.searchParams.get('channel');
+    if (channelParam && !getSelectedConcordChannel(cid)) {
+      selectConcordChannel(cid, channelParam);
+    }
+  });
   // Two distinct owner questions conflated as one variable would be wrong:
   // "is the active user the Communikey community's own keypair holder"
   // (relevant ONLY to the founding affordance below — you can't found a
@@ -214,7 +238,7 @@
             ? 'bg-primary/10 font-semibold text-primary'
             : 'text-base-content/80 hover:bg-base-300/60'}"
           onclick={() => {
-            selectedChannelId = channel.channel_id;
+            if (concord.communityId) selectConcordChannel(concord.communityId, channel.channel_id);
             mobileChat = true;
           }}
         >
@@ -314,7 +338,7 @@
       onClose={() => (overlay = null)}
       onCreated={(/** @type {string} */ channelId) => {
         overlay = null;
-        selectedChannelId = channelId;
+        if (concord.communityId) selectConcordChannel(concord.communityId, channelId);
         mobileChat = true;
       }}
     />

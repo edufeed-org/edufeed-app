@@ -20,3 +20,28 @@ export function clearActiveConcordChannel() {
 export function getActiveConcordChannel() {
   return active;
 }
+
+// Per-community SELECTED channel (final review, IMPORTANT). Distinct from
+// `active` above: `active` is "on screen and being viewed right now" (one
+// value, cleared on unmount, drives auto-mark-read); `selections` is "which
+// channel this community's rail has picked" and must be SHARED across every
+// mounted PrivateChannelsView instance. The community layout mounts 2-3
+// responsive instances of that component simultaneously (see
+// community-layout-double-mount in project memory) — hidden instances never
+// receive row clicks, so a component-local `selectedChannelId` diverges
+// (stuck at the default channels[0]) and can overwrite the shared
+// active-channel store back to that stale default on any channels$
+// re-emission, losing unread truth for the channel actually being viewed.
+// Session-only (module state) — deliberately NOT persisted to storage.
+let selections = $state.raw(/** @type {Record<string, string>} */ ({}));
+
+/** @param {string} communityId @param {string} channelId */
+export function selectConcordChannel(communityId, channelId) {
+  selections = { ...selections, [communityId]: channelId };
+}
+
+/** @param {string|undefined} communityId @returns {string} */
+export function getSelectedConcordChannel(communityId) {
+  if (!communityId) return '';
+  return selections[communityId] ?? '';
+}
