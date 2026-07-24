@@ -132,7 +132,12 @@
               ? 'opacity-50'
               : ''}"
           >
-            <ConcordAreaBadge name={area.name} communityId={area.communityId} class="h-9 w-9" />
+            <ConcordAreaBadge
+              name={area.name}
+              communityId={area.communityId}
+              iconPointer={area.iconPointer}
+              class="h-9 w-9"
+            />
           </a>
         </div>
       {/each}
@@ -238,6 +243,7 @@
           <ConcordAreaBadge
             name={area.name}
             communityId={area.communityId}
+            iconPointer={area.iconPointer}
             class="h-8 w-8 shrink-0"
           />
           <span class="flex-1 truncate text-left text-sm font-medium">{area.name}</span>

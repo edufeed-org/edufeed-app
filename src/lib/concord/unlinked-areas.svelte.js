@@ -39,7 +39,7 @@ const requestedPubkeys = new Set();
  * path loads it". No subscriptions to unsubscribe for the fetch itself: it
  * completes on its own (see the `addressLoader` fire-and-forget pattern in
  * user-emoji-sets.svelte.js).
- * @returns {() => Array<{communityId: string, name: string, dissolved: boolean}>}
+ * @returns {() => import('./unlinked-areas.js').UnlinkedArea[]}
  */
 export function useUnlinkedConcordAreas() {
   const getJoinedCommunities = useJoinedCommunitiesList();

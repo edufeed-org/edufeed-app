@@ -23,6 +23,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import PrivateChannelsView from '$lib/components/community/channels/PrivateChannelsView.svelte';
+  import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { data } = $props();
@@ -90,7 +91,16 @@
       treatment as ChannelChat's own bar, so the standalone page reads as one
       continuous shell rather than a page wrapped around a boxed widget. -->
     <header class="flex shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 py-3">
-      <span class="text-lg">🔒</span>
+      <!-- ConcordAreaBadge shows the decrypted community icon when available
+        (falling back to the abbreviation placeholder), with the lock glyph
+        kept in its corner — replaces the bare 🔒 emoji that used to be the
+        ONLY visual signal here, same rationale as the sidebar badges. -->
+      <ConcordAreaBadge
+        name={areaName}
+        communityId={data.communityId}
+        iconPointer={communityState?.metadata?.icon}
+        class="h-8 w-8 shrink-0"
+      />
       <div class="min-w-0 flex-1">
         <h1 class="flex items-center gap-2 truncate text-lg font-extrabold">
           {areaName}

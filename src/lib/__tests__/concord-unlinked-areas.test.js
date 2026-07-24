@@ -28,8 +28,27 @@ describe('unlinkedConcordAreas', () => {
   it('includes memberships not in linkedIds', () => {
     const communities = [community({ community_id: A, name: 'Armada A' })];
     expect(unlinkedConcordAreas({ communities, linkedIds: new Set() })).toEqual([
-      { communityId: A, name: 'Armada A', dissolved: false }
+      { communityId: A, name: 'Armada A', dissolved: false, iconPointer: undefined }
     ]);
+  });
+
+  it('surfaces metadata.icon as iconPointer, undefined when absent', () => {
+    const withIcon = {
+      material: { community_id: A, name: 'Has Icon' },
+      metadata: { icon: { url: 'https://x/blob', key: 'aa', nonce: 'bb', hash: 'cc' } }
+    };
+    const withoutIcon = { material: { community_id: B, name: 'No Icon' } };
+    const result = unlinkedConcordAreas({
+      communities: [withIcon, withoutIcon],
+      linkedIds: new Set()
+    });
+    expect(result.find((r) => r.communityId === A)?.iconPointer).toEqual({
+      url: 'https://x/blob',
+      key: 'aa',
+      nonce: 'bb',
+      hash: 'cc'
+    });
+    expect(result.find((r) => r.communityId === B)?.iconPointer).toBeUndefined();
   });
 
   it('name fallback chain: metadata.name > material.name > communityId slice', () => {

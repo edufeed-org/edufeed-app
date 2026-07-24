@@ -6,7 +6,7 @@
 import { parseConcordPointer, isConcordCommunityId } from './pointer.js';
 
 /**
- * @typedef {{communityId: string, name: string, dissolved: boolean}} UnlinkedArea
+ * @typedef {{communityId: string, name: string, dissolved: boolean, iconPointer: import('./blob-media.js').BlobPointerLike | undefined}} UnlinkedArea
  */
 
 /**
@@ -65,7 +65,8 @@ export function unlinkedConcordAreas({ communities, linkedIds }) {
     byId.set(communityId, {
       communityId,
       name: concordAreaDisplayName(state),
-      dissolved: !!state.dissolved
+      dissolved: !!state.dissolved,
+      iconPointer: state.metadata?.icon
     });
   }
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));

@@ -165,6 +165,7 @@
           <ConcordAreaBadge
             name={area.name}
             communityId={area.communityId}
+            iconPointer={area.iconPointer}
             class="h-8 w-8 shrink-0"
           />
           <p
