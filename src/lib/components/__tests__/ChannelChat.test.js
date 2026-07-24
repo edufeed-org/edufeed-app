@@ -93,7 +93,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   concord_read_only: () => 'Read only',
   concord_no_key_error: () => 'No key',
   concord_send_failed: () => 'Send failed',
-  concord_reply: () => 'Reply'
+  concord_reply: () => 'Reply',
+  concord_notif_level_label: () => 'Notify me',
+  concord_notif_level_all: () => 'All messages',
+  concord_notif_level_mentions: () => 'Mentions only',
+  concord_notif_level_nothing: () => 'Nothing'
 }));
 
 const { default: ChannelChat } = await import(
