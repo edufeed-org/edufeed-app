@@ -6,6 +6,9 @@ import { browser } from '$app/environment';
 // Pure merge helper (no package deps beyond the app's own applesauce-core) —
 // safe to import statically, unlike 'applesauce-concord' itself.
 import { mergeRelaySets } from './relay-sets.js';
+// Cross-build pool auth shim — safe to import statically (only depends on
+// rxjs, which the app already uses elsewhere). See pool-adapter.js header.
+import { adaptPoolForConcord } from './pool-adapter.js';
 
 let state = $state.raw({
   phase: /** @type {'off'|'starting'|'ready'|'error'} */ ('off'),
@@ -219,10 +222,12 @@ async function setup(account, myGeneration) {
       signer: account.signer,
       // The app's `pool` is `applesauce-relay@^6.2.1`; applesauce-concord
       // pins its own pre-release fork of applesauce-relay as an internal
-      // dependency, so svelte-check sees two structurally different
-      // RelayPool classes here. Intentional per the design doc ("existing
-      // app RelayPool instance") — cast bridges the type-only mismatch.
-      pool: /** @type {any} */ (pool),
+      // dependency. Beyond the type-only mismatch, the fork's Relay class
+      // has REAL behavioral additions (per-pubkey isAuthenticated/NIP-42
+      // tracking) that 6.2.1 lacks — adaptPoolForConcord() shims those in
+      // (see pool-adapter.js) so relay-auth.js's stream-key AUTH driver
+      // doesn't crash on relays that gate reads/writes behind NIP-42.
+      pool: /** @type {any} */ (adaptPoolForConcord(pool)),
       relays: relaysWithStock,
       storage: storageModule.createConcordStorage(dbName),
       storeFactory: storageModule.createConcordStoreFactory(dbName),
