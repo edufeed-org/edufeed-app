@@ -2,7 +2,7 @@
 
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 import {
   startConcordNotifications,
   stopConcordNotifications,
@@ -21,6 +21,7 @@ const ME = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
 const CID = 'c'.repeat(64);
 const CH = 'd'.repeat(64);
+const CH2 = 'e'.repeat(64);
 
 function rumor({ pubkey = OTHER, created_at, tags = [] }) {
   return { id: `${pubkey}-${created_at}`, kind: 9, pubkey, created_at, tags, content: 'x' };
@@ -53,6 +54,32 @@ function fakeClient() {
     communities$,
     channels$,
     timeline$,
+    getCommunity: vi.fn(() => community)
+  };
+}
+
+/**
+ * Fake ConcordClient with one community, arbitrary channels (each with its own
+ * cold Subject timeline so tests control emission order), and a direct-invite
+ * watcher (CORD-05 mid-session key grants tick invites$ without re-emitting
+ * channels$ — mirroring receiveChannelKeys()'s in-place material mutation).
+ */
+function fakeMultiClient({ channels, material }) {
+  const timelines = Object.fromEntries(channels.map((c) => [c.channel_id, new Subject()]));
+  const channels$ = new BehaviorSubject(channels);
+  const communities$ = new BehaviorSubject([{ material, metadata: { name: 'Area' } }]);
+  const community = {
+    material,
+    channels$,
+    channelStore: vi.fn((id) => ({ timeline: vi.fn(() => timelines[id]) }))
+  };
+  const inviteWatcher = { invites$: new Subject() };
+  return {
+    communities$,
+    channels$,
+    timelines,
+    inviteWatcher,
+    directInviteWatcher$: new BehaviorSubject(inviteWatcher),
     getCommunity: vi.fn(() => community)
   };
 }
@@ -149,5 +176,82 @@ describe('concord notifications service', () => {
     stopConcordNotifications();
     expect(channelUnreadState(CID, CH)).toEqual({ unread: false, mentioned: false });
     expect(client.timeline$.observers.length).toBe(0);
+  });
+
+  it('keeps other channels persisted markers when auto-marking during partial bootstrap', async () => {
+    const client = fakeMultiClient({
+      channels: [
+        { channel_id: CH, name: 'general', private: false },
+        { channel_id: CH2, name: 'random', private: false }
+      ],
+      material: { community_id: CID, channels: [], name: 'Area' }
+    });
+    const storage = fakeStorage({
+      'notif:read': JSON.stringify({ [`${CID}/${CH}`]: 50, [`${CID}/${CH2}`]: 70 })
+    });
+    await startConcordNotifications({ client, storage, pubkey: ME });
+    await flush();
+    setActiveConcordChannel(CID, CH);
+    // CH's timeline emits FIRST — before CH2 has folded anything — so the
+    // active-channel auto-mark runs on a partial `summaries` snapshot.
+    client.timelines[CH].next([rumor({ created_at: 100 })]);
+    await flush();
+    // CH2's persisted marker must survive in storage...
+    expect(JSON.parse(storage.map.get('notif:read'))).toMatchObject({ [`${CID}/${CH2}`]: 70 });
+    // ...and in the reactive map (rumor at 60 <= marker 70 stays read).
+    client.timelines[CH2].next([rumor({ created_at: 60 })]);
+    expect(channelUnreadState(CID, CH2).unread).toBe(false);
+  });
+
+  it('watches channels granted mid-session via direct invite', async () => {
+    const material = { community_id: CID, channels: [], name: 'Area' };
+    const client = fakeMultiClient({
+      channels: [{ channel_id: CH, name: 'secret', private: true }],
+      material
+    });
+    await startConcordNotifications({ client, storage: fakeStorage(), pubkey: ME });
+    await flush();
+    // Private channel without a held key -> inaccessible, no subscription.
+    expect(client.timelines[CH].observers.length).toBe(0);
+    // Direct invite grants the key: material mutated in place (no channels$
+    // re-emit — see receiveChannelKeys), then invites$ ticks.
+    material.channels.push({ id: CH });
+    client.inviteWatcher.invites$.next([{}]);
+    expect(client.timelines[CH].observers.length).toBe(1);
+    client.timelines[CH].next([rumor({ created_at: 100 })]);
+    expect(channelUnreadState(CID, CH).unread).toBe(true);
+  });
+
+  it('prunes markers when a community is confirmed gone', async () => {
+    const client = fakeClient();
+    const storage = fakeStorage({
+      'notif:read': JSON.stringify({ [`${CID}/${CH}`]: 50 }),
+      'notif:mention-read': JSON.stringify({ [CID]: 40 })
+    });
+    await startConcordNotifications({ client, storage, pubkey: ME });
+    await flush();
+    client.communities$.next([]); // left / dissolved
+    await flush();
+    expect(JSON.parse(storage.map.get('notif:read'))).toEqual({});
+    expect(JSON.parse(storage.map.get('notif:mention-read'))).toEqual({});
+  });
+
+  it('prunes a gone channels marker when channels$ confirms removal', async () => {
+    const client = fakeMultiClient({
+      channels: [
+        { channel_id: CH, name: 'general', private: false },
+        { channel_id: CH2, name: 'random', private: false }
+      ],
+      material: { community_id: CID, channels: [], name: 'Area' }
+    });
+    const storage = fakeStorage({
+      'notif:read': JSON.stringify({ [`${CID}/${CH}`]: 50, [`${CID}/${CH2}`]: 70 })
+    });
+    await startConcordNotifications({ client, storage, pubkey: ME });
+    await flush();
+    // CH2 deleted from the channel list -> its marker is pruned + persisted.
+    client.channels$.next([{ channel_id: CH, name: 'general', private: false }]);
+    await flush();
+    expect(JSON.parse(storage.map.get('notif:read'))).toEqual({ [`${CID}/${CH}`]: 50 });
   });
 });

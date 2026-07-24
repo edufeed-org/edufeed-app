@@ -5,14 +5,15 @@
 // Started/stopped by client.svelte.js's setup()/teardown() under the same
 // account lifecycle; imports only sibling concord submodules + pure helpers,
 // so any chrome component may import this file directly (SSR-clean).
+import { of } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 import {
   markerKey,
   foldChannelSummary,
   mergeMarker,
   summaryFlags,
   rollupArea,
-  resolveLevel,
-  pruneMarkers
+  resolveLevel
 } from './notification-helpers.js';
 import { deriveVisibleChannels } from './community.svelte.js';
 import { getActiveConcordChannel } from './active-channel.svelte.js';
@@ -40,7 +41,9 @@ let startTime = 0; // unix seconds — toast cache-replay guard (Task 9)
 let generation = 0;
 /** @type {import('rxjs').Subscription | undefined} */
 let communitiesSub;
-/** @type {Map<string, {channelsSub: import('rxjs').Subscription, channelSubs: Map<string, import('rxjs').Subscription>, communityName: string, channelNames: Map<string, string>}>} */
+/** @type {import('rxjs').Subscription | undefined} */
+let inviteTickSub;
+/** @type {Map<string, {community: any, lastChannels: any[], channelsSub: import('rxjs').Subscription, channelSubs: Map<string, import('rxjs').Subscription>, communityName: string, channelNames: Map<string, string>}>} */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping (subscriptions), not reactive state
 let watchers = new Map();
 /** @type {(() => void) | undefined} */
@@ -91,18 +94,97 @@ function onChannelRumors(communityId, channelId, rumors) {
  */
 function maybeToast(_communityId, _channelId, _rumors, _prev, _summary) {}
 
+/**
+ * Drop one channel's read marker after the channel is CONFIRMED gone (its
+ * channels$ entry disappeared while we were subscribed). Never called on
+ * partial bootstrap snapshots — see markChannelRead, which no longer prunes.
+ * @param {string} communityId @param {string} channelId
+ */
+function dropChannelMarker(communityId, channelId) {
+  const key = markerKey(communityId, channelId);
+  if (!(key in readMarkers)) return;
+  const { [key]: _dropped, ...rest } = readMarkers;
+  readMarkers = rest;
+  persist(READ_KEY, readMarkers);
+}
+
+/**
+ * Drop all of a community's markers after the community is CONFIRMED gone
+ * (disappeared from communities$ while we had a watcher for it).
+ * @param {string} communityId
+ */
+function dropCommunityMarkers(communityId) {
+  const prefix = `${communityId}/`;
+  const kept = Object.entries(readMarkers).filter(([key]) => !key.startsWith(prefix));
+  if (kept.length !== Object.keys(readMarkers).length) {
+    readMarkers = Object.fromEntries(kept);
+    persist(READ_KEY, readMarkers);
+  }
+  if (communityId in mentionRead) {
+    const { [communityId]: _dropped, ...rest } = mentionRead;
+    mentionRead = rest;
+    persist(MENTION_READ_KEY, mentionRead);
+  }
+}
+
+/**
+ * Diff one community's per-channel timeline subscriptions against what is
+ * currently accessible. Shared by the channels$ handler AND the direct-invite
+ * tick: receiveChannelKeys() mutates `community.material.channels` in place
+ * without re-emitting channels$ (see community.svelte.js CARRY-FORWARD note),
+ * so a mid-session key grant must re-run this diff with the LAST channels$
+ * value against the freshly-mutated material.
+ * @param {string} communityId
+ * @param {{community: any, lastChannels: any[], channelSubs: Map<string, import('rxjs').Subscription>, channelNames: Map<string, string>}} watcher
+ * @param {number} myGeneration
+ */
+function refreshChannelSubs(communityId, watcher, myGeneration) {
+  const { community, channelSubs } = watcher;
+  const held = (community.material?.channels ?? []).map((/** @type {{id: string}} */ k) => k.id);
+  const visible = deriveVisibleChannels(watcher.lastChannels ?? [], held).filter(
+    (c) => c.accessible
+  );
+  const liveIds = new Set(visible.map((c) => c.channel_id));
+  watcher.channelNames = new Map(visible.map((c) => [c.channel_id, c.name ?? '']));
+  for (const [channelId, sub] of channelSubs) {
+    if (!liveIds.has(channelId)) {
+      sub.unsubscribe();
+      channelSubs.delete(channelId);
+      if (summaries[communityId]?.[channelId]) {
+        const { [channelId]: _gone, ...rest } = summaries[communityId];
+        summaries = { ...summaries, [communityId]: rest };
+      }
+      dropChannelMarker(communityId, channelId);
+    }
+  }
+  for (const channel of visible) {
+    if (channelSubs.has(channel.channel_id)) continue;
+    channelSubs.set(
+      channel.channel_id,
+      community
+        .channelStore(channel.channel_id)
+        .timeline([{ kinds: [9] }])
+        .subscribe((/** @type {any[]} */ rumors) => {
+          if (myGeneration !== generation) return;
+          onChannelRumors(communityId, channel.channel_id, rumors ?? []);
+        })
+    );
+  }
+}
+
 /** Diff-subscribe one community's accessible channels. @param {any} client @param {string} communityId @param {number} myGeneration */
 function watchCommunity(client, communityId, myGeneration) {
   const community = client.getCommunity(communityId);
   if (!community) return;
-  /** @type {Map<string, import('rxjs').Subscription>} */
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping (subscriptions), not reactive state
-  const channelSubs = new Map();
   // channels$ is a BehaviorSubject and fires synchronously on subscribe(),
   // so `watcher` must exist (with a placeholder channelsSub) BEFORE
   // subscribing — the callback below closes over and reassigns fields on it.
   const watcher = {
-    channelSubs,
+    community,
+    /** @type {any[]} */
+    lastChannels: [],
+    /** @type {Map<string, import('rxjs').Subscription>} */
+    channelSubs: new Map(),
     communityName: '',
     channelNames: new Map(),
     /** @type {import('rxjs').Subscription} */
@@ -110,33 +192,8 @@ function watchCommunity(client, communityId, myGeneration) {
   };
   watcher.channelsSub = community.channels$.subscribe((/** @type {any[]} */ channels) => {
     if (myGeneration !== generation) return;
-    const held = (community.material?.channels ?? []).map((/** @type {{id: string}} */ k) => k.id);
-    const visible = deriveVisibleChannels(channels ?? [], held).filter((c) => c.accessible);
-    const liveIds = new Set(visible.map((c) => c.channel_id));
-    watcher.channelNames = new Map(visible.map((c) => [c.channel_id, c.name ?? '']));
-    for (const [channelId, sub] of channelSubs) {
-      if (!liveIds.has(channelId)) {
-        sub.unsubscribe();
-        channelSubs.delete(channelId);
-        if (summaries[communityId]?.[channelId]) {
-          const { [channelId]: _gone, ...rest } = summaries[communityId];
-          summaries = { ...summaries, [communityId]: rest };
-        }
-      }
-    }
-    for (const channel of visible) {
-      if (channelSubs.has(channel.channel_id)) continue;
-      channelSubs.set(
-        channel.channel_id,
-        community
-          .channelStore(channel.channel_id)
-          .timeline([{ kinds: [9] }])
-          .subscribe((/** @type {any[]} */ rumors) => {
-            if (myGeneration !== generation) return;
-            onChannelRumors(communityId, channel.channel_id, rumors ?? []);
-          })
-      );
-    }
+    watcher.lastChannels = channels ?? [];
+    refreshChannelSubs(communityId, watcher, myGeneration);
   });
   watchers.set(communityId, watcher);
 }
@@ -184,6 +241,7 @@ export async function startConcordNotifications({ client, storage: kv, pubkey })
         const { [communityId]: _gone, ...rest } = summaries;
         summaries = rest;
       }
+      dropCommunityMarkers(communityId);
     }
     for (const communityState of communities ?? []) {
       const communityId = communityState?.material?.community_id;
@@ -196,6 +254,22 @@ export async function startConcordNotifications({ client, storage: kv, pubkey })
       }
     }
   });
+
+  // Mid-session Direct Invite key grants mutate material.channels in place
+  // WITHOUT re-emitting channels$ (receiveChannelKeys — see the CARRY-FORWARD
+  // note in community.svelte.js). The client's own onDirectInvite handler runs
+  // synchronously inside its invites$ subscription, so re-subscribing to that
+  // observable here ticks exactly after each grant lands — re-run the channel
+  // diff for every watcher then. Optional-chained: clients without a
+  // directInviteWatcher$ (tests, older builds) simply never tick.
+  inviteTickSub = client.directInviteWatcher$
+    ?.pipe(switchMap((/** @type {any} */ w) => w?.invites$ ?? of([])))
+    .subscribe(() => {
+      if (myGeneration !== generation) return;
+      for (const [communityId, watcher] of watchers) {
+        refreshChannelSubs(communityId, watcher, myGeneration);
+      }
+    });
 
   const onVisibility = () => {
     if (document.visibilityState !== 'visible') return;
@@ -210,6 +284,8 @@ export function stopConcordNotifications() {
   generation += 1;
   communitiesSub?.unsubscribe();
   communitiesSub = undefined;
+  inviteTickSub?.unsubscribe();
+  inviteTickSub = undefined;
   for (const watcher of watchers.values()) {
     watcher.channelsSub.unsubscribe();
     for (const sub of watcher.channelSubs.values()) sub.unsubscribe();
@@ -230,8 +306,12 @@ export function stopConcordNotifications() {
 /**
  * Stamp a channel read up to its newest rumor (monotonic — never rewinds,
  * which also defuses far-future clock-skewed messages once viewed). Updates
- * reactive state synchronously; persists fire-and-forget. Prunes markers of
- * gone channels lazily on save.
+ * reactive state synchronously; persists fire-and-forget. Deliberately does
+ * NOT prune here: during the fully-synchronous bootstrap fan-out this can run
+ * (active-channel auto-mark) while `summaries` holds only a partial snapshot,
+ * and pruning against it would strip live channels' persisted markers.
+ * Pruning happens only where a channel/community is CONFIRMED gone
+ * (dropChannelMarker / dropCommunityMarkers).
  * @param {string} communityId @param {string} channelId
  */
 export function markChannelRead(communityId, channelId) {
@@ -240,12 +320,7 @@ export function markChannelRead(communityId, channelId) {
   const key = markerKey(communityId, channelId);
   const next = mergeMarker(readMarkers, key, summary.latest);
   if (next !== readMarkers) {
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, ephemeral dedup, not reactive state
-    const liveKeys = new Set();
-    for (const [cid, channels] of Object.entries(summaries)) {
-      for (const chid of Object.keys(channels)) liveKeys.add(markerKey(cid, chid));
-    }
-    readMarkers = pruneMarkers(next, liveKeys);
+    readMarkers = next;
     persist(READ_KEY, readMarkers);
   }
   if (summary.latestMention > (mentionRead[communityId] ?? 0)) {
