@@ -43,6 +43,12 @@
   /** @type {Record<string, string>} */
   const IMPLIED_OUTPUT = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
 
+  // Locked-output types: their output is fixed by the adapter, so normalize it
+  // on load — an existing event may carry a stale `amb:<id>` fallback that
+  // parseFormTemplate produced when the template had no field-output tag.
+  /** @type {Record<string, string>} */
+  const LOCKED_OUTPUT = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
+
   // existingEvent is only used for initial population — it won't change after mount
   // svelte-ignore state_referenced_locally
   const existing = existingEvent ? parseFormTemplate(existingEvent) : null;
@@ -121,7 +127,7 @@
       selectOptions: f.options?.options || [],
       multiple: f.options?.multiple || false,
       vocab: f.vocab,
-      output: f.output,
+      output: LOCKED_OUTPUT[f.type] ?? f.output,
       vocabNaddrInput: vocabToNaddr(f.vocab),
       vocabError: '',
       displayIf: f.options?.displayIf

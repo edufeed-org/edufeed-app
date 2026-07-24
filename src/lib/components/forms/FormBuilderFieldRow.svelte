@@ -307,7 +307,7 @@
   <div class="flex items-center gap-2 text-sm">
     <span class="text-xs text-base-content/50">{m.form_builder_field_output_label()}</span>
     {#if field.type === 'creator' || field.type === 'external-urls'}
-      {@const lockedValue = LOCKED_OUTPUTS[field.type]}
+      {@const lockedValue = field.output || LOCKED_OUTPUTS[field.type]}
       <select
         class="select-bordered select flex-1 select-xs"
         data-testid="field-output-select"

@@ -178,4 +178,52 @@ describe('FormBuilder: rich field palette (creator/amb-relation/external-urls)',
     expect(values).toContain('amb:refs');
     expect(values).toContain('');
   });
+
+  it('normalizes a stale locked output on load and republishes the correct value', async () => {
+    // Existing creator field with NO field-output tag: parseFormTemplate
+    // defaults field.output to the stale `amb:<id>` fallback (amb:creators).
+    // fieldToState must normalize it to the locked amb:creator.
+    const existingEvent = {
+      kind: 30168,
+      pubkey: 'author-pub',
+      created_at: 1,
+      id: 'existing-eid',
+      sig: 'sig',
+      content: '',
+      tags: [
+        ['d', 'my-form'],
+        ['name', 'My Form'],
+        ['settings', JSON.stringify({ description: '' })],
+        ['field', 'creators', 'text', 'Authors', '[]', JSON.stringify({ renderElement: 'creator' })]
+        // deliberately no ['field-output', 'creators', ...] tag
+      ]
+    };
+
+    const { container } = render(FormBuilder, { props: { existingEvent } });
+    await Promise.resolve();
+
+    // The disabled locked select displays the normalized value, not the stale one.
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe('amb:creator');
+
+    // Save republishes amb:creator, not the stale amb:creators fallback.
+    const saveButton = /** @type {HTMLButtonElement} */ (
+      container.querySelector('button.btn-primary')
+    );
+    await fireEvent.click(saveButton);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(buildSpy).toHaveBeenCalledTimes(1);
+    const template = buildSpy.mock.calls[0][0];
+    const outputTag = template.tags.find(
+      (/** @type {string[]} */ t) => t[0] === 'field-output' && t[1] === 'creators'
+    );
+    expect(outputTag, 'expected a field-output tag for the creator field').toBeTruthy();
+    expect(outputTag[2]).toBe('amb:creator');
+  });
 });
