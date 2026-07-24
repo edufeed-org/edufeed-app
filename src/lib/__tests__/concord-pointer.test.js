@@ -3,10 +3,22 @@ import { describe, it, expect } from 'vitest';
 import {
   parseConcordPointer,
   buildConcordPointerTag,
-  withConcordPointer
+  withConcordPointer,
+  isConcordCommunityId
 } from '$lib/concord/pointer.js';
 
 const CID = 'a'.repeat(64);
+
+describe('isConcordCommunityId', () => {
+  it('accepts 64-char lowercase hex', () => {
+    expect(isConcordCommunityId(CID)).toBe(true);
+  });
+  it('rejects malformed or non-string values', () => {
+    for (const bad of ['xyz', 'A'.repeat(64), 'a'.repeat(63), '', null, undefined, 123]) {
+      expect(isConcordCommunityId(bad)).toBe(false);
+    }
+  });
+});
 
 describe('buildConcordPointerTag', () => {
   it('builds ["concord", id, relay]', () => {

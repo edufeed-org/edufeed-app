@@ -5,6 +5,18 @@
 const HEX64 = /^[0-9a-f]{64}$/;
 
 /**
+ * Whether a string is a well-formed Concord community id (64-char lowercase
+ * hex). Exported so callers validating an id from untrusted input outside a
+ * pointer tag — e.g. the `/private/<id>` route's URL param — share the same
+ * rule as {@link parseConcordPointer}.
+ * @param {unknown} value
+ * @returns {value is string}
+ */
+export function isConcordCommunityId(value) {
+  return typeof value === 'string' && HEX64.test(value);
+}
+
+/**
  * @param {string} communityId
  * @param {string} [relay]
  * @returns {string[]}
@@ -22,7 +34,7 @@ export function buildConcordPointerTag(communityId, relay) {
 export function parseConcordPointer(event) {
   if (!event || !Array.isArray(event.tags)) return undefined;
   const tag = event.tags.find((t) => t[0] === 'concord');
-  if (!tag || !HEX64.test(tag[1] || '')) return undefined;
+  if (!tag || !isConcordCommunityId(tag[1])) return undefined;
   return { communityId: tag[1], relay: tag[2] || undefined };
 }
 

@@ -23,29 +23,33 @@ export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember }) {
 }
 
 /**
- * Reactive Concord context for one Communikey community.
- * Call during component init; read via the returned getter. Robust to the
- * Concord client being absent (flag off / logged out) — every accessor
- * chain uses optional chaining and getters return safe defaults.
- * @param {() => any} getCommunikeyEvent kind 10222 event getter
- * @returns {() => { enabled: boolean, pointer: {communityId: string, relay: string|undefined}|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean }}
+ * Reactive Concord context for one Concord community, keyed on a raw
+ * community id rather than a Communikey pointer — the core `useConcordCommunity`
+ * used to inline directly. Extracted (Concord follow-up 1) so a standalone
+ * page can open an UNLINKED membership (no Communikey 10222 pointing at it)
+ * with the exact same reactive plumbing. Call during component init; read
+ * via the returned getter. Robust to the Concord client being absent (flag
+ * off / logged out) or `getCommunityId()` returning undefined — every
+ * accessor chain uses optional chaining and getters return safe defaults.
+ * @param {() => string|undefined} getCommunityId Concord community id getter
+ * @returns {() => { enabled: boolean, communityId: string|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean }}
  */
-export function useConcordCommunity(getCommunikeyEvent) {
+export function useConcordArea(getCommunityId) {
   const getChannels = useObservable(() => {
-    const pointer = parseConcordPointer(getCommunikeyEvent());
+    const communityId = getCommunityId();
     const _tick = getConcordState().communities; // re-run when memberships change
-    const community = pointer && getConcordClient()?.getCommunity(pointer.communityId);
+    const community = communityId && getConcordClient()?.getCommunity(communityId);
     return community?.channels$;
   }, /** @type {any[]} */ ([]));
   const getPhase = useObservable(() => {
-    const pointer = parseConcordPointer(getCommunikeyEvent());
+    const communityId = getCommunityId();
     const _tick = getConcordState().communities;
-    return pointer && getConcordClient()?.getCommunity(pointer.communityId)?.phase$;
+    return communityId && getConcordClient()?.getCommunity(communityId)?.phase$;
   }, 'idle');
   const getDissolved = useObservable(() => {
-    const pointer = parseConcordPointer(getCommunikeyEvent());
+    const communityId = getCommunityId();
     const _tick = getConcordState().communities;
-    return pointer && getConcordClient()?.getCommunity(pointer.communityId)?.dissolved$;
+    return communityId && getConcordClient()?.getCommunity(communityId)?.dissolved$;
   }, false);
   // CARRY-FORWARD FIX (Task 7 review): `community.material.channels` is
   // mutated in place by `receiveChannelKeys()` when a Direct Invite grants a
@@ -67,10 +71,10 @@ export function useConcordCommunity(getCommunikeyEvent) {
   }, /** @type {any[]} */ ([]));
 
   return () => {
-    const pointer = parseConcordPointer(getCommunikeyEvent());
+    const communityId = getCommunityId();
     const _tick = getConcordState().communities;
     const _inviteTick = getInviteTick(); // re-derive `accessible` when a channel key grant lands
-    const community = pointer ? getConcordClient()?.getCommunity(pointer.communityId) : undefined;
+    const community = communityId ? getConcordClient()?.getCommunity(communityId) : undefined;
     // A channel is "accessible" when we hold its key (material.channels) —
     // metadata for private channels we're not a member of still folds into
     // channels$ (it's public knowledge that they exist), but we can't
@@ -80,7 +84,7 @@ export function useConcordCommunity(getCommunikeyEvent) {
     );
     return {
       enabled: !!runtimeConfig.concord?.enabled,
-      pointer,
+      communityId,
       community,
       membership: /** @type {'none'|'member'} */ (community ? 'member' : 'none'),
       channels: getChannels()
@@ -98,4 +102,22 @@ export function useConcordCommunity(getCommunikeyEvent) {
       signerHasNip44: !!getConcordState().client?.signer?.nip44
     };
   };
+}
+
+/**
+ * Reactive Concord context for one Communikey community. Thin wrapper over
+ * {@link useConcordArea}, keyed on the community id parsed from the kind
+ * 10222 event's `concord` pointer tag; adds `pointer` to the returned shape
+ * (needed by `shouldShowChannelsTab` callers — ContentNavSidebar/BottomTabBar
+ * — which gate visibility on the pointer's mere existence, independent of
+ * membership).
+ * @param {() => any} getCommunikeyEvent kind 10222 event getter
+ * @returns {() => { enabled: boolean, pointer: {communityId: string, relay: string|undefined}|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean }}
+ */
+export function useConcordCommunity(getCommunikeyEvent) {
+  const getArea = useConcordArea(() => parseConcordPointer(getCommunikeyEvent())?.communityId);
+  return () => ({
+    ...getArea(),
+    pointer: parseConcordPointer(getCommunikeyEvent())
+  });
 }
