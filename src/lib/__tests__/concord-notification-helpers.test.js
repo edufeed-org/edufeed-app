@@ -15,6 +15,7 @@ const ME = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
 
 /** Minimal kind-9 rumor. */
+/** @param {{pubkey?: string, created_at?: number, tags?: string[][]}} args */
 function rumor({ pubkey = OTHER, created_at, tags = [] }) {
   return { id: `${pubkey}-${created_at}`, kind: 9, pubkey, created_at, tags, content: 'x' };
 }
@@ -133,6 +134,7 @@ describe('resolveLevel', () => {
 });
 
 describe('shouldToast', () => {
+  /** @type {Parameters<typeof shouldToast>[0]} */
   const base = {
     createdAt: 1000,
     isMention: false,
