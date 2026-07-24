@@ -13,10 +13,16 @@ import {
   mergeMarker,
   summaryFlags,
   rollupArea,
-  resolveLevel
+  resolveLevel,
+  shouldToast
 } from './notification-helpers.js';
 import { deriveVisibleChannels } from './community.svelte.js';
 import { getActiveConcordChannel } from './active-channel.svelte.js';
+import { goto } from '$app/navigation';
+import { getProfileContent } from 'applesauce-core/helpers';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { getUserDisplayName } from '$lib/helpers/message-utils.js';
+import * as m from '$lib/paraglide/messages';
 
 const READ_KEY = 'notif:read';
 const MENTION_READ_KEY = 'notif:mention-read';
@@ -36,8 +42,10 @@ let toastsEnabled = $state.raw(false);
 /** @type {import('./storage.js').ConcordStorage | undefined} */
 let storage;
 let myPubkey = '';
-// eslint-disable-next-line no-unused-vars -- read by maybeToast once Task 9 fills it in
-let startTime = 0; // unix seconds — toast cache-replay guard (Task 9)
+let startTime = 0; // unix seconds — toast cache-replay guard
+/** @type {Map<string, number>} */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal throttle bookkeeping, not reactive state
+let lastToastAt = new Map();
 let generation = 0;
 /** @type {import('rxjs').Subscription | undefined} */
 let communitiesSub;
@@ -87,12 +95,60 @@ function onChannelRumors(communityId, channelId, rumors) {
 }
 
 /**
- * Toast dispatcher stub — Task 9 fills this in (gates + Notification). Kept
- * as a named function so the fan-out above never changes.
- * @param {string} _communityId @param {string} _channelId @param {any[]} _rumors
- * @param {ChannelSummary | undefined} _prev @param {ChannelSummary} _summary
+ * Foreground OS toast (spec §6). Content stays minimal — channel/community
+ * names and the sender's display name only, never message text (OS
+ * notification centers persist content, which conflicts with sealed
+ * channels). The Notification `tag` collapses bursts per channel; the pure
+ * shouldToast() gate carries every suppression rule and is unit-tested in
+ * concord-notification-helpers.test.js.
+ * @param {string} communityId @param {string} channelId
+ * @param {Array<{pubkey?: string, created_at?: number, tags?: string[][]}>} rumors
+ * @param {ChannelSummary | undefined} prev @param {ChannelSummary} summary
  */
-function maybeToast(_communityId, _channelId, _rumors, _prev, _summary) {}
+function maybeToast(communityId, channelId, rumors, prev, summary) {
+  if (typeof Notification === 'undefined') return;
+  if (!prev) return; // first fold for this channel = cache replay
+  if (summary.latestFromOthers <= prev.latestFromOthers) return;
+  const newest = (rumors ?? []).find((r) => r?.pubkey && r.pubkey !== myPubkey); // newest-first
+  if (!newest) return;
+  const isMention = (newest.tags ?? []).some((t) => t?.[0] === 'p' && t?.[1] === myPubkey);
+  const active = getActiveConcordChannel();
+  const fire = shouldToast({
+    createdAt: newest.created_at ?? 0,
+    isMention,
+    level: resolveLevel(levels, communityId, channelId),
+    enabled: toastsEnabled,
+    permissionGranted: Notification.permission === 'granted',
+    tabVisible: typeof document !== 'undefined' && document.visibilityState === 'visible',
+    isActiveChannel: active?.communityId === communityId && active?.channelId === channelId,
+    marker: readMarkers[markerKey(communityId, channelId)] ?? 0,
+    startTime,
+    lastToastAt: lastToastAt.get(channelId) ?? 0,
+    now: Date.now()
+  });
+  if (!fire) return;
+  lastToastAt.set(channelId, Date.now());
+  const watcher = watchers.get(communityId);
+  const channelName = watcher?.channelNames.get(channelId) || '#';
+  const communityName = watcher?.communityName || '';
+  const authorPubkey = newest.pubkey ?? ''; // guaranteed truthy by the find() predicate above
+  let profile;
+  try {
+    const profileEvent = eventStore.getReplaceable(0, authorPubkey);
+    profile = profileEvent ? getProfileContent(profileEvent) : undefined;
+  } catch {
+    profile = undefined;
+  }
+  const displayName = getUserDisplayName(authorPubkey, profile);
+  const notification = new Notification(
+    communityName ? `${channelName} · ${communityName}` : channelName,
+    { body: m.concord_notif_toast_body({ name: displayName }), tag: `concord-${channelId}` }
+  );
+  notification.onclick = () => {
+    window.focus();
+    goto(`/private/${communityId}?channel=${channelId}`);
+  };
+}
 
 /**
  * Drop one channel's read marker after the channel is CONFIRMED gone (its
@@ -301,6 +357,8 @@ export function stopConcordNotifications() {
   mentionRead = {};
   levels = {};
   toastsEnabled = false;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal throttle bookkeeping, not reactive state
+  lastToastAt = new Map();
 }
 
 /**

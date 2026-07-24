@@ -30,9 +30,18 @@
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import MentionAutocomplete from './MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
+  import { getChannelLevel, setChannelLevel } from '$lib/concord/notifications.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   let { community, channel, dissolved = false, isOwner = false, openOverlay, onBack } = $props();
+
+  const communityId = $derived(community?.material?.community_id ?? '');
+  const notifLevel = $derived(getChannelLevel(communityId, channel.channel_id));
+  const LEVELS = /** @type {const} */ ([
+    ['all', m.concord_notif_level_all],
+    ['mentions', m.concord_notif_level_mentions],
+    ['nothing', m.concord_notif_level_nothing]
+  ]);
 
   const getActiveUser = useActiveUser();
   // ConcordRumorStore#timeline() returns Observable<Rumor[]> (verified against
@@ -288,6 +297,18 @@
             }}>{m.concord_menu_backup()}</button
           >
         </li>
+        <li class="menu-title text-xs">{m.concord_notif_level_label()}</li>
+        {#each LEVELS as [level, label] (level)}
+          <li>
+            <button
+              class={notifLevel === level ? 'active' : ''}
+              onclick={() => setChannelLevel(communityId, channel.channel_id, level)}
+            >
+              {notifLevel === level ? '✓' : ''}
+              {label()}
+            </button>
+          </li>
+        {/each}
         {#if isOwner && !dissolved}
           <li>
             <button

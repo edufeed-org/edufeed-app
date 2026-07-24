@@ -3,6 +3,12 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BehaviorSubject, Subject } from 'rxjs';
+
+vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: { getReplaceable: () => undefined }
+}));
+
 import {
   startConcordNotifications,
   stopConcordNotifications,
@@ -253,5 +259,56 @@ describe('concord notifications service', () => {
     client.channels$.next([{ channel_id: CH, name: 'general', private: false }]);
     await flush();
     expect(JSON.parse(storage.map.get('notif:read'))).toEqual({ [`${CID}/${CH}`]: 50 });
+  });
+
+  it('fires a Notification for a fresh post-start message when enabled', async () => {
+    const created = [];
+    class FakeNotification {
+      static permission = 'granted';
+      constructor(title, options) {
+        created.push({ title, options });
+      }
+    }
+    vi.stubGlobal('Notification', FakeNotification);
+    const client = fakeClient();
+    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    await startConcordNotifications({ client, storage, pubkey: ME });
+    await flush();
+    // Baseline fold (cache replay analog) — must NOT toast.
+    client.timeline$.next([rumor({ created_at: 100 })]);
+    expect(created).toHaveLength(0);
+    // New message stamped AFTER service start.
+    const fresh = Math.floor(Date.now() / 1000) + 10;
+    client.timeline$.next([rumor({ created_at: fresh }), rumor({ created_at: 100 })]);
+    expect(created).toHaveLength(1);
+    expect(created[0].options.tag).toBe(`concord-${CH}`);
+    vi.unstubAllGlobals();
+  });
+
+  it('suppresses toasts for the visible active channel and for level=nothing', async () => {
+    const created = [];
+    class FakeNotification {
+      static permission = 'granted';
+      constructor(title, options) {
+        created.push({ title, options });
+      }
+    }
+    vi.stubGlobal('Notification', FakeNotification);
+    const client = fakeClient();
+    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    await startConcordNotifications({ client, storage, pubkey: ME });
+    await flush();
+    client.timeline$.next([rumor({ created_at: 100 })]);
+
+    setActiveConcordChannel(CID, CH); // jsdom tab is 'visible'
+    const fresh = Math.floor(Date.now() / 1000) + 10;
+    client.timeline$.next([rumor({ created_at: fresh }), rumor({ created_at: 100 })]);
+    expect(created).toHaveLength(0);
+
+    clearActiveConcordChannel();
+    await setChannelLevel(CID, CH, 'nothing');
+    client.timeline$.next([rumor({ created_at: fresh + 5 }), rumor({ created_at: 100 })]);
+    expect(created).toHaveLength(0);
+    vi.unstubAllGlobals();
   });
 });

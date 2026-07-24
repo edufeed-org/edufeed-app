@@ -13,7 +13,12 @@
   import { useConcordArea } from '$lib/concord/community.svelte.js';
   import { parseConcordPointer } from '$lib/concord/pointer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { channelUnreadState, markChannelRead } from '$lib/concord/notifications.svelte.js';
+  import {
+    channelUnreadState,
+    markChannelRead,
+    getToastsEnabled,
+    setToastsEnabled
+  } from '$lib/concord/notifications.svelte.js';
   import {
     setActiveConcordChannel,
     clearActiveConcordChannel
@@ -123,6 +128,25 @@
   // echo, so `concord.dissolved` (backed by `dissolved$`) flips before any
   // relay round-trip completes; Tasks 8/10 already render the resulting
   // tombstone banner + read-only composer off that same flag.
+  // Notification API state. permissionDenied is a $state refreshed on toggle
+  // attempts — the browser offers no permission-change event worth polling.
+  const notificationSupported = typeof Notification !== 'undefined';
+  let permissionDenied = $state(notificationSupported && Notification.permission === 'denied');
+  const toastsOn = $derived(getToastsEnabled());
+
+  async function toggleToasts() {
+    if (getToastsEnabled()) {
+      await setToastsEnabled(false);
+      return;
+    }
+    if (Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission();
+      permissionDenied = permission === 'denied';
+      if (permission !== 'granted') return;
+    }
+    await setToastsEnabled(true);
+  }
+
   let dissolving = $state(false);
   async function dissolve() {
     if (dissolving) return;
@@ -158,7 +182,24 @@
         <span class="text-xs font-bold tracking-wider text-base-content/60 uppercase"
           >{m.concord_rail_channels()}</span
         >
-        <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+        <span class="flex items-center gap-1">
+          {#if notificationSupported}
+            <button
+              class="btn btn-circle btn-ghost btn-xs"
+              data-testid="concord-notif-bell"
+              disabled={permissionDenied}
+              title={permissionDenied
+                ? m.concord_notif_bell_denied()
+                : toastsOn
+                  ? m.concord_notif_bell_on()
+                  : m.concord_notif_bell_off()}
+              onclick={toggleToasts}
+            >
+              {toastsOn ? '🔔' : '🔕'}
+            </button>
+          {/if}
+          <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+        </span>
       </div>
       <!-- Tighter, list-style rows (Armada-parity cleanup) — deliberately NOT
         `btn` (its min-height/border/shadow chrome reads as a toolbar, not a

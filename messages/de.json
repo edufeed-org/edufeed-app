@@ -2934,5 +2934,13 @@
   "concord_area_invalid_body": "Dieser Link zu einem privaten Bereich ist fehlerhaft.",
   "concord_area_login_body": "Um diesen privaten Bereich zu öffnen, musst du angemeldet sein.",
   "concord_notif_mentioned": "Du wurdest erwähnt",
-  "concord_notif_unread": "Ungelesene Nachrichten"
+  "concord_notif_unread": "Ungelesene Nachrichten",
+  "concord_notif_toast_body": "Neue Nachricht von {name}",
+  "concord_notif_bell_on": "Browser-Benachrichtigungen an — klicken zum Deaktivieren",
+  "concord_notif_bell_off": "Browser-Benachrichtigungen aktivieren",
+  "concord_notif_bell_denied": "Benachrichtigungen sind in den Browser-Einstellungen blockiert",
+  "concord_notif_level_label": "Benachrichtigungen",
+  "concord_notif_level_all": "Alle Nachrichten",
+  "concord_notif_level_mentions": "Nur Erwähnungen",
+  "concord_notif_level_nothing": "Keine"
 }

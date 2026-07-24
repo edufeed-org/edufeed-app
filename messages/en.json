@@ -2934,5 +2934,13 @@
   "concord_area_invalid_body": "This private-area link is malformed.",
   "concord_area_login_body": "You need to be logged in to open this private area.",
   "concord_notif_mentioned": "You were mentioned",
-  "concord_notif_unread": "Unread messages"
+  "concord_notif_unread": "Unread messages",
+  "concord_notif_toast_body": "New message from {name}",
+  "concord_notif_bell_on": "Browser notifications on — click to disable",
+  "concord_notif_bell_off": "Enable browser notifications",
+  "concord_notif_bell_denied": "Notifications are blocked in your browser settings",
+  "concord_notif_level_label": "Notifications",
+  "concord_notif_level_all": "All messages",
+  "concord_notif_level_mentions": "Mentions only",
+  "concord_notif_level_nothing": "Nothing"
 }
