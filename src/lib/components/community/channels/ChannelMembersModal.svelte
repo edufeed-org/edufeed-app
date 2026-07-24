@@ -1,23 +1,24 @@
 <!--
-  ChannelMembersModal — Task 13.
+  ChannelMembersModal — Task 13, reworked for community-wide roster + roles
+  (Armada-parity follow-up: this modal used to show only authors observed
+  writing in ONE channel, e.g. 2 people vs Armada's 85+roles).
 
-  Lists the channel's approximate roster and lets the owner kick (channel-only
-  rotate) or ban (community banlist + channel rotate) a member. Verified
-  against node_modules/applesauce-concord/dist (full trail in
-  .superpowers/sdd/task-13-report.md):
+  DISPLAY vs MODERATION are deliberately split, and must stay split:
 
-  - There is no authoritative per-channel roster (key possession IS
-    membership) — the list here is `channelMemberList()`'s approximation:
-    (authors observed writing in the channel (any kind — `.timeline([{}])`) ∪
-    self) − banlist (spec §3.3). We pass `granted: []`: this app has no local
-    record of channel grants independent of what's already observable, so
-    it's an honest no-op input rather than a fabricated one.
-    `concord_members_note` tells the user the list can lag.
-  - `community.banlist$` (Observable<Set<string>>) is bridged reactively and
-    subtracted both from the displayed roster AND from the `keep` list passed
-    to kick/ban (final-review fix: a banned member must never re-receive a
-    fresh channel key on a later rotation) — banned members simply disappear
-    from this modal, there is no "unban" affordance in Phase 1.
+  - Display roster: `community.members$` (community-wide, banlist already
+    folded in by `foldMembers` per node_modules/applesauce-concord/dist —
+    verified in helpers/guestbook.js) bridged with `roles$`/`grants$` through
+    `memberSections()` (roster.js, pure/unit-tested) into owner+role-holders
+    ("leaders", ordered by authority) then plain members. Role names are
+    arbitrary control-plane strings, rendered as-is (CSS-truncated).
+  - Moderation keep-list: kick/ban still rotate the CHANNEL's key, so the
+    `currentMembers` they receive MUST stay the channel-scoped approximation
+    from `channelMemberList()` (observed-in-channel ∪ self, minus banned) —
+    see moderation.js's header comment for the full rotateChannel trail.
+    Widening this to the community-wide roster would fan out a fresh channel
+    key to every community member on the next rotation, not just whoever
+    actually held it. `concord_members_note` tells the user the DISPLAYED
+    list is community-wide but per-channel activity can lag.
   - `rotateChannel`/`ban` both require the phase-1 moderator to be the
     community owner in this UI (the `isOwner` prop, same gate the rest of
     PrivateChannelsView uses) — `rotateChannel` itself also throws if the
@@ -30,6 +31,7 @@
 <script>
   import { useObservable } from '$lib/concord/bridge.svelte.js';
   import { channelMemberList, kickFromChannel, banFromChannel } from '$lib/concord/moderation.js';
+  import { memberSections } from '$lib/concord/roster.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -49,13 +51,18 @@
     /** @type {any[]} */ ([])
   );
   // community.banlist$ (Observable<Set<string>>, verified in
-  // node_modules/applesauce-concord/dist/client/community.js) — subtracted
-  // from both the displayed roster and the keep-list passed to kick/ban.
+  // node_modules/applesauce-concord/dist/client/community.js) — still
+  // subtracted from the channel-scoped keep-list passed to kick/ban
+  // (defensive: members$ already folds the banlist in, but this keep-list
+  // is built from `getRumors()`, not `members$`).
   const getBanlist = useObservable(
     () => community?.banlist$,
     /** @type {Set<string>} */ (new Set())
   );
-  const members = $derived(
+  // CHANNEL-scoped approximate roster — used ONLY as the `currentMembers`
+  // argument to kickFromChannel/banFromChannel below. Never render this as
+  // the displayed list (see header comment).
+  const channelMembers = $derived(
     channelMemberList({
       observed: getRumors().map((/** @type {any} */ r) => r.pubkey),
       granted: [],
@@ -63,7 +70,31 @@
       banned: getBanlist()
     })
   );
-  const getProfiles = useProfileMap(() => members);
+
+  // COMMUNITY-wide display roster: members$/roles$/grants$ bridged reactively,
+  // folded into sections by the pure memberSections() helper.
+  const getMembers = useObservable(
+    () => community?.members$,
+    /** @type {Set<string>} */ (new Set())
+  );
+  const getRoles = useObservable(() => community?.roles$, /** @type {any[]} */ ([]));
+  const getGrants = useObservable(
+    () => community?.grants$,
+    /** @type {Map<string, string[]>} */ (new Map())
+  );
+  const sections = $derived(
+    memberSections({
+      members: getMembers(),
+      roles: getRoles(),
+      grants: getGrants(),
+      owner: community?.material?.owner
+    })
+  );
+  const rosterCount = $derived(sections.leaders.length + sections.members.length);
+  const getProfiles = useProfileMap(() => [
+    ...sections.leaders.map((l) => l.pubkey),
+    ...sections.members
+  ]);
 
   /** @type {{kind: 'kick'|'ban', pubkey: string}|null} */
   let confirm = $state(null);
@@ -78,12 +109,15 @@
     // self-exclude would pass rotateChannel's checks and lose the key).
     const callerPubkey = getActiveUser()?.pubkey;
     try {
+      // channelMembers (NOT the community-wide sections above) — see the
+      // header comment: kick/ban must only ever rotate the channel key to
+      // the channel-scoped keep-list.
       if (kind === 'ban')
         await banFromChannel(
           community,
           channel.channel_id,
           pubkey,
-          members,
+          channelMembers,
           callerPubkey,
           getBanlist()
         );
@@ -92,7 +126,7 @@
           community,
           channel.channel_id,
           pubkey,
-          members,
+          channelMembers,
           callerPubkey,
           getBanlist()
         );
@@ -107,6 +141,45 @@
   }
 </script>
 
+{#snippet memberRow(
+  /** @type {string} */ pubkey,
+  /** @type {string | null} */ chip,
+  /** @type {boolean} */ chipIsOwner
+)}
+  {@const self = pubkey === getActiveUser()?.pubkey}
+  <div class="flex items-center gap-3 py-2">
+    <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
+    <span class="flex-1 truncate text-sm font-semibold">
+      {getProfiles().get(pubkey)?.name ?? pubkey.slice(0, 12)}{self
+        ? ` ${m.concord_you_suffix()}`
+        : ''}
+    </span>
+    {#if chip}
+      <span
+        class="badge max-w-[7rem] truncate badge-sm {chipIsOwner ? 'badge-primary' : 'badge-ghost'}"
+        title={chip}
+      >
+        {chip}
+      </span>
+    {/if}
+    {#if isOwner && !self}
+      <button
+        class="btn btn-ghost btn-xs"
+        title={signerHasNip44 ? m.concord_kick() : m.concord_moderate_needs_nip44()}
+        disabled={!signerHasNip44}
+        onclick={() => (confirm = { kind: 'kick', pubkey })}>−</button
+      >
+      <button
+        class="btn text-error btn-ghost btn-xs"
+        data-testid="concord-member-ban"
+        title={signerHasNip44 ? m.concord_ban() : m.concord_moderate_needs_nip44()}
+        disabled={!signerHasNip44}
+        onclick={() => (confirm = { kind: 'ban', pubkey })}>⦸</button
+      >
+    {/if}
+  </div>
+{/snippet}
+
 <div class="modal-open modal" role="dialog">
   <div class="modal-box max-w-md">
     <button class="btn absolute top-3 right-3 btn-circle btn-ghost btn-sm" onclick={onClose}
@@ -114,35 +187,19 @@
     >
     <h3 class="text-lg font-extrabold">
       {m.concord_members_title()}
-      <span class="font-mono text-sm text-base-content/50">{members.length}</span>
+      <span class="font-mono text-sm text-base-content/50">{rosterCount}</span>
     </h3>
     <p class="mb-3 text-xs text-base-content/60">{m.concord_members_note()}</p>
     <div class="divide-y divide-base-300">
-      {#each members as pubkey (pubkey)}
-        {@const self = pubkey === getActiveUser()?.pubkey}
-        <div class="flex items-center gap-3 py-2">
-          <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
-          <span class="flex-1 truncate text-sm font-semibold">
-            {getProfiles().get(pubkey)?.name ?? pubkey.slice(0, 12)}{self
-              ? ` ${m.concord_you_suffix()}`
-              : ''}
-          </span>
-          {#if isOwner && !self}
-            <button
-              class="btn btn-ghost btn-xs"
-              title={signerHasNip44 ? m.concord_kick() : m.concord_moderate_needs_nip44()}
-              disabled={!signerHasNip44}
-              onclick={() => (confirm = { kind: 'kick', pubkey })}>−</button
-            >
-            <button
-              class="btn text-error btn-ghost btn-xs"
-              data-testid="concord-member-ban"
-              title={signerHasNip44 ? m.concord_ban() : m.concord_moderate_needs_nip44()}
-              disabled={!signerHasNip44}
-              onclick={() => (confirm = { kind: 'ban', pubkey })}>⦸</button
-            >
-          {/if}
-        </div>
+      {#each sections.leaders as leader (leader.pubkey)}
+        {@render memberRow(
+          leader.pubkey,
+          leader.isOwner ? m.concord_role_owner() : leader.roleName,
+          leader.isOwner
+        )}
+      {/each}
+      {#each sections.members as pubkey (pubkey)}
+        {@render memberRow(pubkey, null, false)}
       {/each}
     </div>
   </div>
