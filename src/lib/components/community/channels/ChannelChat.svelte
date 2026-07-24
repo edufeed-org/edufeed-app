@@ -390,7 +390,10 @@
       class="m-4 mt-0 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-100 p-1.5"
       onsubmit={(e) => {
         e.preventDefault();
-        if (mention && mentionCandidates.length > 0) return; // Enter picked a mention
+        // Enter-while-picking never reaches here (onComposerKeydown
+        // preventDefaults it), so any submit — notably a Send-button click
+        // with the picker still open — must close the picker and send.
+        mention = null;
         send();
       }}
     >

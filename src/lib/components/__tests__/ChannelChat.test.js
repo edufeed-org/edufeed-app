@@ -19,6 +19,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { of, BehaviorSubject } from 'rxjs';
+import { nip19 } from 'nostr-tools';
 
 if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = /** @type {any} */ (
@@ -42,8 +43,17 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: ACTIVE_PUBKEY })
 }));
 
+// Shared, hoisted profile map so mention tests can hand members display
+// names; reaction tests leave it empty (same behavior as the previous
+// always-empty-Map mock).
+const memberProfiles = vi.hoisted(() => new Map());
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
-  useProfileMap: () => () => new Map()
+  useProfileMap: () => () => memberProfiles
+}));
+
+const sendChannelMessageMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock('$lib/concord/send-message.js', () => ({
+  sendChannelMessage: sendChannelMessageMock
 }));
 
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
@@ -100,8 +110,12 @@ const message1 = {
   tags: []
 };
 
-/** @param {any[]} reactionRumors @param {any} reactMock */
-function makeCommunity(reactionRumors, reactMock = vi.fn().mockResolvedValue(undefined)) {
+/** @param {any[]} reactionRumors @param {any} [reactMock] @param {Set<string>} [members] */
+function makeCommunity(
+  reactionRumors,
+  reactMock = vi.fn().mockResolvedValue(undefined),
+  members = new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])
+) {
   return {
     channelStore: (/** @type {string} */ _id) => ({
       timeline: (/** @type {any[]} */ filters) => {
@@ -110,7 +124,7 @@ function makeCommunity(reactionRumors, reactMock = vi.fn().mockResolvedValue(und
         return of([message1]);
       }
     }),
-    members$: new BehaviorSubject(new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])),
+    members$: new BehaviorSubject(members),
     react: reactMock
   };
 }
@@ -189,5 +203,95 @@ describe('ChannelChat reaction parity', () => {
     await Promise.resolve();
 
     expect(reactMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChannelChat mention composer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    memberProfiles.clear();
+  });
+
+  /** @param {any} community */
+  async function renderChat(community) {
+    const utils = render(ChannelChat, {
+      props: { community, channel: CHANNEL, openOverlay: () => {}, onBack: () => {} }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    const input = /** @type {HTMLInputElement} */ (
+      utils.container.querySelector('[data-testid="concord-chat-input"]')
+    );
+    return { ...utils, input };
+  }
+
+  it('clicking Send with an open, matching mention still sends the message', async () => {
+    const community = makeCommunity([]);
+    const { container, input } = await renderChat(community);
+
+    // A trailing bare "@" opens the picker with an empty query, which
+    // matches EVERY member — the exact state that used to swallow the send.
+    await fireEvent.input(input, { target: { value: 'hello @' } });
+    expect(container.querySelector('[role="listbox"]')).toBeTruthy();
+
+    await fireEvent.submit(/** @type {HTMLFormElement} */ (input.closest('form')));
+
+    expect(sendChannelMessageMock).toHaveBeenCalledWith(
+      community,
+      'chan-1',
+      'hello @',
+      undefined,
+      ACTIVE_PUBKEY
+    );
+  });
+
+  it('typing @ali opens the dropdown with name-filtered candidates, excluding self', async () => {
+    const bobPubkey = 'b'.repeat(64);
+    memberProfiles.set(OTHER_PUBKEY, { name: 'alice' });
+    memberProfiles.set(bobPubkey, { name: 'bob' });
+    // The active user matches the query too — must still be excluded.
+    memberProfiles.set(ACTIVE_PUBKEY, { name: 'alina' });
+    const community = makeCommunity(
+      [],
+      undefined,
+      new Set([ACTIVE_PUBKEY, OTHER_PUBKEY, bobPubkey])
+    );
+    const { container, input } = await renderChat(community);
+
+    await fireEvent.input(input, { target: { value: '@ali' } });
+
+    const options = [...container.querySelectorAll('[role="option"]')];
+    expect(options).toHaveLength(1);
+    expect(options[0].textContent).toContain('alice');
+  });
+
+  it('caps the candidate list at 8', async () => {
+    const members = new Set([ACTIVE_PUBKEY]);
+    for (let i = 0; i < 10; i++) {
+      const pubkey = `${i}`.repeat(64);
+      members.add(pubkey);
+      memberProfiles.set(pubkey, { name: `user${i}` });
+    }
+    const community = makeCommunity([], undefined, members);
+    const { container, input } = await renderChat(community);
+
+    await fireEvent.input(input, { target: { value: '@user' } });
+
+    expect(container.querySelectorAll('[role="option"]')).toHaveLength(8);
+  });
+
+  it('Enter with the dropdown open picks the highlighted candidate and does NOT send', async () => {
+    memberProfiles.set(OTHER_PUBKEY, { name: 'alice' });
+    const community = makeCommunity([]);
+    const { container, input } = await renderChat(community);
+
+    await fireEvent.input(input, { target: { value: 'hi @ali' } });
+    expect(container.querySelector('[role="listbox"]')).toBeTruthy();
+
+    await fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(input.value).toBe(`hi nostr:${nip19.npubEncode(OTHER_PUBKEY)} `);
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(sendChannelMessageMock).not.toHaveBeenCalled();
   });
 });
