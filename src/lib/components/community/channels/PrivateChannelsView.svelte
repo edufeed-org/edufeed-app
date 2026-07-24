@@ -13,6 +13,14 @@
   import { useConcordArea } from '$lib/concord/community.svelte.js';
   import { parseConcordPointer } from '$lib/concord/pointer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { channelUnreadState, markChannelRead } from '$lib/concord/notifications.svelte.js';
+  import {
+    setActiveConcordChannel,
+    clearActiveConcordChannel
+  } from '$lib/concord/active-channel.svelte.js';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
+  import { page } from '$app/stores';
+  import { get } from 'svelte/store';
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
@@ -46,7 +54,12 @@
   );
   const getActiveUser = useActiveUser();
 
-  let selectedChannelId = $state('');
+  // ?channel= deep link (spec §6: toast click target; also makes channels
+  // linkable). Read once at init — subsequent selection is user-driven.
+  // Optional-chained: component tests that render this component without a
+  // SvelteKit page context (see PrivateChannelsView.test.js) get `{}` back
+  // from `get(page)`, not a populated page object.
+  let selectedChannelId = $state(get(page)?.url?.searchParams.get('channel') ?? '');
   /** @type {string|null} */
   let overlay = $state(null);
   let mobileChat = $state(false);
@@ -83,6 +96,23 @@
   const activeChannel = $derived(
     channels.find((c) => c.channel_id === selectedChannelId) ?? channels[0]
   );
+
+  // Mirror the on-screen channel into the shared active-channel store and
+  // stamp it read. Reads deps BEFORE the early return (project gotcha:
+  // effects that bail before reading reactive state capture no deps). The
+  // responsive double-mount renders two instances tracking the same
+  // selection — last-writer-wins is fine, both write the same value.
+  $effect(() => {
+    const cid = concord.communityId;
+    const chid = activeChannel?.accessible ? activeChannel.channel_id : undefined;
+    if (!cid || !chid) {
+      clearActiveConcordChannel();
+      return;
+    }
+    setActiveConcordChannel(cid, chid);
+    markChannelRead(cid, chid);
+    return () => clearActiveConcordChannel();
+  });
 
   // community.dissolve() (dist/client/community.js) throws a plain
   // Error("only the owner can dissolve") when the caller isn't
@@ -136,6 +166,7 @@
         active-nav treatment (BottomTabBar.svelte: bg-primary/10 text-primary)
         instead of the previous btn-active fill. -->
       {#each channels as channel (channel.channel_id)}
+        {@const flags = channelUnreadState(concord.communityId, channel.channel_id)}
         <button
           class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-150 {activeChannel?.channel_id ===
           channel.channel_id
@@ -147,9 +178,12 @@
           }}
         >
           <span aria-hidden="true">{channel.private ? '🔒' : '#'}</span>
-          <span class="min-w-0 flex-1 truncate {channel.accessible ? '' : 'opacity-50'}"
-            >{channel.name}</span
+          <span
+            class="min-w-0 flex-1 truncate {channel.accessible ? '' : 'opacity-50'} {flags.unread
+              ? 'font-bold'
+              : ''}">{channel.name}</span
           >
+          <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
         </button>
       {/each}
       {#if concord.community && isConcordOwner && !concord.dissolved}
