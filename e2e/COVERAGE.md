@@ -7,46 +7,46 @@ This document tracks what E2E tests exist, what features they cover, and identif
 
 ## Quick Summary
 
-| File                                 | Tests | Auth | Coverage                                                                                                                              |
-| ------------------------------------ | ----- | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                                                         |
-| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                                                             |
-| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail                                 |
-| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                                                             |
-| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                                                          |
-| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                     |
-| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                                                            |
-| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                          |
-| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                          |
-| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                     |
-| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                        |
-| `image-license.test.js`              | 2     | Yes  | Image upload triggers license modal; cancel-without-save flags the field; save dismisses the modal                                    |
-| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                        |
-| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                            |
-| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                                |
-| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                                                          |
-| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                                                         |
-| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                                                         |
-| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                                                               |
-| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                                                             |
-| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                                                         |
-| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                                                    |
-| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                    |
-| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                       |
-| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                           |
-| `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                              |
-| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → Termi backup hint               |
-| `settings.test.js`                   | 18    | Both | Single-theme check, relays, relay editing, gated/debug                                                                                |
-| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                             |
-| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                              |
-| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                     |
-| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                |
-| `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards     |
-| `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                         |
-| `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                     |
-| `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                         |
-| `concord-channels.test.js`           | 1     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                    |
-| `concord-notifications.test.js`      | 1     | Yes  | Concord unread/mention badges: dot lights while off-channel, clears on open, survives reload (IDB markers), reply lights mention pill |
+| File                                 | Tests | Auth | Coverage                                                                                                                                                   |
+| ------------------------------------ | ----- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                                                                              |
+| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                                                                                  |
+| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail                                                      |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                                                                                  |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                                                                               |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                                          |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                                                                                 |
+| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                                               |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                                               |
+| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                                          |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                                             |
+| `image-license.test.js`              | 2     | Yes  | Image upload triggers license modal; cancel-without-save flags the field; save dismisses the modal                                                         |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                                             |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                                                 |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                                                     |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                                                                               |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                                                                              |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                                                                              |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                                                                                    |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                                                                                  |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                                                                              |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                         |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                                         |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                                            |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                                                |
+| `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                                                   |
+| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → Termi backup hint                                    |
+| `settings.test.js`                   | 18    | Both | Single-theme check, relays, relay editing, gated/debug                                                                                                     |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                                                  |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                                                   |
+| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                                          |
+| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                                     |
+| `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards                          |
+| `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                                              |
+| `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                                          |
+| `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                                              |
+| `concord-channels.test.js`           | 1     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                                         |
+| `concord-notifications.test.js`      | 1     | Yes  | Concord unread/mention badges: tab rollup dot + channel-row dot (2 channels), clears on row open, survives reload (IDB markers), reply lights mention pill |
 
 ## Detailed Coverage
 
@@ -1499,24 +1499,40 @@ The one e2e flow for Concord's unread/mention badge system (spec §8). Reuses
 `concord-channels.test.js`'s owner/guest setup, wizard, and invite round trip
 (helpers duplicated locally — e2e spec files in this project don't import
 from one another), then drives the badge lifecycle end to end over the real
-strfry relay:
+strfry relay.
 
-1. Owner founds an area + channel, invites the guest, guest joins.
+**Two channels are load-bearing:** PrivateChannelsView auto-selects
+`channels[0]` (alphabetical) on mount and marks the active channel read, so
+with a single channel the ROW dot would clear the instant the view opens and
+only the tab-rollup dot would be observable. The guest's channel is named to
+sort second ("Beta Talk" after "Alpha Planung"); the invite link is
+channel-scoped, so the guest holds only Beta's key.
+
+1. Owner founds an area + channel "Alpha Planung", posts a message into it
+   (this doubles as the post-reload readiness signal), creates a second
+   channel "Beta Talk", and mints the invite from Beta (active); guest
+   joins, clicks Beta's rail row (Alpha auto-selects but is locked for
+   them), and reaches the composer.
 2. Owner navigates to the community's Home tab (clearing the "active
-   channel" so the channel is no longer considered viewed).
-3. Guest sends a message; the owner's Channels tab/rail lights up with the
+   channel"). Baseline: no dot, no pill anywhere.
+3. Guest sends into Beta; the owner's Channels TAB (area rollup) lights the
    neutral `concord-unread-dot` while still on Home.
-4. Owner opens the Channels tab — the lone channel auto-selects and is
-   marked read, clearing the dot everywhere in the DOM (`toHaveCount(0)`,
-   not scoped to one mount, since `ConcordUnreadDot` renders no node at all
-   when its flags are false).
-5. Owner leaves again and reloads the page — the dot stays cleared, proving
-   the read marker was persisted to IndexedDB rather than only held in the
-   torn-down in-memory session.
-6. Owner posts a message and leaves the channel again; the guest hovers that
-   specific message, clicks the hover-revealed Reply button, and replies —
-   the reply factory p-tags the owner as a mention. The owner's
-   `concord-mention-pill` lights even while off-channel.
+4. Owner opens the Kanäle view — Alpha auto-selects, so Beta's unread
+   survives the mount: **Beta's rail ROW carries the dot** while Alpha's
+   row carries none (row-scoped locators).
+5. Owner clicks Beta's row — `markChannelRead` clears the dot everywhere in
+   the DOM (`toHaveCount(0)`, not scoped to one mount, since
+   `ConcordUnreadDot` renders no node at all when its flags are false).
+6. Owner goes Home and reloads. Readiness is asserted POSITIVELY before the
+   negative check: the Kanäle rail lists Beta again and auto-selected
+   Alpha's history shows the pre-reload "alpha checkpoint" message (rumor
+   cache re-hydrated). Only then: still no dot/pill — and since only active
+   Alpha gets auto-marked on this navigation, a lost Beta marker WOULD
+   light Beta's row dot here, proving the marker came back from IndexedDB.
+7. Owner posts into Beta and leaves; the guest hovers that specific
+   message, clicks the hover-revealed Reply button, and replies — the reply
+   factory p-tags the owner as a mention. The owner's
+   `concord-mention-pill` lights even while off-channel (Home tab).
 
 **Explicit non-goal:** OS toasts (the `Notification` API call in
 `notifications.svelte.js`'s `maybeToast`) are NOT exercised here — headless
