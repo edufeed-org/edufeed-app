@@ -29,6 +29,7 @@
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { recordNavigation } from '$lib/helpers/navigationHistory.js';
+  import { hasStaticOwnBottomUI } from '$lib/helpers/bottomUiVisibility.js';
   import { page, navigating } from '$app/stores';
   import { setContext } from 'svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
@@ -86,8 +87,9 @@
   let hasOwnBottomUI = $derived(
     (() => {
       const pathname = $page.url.pathname;
-      if (pathname.startsWith('/create/')) return true;
-      if ($page.url.searchParams.get('view') === 'chat') return true;
+      if (hasStaticOwnBottomUI({ pathname, viewParam: $page.url.searchParams.get('view') })) {
+        return true;
+      }
       if (pathname.startsWith('/c/messages')) {
         // Page reports whether a thread is currently open
         return getPageHasOwnBottomUI?.() ?? false;
