@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-07-23
-**Total tests:** 311
+**Last updated:** 2026-07-24
+**Total tests:** 312
 
 ## Quick Summary
 
@@ -21,6 +21,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `resource-form-variants.test.js`     | 3                     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                                                                                                                                                                                                                      |
 | `resource-form-no-url.test.js`       | 2                     | Yes  | Index-without-URL happy path + edit round-trip                                                                                                                                                                                                                                                                                         |
 | `amb-basic-form.test.js`             | 2 (1 live, 1 `fixme`) | Yes  | NIP-101-EDU `amb-basic` template form (`/forms/<naddr>/create-resource`): test 1 renders all field types (live, passing); test 2 fills + publishes + asserts NIP-AMB tag shape (`test.fixme` — relay read-back unobservable under sandbox contention, un-fixme once confirmed green in an uncontended run). See limitation note below. |
+| `form-builder-authoring.test.js`     | 1                     | Yes  | Form builder (`/forms/new`) sections + option→section routing + displayIf show-if authoring, publish, then the `/respond` fill wizard obeys both. See limitation note below.                                                                                                                                                           |
 | `image-license.test.js`              | 2                     | Yes  | Image upload triggers license modal; cancel-without-save flags the field; save dismisses the modal                                                                                                                                                                                                                                     |
 | `profile.test.js`                    | 4                     | No   | Profile page, notes, not-found                                                                                                                                                                                                                                                                                                         |
 | `profile-editing.test.js`            | 10                    | Yes  | Edit modal, form pre-population, save flow                                                                                                                                                                                                                                                                                             |
@@ -510,6 +511,45 @@ this doc-correction slice's scope. The spec itself was NOT weakened to force
 a pass; both tests are written to the real expected behavior and should be
 re-run in a clean (uncontended) environment before being trusted as fully
 green in CI.
+
+---
+
+### form-builder-authoring.test.js (1 test)
+
+**Route:** `/forms/new` → `/forms/<naddr>` → `/forms/<naddr>/respond`
+**Auth required:** Yes
+
+Drives the full builder-authoring UI added for the sections/routing/show-if
+slice (`FormBuilder.svelte`, `FormBuilderFieldRow.svelte`,
+`FormBuilderConditionRow.svelte`, `src/lib/helpers/forms/builder-sections.js`
+
+- `branching.js`): names a form, adds Section A with a manually-optioned
+  radio field ("Color": Red/Blue) where "Red" is routed (`nextSection`) to
+  Section B, adds Section B with a text field ("Reason") whose `displayIf`
+  shows it only when Color equals Red, publishes, then follows the in-app
+  "Fill Form" link into the `/respond` wizard and drives it both ways:
+
+| Assertion                                                               | What it proves                                                                                                   |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Section A renders first (Color radio visible, "Reason" absent from DOM) | `orderedSections` + wizard chrome render the first section only                                                  |
+| Pick "Blue" → Next → Section B reached, "Reason" still absent           | Linear fallthrough (no explicit route for Blue) + `displayIf` false hides the field entirely (not just visually) |
+| Back → pick "Red" → Next → Section B reached, "Reason" visible          | Explicit option→section route (Red → Section B) + `displayIf` true shows the field                               |
+
+**Limitation (by design, not a gap):** unlike `amb-basic-form.test.js` test 2,
+this spec does **not** read the published kind-30168 template back off the
+relay to independently confirm it persisted. `FormBuilder.publish()` writes
+the signed event into the local `eventStore` (optimistic write) _before_
+navigating, and every navigation in this test — the builder's own
+`goto()` after publish, and clicking the "Fill Form" `<a>` — is a same-tab
+SvelteKit client-side transition, never a hard page reload. So the
+`/respond` route's model subscription resolves the template from local
+state, and the wizard assertions never depend on relay publish timing. This
+makes the full flow reliably observable (no `test.fixme` needed here), but
+it also means the test does not independently prove the event reached
+`COMMUNIKEY_RELAYS` — only that the app's own optimistic-render contract
+holds for the publishing user, same caveat noted for
+`TemplateResourceForm.handleSubmit` in the `amb-basic-form.test.js` section
+above.
 
 ---
 
