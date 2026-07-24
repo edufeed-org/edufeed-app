@@ -64,11 +64,20 @@ function buildSparql(tool, args) {
       // every state graph carries that predicate, so the reverse scan walks
       // ~1.6M triples to find 16 distinct objects. The class has 16 typed
       // instances, full stop.
+      //
+      // Only 4 of those 16 states actually carry curriculum data (BY, SN, RP,
+      // BE); the other 12 are typed but empty, and picking them yields a dead
+      // cascade. Gate on the existence of a Schulfach-bearing Lehrplan
+      // (lp:LP_0000537 is a Lehrplan-level predicate) so only states with data
+      // are selectable. The FILTER EXISTS is scoped to the already-bound ?uri,
+      // so it stays cheap — a bare `?lp lp:LP_0000029 ?uri` still returns all
+      // 16 because every state is referenced by some node.
       return `${PREFIXES}
 SELECT DISTINCT ?uri ?label WHERE {
   ?uri a lp:LP_0000040 ;
        rdfs:label ?label .
   FILTER(lang(?label) = "de")
+  FILTER EXISTS { ?lp lp:LP_0000029 ?uri ; lp:LP_0000537 [] }
 } ORDER BY ?label`;
 
     case 'list_schularten': {
@@ -103,13 +112,21 @@ SELECT DISTINCT ?uri (SAMPLE(?l) AS ?label) WHERE {
       if (!bl || !sf) return null;
       const sa = resolveOptionalSchulartFilter(args.schulartUri);
       if (!sa) return null;
+      // Select Lehrpläne purely by their Bundesland + Schulfach (+ optional
+      // Schulart). We deliberately do NOT add a `?s rdf:type/rdfs:subClassOf*
+      // lp:LP_0000438` type gate: that transitive property path exceeds
+      // Virtuoso's transitive temp-memory pool (HTTP 500 "Exceeded
+      // 1000000000 bytes in transitive temp memory") the moment it is joined
+      // with these selective IRI filters — no restructuring avoids it, and a
+      // non-transitive single hop misses states (BE) that type their Lehrpläne
+      // with a deeper subclass. The gate is redundant anyway: lp:LP_0000537
+      // (Schulfach) is only ever asserted on Lehrplan-level nodes, so
+      // Bundesland + Schulfach already uniquely identifies Lehrpläne.
       return `${PREFIXES}
 SELECT DISTINCT ?s ?label WHERE {
-  ?lpsubclass rdfs:subClassOf* lp:LP_0000438 .
-  ?s rdf:type ?lpsubclass .
-  ?s rdfs:label ?label .
   ?s lp:LP_0000029 <${bl}> .
-  ?s lp:LP_0000537 <${sf}> .${sa.filter}
+  ?s lp:LP_0000537 <${sf}> .
+  ?s rdfs:label ?label .${sa.filter}
 } ORDER BY ?label LIMIT 50`;
     }
 

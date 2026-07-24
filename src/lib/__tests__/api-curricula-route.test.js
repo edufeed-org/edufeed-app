@@ -63,10 +63,15 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(queryMock).toHaveBeenCalledTimes(1);
     const callArg = queryMock.mock.calls[0][0];
     expect(callArg.endpoint).toBe('https://sparql.example/sparql/');
-    // Query the Bundesland class directly, not via reverse lp:LP_0000029 scan
-    // (that reverse-scan walks ~1.6M triples to find 16 distinct objects).
+    // Query the Bundesland class directly (LP_0000040), not via a reverse
+    // lp:LP_0000029 scan of all ~1.6M triples.
     expect(callArg.sparql).toMatch(/lp:LP_0000040/);
-    expect(callArg.sparql).not.toMatch(/lp:LP_0000029/);
+    // Only surface states that actually carry curriculum data — 12 of the 16
+    // typed Bundesland instances have no Lehrpläne, and selecting them yields
+    // an empty cascade. Gate on a Schulfach-bearing Lehrplan (LP_0000537),
+    // scoped to the already-bound ?uri inside a FILTER EXISTS so it stays cheap.
+    expect(callArg.sparql).toMatch(/FILTER\s+EXISTS/i);
+    expect(callArg.sparql).toMatch(/lp:LP_0000537/);
   });
 
   it('list_schularten: substitutes the bundesland URI into the query', async () => {
@@ -169,6 +174,12 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(sparql).toContain('<https://w3id.org/lehrplan/ontology/LP_3000051>');
     expect(sparql).toContain('<https://w3id.org/schulart/BY_0000005>');
     expect(sparql).toContain('<https://w3id.org/schulfach/BY_0000030>');
+    // Select Lehrpläne by their Schulfach (LP_0000537), which is a
+    // Lehrplan-exclusive predicate. Must NOT use an rdfs:subClassOf* type
+    // gate: that transitive path exceeds Virtuoso's transitive temp memory
+    // (HTTP 500) once joined with the selective Bundesland/Schulfach filters.
+    expect(sparql).toMatch(/lp:LP_0000537/);
+    expect(sparql).not.toMatch(/subClassOf/i);
   });
 
   it('get_node_children: substitutes nodeUri and parses child/childLabel/hasChildren bindings', async () => {
@@ -259,6 +270,8 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(sparql).toContain('<https://w3id.org/lehrplan/ontology/LP_3000046>');
     expect(sparql).toContain('<https://w3id.org/schulfach/RP_0000035>');
     expect(sparql).not.toMatch(/lp:LP_0000812/);
+    // No transitive type gate — see the "substitutes all three URIs" test.
+    expect(sparql).not.toMatch(/subClassOf/i);
   });
 
   it('list_schulfaecher: still rejects a non-empty but malformed schulartUri', async () => {
