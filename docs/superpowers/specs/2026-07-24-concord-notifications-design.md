@@ -174,10 +174,15 @@ inserts `nostr:npub1…` + space at the cursor. No package change needed:
 runs `tagPubkeyMentions()`, turning content `nostr:npub…`/`nprofile…` into
 `p` tags (verified in the pinned dist).
 
-**Mention rendering** — `ChatMessageRow` gets a lightweight token renderer:
-`nostr:npub…`/`nostr:nprofile…` in message text render as an `@displayname`
-chip (profile map + hex fallback), visually highlighted when it is the current
-user. Pure text-token replacement; no other content-rendering changes.
+**Mention rendering** — as shipped, `ChatMessageRow` renders message content
+via the existing shared `NostrContentRenderer` → `NostrIdentifier` →
+`UserProfilePreview` chain (the same pipeline public `Chat.svelte` already
+uses), unchanged: `nostr:npub…`/`nostr:nprofile…` tokens become the generic
+`@displayname` mention chip that component already produces. No bespoke
+token renderer was added, and the chip carries no self-highlight — a mention
+of the current user renders identically to a mention of anyone else.
+Distinguishing "this mentions me" visually is possible future polish, not
+part of this feature.
 
 ## 6. Foreground OS notifications
 
