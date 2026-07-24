@@ -39,17 +39,24 @@ describe('getConcordReplyParentId', () => {
 });
 
 describe('aggregateChannelReactions', () => {
-  /** @param {string} target @param {string} content */
-  const reaction = (target, content) => ({ content, tags: [['e', target]] });
+  const AUTHOR_A = 'a'.repeat(64);
+  const AUTHOR_B = 'b'.repeat(64);
+
+  /** @param {string} target @param {string} content @param {string} [pubkey] */
+  const reaction = (target, content, pubkey = AUTHOR_A) => ({
+    content,
+    tags: [['e', target]],
+    pubkey
+  });
 
   it('counts multiple emojis per target', () => {
     const result = aggregateChannelReactions([
       reaction('msg-1', '👍'),
-      reaction('msg-1', '👍'),
+      reaction('msg-1', '👍', AUTHOR_B),
       reaction('msg-1', '❤️')
     ]);
-    expect(result.get('msg-1')?.get('👍')).toBe(2);
-    expect(result.get('msg-1')?.get('❤️')).toBe(1);
+    expect(result.get('msg-1')?.get('👍')?.count).toBe(2);
+    expect(result.get('msg-1')?.get('❤️')?.count).toBe(1);
   });
 
   it('keeps targets separate', () => {
@@ -60,7 +67,7 @@ describe('aggregateChannelReactions', () => {
     ]);
     expect(result.get('msg-1')?.size).toBe(1);
     expect(result.get('msg-2')?.size).toBe(2);
-    expect(result.get('msg-2')?.get('🎉')).toBe(1);
+    expect(result.get('msg-2')?.get('🎉')?.count).toBe(1);
   });
 
   it('skips reactions without an e tag', () => {
@@ -71,18 +78,18 @@ describe('aggregateChannelReactions', () => {
       reaction('msg-1', '👍')
     ]);
     expect(result.size).toBe(1);
-    expect(result.get('msg-1')?.get('👍')).toBe(1);
+    expect(result.get('msg-1')?.get('👍')?.count).toBe(1);
   });
 
   it('defaults empty content to 👍 (NIP-25 "+"-style likes stay distinct)', () => {
     const result = aggregateChannelReactions([
       reaction('msg-1', ''),
-      reaction('msg-1', '👍'),
+      reaction('msg-1', '👍', AUTHOR_B),
       reaction('msg-1', '+')
     ]);
     // '' falls back to 👍 and merges with the explicit 👍; '+' stays its own key
-    expect(result.get('msg-1')?.get('👍')).toBe(2);
-    expect(result.get('msg-1')?.get('+')).toBe(1);
+    expect(result.get('msg-1')?.get('👍')?.count).toBe(2);
+    expect(result.get('msg-1')?.get('+')?.count).toBe(1);
   });
 
   it('returns an empty map for an empty input', () => {
@@ -93,13 +100,47 @@ describe('aggregateChannelReactions', () => {
     const result = aggregateChannelReactions([
       {
         content: '👍',
+        pubkey: AUTHOR_A,
         tags: [
           ['e', 'msg-1'],
           ['e', 'msg-2']
         ]
       }
     ]);
-    expect(result.get('msg-1')?.get('👍')).toBe(1);
+    expect(result.get('msg-1')?.get('👍')?.count).toBe(1);
     expect(result.has('msg-2')).toBe(false);
+  });
+
+  it('marks userReacted and collects reactors for the current user pubkey', () => {
+    const result = aggregateChannelReactions(
+      [reaction('msg-1', '👍', AUTHOR_A), reaction('msg-1', '👍', AUTHOR_B)],
+      AUTHOR_B
+    );
+    const summary = result.get('msg-1')?.get('👍');
+    expect(summary?.userReacted).toBe(true);
+    expect(summary?.reactors).toEqual([AUTHOR_A, AUTHOR_B]);
+  });
+
+  it('does not mark userReacted when currentUserPubkey is undefined', () => {
+    const result = aggregateChannelReactions([reaction('msg-1', '👍', AUTHOR_A)]);
+    expect(result.get('msg-1')?.get('👍')?.userReacted).toBe(false);
+  });
+
+  it("leaves userReactionEvent null even for the current user's own reaction (no retract support yet)", () => {
+    const result = aggregateChannelReactions([reaction('msg-1', '👍', AUTHOR_A)], AUTHOR_A);
+    expect(result.get('msg-1')?.get('👍')?.userReactionEvent).toBeNull();
+  });
+
+  it('resolves a NIP-30 custom-emoji URL from the emoji tag', () => {
+    const customReaction = {
+      content: ':zap:',
+      pubkey: AUTHOR_A,
+      tags: [
+        ['e', 'msg-1'],
+        ['emoji', 'zap', 'https://example.com/zap.png']
+      ]
+    };
+    const result = aggregateChannelReactions([customReaction]);
+    expect(result.get('msg-1')?.get(':zap:')?.emojiUrl).toBe('https://example.com/zap.png');
   });
 });

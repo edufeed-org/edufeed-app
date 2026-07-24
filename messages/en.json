@@ -2845,7 +2845,6 @@
   "concord_input_placeholder": "Encrypted message to \"{name}\"…",
   "concord_no_key_error": "You don't hold this channel's key",
   "concord_send_failed": "Sending failed",
-  "concord_react": "React",
   "concord_reply": "Reply",
   "concord_invite_title": "Invite to \"{name}\"",
   "concord_invite_tab_link": "Link & QR",

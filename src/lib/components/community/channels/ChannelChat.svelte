@@ -20,6 +20,7 @@
   import { aggregateChannelReactions, getConcordReplyParentId } from '$lib/concord/chat-helpers.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
+  import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -51,9 +52,13 @@
     () => community?.channelStore(channel.channel_id).timeline([{ kinds: [7] }]),
     /** @type {any[]} */ ([])
   );
-  /** message id → Map<emoji, count> — pure aggregation, tested in
-   *  concord-chat-helpers.test.js */
-  const reactionsByTarget = $derived(aggregateChannelReactions(getReactions()));
+  /** message id → Map<emoji, ReactionSummary> — pure aggregation, tested in
+   *  concord-chat-helpers.test.js. Same summary shape as the public chat's
+   *  aggregateReactions() (helpers/reactions.js) so both feed the identical
+   *  ReactionChips presentational component (full reply/reaction parity). */
+  const reactionsByTarget = $derived(
+    aggregateChannelReactions(getReactions(), getActiveUser()?.pubkey)
+  );
 
   let text = $state('');
   let sending = $state(false);
@@ -120,13 +125,37 @@
     }
   }
 
-  /** @param {any} message @param {string} emoji */
+  /**
+   * Publish a reaction to a channel message. `community.react()` accepts a
+   * plain unicode emoji or a NIP-30 custom-emoji object ({shortcode, url}),
+   * matching ReactionFactory.create's `string | Emoji` signature (verified
+   * against applesauce-concord/dist/client/community.js + applesauce-core's
+   * Emoji type) — same shape EmojiPicker's onSelectCustom hands to onPick.
+   *
+   * @param {any} message
+   * @param {string | { shortcode: string, url: string }} emoji
+   */
   async function react(message, emoji) {
     try {
       await community.react(channel.channel_id, { id: message.id, author: message.pubkey }, emoji);
     } catch (error) {
       console.error('concord: react failed', error);
     }
+  }
+
+  /**
+   * ReactionChips' onToggle for an EXISTING chip. There is no retract/unreact
+   * method on ConcordCommunity yet (see chat-helpers.js's aggregateChannelReactions
+   * doc comment), so re-clicking an emoji the user already reacted with is a
+   * silent no-op rather than publishing a duplicate reaction rumor.
+   *
+   * @param {any} message
+   * @param {string} emoji
+   * @param {import('$lib/concord/chat-helpers.js').ChannelReactionSummary} summary
+   */
+  function toggleReaction(message, emoji, summary) {
+    if (summary.userReacted) return;
+    react(message, emoji);
   }
 </script>
 
@@ -251,16 +280,12 @@
         replyTitle={m.concord_reply()}
       >
         {#snippet reactions(/** @type {any} */ msg)}
-          <div class="flex flex-wrap items-center gap-2">
-            {#each [...(reactionsByTarget.get(msg.id) ?? new Map())] as [emoji, count] (emoji)}
-              <span class="badge badge-ghost badge-sm">{emoji} {count}</span>
-            {/each}
-            <button
-              class="btn btn-circle opacity-40 btn-ghost btn-xs hover:opacity-100"
-              onclick={() => react(msg, '👍')}
-              title={m.concord_react()}>🙂</button
-            >
-          </div>
+          <ReactionChips
+            aggregated={reactionsByTarget.get(msg.id) ?? new Map()}
+            addButtonOnHover
+            onToggle={(emoji, summary) => toggleReaction(msg, emoji, summary)}
+            onPick={(emoji) => react(msg, emoji)}
+          />
         {/snippet}
       </ChatMessageRow>
     {/snippet}

@@ -2845,7 +2845,6 @@
   "concord_input_placeholder": "Verschlüsselte Nachricht an „{name}“…",
   "concord_no_key_error": "Du besitzt den Schlüssel dieses Kanals nicht",
   "concord_send_failed": "Senden fehlgeschlagen",
-  "concord_react": "Reagieren",
   "concord_reply": "Antworten",
   "concord_invite_title": "In „{name}“ einladen",
   "concord_invite_tab_link": "Link & QR",
