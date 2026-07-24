@@ -11,9 +11,10 @@
     useConcordListLocked
   } from '$lib/concord/unlinked-areas.svelte.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
-  import { HomeIcon, LockIcon, LockOpenIcon } from '$lib/components/icons';
+  import { HomeIcon, LockOpenIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { currentCommunityId, onCommunitySelect, isDashboardActive = false, onHomeSelect } = $props();
@@ -131,7 +132,7 @@
               ? 'opacity-50'
               : ''}"
           >
-            <LockIcon class_="h-5 w-5" />
+            <ConcordAreaBadge name={area.name} communityId={area.communityId} class="h-9 w-9" />
           </a>
         </div>
       {/each}
@@ -234,7 +235,11 @@
             ? 'opacity-50'
             : ''}"
         >
-          <LockIcon class_="h-5 w-5 shrink-0 text-base-content/60" />
+          <ConcordAreaBadge
+            name={area.name}
+            communityId={area.communityId}
+            class="h-8 w-8 shrink-0"
+          />
           <span class="flex-1 truncate text-left text-sm font-medium">{area.name}</span>
         </a>
       {/each}

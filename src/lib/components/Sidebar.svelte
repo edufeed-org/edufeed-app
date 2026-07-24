@@ -16,8 +16,9 @@
     useConcordListLocked
   } from '$lib/concord/unlinked-areas.svelte.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
-  import { LockIcon, LockOpenIcon } from '$lib/components/icons';
+  import { LockOpenIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const activeUser = useActiveUser();
@@ -161,7 +162,11 @@
           href={resolve(`/private/${area.communityId}`)}
           class="flex transform cursor-pointer items-center gap-2 rounded-lg border border-base-200 bg-base-100 p-3 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:border-primary/20 hover:shadow-md"
         >
-          <LockIcon class_="h-4 w-4 shrink-0 text-base-content/60" />
+          <ConcordAreaBadge
+            name={area.name}
+            communityId={area.communityId}
+            class="h-8 w-8 shrink-0"
+          />
           <p
             class="min-w-0 flex-1 truncate text-sm font-medium text-base-content transition-colors duration-300 hover:text-primary {area.dissolved
               ? 'opacity-50'

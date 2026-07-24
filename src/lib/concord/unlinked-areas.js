@@ -90,3 +90,69 @@ export function privateAreaGate({ enabled, id, loggedIn }) {
   if (!loggedIn) return 'login';
   return 'render';
 }
+
+/**
+ * Fixed palette for the sidebar area badge background (Armada-parity follow-
+ * up, sidebar badges task). Every entry is a DaisyUI semantic pair (bg +
+ * matching content color) so the badge always follows the active theme's
+ * tokens — never hardcode OKLCH literals here, per CLAUDE.md's theming
+ * rules. `areaColorClass` picks one deterministically from this list.
+ */
+export const AREA_BADGE_COLOR_CLASSES = [
+  'bg-primary text-primary-content',
+  'bg-secondary text-secondary-content',
+  'bg-accent text-accent-content',
+  'bg-info text-info-content',
+  'bg-success text-success-content',
+  'bg-warning text-warning-content',
+  'bg-error text-error-content',
+  'bg-neutral text-neutral-content'
+];
+
+/** Words separated by whitespace OR a hyphen — "edufeed-armada" abbreviates
+ *  like a two-word name ("EA"), matching Armada's badge convention. */
+const AREA_NAME_WORD_SPLIT = /[\s-]+/;
+
+/**
+ * Abbreviate a Concord area name to 1-2 characters for the sidebar badge
+ * (Armada shows these instead of a bare lock icon for unlinked areas).
+ *
+ * - 2+ words (or a hyphenated single word, split the same way): first letter
+ *   of the first two words, uppercased — "Soapbox Community" -> "SC",
+ *   "edufeed-armada" -> "EA".
+ * - exactly 1 word: its first two letters, uppercased — "Concord" -> "CO".
+ *   A single-character word returns just that character uppercased.
+ * - empty/whitespace-only/missing name: "?" (the tooltip still carries the
+ *   full name, so this is only the glyph, never the only signal).
+ *
+ * @param {string | null | undefined} name
+ * @returns {string}
+ */
+export function areaAbbreviation(name) {
+  const trimmed = (name ?? '').trim();
+  if (!trimmed) return '?';
+  const words = trimmed.split(AREA_NAME_WORD_SPLIT).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return words[0].slice(0, 2).toUpperCase();
+}
+
+/**
+ * Deterministically pick a background/content class pair from
+ * {@link AREA_BADGE_COLOR_CLASSES} for a given Concord communityId, so the
+ * same area always renders the same badge color across sessions/devices.
+ * Pure string hash (djb2-ish) — no crypto needed, just a stable spread
+ * across the fixed palette.
+ *
+ * @param {string | null | undefined} communityId
+ * @returns {string} one of {@link AREA_BADGE_COLOR_CLASSES}
+ */
+export function areaColorClass(communityId) {
+  const s = communityId ?? '';
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) {
+    hash = (Math.imul(hash, 31) + s.charCodeAt(i)) >>> 0;
+  }
+  return AREA_BADGE_COLOR_CLASSES[hash % AREA_BADGE_COLOR_CLASSES.length];
+}

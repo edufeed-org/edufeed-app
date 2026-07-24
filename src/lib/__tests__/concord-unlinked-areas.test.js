@@ -4,7 +4,10 @@ import {
   unlinkedConcordAreas,
   linkedConcordIds,
   concordAreaDisplayName,
-  privateAreaGate
+  privateAreaGate,
+  areaAbbreviation,
+  areaColorClass,
+  AREA_BADGE_COLOR_CLASSES
 } from '$lib/concord/unlinked-areas.js';
 
 const A = 'a'.repeat(64);
@@ -152,5 +155,71 @@ describe('privateAreaGate', () => {
 
   it('returns "render" when enabled + valid id + logged in', () => {
     expect(privateAreaGate({ enabled: true, id: validId, loggedIn: true })).toBe('render');
+  });
+});
+
+describe('areaAbbreviation', () => {
+  it('takes the first letter of each of the first two words for multi-word names', () => {
+    expect(areaAbbreviation('Soapbox Community')).toBe('SC');
+  });
+
+  it('splits hyphenated single-word names like a multi-word name', () => {
+    expect(areaAbbreviation('edufeed-armada')).toBe('EA');
+  });
+
+  it('takes the first two letters, capitalized, for a genuine single word', () => {
+    expect(areaAbbreviation('Concord')).toBe('CO');
+  });
+
+  it('uppercases umlauts correctly (word-per-word)', () => {
+    expect(areaAbbreviation('Übung Gruppe')).toBe('ÜG');
+    expect(areaAbbreviation('Über')).toBe('ÜB');
+  });
+
+  it('falls back to a placeholder for empty/whitespace-only names', () => {
+    expect(areaAbbreviation('')).toBe('?');
+    expect(areaAbbreviation('   ')).toBe('?');
+    expect(areaAbbreviation(undefined)).toBe('?');
+    expect(areaAbbreviation(null)).toBe('?');
+  });
+
+  it('collapses extra whitespace between words', () => {
+    expect(areaAbbreviation('  Soapbox   Community  ')).toBe('SC');
+  });
+
+  it('handles a lone one-character word', () => {
+    expect(areaAbbreviation('X')).toBe('X');
+  });
+});
+
+describe('areaColorClass', () => {
+  it('always returns one of the fixed palette classes', () => {
+    for (const id of ['a'.repeat(64), 'b'.repeat(64), 'deadbeef', '', 'z']) {
+      expect(AREA_BADGE_COLOR_CLASSES).toContain(areaColorClass(id));
+    }
+  });
+
+  it('is deterministic for the same communityId', () => {
+    const id = 'f'.repeat(64);
+    expect(areaColorClass(id)).toBe(areaColorClass(id));
+  });
+
+  it('is stable across null/undefined (defensive, does not throw)', () => {
+    expect(() => areaColorClass(undefined)).not.toThrow();
+    expect(() => areaColorClass(null)).not.toThrow();
+  });
+
+  it('picks different colors for at least some different ids (not a constant function)', () => {
+    // Realistic 64-char hex pubkeys (not degenerate repeated-character
+    // strings — a polynomial hash's low bits can cancel out for those, but
+    // real Concord communityIds are always varied hex, like these).
+    const ids = [
+      '3bf0d7f7fac04e56dc37e5b6a7b0b1a95f5a6f2b2f3d5f21a9c3ab6da6c7e6f',
+      'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9',
+      '0000000000000000000000000000000000000000000000000000000000001',
+      'deadbeefcafebabe0123456789abcdef0123456789abcdef0123456789abcd'
+    ];
+    const classes = new Set(ids.map(areaColorClass));
+    expect(classes.size).toBeGreaterThan(1);
   });
 });
