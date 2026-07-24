@@ -18,8 +18,8 @@
   // replies carry a NIP-C7 `q` tag, not a NIP-10 marked `e` tag. See the
   // rationale (with dist references) in chat-helpers.js.
   import { aggregateChannelReactions, getConcordReplyParentId } from '$lib/concord/chat-helpers.js';
-  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
+  import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -226,63 +226,45 @@
     <b>{m.concord_genesis_title({ name: channel.name })}</b>
     <p class="mt-1 text-xs">{m.concord_genesis_body()}</p>
   </div>
-  {#each grouped as item, i (item.type === 'separator' ? `sep-${item.date}-${i}` : item.message.id)}
-    {#if item.type === 'separator'}
-      <div class="divider text-xs text-base-content/50">{item.date}</div>
-    {:else}
-      {@const message = item.message}
+  <ChatMessageList items={grouped}>
+    {#snippet row(/** @type {any} */ message)}
       {@const mine = message.pubkey === getActiveUser()?.pubkey}
-      <div class="chat {mine ? 'chat-end' : 'chat-start'}">
-        {#if !mine}
-          <div class="chat-image">
-            <ProfileAvatar
-              pubkey={message.pubkey}
-              profile={getProfiles().get(message.pubkey)}
-              size="sm"
-            />
-          </div>
-          <div class="chat-header text-xs font-bold">
-            {getUserDisplayName(message.pubkey, getProfiles().get(message.pubkey))}
-            <time class="ml-1 font-normal opacity-50"
-              >{formatMessageTimestamp(message.created_at)}</time
+      {@const parentId = getConcordReplyParentId(message)}
+      {@const replyParent = parentId ? messages.find((p) => p.id === parentId) : null}
+      <ChatMessageRow
+        {message}
+        isOwnMessage={mine}
+        displayName={getUserDisplayName(message.pubkey, getProfiles().get(message.pubkey))}
+        timestamp={formatMessageTimestamp(message.created_at)}
+        profile={getProfiles().get(message.pubkey)}
+        replyPreview={replyParent
+          ? {
+              displayName: getUserDisplayName(
+                replyParent.pubkey,
+                getProfiles().get(replyParent.pubkey)
+              ),
+              content: replyParent.content
+            }
+          : null}
+        onReply={(msg) =>
+          (replyTo = { id: msg.id, author: msg.pubkey, preview: msg.content.slice(0, 80) })}
+        replyTitle={m.concord_reply()}
+      >
+        {#snippet reactions(/** @type {any} */ msg)}
+          <div class="flex flex-wrap items-center gap-2">
+            {#each [...(reactionsByTarget.get(msg.id) ?? new Map())] as [emoji, count] (emoji)}
+              <span class="badge badge-ghost badge-sm">{emoji} {count}</span>
+            {/each}
+            <button
+              class="btn btn-circle opacity-40 btn-ghost btn-xs hover:opacity-100"
+              onclick={() => react(msg, '👍')}
+              title={m.concord_react()}>🙂</button
             >
           </div>
-        {/if}
-        {#if getConcordReplyParentId(message)}
-          {@const parentId = getConcordReplyParentId(message)}
-          {@const parent = messages.find((p) => p.id === parentId)}
-          {#if parent}
-            <div class="mb-0.5 truncate text-xs text-base-content/50">
-              ↩ {parent.content.slice(0, 80)}
-            </div>
-          {/if}
-        {/if}
-        <div class="chat-bubble {mine ? 'chat-bubble-primary' : ''}">
-          <NostrContentRenderer event={message} />
-        </div>
-        <div class="mt-0.5 flex gap-1 {mine ? 'justify-end' : ''}">
-          {#each [...(reactionsByTarget.get(message.id) ?? new Map())] as [emoji, count] (emoji)}
-            <span class="badge badge-ghost badge-sm">{emoji} {count}</span>
-          {/each}
-          <button
-            class="btn btn-circle opacity-40 btn-ghost btn-xs hover:opacity-100"
-            onclick={() => react(message, '👍')}
-            title={m.concord_react()}>🙂</button
-          >
-          <button
-            class="btn btn-circle opacity-40 btn-ghost btn-xs hover:opacity-100"
-            onclick={() =>
-              (replyTo = {
-                id: message.id,
-                author: message.pubkey,
-                preview: message.content.slice(0, 80)
-              })}
-            title={m.concord_reply()}>↩</button
-          >
-        </div>
-      </div>
-    {/if}
-  {/each}
+        {/snippet}
+      </ChatMessageRow>
+    {/snippet}
+  </ChatMessageList>
 </div>
 
 {#if dissolved}
