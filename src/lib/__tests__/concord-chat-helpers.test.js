@@ -131,6 +131,17 @@ describe('aggregateChannelReactions', () => {
     expect(result.get('msg-1')?.get('👍')?.userReactionEvent).toBeNull();
   });
 
+  it('skips falsy pubkeys when collecting reactors (untrusted network input)', () => {
+    const result = aggregateChannelReactions([
+      { content: '👍', tags: [['e', 'msg-1']], pubkey: undefined },
+      { content: '👍', tags: [['e', 'msg-1']], pubkey: '' },
+      reaction('msg-1', '👍', AUTHOR_A)
+    ]);
+    const summary = result.get('msg-1')?.get('👍');
+    expect(summary?.count).toBe(3);
+    expect(summary?.reactors).toEqual([AUTHOR_A]);
+  });
+
   it('resolves a NIP-30 custom-emoji URL from the emoji tag', () => {
     const customReaction = {
       content: ':zap:',

@@ -89,7 +89,11 @@ export function aggregateChannelReactions(reactions, currentUserPubkey) {
       reactors: []
     };
     const isUserReaction = !!currentUserPubkey && reaction.pubkey === currentUserPubkey;
-    existing.reactors.push(reaction.pubkey);
+    // Reaction events are untrusted network input — a malformed/relay-mangled
+    // event can arrive with no pubkey at all. Push only real ones, mirroring
+    // the app's other tag-derived-data guards (CLAUDE.md's "Keyed {#each}
+    // over Tag-Derived Data Must Be Deduped").
+    if (reaction.pubkey) existing.reactors.push(reaction.pubkey);
     perMessage.set(emoji, {
       count: existing.count + 1,
       userReacted: existing.userReacted || isUserReaction,

@@ -15,6 +15,7 @@
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
+  import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
   let { currentCommunityId, onCommunitySelect, isDashboardActive = false, onHomeSelect } = $props();
@@ -43,7 +44,8 @@
   );
 
   async function handleUnlockAreas() {
-    await unlockConcordLists();
+    const ok = await unlockConcordLists();
+    if (!ok) showToast(m.concord_unlock_failed(), 'error');
   }
 
   /**

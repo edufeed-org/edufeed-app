@@ -19,6 +19,7 @@
   import { LockOpenIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
+  import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
   const activeUser = useActiveUser();
@@ -43,9 +44,14 @@
   // after the async client finishes setup).
   const signerHasNip44 = $derived(!!getConcordState().client?.signer?.nip44);
   const unlocking = $derived(getConcordState().unlocking);
+  // Aligns with CommunitySidebar's showUnlockAffordance (Fix 5, gating
+  // asymmetry): the button must not render before the client has finished
+  // starting, same as the rest of this sidebar's Concord chrome.
+  const showUnlockAffordance = $derived(concordReady && listLocked);
 
   async function handleUnlockAreas() {
-    await unlockConcordLists();
+    const ok = await unlockConcordLists();
+    if (!ok) showToast(m.concord_unlock_failed(), 'error');
   }
 </script>
 
@@ -137,10 +143,10 @@
   {/if}
 </div>
 
-{#if runtimeConfig.concord?.enabled && (unlinkedAreas.length > 0 || (concordReady && listLocked))}
+{#if runtimeConfig.concord?.enabled && (unlinkedAreas.length > 0 || showUnlockAffordance)}
   <div class="mt-4 space-y-2">
     <h2 class="text-base font-semibold text-base-content">{m.concord_sidebar_private_areas()}</h2>
-    {#if listLocked}
+    {#if showUnlockAffordance}
       <button
         class="btn btn-block gap-2 btn-outline btn-sm"
         data-testid="concord_unlock_areas"

@@ -115,22 +115,28 @@ export function useUnlinkedConcordAreas() {
  * `.unlock()` re-emits via the cast's OWN `communities$`, not necessarily a
  * new cast instance from the outer switchMap, so subscribing one level
  * deeper is what actually observes the unlock.
+ *
+ * CRITICAL: the piped observable must emit the derived BOOLEAN, not the cast
+ * itself. `useObservable` assigns emissions straight into a `$state.raw` —
+ * Svelte's strict-equality bail-out means reassigning the SAME cast
+ * reference (which is exactly what `.unlock()`'s re-emission is: the same
+ * cast, now with `.unlocked` flipped) never triggers a re-render, so any
+ * `$derived` reading this hook's getter would cache the pre-unlock value
+ * forever. Mapping to a primitive boolean sidesteps that entirely — a
+ * changed boolean is never reference-equal to the old one.
  * @returns {() => boolean}
  */
 export function useConcordListLocked() {
-  const getCast = useObservable(() => {
+  const getLocked = useObservable(() => {
     const _tick = getConcordState().communities; // re-subscribe when the client (re)starts
     const client = getConcordClient();
     if (!client) return undefined;
     return client.communityList$.pipe(
       switchMap((/** @type {any} */ cast) =>
-        cast ? cast.communities$.pipe(map(() => cast)) : of(undefined)
+        cast ? cast.communities$.pipe(map(() => !cast.unlocked)) : of(false)
       )
     );
-  }, /** @type {any} */ (undefined));
+  }, /** @type {any} */ (false));
 
-  return () => {
-    const cast = getCast();
-    return !!cast && !cast.unlocked;
-  };
+  return () => getLocked();
 }

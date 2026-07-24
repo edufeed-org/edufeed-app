@@ -424,8 +424,15 @@ applesauce repo's concord branch).
   `import('./storage.js')` or a direct test import instead.
 - One Concord community per Communikey community; pointer tag
   `["concord", <id>, <relay>]` on kind 10222. Kanäle = CORD-03 private channels.
-- Kind 1059 traffic goes ONLY to `CONCORD_RELAYS` (never outbox/category
-  relays; never through curated/WoT filtering).
+- Kind 1059 traffic never uses outbox/category relays or curated/WoT
+  filtering, but not all of it stays on `CONCORD_RELAYS` alone: community
+  STREAM traffic (channel/control/guestbook) stays on the community's
+  `material.relays` (= `CONCORD_RELAYS` for wizard-founded areas), while the
+  self-encrypted Community/Invite List (13302/13303) sync — and the
+  direct-invite watcher — use the merged set that also includes CORD-05's
+  public stock relays (`mergeRelaySets()`, `relay-sets.js`). Deliberate
+  interop trade-off: list contents stay NIP-44-encrypted, but existence/timing
+  metadata is exposed on those public relays.
 - Feature flag `CONCORD_ENABLED` (default off). Spec:
   `docs/superpowers/specs/2026-07-23-concord-private-channels-design.md`.
 - Concord code must never enter SSR chunks (dep tree has @noble/hashes v2 —

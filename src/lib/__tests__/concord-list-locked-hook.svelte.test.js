@@ -78,4 +78,33 @@ describe('useConcordListLocked', () => {
     expect(getLocked()).toBe(false);
     cleanup();
   });
+
+  it('flips to false through a $derived consumer once unlocked (stale-unlock-affordance regression)', () => {
+    // Mirrors how the sidebars actually consume this hook — `const listLocked
+    // = $derived(getListLocked())` — because the bug only shows up through
+    // Svelte's dependency-tracking cache (see the invite-tick test's
+    // rationale in concord-community-invite-tick.svelte.test.js). Calling
+    // getLocked() directly (as the test above does) always recomputes fresh
+    // and masks the bug: before the fix, `useConcordListLocked`'s inner
+    // observable emitted the SAME `cast` reference on unlock (`map(() =>
+    // cast)`), so `$state.raw` never reassigned and `$derived` never reran.
+    const cast = fakeCast(false);
+    holders.client = { communityList$: new BehaviorSubject(cast) };
+
+    let getSnapshot;
+    const cleanup = $effect.root(() => {
+      const getLocked = useConcordListLocked();
+      const locked = $derived(getLocked());
+      getSnapshot = () => locked;
+    });
+    flushSync();
+    expect(getSnapshot()).toBe(true);
+
+    cast.unlocked = true;
+    cast.communities$.next([{ community_id: 'x' }]);
+    flushSync();
+
+    expect(getSnapshot()).toBe(false);
+    cleanup();
+  });
 });
