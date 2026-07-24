@@ -7,8 +7,7 @@ import {
   summaryFlags,
   rollupArea,
   resolveLevel,
-  shouldToast,
-  pruneMarkers
+  shouldToast
 } from '$lib/concord/notification-helpers.js';
 
 const ME = 'a'.repeat(64);
@@ -178,17 +177,5 @@ describe('shouldToast', () => {
   it('throttles to one toast per channel per 30s', () => {
     expect(shouldToast({ ...base, lastToastAt: 100_000 - 10_000 })).toBe(false);
     expect(shouldToast({ ...base, lastToastAt: 100_000 - 31_000 })).toBe(true);
-  });
-});
-
-describe('pruneMarkers', () => {
-  it('drops markers for channels no longer live, keeps the rest', () => {
-    const markers = { 'c/live': 1, 'c/gone': 2 };
-    expect(pruneMarkers(markers, new Set(['c/live']))).toEqual({ 'c/live': 1 });
-  });
-
-  it('returns the same object when nothing is pruned', () => {
-    const markers = { 'c/live': 1 };
-    expect(pruneMarkers(markers, new Set(['c/live']))).toBe(markers);
   });
 });

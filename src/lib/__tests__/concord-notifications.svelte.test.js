@@ -311,4 +311,39 @@ describe('concord notifications service', () => {
     expect(created).toHaveLength(0);
     vi.unstubAllGlobals();
   });
+
+  it('scans the whole burst for a mention at level=mentions — a newer non-mention does not hide an older mention in the same emission', async () => {
+    // Minor, final review: maybeToast used to inspect only the single
+    // newest not-self rumor. A burst emission [newer non-mention, older
+    // mention] would find the non-mention first and drop the mention
+    // entirely at level 'mentions'.
+    const created = [];
+    class FakeNotification {
+      static permission = 'granted';
+      constructor(title, options) {
+        created.push({ title, options });
+      }
+    }
+    vi.stubGlobal('Notification', FakeNotification);
+    const client = fakeClient();
+    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    await startConcordNotifications({ client, storage, pubkey: ME });
+    await flush();
+    await setChannelLevel(CID, CH, 'mentions');
+
+    // Baseline fold — must NOT toast (cache replay analog).
+    client.timeline$.next([rumor({ created_at: 100 })]);
+    expect(created).toHaveLength(0);
+
+    const base = Math.floor(Date.now() / 1000) + 10;
+    // Burst arriving in ONE emission: a newer non-mention (base+10) and an
+    // older mention (base+5), both newer than the baseline fold above.
+    client.timeline$.next([
+      rumor({ created_at: base + 10 }), // newer, not a mention
+      rumor({ created_at: base + 5, tags: [['p', ME]] }), // older, IS a mention
+      rumor({ created_at: 100 })
+    ]);
+    expect(created).toHaveLength(1);
+    vi.unstubAllGlobals();
+  });
 });

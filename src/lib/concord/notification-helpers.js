@@ -119,17 +119,3 @@ export function shouldToast(args) {
   if (args.now - args.lastToastAt < throttleMs) return false;
   return true;
 }
-
-/**
- * Drop marker entries whose channel is gone (lazy cleanup on save). Returns
- * the same object when nothing was pruned.
- * @param {Record<string, number>} markers
- * @param {Set<string>} liveKeys
- * @returns {Record<string, number>}
- */
-export function pruneMarkers(markers, liveKeys) {
-  const keys = Object.keys(markers);
-  const kept = keys.filter((k) => liveKeys.has(k));
-  if (kept.length === keys.length) return markers;
-  return Object.fromEntries(kept.map((k) => [k, markers[k]]));
-}

@@ -109,9 +109,22 @@ function maybeToast(communityId, channelId, rumors, prev, summary) {
   if (typeof Notification === 'undefined') return;
   if (!prev) return; // first fold for this channel = cache replay
   if (summary.latestFromOthers <= prev.latestFromOthers) return;
-  const newest = (rumors ?? []).find((r) => r?.pubkey && r.pubkey !== myPubkey); // newest-first
+  // Scan every not-self rumor newer than the previous fold, not just the
+  // single newest one (minor, final review): a burst emission like
+  // [newer non-mention, mention] would otherwise inspect only the newer
+  // non-mention and silently drop the mention at level 'mentions'. Track
+  // the newest CANDIDATE (for createdAt/displayName) separately from
+  // whether ANY candidate in the burst mentions the user.
+  /** @type {{pubkey?: string, created_at?: number, tags?: string[][]} | undefined} */
+  let newest;
+  let isMention = false;
+  for (const rumor of rumors ?? []) {
+    if (!rumor?.pubkey || rumor.pubkey === myPubkey) continue;
+    if ((rumor.created_at ?? 0) <= prev.latestFromOthers) continue;
+    if (!newest || (rumor.created_at ?? 0) > (newest.created_at ?? 0)) newest = rumor;
+    if ((rumor.tags ?? []).some((t) => t?.[0] === 'p' && t?.[1] === myPubkey)) isMention = true;
+  }
   if (!newest) return;
-  const isMention = (newest.tags ?? []).some((t) => t?.[0] === 'p' && t?.[1] === myPubkey);
   const active = getActiveConcordChannel();
   const fire = shouldToast({
     createdAt: newest.created_at ?? 0,
