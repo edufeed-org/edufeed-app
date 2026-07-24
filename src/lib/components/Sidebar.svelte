@@ -16,9 +16,11 @@
     useConcordListLocked
   } from '$lib/concord/unlinked-areas.svelte.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
+  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import { LockOpenIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -164,16 +166,22 @@
     {/if}
     <div class="space-y-2">
       {#each unlinkedAreas as area (area.communityId)}
+        {@const areaFlags = areaUnreadState(area.communityId)}
         <a
           href={resolve(`/private/${area.communityId}`)}
           class="flex transform cursor-pointer items-center gap-2 rounded-lg border border-base-200 bg-base-100 p-3 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:border-primary/20 hover:shadow-md"
         >
-          <ConcordAreaBadge
-            name={area.name}
-            communityId={area.communityId}
-            iconPointer={area.iconPointer}
-            class="h-8 w-8 shrink-0"
-          />
+          <span class="relative shrink-0">
+            <ConcordAreaBadge
+              name={area.name}
+              communityId={area.communityId}
+              iconPointer={area.iconPointer}
+              class="h-8 w-8 shrink-0"
+            />
+            <span class="absolute -top-0.5 -right-0.5">
+              <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
+            </span>
+          </span>
           <p
             class="min-w-0 flex-1 truncate text-sm font-medium text-base-content transition-colors duration-300 hover:text-primary {area.dissolved
               ? 'opacity-50'

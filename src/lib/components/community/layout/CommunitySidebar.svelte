@@ -11,10 +11,12 @@
     useConcordListLocked
   } from '$lib/concord/unlinked-areas.svelte.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
+  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import { HomeIcon, LockOpenIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -127,6 +129,7 @@
         </div>
       {/if}
       {#each unlinkedAreas as area (area.communityId)}
+        {@const areaFlags = areaUnreadState(area.communityId)}
         <div class="tooltip tooltip-right" data-tip={area.name}>
           <a
             href={resolve(`/private/${area.communityId}`)}
@@ -134,12 +137,17 @@
               ? 'opacity-50'
               : ''}"
           >
-            <ConcordAreaBadge
-              name={area.name}
-              communityId={area.communityId}
-              iconPointer={area.iconPointer}
-              class="h-9 w-9"
-            />
+            <span class="relative shrink-0">
+              <ConcordAreaBadge
+                name={area.name}
+                communityId={area.communityId}
+                iconPointer={area.iconPointer}
+                class="h-9 w-9"
+              />
+              <span class="absolute -top-0.5 -right-0.5">
+                <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
+              </span>
+            </span>
           </a>
         </div>
       {/each}
@@ -236,18 +244,24 @@
         </button>
       {/if}
       {#each unlinkedAreas as area (area.communityId)}
+        {@const areaFlags = areaUnreadState(area.communityId)}
         <a
           href={resolve(`/private/${area.communityId}`)}
           class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300 {area.dissolved
             ? 'opacity-50'
             : ''}"
         >
-          <ConcordAreaBadge
-            name={area.name}
-            communityId={area.communityId}
-            iconPointer={area.iconPointer}
-            class="h-8 w-8 shrink-0"
-          />
+          <span class="relative shrink-0">
+            <ConcordAreaBadge
+              name={area.name}
+              communityId={area.communityId}
+              iconPointer={area.iconPointer}
+              class="h-8 w-8 shrink-0"
+            />
+            <span class="absolute -top-0.5 -right-0.5">
+              <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
+            </span>
+          </span>
           <span class="flex-1 truncate text-left text-sm font-medium">{area.name}</span>
         </a>
       {/each}

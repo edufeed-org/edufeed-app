@@ -17,6 +17,8 @@
   } from '$lib/components/icons';
   import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
   import { shouldShowChannelsTab, useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
@@ -31,6 +33,10 @@
 
   const getConcord = useConcordCommunity(() => communityEvent);
   const getActiveUser = useActiveUser();
+  // getConcord() isn't reachable in template scope here (the tab loop is a
+  // plain {#each}, not inside the $derived.by above), so compute the rollup
+  // flags at script level and read them from the template instead.
+  const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
 
   // Icon mapping for content types
   /** @type {Record<string, any>} */
@@ -227,6 +233,14 @@
                   {:else}
                     <LockIcon class_="w-2.5 h-2.5 opacity-60" />
                   {/if}
+                </span>
+              {/if}
+              {#if type.id === 'channels'}
+                <span class="absolute -top-1 -right-1.5">
+                  <ConcordUnreadDot
+                    unread={concordAreaFlags.unread}
+                    mentioned={concordAreaFlags.mentioned}
+                  />
                 </span>
               {/if}
             </span>

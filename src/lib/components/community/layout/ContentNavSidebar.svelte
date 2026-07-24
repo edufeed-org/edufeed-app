@@ -17,6 +17,8 @@
   } from '$lib/components/icons';
   import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
   import { shouldShowChannelsTab, useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -36,6 +38,7 @@
 
   const getConcord = useConcordCommunity(() => communityEvent);
   const getActiveUser = useActiveUser();
+  const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
 
   let communityDisplayName = $derived(
     communityProfile?.name || communityProfile?.display_name || 'Community'
@@ -176,6 +179,14 @@
                   <LockIcon class_="w-2.5 h-2.5" />
                 </span>
               {/if}
+            {/if}
+            {#if type.id === 'channels'}
+              <span class="absolute -top-1.5 -right-4">
+                <ConcordUnreadDot
+                  unread={concordAreaFlags.unread}
+                  mentioned={concordAreaFlags.mentioned}
+                />
+              </span>
             {/if}
           </span>
         </button>
