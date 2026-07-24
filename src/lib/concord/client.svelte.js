@@ -273,11 +273,19 @@ async function setup(account, myGeneration) {
       pubkey: account.pubkey
     });
     if (myGeneration !== generation) {
-      // A newer generation already ran teardown() (which stopped whatever
-      // notificationsModule pointed at then) while the service was starting.
-      // Stop THIS invocation's own service start directly — don't touch the
-      // shared notificationsModule, which may already belong to the successor.
-      notifications.stopConcordNotifications();
+      // A newer generation already ran teardown() (which called
+      // notificationsModule?.stop() while it still pointed at THIS
+      // invocation's service — see teardown() above) before this await
+      // resumed. Do NOT call the singleton stop here (final review,
+      // IMPORTANT — a prior version of this guard did, and it was a bug):
+      // start/stopConcordNotifications are module-level, one service for
+      // the whole session, not one per setup() invocation. By the time this
+      // stale branch runs, the successor may already have started ITS OWN
+      // service (its own startConcordNotifications() call begins by calling
+      // stopConcordNotifications() itself) — calling stop again here would
+      // kill that healthy, freshly-started service instead of this stale
+      // one. teardown() already covers this invocation's cleanup; nothing
+      // further is needed.
       return;
     }
     await client.start();

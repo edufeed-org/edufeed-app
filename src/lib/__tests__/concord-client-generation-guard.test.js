@@ -91,7 +91,19 @@ vi.mock('../concord/account-removal-watcher.js', () => ({ watchAccountRemovals: 
 // client.svelte.js while it's still mid-setup()), which silently defeated
 // the intended start()-gate interleaving below without failing any
 // assertion. Mock it so setup() actually reaches `await client.start()`.
-const startConcordNotifications = vi.fn(async (/** @type {any} */ _args) => {});
+//
+// notifStartGates lets a test suspend one account's startConcordNotifications
+// call mid-flight (default: resolves immediately, like the real mock did
+// before) — needed below to reproduce the stale-branch-stops-the-winner race
+// (final review, IMPORTANT) where the stale setup is still awaiting
+// startConcordNotifications() when the successor's OWN service finishes
+// starting.
+/** @type {Map<string, {promise: Promise<void>, resolve: (value?: any) => void, reject: (reason?: any) => void}>} */
+const notifStartGates = new Map();
+const startConcordNotifications = vi.fn(async (/** @type {any} */ args) => {
+  const gate = notifStartGates.get(args?.pubkey);
+  if (gate) await gate.promise;
+});
 const stopConcordNotifications = vi.fn();
 vi.mock('../concord/notifications.svelte.js', () => ({
   startConcordNotifications: (/** @type {any} */ args) => startConcordNotifications(args),
@@ -136,6 +148,7 @@ const { initConcordService, getConcordClient, getConcordState } = await import(
 describe('client.svelte.js setup() generation guard', () => {
   beforeEach(() => {
     startGates.clear();
+    notifStartGates.clear();
     createdClients.length = 0;
     startConcordNotifications.mockClear();
     stopConcordNotifications.mockClear();
@@ -199,5 +212,55 @@ describe('client.svelte.js setup() generation guard', () => {
 
     expect(getConcordState().phase).not.toBe('error');
     expect(getConcordClient().pubkey).toBe('dave');
+  });
+
+  it('a stale setup does not stop the winner’s already-started notifications service', async () => {
+    // Final review, IMPORTANT: a prior version of the stale-generation
+    // branch in setup() called the module-singleton stopConcordNotifications()
+    // directly. Since there is one notifications service for the whole
+    // session (not one per setup() invocation), that call stops WHATEVER
+    // service is currently running — if the successor's own service has
+    // already started by the time the stale branch runs, the stale call
+    // kills the successor's healthy service instead of the stale one.
+    await initConcordService();
+
+    // Gate alice's own startConcordNotifications call so her setup()
+    // suspends there (not at client.start(), unlike the other tests in this
+    // file) — this is the exact await point the buggy branch resumes from.
+    // Assertions below use deltas, not absolute call counts: `notificationsModule`
+    // is module-level state that outlives any one `it()` (this file never
+    // resets modules between tests), so a prior test's leftover client can
+    // add an extra real teardown()-stop call before this test's own
+    // emissions even begin.
+    const aliceGate = deferred();
+    notifStartGates.set('alice', aliceGate);
+    active$.next({ pubkey: 'alice', signer: { pubkey: 'alice', nip44: {} } });
+    await flush();
+    const stopCallsAfterAliceSuspended = stopConcordNotifications.mock.calls.length;
+
+    // Bob supersedes alice. teardown() stops whatever notificationsModule
+    // pointed at (alice's, at this point) exactly once.
+    active$.next({ pubkey: 'bob', signer: { pubkey: 'bob', nip44: {} } });
+    await flush();
+    expect(stopConcordNotifications.mock.calls.length).toBe(stopCallsAfterAliceSuspended + 1);
+
+    // Bob's own startConcordNotifications call is NOT gated, so it already
+    // resolved during the flush() above; only his client.start() is still
+    // pending. Resolve it so bob's service is fully started.
+    startGates.get('bob')?.resolve();
+    await flush();
+    expect(getConcordClient().pubkey).toBe('bob');
+    const stopCallsAfterBobStarted = stopConcordNotifications.mock.calls.length;
+
+    // NOW let alice's stale startConcordNotifications resolve — her setup()
+    // resumes into the stale-generation branch.
+    aliceGate.resolve();
+    await flush();
+
+    // The stale branch must NOT call the singleton stop again: that would
+    // tear down bob's already-running service. teardown() (above) plus
+    // bob's own start/stop already cover cleanup for this invocation.
+    expect(stopConcordNotifications.mock.calls.length).toBe(stopCallsAfterBobStarted);
+    expect(getConcordClient().pubkey).toBe('bob');
   });
 });
