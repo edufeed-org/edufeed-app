@@ -127,7 +127,7 @@ describe('FormBuilder: sections + displayIf round-trip', () => {
       created_at: 0
     });
 
-    expect(reparsed.sections).toEqual(sections);
+    expect(reparsed.sections).toEqual(sections.map((s, i) => ({ ...s, order: i })));
     const detailField = reparsed.fields.find((f) => f.id === 'detail');
     expect(detailField?.options?.displayIf).toEqual(displayIf);
   });
