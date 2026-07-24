@@ -29,17 +29,24 @@ The engine plumbing already exists — this phase is almost entirely UI:
 - `FormBuilder` `FIELD_TYPES` (line 19): text/textarea/text-array/number/email/url/select/checkbox/radio/date — **missing** the slice-1 rich types creator/amb-relation/external-urls.
 - Component registry (`form-field-types.js`) renders creator/amb-relation/external-urls/date; emitter registry (`amb-emitters.js`) serializes every `amb:<prop>` + these types. So anything the builder can produce already renders and serializes correctly.
 
+## Approach validation (KISS / DRY / applesauce)
+
+- **applesauce (verified via MCP):** there is no form/template factory or form-builder primitive. Domain `*Factory.modify(event)` helpers exist (Wallet/Badge/AppData/Contacts) but none for forms, and `ActionRunner` targets incremental CRUD on existing events — the builder legitimately rebuilds the whole template from UI state, so the existing `EventFactory` + `buildFormTemplateTags` + `publishEvent` pattern is correct and simplest. No applesauce change.
+- **KISS/DRY win — sections are divider entries in the existing field list, not a parallel subsystem.** A section is represented, *while editing*, as a `type: 'section'` item in the same `fields` list the builder already manages. This reuses the existing add/remove/drag/reorder machinery wholesale (no duplicate reorder logic, no separate stateful component, no field→section sync to keep consistent). Two pure functions convert between the editing list and the wire model. This removes the "keep flat fields and sections in sync" risk entirely — there is one list, one source of truth for order.
+
 ## Architecture
 
-### 1. Sections/steps authoring (`FormBuilder.svelte` + a new section-row component)
+### 1. Sections/steps authoring — section-as-divider in the flat field list
 
-**Model:** interleaved section dividers in the field list (Formstr's model; matches our `FormSection = { id, title, description?, questionIds[], order }`). A field belongs to the section whose divider precedes it; section order = divider order; `questionIds` = the fields under each divider in order.
+**Editing model:** a section is a `type: 'section'` entry (carrying `{ id, title, description? }`) interleaved in the builder's existing `fields` list. The fields following a divider (until the next divider) belong to it; fields before the first divider are un-sectioned. All existing controls — add, remove, drag-reorder, arrow-move — work on the unified list unchanged; a divider is just another list item, so "moving a field into a section" or "reordering sections" needs **no new logic**. Deleting a divider merges its fields into the preceding section automatically (there is nothing to re-parent — grouping is re-derived from the remaining dividers).
 
-**State:** replace the passthrough `templateSections` with editable state. Keep the flat `fields` array as the source of field order; derive/maintain a parallel `sections` list of `{ id, title, description? }` plus a mapping of field→section. On publish, build `FormSection[]` by walking the field list and grouping under the active section divider. Fields before any divider go into an implicit first section (or the un-sectioned set — matching `orderedSections`' `__rest` handling).
+**Two pure conversion functions** (new `src/lib/helpers/forms/builder-sections.js`, unit-tested first):
+- `extractSections(items) → { fields, sections }` — walk the editing list; `section` items become `FormSection[]` (`{ id, title, description?, questionIds: [ids of following non-section fields], order }`); non-section items become the real `fields`. Called in `publish()` before `buildFormTemplateTags(dTag, fields, { …, sections })`.
+- `interleaveSections(fields, sections) → items` — inverse, for edit/fork load: place a `section` divider before each section's `questionIds`, preserving order, appending any un-referenced fields at the front (mirrors `orderedSections`' `__rest`). Replaces the current passthrough `templateSections` seeding.
 
-**UI:** a "+ Add section" control; each section renders a header row (title input, optional description, reorder handles, delete — deleting a section reparents its fields to the previous section, never orphans). Existing field add/drag/reorder is preserved; dragging a field across a divider changes its section. A form with zero sections behaves exactly as today (flat, single-page) — sections are opt-in.
+Round-trip (`extract ∘ interleave === identity` on well-formed input) is the core unit test. The `section` divider **never** becomes a wire `field` tag — `extractSections` removes it — so there is no NIP-101/`inputType:"label"` collision; it is purely a builder-editing representation of `settings.sections`.
 
-**New file:** `src/lib/components/forms/FormBuilderSectionRow.svelte` (section header: title/description/reorder/delete). `FormBuilder.svelte` orchestrates the interleaved render.
+**UI:** a "+ Add section" control appends a `section` divider; the divider renders as a lightweight header (title input, optional description, the same reorder/delete affordances as a field row — reused, not reimplemented). A form with zero `section` dividers publishes exactly as today (flat, no `sections`) — sections are opt-in and backward compatible.
 
 ### 2. Branching authoring — minimal (`FormBuilderFieldRow.svelte` + option editor)
 
@@ -61,8 +68,9 @@ Both editors read the form's current sections/fields from props threaded down fr
 
 ## Testing (TDD)
 
+- **Unit (node) — the pure conversion helpers, written first:** `extractSections`/`interleaveSections` in `builder-sections.js` — round-trip identity on well-formed input; edge cases (leading un-sectioned fields, empty section, divider with no following fields, zero dividers → empty `sections`). This is the load-bearing correctness test; the UI sits on top.
 - **Component (jsdom), following existing `FormBuilder.test.js`/`FormBuilderFieldRow.test.js` patterns:**
-  - Section authoring: add two sections, assign fields, reorder → publish → `parseFormTemplate` yields the expected `FormSection[]` with correct `questionIds`; deleting a section reparents its fields; a zero-section form still publishes flat.
+  - Section authoring: add two section dividers, place fields under them, reorder → publish → `parseFormTemplate` yields the expected `FormSection[]` with correct `questionIds`; deleting a divider merges its fields into the previous section; a zero-section form still publishes flat (no `sections` tag).
   - Option routing: set an option's `nextSection` → the published template's option triple round-trips through `parseFormTemplate` with `nextSection` set; `branching.js#resolveNextSectionId` routes to it.
   - `displayIf`: build a show-if rule → `field.options.displayIf` round-trips; `branching.js#evaluateDisplayIf` returns the expected visibility; value maps to the referenced option's id for choice questions.
   - Output-on-any-type: a `text` field with `output: amb:name` publishes the `field-output` tag; the extended `AMB_OUTPUTS` options render.
@@ -80,6 +88,6 @@ Both editors read the form's current sections/fields from props threaded down fr
 
 ## Risks
 
-- **Sections state model** is the trickiest part: keeping the flat `fields` order and the section grouping in sync (drag across dividers, delete-reparent) without orphaning fields or duplicating ids. Mitigation: derive `FormSection[]` from field position at publish time rather than maintaining a second source of truth; a pure grouping helper with unit tests.
-- **displayIf value ↔ optionId mapping**: when the referenced question is a choice field, the stored value must be the option **id** (not label), or `branching.js` won't match. The editor must bind the value `<select>` to option ids. Covered by a test.
+- **`extractSections`/`interleaveSections` round-trip correctness** is the one thing that must be exact (a mis-grouping silently drops fields from a section on re-save). Mitigation: both are pure functions, unit-tested first with a round-trip property and edge cases (un-sectioned leading fields, empty sections, a divider with no following fields). This is a far smaller surface than a synced parallel-state model.
+- **displayIf value ↔ optionId mapping**: when the referenced question is a choice field, the stored value must be the option **id** (not label), or `branching.js` won't match. The editor binds the value `<select>` to option ids. Covered by a test.
 - **Backward compat**: existing flat templates and the passthrough behavior must be unchanged when no sections/branching are authored. The zero-section and no-displayIf paths are explicit test cases.
