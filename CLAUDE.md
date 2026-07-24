@@ -404,8 +404,9 @@ This app implements the Communikey community specification. Use `/communikey` sk
 ## Concord Private Channels (CORD, Beta)
 
 E2E-encrypted channels inside communities via `applesauce-concord` (pre-release,
-exact-pinned together with the `applesauce-core-concord` alias — bump both in
-lockstep and review diffs; run the package's own vitest suite as a canary:
+exact-pinned together with the `applesauce-core-concord` and
+`applesauce-common-concord` aliases — bump all three in lockstep and review
+diffs; run the package's own vitest suite as a canary:
 `cd $(mktemp -d) && npm pack applesauce-concord@concord` or test in the
 applesauce repo's concord branch).
 
@@ -442,6 +443,16 @@ applesauce repo's concord branch).
   directly with stream-author filters on its own relays), so author filtering
   cannot touch it. Do not "fix" this by adding kind-1059 exclusions to feed
   code.
+- Notifications/read-state (spec 2026-07-24): local-only per device, in the
+  per-account Concord IDB `kv` store (keys `notif:read`, `notif:mention-read`,
+  `notif:levels`, `notif:toasts-enabled`). Central service
+  `src/lib/concord/notifications.svelte.js` (started with the client); badge
+  components read `channelUnreadState`/`areaUnreadState` getters. Do NOT sync
+  Concord read-state via NIP-78 — deliberate metadata-leak avoidance
+  (mirrors Armada).
+- Concord replies must go through `sendChannelMessage`
+  (src/lib/concord/send-message.js), not community.sendMessage — the dist
+  omits the reply `p` tag that the mention tier depends on.
 
 ## Configuration
 
