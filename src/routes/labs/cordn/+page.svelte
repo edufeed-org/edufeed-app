@@ -2,6 +2,7 @@
   import { runtimeConfig, configReady } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { parseCordnGroupsConfig } from '$lib/cordn';
+  import { composerKeydown } from '$lib/cordn/composer.js';
 
   const getActiveUser = useActiveUser();
 
@@ -301,7 +302,7 @@
             {#each selectedGroup.messages as message (message.cursor)}
               <li class="chat {message.pubkey === client.pubkey ? 'chat-end' : 'chat-start'}">
                 <div class="chat-header text-xs opacity-60">{shortPubkey(message.pubkey)}</div>
-                <div class="chat-bubble">{message.content}</div>
+                <div class="chat-bubble whitespace-pre-wrap">{message.content}</div>
               </li>
             {:else}
               <li class="text-sm opacity-60">Noch keine Nachrichten</li>
@@ -309,12 +310,14 @@
           </ul>
 
           <form class="join w-full" onsubmit={(e) => (e.preventDefault(), send())}>
-            <input
-              class="input join-item w-full"
-              placeholder="Nachricht…"
+            <textarea
+              class="textarea join-item max-h-40 min-h-10 w-full"
+              rows="1"
+              placeholder="Nachricht… (Enter sendet, Shift/Alt+Enter = neue Zeile)"
               bind:value={draft}
+              onkeydown={(e) => composerKeydown(e, send)}
               data-testid="cordn-message-input"
-            />
+            ></textarea>
             <button
               class="btn join-item btn-primary"
               disabled={busy || !draft.trim()}
