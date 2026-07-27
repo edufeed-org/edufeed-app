@@ -177,7 +177,8 @@ const defaultConfig = {
   // Cordn MLS private groups spike
   cordnGroups: {
     enabled: false,
-    coordinatorPubkey: '',
+    /** @type {string[]} */
+    coordinatorPubkeys: [],
     /** @type {string[]} */
     relays: []
   },

@@ -14,6 +14,7 @@
   );
   let selectedGid = $state('');
   let newGroupName = $state('');
+  let newGroupCoordinator = $state('');
   let inviteePubkey = $state('');
   let draft = $state('');
   let busy = $state(false);
@@ -63,7 +64,10 @@
 
   const createGroup = () =>
     run(async (c) => {
-      const gid = await c.createGroup(newGroupName.trim() || 'Neue Gruppe');
+      const gid = await c.createGroup(
+        newGroupName.trim() || 'Neue Gruppe',
+        newGroupCoordinator || undefined
+      );
       selectedGid = gid;
       newGroupName = '';
     });
@@ -74,7 +78,7 @@
       inviteePubkey = '';
     });
 
-  /** @param {{kp_ref: string, welcome_64: string, at: number, after?: number}} welcome */
+  /** @param {import('$lib/cordn/client.svelte.js').TaggedWelcome} welcome */
   const acceptWelcome = (welcome) =>
     run(async (c) => {
       selectedGid = await c.acceptWelcome(welcome);
@@ -115,6 +119,11 @@
     {#if actionError}
       <div class="alert alert-error" data-testid="cordn-action-error">{actionError}</div>
     {/if}
+    {#if client.error}
+      <div class="alert text-sm alert-warning" data-testid="cordn-client-warning">
+        {client.error}
+      </div>
+    {/if}
 
     <div class="grid gap-4 md:grid-cols-[280px_1fr]">
       <aside class="space-y-4">
@@ -129,6 +138,9 @@
                 >
                   {group.name}
                   <span class="badge badge-sm">{group.members.length}</span>
+                  <span class="badge badge-ghost font-mono badge-xs">
+                    @{group.coordinatorPubkey.slice(0, 8)}
+                  </span>
                 </button>
               </li>
             {/each}
@@ -144,6 +156,19 @@
               Anlegen
             </button>
           </form>
+          {#if (config?.coordinatorPubkeys.length ?? 0) > 1}
+            <select
+              class="select w-full select-sm font-mono"
+              bind:value={newGroupCoordinator}
+              data-testid="cordn-new-group-coordinator"
+            >
+              {#each config?.coordinatorPubkeys ?? [] as pubkey, index (pubkey)}
+                <option value={index === 0 ? '' : pubkey}>
+                  Koordinator {pubkey.slice(0, 8)}…{index === 0 ? ' (Standard)' : ''}
+                </option>
+              {/each}
+            </select>
+          {/if}
         </section>
 
         <section class="card space-y-2 bg-base-100 p-3">
@@ -156,9 +181,14 @@
             Aktualisieren
           </button>
           <ul class="space-y-1" data-testid="cordn-welcome-list">
-            {#each client.welcomes as welcome (welcome.kp_ref)}
+            {#each client.welcomes as welcome (`${welcome.coordinatorPubkey}:${welcome.kp_ref}`)}
               <li class="flex items-center justify-between gap-2 text-sm">
-                <span>Einladung {welcome.kp_ref.slice(0, 8)}…</span>
+                <span>
+                  Einladung {welcome.kp_ref.slice(0, 8)}…
+                  <span class="badge badge-ghost font-mono badge-xs">
+                    @{welcome.coordinatorPubkey.slice(0, 8)}
+                  </span>
+                </span>
                 <button
                   class="btn btn-xs btn-primary"
                   disabled={busy}

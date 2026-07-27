@@ -377,7 +377,8 @@ export function GET() {
     // flag off there is zero Cordn UI and zero Cordn network traffic.
     cordnGroups: {
       enabled: parseBool(env.CORDN_GROUPS_ENABLED, false),
-      coordinatorPubkey: env.CORDN_COORDINATOR_PUBKEY || '',
+      // Comma-separated list; first entry is the default coordinator.
+      coordinatorPubkeys: parseArray(env.CORDN_COORDINATOR_PUBKEY),
       relays: parseArray(env.CORDN_CONTEXTVM_RELAYS, ['wss://relay.contextvm.org'])
     },
 
