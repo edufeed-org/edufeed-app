@@ -56,6 +56,9 @@ export { default as SchoolIcon } from './ui/SchoolIcon.svelte';
 export { default as LightbulbIcon } from './ui/LightbulbIcon.svelte';
 export { default as SparkleIcon } from './ui/SparkleIcon.svelte';
 export { default as BibleIcon } from './ui/BibleIcon.svelte';
+export { default as PuzzleIcon } from './ui/PuzzleIcon.svelte';
+export { default as SmartphoneIcon } from './ui/SmartphoneIcon.svelte';
+export { default as KeyIcon } from './ui/KeyIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';
