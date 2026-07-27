@@ -70,7 +70,8 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import {
     mapCommunityItemsToRawItems,
-    getCommunityFilterOptions
+    getCommunityFilterOptions,
+    hasDisplayableCommunityProfile
   } from '$lib/helpers/communityContent.js';
   import { matchesTextSearch } from '$lib/helpers/contentSearch.js';
   import AuthorSearchDropdown from '$lib/components/discover/AuthorSearchDropdown.svelte';
@@ -1215,14 +1216,17 @@
 
   // Filtered communities for the Communities tab
   const filteredCommunities = $derived.by(() => {
-    let filtered = communities;
+    // Hide communities without a named kind 0 profile —
+    // they'd render as meaningless "Unknown User" cards.
+    let filtered = communities.filter((community) =>
+      hasDisplayableCommunityProfile(communityProfiles.get(community.pubkey))
+    );
 
     // Apply search filter by name and description
     if (activeSearchQuery.trim()) {
       const query = activeSearchQuery.toLowerCase();
       filtered = filtered.filter((community) => {
-        const communityPubkey = getTagValue(community, 'd') || community.pubkey;
-        const profile = communityProfiles.get(communityPubkey);
+        const profile = communityProfiles.get(community.pubkey);
 
         const name = profile?.name?.toLowerCase() || '';
         const about = profile?.about?.toLowerCase() || '';
