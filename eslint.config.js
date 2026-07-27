@@ -45,7 +45,7 @@ export default [
   },
   {
     files: ['src/**/*.{js,svelte}'],
-    ignores: ['src/lib/cordn/**'],
+    ignores: ['src/lib/cordn/**', 'src/lib/concord/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -55,6 +55,17 @@ export default [
               group: ['ts-mls', 'ts-mls/*', '@contextvm/*', '@noble/ciphers', '@noble/ciphers/*'],
               message:
                 'Import Cordn APIs via $lib/cordn only (spike wrapper isolates the MLS stack).'
+            },
+            {
+              group: [
+                'applesauce-concord',
+                'applesauce-concord/*',
+                'applesauce-core-concord',
+                'applesauce-core-concord/*',
+                'applesauce-common-concord',
+                'applesauce-common-concord/*'
+              ],
+              message: 'Import Concord APIs via $lib/concord only (wrapper contains pre-1.0 churn).'
             }
           ]
         }

@@ -182,6 +182,11 @@ const defaultConfig = {
     /** @type {string[]} */
     relays: []
   },
+  // Concord private channels
+  concord: {
+    enabled: false,
+    relays: /** @type {string[]} */ ([])
+  },
   // Read-only npub login
   npubLogin: {
     enabled: false
@@ -357,6 +362,10 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.cordnGroups,
       ...runtimeConfig.cordnGroups
     },
+    concord: {
+      ...defaultConfig.concord,
+      ...runtimeConfig.concord
+    },
     npubLogin: {
       ...defaultConfig.npubLogin,
       ...runtimeConfig.npubLogin
@@ -471,6 +480,9 @@ export const runtimeConfig = {
   },
   get cordnGroups() {
     return config.cordnGroups;
+  },
+  get concord() {
+    return config.concord;
   },
   get npubLogin() {
     return config.npubLogin;

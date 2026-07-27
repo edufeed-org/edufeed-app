@@ -2,9 +2,22 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
-  import { HomeIcon } from '$lib/components/icons';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  // Directly from the concord submodule, never the $lib/concord barrel —
+  // convention every Concord call site follows (see CLAUDE.md's Concord
+  // section) so this stays SSR-clean.
+  import {
+    useUnlinkedConcordAreas,
+    useConcordListLocked
+  } from '$lib/concord/unlinked-areas.svelte.js';
+  import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
+  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
+  import { HomeIcon, LockOpenIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
+  import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
   let { currentCommunityId, onCommunitySelect, isDashboardActive = false, onHomeSelect } = $props();
@@ -14,6 +27,28 @@
 
   // Create non-mutating copy to avoid Svelte 5 state mutation error
   const sortedCommunities = $derived([...joinedCommunities]);
+
+  const getUnlinkedAreas = useUnlinkedConcordAreas();
+  const unlinkedAreas = $derived(
+    runtimeConfig.concord?.enabled ? getUnlinkedAreas() : /** @type {any[]} */ ([])
+  );
+
+  // "Sync private areas" affordance (Fix 2) — see the matching comment in
+  // Sidebar.svelte for the full rationale. Shown even with zero unlinked
+  // areas: a locked list is exactly why the list looks empty.
+  const getListLocked = useConcordListLocked();
+  const listLocked = $derived(runtimeConfig.concord?.enabled ? getListLocked() : false);
+  const concordReady = $derived(getConcordState().phase === 'ready');
+  const signerHasNip44 = $derived(!!getConcordState().client?.signer?.nip44);
+  const unlocking = $derived(getConcordState().unlocking);
+  const showUnlockAffordance = $derived(
+    runtimeConfig.concord?.enabled && concordReady && listLocked
+  );
+
+  async function handleUnlockAreas() {
+    const ok = await unlockConcordLists();
+    if (!ok) showToast(m.concord_unlock_failed(), 'error');
+  }
 
   /**
    * Handle community selection - uses route-based navigation
@@ -71,6 +106,52 @@
         </button>
       </div>
     {/each}
+
+    {#if unlinkedAreas.length > 0 || showUnlockAffordance}
+      <div class="w-8 border-b border-base-300"></div>
+      {#if showUnlockAffordance}
+        <div
+          class="tooltip tooltip-right"
+          data-tip={signerHasNip44 ? m.concord_unlock_areas() : m.concord_direct_needs_nip44()}
+        >
+          <button
+            class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
+            data-testid="concord_unlock_areas"
+            disabled={!signerHasNip44 || unlocking}
+            onclick={handleUnlockAreas}
+          >
+            {#if unlocking}
+              <span class="loading loading-sm loading-spinner"></span>
+            {:else}
+              <LockOpenIcon class_="h-5 w-5" />
+            {/if}
+          </button>
+        </div>
+      {/if}
+      {#each unlinkedAreas as area (area.communityId)}
+        {@const areaFlags = areaUnreadState(area.communityId)}
+        <div class="tooltip tooltip-right" data-tip={area.name}>
+          <a
+            href={resolve(`/private/${area.communityId}`)}
+            class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {area.dissolved
+              ? 'opacity-50'
+              : ''}"
+          >
+            <span class="relative shrink-0">
+              <ConcordAreaBadge
+                name={area.name}
+                communityId={area.communityId}
+                iconPointer={area.iconPointer}
+                class="h-9 w-9"
+              />
+              <span class="absolute -top-0.5 -right-0.5">
+                <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
+              </span>
+            </span>
+          </a>
+        </div>
+      {/each}
+    {/if}
   </div>
 </div>
 
@@ -139,6 +220,51 @@
           {m.community_layout_sidebar_discover_button()}
         </a>
       </div>
+    {/if}
+
+    {#if unlinkedAreas.length > 0 || showUnlockAffordance}
+      <div class="border-b border-base-300"></div>
+      <p class="px-3 pt-1 text-xs font-semibold tracking-wider text-base-content/50 uppercase">
+        {m.concord_sidebar_private_areas()}
+      </p>
+      {#if showUnlockAffordance}
+        <button
+          class="btn btn-block gap-2 btn-outline btn-sm"
+          data-testid="concord_unlock_areas"
+          disabled={!signerHasNip44 || unlocking}
+          title={signerHasNip44 ? undefined : m.concord_direct_needs_nip44()}
+          onclick={handleUnlockAreas}
+        >
+          {#if unlocking}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            <LockOpenIcon class_="h-4 w-4" />
+          {/if}
+          {m.concord_unlock_areas()}
+        </button>
+      {/if}
+      {#each unlinkedAreas as area (area.communityId)}
+        {@const areaFlags = areaUnreadState(area.communityId)}
+        <a
+          href={resolve(`/private/${area.communityId}`)}
+          class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300 {area.dissolved
+            ? 'opacity-50'
+            : ''}"
+        >
+          <span class="relative shrink-0">
+            <ConcordAreaBadge
+              name={area.name}
+              communityId={area.communityId}
+              iconPointer={area.iconPointer}
+              class="h-8 w-8 shrink-0"
+            />
+            <span class="absolute -top-0.5 -right-0.5">
+              <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
+            </span>
+          </span>
+          <span class="flex-1 truncate text-left text-sm font-medium">{area.name}</span>
+        </a>
+      {/each}
     {/if}
   </div>
 </div>

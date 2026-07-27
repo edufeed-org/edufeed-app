@@ -18,7 +18,8 @@ export async function load({ url }) {
     'social-bookmarks',
     'meet',
     'members',
-    'settings'
+    'settings',
+    'channels'
   ]);
 
   const viewParam = url.searchParams.get('view');

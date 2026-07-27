@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-07-16
-**Total tests:** 309
+**Last updated:** 2026-07-24
+**Total tests:** 311
 
 ## Quick Summary
 
@@ -46,6 +46,46 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                                                                                                                                      |
 | `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                                                                                                                                  |
 | `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                                                                                                                                      |
+| File                                 | Tests | Auth | Coverage                                                                                                                                                                                                                                           |
+| ------------------------------------ | ----- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                         |
+| `account-management.test.js`         | 14    | Both | Login, logout, persistence, account switching                                                                                                                                                                                                      |
+| `calendar.test.js`                   | 5     | No   | Calendar page, events, modal, view toggle                                                                                                                                                                                                          |
+| `calendar-ui-redesign.test.js`       | 13    | No   | Page chrome, inline filter bar, relay post-filter, header count, mobile drawer, featured authors rail                                                                                                                                              |
+| `calendar-creation.test.js`          | 10    | Yes  | FAB, event creation, validation, deletion                                                                                                                                                                                                          |
+| `calendar-editing.test.js`           | 10    | Yes  | Edit button, form pre-population, validation                                                                                                                                                                                                       |
+| `calendar-context-menu.test.js`      | 4     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                                                                                                                                  |
+| `calendar-date-filtering.test.js`    | 10    | No   | Date range loading, navigation, view modes                                                                                                                                                                                                         |
+| `amb-creation.test.js`               | 29    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                                                                                                                                       |
+| `amb-creation-full.test.js`          | 16    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                                                                                                                                       |
+| `resource-form-variants.test.js`     | 3     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                                                                                                                                  |
+| `resource-form-no-url.test.js`       | 2     | Yes  | Index-without-URL happy path + edit round-trip                                                                                                                                                                                                     |
+| `image-license.test.js`              | 2     | Yes  | Image upload triggers license modal; cancel-without-save flags the field; save dismisses the modal                                                                                                                                                 |
+| `profile.test.js`                    | 4     | No   | Profile page, notes, not-found                                                                                                                                                                                                                     |
+| `profile-editing.test.js`            | 10    | Yes  | Edit modal, form pre-population, save flow                                                                                                                                                                                                         |
+| `event-detail.test.js`               | 4     | No   | naddr routes (articles, calendar, AMB)                                                                                                                                                                                                             |
+| `community.test.js`                  | 5     | No   | Community Learning/Chat tabs                                                                                                                                                                                                                       |
+| `community-access-filtering.test.js` | 3     | No   | Profile-list gated forum filtering, open chat                                                                                                                                                                                                      |
+| `community-membership.test.js`       | 12    | Both | Join/leave flows, persistence, error handling                                                                                                                                                                                                      |
+| `community-creation.test.js`         | 23    | Yes  | Both keypair flows, all steps, settings                                                                                                                                                                                                            |
+| `discover.test.js`                   | 11    | No   | Discovery tabs, infinite scroll, profiles                                                                                                                                                                                                          |
+| `discover-events-filter.test.js`     | 9     | No   | Events tab date range filter, URL persistence                                                                                                                                                                                                      |
+| `learning-search.test.js`            | 14    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                                                                                                                 |
+| `relay-override-pagination.test.js`  | 6     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                                                                                                                                 |
+| `comments-reactions.test.js`         | 18    | Both | Comments, reactions, auth flows                                                                                                                                                                                                                    |
+| `chat-posting.test.js`               | 8     | Both | Chat input visibility, message posting flow                                                                                                                                                                                                        |
+| `chat-reactions.test.js`             | 2     | Yes  | Reactions on chat messages: hover-revealed add button, add-reaction flow                                                                                                                                                                           |
+| `signup-normie-path.test.js`         | 1     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → Termi backup hint                                                                                                                            |
+| `settings.test.js`                   | 18    | Both | Single-theme check, relays, relay editing, gated/debug                                                                                                                                                                                             |
+| `settings-blossom.test.js`           | 6     | Yes  | Blossom server management                                                                                                                                                                                                                          |
+| `mobile-navigation.test.js`          | 8     | No   | Mobile hamburger menu, responsive layout                                                                                                                                                                                                           |
+| `list-management.test.js`            | 9     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                                                                                                                                  |
+| `cache-warm-boot.test.js`            | 1     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                                                                                                                             |
+| `layout-consistency.test.js`         | 14    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards                                                                                                                  |
+| `poll-flow.test.js`                  | 2     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                                                                                                                                      |
+| `membership-application.test.js`     | 2     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                                                                                                                                  |
+| `npub-login.test.js`                 | 3     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                                                                                                                                      |
+| `concord-channels.test.js`           | 1     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                                                                                                                                 |
+| `concord-notifications.test.js`      | 1     | Yes  | Concord unread/mention badges: tab rollup dot + channel-row dot (2 channels), clears on row open, survives reload (IDB markers), reply lights mention pill                                                                                         |
 
 ## Detailed Coverage
 
@@ -992,10 +1032,10 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 
 #### Authenticated (2 tests)
 
-| Test                                                | What it verifies                                                                  |
-| --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| add-reaction button is hidden until message hovered | `addButtonOnHover`: "+" button is display:none until the message group is hovered |
-| authenticated user can react to a chat message      | Hover → add → picker opens → pick emoji → reaction button appears on the message  |
+| Test                                                                 | What it verifies                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| add-reaction button is faded until hovered, without shifting the row | `addButtonOnHover`: "+" wrapper reveals via opacity (not display:none) so the row's bounding box is identical hovered vs. not — regression test for a hover-flicker bug where a display swap collapsed/expanded the footer and shifted rows below it |
+| authenticated user can react to a chat message                       | Hover → add → picker opens → pick emoji → reaction button appears on the message                                                                                                                                                                     |
 
 **Components exercised:** Chat, ReactionBar, AddReactionButton, ReactionPicker, EmojiPicker, ReactionButton
 
@@ -1452,6 +1492,97 @@ and never hits the network.)
   instead of racing the npub modal's close.
 
 **Components exercised:** LoginModal (npub method gate), LoginWithNpub, ModalManager transitions, ReadonlyNotice on the inbox page.
+
+---
+
+### concord-channels.test.js (1 test)
+
+**Routes:** `/c/[pubkey]?view=channels`, `/invite/[naddr]#fragment`
+**Auth required:** Yes (two fresh nsec accounts in two isolated browser contexts)
+
+`concord-channels.test.js` — private channels: create wizard, invite link,
+join-by-link, two-context message exchange, ban + key-rotation severance.
+Not covered: direct invites (needs second seeded profile with DM relays),
+dissolve, key backup.
+
+One long two-context test over the real strfry relay (`CONCORD_RELAYS` wired
+in `playwright.config.js`): the owner creates a community (Use Current
+Keypair flow), founds the private area + channel through the 3-step wizard,
+mints an invite link; the guest joins via the link, both exchange encrypted
+messages; the owner bans the guest and the test asserts a post-rotation
+message renders for the owner but never for the banned guest (bounded
+negative wait). Doubles as the runtime smoke test for passing the app's
+applesauce-relay@6.2.1 pool into the concord fork's ConcordClient.
+
+**Nuances:**
+
+- Community-page selectors go through a `vis()` helper
+  (`.filter({ visible: true }).first()`): the `/c/[pubkey]` layout renders
+  its children up to 3× for responsive variants, so every testid matches
+  multiple nodes.
+- Modal ✕ buttons must be scoped to `.modal-box` — the chat pane's
+  key-backup bar has its own ✕.
+- e2e Chromium reports `en-US`, so text assertions use the English catalog
+  despite `de` being the base locale.
+
+**Components exercised:** PrivateChannelsView, ChannelCreateWizard, ChannelChat, ChannelInviteSheet, ChannelMembersModal, the `/invite/[naddr]` join page, CreateCommunityModal.
+
+---
+
+### concord-notifications.test.js (1 test)
+
+**Routes:** `/c/[pubkey]`, `/c/[pubkey]?view=channels`, `/invite/[naddr]#fragment`
+**Auth required:** Yes (two fresh nsec accounts in two isolated browser contexts)
+
+The one e2e flow for Concord's unread/mention badge system (spec §8). Reuses
+`concord-channels.test.js`'s owner/guest setup, wizard, and invite round trip
+(helpers duplicated locally — e2e spec files in this project don't import
+from one another), then drives the badge lifecycle end to end over the real
+strfry relay.
+
+**Two channels are load-bearing:** PrivateChannelsView auto-selects
+`channels[0]` (alphabetical) on mount and marks the active channel read, so
+with a single channel the ROW dot would clear the instant the view opens and
+only the tab-rollup dot would be observable. The guest's channel is named to
+sort second ("Beta Talk" after "Alpha Planung"); the invite link is
+channel-scoped, so the guest holds only Beta's key.
+
+1. Owner founds an area + channel "Alpha Planung", posts a message into it
+   (this doubles as the post-reload readiness signal), creates a second
+   channel "Beta Talk", and mints the invite from Beta (active); guest
+   joins, clicks Beta's rail row (Alpha auto-selects but is locked for
+   them), and reaches the composer.
+2. Owner navigates to the community's Home tab (clearing the "active
+   channel"). Baseline: no dot, no pill anywhere.
+3. Guest sends into Beta; the owner's Channels TAB (area rollup) lights the
+   neutral `concord-unread-dot` while still on Home.
+4. Owner opens the Kanäle view — Alpha auto-selects, so Beta's unread
+   survives the mount: **Beta's rail ROW carries the dot** while Alpha's
+   row carries none (row-scoped locators).
+5. Owner clicks Beta's row — `markChannelRead` clears the dot everywhere in
+   the DOM (`toHaveCount(0)`, not scoped to one mount, since
+   `ConcordUnreadDot` renders no node at all when its flags are false).
+6. Owner goes Home and reloads. Readiness is asserted POSITIVELY before the
+   negative check: the Kanäle rail lists Beta again and auto-selected
+   Alpha's history shows the pre-reload "alpha checkpoint" message (rumor
+   cache re-hydrated). Only then: still no dot/pill — and since only active
+   Alpha gets auto-marked on this navigation, a lost Beta marker WOULD
+   light Beta's row dot here, proving the marker came back from IndexedDB.
+7. Owner posts into Beta and leaves; the guest hovers that specific
+   message, clicks the hover-revealed Reply button, and replies — the reply
+   factory p-tags the owner as a mention. The owner's
+   `concord-mention-pill` lights even while off-channel (Home tab).
+
+**Explicit non-goal:** OS toasts (the `Notification` API call in
+`notifications.svelte.js`'s `maybeToast`) are NOT exercised here — headless
+Chromium's `Notification` support is unreliable in CI. The toast gate logic
+(`shouldToast`) is fully covered by unit tests in
+`src/lib/__tests__/concord-notification-helpers.test.js`.
+
+**Components exercised:** ConcordUnreadDot, PrivateChannelsView (channel-row
+badges + `markChannelRead` on mount), ContentNavSidebar (Channels tab
+rollup), ChannelChat (reply UI, mention p-tag on send), the Concord
+notifications service (`src/lib/concord/notifications.svelte.js`).
 
 ## Google login (Pomegranate) — manual checklist (no E2E: external OAuth)
 
