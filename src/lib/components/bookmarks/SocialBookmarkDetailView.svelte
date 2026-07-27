@@ -37,6 +37,8 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { renderMarkdown } from '$lib/helpers/markdown.js';
   import { showToast } from '$lib/helpers/toast.js';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useReplaceableEvent } from '$lib/stores/replaceable-event.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -617,7 +619,12 @@
               {m.bookmark_detail_eyebrow()}
             </span>
             <p class="mt-1 text-sm text-base-content">
-              <span class="font-bold">{saverName(featuredSaver)}</span>
+              <a
+                href={resolve(profileLink(featuredSaver.pubkey))}
+                class="font-bold hover:underline"
+              >
+                {saverName(featuredSaver)}
+              </a>
               {#if savers.length > 1}
                 {m
                   .bookmark_detail_lead_network({ name: '', count: savers.length - 1 })
@@ -639,6 +646,7 @@
                   pubkey={saver.pubkey}
                   profile={profiles.get(saver.pubkey)}
                   size="sm"
+                  linkToProfile
                   fallbackType="robohash"
                   class="ring-2 ring-base-100"
                 />
@@ -859,7 +867,12 @@
               linkToProfile
             />
             <div class="min-w-0">
-              <div class="font-semibold text-base-content">{authorName}</div>
+              <a
+                href={resolve(profileLink(article.pubkey))}
+                class="block font-semibold text-base-content hover:underline"
+              >
+                {authorName}
+              </a>
               <div class="mt-0.5 flex flex-wrap gap-3">
                 {#if articleDate}
                   <span class="inline-flex items-center gap-1">
@@ -943,6 +956,7 @@
                         pubkey={pk}
                         profile={profiles.get(pk)}
                         size="xs"
+                        linkToProfile
                         fallbackType="robohash"
                         class="ring-2 ring-base-100"
                       />
@@ -950,9 +964,9 @@
                   {/each}
                 </div>
                 <span class="truncate text-sm text-base-content/60">
-                  {pubkeyName(reactorPubkeys[0])}{reactorPubkeys.length > 1
-                    ? ` & ${reactorPubkeys.length - 1}`
-                    : ''}
+                  <a href={resolve(profileLink(reactorPubkeys[0]))} class="hover:underline"
+                    >{pubkeyName(reactorPubkeys[0])}</a
+                  >{reactorPubkeys.length > 1 ? ` & ${reactorPubkeys.length - 1}` : ''}
                 </span>
               </div>
             {/if}
@@ -1004,6 +1018,7 @@
                           pubkey={saver.pubkey}
                           profile={profiles.get(saver.pubkey)}
                           size="xs"
+                          linkToProfile
                           fallbackType="robohash"
                           class="ring-2 ring-base-100"
                         />
@@ -1031,9 +1046,12 @@
                       />
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
-                          <span class="truncate text-sm font-semibold text-base-content">
+                          <a
+                            href={resolve(profileLink(saver.pubkey))}
+                            class="truncate text-sm font-semibold text-base-content hover:underline"
+                          >
                             {saverName(saver)}
-                          </span>
+                          </a>
                           {#if saver.pubkey === article.pubkey}
                             <span
                               class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-primary uppercase"

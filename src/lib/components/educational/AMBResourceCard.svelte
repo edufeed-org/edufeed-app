@@ -5,6 +5,7 @@
 
 <script>
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { nip19 } from 'nostr-tools';
   import { goto } from '$app/navigation';
@@ -23,6 +24,12 @@
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import CreatorAvatarStack from '../shared/CreatorAvatarStack.svelte';
+  import {
+    getResourceAttribution,
+    formatCreatorNames
+  } from '$lib/helpers/educational/resourceAttribution.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
@@ -75,6 +82,44 @@
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
+
+  // Indexer vs. author: when the AMB creator metadata names someone other
+  // than the event pubkey, the pubkey is only the indexer — the author slot
+  // shows the metadata creator instead and the indexer stays off the card.
+  const attribution = $derived(
+    getResourceAttribution(resource.rawEvent ?? resource, authorProfile)
+  );
+  const indexedCreators = $derived(attribution.indexed ? attribution.creators : []);
+  const getCreatorProfiles = useProfileMap(() =>
+    indexedCreators.flatMap((c) => (c.pubkey ? [c.pubkey] : []))
+  );
+  /** @param {import('$lib/helpers/educational/resourceAttribution.js').DisplayCreator} c */
+  function creatorDisplayName(c) {
+    if (c.name) return c.name;
+    if (!c.pubkey) return '';
+    return getDisplayName(getCreatorProfiles().get(c.pubkey), c.pubkey.slice(0, 8) + '…');
+  }
+  const displayedAuthorName = $derived(
+    indexedCreators.length
+      ? formatCreatorNames(indexedCreators.map(creatorDisplayName))
+      : authorName
+  );
+  // Full author list as hover title — the visible line truncates/caps at +N.
+  const fullCreatorNames = $derived(
+    indexedCreators.length
+      ? indexedCreators.map(creatorDisplayName).filter(Boolean).join(', ')
+      : undefined
+  );
+  // The creator name links to a profile only for a single pubkey creator —
+  // mixed/multiple author groups stay plain text (the card itself navigates).
+  const singleCreatorPubkey = $derived(
+    indexedCreators.length === 1 ? indexedCreators[0].pubkey : undefined
+  );
+  // Indexed byline: source domain + date (dashed avatar alone marks the
+  // metadata origin — no extra hint text).
+  const attributionLine = $derived(
+    [attribution.sourceDomain, formatCalendarDate(publishedAt, 'short')].filter(Boolean).join(' · ')
+  );
 
   // Reactive SKOS concepts for URI-to-label resolution
   const resourceTypeConcepts = $derived(getCachedConcepts('learningResourceType'));
@@ -214,8 +259,8 @@
           >
         {/if}
       </div>
-      <div class="truncate text-sm text-base-content/60">
-        {authorName} · {formatCalendarDate(publishedAt, 'short')}
+      <div class="truncate text-sm text-base-content/60" title={fullCreatorNames}>
+        {displayedAuthorName} · {formatCalendarDate(publishedAt, 'short')}
         {#if resource.license}
           · {resource.license.label}
         {/if}
@@ -275,21 +320,52 @@
     onclick={preview ? undefined : navigateToDetail}
     onkeydown={preview ? undefined : handleKeydown}
   >
-    <!-- Author Header -->
+    <!-- Author Header — for indexed resources the metadata creator takes the
+         author slot (dashed avatar = no Nostr profile); the indexer only
+         appears on the detail page ("Indexed by"). -->
     <div class="mb-3 flex items-center gap-3">
-      <ProfileAvatar
-        pubkey={resource.pubkey}
-        profile={authorProfile}
-        size="md"
-        linkToProfile
-        showHoverCard
-        fallbackType="robohash"
-      />
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+        {#if indexedCreators.length}
+          <CreatorAvatarStack creators={indexedCreators} size="md" />
+        {:else}
+          <ProfileAvatar
+            pubkey={resource.pubkey}
+            profile={authorProfile}
+            size="md"
+            linkToProfile
+            showHoverCard
+            fallbackType="robohash"
+          />
+        {/if}
+      </div>
       <div class="min-w-0 flex-1">
-        <div class="truncate font-medium text-base-content">{authorName}</div>
-        <div class="text-sm text-base-content/60">
-          {formatCalendarDate(publishedAt, 'short')}
-        </div>
+        {#if indexedCreators.length && !singleCreatorPubkey}
+          <span class="block truncate font-medium text-base-content" title={fullCreatorNames}>
+            {displayedAuthorName}
+          </span>
+        {:else}
+          <a
+            href={resolve(profileLink(singleCreatorPubkey ?? resource.pubkey))}
+            class="block truncate font-medium text-base-content hover:underline"
+            title={fullCreatorNames}
+            onclick={(e) => e.stopPropagation()}
+          >
+            {displayedAuthorName}
+          </a>
+        {/if}
+        {#if indexedCreators.length}
+          <div
+            class="truncate font-mono text-xs text-base-content/60"
+            data-testid="metadata-attribution"
+          >
+            {attributionLine}
+          </div>
+        {:else}
+          <div class="text-sm text-base-content/60">
+            {formatCalendarDate(publishedAt, 'short')}
+          </div>
+        {/if}
       </div>
       <!-- Resource Type Badge -->
       {#if localizedLearningResourceTypes.length > 0}

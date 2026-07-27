@@ -21,6 +21,8 @@
   import { SvelteMap } from 'svelte/reactivity';
   import LicenseBadge from './LicenseBadge.svelte';
   import LicenseModal from './LicenseModal.svelte';
+  import MetadataCleanerModal from './MetadataCleanerModal.svelte';
+  import { isPdfFile, isSupportedFile, cleanFileQuietly } from '$lib/helpers/metaclean.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -31,6 +33,8 @@
    * @property {number} size
    * @property {string} [sha256]
    * @property {any} [licenseEvent]
+   * @property {number} [metaCleanedFields] - display-only: hidden metadata fields removed on upload
+   * @property {boolean} [metaCleanFailed] - display-only: quiet clean was requested but the service failed
    */
 
   /** @type {{ files?: UploadedFileWithLicense[], multiple?: boolean, accept?: string, maxSize?: number, label?: string, helpText?: string, disabled?: boolean, activeUserDisplayName?: string }} */
@@ -79,6 +83,22 @@
   let modalOpen = $state(false);
   let modalTargetIndex = $state(/** @type {number | null} */ (null));
 
+  // Optional metadata review interstitial (metadata-cleaner service), run
+  // per-file inside the handleFiles loop before hashing.
+  let cleanerOpen = $state(false);
+  /** @type {File | null} */
+  let cleanerFile = $state(null);
+  /** @type {((file: File) => void) | null} */
+  let cleanerResolve = null;
+
+  // Quiet metaclean opt-in, surfaced as extra options inside the license
+  // modal (see metacleanOptions snippet below) instead of a blocking
+  // interstitial. Cleaning itself happens silently in makeBeforeAttest.
+  let cleanMetadata = $state(false);
+  /** @type {'off' | 'balanced' | 'strong'} */
+  let cleanCompress = $state('off');
+  let inspectOpen = $state(false);
+
   // Snapshot of `files` taken just before a brand-new upload appends/replaces.
   // Set ONLY when the modal is being opened for a mandatory (upload-loop) flow.
   // Null when the modal was opened from a row button (optional, replace-only
@@ -100,6 +120,12 @@
   /** @type {SvelteMap<number, File>} */
   let pendingFilesByIndex = new SvelteMap();
 
+  // The pending (not-yet-uploaded) File for the current modal target, if any —
+  // used to gate the metaclean options and feed the inspect modal.
+  const modalTargetPendingFile = $derived(
+    modalTargetIndex !== null ? (pendingFilesByIndex.get(modalTargetIndex) ?? null) : null
+  );
+
   function notifyModalClosed() {
     const listeners = modalCloseListeners;
     modalCloseListeners = [];
@@ -111,6 +137,11 @@
   // - Row-button (optional): set to null (cancel must not mutate files).
   function openModalFor(/** @type {number} */ index) {
     modalTargetIndex = index;
+    // Reset per-file so a re-opened modal (row "add license" button) never
+    // inherits a previous file's opt-in state.
+    cleanMetadata = false;
+    cleanCompress = 'off';
+    inspectOpen = false;
     modalOpen = true;
   }
 
@@ -229,12 +260,39 @@
 
     try {
       for (const file of filesToUpload) {
-        if (file.size > maxSize) {
+        const cleanerEligible = runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file);
+        // The blocking interstitial is now ONLY the oversized-PDF rescue case:
+        // an oversized PDF may still fit after the cleaner's compression, so
+        // its size check moves to the resolved file below. Everything else —
+        // including normal-sized supported files — skips straight to the
+        // license flow, where the quiet metaclean checkbox offers the same
+        // cleaning as an opt-in instead of a blocking step.
+        const needsInterstitial = cleanerEligible && isPdfFile(file) && file.size > maxSize;
+        if (file.size > maxSize && !needsInterstitial) {
           throw new Error(`File "${file.name}" exceeds maximum size of ${formatFileSize(maxSize)}`);
         }
-        const hash = await sha256Hex(file);
+
+        // Optional metadata review step (metadata-cleaner service). Resolves
+        // with the original file when skipped/closed, or the cleaned copy.
+        let fileToUpload = file;
+        if (needsInterstitial) {
+          cleanerFile = file;
+          cleanerOpen = true;
+          fileToUpload = await new Promise((resolve) => {
+            cleanerResolve = resolve;
+          });
+          cleanerFile = null;
+        }
+
+        if (fileToUpload.size > maxSize) {
+          throw new Error(
+            `File "${fileToUpload.name}" exceeds maximum size of ${formatFileSize(maxSize)}`
+          );
+        }
+
+        const hash = await sha256Hex(fileToUpload);
         if (files.some((f) => f.sha256 === hash)) {
-          uploadError = m.licensed_file_input_duplicate_file({ name: file.name });
+          uploadError = m.licensed_file_input_duplicate_file({ name: fileToUpload.name });
           preparedCount++;
           uploadProgress = Math.round((preparedCount / totalFiles) * 100);
           continue;
@@ -248,9 +306,9 @@
         /** @type {UploadedFileWithLicense} */
         const descriptor = {
           url: reuseUrl ?? '',
-          name: file.name,
-          type: file.type || 'application/octet-stream',
-          size: file.size,
+          name: fileToUpload.name,
+          type: fileToUpload.type || 'application/octet-stream',
+          size: fileToUpload.size,
           sha256: hash,
           licenseEvent: null
         };
@@ -269,7 +327,7 @@
         // to reuse. With no stash, the modal's beforeAttest prop stays null and
         // neither Save path uploads.
         if (!reuseUrl) {
-          pendingFilesByIndex.set(targetIndex, file);
+          pendingFilesByIndex.set(targetIndex, fileToUpload);
         }
 
         preparedCount++;
@@ -304,13 +362,32 @@
       if (!file) throw new Error('makeBeforeAttest: no pending file at index ' + index);
       if (!activeUser?.pubkey) throw new Error('No active user');
 
+      // Quiet clean: only runs when the user opted in via the license
+      // modal's checkbox/compression select. Never throws — a failed clean
+      // falls back to uploading the original file, noted on the row.
+      let uploadFile = file;
+      let cleanedFields = 0;
+      let cleanFailed = false;
+      if (cleanMetadata || cleanCompress !== 'off') {
+        const result = await cleanFileQuietly(uploadFile, {
+          strip: cleanMetadata,
+          compress: cleanCompress
+        });
+        if (result) {
+          uploadFile = result.file;
+          cleanedFields = result.cleaned ? result.removedCount : 0;
+        } else {
+          cleanFailed = true; // service down — upload the original, note it
+        }
+      }
+
       const signerFn = async (/** @type {any} */ ev) => {
         if (!activeUser) throw new Error('User not available');
         return await activeUser.signEvent(ev);
       };
       const serverUrl = getActiveBlossomServer(activeUser.pubkey, eventStore);
       const client = new BlossomClient(serverUrl, signerFn);
-      const blob = await client.uploadBlob(file);
+      const blob = await client.uploadBlob(uploadFile);
       const finalUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
 
       files = files.map((f, i) =>
@@ -320,7 +397,9 @@
               url: finalUrl,
               sha256: blob.sha256,
               size: blob.size ?? f.size,
-              type: blob.type || f.type
+              type: blob.type || f.type,
+              metaCleanedFields: cleanedFields,
+              metaCleanFailed: cleanFailed
             }
           : f
       );
@@ -328,8 +407,8 @@
       return {
         url: finalUrl,
         hash: blob.sha256,
-        mime: blob.type || file.type || 'application/octet-stream',
-        size: blob.size ?? file.size
+        mime: blob.type || uploadFile.type || 'application/octet-stream',
+        size: blob.size ?? uploadFile.size
       };
     };
   }
@@ -505,6 +584,13 @@
                 />
               </div>
             {/if}
+            {#if file.metaCleanedFields}
+              <div class="text-xs text-success">
+                {m.metaclean_removed_note({ count: String(file.metaCleanedFields) })}
+              </div>
+            {:else if file.metaCleanFailed}
+              <div class="text-xs text-warning">{m.metaclean_clean_failed_note()}</div>
+            {/if}
           </div>
 
           <div class="flex shrink-0 items-center gap-1">
@@ -562,6 +648,40 @@
   {/if}
 </div>
 
+{#snippet metacleanOptions()}
+  <label class="flex cursor-pointer items-start gap-2 text-sm">
+    <input
+      type="checkbox"
+      class="checkbox mt-0.5 checkbox-sm"
+      bind:checked={cleanMetadata}
+      data-testid="metaclean-license-checkbox"
+    />
+    <span class="whitespace-normal">{m.metaclean_license_checkbox()}</span>
+  </label>
+  {#if modalTargetPendingFile && isPdfFile(modalTargetPendingFile)}
+    <label class="mt-2 flex items-center gap-2 text-sm">
+      <span>{m.metaclean_compress_label()}</span>
+      <select
+        class="select-bordered select select-xs"
+        bind:value={cleanCompress}
+        data-testid="metaclean-license-compress"
+      >
+        <option value="off">{m.metaclean_compress_off()}</option>
+        <option value="balanced">{m.metaclean_compress_balanced()}</option>
+        <option value="strong">{m.metaclean_compress_strong()}</option>
+      </select>
+    </label>
+  {/if}
+  <button
+    type="button"
+    class="btn mt-1 btn-ghost btn-xs"
+    data-testid="metaclean-license-details"
+    onclick={() => (inspectOpen = true)}
+  >
+    {m.metaclean_license_details()}
+  </button>
+{/snippet}
+
 <LicenseModal
   bind:open={modalOpen}
   hash={modalTargetFile?.sha256 ?? ''}
@@ -571,6 +691,11 @@
   fileName={modalTargetFile?.name ?? ''}
   {activeUserDisplayName}
   existingLicense={pendingExistingLicense}
+  extraOptions={runtimeConfig.metadataCleaner?.enabled &&
+  modalTargetPendingFile &&
+  isSupportedFile(modalTargetPendingFile)
+    ? metacleanOptions
+    : null}
   beforeAttest={modalTargetIndex !== null && pendingFilesByIndex.has(modalTargetIndex)
     ? makeBeforeAttest(modalTargetIndex)
     : null}
@@ -602,3 +727,15 @@
     notifyModalClosed();
   }}
 />
+
+<MetadataCleanerModal
+  bind:open={cleanerOpen}
+  file={cleanerFile}
+  {maxSize}
+  ondone={(/** @type {File} */ f) => {
+    cleanerResolve?.(f);
+    cleanerResolve = null;
+  }}
+/>
+
+<MetadataCleanerModal bind:open={inspectOpen} file={modalTargetPendingFile} mode="inspect" />

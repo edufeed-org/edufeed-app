@@ -1,6 +1,6 @@
 <script>
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { untrack } from 'svelte';
   import { onMount } from 'svelte';
@@ -70,7 +70,8 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import {
     mapCommunityItemsToRawItems,
-    getCommunityFilterOptions
+    getCommunityFilterOptions,
+    hasDisplayableCommunityProfile
   } from '$lib/helpers/communityContent.js';
   import { matchesTextSearch } from '$lib/helpers/contentSearch.js';
   import AuthorSearchDropdown from '$lib/components/discover/AuthorSearchDropdown.svelte';
@@ -1215,14 +1216,17 @@
 
   // Filtered communities for the Communities tab
   const filteredCommunities = $derived.by(() => {
-    let filtered = communities;
+    // Hide communities without a named kind 0 profile —
+    // they'd render as meaningless "Unknown User" cards.
+    let filtered = communities.filter((community) =>
+      hasDisplayableCommunityProfile(communityProfiles.get(community.pubkey))
+    );
 
     // Apply search filter by name and description
     if (activeSearchQuery.trim()) {
       const query = activeSearchQuery.toLowerCase();
       filtered = filtered.filter((community) => {
-        const communityPubkey = getTagValue(community, 'd') || community.pubkey;
-        const profile = communityProfiles.get(communityPubkey);
+        const profile = communityProfiles.get(community.pubkey);
 
         const name = profile?.name?.toLowerCase() || '';
         const about = profile?.about?.toLowerCase() || '';
@@ -1480,10 +1484,12 @@
     </div>
   {:else if runtimeConfig.ui?.discoverHeroImage}
     <div class="relative overflow-hidden py-12 text-primary-content">
-      <img
-        src={getProxiedImageUrl(runtimeConfig.ui.discoverHeroImage, 'hero') ||
-          runtimeConfig.ui.discoverHeroImage}
+      <ImageWithFallback
+        src={runtimeConfig.ui.discoverHeroImage}
         alt=""
+        size="hero"
+        loading="eager"
+        fallbackType="banner"
         class="absolute inset-0 h-full w-full object-cover"
       />
       <div class="relative z-10 container mx-auto px-4">

@@ -39,10 +39,12 @@ export { default as SearchIcon } from './ui/SearchIcon.svelte';
 export { default as TagIcon } from './ui/TagIcon.svelte';
 export { default as BookIcon } from './ui/BookIcon.svelte';
 export { default as BookClosedIcon } from './ui/BookClosedIcon.svelte';
+export { default as WikipediaIcon } from './ui/WikipediaIcon.svelte';
 export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
 export { default as InfoIcon } from './ui/InfoIcon.svelte';
 export { default as PersonIcon } from './ui/PersonIcon.svelte';
+export { default as PhotoIcon } from './ui/PhotoIcon.svelte';
 export { default as GearIcon } from './ui/GearIcon.svelte';
 export { default as ArrowLeftRightIcon } from './ui/ArrowLeftRightIcon.svelte';
 export { default as InfoCircleIcon } from './ui/InfoCircleIcon.svelte';
@@ -54,6 +56,9 @@ export { default as SchoolIcon } from './ui/SchoolIcon.svelte';
 export { default as LightbulbIcon } from './ui/LightbulbIcon.svelte';
 export { default as SparkleIcon } from './ui/SparkleIcon.svelte';
 export { default as BibleIcon } from './ui/BibleIcon.svelte';
+export { default as PuzzleIcon } from './ui/PuzzleIcon.svelte';
+export { default as SmartphoneIcon } from './ui/SmartphoneIcon.svelte';
+export { default as KeyIcon } from './ui/KeyIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';
@@ -86,3 +91,4 @@ export { default as LinkedinIcon } from './social/LinkedinIcon.svelte';
 export { default as FacebookIcon } from './social/FacebookIcon.svelte';
 export { default as TwitterXIcon } from './social/TwitterXIcon.svelte';
 export { default as WhatsappIcon } from './social/WhatsappIcon.svelte';
+export { default as GoogleIcon } from './social/GoogleIcon.svelte';

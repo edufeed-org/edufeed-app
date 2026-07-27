@@ -6,6 +6,7 @@
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const activeUser = useActiveUser();
@@ -60,10 +61,11 @@
         <div
           class="h-8 w-8 rounded-full ring-2 ring-base-300 transition-colors duration-300 hover:ring-primary/50"
         >
-          <img
+          <ImageWithFallback
             src={getProfilePicture(communityProfile) || `https://robohash.org/${communityPubKey}`}
             alt="Community"
-            class="rounded-full object-cover"
+            fallbackType="community"
+            class="h-full w-full rounded-full object-cover"
           />
         </div>
       </div>

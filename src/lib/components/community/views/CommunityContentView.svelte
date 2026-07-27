@@ -26,7 +26,8 @@
    * @property {string} emptyDescription
    * @property {(count: number) => string} formatCount - Function to format the item count
    * @property {(items: any[]) => number} [countTransform] - Optional transform to derive display count from items
-   * @property {string} emptyIconPath - SVG path for empty state icon
+   * @property {string} [emptyIconPath] - SVG path for empty state icon
+   * @property {import('svelte').Snippet} [emptyIcon] - Icon snippet for empty state (takes precedence over emptyIconPath)
    * @property {boolean} [searchable] - Show search input in header
    * @property {string} [searchPlaceholder] - Placeholder text for search input
    */
@@ -43,6 +44,7 @@
     formatCount,
     countTransform = /** @type {any[]} */ (items) => items.length,
     emptyIconPath,
+    emptyIcon,
     searchable = false,
     searchPlaceholder = 'Search...',
     content,
@@ -207,7 +209,12 @@
     </div>
     <!-- Empty State -->
   {:else if displayedItems.length === 0}
-    <EmptyState title={emptyTitle} description={emptyDescription} iconPath={emptyIconPath} />
+    <EmptyState
+      title={emptyTitle}
+      description={emptyDescription}
+      iconPath={emptyIconPath}
+      icon={emptyIcon}
+    />
     <!-- Content -->
   {:else}
     {@render content(displayedItems, authorProfiles)}

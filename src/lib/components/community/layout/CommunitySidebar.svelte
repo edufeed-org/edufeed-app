@@ -4,6 +4,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { HomeIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { currentCommunityId, onCommunitySelect, isDashboardActive = false, onHomeSelect } = $props();
@@ -58,15 +59,12 @@
         >
           <div class="avatar">
             <div class="h-12 w-12 rounded-full">
-              <img
+              <ImageWithFallback
                 src={getProfilePicture(communityProfile) ||
                   `https://robohash.org/${communityPubKey}`}
                 alt={getDisplayName(communityProfile)}
-                class="rounded-full object-cover"
-                onerror={(e) => {
-                  const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
-                  if (img) img.src = `https://robohash.org/${communityPubKey}`;
-                }}
+                fallbackType="community"
+                class="h-full w-full rounded-full object-cover"
               />
             </div>
           </div>
@@ -106,14 +104,11 @@
       >
         <div class="avatar">
           <div class="h-10 w-10 rounded-full">
-            <img
+            <ImageWithFallback
               src={getProfilePicture(communityProfile) || `https://robohash.org/${communityPubKey}`}
               alt={getDisplayName(communityProfile)}
-              class="rounded-full object-cover"
-              onerror={(e) => {
-                const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
-                if (img) img.src = `https://robohash.org/${communityPubKey}`;
-              }}
+              fallbackType="community"
+              class="h-full w-full rounded-full object-cover"
             />
           </div>
         </div>

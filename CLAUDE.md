@@ -415,6 +415,7 @@ Top-level shape:
 - `blossom.serverUrl` — file upload server
 - `ui.{defaultLightTheme,defaultDarkTheme}` — theme defaults (dark is inert)
 - `educational` — search debounce, vocabulary choices, `schemeNaddrs` (kind 39737 ConceptScheme naddrs from `SCHEME_NADDR_*` env vars)
+- `npubLogin.enabled` / `googleLogin.{enabled,centralUrl,operatorUrls}` — login methods (`NPUB_LOGIN_ENABLED`, `GOOGLE_LOGIN_ENABLED`, `POMEGRANATE_CENTRAL_URL`, `POMEGRANATE_OPERATOR_URLS`); Google = Pomegranate/promenade FROST bunker, accounts tagged via `account.metadata.pomegranateCentral`
 - Whitelabel: `APP_LOGO`, hero images (`LANDING_HERO_IMAGE`, `DISCOVER_HERO_IMAGE`), favicons, imprint vars
 
 ### Server API Endpoints
@@ -423,6 +424,7 @@ Besides `/api/config`, the app has server-side proxy endpoints (all optional, 50
 
 - `/api/enrich` — URL → form-prefill metadata via the deployed AMB MCP server (`AMB_MCP_URL`, Keycloak client-credentials auth via `AMB_MCP_TOKEN_URL`/`AMB_MCP_CLIENT_ID`/`AMB_MCP_CLIENT_SECRET`)
 - `/api/oer` — OER media-library image search proxy (`OER_PROXY_URL`)
+- `/api/metaclean` — metadata-cleaner proxy for the pre-upload review step in `LicensedFileInput`/`LicensedImageInput` (`METADATA_CLEANER_URL`)
 - `/api/curricula` — Lehrplan-ontology SPARQL cascade for the curriculum picker (`SPARQL_ENDPOINT_URL`)
 - `/api/nip05` — membership/handle admin proxy to the standalone nip-05-service (`NIP05_SERVICE_URL`, `NIP05_SERVICE_API_KEY`, allowlist `MEMBERSHIP_ADMIN_PUBKEYS`; feature flag `MEMBERSHIP_ENABLED`)
 

@@ -1,5 +1,6 @@
 <script>
-  let { modalId, onNSECTransition, onBunkerTransition } = $props();
+  let { modalId, onNSECTransition, onBunkerTransition, onNpubTransition, onGoogleTransition } =
+    $props();
 
   import * as m from '$lib/paraglide/messages';
   import { ExtensionSigner } from 'applesauce-signers';
@@ -10,6 +11,14 @@
   import AccountProfile from './AccountProfile.svelte';
   import { useAccounts } from '$lib/stores/accounts.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import {
+    CloseIcon,
+    GoogleIcon,
+    KeyIcon,
+    PuzzleIcon,
+    SmartphoneIcon
+  } from '$lib/components/icons';
 
   const getAccounts = useAccounts();
 
@@ -21,6 +30,14 @@
    * @type {string | null}
    */
   let extensionError = $state(null);
+
+  // NIP-07 extensions barely exist on mobile browsers, so the card would be
+  // a dead button for most phone users. The modal mounts on demand (see
+  // ModalManager's {#if}), long after extensions inject window.nostr — so a
+  // one-shot check at init is reliable. Desktop always shows the card:
+  // clicking without an extension surfaces the inline install hint instead.
+  const isMobileUA = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  const showExtensionCard = !isMobileUA || !!(/** @type {any} */ (window).nostr);
 
   /**
    * Sync modal close with store state
@@ -114,6 +131,11 @@
           onBunkerTransition();
         }
         return null;
+      case 'Npub':
+        if (onNpubTransition) {
+          onNpubTransition();
+        }
+        return null;
       default:
         throw new Error('Unknown signer');
     }
@@ -122,6 +144,16 @@
 
 <dialog id={modalId} class="modal">
   <div class="modal-box">
+    <form method="dialog">
+      <button
+        data-testid="login-modal-close"
+        class="btn absolute top-3 right-3 btn-circle btn-ghost btn-sm"
+        aria-label={m.common_close()}
+      >
+        <CloseIcon class_="w-4 h-4" />
+      </button>
+    </form>
+
     <h1 class="text-lg font-bold">{m.auth_login_modal_add_account()}</h1>
 
     <div class="mt-4 space-y-4">
@@ -139,57 +171,75 @@
         <div class="divider">{m.auth_login_modal_or()}</div>
       {/if}
 
-      <div class="text-center">
-        <button
-          data-testid="signup-primary-cta"
-          class="btn w-full btn-lg btn-primary"
-          onclick={() => modalStore.openModal('signup')}
-        >
-          {m.auth_login_modal_create_account_cta()}
-        </button>
-      </div>
+      <button
+        data-testid="signup-primary-cta"
+        class="btn w-full btn-lg btn-primary"
+        onclick={() => modalStore.openModal('signup')}
+      >
+        {m.auth_login_modal_create_account_cta()}
+      </button>
 
-      <!-- Returning users (extension, paste-in nsec, remote signer) need the
-           three method buttons visible without an extra click. The earlier
-           collapsed <details> over-corrected for newcomers at their cost. -->
+      {#if runtimeConfig.googleLogin?.enabled}
+        <button
+          data-testid="login-method-google"
+          class="btn w-full"
+          onclick={() => onGoogleTransition?.()}
+        >
+          <GoogleIcon />
+          {m.auth_login_modal_google()}
+        </button>
+      {/if}
+
       <div class="divider text-xs opacity-70">{m.auth_login_modal_existing_account()}</div>
 
-      <section data-testid="other-signin-methods">
+      <section data-testid="other-signin-methods" class="space-y-2">
         {#if extensionError}
           <div data-testid="extension-error" class="mb-2 alert alert-error" role="alert">
             <span class="text-sm">{extensionError}</span>
           </div>
         {/if}
-        <div class="join flex flex-col">
-          <button
-            data-testid="login-method-nsec"
-            onclick={() => createSigner('NSEC')}
-            class="btn join-item"
-          >
-            {m.auth_login_modal_nsec()}
-          </button>
+        <div class="grid gap-2 {showExtensionCard ? 'grid-cols-3' : 'grid-cols-2'}">
+          {#if showExtensionCard}
+            <button
+              data-testid="login-method-extension"
+              title={m.auth_login_modal_extension()}
+              onclick={() => createSigner('Extension')}
+              class="btn h-auto flex-col gap-2 py-4 font-normal"
+            >
+              <PuzzleIcon class_="h-6 w-6" title="" />
+              <span class="text-xs leading-tight">{m.auth_login_modal_extension_short()}</span>
+            </button>
+          {/if}
           <button
             data-testid="login-method-bunker"
+            title={m.auth_login_modal_bunker()}
             onclick={() => createSigner('Bunker')}
-            class="btn join-item"
+            class="btn h-auto flex-col gap-2 py-4 font-normal"
           >
-            {m.auth_login_modal_bunker()}
+            <SmartphoneIcon class_="h-6 w-6" title="" />
+            <span class="text-xs leading-tight">{m.auth_login_modal_bunker_short()}</span>
           </button>
           <button
-            data-testid="login-method-extension"
-            onclick={() => createSigner('Extension')}
-            class="btn join-item"
+            data-testid="login-method-nsec"
+            title={m.auth_login_modal_nsec()}
+            onclick={() => createSigner('NSEC')}
+            class="btn h-auto flex-col gap-2 py-4 font-normal"
           >
-            {m.auth_login_modal_extension()}
+            <KeyIcon class_="h-6 w-6" title="" />
+            <span class="text-xs leading-tight">{m.auth_login_modal_nsec_short()}</span>
           </button>
         </div>
+        {#if runtimeConfig.npubLogin?.enabled}
+          <button
+            data-testid="login-method-npub"
+            title={m.auth_login_modal_npub()}
+            onclick={() => createSigner('Npub')}
+            class="btn w-full font-normal opacity-70 btn-ghost btn-sm"
+          >
+            {m.auth_login_modal_npub_short()}
+          </button>
+        {/if}
       </section>
-    </div>
-
-    <div class="modal-action">
-      <form method="dialog">
-        <button class="btn">{m.common_close()}</button>
-      </form>
     </div>
   </div>
 </dialog>

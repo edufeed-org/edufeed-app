@@ -75,6 +75,13 @@
       action: m.termi_hint_nip05_cta(),
       secondary: null,
       doing: null
+    },
+    profile: {
+      title: m.termi_hint_profile_title(),
+      body: m.termi_hint_profile_body(),
+      action: m.termi_hint_profile_cta(),
+      secondary: null,
+      doing: null
     }
   });
 
@@ -204,7 +211,8 @@
     </div>
 
     {#each hints as hint (hint.id)}
-      {@const copy = hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05'} */ (hint.id)]}
+      {@const copy =
+        hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} */ (hint.id)]}
       <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
         <TermiAvatar />
         <div

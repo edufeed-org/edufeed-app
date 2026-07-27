@@ -141,55 +141,47 @@
     ></div>
   {:else if phase === 'ok' && metadata}
     {@const hasImage = isSafeHttpUrl(metadata.image) && !imageFailed}
-    {@const title = metadata.title}
+    {@const title = metadata.title?.trim()}
     {@const description = metadata.description}
-    {@const displayTitle = metadata.title?.trim() || hostname()}
-    {@const displaySiteName = metadata.siteName?.trim() || null}
-    {@const cardSiteName = displaySiteName || hostname()}
 
-    {#if hasImage}
-      <a
-        data-testid="link-preview-card"
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="my-2 flex w-full flex-col overflow-hidden rounded-lg border border-base-300 bg-base-100 no-underline hover:bg-base-200/50"
-      >
-        <div class="w-full overflow-hidden bg-base-200">
+    <!-- Horizontal card: thumbnail left, domain → title → description right -->
+    <a
+      data-testid="link-preview-card"
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="my-2 flex w-full overflow-hidden rounded-xl border border-base-300 bg-base-100 no-underline transition-colors hover:border-base-content/25"
+    >
+      {#if hasImage}
+        <div data-testid="link-preview-thumb" class="w-[150px] shrink-0 bg-base-200">
           <img
             src={metadata.image}
             alt=""
             loading="lazy"
             referrerpolicy="no-referrer"
             onerror={() => (imageFailed = true)}
-            class="aspect-[1.91/1] max-h-60 w-full object-cover"
+            class="h-full w-full object-cover"
           />
         </div>
-        <div class="min-w-0 flex-1 p-3">
-          {#if title}
-            <div class="line-clamp-2 text-sm font-semibold text-base-content">{title}</div>
-          {/if}
-          {#if description}
-            <div class="mt-0.5 line-clamp-2 text-xs text-base-content/70">{description}</div>
-          {/if}
-          <div class="mt-1 flex items-center gap-1 text-xs text-base-content/50">
-            <span class="truncate">{cardSiteName}</span>
-          </div>
-        </div>
-      </a>
-    {:else}
-      <a
-        data-testid="link-preview-compact"
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="my-1 flex items-center gap-1.5 text-xs text-base-content/70 no-underline hover:text-base-content"
-      >
-        <span class="truncate">{displayTitle}</span>
-        {#if displaySiteName && displaySiteName !== displayTitle}
-          <span class="shrink-0 text-base-content/40">— {displaySiteName}</span>
+      {/if}
+      <div class="flex min-w-0 flex-1 flex-col justify-center px-4 py-3">
+        <span data-testid="link-preview-domain" class="font-mono text-[11px] text-base-content/60"
+          >{hostname()}</span
+        >
+        {#if title}
+          <span
+            data-testid="link-preview-title"
+            class="mt-1 line-clamp-2 text-sm font-semibold text-base-content">{title}</span
+          >
         {/if}
-      </a>
-    {/if}
+        {#if description}
+          <span
+            data-testid="link-preview-description"
+            class="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-base-content/60"
+            >{description}</span
+          >
+        {/if}
+      </div>
+    </a>
   {/if}
 {/if}

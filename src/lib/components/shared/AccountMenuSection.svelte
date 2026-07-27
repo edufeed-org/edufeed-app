@@ -97,6 +97,11 @@
         class="line-clamp-2 min-w-0 flex-1 leading-snug font-medium break-words text-base-content"
         title={displayName}>{displayName}</span
       >
+      {#if activeAccount.type === 'readonly'}
+        <span class="badge badge-outline badge-sm badge-warning" data-testid="readonly-badge"
+          >{m.auth_readonly_account_type()}</span
+        >
+      {/if}
     </a>
   </li>
 

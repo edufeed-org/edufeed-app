@@ -1,6 +1,8 @@
 <script>
   import { resolve } from '$app/paths';
+  import { goto } from '$app/navigation';
   import { markConversationAsRead } from '$lib/services/dm-service.svelte.js';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { MessageSquareIcon } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -69,7 +71,24 @@
   </div>
   <div class="min-w-0 flex-1">
     <div class="text-sm leading-snug">
-      <span class="font-medium">{displayName}</span>
+      <!-- The row is already an <a>; anchors cannot nest, so navigate via goto -->
+      <span
+        role="link"
+        tabindex="0"
+        class="cursor-pointer font-medium hover:underline"
+        onclick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          goto(resolve(profileLink(otherPubkey)));
+        }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            goto(resolve(profileLink(otherPubkey)));
+          }
+        }}>{displayName}</span
+      >
       &nbsp;{m.inbox_action_dm()}
     </div>
     <div class="mt-0.5 flex items-center gap-2">

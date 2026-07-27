@@ -9,6 +9,8 @@
  *  - relays hint only after the network check settles; primary action
  *    publishes the default list, secondary routes to settings
  *  - dm hint from the dm-service self-check; primary action backfills
+ *  - profile hint when no kind 0 exists after settle; action opens the
+ *    profile-edit modal, hidden by an existing profile or the dismiss flag
  *  - launcher badge counts open hints
  *
  * @vitest-environment jsdom
@@ -36,6 +38,9 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_hint_nip05_title',
       'termi_hint_nip05_body',
       'termi_hint_nip05_cta',
+      'termi_hint_profile_title',
+      'termi_hint_profile_body',
+      'termi_hint_profile_cta',
       'termi_sugg_1_q',
       'termi_sugg_1_a',
       'termi_sugg_2_q',
@@ -302,6 +307,46 @@ describe('TermiAssistant launcher + hints', () => {
     const { container } = render(TermiAssistant);
     await openTermi(container);
     expect(container.querySelector('[data-testid="termi-hint-nip05"]')).toBeNull();
+  });
+
+  it('shows the profile hint when no kind 0 exists after settle, action opens the profile modal', async () => {
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockProfileEvent.value = null; // no kind 0 anywhere
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    // Not settled yet: a missing profile is only concluded after the timeout.
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).not.toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-profile-action"]'));
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('profile', {
+      profile: {},
+      pubkey: EXT_PUBKEY
+    });
+  });
+
+  it('shows no profile hint when a kind 0 exists or the dismiss flag is set', async () => {
+    // Kind 0 present (beforeEach default fixture) → no hint even after settle.
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    let r = render(TermiAssistant);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await openTermi(r.container);
+    expect(r.container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+    r.unmount();
+
+    // Missing kind 0 but dismissed for this pubkey → no hint.
+    mockProfileEvent.value = null;
+    localStorage.setItem(`profile-hint-dismissed:${EXT_PUBKEY}`, '1');
+    r = render(TermiAssistant);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await openTermi(r.container);
+    expect(r.container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
   });
 
   it('renders no launcher badge when everything is set up', async () => {

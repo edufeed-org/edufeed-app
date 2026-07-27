@@ -3,6 +3,8 @@
 -->
 <script>
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -39,9 +41,15 @@
       pubkey={event.pubkey}
       profile={authorProfile}
       size="2xs"
+      linkToProfile
       fallbackType="robohash"
     />
-    <span class="text-xs text-base-content/60">{name}</span>
+    <a
+      href={resolve(profileLink(event.pubkey))}
+      class="text-xs text-base-content/60 hover:underline"
+    >
+      {name}
+    </a>
     {#if timestamp}
       <span class="text-xs text-base-content/40">· {timestamp}</span>
     {/if}

@@ -287,6 +287,152 @@ describe('AMBResourceCard', () => {
     });
   });
 
+  describe('indexed resource attribution (creator ≠ pubkey)', () => {
+    // Real-world shape: Colibri indexes an ÖRF journal article — the event
+    // pubkey is only the indexer, the author lives in creator:* metadata.
+    const indexedTags = [
+      ['d', 'https://oerf-journal.eu/index.php/oerf/article/view/605'],
+      ['name', 'Aufbruch ins Unbekannte'],
+      ['creator:name', 'Regina Polak'],
+      ['creator:type', 'Person'],
+      ['t', 'Jugendreligiosität']
+    ];
+    const indexedResource = {
+      ...mockResource,
+      name: 'Aufbruch ins Unbekannte',
+      identifier: 'https://oerf-journal.eu/index.php/oerf/article/view/605',
+      tags: indexedTags,
+      rawEvent: { ...mockResource.rawEvent, tags: indexedTags }
+    };
+    const indexerProfile = { name: 'Colibri', picture: 'https://example.com/colibri.jpg' };
+
+    it('shows the metadata creator instead of the indexer in the card header', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      expect(container.textContent).toContain('Regina Polak');
+      expect(container.textContent).not.toContain('Colibri');
+    });
+
+    it('renders a dashed initials avatar for creators without a Nostr profile', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      const avatar = container.querySelector('[data-testid="metadata-avatar"]');
+      expect(avatar).toBeTruthy();
+      expect(avatar?.textContent?.trim()).toBe('RP');
+      expect(avatar?.className).toContain('border-dashed');
+    });
+
+    it('shows the source domain and date, without hint text', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      const line = container.querySelector('[data-testid="metadata-attribution"]');
+      expect(line?.textContent).toContain('oerf-journal.eu');
+      expect(line?.textContent).toContain('Jan 15'); // mocked formatCalendarDate
+      expect(line?.textContent).not.toContain('metadata');
+    });
+
+    it('does not link the creator name when there is no Nostr profile', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile }
+      });
+      const header = container.querySelector('.amb-card > div');
+      expect(header?.querySelector('a')).toBeFalsy();
+    });
+
+    it('keeps the publisher header when the creator p-tag matches the event pubkey', () => {
+      const ownTags = [...indexedTags, ['p', mockResource.pubkey, '', 'creator']];
+      const ownResource = {
+        ...indexedResource,
+        tags: ownTags,
+        rawEvent: { ...mockResource.rawEvent, tags: ownTags }
+      };
+      const { container } = render(AMBResourceCard, {
+        props: { resource: ownResource, authorProfile: indexerProfile }
+      });
+      expect(container.textContent).toContain('Colibri');
+      expect(container.querySelector('[data-testid="metadata-avatar"]')).toBeFalsy();
+    });
+
+    it('stacks avatars and joins names with +N for multi-author resources', () => {
+      const multiTags = [
+        ['d', 'https://www.rpi-ekkw-ekhn.de/some/article.pdf'],
+        ['name', 'Wunder-Artikel'],
+        ['creator:name', 'Institut RPI'],
+        ['creator:type', 'Organization'],
+        ['creator:name', 'Julia Gerth'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Nadine Hofmann-Driesch'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Vierte Person'],
+        ['creator:type', 'Person']
+      ];
+      const multiResource = {
+        ...indexedResource,
+        tags: multiTags,
+        rawEvent: { ...mockResource.rawEvent, tags: multiTags }
+      };
+      const { container } = render(AMBResourceCard, {
+        props: { resource: multiResource, authorProfile: indexerProfile }
+      });
+      // Name line: first two names + count of the remaining two
+      expect(container.textContent).toContain('Institut RPI, Julia Gerth +2');
+      // Avatar stack: 4 creators > max 3 → two avatars + "+2" overflow circle
+      const stack = container.querySelector('[data-testid="creator-avatar-stack"]');
+      expect(stack).toBeTruthy();
+      expect(stack?.querySelectorAll('[data-testid="metadata-avatar"]').length).toBe(2);
+      expect(stack?.querySelector('[data-testid="creator-overflow"]')?.textContent?.trim()).toBe(
+        '+2'
+      );
+      // Multi-author name line is plain text, not a profile link
+      const header = container.querySelector('.amb-card > div');
+      expect(header?.querySelector('a')).toBeFalsy();
+    });
+
+    it('shows all creator names in hover titles (name line + overflow circle)', () => {
+      const multiTags = [
+        ['d', 'https://example.org/x'],
+        ['name', 'Multi'],
+        ['creator:name', 'Judith Noa'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Konstantin Falahati'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Anna Krause'],
+        ['creator:type', 'Person'],
+        ['creator:name', 'Vierte Person'],
+        ['creator:type', 'Person']
+      ];
+      const multiResource = {
+        ...indexedResource,
+        tags: multiTags,
+        rawEvent: { ...mockResource.rawEvent, tags: multiTags }
+      };
+      const { container } = render(AMBResourceCard, {
+        props: { resource: multiResource, authorProfile: indexerProfile }
+      });
+      // Full list on the (truncated) name line
+      const nameEl = [...container.querySelectorAll('[title]')].find((el) =>
+        el.getAttribute('title')?.startsWith('Judith Noa,')
+      );
+      expect(nameEl?.getAttribute('title')).toBe(
+        'Judith Noa, Konstantin Falahati, Anna Krause, Vierte Person'
+      );
+      // The +N circle names exactly the hidden creators
+      const overflow = container.querySelector('[data-testid="creator-overflow"]');
+      expect(overflow?.getAttribute('title')).toBe('Anna Krause, Vierte Person');
+    });
+
+    it('shows the creator in the list variant byline', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: indexedResource, authorProfile: indexerProfile, variant: 'list' }
+      });
+      expect(container.textContent).toContain('Regina Polak');
+      expect(container.textContent).not.toContain('Colibri');
+    });
+  });
+
   describe('navigation href', () => {
     beforeEach(() => {
       /** @type {any} */ (goto).mockClear();

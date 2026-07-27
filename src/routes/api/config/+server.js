@@ -372,10 +372,36 @@ export function GET() {
       adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
     },
 
+    // Read-only npub login ("browse as") — see docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md
+    npubLogin: {
+      enabled: parseBool(env.NPUB_LOGIN_ENABLED, false)
+    },
+
+    // Google login via the Pomegranate FROST threshold signer (promenade).
+    // Defaults point at the public community infrastructure; deployments can
+    // self-host promenade and swap these without client changes.
+    googleLogin: {
+      enabled: parseBool(env.GOOGLE_LOGIN_ENABLED, false),
+      centralUrl: env.POMEGRANATE_CENTRAL_URL || 'https://auth.njump.me',
+      operatorUrls: parseArray(env.POMEGRANATE_OPERATOR_URLS, [
+        'https://po.jumble.social',
+        'https://po.coracle.social',
+        'https://po.njump.me',
+        'https://po.f7z.io',
+        'https://po.nostrver.se'
+      ])
+    },
+
     // OER media-library search (proxied via the homelab oer-finder-plugin).
     // Only exposes whether it's enabled — the proxy URL stays server-side.
     oer: {
       enabled: Boolean(env.OER_PROXY_URL)
+    },
+
+    // Metadata cleaner (inspect/strip file metadata, compress PDFs before
+    // upload). Only exposes whether it's enabled — the URL stays server-side.
+    metadataCleaner: {
+      enabled: Boolean(env.METADATA_CLEANER_URL)
     }
   };
 

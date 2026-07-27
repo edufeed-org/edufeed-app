@@ -76,14 +76,16 @@ export const BILDUNGSBEREICHE = {
     subjectVocabKeys: ['hochschulfaecher'],
     educationalLevelMapping: [
       'https://w3id.org/kim/educationalLevel/level_A' // Hochschule
-    ]
+    ],
+    bildungsbereichTag: 'hochschule'
   },
   extra: {
     label: { de: 'Extra-Institutionell', en: 'Informal / Continuing Education' },
     subjectVocabKeys: ['schulfaecher', 'hochschulfaecher'],
     educationalLevelMapping: [
       'https://w3id.org/kim/educationalLevel/level_C' // Fortbildung
-    ]
+    ],
+    bildungsbereichTag: 'extra'
   },
   konfi: {
     label: { de: 'Konfi-Arbeit', en: 'Confirmation program' },

@@ -7,6 +7,7 @@ import { ambToNostr } from 'amb-nostr-converter';
 import { getSha256FromURL } from 'applesauce-common/helpers';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
+import { canSign } from '$lib/helpers/signing-guard.js';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -51,6 +52,8 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {string} inLanguage - ISO 639-1 language code
  * @property {string} license - License URI
  * @property {number | null} [coverHue] - User-chosen cover hue (null = auto)
+ * @property {string} [image] - Thumbnail image URL; emitted as an `image` tag
+ * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - NIP-94 license attestation for the thumbnail; its `x` tag becomes the resource's `x` tag
  * @property {string} [datePublished] - schema.org datePublished (YYYY-MM-DD); emitted as a `datePublished` tag
  * @property {string} [dateCreated] - schema.org dateCreated (YYYY-MM-DD); emitted as a `dateCreated` tag
  * @property {Creator[]} creators - Array of creators
@@ -162,7 +165,13 @@ function resolveImageHash(formData) {
     if (xTag) return xTag;
   }
   if (formData?.image) {
-    return getSha256FromURL(formData.image) ?? undefined;
+    // getSha256FromURL does `new URL(...)` — a malformed pasted image URL
+    // must not make the whole publish throw.
+    try {
+      return getSha256FromURL(formData.image) ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
   return undefined;
 }
@@ -189,6 +198,11 @@ export function createEducationalActions() {
       const currentAccount = manager.active;
       if (!currentAccount) {
         throw new Error('No account selected. Please log in to create resources.');
+      }
+      if (!canSign(currentAccount)) {
+        throw new Error(
+          'This account is read-only. Log in with a signing method to create resources.'
+        );
       }
 
       // Validate required fields
@@ -284,6 +298,11 @@ export function createEducationalActions() {
       const currentAccount = manager.active;
       if (!currentAccount) {
         throw new Error('No account selected. Please log in to update resources.');
+      }
+      if (!canSign(currentAccount)) {
+        throw new Error(
+          'This account is read-only. Log in with a signing method to update resources.'
+        );
       }
 
       // Extract the original d-tag

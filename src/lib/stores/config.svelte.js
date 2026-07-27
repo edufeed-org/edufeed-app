@@ -174,8 +174,29 @@ const defaultConfig = {
     formAddress: '',
     adminPubkeys: /** @type {string[]} */ ([])
   },
+  // Read-only npub login
+  npubLogin: {
+    enabled: false
+  },
+  // Google login via Pomegranate (promenade FROST threshold signer)
+  googleLogin: {
+    enabled: false,
+    centralUrl: 'https://auth.njump.me',
+    /** @type {string[]} */
+    operatorUrls: [
+      'https://po.jumble.social',
+      'https://po.coracle.social',
+      'https://po.njump.me',
+      'https://po.f7z.io',
+      'https://po.nostrver.se'
+    ]
+  },
   // OER media-library search availability (proxy URL stays server-side)
   oer: {
+    enabled: false
+  },
+  // Metadata cleaner availability (service URL stays server-side)
+  metadataCleaner: {
     enabled: false
   }
 };
@@ -324,9 +345,21 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.membership,
       ...runtimeConfig.membership
     },
+    npubLogin: {
+      ...defaultConfig.npubLogin,
+      ...runtimeConfig.npubLogin
+    },
+    googleLogin: {
+      ...defaultConfig.googleLogin,
+      ...runtimeConfig.googleLogin
+    },
     oer: {
       ...defaultConfig.oer,
       ...runtimeConfig.oer
+    },
+    metadataCleaner: {
+      ...defaultConfig.metadataCleaner,
+      ...runtimeConfig.metadataCleaner
     }
   };
 
@@ -424,7 +457,16 @@ export const runtimeConfig = {
   get membership() {
     return config.membership;
   },
+  get npubLogin() {
+    return config.npubLogin;
+  },
+  get googleLogin() {
+    return config.googleLogin;
+  },
   get oer() {
     return config.oer;
+  },
+  get metadataCleaner() {
+    return config.metadataCleaner;
   }
 };

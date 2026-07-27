@@ -105,10 +105,11 @@
             {#if isDashboardActive}
               <div class="avatar">
                 <div class="w-8 rounded-full">
-                  <img
+                  <ImageWithFallback
                     src={runtimeConfig.appLogo}
                     alt={m.community_layout_title()}
-                    class="object-cover"
+                    fallbackType="generic"
+                    class="h-full w-full object-cover"
                   />
                 </div>
               </div>
@@ -118,6 +119,7 @@
                   <ImageWithFallback
                     src={mobileHeaderAvatarUrl}
                     alt={mobileHeaderTitle || ''}
+                    fallbackType="community"
                     size="avatar_sm"
                     class="h-full w-full rounded-full object-cover"
                   />

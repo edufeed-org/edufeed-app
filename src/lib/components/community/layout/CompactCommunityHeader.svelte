@@ -1,6 +1,7 @@
 <script>
   import { getProfilePicture } from 'applesauce-core/helpers';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -28,14 +29,11 @@
   <!-- Community Avatar -->
   <div class="avatar">
     <div class="w-10 rounded-full ring-2 ring-base-300">
-      <img
+      <ImageWithFallback
         src={avatarUrl || `https://robohash.org/${communityPubkey}`}
         alt={displayName}
-        class="object-cover"
-        onerror={(e) => {
-          const img = /** @type {HTMLImageElement} */ (/** @type {unknown} */ (e.target));
-          if (img) img.src = `https://robohash.org/${communityPubkey}`;
-        }}
+        fallbackType="community"
+        class="h-full w-full object-cover"
       />
     </div>
   </div>

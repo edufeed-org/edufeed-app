@@ -41,7 +41,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
-    "amb-nostr-converter": "https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz",
+    "amb-nostr-converter": "https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-2f68a71/amb-nostr-converter-0.0.0-2f68a71.tgz",
     "applesauce-accounts": "^6.2.0",
     "applesauce-actions": "^6.2.0",
     "applesauce-content": "^6.2.0",
@@ -83,6 +83,7 @@
     "ws": "^8.20.0"
   },
   "dependencies": {
+    "@fiatjaf/promenade-trusted-dealer": "npm:@jsr/fiatjaf__promenade-trusted-dealer@^0.4.3",
     "@fontsource-variable/caveat": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/outfit": "^5.2.8",

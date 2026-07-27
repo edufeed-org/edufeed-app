@@ -456,6 +456,7 @@
                     authorName={authorProfile?.displayName || authorProfile?.name}
                     authorAvatar={authorProfile?.picture}
                     authorPubkey={itemEvent.pubkey}
+                    event={itemEvent}
                     timestamp={itemEvent.created_at}
                     onclick={() => navigateToEvent(itemEvent)}
                   />

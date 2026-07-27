@@ -136,7 +136,15 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
   if (!hasTag('x') && formData) {
     const licenseEvent = formData.imageLicenseEvent;
     const fromLicense = licenseEvent?.tags?.find((t) => t[0] === 'x')?.[1];
-    const fromUrl = formData.image ? getSha256FromURL(formData.image) : undefined;
+    // getSha256FromURL does `new URL(...)` and throws on partial input —
+    // this runs in a $derived on every keystroke of the image field, so an
+    // in-progress URL must never crash the preview.
+    let fromUrl;
+    try {
+      fromUrl = formData.image ? getSha256FromURL(formData.image) : undefined;
+    } catch {
+      fromUrl = undefined;
+    }
     const hash = fromLicense ?? fromUrl;
     if (hash) tags.push(['x', hash]);
   }

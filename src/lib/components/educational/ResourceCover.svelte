@@ -18,6 +18,8 @@
   import TypoCover from './TypoCover.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
@@ -29,12 +31,13 @@
   } from '$lib/helpers/educational/pdfThumbnailGate.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+  import { clampCoverAspect } from '$lib/helpers/educational/coverAspect.js';
 
   /**
    * @typedef {Object} Props
    * @property {any} resource — AMB resource (same shape AMBResourceCard consumes)
    * @property {'thumbnail' | 'full'} [size]
-   * @property {'auto' | 'square' | 'video' | 'wide' | 'portrait'} [aspect]
+   * @property {'auto' | 'square' | 'video' | 'wide' | 'portrait' | 'adaptive'} [aspect] - 'adaptive' sizes the frame to the image's natural orientation (clamped 3:4 to 16:9); non-image branches treat it as portrait
    * @property {string} [class]
    */
 
@@ -45,15 +48,30 @@
   ensureVocabularyLoaded('learningResourceType');
 
   // Aspect class map for the image branch. 'auto' = no aspect class.
+  // 'adaptive' renders as portrait until the image reports its natural size,
+  // then follows the artwork's orientation (see adaptiveRatio below).
   const ASPECT_CLASS = /** @type {Record<string, string>} */ ({
     auto: '',
     square: 'aspect-square',
     video: 'aspect-video',
     wide: 'aspect-[2/1]',
-    portrait: 'aspect-[3/4]'
+    portrait: 'aspect-[3/4]',
+    adaptive: 'aspect-[3/4]'
   });
 
   const aspectClass = $derived(ASPECT_CLASS[aspect] ?? '');
+
+  // Adaptive frame: measured natural ratio of the loaded image, clamped so
+  // the frame follows the artwork (landscape slides stay landscape) instead
+  // of center-cropping it. null until the image has loaded — the portrait
+  // aspect class above covers that window so the layout doesn't jump for
+  // the common portrait/typo case.
+  let adaptiveRatio = $state(/** @type {number | null} */ (null));
+  function handleImageLoad(/** @type {Event} */ event) {
+    if (aspect !== 'adaptive') return;
+    const img = /** @type {HTMLImageElement} */ (event.currentTarget);
+    adaptiveRatio = clampCoverAspect(img.naturalWidth, img.naturalHeight);
+  }
 
   // License-badge centralization: lookup the kind-1063 license event for the
   // image's SHA-256 hash (if the resource carries an `x` tag).
@@ -109,14 +127,34 @@
   const title = $derived(resource?.name ?? '');
 
   // Author attribution for the CC BY footer line.
-  // Prefers the resource's own creator:name tags (the *actual* author of the
-  // metadata, e.g. "Constanze von Kitzing") over the Nostr publisher.
+  // Prefers the resource's own creators over the Nostr publisher: creator:name
+  // tags (persons without a Nostr identity, e.g. "Constanze von Kitzing")
+  // followed by `["p", pk, relay, "creator"]` creators resolved via their
+  // kind:0 profile (NIP-AMB: the p-tag is their sole representation).
   // Falls back to the publisher profile's display name, then a shortened pubkey.
   // The display order matters: the first author is the primary attribution.
   const creatorNames = $derived(getAMBCreatorNames({ tags: resource?.tags ?? [] }).filter(Boolean));
+  const creatorPubkeys = $derived(
+    unique(
+      (resource?.tags ?? [])
+        .filter(
+          (/** @type {string[]} */ t) =>
+            t[0] === 'p' && t[3] === 'creator' && /^[0-9a-f]{64}$/i.test(t[1] || '')
+        )
+        .map((/** @type {string[]} */ t) => t[1].toLowerCase())
+    )
+  );
+  const getCreatorProfiles = useProfileMap(() => creatorPubkeys);
   const publisherProfile = useUserProfile(() => resource?.pubkey);
   const authors = $derived.by(() => {
-    if (creatorNames.length > 0) return creatorNames;
+    const profiles = getCreatorProfiles();
+    const pTagNames = creatorPubkeys
+      .map((pubkey) => getDisplayName(profiles.get(pubkey), ''))
+      .filter(Boolean);
+    // unique(): legacy dual-write events carry the same person as a
+    // creator:name run AND a p-tag — don't count them twice.
+    const names = unique([...creatorNames, ...pTagNames]);
+    if (names.length > 0) return names;
     const profile = publisherProfile();
     if (profile) {
       const name = getDisplayName(profile, '');
@@ -131,6 +169,7 @@
 {#if resource?.image}
   <div
     class="resource-cover-image relative w-full overflow-hidden rounded-lg bg-base-200 {aspectClass} {className}"
+    style:aspect-ratio={aspect === 'adaptive' && adaptiveRatio ? adaptiveRatio : undefined}
     data-testid="resource-cover-image"
   >
     <ImageWithFallback
@@ -139,6 +178,7 @@
       fallbackType="article"
       size={size === 'thumbnail' ? 'thumbnail' : 'card'}
       class="h-full w-full object-cover"
+      onload={handleImageLoad}
     />
     <ImageLicenseOverlay
       licenseEvent={licenseStatus.event}

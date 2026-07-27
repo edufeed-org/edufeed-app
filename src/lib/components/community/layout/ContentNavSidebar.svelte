@@ -4,7 +4,7 @@
     ChatIcon,
     CalendarIcon,
     SettingsIcon,
-    BookIcon,
+    WikipediaIcon,
     GraduationCapIcon,
     KanbanIcon,
     ScrollTextIcon,
@@ -46,7 +46,7 @@
     boards: KanbanIcon,
     articles: ScrollTextIcon,
     forum: ForumIcon,
-    wikis: BookIcon,
+    wikis: WikipediaIcon,
     'social-bookmarks': BookmarkShareIcon,
     meet: MeetIcon,
     polls: PollIcon,
@@ -107,6 +107,7 @@
             <ImageWithFallback
               src={communityAvatarUrl}
               alt={communityDisplayName}
+              fallbackType="community"
               size="avatar_md"
               class="h-full w-full rounded-full object-cover"
             />

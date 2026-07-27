@@ -17,6 +17,8 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { createCachedTimelineLoader } from '$lib/loaders/base.js';
   import { createBookmarkEvent } from '$lib/helpers/bookmark.js';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getAllLookupRelays, getArticleRelays } from '$lib/helpers/relay-helper.js';
@@ -600,7 +602,9 @@
             {m.bookmark_detail_eyebrow()}
           </span>
           <p class="mt-1 text-sm text-base-content">
-            <span class="font-bold">{saverName(featuredSaver)}</span>
+            <a href={resolve(profileLink(featuredSaver.pubkey))} class="font-bold hover:underline">
+              {saverName(featuredSaver)}
+            </a>
             {#if savers.length > 1}
               {m
                 .bookmark_detail_lead_network({ name: '', count: savers.length - 1 })
@@ -622,6 +626,7 @@
                 pubkey={saver.pubkey}
                 profile={profiles.get(saver.pubkey)}
                 size="sm"
+                linkToProfile
                 fallbackType="robohash"
                 class="ring-2 ring-base-100"
               />
@@ -944,6 +949,7 @@
                         pubkey={saver.pubkey}
                         profile={profiles.get(saver.pubkey)}
                         size="xs"
+                        linkToProfile
                         fallbackType="robohash"
                         class="ring-2 ring-base-100"
                       />
@@ -970,9 +976,12 @@
                       linkToProfile
                     />
                     <div class="min-w-0 flex-1">
-                      <span class="truncate text-sm font-semibold text-base-content">
+                      <a
+                        href={resolve(profileLink(saver.pubkey))}
+                        class="block truncate text-sm font-semibold text-base-content hover:underline"
+                      >
                         {saverName(saver)}
-                      </span>
+                      </a>
                       <div class="mt-0.5 text-xs text-base-content/50">
                         {formatRelativeTime(saver.created_at)}
                       </div>

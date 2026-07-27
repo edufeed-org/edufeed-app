@@ -9,6 +9,7 @@
   import { fetchEventById } from '$lib/helpers/nostrUtils.js';
   import { CalendarIcon } from '$lib/components/icons';
   import { CopyIcon } from '$lib/components/icons';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
   let { identifier, decoded: _decoded, inline: _inline = false } = $props();
 
@@ -76,7 +77,12 @@
     <div class="card-body p-4">
       <div class="flex items-center gap-3">
         {#if calendar.image}
-          <img src={calendar.image} alt={calendar.name} class="h-12 w-12 rounded-lg object-cover" />
+          <ImageWithFallback
+            src={calendar.image}
+            alt={calendar.name}
+            fallbackType="event"
+            class="h-12 w-12 rounded-lg object-cover"
+          />
         {:else}
           <div
             class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10"

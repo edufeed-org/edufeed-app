@@ -9,6 +9,8 @@
     getHighlightComment
   } from 'applesauce-common/helpers';
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -57,13 +59,23 @@
     <p class="mt-1 line-clamp-2 text-xs text-base-content/50">{context}</p>
   {/if}
   <div class="mt-2 flex items-center gap-2">
-    <ProfileAvatar
-      pubkey={event.pubkey}
-      profile={authorProfile}
-      size="2xs"
-      fallbackType="robohash"
-    />
-    <span class="text-xs text-base-content/60">{name}</span>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="contents" onclick={(e) => e.stopPropagation()}>
+      <ProfileAvatar
+        pubkey={event.pubkey}
+        profile={authorProfile}
+        size="2xs"
+        linkToProfile
+        fallbackType="robohash"
+      />
+      <a
+        href={resolve(profileLink(event.pubkey))}
+        class="text-xs text-base-content/60 hover:underline"
+      >
+        {name}
+      </a>
+    </div>
     {#if timestamp}
       <span class="text-xs text-base-content/40">· {timestamp}</span>
     {/if}

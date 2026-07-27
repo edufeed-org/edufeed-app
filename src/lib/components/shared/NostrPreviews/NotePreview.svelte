@@ -6,9 +6,11 @@
 
 <script>
   import { resolve } from '$app/paths';
+  import { goto } from '$app/navigation';
   import { nip19 } from 'nostr-tools';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
@@ -130,7 +132,24 @@
         />
         <div class="min-w-0 flex-1">
           <div class="flex items-baseline gap-2">
-            <span class="text-sm font-medium">
+            <!-- The preview card is already an <a>; anchors cannot nest, so navigate via goto -->
+            <span
+              role="link"
+              tabindex="0"
+              class="cursor-pointer text-sm font-medium hover:underline"
+              onclick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                goto(resolve(profileLink(event.pubkey)));
+              }}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  goto(resolve(profileLink(event.pubkey)));
+                }
+              }}
+            >
               {getDisplayName(authorProfile) || `${event.pubkey.slice(0, 8)}...`}
             </span>
             <span class="text-xs text-base-content/50">

@@ -1,6 +1,8 @@
 <script>
   import { resolve } from '$app/paths';
+  import { goto } from '$app/navigation';
   import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { markItemAsRead } from '$lib/services/inbox-service.svelte.js';
   import { publishWave } from '$lib/helpers/waves.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -119,7 +121,24 @@
   </div>
   <div class="min-w-0 flex-1">
     <div class="text-sm leading-snug">
-      <span class="font-medium">{displayName}</span>
+      <!-- The row is already an <a>; anchors cannot nest, so navigate via goto -->
+      <span
+        role="link"
+        tabindex="0"
+        class="cursor-pointer font-medium hover:underline"
+        onclick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          goto(resolve(profileLink(event.pubkey)));
+        }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            goto(resolve(profileLink(event.pubkey)));
+          }
+        }}>{displayName}</span
+      >
       {#if type === 'formRequest'}
         &nbsp;{m.inbox_action_form_request({ formName: formName || '' })}
       {:else if type === 'formResponse'}

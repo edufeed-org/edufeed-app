@@ -43,14 +43,22 @@ import {
   isNip05HintDismissed,
   markNip05HintDismissed
 } from '$lib/stores/nip05-hint-flags.svelte.js';
-import { deriveHintStatus, trackEverOpen } from '$lib/helpers/assistant-hints.js';
+import {
+  isProfileHintDismissed,
+  markProfileHintDismissed
+} from '$lib/stores/profile-hint-flags.svelte.js';
+import {
+  deriveHintStatus,
+  trackEverOpen,
+  isProfileHintApplicable
+} from '$lib/helpers/assistant-hints.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
-export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'nip05']);
+export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'profile', 'nip05']);
 
 /**
  * Reactive hook for the assistant's hints. Must be called during component
@@ -102,15 +110,18 @@ export function useAssistantHints() {
   // settle timeout passed — never over a profile we simply haven't fetched.
   let profileSettled = $state(false);
   let hasNip05 = $state(false);
+  let hasProfile = $state(false);
 
   $effect(() => {
     const user = getActiveUser();
     profileSettled = false;
     hasNip05 = false;
+    hasProfile = false;
     if (!user) return;
 
     const sub = eventStore.replaceable(0, user.pubkey).subscribe((event) => {
       if (!event) return;
+      hasProfile = true;
       hasNip05 = getProfileNip05s(event).length > 0;
       profileSettled = true;
     });
@@ -144,7 +155,7 @@ export function useAssistantHints() {
 
   const statuses = $derived.by(() => {
     const user = getActiveUser();
-    if (!user) return { backup: null, relays: null, dm: null, nip05: null };
+    if (!user) return { backup: null, relays: null, dm: null, nip05: null, profile: null };
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
     // Only nudge users who created their account via the in-app wizard —
@@ -177,6 +188,14 @@ export function useAssistantHints() {
       getDefaultDmRelays().length > 0 &&
       !isDmRelayBannerDismissed(user.pubkey);
 
+    const profileApplicable = isProfileHintApplicable({
+      user,
+      settled: profileSettled,
+      hasProfile,
+      dismissed: isProfileHintDismissed(user.pubkey),
+      signupOpen: modalStore.activeModal === 'signup'
+    });
+
     return {
       backup: deriveHintStatus({
         applicable: backupApplicable,
@@ -201,6 +220,12 @@ export function useAssistantHints() {
         confirmed: hasNip05,
         running: false, // the action navigates; the profile confirms reactively
         everOpen: everOpen.has('nip05')
+      }),
+      profile: deriveHintStatus({
+        applicable: profileApplicable,
+        confirmed: hasProfile,
+        running: false, // the action opens a modal; the kind 0 confirms reactively
+        everOpen: everOpen.has('profile')
       })
     };
   });
@@ -229,6 +254,13 @@ export function useAssistantHints() {
     if (id === 'nip05') {
       // The settings page hosts the membership card with the handle request.
       goto('/settings');
+      return;
+    }
+    if (id === 'profile') {
+      const user = getActiveUser();
+      if (!user) return;
+      // EditProfileModal creates the kind 0 when none exists (UpdateProfile).
+      modalStore.openModal('profile', { profile: {}, pubkey: user.pubkey });
       return;
     }
     if (running.has(id)) return;
@@ -261,6 +293,7 @@ export function useAssistantHints() {
       else if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
       else if (id === 'dm') markDmRelayBannerDismissed(user.pubkey);
       else if (id === 'nip05') markNip05HintDismissed(user.pubkey);
+      else if (id === 'profile') markProfileHintDismissed(user.pubkey);
     }
     const next = new Set(dismissed); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale below
     next.add(id);

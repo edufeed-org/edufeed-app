@@ -12,6 +12,7 @@
     MessageSquareIcon
   } from './icons';
   import ProfileAvatar from './shared/ProfileAvatar.svelte';
+  import ImageWithFallback from './shared/ImageWithFallback.svelte';
   import AccountMenuSection from './shared/AccountMenuSection.svelte';
   import MobileNavMenu from './shared/MobileNavMenu.svelte';
   import InboxDropdown from './inbox/InboxDropdown.svelte';
@@ -62,7 +63,12 @@
   <div class="flex flex-1 items-center">
     <div class="avatar">
       <div class="mask w-10 mask-hexagon-2">
-        <img src={runtimeConfig.appLogo} alt="App Logo" />
+        <ImageWithFallback
+          src={runtimeConfig.appLogo}
+          alt="App Logo"
+          fallbackType="generic"
+          class="h-full w-full object-cover"
+        />
       </div>
     </div>
     <a href={resolve('/')} class="btn text-xl btn-ghost"

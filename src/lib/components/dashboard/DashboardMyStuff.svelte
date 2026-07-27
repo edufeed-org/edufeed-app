@@ -12,7 +12,7 @@
   import {
     CalendarIcon,
     GraduationCapIcon,
-    BookIcon,
+    WikipediaIcon,
     ScrollTextIcon,
     FilesIcon,
     PollIcon,
@@ -32,7 +32,7 @@
     calendar: { icon: CalendarIcon, label: () => m.fab_create_event() },
     learning: { icon: GraduationCapIcon, label: () => m.fab_create_learning() },
     article: { icon: ScrollTextIcon, label: () => m.article_fab_write() },
-    wiki: { icon: BookIcon, label: () => m.wiki_fab_write() },
+    wiki: { icon: WikipediaIcon, label: () => m.wiki_fab_write() },
     form: { icon: FilesIcon, label: () => m.fab_create_form() },
     poll: { icon: PollIcon, label: () => m.fab_create_poll() },
     bookmark: { icon: BookmarkIcon, label: () => m.fab_add_bookmark() }

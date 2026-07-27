@@ -1,6 +1,8 @@
 import { AccountManager } from 'applesauce-accounts';
 import { registerCommonAccountTypes } from 'applesauce-accounts/accounts';
 import { NostrConnectSigner } from 'applesauce-signers';
+import { showToast } from '$lib/helpers/toast.js';
+import * as m from '$lib/paraglide/messages';
 
 /**
  * @typedef {{ name?: string }} AccountMetadata
@@ -110,6 +112,32 @@ export function wrapBunkerSigner(signer, ms) {
 }
 
 /**
+ * Wrap a ReadonlySigner so a missed UI gate surfaces the upgrade toast instead
+ * of a silent console error. ReadonlySigner.signEvent always throws; this adds
+ * the user-facing prompt in front of that throw as a safety net for any write
+ * CTA the explicit requireSigningOrToast() guards don't cover.
+ *
+ * @template {object} T
+ * @param {T} signer
+ * @returns {T}
+ */
+export function wrapReadonlySigner(signer) {
+  return new Proxy(signer, {
+    get(target, prop) {
+      if (prop === TIMEOUT_WRAPPED) return true;
+      if (prop === 'signEvent') {
+        return () => {
+          showToast(m.readonly_sign_prompt(), 'warning');
+          return Promise.reject(new Error('This account is read-only and cannot sign events'));
+        };
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+}
+
+/**
  * Harden signer-backed accounts against never-settling or opaque signers:
  *
  * NIP-07 extension accounts:
@@ -142,6 +170,10 @@ export function hardenExtensionAccounts(accounts, opts = {}) {
           account.signer,
           opts.bunkerTimeoutMs ?? BUNKER_SIGNER_TIMEOUT_MS
         );
+      }
+    } else if (account.type === 'readonly') {
+      if (account.signer && !account.signer[TIMEOUT_WRAPPED]) {
+        account.signer = wrapReadonlySigner(account.signer);
       }
     }
   }
@@ -267,6 +299,12 @@ async function initializeAccountPersistence() {
       });
     }
 
+    // Prefetch the user's NIP-65 relay list (kind 10002) so the session's
+    // first publish resolves write relays from EventStore instead of racing
+    // a cold network lookup — a miss silently falls back to fallbackRelays
+    // and misroutes the event (2026-07-16 follow-set incident).
+    addressLoader({ kind: 10002, pubkey: account.pubkey, relays: lookupRelays }).subscribe();
+
     // Load user's communities follow set (kind 30000, d="communities")
     addressLoader({
       kind: 30000,
@@ -357,7 +395,7 @@ async function initializeAccountPersistence() {
   manager.active$.subscribe(async (account) => {
     const { initializeDMs, cleanup } = await import('$lib/services/dm-service.svelte.js');
 
-    if (account && account.signer) {
+    if (account && account.signer && account.type !== 'readonly') {
       initializeDMs(account.pubkey, account.signer);
     } else {
       cleanup();

@@ -26,7 +26,8 @@ const CACHE_HEADER = 'public, max-age=86400';
 const PREFIXES = `PREFIX lp: <https://w3id.org/lehrplan/ontology/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX obo: <http://purl.obolibrary.org/obo/>`;
+PREFIX obo: <http://purl.obolibrary.org/obo/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>`;
 
 /**
  * Resolve the optional Schulart filter clause used by list_schulfaecher and
@@ -64,11 +65,20 @@ function buildSparql(tool, args) {
       // every state graph carries that predicate, so the reverse scan walks
       // ~1.6M triples to find 16 distinct objects. The class has 16 typed
       // instances, full stop.
+      //
+      // Only 4 of those 16 states actually carry curriculum data (BY, SN, RP,
+      // BE); the other 12 are typed but empty, and picking them yields a dead
+      // cascade. Gate on the existence of a Schulfach-bearing Lehrplan
+      // (lp:LP_0000537 is a Lehrplan-level predicate) so only states with data
+      // are selectable. The FILTER EXISTS is scoped to the already-bound ?uri,
+      // so it stays cheap — a bare `?lp lp:LP_0000029 ?uri` still returns all
+      // 16 because every state is referenced by some node.
       return `${PREFIXES}
 SELECT DISTINCT ?uri ?label WHERE {
   ?uri a lp:LP_0000040 ;
        rdfs:label ?label .
   FILTER(lang(?label) = "de")
+  FILTER EXISTS { ?lp lp:LP_0000029 ?uri ; lp:LP_0000537 [] }
 } ORDER BY ?label`;
 
     case 'list_schularten': {
@@ -103,13 +113,21 @@ SELECT DISTINCT ?uri (SAMPLE(?l) AS ?label) WHERE {
       if (!bl || !sf) return null;
       const sa = resolveOptionalSchulartFilter(args.schulartUri);
       if (!sa) return null;
+      // Select Lehrpläne purely by their Bundesland + Schulfach (+ optional
+      // Schulart). We deliberately do NOT add a `?s rdf:type/rdfs:subClassOf*
+      // lp:LP_0000438` type gate: that transitive property path exceeds
+      // Virtuoso's transitive temp-memory pool (HTTP 500 "Exceeded
+      // 1000000000 bytes in transitive temp memory") the moment it is joined
+      // with these selective IRI filters — no restructuring avoids it, and a
+      // non-transitive single hop misses states (BE) that type their Lehrpläne
+      // with a deeper subclass. The gate is redundant anyway: lp:LP_0000537
+      // (Schulfach) is only ever asserted on Lehrplan-level nodes, so
+      // Bundesland + Schulfach already uniquely identifies Lehrpläne.
       return `${PREFIXES}
 SELECT DISTINCT ?s ?label WHERE {
-  ?lpsubclass rdfs:subClassOf* lp:LP_0000438 .
-  ?s rdf:type ?lpsubclass .
-  ?s rdfs:label ?label .
   ?s lp:LP_0000029 <${bl}> .
-  ?s lp:LP_0000537 <${sf}> .${sa.filter}
+  ?s lp:LP_0000537 <${sf}> .
+  ?s rdfs:label ?label .${sa.filter}
 } ORDER BY ?label LIMIT 50`;
     }
 
@@ -130,9 +148,17 @@ SELECT DISTINCT ?s ?label WHERE {
       // children of the Lehrplan. We want only the truly-direct children
       // (the 5 chapters), so we exclude any ?child that's also reachable
       // via an intermediate has-part hop from the same parent.
+      //
+      // Nodes carry their text under different predicates depending on the
+      // source graph: the ISB (BY) / RP / SN imports use rdfs:label, while the
+      // yovisto import (BE, BB) uses skos:prefLabel. Coalesce both — reading
+      // only rdfs:label left every Berlin node unlabelled, so bindingsToItems
+      // dropped them and the tree came back empty. SAMPLE + GROUP BY collapses
+      // the row per child to one (a node with de+en prefLabels would otherwise
+      // emit duplicate rows → duplicate keys crash the keyed {#each} in
+      // CurriculumTree).
       return `${PREFIXES}
-SELECT DISTINCT ?child ?childLabel
-  (EXISTS { ?child obo:BFO_0000051 ?gc } AS ?hasChildren)
+SELECT ?child (SAMPLE(?lbl) AS ?childLabel) (MAX(?hc) AS ?hasChildren)
 WHERE {
   <${node}> obo:BFO_0000051 ?child .
   FILTER NOT EXISTS {
@@ -140,8 +166,11 @@ WHERE {
     ?intermediate obo:BFO_0000051 ?child .
     FILTER(?intermediate != ?child)
   }
-  OPTIONAL { ?child rdfs:label ?childLabel . }
-} ORDER BY DESC(?hasChildren) ?childLabel`;
+  OPTIONAL { ?child rdfs:label ?rl . }
+  OPTIONAL { ?child skos:prefLabel ?pl . }
+  BIND(COALESCE(?rl, ?pl) AS ?lbl)
+  BIND(IF(EXISTS { ?child obo:BFO_0000051 ?gc }, 1, 0) AS ?hc)
+} GROUP BY ?child ORDER BY DESC(?hasChildren) ?childLabel`;
     }
 
     default:

@@ -4,13 +4,13 @@
  *
  * Covers:
  *  - Extension login branch's duplicate handling
- *  - Restructured normie-friendly layout: saved accounts on top, primary
- *    "Create your account" CTA, then a divider + section with the three
- *    legacy methods all visible (no disclosure to expand).
+ *  - Cleaned-up layout (issue #49): saved accounts on top, primary "Create your account" CTA,
+ *    Google below, then a divider + 3-column icon-card grid (extension hidden on mobile UAs
+ *    without window.nostr) and an npub ghost row.
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import LoginModal from '../LoginModal.svelte';
 
@@ -92,7 +92,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   auth_login_modal_existing_account: () => 'Already have a Nostr account?',
   auth_login_modal_extension_error_missing: () => 'No browser extension found.',
   auth_login_modal_extension_error_generic: () => 'Could not connect to extension.',
-  common_close: () => 'Close'
+  common_close: () => 'Close',
+  auth_login_modal_npub: () => 'Browse with a public key (npub…) — read-only',
+  auth_login_modal_extension_short: () => 'Extension',
+  auth_login_modal_bunker_short: () => 'Signer app',
+  auth_login_modal_nsec_short: () => 'Private key',
+  auth_login_modal_npub_short: () => 'Browse only: with public key (npub)'
 }));
 
 beforeEach(() => {
@@ -205,7 +210,7 @@ describe('LoginModal — Extension flow duplicate handling', () => {
   });
 });
 
-describe('LoginModal — restructured normie-friendly layout', () => {
+describe('LoginModal — cleaned-up layout (issue #49)', () => {
   it('shows the primary "Create your account" CTA prominently', async () => {
     const { container } = render(LoginModal, { props: { modalId: 'login-modal-3' } });
 
@@ -213,25 +218,34 @@ describe('LoginModal — restructured normie-friendly layout', () => {
     expect(cta, 'Primary signup CTA should be present').not.toBeNull();
   });
 
-  it('renders the three legacy methods visibly under an "Already have…" divider', async () => {
+  it('renders the three method cards in a 3-column grid inside the methods section', async () => {
     const { container } = render(LoginModal, { props: { modalId: 'login-modal-4' } });
 
-    // The disclosure was dropped. Returning users (extension/nsec/bunker)
-    // need their option without a click.
     const section = container.querySelector('section[data-testid="other-signin-methods"]');
-    expect(section, 'Legacy methods section should render directly').not.toBeNull();
+    expect(section, 'methods section should render').not.toBeNull();
 
-    // No <details> wrapper anywhere — assert it's truly gone.
-    const details = container.querySelector('details[data-testid="other-signin-methods"]');
-    expect(details).toBeNull();
+    const grid = section?.querySelector('.grid');
+    expect(grid, 'method cards should sit in a grid').not.toBeNull();
+    expect(grid?.classList.contains('grid-cols-3')).toBe(true);
+    expect(grid?.querySelectorAll('button').length).toBe(3);
 
-    // All three method buttons present.
-    const insideButtons = section?.querySelectorAll('button.btn');
-    expect(insideButtons?.length).toBe(3);
+    // The old stacked join-group is gone.
+    expect(container.querySelector('.join')).toBeNull();
+  });
+
+  it('replaces the footer Schließen button with a header close button', async () => {
+    const { container } = render(LoginModal, { props: { modalId: 'login-modal-hdr' } });
+
+    expect(container.querySelector('.modal-action')).toBeNull();
+
+    const close = container.querySelector('[data-testid="login-modal-close"]');
+    expect(close, 'header close button should render').not.toBeNull();
+    // Inside a method="dialog" form so the native dialog close fires
+    // (which the store-sync $effect listens for).
+    expect(close?.closest('form')?.getAttribute('method')).toBe('dialog');
   });
 
   it('renders saved accounts above the primary CTA when present', async () => {
-    // Override useAccounts mock for this test only.
     const accounts = [
       { id: 'acc-1', pubkey: 'p1' },
       { id: 'acc-2', pubkey: 'p2' }
@@ -250,10 +264,8 @@ describe('LoginModal — restructured normie-friendly layout', () => {
       const cta = container.querySelector('[data-testid="signup-primary-cta"]');
       expect(cta).not.toBeNull();
 
-      // DOM order: first saved-account-mock should appear before the CTA.
       const first = savedRows[0];
       const cmp = first.compareDocumentPosition(/** @type {Node} */ (cta));
-      // Node.DOCUMENT_POSITION_FOLLOWING === 4 — cta follows first saved row
       expect(cmp & 4).toBeTruthy();
     } finally {
       // @ts-ignore
@@ -261,7 +273,7 @@ describe('LoginModal — restructured normie-friendly layout', () => {
     }
   });
 
-  it('legacy Extension button is clickable without expanding anything', async () => {
+  it('extension card is clickable without expanding anything', async () => {
     mockManager.getAccountForPubkey.mockReturnValue(undefined);
 
     const { container } = render(LoginModal, { props: { modalId: 'login-modal-6' } });
@@ -271,5 +283,49 @@ describe('LoginModal — restructured normie-friendly layout', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LoginModal — mobile extension capability check', () => {
+  /** @param {string} ua */
+  function stubUserAgent(ua) {
+    // jsdom defines userAgent as a prototype getter; an own configurable
+    // property shadows it and can be cleanly deleted afterwards.
+    Object.defineProperty(window.navigator, 'userAgent', { value: ua, configurable: true });
+  }
+
+  afterEach(() => {
+    // @ts-ignore — remove the shadow so the jsdom default returns
+    delete window.navigator.userAgent;
+    // @ts-ignore
+    delete window.nostr;
+  });
+
+  it('hides the extension card on a mobile UA without window.nostr', () => {
+    stubUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15');
+
+    const { container } = render(LoginModal, { props: { modalId: 'login-modal-m1' } });
+
+    expect(container.querySelector('[data-testid="login-method-extension"]')).toBeNull();
+    const grid = container.querySelector('section[data-testid="other-signin-methods"] .grid');
+    expect(grid?.classList.contains('grid-cols-2')).toBe(true);
+    expect(grid?.querySelectorAll('button').length).toBe(2);
+  });
+
+  it('shows the extension card on a mobile UA when window.nostr is injected', () => {
+    stubUserAgent('Mozilla/5.0 (Android 14; Mobile; rv:127.0) Gecko/127.0 Firefox/127.0');
+    // @ts-ignore
+    window.nostr = {};
+
+    const { container } = render(LoginModal, { props: { modalId: 'login-modal-m2' } });
+
+    expect(container.querySelector('[data-testid="login-method-extension"]')).not.toBeNull();
+  });
+
+  it('shows the extension card on a desktop UA without window.nostr', () => {
+    // jsdom's default UA contains no mobile marker.
+    const { container } = render(LoginModal, { props: { modalId: 'login-modal-m3' } });
+
+    expect(container.querySelector('[data-testid="login-method-extension"]')).not.toBeNull();
   });
 });

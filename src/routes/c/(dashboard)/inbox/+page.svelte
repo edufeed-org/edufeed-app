@@ -17,6 +17,7 @@
   import InboxItem from '$lib/components/inbox/InboxItem.svelte';
   import InboxDmItem from '$lib/components/inbox/InboxDmItem.svelte';
   import EmptyState from '$lib/components/shared/EmptyState.svelte';
+  import ReadonlyNotice from '$lib/components/shared/ReadonlyNotice.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   const getActiveUser = useActiveUser();
@@ -112,6 +113,7 @@
 <svelte:head><title>{m.inbox_title()}</title></svelte:head>
 
 <div class="mx-auto max-w-3xl px-4 py-6">
+  <ReadonlyNotice />
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-2xl font-bold">{m.inbox_title()}</h1>
     {#if getUnreadCount() + getUnreadDmCount() > 0}

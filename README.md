@@ -312,10 +312,29 @@ Lets users apply for a memorable `name@<domain>` handle during signup. Requires 
 - `NIP05_SERVICE_URL`: **SECRET** — Base URL of the standalone nip-05-service. Server-only (never sent to the browser)
 - `NIP05_SERVICE_API_KEY`: **SECRET** — Bearer token for the nip-05-service admin API. Server-only
 
+**Login Methods**
+
+| Variable                    | Default                      | Purpose                                                                                                                   |
+| --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `NPUB_LOGIN_ENABLED`        | `false`                      | Read-only "browse as npub" login method                                                                                   |
+| `GOOGLE_LOGIN_ENABLED`      | `false`                      | "Continue with Google" via the Pomegranate FROST threshold signer ([promenade](https://pkg.go.dev/fiatjaf.com/promenade)) |
+| `POMEGRANATE_CENTRAL_URL`   | `https://auth.njump.me`      | Central server (Google OAuth + NIP-46 relay + FROST coordinator)                                                          |
+| `POMEGRANATE_OPERATOR_URLS` | 5 public community operators | Comma-separated shard-operator servers; ≥2 required, signing threshold is ceil(7n/12)                                     |
+
+The Google flow generates a random key client-side, splits it into FROST shards across the operators, and signs via NIP-46 — no server ever holds the whole key. Self-hosting promenade later only requires changing these two URLs.
+
 **Media Uploads (Blossom)**
 
 - `BLOSSOM_UPLOAD_ENDPOINT`: Blossom server upload endpoint
-- `BLOSSOM_MAX_FILE_SIZE`: Maximum file size in bytes
+- `BLOSSOM_MAX_FILE_SIZE`: Maximum file size in bytes (app-side limit; not enforced by the Blossom server itself)
+
+**Metadata Cleaner (optional)**
+
+Optional quiet opt-in backed by a [metadata-cleaner](https://git.edufeed.org/edufeed/metadata-cleaner) service instance. For supported files (PDF, JPG/JPEG, PNG, TIF/TIFF, WebP), the license modal shows an unchecked "remove hidden file metadata" checkbox (plus a compress select for PDFs) and a "show details" link into a read-only inspect view — no interstitial interrupts the normal upload flow. If ticked, stripping (and compression) happens silently during the deferred upload step and the cleaned bytes go to Blossom; a subtle confirmation note appears on the file row afterwards, and the cleaner failing never blocks the upload. The one interruption is a PDF over `BLOSSOM_MAX_FILE_SIZE`: it auto-opens a compression-first rescue modal (balanced preselected) before the upload proceeds, since compression may bring it under the limit.
+
+- `METADATA_CLEANER_URL`: **SECRET** — Base URL of the metadata-cleaner service (e.g. `https://cleaner.edufeed.org`). Server-only, proxied via `/api/metaclean`; when unset the feature is hidden entirely
+- `METADATA_CLEANER_MAX_UPLOAD_MB`: Maximum body size the `/api/metaclean` proxy accepts, in MB (default 200, matching the service's own limit). Deliberately independent of `BLOSSOM_MAX_FILE_SIZE`
+- Deployment note: with adapter-node, `BODY_SIZE_LIMIT` (default 512K) must be raised above the proxy cap, or uploads to `/api/metaclean` are rejected before the route runs
 
 **Geocoding (OpenCage API)**
 

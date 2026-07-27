@@ -226,3 +226,20 @@ describe('buildPreviewResource — x tag', () => {
     expect(resource.tags.some((t) => t[0] === 'cover_color')).toBe(false);
   });
 });
+
+describe('buildPreviewResource — invalid image URLs (mid-typing)', () => {
+  it('does not throw while the user is still typing the image URL', () => {
+    // Regression: getSha256FromURL does `new URL(...)` and threw for partial
+    // input like "https:/", crashing the whole wizard page via $derived.
+    for (const partial of ['h', 'https:/', 'https://', 'blossom.example/x.png ']) {
+      expect(() =>
+        buildPreviewResource({ name: 'Test', image: partial }, '0'.repeat(64), 'en')
+      ).not.toThrow();
+    }
+  });
+
+  it('emits no x tag for an unparseable image URL', () => {
+    const resource = buildPreviewResource({ name: 'Test', image: 'https:/' }, '0'.repeat(64), 'en');
+    expect(resource.tags.some((t) => t[0] === 'x')).toBe(false);
+  });
+});
