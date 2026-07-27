@@ -21,6 +21,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {string} dashboardFeedRelay
  * @property {string[]} dashboardCustomRelays
  * @property {boolean} linkPreviewsEnabled
+ * @property {boolean} cordnGroupsEnabled
  */
 
 /**
@@ -97,7 +98,9 @@ function getDefaultSettings() {
     dashboardFeedSource: 'communities',
     dashboardFeedRelay: '',
     dashboardCustomRelays: [],
-    linkPreviewsEnabled: true
+    linkPreviewsEnabled: true,
+    // Cordn private groups are opt-in per user (deployment flag alone is not enough).
+    cordnGroupsEnabled: false
   };
 }
 
@@ -122,7 +125,8 @@ function migrateSettings(stored) {
       dashboardCustomRelays: Array.isArray(stored.dashboardCustomRelays)
         ? stored.dashboardCustomRelays
         : defaults.dashboardCustomRelays,
-      linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
+      linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
+      cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled
     };
   }
 
@@ -165,7 +169,8 @@ function migrateSettings(stored) {
     dashboardCustomRelays: Array.isArray(stored.dashboardCustomRelays)
       ? stored.dashboardCustomRelays
       : defaults.dashboardCustomRelays,
-    linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled
+    linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
+    cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled
   };
 }
 
@@ -459,6 +464,23 @@ export const appSettings = {
    */
   set linkPreviewsEnabled(value) {
     settings.linkPreviewsEnabled = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get Cordn groups enabled (per-user opt-in for the «Gruppen» section)
+   * @returns {boolean}
+   */
+  get cordnGroupsEnabled() {
+    return settings.cordnGroupsEnabled;
+  },
+
+  /**
+   * Set Cordn groups enabled
+   * @param {boolean} value
+   */
+  set cordnGroupsEnabled(value) {
+    settings.cordnGroupsEnabled = value;
     saveSettings(settings);
   },
 

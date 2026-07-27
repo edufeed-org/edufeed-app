@@ -1,7 +1,10 @@
 <script>
+  import { getContext, onDestroy } from 'svelte';
+  import { resolve } from '$app/paths';
   import { runtimeConfig, configReady } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import { parseCordnGroupsConfig } from '$lib/cordn';
   import { composerKeydown } from '$lib/cordn/composer.js';
   import {
@@ -11,12 +14,14 @@
   } from '$lib/helpers/message-utils.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   const getActiveUser = useActiveUser();
 
   const config = $derived(
     $configReady ? parseCordnGroupsConfig(runtimeConfig.cordnGroups) : undefined
   );
+  const optedIn = $derived(appSettings.cordnGroupsEnabled);
 
   let client = $state.raw(
     /** @type {import('$lib/cordn/client.svelte.js').CordnGroupsClient | undefined} */ (undefined)
@@ -35,6 +40,23 @@
   let messagesContainer = $state.raw(undefined);
 
   const selectedGroup = $derived(client?.groups.find((g) => g.gid === selectedGid));
+
+  // Report our bottom composer to the root layout (same pattern as
+  // /c/messages): once a chat is open, the global FAB/Termi/tab bar yield.
+  const setPageHasOwnBottomUI =
+    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
+      getContext('setPageHasOwnBottomUI')
+    );
+  setPageHasOwnBottomUI?.(() => mobileChat);
+  onDestroy(() => setPageHasOwnBottomUI?.(undefined));
+
+  // The rail has its own create form — suppress the generic global FAB.
+  const setPageHasOwnCreateAction =
+    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
+      getContext('setPageHasOwnCreateAction')
+    );
+  setPageHasOwnCreateAction?.(() => true);
+  onDestroy(() => setPageHasOwnCreateAction?.(undefined));
 
   const getProfiles = useProfileMap(() => {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient dedupe inside a getter
@@ -58,26 +80,20 @@
 
   $effect(() => {
     const account = getActiveUser();
-    const enabled = config?.enabled;
+    const enabled = config?.enabled && optedIn;
     if (!enabled || !account?.signer) return;
     let generation = true;
-    /** @type {import('$lib/cordn/client.svelte.js').CordnGroupsClient | undefined} */
-    let created;
     (async () => {
-      const { CordnGroupsClient } = await import('$lib/cordn/client.svelte.js');
+      // Singleton service: the /c layout mounts this page multiple times for
+      // responsive variants; every mount shares one client per account, and
+      // the service (not the page) owns the client lifecycle.
+      const { ensureCordnClient } = await import('$lib/cordn/service.svelte.js');
       if (!generation) return;
-      created = new CordnGroupsClient({
-        pubkey: account.pubkey,
-        signer: account.signer,
-        config
-      });
-      client = created;
-      await created.init();
+      client = ensureCordnClient({ pubkey: account.pubkey, signer: account.signer, config });
     })();
     return () => {
       generation = false;
       client = undefined;
-      void created?.destroy();
     };
   });
 
@@ -112,10 +128,7 @@
 
   const createGroup = () =>
     run(async (c) => {
-      const gid = await c.createGroup(
-        newGroupName.trim() || 'Neue Gruppe',
-        newGroupCoordinator || undefined
-      );
+      const gid = await c.createGroup(newGroupName.trim(), newGroupCoordinator || undefined);
       selectGroup(gid);
       newGroupName = '';
     });
@@ -164,23 +177,32 @@
   );
 </script>
 
-<svelte:head><title>Cordn Labs</title></svelte:head>
+<svelte:head><title>{m.cordn_title()}</title></svelte:head>
 
 {#if !$configReady}
   <div class="p-6"><span class="loading loading-sm loading-spinner"></span></div>
 {:else if !config?.enabled}
   <div class="p-6">
-    <div class="alert">Cordn-Gruppen sind auf dieser Instanz nicht aktiviert.</div>
+    <div class="alert">{m.cordn_not_enabled()}</div>
+  </div>
+{:else if !optedIn}
+  <div class="flex h-[calc(100dvh-4rem)] items-center justify-center p-6">
+    <div class="card max-w-md bg-base-100 p-6 text-center shadow-sm" data-testid="cordn-optin-card">
+      <h1 class="text-lg font-bold">{m.cordn_optin_title()}</h1>
+      <p class="mt-2 text-sm opacity-70">{m.cordn_optin_text()}</p>
+      <a class="btn mt-4 btn-primary" href={resolve('/settings')}>{m.cordn_optin_link()}</a>
+    </div>
   </div>
 {:else if !getActiveUser()}
-  <div class="p-6"><div class="alert">Bitte zuerst anmelden.</div></div>
+  <div class="p-6"><div class="alert">{m.cordn_login_first()}</div></div>
 {:else if !client || client.status === 'loading' || client.status === 'idle'}
   <div class="flex items-center gap-2 p-6 text-sm opacity-70">
-    <span class="loading loading-sm loading-spinner"></span> Verbinde mit dem Koordinator…
+    <span class="loading loading-sm loading-spinner"></span>
+    {m.cordn_connecting()}
   </div>
 {:else if client.status === 'error'}
   <div class="p-6">
-    <div class="alert alert-error">Initialisierung fehlgeschlagen: {client.error}</div>
+    <div class="alert alert-error">{m.cordn_init_failed({ error: client.error })}</div>
   </div>
 {:else}
   <div class="flex h-[calc(100dvh-4rem)] min-h-0">
@@ -191,12 +213,12 @@
         : 'flex'}"
     >
       <header class="border-b border-base-300 px-4 py-3">
-        <h1 class="text-lg font-bold">Cordn-Gruppen</h1>
+        <h1 class="text-lg font-bold">{m.cordn_title()}</h1>
         <p class="flex items-center gap-1 text-xs opacity-60" data-testid="cordn-status">
           <span class="inline-block h-2 w-2 rounded-full bg-success"></span>
-          Verbunden
+          {m.cordn_status_connected()}
           <button class="btn btn-ghost btn-xs" onclick={copyPubkey} data-testid="cordn-copy-pubkey">
-            {pubkeyCopied ? 'Pubkey kopiert ✓' : 'Pubkey kopieren'}
+            {pubkeyCopied ? m.cordn_pubkey_copied() : m.cordn_copy_pubkey()}
           </button>
         </p>
       </header>
@@ -217,12 +239,12 @@
             </span>
             <span class="min-w-0 flex-1 truncate">{group.name}</span>
             {#if group.viaSync}
-              <span class="badge badge-ghost badge-xs" title="Über Geräte-Sync">⇄</span>
+              <span class="badge badge-ghost badge-xs" title={m.cordn_synced_via()}>⇄</span>
             {/if}
             <span class="badge badge-ghost badge-sm">{group.members.length}</span>
           </button>
         {:else}
-          <p class="px-2 py-4 text-sm opacity-60">Noch keine Gruppen.</p>
+          <p class="px-2 py-4 text-sm opacity-60">{m.cordn_groups_empty()}</p>
         {/each}
       </nav>
 
@@ -230,12 +252,16 @@
         <form class="join w-full" onsubmit={(e) => (e.preventDefault(), createGroup())}>
           <input
             class="input input-sm join-item w-full"
-            placeholder="Neue Gruppe…"
+            placeholder={m.cordn_new_group_placeholder()}
             bind:value={newGroupName}
             data-testid="cordn-new-group-name"
           />
-          <button class="btn join-item btn-sm btn-primary" disabled={busy} type="submit">
-            Anlegen
+          <button
+            class="btn join-item btn-sm btn-primary"
+            disabled={busy || !newGroupName.trim()}
+            type="submit"
+          >
+            {m.cordn_create()}
           </button>
         </form>
         {#if (config?.coordinatorPubkeys.length ?? 0) > 1}
@@ -246,7 +272,9 @@
           >
             {#each config?.coordinatorPubkeys ?? [] as pubkey, index (pubkey)}
               <option value={index === 0 ? '' : pubkey}>
-                Koordinator {pubkey.slice(0, 8)}…{index === 0 ? ' (Standard)' : ''}
+                {m.cordn_coordinator_label({ id: pubkey.slice(0, 8) })}{index === 0
+                  ? m.cordn_coordinator_default()
+                  : ''}
               </option>
             {/each}
           </select>
@@ -254,27 +282,29 @@
 
         <details class="collapse-arrow collapse rounded-lg bg-base-200">
           <summary class="collapse-title min-h-0 py-2 text-sm font-medium">
-            Geräte-Sync
-            {#if client.multiDevice}<span class="badge badge-xs badge-success">aktiv</span>{/if}
+            {m.cordn_md_title()}
+            {#if client.multiDevice}
+              <span class="badge badge-xs badge-success">{m.cordn_md_active()}</span>
+            {/if}
           </summary>
           <div class="collapse-content space-y-2 text-xs">
             {#if client.multiDevice}
               <p class="opacity-70" data-testid="cordn-md-status">
-                Verknüpft · {client.multiDevice.lastSyncAt
-                  ? `zuletzt ${new Date(client.multiDevice.lastSyncAt).toLocaleTimeString('de-DE')}`
-                  : 'noch nicht synchronisiert'}
+                {client.multiDevice.lastSyncAt
+                  ? m.cordn_md_linked_last({
+                      time: new Date(client.multiDevice.lastSyncAt).toLocaleTimeString('de-DE')
+                    })
+                  : m.cordn_md_linked_never()}
               </p>
               <button class="btn w-full btn-sm" disabled={busy} onclick={syncNow}>
-                Jetzt synchronisieren
+                {m.cordn_md_sync_now()}
               </button>
             {:else}
-              <p class="opacity-60">
-                Verbindungscode aus cordn.net einfügen, um Gruppen dieser Identität zu übernehmen.
-              </p>
+              <p class="opacity-60">{m.cordn_md_hint()}</p>
               <form class="join w-full" onsubmit={(e) => (e.preventDefault(), linkDevice())}>
                 <input
                   class="input input-xs join-item w-full font-mono"
-                  placeholder="Verbindungscode…"
+                  placeholder={m.cordn_md_connection_placeholder()}
                   bind:value={connectionString}
                   data-testid="cordn-md-connection"
                 />
@@ -283,7 +313,7 @@
                   disabled={busy || !connectionString.trim()}
                   type="submit"
                 >
-                  Verbinden
+                  {m.cordn_md_connect()}
                 </button>
               </form>
             {/if}
@@ -291,8 +321,11 @@
         </details>
 
         <details class="collapse-arrow collapse rounded-lg bg-base-200">
-          <summary class="collapse-title min-h-0 py-2 text-sm font-medium">
-            Einladungen
+          <summary
+            class="collapse-title min-h-0 py-2 text-sm font-medium"
+            data-testid="cordn-invites-summary"
+          >
+            {m.cordn_invites_title()}
             {#if client.welcomes.length > 0}
               <span class="badge badge-xs badge-primary">{client.welcomes.length}</span>
             {/if}
@@ -301,24 +334,28 @@
             <button
               class="btn w-full btn-sm"
               disabled={busy}
+              data-testid="cordn-invites-refresh"
               onclick={() => run((c) => c.refreshWelcomes())}
             >
-              Aktualisieren
+              {m.cordn_invites_refresh()}
             </button>
             <ul class="space-y-1" data-testid="cordn-welcome-list">
               {#each client.welcomes as welcome (`${welcome.coordinatorPubkey}:${welcome.kp_ref}`)}
                 <li class="flex items-center justify-between gap-2">
-                  <span class="truncate">Einladung {welcome.kp_ref.slice(0, 8)}…</span>
+                  <span class="truncate">
+                    {m.cordn_invite_entry({ id: welcome.kp_ref.slice(0, 8) })}
+                  </span>
                   <button
                     class="btn btn-xs btn-primary"
                     disabled={busy}
+                    data-testid="cordn-invite-accept"
                     onclick={() => acceptWelcome(welcome)}
                   >
-                    Annehmen
+                    {m.cordn_invite_accept()}
                   </button>
                 </li>
               {:else}
-                <li class="opacity-60">Keine offenen Einladungen</li>
+                <li class="opacity-60">{m.cordn_invites_none()}</li>
               {/each}
             </ul>
           </div>
@@ -342,22 +379,22 @@
           <button
             class="btn btn-ghost btn-sm md:hidden"
             onclick={() => (mobileChat = false)}
-            aria-label="Zurück zur Gruppenliste"
+            aria-label={m.cordn_back_to_groups()}
           >
             ←
           </button>
           <div class="min-w-0 flex-1">
             <h2 class="truncate font-semibold">{selectedGroup.name}</h2>
             <p class="truncate text-xs opacity-60">
-              {selectedGroup.members.length} Mitglieder
-              {#if selectedGroup.viaSync}· synchronisiert via cordn.net{/if}
+              {m.cordn_members_count({ count: selectedGroup.members.length })}
+              {#if selectedGroup.viaSync}· {m.cordn_synced_via()}{/if}
             </p>
           </div>
           {#if canInvite}
             <form class="join hidden sm:flex" onsubmit={(e) => (e.preventDefault(), addMember())}>
               <input
                 class="input input-sm join-item w-44 font-mono"
-                placeholder="Pubkey einladen…"
+                placeholder={m.cordn_invitee_placeholder()}
                 bind:value={inviteePubkey}
                 data-testid="cordn-invitee-pubkey"
               />
@@ -366,9 +403,13 @@
                 disabled={busy || !inviteePubkey.trim()}
                 type="submit"
               >
-                Einladen
+                {m.cordn_invite_button()}
               </button>
             </form>
+          {:else if selectedGroup.adminPubkeys.length > 0 && !selectedGroup.viaSync}
+            <p class="hidden text-xs opacity-60 sm:block" data-testid="cordn-admin-gate-hint">
+              {m.cordn_admin_gate_hint()}
+            </p>
           {/if}
         </header>
 
@@ -378,7 +419,7 @@
           data-testid="cordn-message-list"
         >
           {#if messageItems.length === 0}
-            <p class="py-8 text-center text-sm opacity-60">Noch keine Nachrichten</p>
+            <p class="py-8 text-center text-sm opacity-60">{m.cordn_no_messages()}</p>
           {:else}
             <ChatMessageList items={messageItems}>
               {#snippet row(message)}
@@ -402,19 +443,19 @@
             <textarea
               class="textarea max-h-40 min-h-10 flex-1"
               rows="1"
-              placeholder="Nachricht… (Enter sendet, Shift/Alt+Enter = neue Zeile)"
+              placeholder={m.cordn_message_placeholder()}
               bind:value={draft}
               onkeydown={(e) => composerKeydown(e, send)}
               data-testid="cordn-message-input"
             ></textarea>
             <button class="btn btn-primary" disabled={busy || !draft.trim()} type="submit">
-              Senden
+              {m.cordn_send()}
             </button>
           </form>
         </footer>
       {:else}
         <div class="flex flex-1 items-center justify-center">
-          <p class="text-sm opacity-60">Gruppe auswählen oder anlegen.</p>
+          <p class="text-sm opacity-60">{m.cordn_select_group()}</p>
         </div>
       {/if}
     </main>

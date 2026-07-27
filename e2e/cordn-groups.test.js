@@ -17,6 +17,14 @@ function freshIdentity() {
   return { nsec: nip19.nsecEncode(secret), pubkey: getPublicKey(secret) };
 }
 
+/**
+ * The /c layout mounts route children multiple times for responsive
+ * variants — scope every testid lookup to the visible instance.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} id
+ */
+const byId = (page, id) => page.locator(`[data-testid="${id}"]:visible`);
+
 test.describe('Cordn groups (spike)', () => {
   test.skip(!enabled, 'CORDN_GROUPS_ENABLED not set');
   test.setTimeout(240_000);
@@ -30,63 +38,73 @@ test.describe('Cordn groups (spike)', () => {
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
 
-    // Bob first: reaching "ready" publishes his KeyPackage to the coordinator.
-    await pageB.goto('/labs/cordn');
-    await loginWithNsec(pageB, bob.nsec);
-    await pageB.goto('/labs/cordn');
-    await expect(pageB.getByTestId('cordn-status')).toBeVisible({ timeout: 90_000 });
+    // The «Gruppen» section is per-user opt-in — seed the settings toggle
+    // before the app boots (matches enabling it in /settings).
+    const optIn = `(() => {
+      const key = 'app-settings';
+      const stored = JSON.parse(localStorage.getItem(key) || '{}');
+      stored.cordnGroupsEnabled = true;
+      localStorage.setItem(key, JSON.stringify(stored));
+    })()`;
+    await pageA.addInitScript(optIn);
+    await pageB.addInitScript(optIn);
 
-    await pageA.goto('/labs/cordn');
+    // Bob first: reaching "ready" publishes his KeyPackage to the coordinator.
+    await pageB.goto('/c/groups');
+    await loginWithNsec(pageB, bob.nsec);
+    await pageB.goto('/c/groups');
+    await expect(byId(pageB, 'cordn-status')).toBeVisible({ timeout: 90_000 });
+
+    await pageA.goto('/c/groups');
     await loginWithNsec(pageA, alice.nsec);
-    await pageA.goto('/labs/cordn');
-    await expect(pageA.getByTestId('cordn-status')).toBeVisible({ timeout: 90_000 });
+    await pageA.goto('/c/groups');
+    await expect(byId(pageA, 'cordn-status')).toBeVisible({ timeout: 90_000 });
 
     // The post-login onboarding redirect can pull pages back to Home — pin
     // both pages to the probe route before interacting.
-    await pageA.goto('/labs/cordn');
-    await expect(pageA.getByTestId('cordn-status')).toBeVisible({ timeout: 90_000 });
+    await pageA.goto('/c/groups');
+    await expect(byId(pageA, 'cordn-status')).toBeVisible({ timeout: 90_000 });
 
     // Alice creates a group and invites Bob by pubkey.
-    await pageA.getByTestId('cordn-new-group-name').fill('E2E Spike');
-    await pageA.getByTestId('cordn-new-group-name').press('Enter');
-    await expect(pageA.getByTestId('cordn-group-list')).toContainText('E2E Spike');
+    await byId(pageA, 'cordn-new-group-name').fill('E2E Spike');
+    await byId(pageA, 'cordn-new-group-name').press('Enter');
+    await expect(byId(pageA, 'cordn-group-list')).toContainText('E2E Spike');
 
-    await pageA.getByTestId('cordn-invitee-pubkey').fill(bob.pubkey);
-    await pageA.getByTestId('cordn-invitee-pubkey').press('Enter');
+    await byId(pageA, 'cordn-invitee-pubkey').fill(bob.pubkey);
+    await byId(pageA, 'cordn-invitee-pubkey').press('Enter');
     // Member count badge reflects the add (2 members) once the commit posts.
-    await expect(pageA.getByTestId('cordn-group-list')).toContainText('2', { timeout: 60_000 });
+    await expect(byId(pageA, 'cordn-group-list')).toContainText('2', { timeout: 60_000 });
 
     // Bob refreshes invitations until Alice's storeWelcome (async over the
     // relay) has landed, then accepts (re-pin the route first). The
     // invitations tools live in a collapsed <details> in the rail.
-    await pageB.goto('/labs/cordn');
-    await expect(pageB.getByTestId('cordn-status')).toBeVisible({ timeout: 90_000 });
-    await pageB.getByText('Einladungen', { exact: false }).first().click();
+    await pageB.goto('/c/groups');
+    await expect(byId(pageB, 'cordn-status')).toBeVisible({ timeout: 90_000 });
+    await byId(pageB, 'cordn-invites-summary').click();
     await expect(async () => {
-      await pageB.getByRole('button', { name: 'Aktualisieren' }).click();
-      await expect(pageB.getByRole('button', { name: 'Annehmen' })).toBeVisible({
+      await byId(pageB, 'cordn-invites-refresh').click();
+      await expect(byId(pageB, 'cordn-invite-accept').first()).toBeVisible({
         timeout: 10_000
       });
     }).toPass({ timeout: 120_000, intervals: [5_000] });
-    await pageB.getByRole('button', { name: 'Annehmen' }).click();
-    await expect(pageB.getByTestId('cordn-group-list')).toContainText('Gruppe', {
+    await byId(pageB, 'cordn-invite-accept').first().click();
+    await expect(byId(pageB, 'cordn-group-list')).toContainText('Gruppe', {
       timeout: 60_000
     });
 
     // Alice → Bob.
-    await pageA.getByTestId('cordn-message-input').fill('Hallo Bob, MLS klappt');
-    await pageA.getByTestId('cordn-message-input').press('Enter');
-    await expect(pageB.getByTestId('cordn-message-list')).toContainText('Hallo Bob, MLS klappt', {
+    await byId(pageA, 'cordn-message-input').fill('Hallo Bob, MLS klappt');
+    await byId(pageA, 'cordn-message-input').press('Enter');
+    await expect(byId(pageB, 'cordn-message-list')).toContainText('Hallo Bob, MLS klappt', {
       timeout: 60_000
     });
 
     // Bob → Alice.
-    await pageB.getByTestId('cordn-message-input').fill('Hallo Alice, Antwort kommt an');
-    await pageB.getByTestId('cordn-message-input').press('Enter');
-    await expect(pageA.getByTestId('cordn-message-list')).toContainText(
-      'Hallo Alice, Antwort kommt an',
-      { timeout: 60_000 }
-    );
+    await byId(pageB, 'cordn-message-input').fill('Hallo Alice, Antwort kommt an');
+    await byId(pageB, 'cordn-message-input').press('Enter');
+    await expect(byId(pageA, 'cordn-message-list')).toContainText('Hallo Alice, Antwort kommt an', {
+      timeout: 60_000
+    });
 
     await contextA.close();
     await contextB.close();
