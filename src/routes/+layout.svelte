@@ -87,6 +87,8 @@
     (() => {
       const pathname = $page.url.pathname;
       if (pathname.startsWith('/create/')) return true;
+      // Cordn labs shell has its own bottom composer.
+      if (pathname.startsWith('/labs/cordn')) return true;
       if ($page.url.searchParams.get('view') === 'chat') return true;
       if (pathname.startsWith('/c/messages')) {
         // Page reports whether a thread is currently open
