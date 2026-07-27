@@ -13,6 +13,7 @@ import { buildEnvelope, validateEnvelope, CORDN_CHAT_KIND } from './envelope.js'
 import { sealPayload, unsealPayload } from './sealed-payload.js';
 import { CordnCoordinatorRpc } from './coordinator-rpc.js';
 import { CordnStorage } from './storage.js';
+import { findGroupMetadata } from './group-metadata.js';
 import {
   addMember,
   createChatMessage,
@@ -34,7 +35,7 @@ const GROUPS_KEY = 'groups';
 const POLL_INTERVAL_MS = 3000;
 
 /** @typedef {{cursor: number, pubkey: string, content: string, at: number}} CordnChatMessage */
-/** @typedef {{gid: string, name: string, coordinatorPubkey: string, members: string[], fetchCursor: number, messages: CordnChatMessage[]}} CordnGroupView */
+/** @typedef {{gid: string, name: string, coordinatorPubkey: string, members: string[], adminPubkeys: string[], fetchCursor: number, messages: CordnChatMessage[]}} CordnGroupView */
 /** @typedef {CordnGroupView & {stateBase64: string}} StoredCordnGroup */
 /** @typedef {{coordinatorPubkey: string, keyPackageRef: string, keyPackageBase64: string, privateKeyPackageBase64: string}} StoredKeyPackage */
 /** @typedef {{coordinatorPubkey: string, kp_ref: string, welcome_64: string, at: number, after?: number}} TaggedWelcome */
@@ -94,7 +95,9 @@ export class CordnGroupsClient {
         // Migration: records stored before multi-coordinator support belong to
         // the (then only) default coordinator.
         group.coordinatorPubkey ??= this.coordinatorPubkeys[0];
-        this.states.set(group.gid, decodeStateBase64(group.stateBase64));
+        const state = decodeStateBase64(group.stateBase64);
+        this.states.set(group.gid, state);
+        group.adminPubkeys ??= findGroupMetadata(state)?.adminPubkeys ?? [];
       }
       this.groups = storedGroups.map(({ stateBase64: _stateBase64, ...view }) => view);
       await this.#ensureKeyPackages();
@@ -195,6 +198,7 @@ export class CordnGroupsClient {
         name,
         coordinatorPubkey,
         members: listMemberPubkeys(state),
+        adminPubkeys: [],
         fetchCursor: 0,
         messages: []
       }
@@ -268,13 +272,15 @@ export class CordnGroupsClient {
     const state = await joinFromWelcome({ welcomeBase64: welcome.welcome_64, ...pair });
     const gid = getGid(state);
     this.states.set(gid, state);
+    const metadata = findGroupMetadata(state);
     this.groups = [
       ...this.groups,
       {
         gid,
-        name: `Gruppe ${gid.slice(0, 8)}`,
+        name: metadata?.name || `Gruppe ${gid.slice(0, 8)}`,
         coordinatorPubkey: welcome.coordinatorPubkey,
         members: listMemberPubkeys(state),
+        adminPubkeys: metadata?.adminPubkeys ?? [],
         fetchCursor: welcome.after ?? 0,
         messages: []
       }
@@ -404,9 +410,12 @@ export class CordnGroupsClient {
           return true;
         }
       }
+      const metadata = findGroupMetadata(processed.newState);
       this.#updateGroup(message.gid, {
         fetchCursor: message.cursor,
-        members: listMemberPubkeys(processed.newState)
+        members: listMemberPubkeys(processed.newState),
+        adminPubkeys: metadata?.adminPubkeys ?? [],
+        ...(metadata?.name ? { name: metadata.name } : {})
       });
     } catch (error) {
       // Undecryptable backlog (e.g. pre-join epochs) — skip forward, keep note.

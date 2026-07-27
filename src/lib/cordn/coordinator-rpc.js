@@ -72,7 +72,20 @@ export class CordnCoordinatorRpc {
    */
   async #call(transportKind, name, args) {
     const { client, connected } = this.#connection(transportKind);
-    await connected;
+    await Promise.race([
+      connected,
+      new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Koordinator ${this.transportBase.serverPubkey.slice(0, 8)}… nicht erreichbar (Timeout)`
+              )
+            ),
+          20_000
+        )
+      )
+    ]);
     const result = await client.callTool({ name, arguments: { ...args } }, undefined, {
       onprogress: () => undefined,
       resetTimeoutOnProgress: true

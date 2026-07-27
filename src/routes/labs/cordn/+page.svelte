@@ -94,6 +94,21 @@
 
   /** @param {string} pubkey */
   const shortPubkey = (pubkey) => `${pubkey.slice(0, 8)}…${pubkey.slice(-4)}`;
+
+  let pubkeyCopied = $state(false);
+  async function copyPubkey() {
+    if (!client) return;
+    await navigator.clipboard.writeText(client.pubkey);
+    pubkeyCopied = true;
+    setTimeout(() => (pubkeyCopied = false), 2000);
+  }
+
+  const canInvite = $derived(
+    !!selectedGroup &&
+      !!client &&
+      (selectedGroup.adminPubkeys.length === 0 ||
+        selectedGroup.adminPubkeys.includes(client.pubkey))
+  );
 </script>
 
 <svelte:head><title>Cordn Labs</title></svelte:head>
@@ -112,8 +127,12 @@
   {:else if client.status === 'error'}
     <div class="alert alert-error">Initialisierung fehlgeschlagen: {client.error}</div>
   {:else}
-    <p class="text-sm opacity-70" data-testid="cordn-status">
-      Verbunden · KeyPackage {client.keyPackageRef.slice(0, 12)}…
+    <p class="flex items-center gap-2 text-sm opacity-70" data-testid="cordn-status">
+      Verbunden · KeyPackage {client.keyPackageRef.slice(0, 12)}… · Dein Pubkey
+      <span class="font-mono">{shortPubkey(client.pubkey)}</span>
+      <button class="btn btn-ghost btn-xs" onclick={copyPubkey} data-testid="cordn-copy-pubkey">
+        {pubkeyCopied ? 'Kopiert ✓' : 'Kopieren'}
+      </button>
     </p>
 
     {#if actionError}
@@ -213,21 +232,27 @@
             </span>
           </header>
 
-          <form class="join w-full" onsubmit={(e) => (e.preventDefault(), addMember())}>
-            <input
-              class="input input-sm join-item w-full font-mono"
-              placeholder="Hex-Pubkey einladen…"
-              bind:value={inviteePubkey}
-              data-testid="cordn-invitee-pubkey"
-            />
-            <button
-              class="btn join-item btn-sm"
-              disabled={busy || !inviteePubkey.trim()}
-              type="submit"
-            >
-              Einladen
-            </button>
-          </form>
+          {#if canInvite}
+            <form class="join w-full" onsubmit={(e) => (e.preventDefault(), addMember())}>
+              <input
+                class="input input-sm join-item w-full font-mono"
+                placeholder="Hex-Pubkey einladen…"
+                bind:value={inviteePubkey}
+                data-testid="cordn-invitee-pubkey"
+              />
+              <button
+                class="btn join-item btn-sm"
+                disabled={busy || !inviteePubkey.trim()}
+                type="submit"
+              >
+                Einladen
+              </button>
+            </form>
+          {:else}
+            <p class="text-xs opacity-60" data-testid="cordn-admin-gate-hint">
+              Nur Admins können in dieser Gruppe Mitglieder hinzufügen.
+            </p>
+          {/if}
 
           <ul class="min-h-40 space-y-2" data-testid="cordn-message-list">
             {#each selectedGroup.messages as message (message.cursor)}
