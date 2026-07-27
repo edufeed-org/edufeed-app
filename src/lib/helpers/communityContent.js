@@ -76,6 +76,21 @@ export function mapCommunityItemsToRawItems(items, contentType) {
 }
 
 /**
+ * Whether a community's kind 0 profile is complete enough to display publicly.
+ * Communities without a resolvable profile or without a name are hidden from
+ * discovery surfaces (they'd render as "Unknown User" cards). A description
+ * is intentionally NOT required — legit communities often lack one.
+ * @param {any} profile - Parsed kind 0 content for the community pubkey, or undefined
+ * @returns {boolean}
+ */
+export function hasDisplayableCommunityProfile(profile) {
+  if (!profile) return false;
+  const name = typeof profile.name === 'string' ? profile.name.trim() : '';
+  const displayName = typeof profile.display_name === 'string' ? profile.display_name.trim() : '';
+  return Boolean(name || displayName);
+}
+
+/**
  * Get community display info for the filter dropdown
  * @param {any[]} allCommunities - Array of community events (kind 10222)
  * @param {string[]} joinedCommunities - Array of joined community pubkeys

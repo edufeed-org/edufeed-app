@@ -8,7 +8,10 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { mapCommunityItemsToRawItems } from '$lib/helpers/communityContent.js';
+import {
+  mapCommunityItemsToRawItems,
+  hasDisplayableCommunityProfile
+} from '$lib/helpers/communityContent.js';
 
 /** @param {Partial<{id:string,kind:number,pubkey:string,tags:string[][],created_at:number,content:string}>} o */
 function ev(o = {}) {
@@ -176,5 +179,39 @@ describe('mapCommunityItemsToRawItems', () => {
     expect(result).toHaveLength(1);
     expect(result[0].data._sharedBy).toBe('sharer1');
     expect(result[0].data._allSharers).toEqual(['sharer1', 'sharer2']);
+  });
+});
+
+describe('hasDisplayableCommunityProfile', () => {
+  it('rejects a missing profile (no kind 0 found)', () => {
+    expect(hasDisplayableCommunityProfile(undefined)).toBe(false);
+    expect(hasDisplayableCommunityProfile(null)).toBe(false);
+  });
+
+  it('rejects a profile without any name', () => {
+    expect(hasDisplayableCommunityProfile({ about: 'A community for math teachers' })).toBe(false);
+    expect(hasDisplayableCommunityProfile({ name: '', about: 'A community' })).toBe(false);
+    expect(hasDisplayableCommunityProfile({ name: '  ', about: 'A community' })).toBe(false);
+    expect(hasDisplayableCommunityProfile({})).toBe(false);
+  });
+
+  it('accepts a profile with a name but no description (e.g. EKKW RPI, relilab)', () => {
+    expect(hasDisplayableCommunityProfile({ name: 'relilab' })).toBe(true);
+    expect(hasDisplayableCommunityProfile({ name: 'relilab', about: '' })).toBe(true);
+  });
+
+  it('accepts a profile with name and description', () => {
+    expect(
+      hasDisplayableCommunityProfile({ name: 'Mathe AG', about: 'A community for math teachers' })
+    ).toBe(true);
+  });
+
+  it('accepts display_name as the name field', () => {
+    expect(hasDisplayableCommunityProfile({ display_name: 'Mathe AG' })).toBe(true);
+  });
+
+  it('rejects non-string name values from malformed kind 0 content', () => {
+    expect(hasDisplayableCommunityProfile({ name: 42 })).toBe(false);
+    expect(hasDisplayableCommunityProfile({ name: { text: 'x' } })).toBe(false);
   });
 });
