@@ -42,5 +42,23 @@ export default [
       // Disable until base path support is needed — widespread pre-existing violations
       'svelte/no-navigation-without-resolve': 'off'
     }
+  },
+  {
+    files: ['src/**/*.{js,svelte}'],
+    ignores: ['src/lib/cordn/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['ts-mls', 'ts-mls/*', '@contextvm/*', '@noble/ciphers', '@noble/ciphers/*'],
+              message:
+                'Import Cordn APIs via $lib/cordn only (spike wrapper isolates the MLS stack).'
+            }
+          ]
+        }
+      ]
+    }
   }
 ];

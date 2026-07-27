@@ -83,12 +83,15 @@
     "ws": "^8.20.0"
   },
   "dependencies": {
+    "@contextvm/mcp-sdk": "^1.30.0",
+    "@contextvm/sdk": "^0.13.10",
     "@fiatjaf/promenade-trusted-dealer": "npm:@jsr/fiatjaf__promenade-trusted-dealer@^0.4.3",
     "@fontsource-variable/caveat": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/outfit": "^5.2.8",
     "@mozilla/readability": "^0.6.0",
     "@napi-rs/canvas": "^1.0.2",
+    "@noble/ciphers": "^2.2.0",
     "applesauce-common": "^6.2.0",
     "bible-passage-reference-parser": "^3.2.0",
     "cally": "^0.9.2",
@@ -98,7 +101,8 @@
     "nostr-vocab-core": "https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.2.3/nostr-vocab-core-0.2.3.tgz",
     "nostr-vocab-skos-import": "https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-skos-import/-/0.2.4/nostr-vocab-skos-import-0.2.4.tgz",
     "pdfjs-dist": "4.10.38",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "ts-mls": "2.0.0-rc.13"
   },
   "pnpm": {
     "patchedDependencies": {
