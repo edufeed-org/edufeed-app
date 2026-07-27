@@ -19,6 +19,7 @@ import {
   encode,
   generateKeyPackage,
   getCiphersuiteImpl,
+  getCredentialFromLeafIndex,
   getGroupMembers,
   joinGroup,
   keyPackageDecoder,
@@ -254,12 +255,25 @@ export async function createChatMessage({ state, envelopeJson, senderPubkey }) {
 }
 
 /**
- * Process one unsealed opaque MLS message.
+ * Multi-device §10: thrown (and caught by the ingest loop) when a Commit from
+ * our own shared leaf arrives — processing it would self-remove this device.
+ */
+export class SiblingCommitSkippedError extends Error {
+  constructor() {
+    super('Commit vom eigenen geteilten Leaf übersprungen (Multi-Device)');
+    this.name = 'SiblingCommitSkippedError';
+  }
+}
+
+/**
+ * Process one unsealed opaque MLS message. When `skipOwnCommitsFor` is set
+ * (shared-leaf multi-device groups), Commits authored by that stable identity
+ * throw SiblingCommitSkippedError before the UpdatePath applies.
  *
- * @param {{state: ClientState, opaqueMessageBase64: string}} params
+ * @param {{state: ClientState, opaqueMessageBase64: string, skipOwnCommitsFor?: string}} params
  * @returns {Promise<{kind: 'application', envelopeJson: string, senderPubkey: string, newState: ClientState} | {kind: 'state', newState: ClientState}>}
  */
-export async function processOpaqueMessage({ state, opaqueMessageBase64 }) {
+export async function processOpaqueMessage({ state, opaqueMessageBase64, skipOwnCommitsFor }) {
   const cipherSuite = await getCipherSuite();
   const decoded = mlsMessageDecoder(base64ToBytes(opaqueMessageBase64), 0);
   if (!decoded || (decoded[0].wireformat !== 1 && decoded[0].wireformat !== 2)) {
@@ -268,7 +282,26 @@ export async function processOpaqueMessage({ state, opaqueMessageBase64 }) {
   const result = await processMessage({
     context: mlsContext(cipherSuite),
     state,
-    message: decoded[0]
+    message: decoded[0],
+    callback: skipOwnCommitsFor
+      ? (incoming) => {
+          if (incoming.kind === 'commit' && incoming.senderLeafIndex !== undefined) {
+            try {
+              const credential = getCredentialFromLeafIndex(
+                /** @type {any} */ (state).ratchetTree,
+                incoming.senderLeafIndex
+              );
+              if (credential && credentialIdentity(credential) === skipOwnCommitsFor) {
+                throw new SiblingCommitSkippedError();
+              }
+            } catch (error) {
+              if (error instanceof SiblingCommitSkippedError) throw error;
+              // Unresolvable leaf → fall through and accept normally.
+            }
+          }
+          return 'accept';
+        }
+      : undefined
   });
   if (result.kind === 'applicationMessage') {
     return {

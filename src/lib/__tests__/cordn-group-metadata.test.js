@@ -9,7 +9,10 @@ import {
 const ADMIN_A = 'a'.repeat(64);
 const ADMIN_B = 'b'.repeat(64);
 
-/** Build a spec/01 §3 CordnGroupMetadata payload (uint16 version + five 2-byte-length-prefixed vectors). */
+/**
+ * Build a spec/01 §3 CordnGroupMetadata payload (uint16 version + five 2-byte-length-prefixed vectors).
+ * @param {{version?: number, name?: string, description?: string, adminHexKeys?: string[], icon?: string, imageUrl?: string}} params
+ */
 function encodeFixture({
   version = 1,
   name = '',

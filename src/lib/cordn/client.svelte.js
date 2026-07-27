@@ -15,7 +15,15 @@ import { CordnCoordinatorRpc } from './coordinator-rpc.js';
 import { CordnStorage } from './storage.js';
 import { findGroupMetadata } from './group-metadata.js';
 import {
+  parseConnectionString,
+  parseTipEvent,
+  planReconcile,
+  unsealDocument
+} from './multidevice-sync.js';
+import { fetchBlossomText, fetchLatestTip } from './multidevice-net.js';
+import {
   addMember,
+  SiblingCommitSkippedError,
   createChatMessage,
   createInitialGroupState,
   decodeKeyPackagePair,
@@ -32,10 +40,20 @@ import {
 
 const KEY_PACKAGES_KEY = 'keyPackages';
 const GROUPS_KEY = 'groups';
+const MULTI_DEVICE_KEY = 'multiDevice';
 const POLL_INTERVAL_MS = 3000;
+/** Tip re-check every Nth message poll (~30s). */
+const TIP_POLL_EVERY = 10;
+/** cordn-web's default tip relays (multiDevice.svelte.ts). */
+const DEFAULT_TIP_RELAYS = [
+  'wss://relay.nostr.net',
+  'wss://relay.ditto.pub',
+  'wss://relay.primal.net'
+];
 
 /** @typedef {{cursor: number, pubkey: string, content: string, at: number}} CordnChatMessage */
-/** @typedef {{gid: string, name: string, coordinatorPubkey: string, members: string[], adminPubkeys: string[], fetchCursor: number, messages: CordnChatMessage[]}} CordnGroupView */
+/** @typedef {{gid: string, name: string, coordinatorPubkey: string, members: string[], adminPubkeys: string[], fetchCursor: number, messages: CordnChatMessage[], viaSync?: boolean}} CordnGroupView */
+/** @typedef {{ephemeralPubkey: string, dTag: string, relays: string[], ephemeralPrivateKey: string, dek?: string, servers?: string[], lastDocAddressByGid?: Record<string, string>, lastMetaAddress?: string}} MultiDeviceConfig */
 /** @typedef {CordnGroupView & {stateBase64: string}} StoredCordnGroup */
 /** @typedef {{coordinatorPubkey: string, keyPackageRef: string, keyPackageBase64: string, privateKeyPackageBase64: string}} StoredKeyPackage */
 /** @typedef {{coordinatorPubkey: string, kp_ref: string, welcome_64: string, at: number, after?: number}} TaggedWelcome */
@@ -48,6 +66,8 @@ export class CordnGroupsClient {
   status = $state('idle');
   error = $state('');
   keyPackageRef = $state('');
+  /** @type {{dTag: string, lastSyncAt: number} | undefined} */
+  multiDevice = $state.raw(undefined);
 
   /**
    * @param {object} params
@@ -57,7 +77,10 @@ export class CordnGroupsClient {
    */
   constructor({ pubkey, signer, config }) {
     this.pubkey = pubkey;
+    this.signer = signer;
+    this.relays = config.relays;
     this.coordinatorPubkeys = config.coordinatorPubkeys;
+    this.pollCount = 0;
     /** @type {Map<string, CordnCoordinatorRpc>} coordinatorPubkey -> RPC (non-reactive internals) */
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain Map on purpose: never rendered
     this.rpcs = new Map(
@@ -78,10 +101,21 @@ export class CordnGroupsClient {
     this.stopped = false;
   }
 
-  /** @param {string} coordinatorPubkey */
+  /**
+   * RPC for a coordinator; created on demand for coordinators discovered via
+   * multi-device sync (synced groups may live outside the configured list).
+   * @param {string} coordinatorPubkey
+   */
   #rpc(coordinatorPubkey) {
-    const rpc = this.rpcs.get(coordinatorPubkey);
-    if (!rpc) throw new Error(`Unknown coordinator ${coordinatorPubkey.slice(0, 8)}`);
+    let rpc = this.rpcs.get(coordinatorPubkey);
+    if (!rpc) {
+      rpc = new CordnCoordinatorRpc({
+        serverPubkey: coordinatorPubkey,
+        relays: this.relays,
+        signer: this.signer
+      });
+      this.rpcs.set(coordinatorPubkey, rpc);
+    }
     return rpc;
   }
 
@@ -100,11 +134,22 @@ export class CordnGroupsClient {
         group.adminPubkeys ??= findGroupMetadata(state)?.adminPubkeys ?? [];
       }
       this.groups = storedGroups.map(({ stateBase64: _stateBase64, ...view }) => view);
+      const multiDeviceConfig = /** @type {MultiDeviceConfig | undefined} */ (
+        await this.storage.get(MULTI_DEVICE_KEY)
+      );
+      if (multiDeviceConfig) {
+        this.multiDevice = { dTag: multiDeviceConfig.dTag, lastSyncAt: 0 };
+      }
       await this.#ensureKeyPackages();
       this.status = 'ready';
       this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
       void this.poll();
       void this.refreshWelcomes();
+      if (multiDeviceConfig) {
+        void this.syncFromTip().catch((error) => {
+          this.error = `Geräte-Sync: ${error instanceof Error ? error.message : error}`;
+        });
+      }
     } catch (error) {
       this.error = error instanceof Error ? error.message : String(error);
       this.status = 'error';
@@ -216,6 +261,11 @@ export class CordnGroupsClient {
    * @param {string} pubkeyOrRef
    */
   async addMemberToGroup(gid, pubkeyOrRef) {
+    if (this.#group(gid).viaSync) {
+      // Epoch-advancing commits on shared-leaf groups need the tip write side
+      // (reconcile-before-commit + doc republish, §10.5) — not in the spike.
+      throw new Error('Synchronisierte Gruppen werden in cordn.net verwaltet');
+    }
     const state = this.#state(gid);
     const rpc = this.#rpc(this.#group(gid).coordinatorPubkey);
     const { keyPackage: consumed } = await rpc.consumeKeyPackage({ id: pubkeyOrRef });
@@ -241,6 +291,123 @@ export class CordnGroupsClient {
       after: posted.cursor
     });
     await this.#persistGroups();
+  }
+
+  /**
+   * Link this app as a device of the identity behind a cordn-web connection
+   * string (multi-device §11): persist the tip locator + ephemeral key, then
+   * pull the tip. Requires being logged in as the same identity — the tip's
+   * inner event must decrypt and verify against our pubkey.
+   *
+   * @param {string} connectionString
+   */
+  async linkDevice(connectionString) {
+    const parsed = parseConnectionString(connectionString);
+    /** @type {MultiDeviceConfig} */
+    const config = {
+      ...parsed,
+      relays: parsed.relays.length > 0 ? parsed.relays : DEFAULT_TIP_RELAYS,
+      lastDocAddressByGid: {}
+    };
+    await this.storage.set(MULTI_DEVICE_KEY, config);
+    this.multiDevice = { dTag: config.dTag, lastSyncAt: 0 };
+    await this.syncFromTip();
+  }
+
+  /**
+   * Fetch the latest tip and reconcile all advertised group documents into
+   * local state (multi-device §8/§9): seed unknown groups, fast-forward when
+   * the doc's MLS epoch is ahead, drop tombstoned groups. Never downgrades.
+   */
+  async syncFromTip() {
+    const config = /** @type {MultiDeviceConfig | undefined} */ (
+      await this.storage.get(MULTI_DEVICE_KEY)
+    );
+    if (!config) return;
+    const tipEvent = await fetchLatestTip(config);
+    if (!tipEvent) throw new Error('Kein Tip-Event auf den Relays gefunden');
+    const tip = await parseTipEvent(tipEvent, {
+      ownerPubkey: this.pubkey,
+      nip44Decrypt: (pubkey, ciphertext) => {
+        if (!this.signer.nip44) throw new Error('Signer unterstützt kein NIP-44');
+        return this.signer.nip44.decrypt(pubkey, ciphertext);
+      }
+    });
+    if (tip.dek) config.dek = tip.dek;
+    if (tip.servers.length > 0) config.servers = tip.servers;
+    if (!config.dek) throw new Error('Tip enthält keinen Dokumentenschlüssel');
+    const dekHex = config.dek;
+    const servers = config.servers ?? [];
+
+    /** @type {Array<{gid: string, epoch: bigint, address: string, state: import('ts-mls').ClientState, doc: Record<string, any>}>} */
+    const docs = [];
+    for (const { address, gid } of tip.groupDocs) {
+      if (config.lastDocAddressByGid?.[gid] === address && this.groups.some((g) => g.gid === gid)) {
+        continue; // unchanged since last sync
+      }
+      const sealedText = await fetchBlossomText(servers, address);
+      const doc = await unsealDocument({ sealedText, dekHex, expectedAddress: address });
+      if (doc.type !== 'group' || typeof doc.clientState !== 'string') continue;
+      const state = decodeStateBase64(doc.clientState);
+      docs.push({ gid: doc.gid, epoch: BigInt(state.groupContext.epoch), address, state, doc });
+    }
+
+    /** @type {Array<{gid: string, epoch: number}>} */
+    let tombstones = [];
+    if (tip.metaDoc && config.lastMetaAddress !== tip.metaDoc) {
+      const sealedText = await fetchBlossomText(servers, tip.metaDoc);
+      const meta = await unsealDocument({ sealedText, dekHex, expectedAddress: tip.metaDoc });
+      tombstones = Array.isArray(meta.removed) ? meta.removed : [];
+      config.lastMetaAddress = tip.metaDoc;
+    }
+
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient local lookup, not UI state
+    const byGid = new Map(docs.map((entry) => [entry.gid, entry]));
+    const plan = planReconcile({
+      localGroups: this.groups.map((group) => ({
+        gid: group.gid,
+        epoch: BigInt(this.states.get(group.gid)?.groupContext.epoch ?? 0)
+      })),
+      docs,
+      tombstones
+    });
+    for (const step of plan) {
+      const entry = byGid.get(step.gid);
+      if ((step.action === 'seed' || step.action === 'fastForward') && entry) {
+        this.#adoptSyncedGroup(entry, step.action);
+        config.lastDocAddressByGid ??= {};
+        config.lastDocAddressByGid[step.gid] = entry.address;
+      } else if (step.action === 'drop') {
+        this.groups = this.groups.filter((group) => group.gid !== step.gid);
+        this.states.delete(step.gid);
+        delete config.lastDocAddressByGid?.[step.gid];
+      }
+    }
+    await this.#persistGroups();
+    await this.storage.set(MULTI_DEVICE_KEY, config);
+    this.multiDevice = { dTag: config.dTag, lastSyncAt: Date.now() };
+  }
+
+  /**
+   * @param {{gid: string, state: import('ts-mls').ClientState, doc: Record<string, any>}} entry
+   * @param {'seed' | 'fastForward'} action
+   */
+  #adoptSyncedGroup({ gid, state, doc }, action) {
+    this.states.set(gid, state);
+    const metadata = findGroupMetadata(state);
+    const existing = action === 'fastForward' ? this.groups.find((g) => g.gid === gid) : undefined;
+    const view = {
+      gid,
+      name: metadata?.name || existing?.name || `Gruppe ${gid.slice(0, 8)}`,
+      coordinatorPubkey:
+        doc.coordinator ?? existing?.coordinatorPubkey ?? this.coordinatorPubkeys[0],
+      members: listMemberPubkeys(state),
+      adminPubkeys: metadata?.adminPubkeys ?? [],
+      fetchCursor: Math.max(existing?.fetchCursor ?? 0, Number(doc.cursor) || 0),
+      messages: existing?.messages ?? [],
+      viaSync: true
+    };
+    this.groups = [...this.groups.filter((g) => g.gid !== gid), view];
   }
 
   /** Fetch pending welcomes from every reachable coordinator. */
@@ -341,14 +508,22 @@ export class CordnGroupsClient {
   }
 
   async poll() {
-    if (this.stopped || this.groups.length === 0) return;
+    if (this.stopped) return;
+    this.pollCount += 1;
+    if (this.multiDevice && this.pollCount % TIP_POLL_EVERY === 0) {
+      void this.syncFromTip().catch((error) => {
+        this.error = `Geräte-Sync: ${error instanceof Error ? error.message : error}`;
+      });
+    }
+    if (this.groups.length === 0) return;
     /** @type {Array<{cursor: number, gid: string, msg_64: string, at: number}>} */
     const messages = [];
-    for (const coordinatorPubkey of this.coordinatorPubkeys) {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient dedupe, not UI state
+    const activeCoordinators = [...new Set(this.groups.map((group) => group.coordinatorPubkey))];
+    for (const coordinatorPubkey of activeCoordinators) {
       const coordinatorGroups = this.groups.filter(
         (group) => group.coordinatorPubkey === coordinatorPubkey
       );
-      if (coordinatorGroups.length === 0) continue;
       try {
         const response = await this.#rpc(coordinatorPubkey).fetchManyGroupMessages({
           groups: coordinatorGroups.map(({ gid, fetchCursor }) => ({
@@ -388,7 +563,9 @@ export class CordnGroupsClient {
       for (const byte of opaque) base64 += String.fromCharCode(byte);
       const processed = await processOpaqueMessage({
         state,
-        opaqueMessageBase64: btoa(base64)
+        opaqueMessageBase64: btoa(base64),
+        // Shared-leaf groups: never process our own sibling's Commits (§10).
+        skipOwnCommitsFor: group.viaSync ? this.pubkey : undefined
       });
       this.states.set(message.gid, processed.newState);
       if (processed.kind === 'application') {
@@ -418,6 +595,17 @@ export class CordnGroupsClient {
         ...(metadata?.name ? { name: metadata.name } : {})
       });
     } catch (error) {
+      if (error instanceof SiblingCommitSkippedError) {
+        // Benign: cursor advances, the new epoch arrives via the next tip sync.
+        this.#updateGroup(message.gid, { fetchCursor: message.cursor });
+        return true;
+      }
+      if (group.viaSync) {
+        // §10.6: ahead-of-epoch messages on synced groups — do NOT advance the
+        // cursor; the sibling's republished doc will fast-forward us.
+        this.error = `Warte auf Geräte-Sync für ${group.name} (Nachricht ${message.cursor})`;
+        return false;
+      }
       // Undecryptable backlog (e.g. pre-join epochs) — skip forward, keep note.
       this.error = `Nachricht ${message.cursor} übersprungen: ${error instanceof Error ? error.message : error}`;
       this.#updateGroup(message.gid, { fetchCursor: message.cursor });

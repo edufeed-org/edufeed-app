@@ -106,9 +106,18 @@
   const canInvite = $derived(
     !!selectedGroup &&
       !!client &&
+      !selectedGroup.viaSync &&
       (selectedGroup.adminPubkeys.length === 0 ||
         selectedGroup.adminPubkeys.includes(client.pubkey))
   );
+
+  let connectionString = $state('');
+  const linkDevice = () =>
+    run(async (c) => {
+      await c.linkDevice(connectionString.trim());
+      connectionString = '';
+    });
+  const syncNow = () => run((c) => c.syncFromTip());
 </script>
 
 <svelte:head><title>Cordn Labs</title></svelte:head>
@@ -187,6 +196,40 @@
                 </option>
               {/each}
             </select>
+          {/if}
+        </section>
+
+        <section class="card space-y-2 bg-base-100 p-3">
+          <h2 class="font-semibold">Geräte-Sync</h2>
+          {#if client.multiDevice}
+            <p class="text-xs opacity-70" data-testid="cordn-md-status">
+              Verknüpft · {client.multiDevice.lastSyncAt
+                ? `zuletzt ${new Date(client.multiDevice.lastSyncAt).toLocaleTimeString('de-DE')}`
+                : 'noch nicht synchronisiert'}
+            </p>
+            <button class="btn btn-sm" disabled={busy} onclick={syncNow}>
+              Jetzt synchronisieren
+            </button>
+          {:else}
+            <p class="text-xs opacity-60">
+              Verbindungscode aus cordn.net (Einstellungen → Multi-Device) einfügen, um Gruppen
+              dieser Identität zu übernehmen.
+            </p>
+            <form class="join w-full" onsubmit={(e) => (e.preventDefault(), linkDevice())}>
+              <input
+                class="input input-sm join-item w-full font-mono"
+                placeholder="Verbindungscode…"
+                bind:value={connectionString}
+                data-testid="cordn-md-connection"
+              />
+              <button
+                class="btn join-item btn-sm btn-primary"
+                disabled={busy || !connectionString.trim()}
+                type="submit"
+              >
+                Verbinden
+              </button>
+            </form>
           {/if}
         </section>
 
