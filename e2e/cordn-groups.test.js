@@ -57,9 +57,11 @@ test.describe('Cordn groups (spike)', () => {
     await expect(pageA.getByTestId('cordn-group-list')).toContainText('2', { timeout: 60_000 });
 
     // Bob refreshes invitations until Alice's storeWelcome (async over the
-    // relay) has landed, then accepts (re-pin the route first).
+    // relay) has landed, then accepts (re-pin the route first). The
+    // invitations tools live in a collapsed <details> in the rail.
     await pageB.goto('/labs/cordn');
     await expect(pageB.getByTestId('cordn-status')).toBeVisible({ timeout: 90_000 });
+    await pageB.getByText('Einladungen', { exact: false }).first().click();
     await expect(async () => {
       await pageB.getByRole('button', { name: 'Aktualisieren' }).click();
       await expect(pageB.getByRole('button', { name: 'Annehmen' })).toBeVisible({
