@@ -193,3 +193,18 @@ describe('planReconcile (spec §8: forward-only LWW by epoch)', () => {
     expect(plan).toEqual([]);
   });
 });
+
+describe('buildChainRanges (spec §8.5)', async () => {
+  const { buildChainRanges } = await import('$lib/cordn/multidevice-sync.js');
+  it('pairs each chain point with its half-open decrypt range', () => {
+    expect(buildChainRanges([{ cursor: 10 }, { cursor: 25 }, { cursor: 40 }], 60)).toEqual([
+      { index: 0, lo: 10, hi: 25 },
+      { index: 1, lo: 25, hi: 40 },
+      { index: 2, lo: 40, hi: 60 }
+    ]);
+  });
+  it('drops empty ranges (chain point at the seed cursor)', () => {
+    expect(buildChainRanges([{ cursor: 60 }], 60)).toEqual([]);
+    expect(buildChainRanges([], 60)).toEqual([]);
+  });
+});

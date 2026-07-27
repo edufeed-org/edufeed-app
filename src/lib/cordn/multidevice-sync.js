@@ -139,6 +139,26 @@ export async function sealDocumentForTest(doc, dekHex) {
 }
 
 /**
+ * Spec §8.5 — turn a per-epoch chain (oldest doc per epoch, ascending by
+ * cursor) into half-open decrypt ranges `(lo, hi]`, each paired with the
+ * chain index whose gen-0 state decrypts it. The final range is capped at
+ * `seedCursor` (everything newer is live-stream territory).
+ *
+ * @param {Array<{cursor: number}>} chain
+ * @param {number} seedCursor
+ * @returns {Array<{index: number, lo: number, hi: number}>}
+ */
+export function buildChainRanges(chain, seedCursor) {
+  return chain
+    .map((point, index) => ({
+      index,
+      lo: point.cursor,
+      hi: index + 1 < chain.length ? chain[index + 1].cursor : seedCursor
+    }))
+    .filter((range) => range.hi > range.lo);
+}
+
+/**
  * Spec §8 reconciliation: forward-only last-writer-wins by MLS epoch.
  * Tombstones drop local groups when tombstone.epoch >= local epoch and veto
  * seeding. Returns actions in doc order followed by tombstone drops.

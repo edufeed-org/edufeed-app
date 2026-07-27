@@ -15,6 +15,7 @@ import { CordnCoordinatorRpc } from './coordinator-rpc.js';
 import { CordnStorage } from './storage.js';
 import { findGroupMetadata } from './group-metadata.js';
 import {
+  buildChainRanges,
   parseConnectionString,
   parseTipEvent,
   planReconcile,
@@ -53,7 +54,7 @@ const DEFAULT_TIP_RELAYS = [
 
 /** @typedef {{cursor: number, pubkey: string, content: string, at: number}} CordnChatMessage */
 /** @typedef {{gid: string, name: string, coordinatorPubkey: string, members: string[], adminPubkeys: string[], fetchCursor: number, messages: CordnChatMessage[], viaSync?: boolean}} CordnGroupView */
-/** @typedef {{ephemeralPubkey: string, dTag: string, relays: string[], ephemeralPrivateKey: string, dek?: string, servers?: string[], lastDocAddressByGid?: Record<string, string>, lastMetaAddress?: string}} MultiDeviceConfig */
+/** @typedef {{ephemeralPubkey: string, dTag: string, relays: string[], ephemeralPrivateKey: string, dek?: string, servers?: string[], lastDocAddressByGid?: Record<string, string>, lastMetaAddress?: string, historyRecoveredGids?: string[]}} MultiDeviceConfig */
 /** @typedef {CordnGroupView & {stateBase64: string}} StoredCordnGroup */
 /** @typedef {{coordinatorPubkey: string, keyPackageRef: string, keyPackageBase64: string, privateKeyPackageBase64: string}} StoredKeyPackage */
 /** @typedef {{coordinatorPubkey: string, kp_ref: string, welcome_64: string, at: number, after?: number}} TaggedWelcome */
@@ -386,6 +387,127 @@ export class CordnGroupsClient {
     await this.#persistGroups();
     await this.storage.set(MULTI_DEVICE_KEY, config);
     this.multiDevice = { dTag: config.dTag, lastSyncAt: Date.now() };
+
+    // §8.5 chained catch-up: recover decryptable history for synced groups,
+    // once per group. Sequential + background — recovery is best-effort.
+    void (async () => {
+      for (const group of this.groups) {
+        if (this.stopped || !group.viaSync) continue;
+        if (config.historyRecoveredGids?.includes(group.gid)) continue;
+        try {
+          await this.#recoverHistory(group.gid, config);
+        } catch (error) {
+          this.error = `Verlauf für ${group.name}: ${error instanceof Error ? error.message : error}`;
+        }
+        config.historyRecoveredGids = [...(config.historyRecoveredGids ?? []), group.gid];
+        await this.storage.set(MULTI_DEVICE_KEY, config);
+      }
+    })();
+  }
+
+  /**
+   * Spec §8.5 — walk the group document `prev` chain to collect the oldest
+   * (gen-0) ClientState per epoch, fetch the coordinator backlog in the
+   * covered cursor window, and decrypt each half-open range with its epoch's
+   * state. Messages older than the oldest retained document stay unreachable
+   * (MLS forward secrecy). Never touches the live state.
+   *
+   * @param {string} gid
+   * @param {MultiDeviceConfig} config
+   */
+  async #recoverHistory(gid, config) {
+    const group = this.groups.find((entry) => entry.gid === gid);
+    const startAddress = config.lastDocAddressByGid?.[gid];
+    if (!group || !startAddress || !config.dek) return;
+    const servers = config.servers ?? [];
+
+    /** @type {Map<bigint, {cursor: number, state: import('ts-mls').ClientState}>} */
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient local lookup
+    const byEpoch = new Map();
+    /** @type {string | undefined} */
+    let address = startAddress;
+    for (let hop = 0; hop < 200 && address; hop++) {
+      /** @type {Record<string, any>} */
+      let doc;
+      try {
+        const sealedText = await fetchBlossomText(servers, address);
+        doc = await unsealDocument({ sealedText, dekHex: config.dek, expectedAddress: address });
+      } catch {
+        break; // chain end, GC'd blob, or unreachable server — recover what we have
+      }
+      if (doc.type !== 'group' || doc.gid !== gid) break;
+      const state = decodeStateBase64(doc.clientState);
+      const epoch = BigInt(state.groupContext.epoch);
+      const cursor = Number(doc.cursor) || 0;
+      const existing = byEpoch.get(epoch);
+      if (!existing || cursor < existing.cursor) byEpoch.set(epoch, { cursor, state });
+      address = typeof doc.prev === 'string' ? doc.prev : undefined;
+    }
+    const chain = [...byEpoch.values()].sort((a, b) => a.cursor - b.cursor);
+    const seedCursor = group.fetchCursor;
+    const ranges = buildChainRanges(chain, seedCursor);
+    if (ranges.length === 0) return;
+
+    // Fetch the backlog (frontier, seedCursor] from the coordinator.
+    const rpc = this.#rpc(group.coordinatorPubkey);
+    /** @type {Array<{cursor: number, gid: string, msg_64: string, at: number}>} */
+    const gap = [];
+    let after = ranges[0].lo;
+    for (let page = 0; page < 50; page++) {
+      const { messages } = await rpc.fetchManyGroupMessages({
+        groups: [{ gid, ...(after > 0 ? { after } : {}) }]
+      });
+      if (messages.length === 0) break;
+      gap.push(...messages.filter((m) => m.cursor <= seedCursor));
+      const maxCursor = Math.max(...messages.map((m) => m.cursor));
+      if (maxCursor <= after || maxCursor >= seedCursor) break;
+      after = maxCursor;
+    }
+    gap.sort((a, b) => a.cursor - b.cursor);
+
+    /** @type {CordnChatMessage[]} */
+    const recovered = [];
+    for (const range of ranges) {
+      let state = chain[range.index].state;
+      for (const message of gap.filter((m) => m.cursor > range.lo && m.cursor <= range.hi)) {
+        try {
+          const key = await deriveGroupPayloadKey(state);
+          const opaque = unsealPayload({ key, sealedBase64: message.msg_64 });
+          let base64 = '';
+          for (const byte of opaque) base64 += String.fromCharCode(byte);
+          const processed = await processOpaqueMessage({
+            state,
+            opaqueMessageBase64: btoa(base64),
+            skipOwnCommitsFor: this.pubkey
+          });
+          state = processed.newState;
+          if (processed.kind === 'application') {
+            const envelope = JSON.parse(processed.envelopeJson);
+            if (validateEnvelope(envelope, processed.senderPubkey).valid) {
+              recovered.push({
+                cursor: message.cursor,
+                pubkey: envelope.pubkey,
+                content: envelope.content,
+                at: message.at
+              });
+            }
+          }
+        } catch {
+          // Sibling commit or ratchet miss — skip this message, keep going.
+        }
+      }
+    }
+    if (recovered.length === 0) return;
+    const current = this.#group(gid);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient merge map
+    const byCursor = new Map(current.messages.map((m) => [m.cursor, m]));
+    for (const message of recovered) {
+      if (!byCursor.has(message.cursor)) byCursor.set(message.cursor, message);
+    }
+    this.#updateGroup(gid, {
+      messages: [...byCursor.values()].sort((a, b) => a.cursor - b.cursor)
+    });
+    await this.#persistGroups();
   }
 
   /**
