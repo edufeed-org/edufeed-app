@@ -95,7 +95,6 @@
   import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
   import { inferBildungsbereich } from '$lib/helpers/educational/inferBildungsbereich.js';
   import { parseKonfiTagsToFormData } from '$lib/helpers/educational/parseKonfiTagsToFormData.js';
-  import { formDataToKonfiTags } from '$lib/helpers/educational/formDataToKonfiTags.js';
   import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
   import {
     advanceStepOrSubStep,
@@ -835,7 +834,7 @@
       bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
     };
 
-    // Merge Konfi facets parsed from ext:ekw:konfi:* tags (no-op for non-Konfi).
+    // Merge Konfi facets parsed from ext:org.edufeed.ekw.konfi:* tags (no-op for non-Konfi).
     if (inferred === 'konfi') {
       const subSteps = BILDUNGSBEREICHE.konfi.step4SubSteps ?? [];
       const konfi = parseKonfiTagsToFormData(editEvent, subSteps);
@@ -1309,11 +1308,6 @@
 
       const resourceData = buildResourceData(formData, {
         about: mergedAbout(),
-        konfiTags: formDataToKonfiTags(
-          formData,
-          bildungsbereichConfig?.step4SubSteps ?? [],
-          bildungsbereichConfig?.bildungsbereichTag
-        ),
         hasNoUrl
       });
 

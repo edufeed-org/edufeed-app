@@ -15,6 +15,7 @@
 
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { BILDUNGSBEREICH_KEYS } from '$lib/helpers/educational/bildungsbereich.js';
+import { EKW_KONFI_NS } from '$lib/helpers/educational/ekwNamespace.js';
 
 /**
  * @typedef {import('$lib/helpers/educational/bildungsbereich.js').BildungsbereichKey} BildungsbereichKey
@@ -131,17 +132,18 @@ export function getBildungsbereichKeysForVariant(variantId) {
 /**
  * Labels for `ext:<ns>:<facet>:*` tag namespaces that aren't 1:1 with a
  * form-variant id. `ExtensionMetadataPanel` consults this map BEFORE the
- * variant-id-keyed registry, so nested namespaces like `ekw:konfi` (which
- * have no matching `variant.id`) get curated labels instead of the humanized
- * fallback.
+ * variant-id-keyed registry, so nested namespaces like Konfi's
+ * `org.edufeed.ekw.konfi` (which have no matching `variant.id`) get curated
+ * labels instead of the humanized fallback.
  *
  * Keys are namespace strings as produced by `parseExtensionTags.js`
- * (e.g. `ext:ekw:konfi:zielgruppen:id` → ns=`ekw:konfi`).
+ * (e.g. `ext:org.edufeed.ekw.konfi:zielgruppen:id` → ns=`org.edufeed.ekw.konfi`,
+ * see `EKW_KONFI_NS`).
  *
  * @type {Record<string, { sectionKey?: string, facets?: Record<string, string> }>}
  */
 export const EXTENSION_NAMESPACE_LABELS = {
-  'ekw:konfi': {
+  [EKW_KONFI_NS]: {
     sectionKey: 'konfi_metadata_section',
     facets: {
       zielgruppen: 'konfi_field_zielgruppen',

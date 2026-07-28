@@ -25,7 +25,7 @@
  * @property {boolean} [multi]
  * @property {boolean} [required]
  * @property {string} [requiredOneOf]
- * @property {boolean} [allowCustom] - When true, the wizard renders a "+ eigene Angabe" affordance below the vocab picker. The custom value lives at `<schemeKey>Custom` in formData and serializes to a `ext:ekw:konfi:<tagSlug>:custom` scalar tag. Vocab + custom may coexist.
+ * @property {boolean} [allowCustom] - When true, the wizard renders a "+ eigene Angabe" affordance below the vocab picker. The custom value lives at `<schemeKey>Custom` in formData and serializes (via `formDataToAmbExt.js` → `ambToNostr`) as a bare `ext:org.edufeed.ekw.konfi:<tagSlug>` scalar tag alongside that facet's Concept triples — there is no separate `:custom` sub-key on the wire. Vocab + custom may coexist.
  * @property {string} [customLabelKey] - Paraglide key for the custom input label (required when `allowCustom`).
  * @property {string} [customButtonLabelKey] - Paraglide key for the "+ Hinzufügen" button (required when `allowCustom`).
  * @property {string} [customPlaceholderKey] - Paraglide key for the input placeholder (optional).

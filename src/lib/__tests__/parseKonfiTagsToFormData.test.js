@@ -30,11 +30,11 @@ describe('parseKonfiTagsToFormData', () => {
   it('extracts vocab + scalar form-data slots from an event', () => {
     const event = {
       tags: [
-        ['ext:ekw:konfi:themen:id', 'urn:t1'],
-        ['ext:ekw:konfi:themen:prefLabel:de', 'Thema 1'],
-        ['ext:ekw:konfi:themen:type', 'Concept'],
-        ['ext:ekw:konfi:subtitle', 'Sub'],
-        ['ext:ekw:konfi:plainLanguage', 'true']
+        ['ext:org.edufeed.ekw.konfi:themen:id', 'urn:t1'],
+        ['ext:org.edufeed.ekw.konfi:themen:prefLabel:de', 'Thema 1'],
+        ['ext:org.edufeed.ekw.konfi:themen:type', 'Concept'],
+        ['ext:org.edufeed.ekw.konfi:subtitle', 'Sub'],
+        ['ext:org.edufeed.ekw.konfi:plainLanguage', 'true']
       ]
     };
     expect(parseKonfiTagsToFormData(event, SUB_STEPS)).toEqual({

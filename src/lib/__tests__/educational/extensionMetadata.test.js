@@ -120,11 +120,11 @@ describe('buildExtensionSections', () => {
 
   it('resolves registered Konfi labels via EXTENSION_NAMESPACE_LABELS', () => {
     const sections = sectionsFrom([
-      ['ext:ekw:konfi:zielgruppen:id', 'urn:ku3'],
-      ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU3'],
-      ['ext:ekw:konfi:zielgruppen:type', 'Concept'],
-      ['ext:ekw:konfi:subtitle', 'Eine Einheit zur Taufe'],
-      ['ext:ekw:konfi:plainLanguage', 'true']
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:id', 'urn:ku3'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:prefLabel:de', 'KU3'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:type', 'Concept'],
+      ['ext:org.edufeed.ekw.konfi:subtitle', 'Eine Einheit zur Taufe'],
+      ['ext:org.edufeed.ekw.konfi:plainLanguage', 'true']
     ]);
     expect(sections[0].sectionLabel).toMatch(/Konfi-Arbeit-Metadaten|Confirmation Work Metadata/i);
     const zg = sections[0].facets.find((f) => f.facetName === 'zielgruppen');
@@ -154,12 +154,12 @@ describe('buildExtensionCards', () => {
   });
 
   it('renders a boolean-true facet as a checkmark card and hides boolean-false', () => {
-    const trueCards = cardsFrom([['ext:ekw:konfi:plainLanguage', 'true']]);
+    const trueCards = cardsFrom([['ext:org.edufeed.ekw.konfi:plainLanguage', 'true']]);
     const flag = trueCards.find((c) => c.key.endsWith(':plainLanguage'));
     expect(flag?.iconKey).toBe('check');
     expect(flag?.value).toBe('✓');
 
-    const falseCards = cardsFrom([['ext:ekw:konfi:plainLanguage', 'false']]);
+    const falseCards = cardsFrom([['ext:org.edufeed.ekw.konfi:plainLanguage', 'false']]);
     expect(falseCards.find((c) => c.key.endsWith(':plainLanguage'))).toBeUndefined();
   });
 

@@ -1,47 +1,11 @@
 // src/lib/helpers/educational/konfiTags.js
-import { EKW_TAG_PREFIX } from './ekwNamespace.js';
+import { EKW_KONFI_NS } from './ekwNamespace.js';
 
-const KONFI_PREFIX = `${EKW_TAG_PREFIX}konfi:`;
+const KONFI_PREFIX = `ext:${EKW_KONFI_NS}:`;
 
 /**
  * @typedef {{ id: string, labels?: Record<string, string> }} KonfiSelectedConcept
  */
-
-/**
- * Emit the canonical id/prefLabel:de/type triple per selected concept.
- *
- * @param {string} tagSlug - short facet name, e.g. 'zielgruppen', 'themen'
- * @param {KonfiSelectedConcept[] | undefined} concepts
- * @returns {string[][]}
- */
-export function emitKonfiVocabTags(tagSlug, concepts) {
-  if (!concepts || concepts.length === 0) return [];
-  /** @type {string[][]} */
-  const tags = [];
-  for (const c of concepts) {
-    tags.push([`${KONFI_PREFIX}${tagSlug}:id`, c.id]);
-    const de = c.labels?.de;
-    if (de) tags.push([`${KONFI_PREFIX}${tagSlug}:prefLabel:de`, de]);
-    tags.push([`${KONFI_PREFIX}${tagSlug}:type`, 'Concept']);
-  }
-  return tags;
-}
-
-/**
- * Emit a single scalar tag. `false`, empty, whitespace-only, null, and
- * undefined values produce no tags. `true` is serialized as the string
- * `"true"` so the parse path can round-trip it.
- *
- * @param {string} tagSlug
- * @param {string | boolean | undefined | null} value
- * @returns {string[][]}
- */
-export function emitKonfiScalarTags(tagSlug, value) {
-  if (value === undefined || value === null || value === false) return [];
-  const str = typeof value === 'boolean' ? 'true' : String(value);
-  if (str.trim() === '') return [];
-  return [[`${KONFI_PREFIX}${tagSlug}`, str]];
-}
 
 /**
  * Re-export the canonical sub-step type definitions from `bildungsbereich.js`
@@ -56,10 +20,12 @@ export function emitKonfiScalarTags(tagSlug, value) {
  */
 
 /**
- * Inverse of `emitKonfiVocabTags` + `emitKonfiScalarTags`. Walks the same
- * sub-step config used at emit time and produces a partial form-data object
- * with `<schemeKey>Ids` / `<schemeKey>Labels` for vocab fields and `<tagSlug>`
- * for scalar fields.
+ * Reads Konfi facet tags (`ext:org.edufeed.ekw.konfi:<tagSlug>[:sub]`, emitted
+ * by `ambToNostr` from `amb.ext[EKW_KONFI_NS]` — see `formDataToAmbExt.js`)
+ * from an existing kind-30142 event. Walks the same sub-step config the
+ * emit side (`formDataToAmbExt.buildKonfiFacets`) walks, and produces a
+ * partial form-data object with `<schemeKey>Ids` / `<schemeKey>Labels` for
+ * vocab fields and `<tagSlug>` for scalar fields.
  *
  * @param {string[][]} tags
  * @param {SubStepConfig[]} subSteps
@@ -83,7 +49,14 @@ export function parseKonfiTags(tags, subSteps) {
           }));
         }
         if (field.allowCustom) {
-          const customKey = `${KONFI_PREFIX}${field.tagSlug}:custom`;
+          // ambToNostr serializes a facet's mixed Concept[]/string[] items in
+          // order: each Concept as an `:id`/`:prefLabel:*`/`:type` run, each
+          // plain string as a BARE `ext:<ns>:<facet>` tag (see
+          // formDataToAmbExt.buildKonfiFacets + ambToNostr's ext-emission
+          // loop) — there is no `:custom` sub-key on the wire. A bare tag can
+          // only occur here for the custom string (concepts always carry
+          // `:id`), so reading the bare key recovers it unambiguously.
+          const customKey = `${KONFI_PREFIX}${field.tagSlug}`;
           const customTag = tags.find((t) => t[0] === customKey);
           if (customTag && typeof customTag[1] === 'string' && customTag[1].trim() !== '') {
             out[`${field.schemeKey}Custom`] = customTag[1];
