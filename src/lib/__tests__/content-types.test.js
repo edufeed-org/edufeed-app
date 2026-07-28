@@ -16,8 +16,35 @@ import {
   filterEventsByAccess,
   getSectionNameForContentType,
   getDefaultCommunityTabs,
-  getCommunityTabs
+  getCommunityTabs,
+  VALID_CONTENT_VIEWS
 } from '$lib/helpers/contentTypes.js';
+import { load as loadCommunityPage } from '../../routes/c/[pubkey]/+page.js';
+
+describe('VALID_CONTENT_VIEWS (shared nav/page view set)', () => {
+  it("includes 'channels' so ?view=channels highlights the Kanäle nav item", () => {
+    // Regression: the layout once kept its own copy of this set that omitted
+    // 'channels', so ?view=channels rendered the channels content but left the
+    // nav highlighting Startseite.
+    expect(VALID_CONTENT_VIEWS.has('channels')).toBe(true);
+  });
+
+  it('validates all first-class community views', () => {
+    for (const v of ['home', 'chat', 'members', 'settings', 'channels']) {
+      expect(VALID_CONTENT_VIEWS.has(v)).toBe(true);
+    }
+  });
+
+  it('the page load resolves ?view=channels to contentView "channels"', async () => {
+    const data = await loadCommunityPage({ url: new URL('http://x/c/npub1abc?view=channels') });
+    expect(data.contentView).toBe('channels');
+  });
+
+  it('the page load drops an unknown ?view=', async () => {
+    const data = await loadCommunityPage({ url: new URL('http://x/c/npub1abc?view=bogus') });
+    expect(data.contentView).toBeUndefined();
+  });
+});
 
 describe('CONTENT_TYPE_CONFIG', () => {
   it('has entry for kind 30818 (wikis)', () => {
