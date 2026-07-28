@@ -33,7 +33,15 @@
   import { getChannelLevel, setChannelLevel } from '$lib/concord/notifications.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
-  let { community, channel, dissolved = false, isOwner = false, openOverlay, onBack } = $props();
+  let {
+    community,
+    channel,
+    dissolved = false,
+    isOwner = false,
+    channelCount = 1,
+    openOverlay,
+    onBack
+  } = $props();
 
   const communityId = $derived(community?.material?.community_id ?? '');
   const notifLevel = $derived(getChannelLevel(communityId, channel.channel_id));
@@ -321,6 +329,18 @@
             </button>
           </li>
         {/each}
+        {#if isOwner && !dissolved && channelCount > 1}
+          <li>
+            <button
+              class="text-error"
+              data-testid="concord-menu-delete-channel"
+              onclick={() => {
+                menuOpen = false;
+                openOverlay('delete-channel');
+              }}>{m.concord_menu_delete_channel()}</button
+            >
+          </li>
+        {/if}
         {#if isOwner && !dissolved}
           <li>
             <button
@@ -338,8 +358,17 @@
 </header>
 
 {#if dissolved}
-  <div class="border-b border-base-300 bg-base-200 px-4 py-2 text-sm text-base-content/70">
-    {m.concord_dissolved_banner()}
+  <div
+    class="flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-2 text-sm text-base-content/70"
+  >
+    <span class="flex-1">{m.concord_dissolved_banner()}</span>
+    {#if isOwner}
+      <button
+        class="btn btn-xs btn-neutral"
+        data-testid="concord-dissolved-recover"
+        onclick={() => openOverlay('create')}>{m.concord_dissolved_recover()}</button
+      >
+    {/if}
   </div>
 {:else if showKeyBar}
   <div

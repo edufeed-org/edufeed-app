@@ -17,7 +17,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/svelte';
+import { render, fireEvent, screen } from '@testing-library/svelte';
 import { of, BehaviorSubject } from 'rxjs';
 import { nip19 } from 'nostr-tools';
 import { tick } from 'svelte';
@@ -84,7 +84,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   concord_menu_members: () => 'Members',
   concord_menu_backup: () => 'Backup',
   concord_menu_dissolve: () => 'Dissolve',
+  concord_menu_delete_channel: () => 'Delete channel',
   concord_dissolved_banner: () => 'Dissolved',
+  concord_dissolved_recover: () => 'Start a new area',
   concord_keybar_title: () => 'Back up your key',
   concord_keybar_body: () => 'body',
   concord_keybar_action: () => 'Back up',
@@ -368,5 +370,66 @@ describe('ChannelChat mention composer', () => {
     const expectedCaret = 3 + inserted.length;
     expect(input.selectionStart).toBe(expectedCaret);
     expect(input.selectionEnd).toBe(expectedCaret);
+  });
+});
+
+describe('ChannelChat delete + dissolved recovery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** @param {any} props */
+  async function renderChat(props) {
+    const community = makeCommunity([]);
+    const utils = render(ChannelChat, {
+      props: { community, channel: CHANNEL, onBack: () => {}, ...props }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    return utils;
+  }
+
+  it('shows "Kanal löschen" and calls openOverlay(delete-channel) when owner, live, >1 channel', async () => {
+    const openOverlay = vi.fn();
+    const { container } = await renderChat({
+      openOverlay,
+      isOwner: true,
+      dissolved: false,
+      channelCount: 2
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    await fireEvent.click(screen.getByRole('button', { name: /Kanal löschen|Delete channel/ }));
+    expect(openOverlay).toHaveBeenCalledWith('delete-channel');
+  });
+
+  it('hides "Kanal löschen" for the last remaining channel', async () => {
+    const { container } = await renderChat({
+      openOverlay: vi.fn(),
+      isOwner: true,
+      dissolved: false,
+      channelCount: 1
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    expect(screen.queryByRole('button', { name: /Kanal löschen|Delete channel/ })).toBeNull();
+  });
+
+  it('shows the dissolved recover button (owner) and calls openOverlay(create)', async () => {
+    const openOverlay = vi.fn();
+    await renderChat({ openOverlay, isOwner: true, dissolved: true, channelCount: 1 });
+    await fireEvent.click(
+      screen.getByRole('button', { name: /Neuen Bereich gründen|Start a new area/ })
+    );
+    expect(openOverlay).toHaveBeenCalledWith('create');
+  });
+
+  it('hides the recover button for non-owners', async () => {
+    await renderChat({ openOverlay: vi.fn(), isOwner: false, dissolved: true, channelCount: 1 });
+    expect(
+      screen.queryByRole('button', { name: /Neuen Bereich gründen|Start a new area/ })
+    ).toBeNull();
   });
 });
