@@ -197,9 +197,13 @@
     <!-- rail — full width in mobile single-column mode (below md, only one
       of rail/pane is ever visible at once via mobileChat), fixed 288px once
       both show side by side. A bare `w-72` here would leave the remainder
-      of a narrow viewport blank instead of the visible pane filling it. -->
+      of a narrow viewport blank instead of the visible pane filling it.
+      Surfaces follow the app convention (design page "Channel Surfaces"):
+      nav chrome = base-200 (this rail joins the content-nav's beige zone),
+      content = base-100 (the chat pane) — previously inverted, which put a
+      stark paper column between two beige nav zones. -->
     <aside
-      class="flex w-full shrink-0 flex-col gap-1 overflow-y-auto border-r border-base-300 bg-base-100 p-3 md:w-72 {mobileChat
+      class="flex w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 md:w-72 {mobileChat
         ? 'hidden md:flex'
         : 'flex'}"
     >
@@ -208,6 +212,12 @@
           >{m.concord_rail_channels()}</span
         >
         <span class="flex items-center gap-1">
+          {#if concord.phase === 'syncing'}
+            <span
+              class="loading loading-xs loading-spinner text-base-content/40"
+              title={m.concord_sync_title()}
+            ></span>
+          {/if}
           {#if notificationSupported}
             <button
               class="btn btn-circle btn-ghost btn-xs"
@@ -271,11 +281,10 @@
       {/if}
     </aside>
 
-    <!-- pane — bg-base-200 (vs. the rail's bg-base-100) matches the approved
-      prototype's fluid chat pane treatment: rail reads as a paper card, the
-      chat area sits on the page's ambient background. -->
+    <!-- pane — the paper content surface (base-100), matching the public
+      community chat; the beige rail beside it reads as chrome. -->
     <section
-      class="flex min-w-0 flex-1 flex-col bg-base-200 {mobileChat ? 'flex' : 'hidden md:flex'}"
+      class="flex min-w-0 flex-1 flex-col bg-base-100 {mobileChat ? 'flex' : 'hidden md:flex'}"
     >
       {#if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
@@ -304,7 +313,13 @@
           title={m.concord_no_membership_title()}
           body={m.concord_no_membership_body()}
         />
-      {:else if concord.phase === 'syncing'}
+      {:else if concord.phase === 'syncing' && channels.length === 0}
+        <!-- Full-screen sync pane ONLY on a cold cache (first join / new
+          device). Decrypted rumors persist per channel in the per-account
+          IDB and the community state folds over those stores in the
+          ConcordCommunity CONSTRUCTOR — i.e. before the network epoch walk —
+          so on a warm cache the rail + chat render instantly from disk while
+          the sync finishes behind the rail header's spinner. -->
         <ChannelStatePane title={m.concord_sync_title()} body={m.concord_sync_body()} progress />
       {:else if concord.phase === 'removed'}
         <ChannelStatePane

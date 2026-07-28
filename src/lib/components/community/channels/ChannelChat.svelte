@@ -410,8 +410,10 @@
       highlightIndex={mentionIndex}
       onSelect={pickMention}
     />
+    <!-- Beige pill on the paper pane — same treatment as the public
+      community chat's composer (Chat.svelte). -->
     <form
-      class="m-4 mt-0 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-100 p-1.5"
+      class="m-4 mt-0 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-200 p-1.5"
       onsubmit={(e) => {
         e.preventDefault();
         // Enter-while-picking never reaches here (onComposerKeydown

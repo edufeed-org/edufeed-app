@@ -106,17 +106,19 @@
       : 'opacity-0'}"
   ></div>
   <div class="flex flex-col items-center space-y-3 py-4">
-    <!-- Home button -->
-    <div class="tooltip tooltip-right" data-tip={m.dashboard_home_tooltip()}>
-      <button
-        onclick={() => onHomeSelect?.()}
-        class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isDashboardActive
-          ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
-          : ''}"
-      >
-        <HomeIcon class_="w-6 h-6" />
-      </button>
-    </div>
+    <!-- Home button. Native `title` tooltips throughout this rail (NOT
+      DaisyUI .tooltip): the scroll container's overflow clips CSS
+      pseudo-element tooltips at the rail edge — a browser-native title
+      renders in its own layer and is never clipped. -->
+    <button
+      title={m.dashboard_home_tooltip()}
+      onclick={() => onHomeSelect?.()}
+      class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isDashboardActive
+        ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
+        : ''}"
+    >
+      <HomeIcon class_="w-6 h-6" />
+    </button>
     <div class="w-8 border-b border-base-300"></div>
 
     {#each sortedCommunities as communityPubKey (communityPubKey)}
@@ -124,26 +126,24 @@
       {@const communityProfile = getCommunityProfile()}
       {@const isActive = !isDashboardActive && currentCommunityId === communityPubKey}
 
-      <div class="tooltip tooltip-right" data-tip={getDisplayName(communityProfile)}>
-        <button
-          onclick={() => handleCommunityClick(communityPubKey)}
-          class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
-            ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
-            : ''}"
-        >
-          <div class="avatar">
-            <div class="h-12 w-12 rounded-full">
-              <ImageWithFallback
-                src={getProfilePicture(communityProfile) ||
-                  `https://robohash.org/${communityPubKey}`}
-                alt={getDisplayName(communityProfile)}
-                fallbackType="community"
-                class="h-full w-full rounded-full object-cover"
-              />
-            </div>
+      <button
+        title={getDisplayName(communityProfile)}
+        onclick={() => handleCommunityClick(communityPubKey)}
+        class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
+          ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
+          : ''}"
+      >
+        <div class="avatar">
+          <div class="h-12 w-12 rounded-full">
+            <ImageWithFallback
+              src={getProfilePicture(communityProfile) || `https://robohash.org/${communityPubKey}`}
+              alt={getDisplayName(communityProfile)}
+              fallbackType="community"
+              class="h-full w-full rounded-full object-cover"
+            />
           </div>
-        </button>
-      </div>
+        </div>
+      </button>
     {/each}
 
     {#if unlinkedAreas.length > 0 || showUnlockAffordance}
@@ -154,49 +154,41 @@
         entry. -->
       {#if showUnlockAffordance}
         <div class="w-8 border-b border-base-300"></div>
-        <div
-          class="tooltip tooltip-right"
-          data-tip={signerHasNip44 ? m.concord_unlock_areas() : m.concord_direct_needs_nip44()}
+        <button
+          title={signerHasNip44 ? m.concord_unlock_areas() : m.concord_direct_needs_nip44()}
+          class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
+          data-testid="concord_unlock_areas"
+          disabled={!signerHasNip44 || unlocking}
+          onclick={handleUnlockAreas}
         >
-          <button
-            class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
-            data-testid="concord_unlock_areas"
-            disabled={!signerHasNip44 || unlocking}
-            onclick={handleUnlockAreas}
-          >
-            {#if unlocking}
-              <span class="loading loading-sm loading-spinner"></span>
-            {:else}
-              <LockOpenIcon class_="h-5 w-5" />
-            {/if}
-          </button>
-        </div>
+          {#if unlocking}
+            <span class="loading loading-sm loading-spinner"></span>
+          {:else}
+            <LockOpenIcon class_="h-5 w-5" />
+          {/if}
+        </button>
       {/if}
       {#each unlinkedAreas as area (area.communityId)}
         {@const areaFlags = areaUnreadState(area.communityId)}
-        <div
-          class="tooltip tooltip-right"
-          data-tip="{area.name} · {m.concord_sidebar_area_tooltip()}"
+        <a
+          title="{area.name} · {m.concord_sidebar_area_tooltip()}"
+          href={resolve(`/private/${area.communityId}`)}
+          class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {area.dissolved
+            ? 'opacity-50'
+            : ''}"
         >
-          <a
-            href={resolve(`/private/${area.communityId}`)}
-            class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {area.dissolved
-              ? 'opacity-50'
-              : ''}"
-          >
-            <span class="relative shrink-0">
-              <ConcordAreaBadge
-                name={area.name}
-                communityId={area.communityId}
-                iconPointer={area.iconPointer}
-                class="h-12 w-12"
-              />
-              <span class="absolute -top-0.5 -right-0.5">
-                <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
-              </span>
+          <span class="relative shrink-0">
+            <ConcordAreaBadge
+              name={area.name}
+              communityId={area.communityId}
+              iconPointer={area.iconPointer}
+              class="h-12 w-12"
+            />
+            <span class="absolute -top-0.5 -right-0.5">
+              <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
             </span>
-          </a>
-        </div>
+          </span>
+        </a>
       {/each}
     {/if}
   </div>

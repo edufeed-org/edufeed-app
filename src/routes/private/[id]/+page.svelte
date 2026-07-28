@@ -90,7 +90,9 @@
     <!-- Slim header bar (title/lock/Beta/unlinked note) — same header
       treatment as ChannelChat's own bar, so the standalone page reads as one
       continuous shell rather than a page wrapped around a boxed widget. -->
-    <header class="flex shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 py-3">
+    <!-- Chrome surface (base-200): joins the sidebar + channel rail's beige
+      nav zone; the chat pane below is the paper content surface. -->
+    <header class="flex shrink-0 items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
       <!-- ConcordAreaBadge shows the decrypted community icon when available
         (falling back to the abbreviation placeholder), with the lock glyph
         kept in its corner — replaces the bare 🔒 emoji that used to be the
