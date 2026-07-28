@@ -195,8 +195,8 @@
     try {
       const remaining = channels.filter((c) => c.channel_id !== activeChannel.channel_id);
       await concord.community.deleteChannel(activeChannel.channel_id);
-      if (remaining[0] && concord.communityId)
-        selectConcordChannel(concord.communityId, remaining[0].channel_id);
+      const next = remaining.find((c) => c.accessible) ?? remaining[0];
+      if (next && concord.communityId) selectConcordChannel(concord.communityId, next.channel_id);
       showToast(m.concord_channel_deleted(), 'success');
       overlay = null;
     } catch (error) {
@@ -219,6 +219,14 @@
   $effect(() => {
     if (overlay !== 'dissolve' && dissolveConfirmText) dissolveConfirmText = '';
   });
+
+  // The dissolve confirm input is only ever created fresh when overlay ===
+  // 'dissolve' (no keyed reuse), so an on-mount focus is exactly the moment
+  // the modal opens — no autofocus attribute (a11y-lint-hostile).
+  /** @param {HTMLElement} node */
+  function focusOnMount(node) {
+    node.focus();
+  }
 </script>
 
 <!-- Flag off must hide the UI entirely (global constraint): the tab is
@@ -482,6 +490,7 @@
           data-testid="concord-dissolve-confirm-input"
           placeholder={m.concord_dissolve_confirm_placeholder()}
           bind:value={dissolveConfirmText}
+          use:focusOnMount
         />
         <div class="modal-action justify-center">
           <button class="btn btn-ghost" onclick={() => (overlay = null)}
