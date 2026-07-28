@@ -167,9 +167,12 @@ fields to the same or different schemes.
 ```
 
 Declares where a field's answer lands when a response is turned into a
-kind 30142 AMB resource (`buildAMBResourceTags` /
-`src/lib/helpers/form-to-amb.js`, delegating per-field serialization to the
-NIP-AMB emitter registry in `src/lib/helpers/forms/amb-emitters.js`).
+kind 30142 AMB resource. Serialization goes through the shared
+`amb-nostr-converter` library: `src/lib/helpers/educational/formValuesToAmbJson.js`
+maps form values to an AMB JSON object per this section's rules, then
+`ambToNostr` (from `amb-nostr-converter`) converts that AMB JSON to Nostr
+tags/content. `src/lib/helpers/educational/buildTemplateResourceSubmission.js`
+wires the two together and reconciles the `d` tag.
 **NIP-AMB is the authoritative grammar for kind-30142 tag emission** — this
 section only maps `field-output`/`field-vocab` to the NIP-AMB shapes; where
 they differ, NIP-AMB wins.
@@ -189,10 +192,10 @@ they differ, NIP-AMB wins.
   (the field's own id used as the AMB property name — so the emitted tag
   key is the bare field id).
 
-  Four `amb:<property>` values are special-cased by the emitter registry
-  (`src/lib/helpers/forms/amb-emitters.js`) instead of following the
-  bare-`<property>` rule above — a foreign client that only strips the
-  `amb:` prefix will diverge on these:
+  Four `amb:<property>` values are special-cased by `formValuesToAmbJson.js` /
+  `amb-nostr-converter` instead of following the bare-`<property>` rule
+  above — a foreign client that only strips the `amb:` prefix will diverge
+  on these:
 
   | `field-output`             | Emitted tag                          | Notes                                    |
   | --------------------------- | ------------------------------------- | ----------------------------------------- |

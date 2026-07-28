@@ -75,8 +75,8 @@
 
   // Resolve edit naddr to event. Skipped when the variant routes to
   // TemplateResourceForm — that component handles edit prefill itself via
-  // the editNaddr prop (parseAMBResourceForForm), so the wizard's edit-event
-  // fetch would be redundant.
+  // the editNaddr prop (nostrToAmb + ambJsonToFormValues), so the wizard's
+  // edit-event fetch would be redundant.
   $effect(() => {
     if (!data.editNaddr || templateNaddr) return;
 

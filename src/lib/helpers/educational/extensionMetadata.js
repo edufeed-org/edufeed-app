@@ -9,7 +9,7 @@
 // testable without a relay or an effect.
 
 import { parseExtensionTags } from './parseExtensionTags.js';
-import { getFormReferenceFromResource } from '../form-to-amb.js';
+import { getFormReferenceFromResource } from './formReference.js';
 import { parseFormTemplate } from '../forms.js';
 import { toDieBibelUrl } from './bibleReference.js';
 import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';

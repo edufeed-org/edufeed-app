@@ -50,7 +50,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
-  import { getFormReferenceFromResource } from '$lib/helpers/form-to-amb.js';
+  import { getFormReferenceFromResource } from '$lib/helpers/educational/formReference.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import {

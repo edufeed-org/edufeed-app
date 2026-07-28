@@ -687,7 +687,7 @@
    * Adapt a compact `{id, label}` to the rich shape FormConceptPicker takes.
    * @param {CompactConcept} c
    * @param {string} [vocabRelay]
-   * @returns {import('$lib/helpers/form-to-amb.js').SelectedConcept}
+   * @returns {import('$lib/helpers/educational/formReference.js').SelectedConcept}
    */
   function toRichConcept(c, vocabRelay = '') {
     const locale = getLocale();
@@ -702,7 +702,7 @@
   /**
    * Inverse adapter — FormConceptPicker emits rich concepts; keep only the bits
    * the form data shape cares about.
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept} rich
+   * @param {import('$lib/helpers/educational/formReference.js').SelectedConcept} rich
    * @returns {CompactConcept}
    */
   function toCompactConcept(rich) {
@@ -1614,7 +1614,7 @@
 
   /**
    * FormConceptPicker change handler for the educationalLevel picker.
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
+   * @param {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} rich
    */
   function handleEduLevelChange(rich) {
     formData.educationalLevels = rich.map(toCompactConcept);
@@ -1625,7 +1625,9 @@
    * @param {string} vocabKey
    */
   function makeAboutHandler(vocabKey) {
-    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+    return (
+      /** @type {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} */ rich
+    ) => {
       aboutByVocab = { ...aboutByVocab, [vocabKey]: rich.map(toCompactConcept) };
     };
   }
@@ -1639,7 +1641,9 @@
    * @param {'gradeLevelLabels'|'schoolTypeLabels'|'didacticConceptLabels'|'methodLabels'} labelsKey
    */
   function makeEkwPairHandler(idsKey, labelsKey) {
-    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+    return (
+      /** @type {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} */ rich
+    ) => {
       const compact = rich.map(toCompactConcept);
       formData[idsKey] = compact.map((c) => c.id);
       formData[labelsKey] = compact;

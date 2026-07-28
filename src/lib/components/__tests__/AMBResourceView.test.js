@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 
-// Mutable state read by the form-to-amb and accounts mocks below.
+// Mutable state read by the formReference and accounts mocks below.
 // Tests can set these before render to simulate different scenarios.
 // vi.hoisted makes this available to vi.mock factories despite hoisting.
 const { mockState } = vi.hoisted(() => ({
@@ -113,7 +113,7 @@ vi.mock('$lib/helpers/navigationHistory.js', () => ({
   getHasHistory: () => true,
   getFallbackRoute: () => '/'
 }));
-vi.mock('$lib/helpers/form-to-amb.js', () => ({
+vi.mock('$lib/helpers/educational/formReference.js', () => ({
   getFormReferenceFromResource: () => mockState.formRef
 }));
 vi.mock('$lib/helpers/calendar.js', () => ({

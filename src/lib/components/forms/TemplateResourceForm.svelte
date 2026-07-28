@@ -2,11 +2,9 @@
   import { goto } from '$app/navigation';
   import { nip19 } from 'nostr-tools';
   import { decodeFormNaddr, parseFormTemplate } from '$lib/helpers/forms.js';
-  import {
-    buildAMBResourceTags,
-    parseAMBResourceForForm,
-    resolveResourceDTag
-  } from '$lib/helpers/form-to-amb.js';
+  import { nostrToAmb } from 'amb-nostr-converter';
+  import { ambJsonToFormValues } from '$lib/helpers/educational/ambJsonToFormValues.js';
+  import { buildTemplateResourceSubmission } from '$lib/helpers/educational/buildTemplateResourceSubmission.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -18,7 +16,8 @@
   /**
    * Template-driven "Share Learning Resource" form: loads a published kind-30168
    * form template (`templateNaddr`), renders it via `FormRenderer`, and on
-   * submit builds/signs/publishes a kind-30142 event via `buildAMBResourceTags`.
+   * submit builds/signs/publishes a kind-30142 event via the shared
+   * amb-nostr-converter (`buildTemplateResourceSubmission`).
    *
    * `communityPubkey` is accepted for interface parity with `ResourceFormWizard`
    * (community preselection) but is not yet consumed here — the template-driven
@@ -92,7 +91,9 @@
   // Combine parsed values + selectedConcepts into a FormRenderer-shaped initialValues map
   const initialValues = $derived.by(() => {
     if (!parsed || !resourceEvent || !decoded.pubkey || !decoded.identifier) return undefined;
-    const { values: parsedValues, selectedConcepts } = parseAMBResourceForForm(resourceEvent, {
+    const { success, data: amb } = nostrToAmb(resourceEvent);
+    if (!success || !amb) return undefined;
+    const { values: parsedValues, selectedConcepts } = ambJsonToFormValues(amb, {
       pubkey: decoded.pubkey,
       dTag: decoded.identifier,
       fields: parsed.fields
@@ -137,30 +138,24 @@
       }
 
       const formRelay = (decoded.relays && decoded.relays[0]) || '';
-      const builtTags = buildAMBResourceTags({
+      // Serializes via the shared amb-nostr-converter (formValuesToAmbJson →
+      // ambToNostr) and reconciles the d-tag: edit mode keeps the resource's
+      // existing d-tag for addressable stability, create mode honors the
+      // converter-emitted d (e.g. the user's typed identifier via an
+      // amb:id-mapped url field) — see resolveResourceDTag for why this must
+      // not clobber it.
+      const { tags, content, dTag } = buildTemplateResourceSubmission({
         form: { pubkey: decoded.pubkey, dTag: decoded.identifier, fields: parsed.fields },
         formRelay,
-        values: rawValues,
-        selectedConcepts
-      });
-      // buildAMBResourceTags MAY emit a 'd' tag itself (e.g. a url field mapped
-      // to amb:id via dtagEmitter). Edit mode keeps the resource's existing
-      // d-tag for addressable stability; create mode honors the emitted d
-      // (the user's typed identifier) and only falls back to a UUID when none
-      // was provided — see resolveResourceDTag for why this must not clobber it.
-      const emittedD = builtTags.find((t) => t[0] === 'd')?.[1];
-      const dTag = resolveResourceDTag({
+        rawValues,
+        selectedConcepts,
+        signerPubkey: manager.active.pubkey,
         isEditMode,
         existingDTag:
           isEditMode && resourceEvent
             ? resourceEvent.tags.find((t) => t[0] === 'd')?.[1]
-            : undefined,
-        emittedD
+            : undefined
       });
-      const tags = [['d', dTag], ...builtTags.filter((t) => t[0] !== 'd')];
-      // The description field's value (not a tag) becomes the event content.
-      const descFieldId = parsed.fields.find((f) => f.output === 'amb:description')?.id;
-      const content = (descFieldId ? rawValues[descFieldId] : rawValues.description) || '';
 
       const template = { kind: 30142, tags, content };
       const factory = createAppEventFactory({ signer: manager.signer });
