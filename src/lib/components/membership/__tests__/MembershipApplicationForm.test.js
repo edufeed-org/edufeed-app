@@ -125,16 +125,17 @@ vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
+// Applesauce/NIP-07 signer shape: NIP-44 lives *only* under the `nip44`
+// namespace. Deliberately no flat `nip44Encrypt` — ExtensionSigner does not
+// expose one, and assuming it silently downgraded submissions to plaintext.
+// Stable object identity: `manager.active` is read inside $effects.
+const activeAccount = vi.hoisted(() => ({
+  pubkey: 'user-pub',
+  signer: /** @type {any} */ (null)
+}));
+
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: {
-    active: {
-      pubkey: 'user-pub',
-      signer: {
-        nip44Encrypt: nip44EncryptSpy,
-        nip44: { decrypt: nip44DecryptSpy }
-      }
-    }
-  }
+  manager: { active: activeAccount }
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
@@ -181,6 +182,7 @@ describe('MembershipApplicationForm', () => {
     });
     nip44EncryptSpy.mockClear();
     nip44DecryptSpy.mockClear();
+    activeAccount.signer = { nip44: { encrypt: nip44EncryptSpy, decrypt: nip44DecryptSpy } };
     /** @type {any} */ (eventStore).replaceable.mockClear();
     // Default fetch: handle is available (404 / empty names)
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -302,6 +304,38 @@ describe('MembershipApplicationForm', () => {
     // encryption used
     expect(nip44EncryptSpy).toHaveBeenCalled();
     expect(builtTemplate.tags.some((/** @type {string[]} */ t) => t[0] === 'encrypted')).toBe(true);
+    // …and the answers themselves never travel in the clear.
+    expect(builtTemplate.tags.some((/** @type {string[]} */ t) => t[0] === 'response')).toBe(false);
+    expect(builtTemplate.content).toContain('encrypted:');
+    expect(JSON.stringify(builtTemplate.tags)).not.toContain('Maria Mustermann');
+  });
+
+  it('refuses to submit rather than publishing answers in the clear', async () => {
+    // A signer without NIP-44 at all: the applicant's name, affiliation and
+    // motivation must never end up readable on the relay.
+    activeAccount.signer = { signEvent: async (/** @type {any} */ e) => e };
+
+    const { findByLabelText, findByRole, findByText } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    const submitBtn = await findByRole('button', { name: /Antrag|Submit/i });
+    await fireEvent.click(submitBtn);
+    vi.useRealTimers();
+
+    expect(await findByText(/NIP-44/)).toBeTruthy();
+    expect(publishEventSpy).not.toHaveBeenCalled();
+    expect(eventStoreAddSpy).not.toHaveBeenCalled();
   });
 
   it('publishes one encrypted kind 1069 copy per configured admin', async () => {

@@ -8,7 +8,7 @@
   import { UpdateProfile } from 'applesauce-actions/actions';
   import { AddProfileNip05Tag } from '$lib/actions/profile-actions.js';
   import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
-  import MembershipApplicationForm from './MembershipApplicationForm.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
 
   const cfg = $derived(runtimeConfig.membership);
@@ -21,7 +21,6 @@
   const upstreamMatchesUser = $derived(grant.getState() === 'granted');
   const addressForProfile = $derived(grant.getAddress());
 
-  let showForm = $state(false);
   /** The user's current kind 0 event, if any. */
   let profileEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   /** UI state for the add-to-profile button. */
@@ -49,6 +48,15 @@
     });
     return () => sub.unsubscribe();
   });
+
+  /**
+   * The form lives in a modal shared with the Termi assistant's apply CTA, so
+   * both entry points land on the form itself instead of unfolding a second
+   * step inside the settings page.
+   */
+  function openApplyModal() {
+    modalStore.openModal('membershipApply');
+  }
 
   /** Replace the primary (content) nip05 with the new address. */
   async function replaceOnProfile() {
@@ -156,21 +164,15 @@
         {/if}
 
         <div class="mt-4 card-actions">
-          <button class="btn btn-ghost" onclick={() => (showForm = !showForm)}>
+          <button class="btn btn-ghost" onclick={openApplyModal}>
             {m.membership_already_applied_update()}
           </button>
         </div>
       {:else}
         <div class="card-actions">
-          <button class="btn btn-primary" onclick={() => (showForm = !showForm)}>
+          <button class="btn btn-primary" onclick={openApplyModal}>
             {m.membership_apply_cta()}
           </button>
-        </div>
-      {/if}
-
-      {#if showForm}
-        <div class="mt-6 border-t border-base-300 pt-4">
-          <MembershipApplicationForm onsubmitted={() => (showForm = false)} showHeader={false} />
         </div>
       {/if}
     </div>

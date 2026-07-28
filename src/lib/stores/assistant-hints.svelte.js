@@ -299,8 +299,11 @@ export function useAssistantHints() {
           .then(() => setRunning(id, false));
         return;
       }
-      // The settings page hosts the membership card with the handle request.
-      goto('/settings');
+      // 'apply' — open the application form right here. Routing to /settings
+      // meant a second click on a card the user had to find first, and left
+      // them unsure whether anything had happened. Submitting inside the modal
+      // feeds the shared grant hook, so this hint flips to 'pending' in place.
+      modalStore.openModal('membershipApply');
       return;
     }
     if (id === 'profile') {

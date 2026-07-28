@@ -16,6 +16,7 @@
     buildUserResponseFilter,
     parseResponseTags
   } from '$lib/helpers/forms.js';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { formatTimestamp } from '$lib/helpers/dates.js';
 
@@ -217,6 +218,12 @@
     try {
       const responseTags = buildResponseTags(values);
       const signer = manager.active.signer;
+      // Applications carry name, affiliation and motivation — never publish
+      // them in the clear. Without NIP-44 we abort instead of downgrading.
+      if (!hasNip44(signer)) {
+        error = m.membership_submit_encryption_unavailable();
+        return;
+      }
       const factory = createAppEventFactory({ signer });
       const aTag = await buildATagWithHint(formAddress);
       const pTags = await buildPTagsWithHints(adminPubkeys);
@@ -230,14 +237,8 @@
         /** @type {string[][]} */
         const tags = [aTag, pTag];
 
-        let content = '';
-        if (signer?.nip44Encrypt) {
-          const plaintext = JSON.stringify(responseTags);
-          content = await signer.nip44Encrypt(admin, plaintext);
-          tags.push(['encrypted']);
-        } else {
-          tags.push(...responseTags);
-        }
+        const content = await signer.nip44.encrypt(admin, JSON.stringify(responseTags));
+        tags.push(['encrypted']);
 
         const template = await factory.build({ kind: 1069, tags, content });
         const signed = await factory.sign(template);

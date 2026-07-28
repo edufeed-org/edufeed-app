@@ -27,6 +27,7 @@
   import NoteCreateModal from './notes/NoteCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
   import DeleteCommunityModal from './community/DeleteCommunityModal.svelte';
+  import MembershipApplyModal from './membership/MembershipApplyModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -396,6 +397,9 @@
   <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
 {:else if modal.activeModal === 'deleteCommunity'}
   <DeleteCommunityModal modalId={deleteCommunityModalId} />
+{:else if modal.activeModal === 'membershipApply'}
+  <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
+  <MembershipApplyModal />
 {:else if modal.activeModal === 'resourceVariantPicker'}
   <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
   <ResourceVariantPickerModal

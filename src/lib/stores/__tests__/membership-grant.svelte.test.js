@@ -16,7 +16,12 @@ const ADMIN2_PUBKEY = 'c'.repeat(64);
 const USER_PUBKEY = 'user-pub';
 const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
 
-const timelineState = { events: [] };
+const timelineState = { events: [], subscribers: [] };
+/** Push a new timeline snapshot to every live subscriber (mirrors eventStore.add). */
+function emitTimeline(events) {
+  timelineState.events = events;
+  for (const cb of timelineState.subscribers) cb(events);
+}
 const decryptMock = vi.fn();
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
@@ -47,8 +52,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     timeline: () => ({
       subscribe: (cb) => {
+        timelineState.subscribers.push(cb);
         cb(timelineState.events);
-        return { unsubscribe: () => {} };
+        return {
+          unsubscribe: () => {
+            timelineState.subscribers = timelineState.subscribers.filter((s) => s !== cb);
+          }
+        };
       }
     })
   }
@@ -76,6 +86,27 @@ function makeResponse(pTag = ADMIN2_PUBKEY) {
     created_at: 1_700_000_000,
     content: '<ciphertext>',
     tags: [['a', FORM_ADDRESS], ['p', pTag], ['encrypted']]
+  };
+}
+
+/**
+ * A plaintext application — the shape every real application on
+ * relay.edufeed.org currently has (no `encrypted` tag, answers in `response`
+ * tags). Detection must not depend on decryption succeeding.
+ */
+function makePlaintextResponse() {
+  return {
+    id: 'resp-plain',
+    kind: 1069,
+    pubkey: USER_PUBKEY,
+    created_at: 1_700_000_000,
+    content: '',
+    tags: [
+      ['a', FORM_ADDRESS],
+      ['p', ADMIN_PUBKEY],
+      ['response', 'wished_handle', 'maria'],
+      ['response', 'full_name', 'Maria M']
+    ]
   };
 }
 
@@ -166,6 +197,50 @@ describe('useMembershipGrantState', () => {
     await settle();
 
     expect(grant.getState()).toBe('pending');
+    cleanup();
+  });
+
+  it("flips from 'none' to 'pending' when an application lands after subscribing", async () => {
+    // The submit path mirrors the published copies into the eventStore, so the
+    // surface the user is looking at (Termi hint / settings card) must switch
+    // to "waiting for review" without a reload — otherwise people re-apply.
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ names: {} })
+    }));
+
+    let grant;
+    const cleanup = $effect.root(() => {
+      grant = useMembershipGrantState();
+    });
+    await settle();
+    expect(grant.getState()).toBe('none');
+
+    emitTimeline([makeResponse()]);
+    await settle();
+
+    expect(grant.getState()).toBe('pending');
+    cleanup();
+  });
+
+  it('reads the wished handle from a plaintext application', async () => {
+    // Applications published before the encryption fix carry their answers in
+    // `response` tags; detection must not depend on decryption running.
+    timelineState.events = [makePlaintextResponse()];
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ names: { maria: USER_PUBKEY } })
+    }));
+
+    let grant;
+    const cleanup = $effect.root(() => {
+      grant = useMembershipGrantState();
+    });
+    await settle();
+
+    expect(grant.getState()).toBe('granted');
+    expect(grant.getAddress()).toBe('maria@edufeed.org');
+    expect(decryptMock).not.toHaveBeenCalled();
     cleanup();
   });
 });

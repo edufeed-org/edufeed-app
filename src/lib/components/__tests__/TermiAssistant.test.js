@@ -319,7 +319,7 @@ describe('TermiAssistant launcher + hints', () => {
     expect(mockEnsureDm).toHaveBeenCalled();
   });
 
-  it('shows the nip05 hint when membership is enabled and the profile has none, action routes to settings', async () => {
+  it('shows the nip05 hint when membership is enabled and the profile has none, action opens the application modal', async () => {
     mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
     mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
     mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
@@ -328,7 +328,10 @@ describe('TermiAssistant launcher + hints', () => {
 
     expect(container.querySelector('[data-testid="termi-hint-nip05"]')).not.toBeNull();
     await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
-    expect(mockGoto).toHaveBeenCalledWith('/settings');
+    // The form comes to the user, rather than sending them to /settings to
+    // hunt for the membership card and click a second time.
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('membershipApply');
+    expect(mockGoto).not.toHaveBeenCalled();
   });
 
   it('one-click activates a granted handle by publishing the profile update', async () => {

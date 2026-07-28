@@ -68,6 +68,15 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 
+const openModalMock = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/modal.svelte.js', () => ({
+  modalStore: {
+    openModal: (/** @type {any} */ type, /** @type {any} */ ...rest) =>
+      openModalMock(type, ...rest),
+    closeModal: () => {}
+  }
+}));
+
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunner: {
     run: (/** @type {any} */ builder, /** @type {any} */ ...args) =>
@@ -115,11 +124,35 @@ describe('MembershipCard', () => {
     actionRunnerRunMock.mockReset();
     updateProfileMock.mockClear();
     addProfileNip05TagMock.mockClear();
+    openModalMock.mockClear();
   });
 
   it('shows CTA when no application exists', () => {
     const { getByRole } = render(MembershipCard);
     expect(getByRole('button', { name: /Jetzt beantragen|Apply now/i })).toBeTruthy();
+  });
+
+  it('opens the application modal instead of expanding an inline form', async () => {
+    const { getByRole } = render(MembershipCard);
+    await fireEvent.click(getByRole('button', { name: /Jetzt beantragen|Apply now/i }));
+    expect(openModalMock).toHaveBeenCalledWith('membershipApply');
+  });
+
+  it('opens the same modal when updating an existing application', async () => {
+    timelineState.events = [
+      {
+        id: 'response-id',
+        kind: 1069,
+        pubkey: 'user-pub',
+        created_at: 1700000000,
+        tags: [['a', FORM_ADDRESS]],
+        content: '',
+        sig: 'sig'
+      }
+    ];
+    const { getByRole } = render(MembershipCard);
+    await fireEvent.click(getByRole('button', { name: /aktualisieren|update/i }));
+    expect(openModalMock).toHaveBeenCalledWith('membershipApply');
   });
 
   it('shows submitted-on text when an application exists', () => {
