@@ -3,10 +3,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { buildUserResponseFilter, parseResponseTags } from '$lib/helpers/forms.js';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
-  import { timedPool } from '$lib/loaders/base.js';
-  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { useMembershipGrantState } from '$lib/stores/membership-grant.svelte.js';
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
   import { UpdateProfile } from 'applesauce-actions/actions';
   import { AddProfileNip05Tag } from '$lib/actions/profile-actions.js';
@@ -16,28 +13,21 @@
 
   const cfg = $derived(runtimeConfig.membership);
   const enabled = $derived(cfg?.enabled === true);
-  const formAddress = $derived(cfg?.formAddress || '');
-  const handleDomain = $derived(cfg?.handleDomain || '');
-  const adminPubkeys = $derived(cfg?.adminPubkeys || []);
 
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let existingResponse = $state(null);
+  // Application state (none / pending / granted) — shared with the Termi
+  // assistant's nip05 hint.
+  const grant = useMembershipGrantState();
+  const existingResponse = $derived(grant.getResponse());
+  const upstreamMatchesUser = $derived(grant.getState() === 'granted');
+  const addressForProfile = $derived(grant.getAddress());
+
   let showForm = $state(false);
-
-  /** Wished handle from the decrypted (or plaintext) response, e.g. "maria". */
-  let wishedHandle = $state('');
   /** The user's current kind 0 event, if any. */
   let profileEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
-  /** Whether the upstream `.well-known` lookup maps wishedHandle → user's pubkey. */
-  let upstreamMatchesUser = $state(false);
   /** UI state for the add-to-profile button. */
   let addState = $state(/** @type {'idle' | 'saving' | 'saved' | 'error'} */ ('idle'));
   /** Hides the CTA immediately after a successful save, before the kind 0 refreshes. */
   let savedLocally = $state(false);
-
-  const addressForProfile = $derived(
-    wishedHandle && handleDomain ? `${wishedHandle}@${handleDomain}` : ''
-  );
   /** All nip05 addresses on the profile: content nip05 + repeated nip05 tags. */
   const existingNip05s = $derived(getProfileNip05s(profileEvent));
   const alreadyOnProfile = $derived(
@@ -50,26 +40,6 @@
   /** A different nip05 already exists → offer "replace or add" instead of a single CTA. */
   const hasOtherNip05 = $derived(existingNip05s.length > 0);
 
-  $effect(() => {
-    if (!enabled || !manager.active || !formAddress) return;
-    const filter = buildUserResponseFilter(formAddress, manager.active.pubkey);
-    const relays = getCommunikeyRelays();
-
-    const loaderSub = createTimelineLoader(timedPool, relays, filter, {
-      eventStore,
-      limit: 1
-    })().subscribe();
-
-    const modelSub = eventStore.timeline(filter).subscribe((events) => {
-      existingResponse = events?.[0] || null;
-    });
-
-    return () => {
-      loaderSub.unsubscribe();
-      modelSub.unsubscribe();
-    };
-  });
-
   // Subscribe to the user's own kind 0 so we know what nip05s (if any) are set.
   $effect(() => {
     const active = manager.active;
@@ -78,66 +48,6 @@
       profileEvent = event || null;
     });
     return () => sub.unsubscribe();
-  });
-
-  // Decrypt (or read plaintext) the wished_handle out of the user's own response.
-  $effect(() => {
-    const response = existingResponse;
-    const active = manager.active;
-    if (!response || !active) {
-      wishedHandle = '';
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const isEncrypted = response.tags.some((/** @type {string[]} */ t) => t[0] === 'encrypted');
-        let tags;
-        if (isEncrypted) {
-          // Each fan-out copy is encrypted to the admin in its own p-tag.
-          const counterparty =
-            response.tags.find((/** @type {string[]} */ t) => t[0] === 'p')?.[1] ||
-            adminPubkeys[0] ||
-            '';
-          if (!counterparty || !active.signer?.nip44?.decrypt) return;
-          const plaintext = await active.signer.nip44.decrypt(counterparty, response.content);
-          tags = JSON.parse(plaintext);
-        } else {
-          tags = response.tags.filter((/** @type {string[]} */ t) => t[0] === 'response');
-        }
-        if (cancelled) return;
-        const values = parseResponseTags(tags);
-        wishedHandle = (values?.wished_handle || '').trim();
-      } catch {
-        if (!cancelled) wishedHandle = '';
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  });
-
-  // Ask the public domain whether the wished_handle has been provisioned for this user.
-  $effect(() => {
-    upstreamMatchesUser = false;
-    const active = manager.active;
-    if (!active || !wishedHandle || !handleDomain) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const url = `https://${handleDomain}/.well-known/nostr.json?name=${encodeURIComponent(wishedHandle)}`;
-        const res = await fetch(url, { headers: { accept: 'application/json' } });
-        if (!res.ok) return;
-        const body = await res.json();
-        const mapped = body?.names?.[wishedHandle];
-        if (!cancelled) upstreamMatchesUser = mapped === active.pubkey;
-      } catch {
-        // Network/CORS — leave as false; user can retry by reloading.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   });
 
   /** Replace the primary (content) nip05 with the new address. */
