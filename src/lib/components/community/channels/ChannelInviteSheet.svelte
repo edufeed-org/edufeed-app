@@ -66,16 +66,17 @@
     if (invite || !client || !community) return;
     const existing = pickLatestChannelInvite(
       client.invites.forCommunity(community.communityId),
-      channel.channel_id
+      channel.channel_id,
+      channel.private
     );
     if (existing) {
       invite = existing;
       return;
     }
-    createChannelInviteOnce(community, channel.channel_id, {
+    createChannelInviteOnce(community, channel.private ? channel.channel_id : 'area', {
       base: window.location.origin,
       label: channel.name,
-      channels: [channel.channel_id]
+      channels: channel.private ? [channel.channel_id] : []
     })
       .then((created) => (invite = created))
       .catch((error) => {
@@ -116,7 +117,17 @@
   /** @param {string} pubkey */
   async function directInvite(pubkey) {
     try {
-      await community.grantChannelAccess(channel.channel_id, pubkey);
+      if (channel.private) {
+        await community.grantChannelAccess(channel.channel_id, pubkey);
+      } else {
+        // Public (#) channels have no per-channel key: grantChannelAccess only
+        // knows how to hand over PRIVATE channel keys and throws otherwise
+        // ("not a private channel we hold a key for"). Route through the AREA
+        // invite instead — dynamic import keeps applesauce-concord out of SSR
+        // chunks (src/lib/concord convention).
+        const { directInviteToArea } = await import('$lib/concord/area-invite.js');
+        await directInviteToArea(community, pubkey);
+      }
       // "Sent", not "invited": grantChannelAccess resolves as soon as the
       // gift wrap is built — its relay publish is best-effort and failures
       // are swallowed internally (community.js: `.catch((err) =>
