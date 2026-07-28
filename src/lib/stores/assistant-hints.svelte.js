@@ -238,8 +238,11 @@ export function useAssistantHints() {
       }),
       invites: deriveHintStatus({
         applicable: getPendingInviteCount() > 0,
+        // Opens a modal and returns before setRunning — no 'doing' state, like nip05/profile.
+        // No persistent dismiss on purpose: keep nudging while a real invite is pending; it
+        // self-clears once accepted/declined drops getPendingInviteCount() to 0.
+        running: false,
         confirmed: false,
-        running: running.has('invites'),
         everOpen: everOpen.has('invites')
       })
     };
