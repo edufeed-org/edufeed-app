@@ -23,7 +23,8 @@
  * Concept entries within a facet are positionally aligned: each new `:id`
  * starts a new entry; subsequent `:prefLabel:*` / `:type` tags attach to the
  * most recent entry. This matches the emission order in `formDataToEkwTags`
- * and `form-to-amb` (`:id`, `:prefLabel:*`, `:type` per concept).
+ * and `formValuesToAmbJson.js` + `ambToNostr` (the amb-nostr-converter
+ * serializer) (`:id`, `:prefLabel:*`, `:type` per concept).
  *
  * @typedef {{ id: string, prefLabels: Record<string, string> }} ConceptItem
  * @typedef {{ kind: 'concept', items: ConceptItem[] } | { kind: 'scalar', items: string[] }} Facet

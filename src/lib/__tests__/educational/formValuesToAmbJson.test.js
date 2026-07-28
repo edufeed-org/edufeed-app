@@ -119,3 +119,38 @@ describe('formValuesToAmbJson → ambToNostr golden', () => {
     expect(extras.externalUrls).toEqual(['https://a.example']);
   });
 });
+
+describe('formValuesToAmbJson isAccessibleForFree tag emission', () => {
+  const f5 = {
+    pubkey: 'pk',
+    dTag: 'd',
+    fields: [
+      { id: 'title', type: 'text', output: 'amb:name' },
+      { id: 'free', type: 'checkbox', output: 'amb:isAccessibleForFree' }
+    ]
+  };
+  const tagFor = (/** @type {string | undefined} */ rawFreeValue) => {
+    const values = { title: 'Res', ...(rawFreeValue !== undefined && { free: rawFreeValue }) };
+    const { amb } = formValuesToAmbJson(f5, values, {});
+    const { data } = ambToNostr(amb, { pubkey: 'pk', timestamp: 0 });
+    return /** @type {any} */ (data).tags.find(
+      (/** @type {string[]} */ t) => t[0] === 'isAccessibleForFree'
+    );
+  };
+
+  it('omits the tag when the field is untouched (empty string, as FormRenderer initializes it)', () => {
+    expect(tagFor('')).toBeUndefined();
+  });
+
+  it('omits the tag when the field is absent from values entirely', () => {
+    expect(tagFor(undefined)).toBeUndefined();
+  });
+
+  it('emits ["isAccessibleForFree","true"] when explicitly checked', () => {
+    expect(tagFor('true')).toEqual(['isAccessibleForFree', 'true']);
+  });
+
+  it('emits ["isAccessibleForFree","false"] when explicitly unchecked after being touched', () => {
+    expect(tagFor('false')).toEqual(['isAccessibleForFree', 'false']);
+  });
+});
