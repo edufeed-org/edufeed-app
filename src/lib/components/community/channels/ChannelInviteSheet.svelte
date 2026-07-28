@@ -33,6 +33,7 @@
   import { getConcordClient } from '$lib/concord/client.svelte.js';
   import { pickLatestChannelInvite, createChannelInviteOnce } from '$lib/concord/invite-helpers.js';
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
+  import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -198,23 +199,34 @@
       {/if}
     {:else}
       <p class="mb-3 text-sm text-base-content/60">{m.concord_invite_direct_lead()}</p>
-      <div class="flex max-h-64 flex-col gap-1 overflow-y-auto">
-        {#each invitable as pubkey (pubkey)}
-          <div class="flex items-center gap-2 px-2 py-1">
-            <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
-            <span class="flex-1 truncate text-sm"
-              >{getProfiles().get(pubkey)?.name ?? pubkey.slice(0, 12)}</span
-            >
-            {#if sent.includes(pubkey)}
-              <span class="text-xs font-semibold text-success">✓ {m.concord_invited()}</span>
-            {:else}
-              <button class="btn btn-ghost btn-xs" onclick={() => directInvite(pubkey)}
-                >{m.concord_invite_action()}</button
+      <ContactSearchInput
+        acceptPubkeyInput
+        placeholder={m.concord_invite_search_placeholder()}
+        exclude={[...sent, manager.active?.pubkey].filter(Boolean)}
+        onselect={(/** @type {{ pubkey: string }} */ c) => directInvite(c.pubkey)}
+        onrawpubkey={(/** @type {string} */ hex) => directInvite(hex)}
+      />
+      {#if invitable.length > 0}
+        <div class="mt-3 flex max-h-64 flex-col gap-1 overflow-y-auto">
+          {#each invitable as pubkey (pubkey)}
+            <div class="flex items-center gap-2 px-2 py-1">
+              <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
+              <span class="flex-1 truncate text-sm"
+                >{getProfiles().get(pubkey)?.name ?? pubkey.slice(0, 12)}</span
               >
-            {/if}
-          </div>
-        {/each}
-      </div>
+              {#if sent.includes(pubkey)}
+                <span class="text-xs font-semibold text-success">✓ {m.concord_invited()}</span>
+              {:else}
+                <button class="btn btn-ghost btn-xs" onclick={() => directInvite(pubkey)}
+                  >{m.concord_invite_action()}</button
+                >
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="mt-3 alert text-sm">{m.concord_invite_direct_empty()}</div>
+      {/if}
     {/if}
   </div>
 </div>
