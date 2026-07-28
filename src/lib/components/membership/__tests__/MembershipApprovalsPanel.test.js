@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, screen } from '@testing-library/svelte';
 
 const ADMIN_PUBKEY = 'a'.repeat(64);
+const ADMIN2_PUBKEY = 'c'.repeat(64);
 const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
 const APPLICANT_PUBKEY = 'b'.repeat(64);
 
@@ -11,6 +12,13 @@ const APPLICANT_PUBKEY = 'b'.repeat(64);
 const hoisted = vi.hoisted(() => ({
   /** @type {{ events: any[] }} */
   timelineState: { events: [] },
+  /** @type {{ pubkey: string }} */
+  activeState: { pubkey: 'a'.repeat(64) },
+  /** @type {{ pubkeys: string[] }} */
+  adminState: { pubkeys: ['a'.repeat(64)] },
+  formResponseLoaderMock: vi.fn(() => () => ({
+    subscribe: () => ({ unsubscribe: () => {} })
+  })),
   nip44DecryptMock: vi.fn(),
   actionRunnerOptimisticRunMock: vi.fn(),
   /** Stub for SendWrappedMessage. We compare identity so the test can verify
@@ -19,8 +27,15 @@ const hoisted = vi.hoisted(() => ({
     /** @param {any[]} args */ (...args) => ({ __action: 'SendWrappedMessage', args })
   )
 }));
-const { timelineState, nip44DecryptMock, actionRunnerOptimisticRunMock, sendWrappedMessageMock } =
-  hoisted;
+const {
+  timelineState,
+  activeState,
+  adminState,
+  formResponseLoaderMock,
+  nip44DecryptMock,
+  actionRunnerOptimisticRunMock,
+  sendWrappedMessageMock
+} = hoisted;
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
@@ -28,8 +43,8 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
       return {
         enabled: true,
         handleDomain: 'edufeed.org',
-        formAddress: 'a'.repeat(64).padStart(0) && `30168:${'a'.repeat(64)}:edufeed-membership`,
-        adminPubkeys: ['a'.repeat(64)]
+        formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
+        adminPubkeys: hoisted.adminState.pubkeys
       };
     }
   }
@@ -37,17 +52,19 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: {
-    active: {
-      pubkey: 'a'.repeat(64),
-      signer: {
-        nip44: { decrypt: hoisted.nip44DecryptMock },
-        signEvent: async (/** @type {any} */ draft) => ({
-          ...draft,
-          id: 'sig-id',
-          pubkey: 'a'.repeat(64),
-          sig: 'sig'
-        })
-      }
+    get active() {
+      return {
+        pubkey: hoisted.activeState.pubkey,
+        signer: {
+          nip44: { decrypt: hoisted.nip44DecryptMock },
+          signEvent: async (/** @type {any} */ draft) => ({
+            ...draft,
+            id: 'sig-id',
+            pubkey: hoisted.activeState.pubkey,
+            sig: 'sig'
+          })
+        }
+      };
     }
   }
 }));
@@ -66,7 +83,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/loaders/community.js', () => ({
-  formResponseLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  formResponseLoader: hoisted.formResponseLoaderMock
 }));
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
@@ -97,14 +114,14 @@ vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: () => (
 import MembershipApprovalsPanel from '../MembershipApprovalsPanel.svelte';
 
 /** @returns {any} */
-function makeResponse(wishedHandle = 'maria') {
+function makeResponse(wishedHandle = 'maria', { id = 'resp-1', pTag = ADMIN_PUBKEY } = {}) {
   return {
-    id: 'resp-1',
+    id,
     kind: 1069,
     pubkey: APPLICANT_PUBKEY,
     created_at: 1_700_000_000,
     content: '<encrypted>',
-    tags: [['a', FORM_ADDRESS], ['p', ADMIN_PUBKEY], ['encrypted']],
+    tags: [['a', FORM_ADDRESS], ['p', pTag], ['encrypted']],
     _wishedHandle: wishedHandle
   };
 }
@@ -131,6 +148,9 @@ const emptyWellKnown = () => new Response(JSON.stringify({ names: {} }), { statu
 describe('MembershipApprovalsPanel', () => {
   beforeEach(() => {
     timelineState.events = [];
+    activeState.pubkey = ADMIN_PUBKEY;
+    adminState.pubkeys = [ADMIN_PUBKEY];
+    formResponseLoaderMock.mockClear();
     nip44DecryptMock.mockClear();
     nip44DecryptMock.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
     actionRunnerOptimisticRunMock.mockReset();
@@ -287,5 +307,30 @@ describe('MembershipApprovalsPanel', () => {
 
     await findByText(/already taken|bereits vergeben|vergeben/i);
     expect(actionRunnerOptimisticRunMock).not.toHaveBeenCalled();
+  });
+
+  it('subscribes to responses addressed to the logged-in admin, not adminPubkeys[0]', () => {
+    adminState.pubkeys = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    activeState.pubkey = ADMIN2_PUBKEY;
+
+    render(MembershipApprovalsPanel);
+
+    expect(formResponseLoaderMock).toHaveBeenCalledWith(FORM_ADDRESS, ADMIN2_PUBKEY);
+  });
+
+  it('shows only the response copy addressed to the logged-in admin', async () => {
+    adminState.pubkeys = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    activeState.pubkey = ADMIN2_PUBKEY;
+    // Fan-out publishes one copy per admin; this admin must only see their own.
+    timelineState.events = [
+      makeResponse('maria', { id: 'copy-for-admin1', pTag: ADMIN_PUBKEY }),
+      makeResponse('maria', { id: 'copy-for-admin2', pTag: ADMIN2_PUBKEY })
+    ];
+    mockFetch({ wellKnown: emptyWellKnown() });
+
+    const { findAllByRole } = render(MembershipApprovalsPanel);
+
+    const approveButtons = await findAllByRole('button', { name: /Approve|Genehmigen/i });
+    expect(approveButtons).toHaveLength(1);
   });
 });

@@ -43,7 +43,6 @@
 
   const cfg = $derived(runtimeConfig.membership);
   const formAddress = $derived(cfg?.formAddress || '');
-  const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
   const handleDomain = $derived(cfg?.handleDomain || '');
 
   /** @type {import('nostr-tools').NostrEvent[]} */
@@ -122,16 +121,21 @@
     else expandedApproved.add(id);
   }
 
-  // Subscribe to kind 1069 responses for this form.
+  // Subscribe to kind 1069 responses for this form. Applications are fanned
+  // out as one encrypted copy per admin, so load and show only the copies
+  // addressed to the logged-in admin — the others are undecryptable here.
   $effect(() => {
-    if (!formAddress || !adminPubkey) return;
+    const myPubkey = manager.active?.pubkey;
+    if (!formAddress || !myPubkey) return;
 
-    const loader = formResponseLoader(formAddress, adminPubkey);
+    const loader = formResponseLoader(formAddress, myPubkey);
     const sub = loader().subscribe();
 
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
-      responses = (events || []).filter((e) =>
-        e.tags.some((t) => t[0] === 'a' && t[1] === formAddress)
+      responses = (events || []).filter(
+        (e) =>
+          e.tags.some((t) => t[0] === 'a' && t[1] === formAddress) &&
+          e.tags.some((t) => t[0] === 'p' && t[1] === myPubkey)
       );
     });
 

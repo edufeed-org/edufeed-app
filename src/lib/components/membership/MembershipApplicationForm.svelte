@@ -28,7 +28,11 @@
 
   const cfg = $derived(runtimeConfig.membership);
   const formAddress = $derived(cfg?.formAddress || '');
-  const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
+  const adminPubkeys = $derived(cfg?.adminPubkeys || []);
+  // The kind 30168 template author is embedded in the form address
+  // (30168:pubkey:d-tag) — independent of the admin list's order.
+  const formAuthorPubkey = $derived(formAddress.split(':')[1] || adminPubkeys[0] || '');
+  const formIdentifier = $derived(formAddress.split(':')[2] || 'edufeed-membership');
   const handleDomain = $derived(cfg?.handleDomain || '');
 
   /** @type {import('nostr-tools').NostrEvent | null} */
@@ -67,20 +71,20 @@
 
   // Load the form template (kind 30168) from communikey relays
   $effect(() => {
-    if (!adminPubkey) {
+    if (!formAuthorPubkey) {
       isLoading = false;
       return;
     }
     const relays = getCommunikeyRelays();
     const loaderSub = addressLoader({
       kind: 30168,
-      pubkey: adminPubkey,
-      identifier: 'edufeed-membership',
+      pubkey: formAuthorPubkey,
+      identifier: formIdentifier,
       relays
     }).subscribe();
 
     const modelSub = eventStore
-      .replaceable(30168, adminPubkey, 'edufeed-membership')
+      .replaceable(30168, formAuthorPubkey, formIdentifier)
       .subscribe((event) => {
         if (event) {
           formEvent = event;
@@ -125,7 +129,10 @@
             prefilledValues = {};
             return;
           }
-          const plaintext = await active.signer.nip44.decrypt(adminPubkey, response.content);
+          // Each copy is encrypted to the admin in its own p-tag.
+          const counterparty =
+            response.tags.find((t) => t[0] === 'p')?.[1] || adminPubkeys[0] || '';
+          const plaintext = await active.signer.nip44.decrypt(counterparty, response.content);
           tags = JSON.parse(plaintext);
         } else {
           tags = response.tags.filter((t) => t[0] === 'response');
@@ -195,35 +202,39 @@
 
   /** @param {Record<string, string>} values */
   async function handleSubmit(values) {
-    if (!manager.active || !formEvent || !adminPubkey || !formAddress) return;
+    if (!manager.active || !formEvent || !adminPubkeys.length || !formAddress) return;
     if (handleStatus === 'taken' || handleStatus === 'invalid') return;
 
     isSubmitting = true;
     error = '';
     try {
       const responseTags = buildResponseTags(values);
-
-      /** @type {string[][]} */
-      const tags = [
-        ['a', formAddress],
-        ['p', adminPubkey]
-      ];
-
-      let content = '';
       const signer = manager.active.signer;
-      if (signer?.nip44Encrypt) {
-        const plaintext = JSON.stringify(responseTags);
-        content = await signer.nip44Encrypt(adminPubkey, plaintext);
-        tags.push(['encrypted']);
-      } else {
-        tags.push(...responseTags);
-      }
-
       const factory = createAppEventFactory({ signer });
-      const template = await factory.build({ kind: 1069, tags, content });
-      const signed = await factory.sign(template);
-      await publishEvent(signed, [adminPubkey]);
-      eventStore.add(signed);
+
+      // NIP-44 is pairwise, so publish one copy per admin — each encrypted to
+      // (and p-tagged with) its own recipient.
+      for (const admin of adminPubkeys) {
+        /** @type {string[][]} */
+        const tags = [
+          ['a', formAddress],
+          ['p', admin]
+        ];
+
+        let content = '';
+        if (signer?.nip44Encrypt) {
+          const plaintext = JSON.stringify(responseTags);
+          content = await signer.nip44Encrypt(admin, plaintext);
+          tags.push(['encrypted']);
+        } else {
+          tags.push(...responseTags);
+        }
+
+        const template = await factory.build({ kind: 1069, tags, content });
+        const signed = await factory.sign(template);
+        await publishEvent(signed, [admin]);
+        eventStore.add(signed);
+      }
 
       submitted = true;
       onsubmitted?.();
