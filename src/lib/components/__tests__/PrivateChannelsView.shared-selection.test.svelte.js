@@ -135,3 +135,22 @@ describe('PrivateChannelsView — shared channel selection across double-mounted
     expect(getActiveConcordChannel()).toEqual({ communityId: CID, channelId: CH2 });
   });
 });
+
+describe('PrivateChannelsView — rail legend (Task 4)', () => {
+  beforeEach(() => {
+    clearActiveConcordChannel();
+    concordFixture = makeConcord(freshChannels());
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders the # / lock legend under the rail header when channels exist', () => {
+    const { getByText } = render(PrivateChannelsView, { props: { communityId: CID } });
+    flushSync();
+
+    expect(getByText(/alle im Bereich|everyone in the area/)).toBeTruthy();
+    expect(getByText(/nur Ausgewählte|only chosen members/)).toBeTruthy();
+  });
+});

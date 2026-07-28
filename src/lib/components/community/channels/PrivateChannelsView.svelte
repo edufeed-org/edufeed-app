@@ -236,6 +236,12 @@
           <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
         </span>
       </div>
+      {#if channels.length > 0}
+        <p class="px-2 pb-1 text-[0.65rem] leading-tight text-base-content/50">
+          <span class="block">{m.concord_legend_public()}</span>
+          <span class="block">{m.concord_legend_private()}</span>
+        </p>
+      {/if}
       <!-- Tighter, list-style rows (Armada-parity cleanup) — deliberately NOT
         `btn` (its min-height/border/shadow chrome reads as a toolbar, not a
         channel list). Active state reuses the app's existing subtle
@@ -253,7 +259,11 @@
             mobileChat = true;
           }}
         >
-          <span aria-hidden="true">{channel.private ? '🔒' : '#'}</span>
+          <span
+            aria-hidden="true"
+            title={channel.private ? m.concord_legend_private() : m.concord_legend_public()}
+            >{channel.private ? '🔒' : '#'}</span
+          >
           <span
             class="min-w-0 flex-1 truncate {channel.accessible ? '' : 'opacity-50'} {flags.unread
               ? 'font-bold'
