@@ -25,6 +25,7 @@ import {
 import { publishDefaultRelayList } from '$lib/services/relay-list-backfill.js';
 import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
 import { getDmRelayCheckStatus } from '$lib/services/dm-service.svelte.js';
+import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
 import { modalStore } from '$lib/stores/modal.svelte.js';
 import {
   isBackupDownloaded,
@@ -55,10 +56,17 @@ import {
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
-export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'profile', 'nip05']);
+export const HINT_IDS = /** @type {HintId[]} */ ([
+  'backup',
+  'relays',
+  'dm',
+  'profile',
+  'nip05',
+  'invites'
+]);
 
 /**
  * Reactive hook for the assistant's hints. Must be called during component
@@ -155,7 +163,8 @@ export function useAssistantHints() {
 
   const statuses = $derived.by(() => {
     const user = getActiveUser();
-    if (!user) return { backup: null, relays: null, dm: null, nip05: null, profile: null };
+    if (!user)
+      return { backup: null, relays: null, dm: null, nip05: null, profile: null, invites: null };
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
     // Only nudge users who created their account via the in-app wizard —
@@ -226,6 +235,12 @@ export function useAssistantHints() {
         confirmed: hasProfile,
         running: false, // the action opens a modal; the kind 0 confirms reactively
         everOpen: everOpen.has('profile')
+      }),
+      invites: deriveHintStatus({
+        applicable: getPendingInviteCount() > 0,
+        confirmed: false,
+        running: running.has('invites'),
+        everOpen: everOpen.has('invites')
       })
     };
   });
@@ -261,6 +276,10 @@ export function useAssistantHints() {
       if (!user) return;
       // EditProfileModal creates the kind 0 when none exists (UpdateProfile).
       modalStore.openModal('profile', { profile: {}, pubkey: user.pubkey });
+      return;
+    }
+    if (id === 'invites') {
+      modalStore.openModal('concordInvites');
       return;
     }
     if (running.has(id)) return;

@@ -82,6 +82,13 @@
       action: m.termi_hint_profile_cta(),
       secondary: null,
       doing: null
+    },
+    invites: {
+      title: m.concord_invite_hint_title(),
+      body: m.concord_invite_hint_body(),
+      action: m.concord_invite_hint_action(),
+      secondary: null,
+      doing: null
     }
   });
 
@@ -212,7 +219,9 @@
 
     {#each hints as hint (hint.id)}
       {@const copy =
-        hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} */ (hint.id)]}
+        hintCopy[
+          /** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)
+        ]}
       <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
         <TermiAvatar />
         <div

@@ -44,6 +44,31 @@ describe('deriveHintStatus', () => {
       deriveHintStatus({ applicable: false, confirmed: true, running: false, everOpen: false })
     ).toBe(null);
   });
+
+  it('locks the invites hint mapping: open while pending invites exist, hidden at zero', () => {
+    // Mirrors the `invites` branch in assistant-hints.svelte.js's statuses map:
+    // applicable = getPendingInviteCount() > 0, confirmed is always false (no
+    // "done" state — the hint just disappears once the count hits zero).
+    const pendingCount = 2;
+    expect(
+      deriveHintStatus({
+        applicable: pendingCount > 0,
+        confirmed: false,
+        running: false,
+        everOpen: false
+      })
+    ).toBe('open');
+
+    const zeroCount = 0;
+    expect(
+      deriveHintStatus({
+        applicable: zeroCount > 0,
+        confirmed: false,
+        running: false,
+        everOpen: false
+      })
+    ).toBe(null);
+  });
 });
 
 describe('trackEverOpen', () => {
