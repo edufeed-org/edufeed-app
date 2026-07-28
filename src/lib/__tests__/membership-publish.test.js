@@ -1,0 +1,282 @@
+/**
+ * Membership application routing + applicant reachability.
+ *
+ * A kind 1069 membership application carries the applicant's real name,
+ * affiliation and motivation. Even NIP-44-encrypted it must not be blasted at
+ * the public fallback relays — which is exactly what the generic outbox
+ * publisher does for an applicant with no kind 10002 (2026-07-28: 13
+ * applications on nos.lol). Backfilling a relay list does not fix that on its
+ * own, because the default relay list IS the fallback list.
+ *
+ * @vitest-environment node
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Every case injects its own collaborators; these stubs only keep the module's
+// default imports (rune-based services, applesauce) out of the import graph.
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ pool: {} }));
+vi.mock('$lib/stores/accounts.svelte', () => ({ manager: { active: null } }));
+vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
+  getAppRelaysForCategory: () => []
+}));
+vi.mock('$lib/helpers/relay-helper.js', () => ({ getCommunikeyRelays: () => [] }));
+vi.mock('$lib/services/relay-service.svelte.js', () => ({
+  fetchRelayListResolution: async () => ({ relayList: null, outcome: 'absent' }),
+  invalidateRelayListCache: () => {}
+}));
+vi.mock('$lib/services/relay-list-backfill.js', () => ({
+  publishDefaultRelayList: async () => null
+}));
+vi.mock('$lib/services/dm-relay-backfill.js', () => ({ ensureDmRelayList: async () => {} }));
+vi.mock('$lib/services/dm-service.svelte.js', () => ({ getDmRelayCheckStatus: () => 'absent' }));
+
+const APP_RELAYS = ['wss://relay.edufeed.org', 'wss://dev.relay.edufeed.org'];
+const PUBLIC_FALLBACKS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://nostr.wine'];
+
+describe('getApplicationRelays', () => {
+  /** @param {object} deps */
+  async function run(deps) {
+    const { getApplicationRelays } = await import('$lib/services/membership-publish.js');
+    return getApplicationRelays(/** @type {any} */ (deps));
+  }
+
+  it('routes applications to the app-managed communikey relays', async () => {
+    const relays = await run({
+      getAppRelays: () => [...APP_RELAYS],
+      getCommunikeyRelays: () => [...APP_RELAYS, ...PUBLIC_FALLBACKS]
+    });
+
+    expect(relays).toEqual(APP_RELAYS);
+  });
+
+  it('never routes an application to a public fallback relay', async () => {
+    const relays = await run({
+      getAppRelays: () => [...APP_RELAYS],
+      getCommunikeyRelays: () => [...APP_RELAYS, ...PUBLIC_FALLBACKS]
+    });
+
+    for (const url of PUBLIC_FALLBACKS) {
+      expect(relays).not.toContain(url);
+    }
+  });
+
+  it('deduplicates repeated relay urls', async () => {
+    const relays = await run({
+      getAppRelays: () => ['wss://relay.edufeed.org', 'wss://relay.edufeed.org', ''],
+      getCommunikeyRelays: () => []
+    });
+
+    expect(relays).toEqual(['wss://relay.edufeed.org']);
+  });
+
+  it('falls back to the read relay set when no communikey relay is configured', async () => {
+    // A deployment without a dedicated communikey relay has no private place to
+    // put applications — delivering them beats silently dropping every one.
+    const relays = await run({
+      getAppRelays: () => [],
+      getCommunikeyRelays: () => [...PUBLIC_FALLBACKS]
+    });
+
+    expect(relays).toEqual(PUBLIC_FALLBACKS);
+  });
+});
+
+describe('publishApplicationCopy', () => {
+  /** @type {ReturnType<typeof vi.fn>} */
+  let relayPublish;
+  /** @type {{ relay: ReturnType<typeof vi.fn> }} */
+  let pool;
+
+  const signed = { kind: 1069, id: 'app1', pubkey: 'applicant', tags: [], content: 'enc' };
+
+  beforeEach(() => {
+    relayPublish = vi.fn().mockResolvedValue({ ok: true });
+    pool = { relay: vi.fn(() => ({ publish: relayPublish })) };
+  });
+
+  /** @param {object} [deps] */
+  async function run(deps = {}) {
+    const { publishApplicationCopy } = await import('$lib/services/membership-publish.js');
+    return publishApplicationCopy(
+      /** @type {any} */ (signed),
+      /** @type {any} */ ({
+        pool,
+        getAppRelays: () => [...APP_RELAYS],
+        getCommunikeyRelays: () => [...APP_RELAYS, ...PUBLIC_FALLBACKS],
+        ...deps
+      })
+    );
+  }
+
+  it('publishes to exactly the application relays', async () => {
+    const result = await run();
+
+    expect(pool.relay).toHaveBeenCalledTimes(2);
+    expect(pool.relay.mock.calls.map((c) => c[0])).toEqual(APP_RELAYS);
+    expect(result.success).toBe(true);
+    expect(result.relays).toEqual(APP_RELAYS);
+  });
+
+  it('reports failure when every relay rejects the event', async () => {
+    relayPublish.mockResolvedValue({ ok: false, message: 'blocked' });
+    const result = await run();
+
+    expect(result.success).toBe(false);
+    expect(result.successCount).toBe(0);
+  });
+
+  it('succeeds when at least one relay accepts', async () => {
+    relayPublish.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ ok: true });
+    const result = await run();
+
+    expect(result.success).toBe(true);
+    expect(result.successCount).toBe(1);
+  });
+
+  it('fails without publishing when no relay is configured', async () => {
+    const result = await run({ getAppRelays: () => [], getCommunikeyRelays: () => [] });
+
+    expect(pool.relay).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ensureApplicantRelayLists', () => {
+  /** @type {any} */
+  let deps;
+  /** @type {ReturnType<typeof vi.fn>} */
+  let publishDefaultRelayList;
+  /** @type {ReturnType<typeof vi.fn>} */
+  let ensureDmRelayList;
+  /** @type {ReturnType<typeof vi.fn>} */
+  let fetchRelayListResolution;
+  /** @type {ReturnType<typeof vi.fn>} */
+  let invalidateRelayListCache;
+
+  beforeEach(() => {
+    publishDefaultRelayList = vi.fn().mockResolvedValue({ kind: 10002 });
+    ensureDmRelayList = vi.fn().mockResolvedValue(undefined);
+    fetchRelayListResolution = vi.fn().mockResolvedValue({ relayList: null, outcome: 'absent' });
+    invalidateRelayListCache = vi.fn();
+    deps = {
+      account: { pubkey: 'applicant', signer: { signEvent: vi.fn() } },
+      publishDefaultRelayList,
+      ensureDmRelayList,
+      fetchRelayListResolution,
+      invalidateRelayListCache,
+      getDmRelayCheckStatus: () => 'absent'
+    };
+  });
+
+  /** @param {object} [overrides] */
+  async function run(overrides = {}) {
+    const { ensureApplicantRelayLists } = await import('$lib/services/membership-publish.js');
+    return ensureApplicantRelayLists(/** @type {any} */ ({ ...deps, ...overrides }));
+  }
+
+  it('publishes a default kind 10002 when the applicant has none', async () => {
+    await run();
+
+    expect(fetchRelayListResolution).toHaveBeenCalledWith('applicant');
+    expect(publishDefaultRelayList).toHaveBeenCalledWith(deps.account.signer);
+  });
+
+  it('does not publish a relay list when the lookup never settled', async () => {
+    // A hung lookup is indistinguishable from "no list" by the value alone.
+    // Publishing a default one here would supersede — and destroy — a real
+    // relay list we simply never received.
+    fetchRelayListResolution.mockResolvedValue({ relayList: null, outcome: 'unknown' });
+    await run();
+
+    expect(publishDefaultRelayList).not.toHaveBeenCalled();
+  });
+
+  it('backfills the kind 10050 so the approval DM has an inbox to land in', async () => {
+    await run();
+
+    expect(ensureDmRelayList).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an existing relay list alone', async () => {
+    fetchRelayListResolution.mockResolvedValue({
+      relayList: { writeRelays: ['wss://my.relay'], readRelays: ['wss://my.relay'] },
+      outcome: 'found'
+    });
+    await run();
+
+    expect(publishDefaultRelayList).not.toHaveBeenCalled();
+  });
+
+  it('replaces an empty relay list', async () => {
+    // An empty kind 10002 leaves the applicant unroutable just as a missing one
+    // does, so existence alone must not satisfy the check.
+    fetchRelayListResolution.mockResolvedValue({
+      relayList: { writeRelays: [], readRelays: [] },
+      outcome: 'found'
+    });
+    await run();
+
+    expect(publishDefaultRelayList).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates the cached relay list after backfilling', async () => {
+    // fetchRelayList caches an empty-but-present list for 5 minutes; without
+    // invalidation the fresh 10002 would be ignored until it expires.
+    fetchRelayListResolution.mockResolvedValue({
+      relayList: { writeRelays: [], readRelays: [] },
+      outcome: 'found'
+    });
+    await run();
+
+    expect(invalidateRelayListCache).toHaveBeenCalledWith('applicant');
+  });
+
+  it('does not backfill a kind 10050 while the self-check is still running', async () => {
+    // ensureDmRelayList reads the EventStore only, so it cannot tell "no kind
+    // 10050" from "not fetched yet". Publishing a default over a custom DM
+    // inbox that had simply not loaded would silently move the user's inbox.
+    await run({ getDmRelayCheckStatus: () => 'checking' });
+
+    expect(ensureDmRelayList).not.toHaveBeenCalled();
+  });
+
+  it('does not backfill a kind 10050 when the self-check never ran', async () => {
+    // 'idle' means the DM service was never initialised for this account, so
+    // the EventStore says nothing about their inbox either way.
+    await run({ getDmRelayCheckStatus: () => 'idle' });
+
+    expect(ensureDmRelayList).not.toHaveBeenCalled();
+  });
+
+  it('leaves a confirmed DM relay list alone', async () => {
+    // The DM service queried the user's own write relays plus the indexers and
+    // saw a non-empty 10050 — nothing to do.
+    await run({ getDmRelayCheckStatus: () => 'present' });
+
+    expect(ensureDmRelayList).not.toHaveBeenCalled();
+  });
+
+  it('still checks the DM side when the kind 10002 lookup throws', async () => {
+    // The two lists are independent — a failure on one must not skip the other.
+    fetchRelayListResolution.mockRejectedValue(new Error('lookup exploded'));
+
+    await expect(run()).resolves.toBeUndefined();
+    expect(ensureDmRelayList).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves when the signer rejects the relay-list publish', async () => {
+    // Relay bookkeeping must never block the application itself.
+    publishDefaultRelayList.mockRejectedValue(new Error('user declined'));
+
+    await expect(run()).resolves.toBeUndefined();
+    expect(ensureDmRelayList).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op without an active account', async () => {
+    await run({ account: null });
+
+    expect(fetchRelayListResolution).not.toHaveBeenCalled();
+    expect(publishDefaultRelayList).not.toHaveBeenCalled();
+    expect(ensureDmRelayList).not.toHaveBeenCalled();
+  });
+});

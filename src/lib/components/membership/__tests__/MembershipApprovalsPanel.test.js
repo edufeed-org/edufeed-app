@@ -25,7 +25,8 @@ const hoisted = vi.hoisted(() => ({
    *  approve() passes the right builder to the action runner. */
   sendWrappedMessageMock: vi.fn(
     /** @param {any[]} args */ (...args) => ({ __action: 'SendWrappedMessage', args })
-  )
+  ),
+  ensureRecipientDmRelaysMock: vi.fn().mockResolvedValue(undefined)
 }));
 const {
   timelineState,
@@ -34,7 +35,8 @@ const {
   formResponseLoaderMock,
   nip44DecryptMock,
   actionRunnerOptimisticRunMock,
-  sendWrappedMessageMock
+  sendWrappedMessageMock,
+  ensureRecipientDmRelaysMock
 } = hoisted;
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
@@ -118,6 +120,10 @@ vi.mock('$lib/services/dm-relay-backfill.js', () => ({
   ensureDmRelayList: vi.fn().mockResolvedValue(undefined)
 }));
 
+vi.mock('$lib/services/dm-recipient-relays.js', () => ({
+  ensureRecipientDmRelays: hoisted.ensureRecipientDmRelaysMock
+}));
+
 vi.mock('applesauce-actions/actions', () => ({
   SendWrappedMessage: hoisted.sendWrappedMessageMock
 }));
@@ -182,6 +188,7 @@ describe('MembershipApprovalsPanel', () => {
     actionRunnerOptimisticRunMock.mockReset();
     actionRunnerOptimisticRunMock.mockResolvedValue(undefined);
     sendWrappedMessageMock.mockClear();
+    ensureRecipientDmRelaysMock.mockClear();
     vi.restoreAllMocks();
   });
 
@@ -295,6 +302,29 @@ describe('MembershipApprovalsPanel', () => {
     expect(recipient).toBe(APPLICANT_PUBKEY);
     expect(typeof body).toBe('string');
     expect(body).toMatch(/maria@edufeed\.org/);
+  });
+
+  it('loads the applicant DM relay list before sending the notify-DM', async () => {
+    // SendWrappedMessage resolves the recipient's relays from the EventStore
+    // only. Without this prefetch the gift wrap falls through to the public
+    // fallback relays instead of the applicant's kind 10050 inbox.
+    timelineState.events = [makeResponse('maria')];
+    mockFetch({
+      wellKnown: emptyWellKnown(),
+      proxyPost: new Response(JSON.stringify({ name: 'maria', pubkey: APPLICANT_PUBKEY }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' }
+      })
+    });
+
+    const { findByRole } = render(MembershipApprovalsPanel);
+    await fireEvent.click(await findByRole('button', { name: /Approve|Genehmigen/i }));
+
+    await waitFor(() => expect(actionRunnerOptimisticRunMock).toHaveBeenCalled());
+    expect(ensureRecipientDmRelaysMock).toHaveBeenCalledWith([APPLICANT_PUBKEY]);
+    expect(ensureRecipientDmRelaysMock.mock.invocationCallOrder[0]).toBeLessThan(
+      actionRunnerOptimisticRunMock.mock.invocationCallOrder[0]
+    );
   });
 
   it('still marks the row approved if the notify-DM fails', async () => {

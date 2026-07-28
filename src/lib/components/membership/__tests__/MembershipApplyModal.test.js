@@ -13,6 +13,9 @@ const signSpy = vi.hoisted(() =>
   vi.fn(async (/** @type {any} */ tpl) => ({ ...tpl, id: 'response-id', sig: 'sig' }))
 );
 const publishEventSpy = vi.hoisted(() => vi.fn(async () => {}));
+const publishApplicationCopySpy = vi.hoisted(() =>
+  vi.fn(async () => ({ success: true, relays: ['wss://relay.edufeed.org'], successCount: 1 }))
+);
 const eventStoreAddSpy = vi.hoisted(() => vi.fn());
 const closeModalMock = vi.hoisted(() => vi.fn());
 const nip44EncryptSpy = vi.hoisted(() =>
@@ -74,6 +77,11 @@ vi.mock('$lib/services/publish-service.js', () => ({
   buildATagWithHint: async (/** @type {string} */ address) => ['a', address, 'wss://hint.example'],
   buildPTagsWithHints: async (/** @type {string[]} */ pubkeys) =>
     pubkeys.map((pk) => ['p', pk, 'wss://hint.example'])
+}));
+
+vi.mock('$lib/services/membership-publish.js', () => ({
+  publishApplicationCopy: publishApplicationCopySpy,
+  ensureApplicantRelayLists: async () => {}
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -140,6 +148,7 @@ describe('MembershipApplyModal', () => {
   beforeEach(() => {
     closeModalMock.mockClear();
     publishEventSpy.mockClear();
+    publishApplicationCopySpy.mockClear();
     eventStoreAddSpy.mockClear();
     buildSpy.mockClear();
     fetchSpy = vi
@@ -181,7 +190,7 @@ describe('MembershipApplyModal', () => {
     await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
     vi.useRealTimers();
 
-    await waitFor(() => expect(publishEventSpy).toHaveBeenCalled());
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalled());
     // The event is in the local store before we close, so whatever opened the
     // modal re-renders as "waiting for review" rather than re-offering "apply".
     await waitFor(() => expect(closeModalMock).toHaveBeenCalled());

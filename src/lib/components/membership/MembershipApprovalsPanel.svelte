@@ -25,6 +25,7 @@
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import { SendWrappedMessage } from 'applesauce-actions/actions';
   import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
+  import { ensureRecipientDmRelays } from '$lib/services/dm-recipient-relays.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -268,6 +269,11 @@
             address: `${name}@${handleDomain}`
           });
           await ensureDmRelayList();
+          // SendWrappedMessage resolves the recipient's DM relays from the
+          // EventStore and never hits the network itself. Without this the wrap
+          // misses the applicant's kind 10050 inbox and falls through to the
+          // public fallback relays.
+          await ensureRecipientDmRelays([response.pubkey]);
           await actionRunnerOptimistic.run(SendWrappedMessage, response.pubkey, dmBody);
         } catch (notifyErr) {
           console.warn('Failed to send approval notification DM', notifyErr);

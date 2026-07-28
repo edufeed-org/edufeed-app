@@ -18,6 +18,14 @@ const signSpy = vi.hoisted(() =>
 // Shared call-order log so tests can assert publish/store sequencing.
 const callOrder = vi.hoisted(() => ({ log: /** @type {string[]} */ ([]) }));
 const publishEventSpy = vi.hoisted(() => vi.fn(async () => {}));
+const publishApplicationCopySpy = vi.hoisted(() =>
+  vi.fn(async (/** @type {any} */ _signedEvent) => ({
+    success: true,
+    relays: ['wss://relay.edufeed.org'],
+    successCount: 1
+  }))
+);
+const ensureApplicantRelayListsSpy = vi.hoisted(() => vi.fn(async () => {}));
 const eventStoreAddSpy = vi.hoisted(() => vi.fn());
 const nip44EncryptSpy = vi.hoisted(() =>
   vi.fn(async (_pub, plaintext) => `encrypted:${plaintext}`)
@@ -91,6 +99,11 @@ vi.mock('$lib/services/publish-service.js', () => ({
   buildATagWithHint: async (/** @type {string} */ address) => ['a', address, 'wss://hint.example'],
   buildPTagsWithHints: async (/** @type {string[]} */ pubkeys) =>
     pubkeys.map((pk) => ['p', pk, 'wss://hint.example'])
+}));
+
+vi.mock('$lib/services/membership-publish.js', () => ({
+  publishApplicationCopy: publishApplicationCopySpy,
+  ensureApplicantRelayLists: ensureApplicantRelayListsSpy
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
@@ -173,8 +186,14 @@ describe('MembershipApplicationForm', () => {
     buildSpy.mockClear();
     signSpy.mockClear();
     publishEventSpy.mockClear();
-    publishEventSpy.mockImplementation(async () => {
+    publishApplicationCopySpy.mockClear();
+    publishApplicationCopySpy.mockImplementation(async () => {
       callOrder.log.push('publish');
+      return { success: true, relays: ['wss://relay.edufeed.org'], successCount: 1 };
+    });
+    ensureApplicantRelayListsSpy.mockClear();
+    ensureApplicantRelayListsSpy.mockImplementation(async () => {
+      callOrder.log.push('ensure-relays');
     });
     eventStoreAddSpy.mockClear();
     eventStoreAddSpy.mockImplementation(() => {
@@ -290,7 +309,7 @@ describe('MembershipApplicationForm', () => {
     await fireEvent.click(submitBtn);
     vi.useRealTimers();
 
-    await waitFor(() => expect(publishEventSpy).toHaveBeenCalled());
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalled());
 
     expect(buildSpy).toHaveBeenCalled();
     const builtTemplate = buildSpy.mock.calls[0][0];
@@ -334,8 +353,10 @@ describe('MembershipApplicationForm', () => {
     vi.useRealTimers();
 
     expect(await findByText(/NIP-44/)).toBeTruthy();
-    expect(publishEventSpy).not.toHaveBeenCalled();
+    expect(publishApplicationCopySpy).not.toHaveBeenCalled();
     expect(eventStoreAddSpy).not.toHaveBeenCalled();
+    // Nothing to be reachable for — don't publish relay lists on their behalf.
+    expect(ensureApplicantRelayListsSpy).not.toHaveBeenCalled();
   });
 
   it('publishes one encrypted kind 1069 copy per configured admin', async () => {
@@ -359,7 +380,7 @@ describe('MembershipApplicationForm', () => {
     await fireEvent.click(submitBtn);
     vi.useRealTimers();
 
-    await waitFor(() => expect(publishEventSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalledTimes(2));
 
     expect(buildSpy).toHaveBeenCalledTimes(2);
     const pTags = buildSpy.mock.calls.map(
@@ -404,7 +425,94 @@ describe('MembershipApplicationForm', () => {
 
     // Adding a copy to the store mid-loop flips the "existing response" state
     // while the submit is still running — all publishes must complete first.
-    expect(callOrder.log).toEqual(['publish', 'publish', 'add', 'add']);
+    expect(callOrder.log).toEqual(['ensure-relays', 'publish', 'publish', 'add', 'add']);
+  });
+
+  it('settles the applicant relay lists before the application goes out', async () => {
+    // The approval is answered with a NIP-17 DM. An applicant with no kind
+    // 10050 has no inbox for it, and with no kind 10002 nothing about them
+    // routes — both must be in place by the time an admin can act.
+    const { findByLabelText, findByRole } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    const submitBtn = await findByRole('button', { name: /Antrag|Submit/i });
+    await fireEvent.click(submitBtn);
+    vi.useRealTimers();
+
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalled());
+
+    expect(ensureApplicantRelayListsSpy).toHaveBeenCalledTimes(1);
+    expect(callOrder.log[0]).toBe('ensure-relays');
+  });
+
+  it('reports a failure instead of claiming the application was submitted', async () => {
+    // The application now goes to a short, app-managed relay list. If none of
+    // them took it, "waiting for review" would strand the applicant forever.
+    publishApplicationCopySpy.mockImplementation(async () => ({
+      success: false,
+      relays: [],
+      successCount: 0
+    }));
+
+    const { findByLabelText, findByRole, findByText, queryByText } =
+      render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
+    vi.useRealTimers();
+
+    expect(await findByText(/konnte nicht gesendet werden|could not be sent/i)).toBeTruthy();
+    expect(eventStoreAddSpy).not.toHaveBeenCalled();
+    expect(queryByText(/Wir melden uns|We will be in touch/i)).toBeNull();
+  });
+
+  it('routes the application through the membership publisher, not the outbox model', async () => {
+    // publishEvent would fan the application out to the applicant's write
+    // relays — the public fallback set for anyone without a kind 10002.
+    const { findByLabelText, findByRole } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    const submitBtn = await findByRole('button', { name: /Antrag|Submit/i });
+    await fireEvent.click(submitBtn);
+    vi.useRealTimers();
+
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalledTimes(1));
+
+    expect(publishEventSpy).not.toHaveBeenCalled();
+    expect(publishApplicationCopySpy.mock.calls[0][0]).toMatchObject({ kind: 1069 });
   });
 
   it('includes relay hints on the a and p tags of each copy', async () => {
@@ -426,7 +534,7 @@ describe('MembershipApplicationForm', () => {
     await fireEvent.click(submitBtn);
     vi.useRealTimers();
 
-    await waitFor(() => expect(publishEventSpy).toHaveBeenCalled());
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalled());
 
     const tags = buildSpy.mock.calls[0][0].tags;
     expect(tags.find((/** @type {string[]} */ t) => t[0] === 'a')?.[2]).toBe(RELAY_HINT);

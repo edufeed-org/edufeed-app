@@ -3,11 +3,11 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { buildATagWithHint, buildPTagsWithHints } from '$lib/services/publish-service.js';
   import {
-    publishEvent,
-    buildATagWithHint,
-    buildPTagsWithHints
-  } from '$lib/services/publish-service.js';
+    publishApplicationCopy,
+    ensureApplicantRelayLists
+  } from '$lib/services/membership-publish.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -224,6 +224,13 @@
         error = m.membership_submit_encryption_unavailable();
         return;
       }
+
+      // An approval is answered with a NIP-17 DM, and everything else about
+      // the applicant routes via NIP-65. Settle both lists before the
+      // application exists, so an admin can never approve someone the reply
+      // cannot reach. Never throws — see membership-publish.js.
+      await ensureApplicantRelayLists();
+
       const factory = createAppEventFactory({ signer });
       const aTag = await buildATagWithHint(formAddress);
       const pTags = await buildPTagsWithHints(adminPubkeys);
@@ -242,7 +249,13 @@
 
         const template = await factory.build({ kind: 1069, tags, content });
         const signed = await factory.sign(template);
-        await publishEvent(signed, [admin]);
+        // Scoped publisher, not the outbox model: an application must not be
+        // fanned out to the applicant's public write relays.
+        const result = await publishApplicationCopy(signed);
+        // The application now targets a short, app-managed relay set. If none
+        // of them accepted the copy, no admin will ever see it — telling the
+        // applicant "we will be in touch" would strand them for good.
+        if (!result.success) throw new Error(m.membership_submit_failed());
         signedCopies.push(signed);
       }
 
