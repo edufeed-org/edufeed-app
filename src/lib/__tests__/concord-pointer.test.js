@@ -4,6 +4,7 @@ import {
   parseConcordPointer,
   buildConcordPointerTag,
   withConcordPointer,
+  withoutConcordPointer,
   isConcordCommunityId
 } from '$lib/concord/pointer.js';
 
@@ -81,5 +82,28 @@ describe('withConcordPointer', () => {
   it('replaces an existing concord tag', () => {
     const out = withConcordPointer([['concord', 'b'.repeat(64)]], CID);
     expect(out).toEqual([['concord', CID]]);
+  });
+});
+
+describe('withoutConcordPointer', () => {
+  it('removes every concord tag, preserving other tags and the input array', () => {
+    const tags = [
+      ['d', ''],
+      ['concord', CID, 'wss://c.example'],
+      ['r', 'wss://x'],
+      ['concord', 'b'.repeat(64)]
+    ];
+    const out = withoutConcordPointer(tags);
+    expect(out).toEqual([
+      ['d', ''],
+      ['r', 'wss://x']
+    ]);
+    expect(tags).toHaveLength(4); // input untouched
+  });
+  it('is a no-op copy when no pointer is present', () => {
+    const tags = [['r', 'wss://x']];
+    const out = withoutConcordPointer(tags);
+    expect(out).toEqual(tags);
+    expect(out).not.toBe(tags);
   });
 });

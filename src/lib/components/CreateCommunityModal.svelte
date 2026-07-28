@@ -26,8 +26,25 @@
   import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import { parseFormTemplate, createDefaultMembershipForm } from '$lib/helpers/forms.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  // Concord submodules imported DIRECTLY (never the barrel) — the convention
+  // every Concord call site follows (see CLAUDE.md's Concord section).
+  import { getConcordClient } from '$lib/concord/client.svelte.js';
+  import { withConcordPointer } from '$lib/concord/pointer.js';
+  import {
+    readFoundingMarker,
+    writeFoundingMarker,
+    clearFoundingMarker
+  } from '$lib/concord/founding.js';
 
   let { modalId } = $props();
+
+  // Optional private area at creation (design spec 2026-07-28). The area is
+  // minted FIRST — before any account switching below — because the Concord
+  // client belongs to the HUMAN's active account and the area owner must be
+  // the human, not the community keypair. The pointer then rides along in the
+  // initial 10222 tags (no separate republish like the later founding flow).
+  let withPrivateArea = $state(false);
 
   // Step management - improved flow
   let currentStep = $state(0); // 0 = keypair selection, 1+ = actual steps
@@ -204,6 +221,7 @@
         };
         showAccessConfig = false;
         defaultFormRef = '';
+        withPrivateArea = false;
         errors = {};
       }
     };
@@ -356,6 +374,31 @@
     try {
       isPublishing = true;
 
+      // Mint the Concord area BEFORE any account juggling: the client is the
+      // human's, so the human becomes the area owner (spec §3.1) — and in the
+      // new-keypair flow `manager.setActive` below would race the concord
+      // service's async client swap. Founding-marker idempotency mirrors
+      // foundConcordArea: a retry after a failed publish reuses the already-
+      // minted area instead of orphaning a duplicate.
+      /** @type {string | undefined} */
+      let concordAreaId;
+      if (withPrivateArea && runtimeConfig.concord?.enabled) {
+        const client = getConcordClient();
+        if (!client) throw new Error(m.concord_not_ready());
+        const communityPk = useCurrentKeypair ? manager.active?.pubkey : userData.publicKey;
+        const pendingId = communityPk ? readFoundingMarker(communityPk) : undefined;
+        if (pendingId && client.getCommunity(pendingId)) {
+          concordAreaId = pendingId;
+        } else {
+          const areaName =
+            (!useCurrentKeypair && userData.name.trim()) || m.concord_default_area_name();
+          const area = await client.createNewCommunity(areaName, '', runtimeConfig.concord.relays);
+          const mintedId = /** @type {string} */ (area.communityId);
+          concordAreaId = mintedId;
+          if (communityPk) writeFoundingMarker(communityPk, mintedId);
+        }
+      }
+
       // Determine which account to use
       let account = manager.active;
       let signer = account?.signer;
@@ -413,9 +456,16 @@
       }
 
       // New communities always use new-spec tags (profile list a-tags)
-      const communityTags = buildCommunityDefinitionTags(communityData, {
+      let communityTags = buildCommunityDefinitionTags(communityData, {
         communityPubkey: account.pubkey
       });
+      if (concordAreaId) {
+        communityTags = withConcordPointer(
+          communityTags,
+          concordAreaId,
+          runtimeConfig.concord?.relays?.[0]
+        );
+      }
 
       const communityEvent = {
         kind: 10222,
@@ -434,6 +484,7 @@
       });
       if (communityResult.success) {
         eventStore.add(signedCommunityEvent);
+        if (concordAreaId) clearFoundingMarker(account.pubkey);
       }
 
       // Create kind 30000 profile list events for gated sections
@@ -519,6 +570,37 @@
     errors = {};
   }
 </script>
+
+{#snippet privateAreaOption()}
+  {#if runtimeConfig.concord?.enabled}
+    <div>
+      <label
+        class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors {withPrivateArea
+          ? 'border-primary bg-primary/5'
+          : 'border-base-300'}"
+      >
+        <div class="min-w-0 flex-1">
+          <span class="flex items-center gap-2 text-sm font-semibold">
+            🔒 {m.concord_create_with_area_title()}
+            <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+          </span>
+          <p class="mt-1 text-xs text-base-content/60">{m.concord_create_with_area_body()}</p>
+        </div>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          data-testid="concord-create-with-area"
+          bind:checked={withPrivateArea}
+        />
+      </label>
+      {#if withPrivateArea}
+        <p class="mt-2 rounded-lg bg-base-200 p-2.5 text-xs text-base-content/60">
+          🔑 {m.concord_create_with_area_key_hint()}
+        </p>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
 
 <dialog id={modalId} class="modal">
   <div class="modal-box max-w-2xl">
@@ -665,6 +747,8 @@
               />
             </div>
           </div>
+
+          {@render privateAreaOption()}
         </div>
       {:else if currentStep === 2 && useCurrentKeypair}
         <!-- Confirmation for Current Keypair -->
@@ -869,6 +953,8 @@
               />
             </div>
           </div>
+
+          {@render privateAreaOption()}
         </div>
       {:else if currentStep === 4 && !useCurrentKeypair}
         <!-- Confirmation for New Keypair -->

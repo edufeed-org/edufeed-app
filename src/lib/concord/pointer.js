@@ -49,3 +49,12 @@ export function withConcordPointer(tags, communityId, relay) {
   const rest = tags.filter((t) => t[0] !== 'concord');
   return [...rest, buildConcordPointerTag(communityId, relay)];
 }
+
+/**
+ * Return a NEW tags array with every concord pointer removed (detach).
+ * @param {string[][]} tags
+ * @returns {string[][]}
+ */
+export function withoutConcordPointer(tags) {
+  return tags.filter((t) => t[0] !== 'concord');
+}

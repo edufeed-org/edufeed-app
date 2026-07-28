@@ -31,6 +31,7 @@
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
+  import AreaAttachModal from './AreaAttachModal.svelte';
   import ChannelInviteSheet from './ChannelInviteSheet.svelte';
   import ChannelMembersModal from './ChannelMembersModal.svelte';
   import ChannelExplainer from './ChannelExplainer.svelte';
@@ -278,13 +279,25 @@
     >
       {#if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
-          <button
-            class="btn mt-4 btn-neutral"
-            data-testid="concord-new-channel"
-            onclick={() => (overlay = 'create')}
-          >
-            🔒 {m.concord_new_channel()}
-          </button>
+          <div class="mt-4 flex flex-wrap justify-center gap-2">
+            <button
+              class="btn btn-neutral"
+              data-testid="concord-new-channel"
+              onclick={() => (overlay = 'create')}
+            >
+              🔒 {m.concord_new_channel()}
+            </button>
+            <button
+              class="btn btn-outline"
+              data-testid="concord-attach-open"
+              onclick={() => (overlay = 'attach-area')}
+            >
+              🔗 {m.concord_attach_secondary()}
+            </button>
+          </div>
+          <p class="mx-auto mt-3 max-w-sm text-xs text-base-content/60">
+            {m.concord_attach_pane_hint()}
+          </p>
         </ChannelStatePane>
       {:else if !concord.community}
         <ChannelStatePane
@@ -342,6 +355,8 @@
         mobileChat = true;
       }}
     />
+  {:else if overlay === 'attach-area'}
+    <AreaAttachModal {communikeyEvent} onClose={() => (overlay = null)} />
   {:else if overlay === 'invite' && concord.community && activeChannel}
     <ChannelInviteSheet
       {communikeyEvent}

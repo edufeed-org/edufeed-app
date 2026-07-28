@@ -6,7 +6,11 @@
 import { of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { getConcordState, getConcordClient } from './client.svelte.js';
-import { unlinkedConcordAreas, linkedConcordIds } from './unlinked-areas.js';
+import {
+  unlinkedConcordAreas,
+  attachableConcordAreas,
+  linkedConcordIds
+} from './unlinked-areas.js';
 import { useObservable } from './bridge.svelte.js';
 import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -42,6 +46,41 @@ const requestedPubkeys = new Set();
  * @returns {() => import('./unlinked-areas.js').UnlinkedArea[]}
  */
 export function useUnlinkedConcordAreas() {
+  const getCommunikeyEvents = useJoinedCommunikeyEvents();
+
+  return () =>
+    unlinkedConcordAreas({
+      communities: getConcordState().communities,
+      linkedIds: linkedConcordIds(getCommunikeyEvents())
+    });
+}
+
+/**
+ * Concord areas the active user OWNS, as candidates for the "attach existing
+ * area" picker (settings card / founding pane). Same joined-10222 input as
+ * {@link useUnlinkedConcordAreas} so `linkedToJoined` disabling and the
+ * unlinked sidebar list can never disagree about what counts as linked.
+ * @param {() => string | null | undefined} getOwnerPubkey reactive getter for the active user's pubkey
+ * @returns {() => import('./unlinked-areas.js').AttachableArea[]}
+ */
+export function useAttachableConcordAreas(getOwnerPubkey) {
+  const getCommunikeyEvents = useJoinedCommunikeyEvents();
+
+  return () =>
+    attachableConcordAreas({
+      communities: getConcordState().communities,
+      linkedIds: linkedConcordIds(getCommunikeyEvents()),
+      ownerPubkey: getOwnerPubkey()
+    });
+}
+
+/**
+ * Shared source for both hooks above: the kind-10222 events of every joined
+ * community, kept current reactively + via the bounded proactive fetch (see
+ * the module doc comment on `requestedPubkeys`).
+ * @returns {() => any[]}
+ */
+function useJoinedCommunikeyEvents() {
   const getJoinedCommunities = useJoinedCommunitiesList();
 
   // Reset (not reuse) on every effect re-run: joined pubkeys can
@@ -93,11 +132,7 @@ export function useUnlinkedConcordAreas() {
     return () => subs.forEach((sub) => sub.unsubscribe());
   });
 
-  return () =>
-    unlinkedConcordAreas({
-      communities: getConcordState().communities,
-      linkedIds: linkedConcordIds(communikeyEvents)
-    });
+  return () => communikeyEvents;
 }
 
 /**

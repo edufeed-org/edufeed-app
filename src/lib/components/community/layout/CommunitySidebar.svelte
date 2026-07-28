@@ -108,8 +108,13 @@
     {/each}
 
     {#if unlinkedAreas.length > 0 || showUnlockAffordance}
-      <div class="w-8 border-b border-base-300"></div>
+      <!-- Aligned one-rail model (design spec 2026-07-28): unlinked areas flow
+        directly after the communities at the same size — the badge's corner
+        lock chip carries the distinction, not a separate divider/section.
+        Only the unlock TOOL keeps a divider, since it's an action, not an
+        entry. -->
       {#if showUnlockAffordance}
+        <div class="w-8 border-b border-base-300"></div>
         <div
           class="tooltip tooltip-right"
           data-tip={signerHasNip44 ? m.concord_unlock_areas() : m.concord_direct_needs_nip44()}
@@ -130,7 +135,10 @@
       {/if}
       {#each unlinkedAreas as area (area.communityId)}
         {@const areaFlags = areaUnreadState(area.communityId)}
-        <div class="tooltip tooltip-right" data-tip={area.name}>
+        <div
+          class="tooltip tooltip-right"
+          data-tip="{area.name} · {m.concord_sidebar_area_tooltip()}"
+        >
           <a
             href={resolve(`/private/${area.communityId}`)}
             class="btn btn-circle h-12 w-12 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {area.dissolved
@@ -142,7 +150,7 @@
                 name={area.name}
                 communityId={area.communityId}
                 iconPointer={area.iconPointer}
-                class="h-9 w-9"
+                class="h-12 w-12"
               />
               <span class="absolute -top-0.5 -right-0.5">
                 <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
