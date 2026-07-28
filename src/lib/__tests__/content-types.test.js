@@ -35,14 +35,20 @@ describe('VALID_CONTENT_VIEWS (shared nav/page view set)', () => {
     }
   });
 
+  // The load fn only reads `url`; cast the partial event + void-able return so
+  // svelte-check is happy without constructing a full SvelteKit LoadEvent.
+  /** @param {string} view */
+  const runLoad = (view) =>
+    /** @type {Promise<{ contentView?: string }>} */ (
+      loadCommunityPage(/** @type {any} */ ({ url: new URL(`http://x/c/npub1abc?view=${view}`) }))
+    );
+
   it('the page load resolves ?view=channels to contentView "channels"', async () => {
-    const data = await loadCommunityPage({ url: new URL('http://x/c/npub1abc?view=channels') });
-    expect(data.contentView).toBe('channels');
+    expect((await runLoad('channels')).contentView).toBe('channels');
   });
 
   it('the page load drops an unknown ?view=', async () => {
-    const data = await loadCommunityPage({ url: new URL('http://x/c/npub1abc?view=bogus') });
-    expect(data.contentView).toBeUndefined();
+    expect((await runLoad('bogus')).contentView).toBeUndefined();
   });
 });
 
