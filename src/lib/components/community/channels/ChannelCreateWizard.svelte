@@ -153,6 +153,7 @@
           <input
             type="radio"
             class="radio mt-0.5 radio-sm"
+            name="concord-channel-visibility"
             data-testid="concord-visibility-private"
             checked={isPrivate}
             onchange={() => (isPrivate = true)}
@@ -165,6 +166,7 @@
           <input
             type="radio"
             class="radio mt-0.5 radio-sm"
+            name="concord-channel-visibility"
             data-testid="concord-visibility-public"
             checked={!isPrivate}
             onchange={() => (isPrivate = false)}
