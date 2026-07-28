@@ -27,6 +27,7 @@
   import NoteCreateModal from './notes/NoteCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
   import DeleteCommunityModal from './community/DeleteCommunityModal.svelte';
+  import InviteInboxModal from './community/channels/InviteInboxModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -403,4 +404,7 @@
     onSelect={handleResourceVariantSelect}
     onClose={() => modal.closeModal()}
   />
+{:else if modal.activeModal === 'concordInvites'}
+  <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
+  <InviteInboxModal onClose={() => modal.closeModal()} />
 {/if}
