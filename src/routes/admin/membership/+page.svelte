@@ -13,7 +13,10 @@
   // The kind 30168 template author is embedded in the form address
   // (30168:pubkey:d-tag) — independent of the admin list's order.
   const formAuthorPubkey = $derived(formAddress.split(':')[1] || adminPubkeys[0] || '');
-  const formIdentifier = $derived(formAddress.split(':')[2] || 'edufeed-membership');
+  // d-tags may themselves contain colons, so rejoin everything after the pubkey.
+  const formIdentifier = $derived(
+    formAddress.split(':').slice(2).join(':') || 'edufeed-membership'
+  );
 
   // `manager.active` is an RxJS-backed property (not a Svelte rune), so we
   // subscribe to `manager.active$` and mirror into local $state for reactivity.

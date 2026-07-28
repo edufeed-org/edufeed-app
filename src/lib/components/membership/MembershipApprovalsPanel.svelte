@@ -45,6 +45,18 @@
   const formAddress = $derived(cfg?.formAddress || '');
   const handleDomain = $derived(cfg?.handleDomain || '');
 
+  // `manager.active` is an RxJS-backed property (not a Svelte rune), so we
+  // subscribe to `manager.active$` and mirror into local $state for reactivity
+  // — otherwise an account switch would keep the previous admin's filter.
+  let activeAccount = $state(/** @type {any} */ (null));
+  $effect(() => {
+    const sub = manager.active$.subscribe((account) => {
+      activeAccount = account;
+    });
+    return () => sub.unsubscribe();
+  });
+  const activePubkey = $derived(activeAccount?.pubkey || '');
+
   /** @type {import('nostr-tools').NostrEvent[]} */
   let responses = $state.raw([]);
 
@@ -125,7 +137,7 @@
   // out as one encrypted copy per admin, so load and show only the copies
   // addressed to the logged-in admin — the others are undecryptable here.
   $effect(() => {
-    const myPubkey = manager.active?.pubkey;
+    const myPubkey = activePubkey;
     if (!formAddress || !myPubkey) return;
 
     const loader = formResponseLoader(formAddress, myPubkey);

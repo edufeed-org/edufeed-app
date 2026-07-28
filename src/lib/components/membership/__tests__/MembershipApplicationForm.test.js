@@ -15,6 +15,8 @@ const buildSpy = vi.hoisted(() =>
 const signSpy = vi.hoisted(() =>
   vi.fn(async (/** @type {any} */ tpl) => ({ ...tpl, id: 'response-id', sig: 'sig' }))
 );
+// Shared call-order log so tests can assert publish/store sequencing.
+const callOrder = vi.hoisted(() => ({ log: /** @type {string[]} */ ([]) }));
 const publishEventSpy = vi.hoisted(() => vi.fn(async () => {}));
 const eventStoreAddSpy = vi.hoisted(() => vi.fn());
 const nip44EncryptSpy = vi.hoisted(() =>
@@ -26,14 +28,17 @@ const nip44DecryptSpy = vi.hoisted(() =>
 // When true, the eventStore mock delivers the form event via setTimeout —
 // like a first-time relay load (signup wizard) instead of a warm cache hit.
 const formEventDelivery = vi.hoisted(() => ({ async: false }));
-// Configurable per test: the admin pubkeys exposed by runtimeConfig and the
-// user's existing kind 1069 responses returned by eventStore.timeline().
+// Configurable per test: the admin pubkeys / form address exposed by
+// runtimeConfig and the user's existing kind 1069 responses returned by
+// eventStore.timeline().
 const membershipAdmins = vi.hoisted(() => ({ list: /** @type {string[]} */ ([]) }));
+const membershipForm = vi.hoisted(() => ({ address: '' }));
 const timelineState = vi.hoisted(() => ({ events: /** @type {any[]} */ ([]) }));
 
 const ADMIN_PUBKEY = 'a'.repeat(64);
 const ADMIN2_PUBKEY = 'c'.repeat(64);
 const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
+const RELAY_HINT = 'wss://hint.example';
 
 // Form template with the 5 expected membership fields
 const formEvent = {
@@ -82,7 +87,10 @@ vi.mock('$lib/helpers/event-factory.js', () => ({
 }));
 
 vi.mock('$lib/services/publish-service.js', () => ({
-  publishEvent: publishEventSpy
+  publishEvent: publishEventSpy,
+  buildATagWithHint: async (/** @type {string} */ address) => ['a', address, 'wss://hint.example'],
+  buildPTagsWithHints: async (/** @type {string[]} */ pubkeys) =>
+    pubkeys.map((pk) => ['p', pk, 'wss://hint.example'])
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
@@ -140,7 +148,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
       return {
         enabled: true,
         handleDomain: 'edufeed.org',
-        formAddress: FORM_ADDRESS,
+        formAddress: membershipForm.address,
         adminPubkeys: membershipAdmins.list
       };
     }
@@ -158,11 +166,19 @@ describe('MembershipApplicationForm', () => {
   beforeEach(() => {
     formEventDelivery.async = false;
     membershipAdmins.list = [ADMIN_PUBKEY];
+    membershipForm.address = FORM_ADDRESS;
     timelineState.events = [];
+    callOrder.log = [];
     buildSpy.mockClear();
     signSpy.mockClear();
     publishEventSpy.mockClear();
+    publishEventSpy.mockImplementation(async () => {
+      callOrder.log.push('publish');
+    });
     eventStoreAddSpy.mockClear();
+    eventStoreAddSpy.mockImplementation(() => {
+      callOrder.log.push('add');
+    });
     nip44EncryptSpy.mockClear();
     nip44DecryptSpy.mockClear();
     /** @type {any} */ (eventStore).replaceable.mockClear();
@@ -327,6 +343,72 @@ describe('MembershipApplicationForm', () => {
       expect(tags.some((/** @type {string[]} */ t) => t[0] === 'encrypted')).toBe(true);
     }
     expect(eventStoreAddSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('adds nothing to the event store until every copy has been published', async () => {
+    membershipAdmins.list = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+
+    const { findByLabelText, findByRole } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    const submitBtn = await findByRole('button', { name: /Antrag|Submit/i });
+    await fireEvent.click(submitBtn);
+    vi.useRealTimers();
+
+    await waitFor(() => expect(eventStoreAddSpy).toHaveBeenCalledTimes(2));
+
+    // Adding a copy to the store mid-loop flips the "existing response" state
+    // while the submit is still running — all publishes must complete first.
+    expect(callOrder.log).toEqual(['publish', 'publish', 'add', 'add']);
+  });
+
+  it('includes relay hints on the a and p tags of each copy', async () => {
+    const { findByLabelText, findByRole } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    const submitBtn = await findByRole('button', { name: /Antrag|Submit/i });
+    await fireEvent.click(submitBtn);
+    vi.useRealTimers();
+
+    await waitFor(() => expect(publishEventSpy).toHaveBeenCalled());
+
+    const tags = buildSpy.mock.calls[0][0].tags;
+    expect(tags.find((/** @type {string[]} */ t) => t[0] === 'a')?.[2]).toBe(RELAY_HINT);
+    expect(tags.find((/** @type {string[]} */ t) => t[0] === 'p')?.[2]).toBe(RELAY_HINT);
+  });
+
+  it('keeps colons in the form identifier when loading the template', async () => {
+    membershipForm.address = `30168:${ADMIN_PUBKEY}:edufeed:membership:v2`;
+
+    const { findByLabelText } = render(MembershipApplicationForm);
+    await findByLabelText(/Wunsch-Adresse/);
+
+    const replaceableSpy = /** @type {import('vitest').Mock} */ (
+      /** @type {any} */ (eventStore).replaceable
+    );
+    expect(replaceableSpy).toHaveBeenCalledWith(30168, ADMIN_PUBKEY, 'edufeed:membership:v2');
   });
 
   it('loads the form template from the form address author even when admin order changes', async () => {

@@ -12,8 +12,8 @@ const APPLICANT_PUBKEY = 'b'.repeat(64);
 const hoisted = vi.hoisted(() => ({
   /** @type {{ events: any[] }} */
   timelineState: { events: [] },
-  /** @type {{ pubkey: string }} */
-  activeState: { pubkey: 'a'.repeat(64) },
+  /** @type {{ pubkey: string, subscribers: ((account: any) => void)[] }} */
+  activeState: { pubkey: 'a'.repeat(64), subscribers: [] },
   /** @type {{ pubkeys: string[] }} */
   adminState: { pubkeys: ['a'.repeat(64)] },
   formResponseLoaderMock: vi.fn(() => () => ({
@@ -50,24 +50,41 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   }
 }));
 
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: {
-    get active() {
-      return {
+vi.mock('$lib/stores/accounts.svelte', () => {
+  const makeActive = () => ({
+    pubkey: hoisted.activeState.pubkey,
+    signer: {
+      nip44: { decrypt: hoisted.nip44DecryptMock },
+      signEvent: async (/** @type {any} */ draft) => ({
+        ...draft,
+        id: 'sig-id',
         pubkey: hoisted.activeState.pubkey,
-        signer: {
-          nip44: { decrypt: hoisted.nip44DecryptMock },
-          signEvent: async (/** @type {any} */ draft) => ({
-            ...draft,
-            id: 'sig-id',
-            pubkey: hoisted.activeState.pubkey,
-            sig: 'sig'
-          })
-        }
-      };
+        sig: 'sig'
+      })
     }
-  }
-}));
+  });
+  return {
+    manager: {
+      get active() {
+        return makeActive();
+      },
+      // BehaviorSubject-shaped: replays the current account on subscribe and
+      // lets tests emit account switches via activeState.subscribers.
+      active$: {
+        subscribe(/** @type {(account: any) => void} */ cb) {
+          hoisted.activeState.subscribers.push(cb);
+          cb(makeActive());
+          return {
+            unsubscribe: () => {
+              const i = hoisted.activeState.subscribers.indexOf(cb);
+              if (i >= 0) hoisted.activeState.subscribers.splice(i, 1);
+            }
+          };
+        }
+      }
+    }
+  };
+});
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
@@ -145,10 +162,19 @@ function mockFetch({ wellKnown, proxyPost }) {
 
 const emptyWellKnown = () => new Response(JSON.stringify({ names: {} }), { status: 200 });
 
+/** Simulate an account switch: update the active pubkey and notify active$ subscribers. */
+function emitActive(/** @type {string} */ pubkey) {
+  activeState.pubkey = pubkey;
+  for (const cb of [...activeState.subscribers]) {
+    cb({ pubkey, signer: { nip44: { decrypt: nip44DecryptMock } } });
+  }
+}
+
 describe('MembershipApprovalsPanel', () => {
   beforeEach(() => {
     timelineState.events = [];
     activeState.pubkey = ADMIN_PUBKEY;
+    activeState.subscribers = [];
     adminState.pubkeys = [ADMIN_PUBKEY];
     formResponseLoaderMock.mockClear();
     nip44DecryptMock.mockClear();
@@ -332,5 +358,19 @@ describe('MembershipApprovalsPanel', () => {
 
     const approveButtons = await findAllByRole('button', { name: /Approve|Genehmigen/i });
     expect(approveButtons).toHaveLength(1);
+  });
+
+  it('re-subscribes with the new admin pubkey when the active account switches', async () => {
+    adminState.pubkeys = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    activeState.pubkey = ADMIN_PUBKEY;
+
+    render(MembershipApprovalsPanel);
+    expect(formResponseLoaderMock).toHaveBeenCalledWith(FORM_ADDRESS, ADMIN_PUBKEY);
+
+    emitActive(ADMIN2_PUBKEY);
+
+    await waitFor(() =>
+      expect(formResponseLoaderMock).toHaveBeenCalledWith(FORM_ADDRESS, ADMIN2_PUBKEY)
+    );
   });
 });

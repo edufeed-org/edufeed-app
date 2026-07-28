@@ -3,7 +3,11 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { publishEvent } from '$lib/services/publish-service.js';
+  import {
+    publishEvent,
+    buildATagWithHint,
+    buildPTagsWithHints
+  } from '$lib/services/publish-service.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -32,7 +36,10 @@
   // The kind 30168 template author is embedded in the form address
   // (30168:pubkey:d-tag) — independent of the admin list's order.
   const formAuthorPubkey = $derived(formAddress.split(':')[1] || adminPubkeys[0] || '');
-  const formIdentifier = $derived(formAddress.split(':')[2] || 'edufeed-membership');
+  // d-tags may themselves contain colons, so rejoin everything after the pubkey.
+  const formIdentifier = $derived(
+    formAddress.split(':').slice(2).join(':') || 'edufeed-membership'
+  );
   const handleDomain = $derived(cfg?.handleDomain || '');
 
   /** @type {import('nostr-tools').NostrEvent | null} */
@@ -211,15 +218,17 @@
       const responseTags = buildResponseTags(values);
       const signer = manager.active.signer;
       const factory = createAppEventFactory({ signer });
+      const aTag = await buildATagWithHint(formAddress);
+      const pTags = await buildPTagsWithHints(adminPubkeys);
 
       // NIP-44 is pairwise, so publish one copy per admin — each encrypted to
       // (and p-tagged with) its own recipient.
-      for (const admin of adminPubkeys) {
+      /** @type {import('nostr-tools').NostrEvent[]} */
+      const signedCopies = [];
+      for (const pTag of pTags) {
+        const admin = pTag[1];
         /** @type {string[][]} */
-        const tags = [
-          ['a', formAddress],
-          ['p', admin]
-        ];
+        const tags = [aTag, pTag];
 
         let content = '';
         if (signer?.nip44Encrypt) {
@@ -233,6 +242,12 @@
         const template = await factory.build({ kind: 1069, tags, content });
         const signed = await factory.sign(template);
         await publishEvent(signed, [admin]);
+        signedCopies.push(signed);
+      }
+
+      // Mirror into the local store only after every copy is out — a mid-loop
+      // add flips the "existing response" UI while the submit is still running.
+      for (const signed of signedCopies) {
         eventStore.add(signed);
       }
 
