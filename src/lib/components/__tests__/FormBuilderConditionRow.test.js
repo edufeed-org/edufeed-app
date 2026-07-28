@@ -83,6 +83,16 @@ describe('FormBuilderConditionRow', () => {
     });
   });
 
+  it('renders nothing when there are no earlier questions (first field)', async () => {
+    const onchange = vi.fn();
+    const { container } = render(FormBuilderConditionRow, {
+      props: { value: undefined, availableQuestions: [], onchange }
+    });
+
+    expect(container.querySelectorAll('select').length).toBe(0);
+    expect(container.textContent?.trim()).toBe('');
+  });
+
   it('clearing the question sets value to undefined', async () => {
     const onchange = vi.fn();
     const { container } = render(FormBuilderConditionRow, {

@@ -10,7 +10,8 @@
   import {
     extractSections,
     interleaveSections,
-    isSectionMarker
+    isSectionMarker,
+    LOCKED_FIELD_OUTPUTS
   } from '$lib/helpers/forms/builder-sections.js';
   import { TrashIcon } from '$lib/components/icons';
   import FormBuilderFieldRow from './FormBuilderFieldRow.svelte';
@@ -40,14 +41,9 @@
   // Rich composite field types get a sensible default output so the author
   // doesn't have to pick one manually (amb-relation is deliberately excluded
   // — hasPart vs isPartOf is a meaningful choice the author must make).
-  /** @type {Record<string, string>} */
-  const IMPLIED_OUTPUT = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
-
-  // Locked-output types: their output is fixed by the adapter, so normalize it
-  // on load — an existing event may carry a stale `amb:<id>` fallback that
-  // parseFormTemplate produced when the template had no field-output tag.
-  /** @type {Record<string, string>} */
-  const LOCKED_OUTPUT = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
+  // Also used to normalize on load — an existing event may carry a stale
+  // `amb:<id>` fallback that parseFormTemplate produced when the template
+  // had no field-output tag.
 
   // existingEvent is only used for initial population — it won't change after mount
   // svelte-ignore state_referenced_locally
@@ -127,7 +123,7 @@
       selectOptions: f.options?.options || [],
       multiple: f.options?.multiple || false,
       vocab: f.vocab,
-      output: LOCKED_OUTPUT[f.type] ?? f.output,
+      output: LOCKED_FIELD_OUTPUTS[f.type] ?? f.output,
       vocabNaddrInput: vocabToNaddr(f.vocab),
       vocabError: '',
       displayIf: f.options?.displayIf
@@ -169,6 +165,12 @@
       : []
   );
 
+  // Sections list handed to each FormBuilderFieldRow for option→section
+  // routing — recomputed whenever fields changes, shared across all rows.
+  const builderSections = $derived(
+    fields.filter((f) => f.type === 'section').map((f) => ({ id: f.id, title: f.title || '' }))
+  );
+
   let isPublishing = $state(false);
   let error = $state('');
 
@@ -196,7 +198,7 @@
       selectOptions: [],
       multiple: false,
       vocab: undefined,
-      output: IMPLIED_OUTPUT[type] || '',
+      output: LOCKED_FIELD_OUTPUTS[type] || '',
       vocabNaddrInput: '',
       vocabError: ''
     });
@@ -564,9 +566,7 @@
               {fields}
               fieldIndex={i}
               existing={!!existing}
-              sections={fields
-                .filter((f) => f.type === 'section')
-                .map((f) => ({ id: f.id, title: f.title || '' }))}
+              sections={builderSections}
               earlierQuestions={fields
                 .slice(0, i)
                 .filter((f) => f.type !== 'section')

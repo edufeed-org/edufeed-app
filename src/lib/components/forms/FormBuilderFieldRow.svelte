@@ -12,6 +12,7 @@
   import { getLocale } from '$lib/paraglide/runtime.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
   import FormBuilderConditionRow from './FormBuilderConditionRow.svelte';
+  import { LOCKED_FIELD_OUTPUTS } from '$lib/helpers/forms/builder-sections.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -243,10 +244,6 @@
   const RICH_TYPES = ['creator', 'amb-relation', 'external-urls'];
   const isRichType = $derived(RICH_TYPES.includes(field.type));
 
-  // creator/external-urls have exactly one sensible AMB output — lock it so
-  // the author can't pick something incompatible with the adapter.
-  const LOCKED_OUTPUTS = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
-
   // amb-relation always targets one of these two coordinate-relation props.
   const RELATION_OUTPUTS = [
     { value: 'amb:hasPart', label: () => m.form_builder_field_output_amb_hasPart() },
@@ -317,7 +314,7 @@
   <div class="flex items-center gap-2 text-sm">
     <span class="text-xs text-base-content/50">{m.form_builder_field_output_label()}</span>
     {#if field.type === 'creator' || field.type === 'external-urls'}
-      {@const lockedValue = field.output || LOCKED_OUTPUTS[field.type]}
+      {@const lockedValue = field.output || LOCKED_FIELD_OUTPUTS[field.type]}
       <select
         class="select-bordered select flex-1 select-xs"
         data-testid="field-output-select"
@@ -398,7 +395,7 @@
           {#each field.selectOptions as opt, j (opt.id)}
             <span class="badge gap-1 badge-outline">
               {opt.label}
-              {#if sections.length > 0}
+              {#if sections.length > 0 && (field.type === 'select' || field.type === 'radio')}
                 <select
                   class="select-bordered select select-xs"
                   value={opt.nextSection || ''}

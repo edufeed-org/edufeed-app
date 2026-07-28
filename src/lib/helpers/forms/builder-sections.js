@@ -13,6 +13,14 @@ export function isSectionMarker(item) {
   return !!item && item.type === 'section';
 }
 
+// creator/external-urls render via adapters with exactly one sensible AMB
+// output each — the builder locks/implies this output so the author can't
+// pick something incompatible with the adapter. Shared between FormBuilder
+// (implied default on add + normalize-on-load) and FormBuilderFieldRow
+// (locked, disabled output select).
+/** @type {Record<string, string>} */
+export const LOCKED_FIELD_OUTPUTS = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
+
 /**
  * Split an editing list into real fields + section grouping.
  * A section marker owns the non-section fields that follow it until the next

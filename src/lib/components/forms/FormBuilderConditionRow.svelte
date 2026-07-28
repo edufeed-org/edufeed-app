@@ -43,43 +43,45 @@
   }
 </script>
 
-<div class="flex flex-wrap items-center gap-2 text-sm">
-  <span class="text-xs text-base-content/50">{m.form_builder_showif_label()}</span>
-  <select
-    class="select-bordered select select-xs"
-    value={rule.questionId || ''}
-    onchange={(e) => update({ questionId: e.currentTarget.value, value: '' })}
-  >
-    <option value="">{m.form_builder_showif_always()}</option>
-    {#each availableQuestions as q (q.id)}<option value={q.id}>{q.label || q.id}</option>{/each}
-  </select>
-  {#if rule.questionId}
+{#if availableQuestions.length > 0}
+  <div class="flex flex-wrap items-center gap-2 text-sm">
+    <span class="text-xs text-base-content/50">{m.form_builder_showif_label()}</span>
     <select
       class="select-bordered select select-xs"
-      value={rule.operator || 'equals'}
-      onchange={(e) => update({ operator: e.currentTarget.value })}
+      value={rule.questionId || ''}
+      onchange={(e) => update({ questionId: e.currentTarget.value, value: '' })}
     >
-      <option value="equals">{m.form_builder_showif_equals()}</option>
-      <option value="notEquals">{m.form_builder_showif_notEquals()}</option>
-      <option value="contains">{m.form_builder_showif_contains()}</option>
+      <option value="">{m.form_builder_showif_always()}</option>
+      {#each availableQuestions as q (q.id)}<option value={q.id}>{q.label || q.id}</option>{/each}
     </select>
-    {#if isChoice}
+    {#if rule.questionId}
       <select
         class="select-bordered select select-xs"
-        value={rule.value || ''}
-        onchange={(e) => update({ value: e.currentTarget.value })}
+        value={rule.operator || 'equals'}
+        onchange={(e) => update({ operator: e.currentTarget.value })}
       >
-        <option value="">—</option>
-        {#each referenced?.selectOptions || [] as o (o.id)}<option value={o.id}
-            >{o.label || o.id}</option
-          >{/each}
+        <option value="equals">{m.form_builder_showif_equals()}</option>
+        <option value="notEquals">{m.form_builder_showif_notEquals()}</option>
+        <option value="contains">{m.form_builder_showif_contains()}</option>
       </select>
-    {:else}
-      <input
-        class="input-bordered input input-xs"
-        value={rule.value || ''}
-        oninput={(e) => update({ value: e.currentTarget.value })}
-      />
+      {#if isChoice}
+        <select
+          class="select-bordered select select-xs"
+          value={rule.value || ''}
+          onchange={(e) => update({ value: e.currentTarget.value })}
+        >
+          <option value="">—</option>
+          {#each referenced?.selectOptions || [] as o (o.id)}<option value={o.id}
+              >{o.label || o.id}</option
+            >{/each}
+        </select>
+      {:else}
+        <input
+          class="input-bordered input input-xs"
+          value={rule.value || ''}
+          oninput={(e) => update({ value: e.currentTarget.value })}
+        />
+      {/if}
     {/if}
-  {/if}
-</div>
+  </div>
+{/if}

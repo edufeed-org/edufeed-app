@@ -827,6 +827,21 @@ describe('FormBuilderFieldRow option → section routing', () => {
     expect(container.querySelectorAll('select[aria-label="Go to section"]').length).toBe(0);
   });
 
+  it('does not render routing selects for checkbox fields even when sections are available', async () => {
+    const field = makeField();
+    field.type = 'checkbox';
+    field.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ];
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false, sections }
+    });
+    await Promise.resolve();
+
+    expect(container.querySelectorAll('select[aria-label="Go to section"]').length).toBe(0);
+  });
+
   it('selecting a section sets option.nextSection on the bound field', async () => {
     /** @type {any} */
     let latest;
