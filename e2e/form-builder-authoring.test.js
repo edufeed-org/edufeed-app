@@ -25,13 +25,25 @@
  * observable, so — unlike the `amb-basic-form.test.js` precedent — nothing
  * here is scoped down to a tags-only assertion or marked `test.fixme`.
  *
- * Flow: build a 2-section form (Section A: radio field with two options,
- * "Red" routed to Section B; Section B: a text field shown only if the
- * radio equals "Red") in `/forms/new`, publish, follow the in-app "Fill
- * Form" link, and drive the wizard both ways — picking "Blue" (no explicit
- * route, falls through to Section B by linear order, but the show-if
- * condition is false) and picking "Red" (explicit route AND the show-if
- * condition is true) — to prove both routing and conditional visibility.
+ * Flow: build a **3-section** form (Section A: radio field "Color" with two
+ * options, "Red" routed explicitly to Section C — skipping Section B, which
+ * is where linear order would otherwise land next; Section B: a plain text
+ * field "Note" with no condition, just to prove it's reachable by linear
+ * fallthrough; Section C: a text field "Reason", shown only if Color equals
+ * Red) in `/forms/new`, publish, follow the in-app "Fill Form" link, and
+ * drive the wizard both ways:
+ *
+ * - picking "Blue" (no explicit route → falls through linearly A→B→C) proves
+ *   plain linear fallthrough still works, and that "Reason" stays hidden on
+ *   Section C when Color isn't Red (show-if false) even though the section
+ *   that owns the field HAS been reached;
+ * - picking "Red" (explicit option→section route) proves routing overrides
+ *   linear order: with 3 sections, linear fallthrough from A would go to B
+ *   next, so landing directly on Section C — skipping B — is only
+ *   explainable by the route, not by fallthrough. (With only 2 sections, an
+ *   explicit route to "the next section" is indistinguishable from
+ *   fallthrough; the 3rd section is what makes this a real routing proof.)
+ *   The show-if condition is also true here, so "Reason" renders.
  */
 import { test, expect } from './fixtures.js';
 
@@ -54,7 +66,7 @@ function sectionRow(page, index) {
 }
 
 test.describe('Form builder: sections + option routing + show-if (E2E)', () => {
-  test('builds a 2-section form with routing + show-if, publishes, and the fill wizard obeys both', async ({
+  test('builds a 3-section form where an explicit route diverges from linear order, and the fill wizard obeys both routing and show-if', async ({
     authenticatedPage: page
   }) => {
     test.setTimeout(120000);
@@ -87,19 +99,24 @@ test.describe('Form builder: sections + option routing + show-if (E2E)', () => {
     await newOptionInput.fill('Blue');
     await newOptionInput.press('Enter');
 
-    // --- Section B ---
+    // --- Section B — reached only by linear fallthrough (no option ever
+    // routes here explicitly). A plain, unconditional text field just to
+    // prove the section is actually rendered when reached.
     await page.getByRole('button', { name: 'Add section' }).click();
     await sectionRow(page, 1).getByPlaceholder('Section title').fill('Section B');
-
-    // Route option "Red" → Section B (only appears once ≥1 section exists,
-    // and now both sections are available in its dropdown).
-    const redBadge = colorRow.locator('.badge', { hasText: 'Red' });
-    await redBadge.locator('select').selectOption({ label: 'Section B' });
-
-    // Text field "Reason" (falls after the Section B marker → belongs to
-    // Section B), shown only if Color equals Red.
     await page.getByRole('button', { name: 'text', exact: true }).click();
-    const reasonRow = fieldRow(page, 1);
+    const noteRow = fieldRow(page, 1);
+    const noteLabelInput = noteRow.getByPlaceholder('Enter field name');
+    await noteLabelInput.fill('Note');
+    await noteLabelInput.blur();
+
+    // --- Section C — routed to explicitly from "Red" (skipping Section B).
+    // Text field "Reason" (falls after the Section C marker → belongs to
+    // Section C), shown only if Color equals Red.
+    await page.getByRole('button', { name: 'Add section' }).click();
+    await sectionRow(page, 2).getByPlaceholder('Section title').fill('Section C');
+    await page.getByRole('button', { name: 'text', exact: true }).click();
+    const reasonRow = fieldRow(page, 2);
     const reasonLabelInput = reasonRow.getByPlaceholder('Enter field name');
     await reasonLabelInput.fill('Reason');
     await reasonLabelInput.blur();
@@ -110,6 +127,13 @@ test.describe('Form builder: sections + option routing + show-if (E2E)', () => {
     await conditionRow.locator('select').nth(0).selectOption({ label: 'Color' });
     // Operator defaults to "equals" — leave as-is.
     await conditionRow.locator('select').nth(2).selectOption({ label: 'Red' });
+
+    // Route option "Red" → Section C (only appears once ≥1 section exists,
+    // and now all three sections are available in its dropdown). Linear
+    // order would put "Red" into Section B next, same as "Blue" — this
+    // explicit route is what makes the routing proof below non-tautological.
+    const redBadge = colorRow.locator('.badge', { hasText: 'Red' });
+    await redBadge.locator('select').selectOption({ label: 'Section C' });
 
     // --- Publish ---
     await page.getByRole('button', { name: 'Publish Form', exact: true }).click();
@@ -127,27 +151,46 @@ test.describe('Form builder: sections + option routing + show-if (E2E)', () => {
     });
     await expect(page.getByLabel('Red')).toBeVisible();
     await expect(page.getByLabel('Blue')).toBeVisible();
-    // The show-if field belongs to Section B — not rendered yet.
+    // Neither Section B's nor Section C's field is rendered yet.
+    await expect(page.locator('#note')).toHaveCount(0);
     await expect(page.locator('#reason')).toHaveCount(0);
 
     // Pick "Blue" (no explicit route → falls through to Section B by
-    // linear order) — Section B is reached, but the show-if condition
-    // (Color equals Red) is false, so "Reason" must NOT render.
+    // linear order).
     await page.getByLabel('Blue').check();
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Section B' })).toBeVisible({
       timeout: 15000
     });
+    await expect(page.locator('#note')).toBeVisible();
+    // Reason belongs to Section C — not reached yet.
     await expect(page.locator('#reason')).toHaveCount(0);
 
-    // Back to Section A, pick "Red" (explicit option→section route to
-    // Section B, AND the show-if condition becomes true) — "Reason" must
-    // render this time.
+    // Keep going linearly, B → C (no route on "Note"). Color is still
+    // "Blue", so the show-if condition (Color equals Red) is false: "Reason"
+    // must stay hidden even though Section C — the section that owns it —
+    // has now actually been reached.
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Section C' })).toBeVisible({
+      timeout: 15000
+    });
+    await expect(page.locator('#reason')).toHaveCount(0);
+
+    // Back twice: C → B → A.
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Section B' })).toBeVisible();
     await page.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Section A' })).toBeVisible();
+
+    // Pick "Red" — the explicit option→section route fires: Section C is
+    // reached DIRECTLY, skipping Section B. This is the non-tautological
+    // routing proof: with 3 sections, linear order would have advanced to B
+    // next (as it just did for "Blue"), so landing on Section C here can
+    // only be explained by the route. The show-if condition is now also
+    // true, so "Reason" must render.
     await page.getByLabel('Red').check();
     await page.getByRole('button', { name: 'Next', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Section B' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Section C' })).toBeVisible({
       timeout: 15000
     });
     await expect(page.locator('#reason')).toBeVisible();

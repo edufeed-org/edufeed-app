@@ -523,17 +523,24 @@ Drives the full builder-authoring UI added for the sections/routing/show-if
 slice (`FormBuilder.svelte`, `FormBuilderFieldRow.svelte`,
 `FormBuilderConditionRow.svelte`, `src/lib/helpers/forms/builder-sections.js`
 
-- `branching.js`): names a form, adds Section A with a manually-optioned
-  radio field ("Color": Red/Blue) where "Red" is routed (`nextSection`) to
-  Section B, adds Section B with a text field ("Reason") whose `displayIf`
-  shows it only when Color equals Red, publishes, then follows the in-app
-  "Fill Form" link into the `/respond` wizard and drives it both ways:
+- `branching.js`): names a form, builds **three** sections — Section A with a
+  manually-optioned radio field ("Color": Red/Blue), Section B with an
+  unconditional text field ("Note", reachable only by linear fallthrough —
+  no option ever routes here explicitly), Section C with a text field
+  ("Reason") whose `displayIf` shows it only when Color equals Red, and
+  "Red" is routed (`nextSection`) explicitly to Section C, **skipping**
+  Section B — publishes, then follows the in-app "Fill Form" link into the
+  `/respond` wizard and drives it both ways. With only 2 sections, an
+  explicit route to "the next section" would be indistinguishable from
+  linear fallthrough; the 3rd section is what makes the routing assertion
+  below non-tautological:
 
-| Assertion                                                               | What it proves                                                                                                   |
-| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Section A renders first (Color radio visible, "Reason" absent from DOM) | `orderedSections` + wizard chrome render the first section only                                                  |
-| Pick "Blue" → Next → Section B reached, "Reason" still absent           | Linear fallthrough (no explicit route for Blue) + `displayIf` false hides the field entirely (not just visually) |
-| Back → pick "Red" → Next → Section B reached, "Reason" visible          | Explicit option→section route (Red → Section B) + `displayIf` true shows the field                               |
+| Assertion                                                                       | What it proves                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Section A renders first (Color radio visible, "Note"/"Reason" absent from DOM)  | `orderedSections` + wizard chrome render the first section only                                                                                                                                                                                            |
+| Pick "Blue" → Next → Section B reached, "Note" visible, "Reason" still absent   | Linear fallthrough (no explicit route for Blue) reaches Section B; "Reason" belongs to Section C, not yet reached                                                                                                                                          |
+| Next (still linear, B→C) → Section C reached, "Reason" still absent             | `displayIf` false (Color ≠ Red) hides the field even though the section that owns it has now been reached                                                                                                                                                  |
+| Back, Back → pick "Red" → Next → Section C reached DIRECTLY (Section B skipped) | Explicit option→section route (Red → Section C) overrides linear order — with 3 sections, landing on C while skipping B (which linear order visited for "Blue") can only be explained by the route, not fallthrough. `displayIf` true also shows "Reason". |
 
 **Limitation (by design, not a gap):** unlike `amb-basic-form.test.js` test 2,
 this spec does **not** read the published kind-30168 template back off the
