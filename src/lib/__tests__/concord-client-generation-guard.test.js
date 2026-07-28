@@ -127,6 +127,9 @@ vi.mock('applesauce-concord', () => {
         }
       };
       this.phase$ = { subscribe: () => ({ unsubscribe() {} }) };
+      // Auto-unlock (client.svelte.js) subscribes this at setup; a stub that
+      // never emits means no auto-unlock fires in these tests.
+      this.communityList$ = { subscribe: () => ({ unsubscribe() {} }) };
       createdClients.push(this);
     }
     async start() {

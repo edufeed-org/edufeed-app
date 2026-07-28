@@ -153,3 +153,39 @@ describe('unlockConcordLists', () => {
     errorSpy.mockRestore();
   });
 });
+
+describe('auto-unlock at client start', () => {
+  beforeEach(() => {
+    casts.communityList = null;
+    casts.inviteList = null;
+  });
+
+  it('unlocks a locked list without user action once the client is up', async () => {
+    await initConcordService();
+    casts.communityList = fakeCast(false);
+    casts.inviteList = fakeCast(false);
+    active$.next({ pubkey: 'dora', signer: { pubkey: 'dora', nip44: {} } });
+    await flush();
+
+    expect(casts.communityList.unlock).toHaveBeenCalled();
+    expect(casts.inviteList.unlock).toHaveBeenCalled();
+  });
+
+  it('makes zero unlock calls when the list is already unlocked', async () => {
+    await initConcordService();
+    casts.communityList = fakeCast(true);
+    active$.next({ pubkey: 'emil', signer: { pubkey: 'emil', nip44: {} } });
+    await flush();
+
+    expect(casts.communityList.unlock).not.toHaveBeenCalled();
+  });
+
+  it('never auto-attempts for signers without nip44 (the manual affordance stays the only path)', async () => {
+    await initConcordService();
+    casts.communityList = fakeCast(false);
+    active$.next({ pubkey: 'fritz', signer: { pubkey: 'fritz' } });
+    await flush();
+
+    expect(casts.communityList.unlock).not.toHaveBeenCalled();
+  });
+});

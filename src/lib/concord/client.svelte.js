@@ -257,6 +257,26 @@ async function setup(account, myGeneration) {
     currentClient = client;
     clientSubs = localSubs;
     state = { ...state, client };
+    // Auto-unlock (rail-affordance follow-up 2026-07-28): the app already
+    // performs automatic NIP-44 decryption at startup for DMs (dm-service),
+    // so the private-areas list gets the same treatment instead of hiding
+    // behind an unexplained lock button. One attempt, and only once a LOCKED
+    // cast actually exists — users without any 13302 still see zero signer
+    // calls, preserving this module's original "no signer calls during
+    // initial sync" property for non-Concord users. The sidebars' manual
+    // "Sync private areas" affordance stays as the fallback for a
+    // failed/rejected attempt (the cast then remains locked).
+    if (account.signer?.nip44) {
+      let autoUnlockAttempted = false;
+      clientSubs.push(
+        client.communityList$.subscribe((/** @type {any} */ cast) => {
+          if (myGeneration !== generation) return;
+          if (autoUnlockAttempted || !cast || cast.unlocked) return;
+          autoUnlockAttempted = true;
+          void unlockConcordLists();
+        })
+      );
+    }
     // Start the notifications service alongside the client (spec §2). Dynamic
     // import keeps module-load order unchanged; the service reuses the same
     // ConcordStorage the client got, so markers live in the same per-account
