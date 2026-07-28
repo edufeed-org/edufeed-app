@@ -211,6 +211,49 @@ describe('ChannelChat reaction parity', () => {
   });
 });
 
+describe('ChannelChat header invite button', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls openOverlay("invite") from a visible header button', async () => {
+    const openOverlay = vi.fn();
+    const community = makeCommunity([]);
+
+    const { container } = render(ChannelChat, {
+      props: { community, channel: CHANNEL, dissolved: false, openOverlay, onBack: () => {} }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const button = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="concord-header-invite"]')
+    );
+    expect(button).toBeTruthy();
+    await fireEvent.click(button);
+
+    expect(openOverlay).toHaveBeenCalledWith('invite');
+  });
+
+  it('hides the header invite button when the area is dissolved', async () => {
+    const community = makeCommunity([]);
+
+    const { container } = render(ChannelChat, {
+      props: {
+        community,
+        channel: CHANNEL,
+        dissolved: true,
+        openOverlay: () => {},
+        onBack: () => {}
+      }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[data-testid="concord-header-invite"]')).toBeNull();
+  });
+});
+
 describe('ChannelChat mention composer', () => {
   beforeEach(() => {
     vi.clearAllMocks();

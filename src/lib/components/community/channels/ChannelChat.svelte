@@ -256,6 +256,15 @@
       >
     </p>
   </div>
+  {#if !dissolved}
+    <button
+      class="btn btn-ghost btn-sm"
+      data-testid="concord-header-invite"
+      onclick={() => openOverlay('invite')}
+    >
+      ✉ {m.concord_menu_invite()}
+    </button>
+  {/if}
   <button
     class="btn btn-ghost btn-sm"
     data-testid="concord-members-button"
