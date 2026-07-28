@@ -202,7 +202,7 @@
       <ContactSearchInput
         acceptPubkeyInput
         placeholder={m.concord_invite_search_placeholder()}
-        exclude={[...sent, manager.active?.pubkey].filter(Boolean)}
+        exclude={manager.active?.pubkey ? [...sent, manager.active.pubkey] : sent}
         onselect={(/** @type {{ pubkey: string }} */ c) => directInvite(c.pubkey)}
         onrawpubkey={(/** @type {string} */ hex) => directInvite(hex)}
       />

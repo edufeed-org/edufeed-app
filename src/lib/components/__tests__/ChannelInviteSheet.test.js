@@ -37,7 +37,7 @@ vi.mock(
 );
 // getContext('profileAccess') → a stub with the ProfileListAccess shape.
 vi.mock('svelte', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = /** @type {Record<string, any>} */ (await importOriginal());
   return { ...actual, getContext: () => ({ getMembers: () => [], isLoading: false }) };
 });
 
