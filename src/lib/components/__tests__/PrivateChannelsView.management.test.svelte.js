@@ -28,7 +28,7 @@ vi.mock('$lib/concord/active-channel.svelte.js', () => ({
   getSelectedConcordChannel: () => 'c2' // active = CH2 (beta)
 }));
 const deleteChannel = vi.hoisted(() => vi.fn(() => Promise.resolve()));
-const concordFixture = vi.hoisted(() => ({ value: null }));
+const concordFixture = vi.hoisted(() => /** @type {{ value: any }} */ ({ value: null }));
 vi.mock('$lib/concord/community.svelte.js', () => ({
   useConcordArea: () => () => concordFixture.value
 }));
@@ -84,7 +84,9 @@ describe('PrivateChannelsView management', () => {
       props: { communityId: 'cid', communityProfile: { name: 'Area' } }
     });
     await fireEvent.click(await screen.findByTestId('stub-open-dissolve'));
-    const confirm = await screen.findByTestId('concord-dissolve-confirm');
+    const confirm = /** @type {HTMLButtonElement} */ (
+      await screen.findByTestId('concord-dissolve-confirm')
+    );
     expect(confirm.disabled).toBe(true);
     await fireEvent.input(screen.getByTestId('concord-dissolve-confirm-input'), {
       target: { value: 'Area' }
