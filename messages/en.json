@@ -2950,6 +2950,7 @@
   "concord_invite_create_failed": "Could not create the invite link",
   "concord_revoke_failed": "Could not revoke the link",
   "concord_direct_invite_failed": "Could not send the invitation",
+  "concord_direct_invite_sent": "Invitation sent.",
   "concord_pending_locked": "{count} locked invitation(s)",
   "concord_unlock": "Unlock",
   "concord_no_invites": "No invitations.",

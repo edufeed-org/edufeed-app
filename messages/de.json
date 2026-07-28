@@ -2950,6 +2950,7 @@
   "concord_invite_create_failed": "Einladungslink konnte nicht erstellt werden",
   "concord_revoke_failed": "Link konnte nicht widerrufen werden",
   "concord_direct_invite_failed": "Einladung konnte nicht gesendet werden",
+  "concord_direct_invite_sent": "Einladung gesendet.",
   "concord_pending_locked": "{count} verschlüsselte Einladung(en)",
   "concord_unlock": "Entschlüsseln",
   "concord_no_invites": "Keine Einladungen.",

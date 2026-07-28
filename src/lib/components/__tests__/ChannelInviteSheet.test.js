@@ -25,7 +25,8 @@ vi.mock('$lib/helpers/contentTypes.js', () => ({
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({ manager: { active: { pubkey: SELF } } }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
-vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+const showToast = vi.hoisted(() => vi.fn());
+vi.mock('$lib/helpers/toast', () => ({ showToast }));
 vi.mock('qrcode', () => ({ default: { toDataURL: () => Promise.resolve('data:,') } }));
 vi.mock('$lib/concord/invite-helpers.js', () => ({
   pickLatestChannelInvite: () => undefined,
@@ -47,7 +48,10 @@ const grantChannelAccess = vi.fn(() => Promise.resolve());
 const community = { communityId: 'cid', grantChannelAccess };
 const channel = { channel_id: 'chan1', name: 'ideen', private: true };
 
-beforeEach(() => grantChannelAccess.mockClear());
+beforeEach(() => {
+  grantChannelAccess.mockClear();
+  showToast.mockClear();
+});
 
 async function openDirectTab() {
   render(ChannelInviteSheet, {
@@ -69,10 +73,11 @@ describe('ChannelInviteSheet direct tab', () => {
     await waitFor(() => expect(grantChannelAccess).toHaveBeenCalledWith('chan1', PK_A));
   });
 
-  it('invites a pasted npub via the picker', async () => {
+  it('invites a pasted npub via the picker and confirms with a success toast', async () => {
     await openDirectTab();
     await fireEvent.click(await screen.findByTestId('stub-raw-a'));
     await waitFor(() => expect(grantChannelAccess).toHaveBeenCalledWith('chan1', PK_A));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.any(String), 'success'));
   });
 
   it('shows the empty-state hint when there are no quick-pick members', async () => {

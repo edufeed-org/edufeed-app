@@ -126,10 +126,13 @@
       >✕</button
     >
     <h3 class="flex items-center gap-2 text-lg font-extrabold">
-      🔒 {m.concord_wizard_title()}
+      {isPrivate ? '🔒' : '#'}
+      {m.concord_new_channel()}
       <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
     </h3>
-    <p class="mb-4 text-sm text-base-content/60">{m.concord_wizard_subtitle()}</p>
+    <p class="mb-4 text-sm text-base-content/60">
+      {isPrivate ? m.concord_wizard_subtitle() : m.concord_channel_visibility_public_hint()}
+    </p>
 
     <ul class="steps steps-horizontal mb-4 w-full text-xs">
       <li class="step {step >= 0 ? 'step-neutral' : ''}">{m.concord_wizard_step1()}</li>
@@ -241,7 +244,8 @@
           onclick={create}
         >
           {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}
-          🔒 {m.concord_wizard_create()}
+          {isPrivate ? '🔒' : '#'}
+          {m.concord_wizard_create()}
         </button>
       {/if}
     </div>

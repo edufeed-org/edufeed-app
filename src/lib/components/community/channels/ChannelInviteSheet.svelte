@@ -123,6 +123,7 @@
       // console.warn("channel grant publish failed", err))`), so delivery is
       // unobservable from here. Only permission errors reject (caught below).
       sent = [...sent, pubkey];
+      showToast(m.concord_direct_invite_sent(), 'success');
     } catch (error) {
       console.error('concord: direct invite failed', error);
       showToast(m.concord_direct_invite_failed(), 'error');
