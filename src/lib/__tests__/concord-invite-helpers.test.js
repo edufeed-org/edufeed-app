@@ -33,6 +33,31 @@ describe('pickLatestChannelInvite', () => {
     const links = [{ revoked: false, createdAt: 100 }];
     expect(pickLatestChannelInvite(links, 'c1')).toBeUndefined();
   });
+
+  it('matches by channel id for a private channel (default)', () => {
+    const links = [
+      { channels: ['chA'], revoked: false, createdAt: 2 },
+      { channels: ['chB'], revoked: false, createdAt: 3 }
+    ];
+    expect(pickLatestChannelInvite(links, 'chA')?.createdAt).toBe(2);
+  });
+
+  it('reuses the latest AREA invite (empty channels) for a public channel', () => {
+    const links = [
+      { channels: [], revoked: false, createdAt: 5 },
+      { channels: ['chA'], revoked: false, createdAt: 9 },
+      { channels: [], revoked: false, createdAt: 7 }
+    ];
+    expect(pickLatestChannelInvite(links, 'general', false)?.createdAt).toBe(7);
+  });
+
+  it('ignores revoked area invites for a public channel', () => {
+    const links = [
+      { channels: [], revoked: true, createdAt: 9 },
+      { channels: [], revoked: false, createdAt: 4 }
+    ];
+    expect(pickLatestChannelInvite(links, 'general', false)?.createdAt).toBe(4);
+  });
 });
 
 describe('createChannelInviteOnce', () => {

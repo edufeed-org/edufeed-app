@@ -12,13 +12,22 @@
  * (see applesauce-concord's ConcordInviteLink type) — comparison direction is
  * unaffected by the unit, so this works whether the caller passes seconds or
  * ms as long as it's consistent across entries.
+ *
+ * For a public channel (`isPrivate = false`), there's no per-channel key to
+ * grant — invites there are AREA invites (`channels: []`, see area-invite.js)
+ * that admit the member to the whole community, so any live area invite can
+ * be reused for any public channel.
  * @param {ConcordInviteLinkLike[] | undefined} links
  * @param {string} channelId
+ * @param {boolean} [isPrivate=true] - public channels reuse the latest AREA invite (empty channels)
  * @returns {ConcordInviteLinkLike | undefined}
  */
-export function pickLatestChannelInvite(links, channelId) {
+export function pickLatestChannelInvite(links, channelId, isPrivate = true) {
   return (links ?? [])
-    .filter((link) => !link.revoked && link.channels?.includes(channelId))
+    .filter(
+      (link) =>
+        !link.revoked && (isPrivate ? link.channels?.includes(channelId) : !link.channels?.length)
+    )
     .sort((a, b) => b.createdAt - a.createdAt)[0];
 }
 
