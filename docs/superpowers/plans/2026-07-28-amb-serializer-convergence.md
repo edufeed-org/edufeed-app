@@ -306,19 +306,23 @@ git commit -m "refactor(forms): template path serializes via amb-nostr-converter
 
 ## SLICE B — Wizard EKW/Konfi through amb.ext
 
+> **CONFORMANCE (normative `ext:` grammar — see spec):** `ns` and `facet` MUST be colon-free. Non-konfi EKW facets stay under namespace `ekw` (`ext:ekw:gradeLevel:id` — already legal). **Konfi facets move under a SEPARATE namespace `ekw.konfi`** (`ext:ekw.konfi:<slug>:id`) — do NOT key them `ekw['konfi:<slug>']` (that emits the illegal 5-segment `ext:ekw:konfi:<slug>:id`). Define the konfi namespace as ONE exported constant `EKW_KONFI_NS = 'ekw.konfi'` in `ekwNamespace.js` (reverse-DNS `org.edufeed.ekw.konfi` is a one-line swap pending NIP-BOSS).
+
 ### Task 4: `convertFormDataToAMB` builds `amb.ext` for EKW/Konfi
 
 **Files:**
 - Create: `src/lib/helpers/educational/formDataToAmbExt.js` (build the ext object from formData EKW/Konfi)
 - Modify: `src/lib/helpers/educational/formDataToAmb.js` (`convertFormDataToAMB` sets `amb.ext`)
+- Modify: `src/lib/helpers/educational/ekwNamespace.js` (add + export `EKW_KONFI_NS`)
 - Test: `src/lib/__tests__/educational/formDataToAmbExt.test.js` (new)
 
 **Interfaces:**
-- Produces: `formDataToAmbExt(formData) → Record<'ekw', Record<facet, Concept[] | string[]>> | undefined`. Concept facets carry ALL languages from the SelectedConcept labels; Konfi facets keyed `konfi:<slug>`; scalars (`methodOther`, `bibleReference`) as string arrays.
+- Produces: `formDataToAmbExt(formData) → Record<string, Record<facet, Concept[] | string[]>> | undefined`. Two namespaces: `ekw` (non-konfi facets: concept facets carry ALL languages from `SelectedConcept.labels`; scalars `methodOther`/`bibleReference` as string arrays) and `[EKW_KONFI_NS]` (konfi facets keyed by bare slug — `zielgruppen`, `themen`, `dimensionen`, …).
+- Adds: `EKW_KONFI_NS` exported const (`'ekw.konfi'`) in `ekwNamespace.js`.
 
-- [ ] **Step 1: Write the failing test** — assert `formDataToAmbExt` produces `{ ekw: { gradeLevel: [{id, type:'Concept', prefLabel:{de,en}}], methodOther: ['…'], 'konfi:zielgruppen': [...] } }` from representative EKW/Konfi formData, and that feeding it to `ambToNostr` yields the SAME `ext:ekw:gradeLevel:id`/`:prefLabel:de`/`:prefLabel:en`/`:type` tags the current `formDataToEkwTags` emits (plus the extra languages). Use the existing `formDataToEkwTags.test.js`/`konfiTags.test.js` fixtures as the input shape reference.
+- [ ] **Step 1: Write the failing test** — assert `formDataToAmbExt` produces `{ ekw: { gradeLevel: [{id, type:'Concept', prefLabel:{de,en}}], methodOther: ['…'] }, 'ekw.konfi': { zielgruppen: [{id, type:'Concept', prefLabel:{…}}] } }` from representative EKW/Konfi formData, and that feeding it to `ambToNostr` yields `ext:ekw:gradeLevel:id`/`:prefLabel:de`/`:prefLabel:en`/`:type` for EKW **and `ext:ekw.konfi:zielgruppen:id`/`:prefLabel:<lang>`/`:type` for Konfi** (NOT `ext:ekw:konfi:zielgruppen:*`). Assert NO emitted key matches `ext:ekw:konfi:` (the illegal shape). Use existing `formDataToEkwTags.test.js`/`konfiTags.test.js` fixtures as the input-shape reference.
 
-- [ ] **Step 2: Run — FAIL. Step 3: Implement** `formDataToAmbExt.js` reading the same formData fields `formDataToEkwTags`/`formDataToKonfiTags` read (mirror their field access), emitting Concept objects with full `labels` instead of `:de`-only. Wire it into `convertFormDataToAMB`: `const ext = formDataToAmbExt(formData); if (ext) amb.ext = ext;`.
+- [ ] **Step 2: Run — FAIL. Step 3: Implement** `formDataToAmbExt.js` reading the same formData fields `formDataToEkwTags`/`formDataToKonfiTags` read (mirror their field access), emitting Concept objects with full `labels` instead of `:de`-only, placing konfi facets under the `EKW_KONFI_NS` key. Wire it into `convertFormDataToAMB`: `const ext = formDataToAmbExt(formData); if (ext) amb.ext = ext;`.
 
 - [ ] **Step 4: Run — PASS; `pnpm run check`; commit**
 
@@ -329,26 +333,29 @@ git commit -m "feat(educational): convertFormDataToAMB builds amb.ext for EKW/Ko
 
 ---
 
-### Task 5: Remove hand-appended EKW/Konfi; preview fixed; round-trip
+### Task 5: Repoint Konfi read namespace; remove hand-appended EKW/Konfi; preview fixed; conformance + round-trip
 
 **Files:**
+- Modify: `src/lib/helpers/educational/konfiTags.js` (repoint `KONFI_PREFIX` from `ext:ekw:konfi:` to `ext:${EKW_KONFI_NS}:` = `ext:ekw.konfi:` — moves both retiring-emit and surviving-parse in lockstep)
 - Modify: `src/lib/stores/educational-actions.svelte.js` (remove the `formDataToEkwTags`/`konfiTags` push loops)
-- Modify: `src/lib/__tests__/educational-actions-tags.test.js`, `src/lib/__tests__/buildPreviewResource.test.js` (EKW/Konfi now via `ambToNostr`)
-- Possibly delete: `src/lib/helpers/educational/formDataToEkwTags.js`, `konfiTags.js` emit helpers IF no remaining caller (keep the parsers `parseEkwTagsToFormData`/`parseKonfiTagsToFormData`)
+- Modify: `src/lib/__tests__/educational-actions-tags.test.js`, `src/lib/__tests__/buildPreviewResource.test.js` (EKW/Konfi now via `ambToNostr`, conformant keys)
+- Possibly delete: `src/lib/helpers/educational/formDataToEkwTags.js`, `konfiTags.js` emit helpers (`emitKonfiVocabTags`/`emitKonfiScalarTags`) IF no remaining caller (keep the parsers `parseEkwTagsToFormData`/`parseKonfiTags`)
 
-**Interfaces:** Consumes Task 4's `amb.ext` (now emitted by `ambToNostr`).
+**Interfaces:** Consumes Task 4's `amb.ext` (now emitted by `ambToNostr`) and `EKW_KONFI_NS`.
 
-- [ ] **Step 1: Write/adjust the failing test** — in `educational-actions-tags.test.js`, assert a resource built via `createResource` (or `buildAMBEventTagsFromFormData`) with EKW/Konfi formData still carries `ext:ekw:gradeLevel:id` etc. (now sourced from `ambToNostr`, not the hand-append). In `buildPreviewResource.test.js`, assert the preview tags NOW include `ext:ekw:*` (they don't today — this is the bug fix); this test is RED before removing the hand-append + Task 4, GREEN after.
+- [ ] **Step 1: Repoint Konfi namespace.** In `konfiTags.js`, change `const KONFI_PREFIX = ${EKW_TAG_PREFIX}konfi:` to `` const KONFI_PREFIX = `ext:${EKW_KONFI_NS}:` `` (import `EKW_KONFI_NS` from `ekwNamespace.js`). This alone repoints `parseKonfiTags` (the surviving reader) to the new `ext:ekw.konfi:<slug>:…` shape. **No back-compat read of the old `ext:ekw:konfi:*`** — deliberate (Bumble re-publishes; see spec grammar note). Update `konfiTags.test.js` expectations to the new prefix.
 
-- [ ] **Step 2: Run — FAIL (preview lacks EKW). Step 3: Remove** the `for (const t of ekwTags) tags.push(t)` and `for (const t of konfiTags) tags.push(t)` loops in `educational-actions.svelte.js#createResource` and `#updateResource` (EKW/Konfi now come from `ambToNostr` via `amb.ext`). Grep for any remaining caller of `formDataToEkwTags`/`emitKonfiVocabTags`; delete the now-dead emit helpers only if none remain (keep parsers + `formDataToKonfiTags` if the wizard still uses it to shape `formData` — verify).
+- [ ] **Step 2: Write/adjust the failing tests** — in `educational-actions-tags.test.js`, assert a resource built via `createResource` (or `buildAMBEventTagsFromFormData`) with EKW/Konfi formData carries `ext:ekw:gradeLevel:id` (EKW) and `ext:ekw.konfi:zielgruppen:id` (Konfi), now sourced from `ambToNostr`. **Conformance assertion (B5):** every `ext:*` tag key splits into `ext:<ns>:<facet>[:sub]` with `ns`/`facet` colon-free and `sub ∈ {id,type,name}` or `prefLabel:<lang>` or bare — i.e. NO `ext:ekw:konfi:*` key exists. In `buildPreviewResource.test.js`, assert the preview tags NOW include `ext:ekw:*` and `ext:ekw.konfi:*` (they don't today — the bug fix); RED before removing the hand-append + Task 4, GREEN after.
 
-- [ ] **Step 4: Round-trip + backward-compat tests** — assert: a wizard resource's EKW/Konfi round-trips through `parseEkwTagsToFormData`/`parseKonfiTagsToFormData` (multi-language now present, still readable); an EXISTING single-`de` resource still reads (construct a `de`-only event, parse it). Run the konfi/ekw round-trip suites.
+- [ ] **Step 3: Run — FAIL (preview lacks EKW/Konfi). Step 4: Remove** the `for (const t of ekwTags) tags.push(t)` and `for (const t of konfiTags) tags.push(t)` loops in `educational-actions.svelte.js#createResource` and `#updateResource` (EKW/Konfi now come from `ambToNostr` via `amb.ext`). Grep for any remaining caller of `formDataToEkwTags`/`emitKonfiVocabTags`/`emitKonfiScalarTags`; delete the now-dead emit helpers only if none remain (keep parsers + `formDataToKonfiTags` if the wizard still uses it to shape `formData` — verify).
 
-- [ ] **Step 5: Verify + commit.** `pnpm vitest run src/lib/__tests__/educational-actions-tags.test.js src/lib/__tests__/buildPreviewResource.test.js src/lib/__tests__/konfiRoundTrip.test.js src/lib/__tests__/parseEkwTagsToFormData.test.js src/lib/__tests__/parseKonfiTagsToFormData.test.js`; `pnpm run check`; `pnpm run lint`.
+- [ ] **Step 5: Round-trip test** — assert a wizard resource's EKW/Konfi round-trips through `parseEkwTagsToFormData` + the repointed `parseKonfiTags` (multi-language now present, read from `ext:ekw.konfi:*`). Note: there is NO old-namespace back-compat, so do NOT add a test asserting an un-migrated `ext:ekw:konfi:*` event still reads — that shape is deliberately ignored now.
+
+- [ ] **Step 6: Verify + commit.** `pnpm vitest run src/lib/__tests__/educational-actions-tags.test.js src/lib/__tests__/buildPreviewResource.test.js src/lib/__tests__/konfiRoundTrip.test.js src/lib/__tests__/parseEkwTagsToFormData.test.js src/lib/__tests__/konfiTags.test.js`; `pnpm run check`; `pnpm run lint`.
 
 ```bash
 git add -A
-git commit -m "refactor(educational): EKW/Konfi via ambToNostr (amb.ext); fixes live-preview omission"
+git commit -m "refactor(educational): EKW/Konfi via ambToNostr; move Konfi to conformant ext:ekw.konfi ns; fix live preview"
 ```
 
 ---
