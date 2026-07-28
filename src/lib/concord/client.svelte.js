@@ -32,6 +32,10 @@ let initialized = false;
 // dynamically import the module itself; it stops the service via this
 // held reference instead.
 /** @type {{ start: Function, stop: Function } | undefined} */ let notificationsModule;
+// Held reference to the pending-invite count service (Task 2, invite
+// surfacing), same reasoning as notificationsModule above: teardown() is
+// sync and cannot dynamically import the module itself.
+/** @type {{ start: Function, stop: Function } | undefined} */ let pendingInvitesModule;
 
 // Generation guard against stale async setup() resumption (final review,
 // IMPORTANT). The combineLatest subscriber below is `async`, and RxJS never
@@ -74,6 +78,7 @@ export function getConcordClient() {
 
 function teardown() {
   notificationsModule?.stop();
+  pendingInvitesModule?.stop();
   for (const sub of clientSubs) sub.unsubscribe();
   clientSubs = [];
   // ConcordClient exposes stop(), not dispose() — verified against
@@ -292,6 +297,15 @@ async function setup(account, myGeneration) {
       storage: storageModule.createConcordStorage(dbName),
       pubkey: account.pubkey
     });
+    // Start the pending-invite count service alongside notifications (Task
+    // 2, invite surfacing) — same dynamic-import + held-reference pattern.
+    const pendingInvites = await import('./pending-invites.svelte.js');
+    if (myGeneration !== generation) return; // superseded while importing the pending-invites module
+    pendingInvitesModule = {
+      start: pendingInvites.startConcordPendingInvites,
+      stop: pendingInvites.stopConcordPendingInvites
+    };
+    pendingInvites.startConcordPendingInvites({ client });
     if (myGeneration !== generation) {
       // A newer generation already ran teardown() (which called
       // notificationsModule?.stop() while it still pointed at THIS
@@ -324,6 +338,7 @@ async function setup(account, myGeneration) {
     // subs, stop the client, and clear it so getConcordClient() returns
     // undefined. Keep phase/error (a plain teardown() would reset to 'off').
     notificationsModule?.stop();
+    pendingInvitesModule?.stop();
     for (const sub of localSubs) sub.unsubscribe();
     client?.stop();
     currentClient = undefined;
