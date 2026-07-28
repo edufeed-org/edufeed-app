@@ -3030,5 +3030,15 @@
   "concord_notif_level_label": "Notifications",
   "concord_notif_level_all": "All messages",
   "concord_notif_level_mentions": "Mentions only",
-  "concord_notif_level_nothing": "Nothing"
+  "concord_notif_level_nothing": "Nothing",
+  "concord_menu_delete_channel": "Delete channel",
+  "concord_delete_channel_title": "Delete channel?",
+  "concord_delete_channel_body": "\"{name}\" and its full history will be removed for all members. This can't be undone.",
+  "concord_delete_channel_action": "Delete channel",
+  "concord_channel_deleted": "Channel deleted.",
+  "concord_channel_delete_failed": "Couldn't delete the channel.",
+  "concord_dissolved_recover": "Start a new area",
+  "concord_dissolve_confirm_label": "Type the area name to confirm: {name}",
+  "concord_dissolve_confirm_placeholder": "Area name",
+  "concord_dissolve_confirm_fallback": "DISSOLVE"
 }

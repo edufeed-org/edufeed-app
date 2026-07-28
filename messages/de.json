@@ -3030,5 +3030,15 @@
   "concord_notif_level_label": "Benachrichtigungen",
   "concord_notif_level_all": "Alle Nachrichten",
   "concord_notif_level_mentions": "Nur Erwähnungen",
-  "concord_notif_level_nothing": "Keine"
+  "concord_notif_level_nothing": "Keine",
+  "concord_menu_delete_channel": "Kanal löschen",
+  "concord_delete_channel_title": "Kanal löschen?",
+  "concord_delete_channel_body": "„{name}“ und der gesamte Verlauf werden für alle Mitglieder entfernt. Das lässt sich nicht rückgängig machen.",
+  "concord_delete_channel_action": "Kanal löschen",
+  "concord_channel_deleted": "Kanal gelöscht.",
+  "concord_channel_delete_failed": "Kanal konnte nicht gelöscht werden.",
+  "concord_dissolved_recover": "Neuen Bereich gründen",
+  "concord_dissolve_confirm_label": "Tippe zur Bestätigung den Namen des Bereichs: {name}",
+  "concord_dissolve_confirm_placeholder": "Name des Bereichs",
+  "concord_dissolve_confirm_fallback": "AUFLÖSEN"
 }
