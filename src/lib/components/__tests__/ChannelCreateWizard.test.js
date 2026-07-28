@@ -38,6 +38,11 @@ vi.mock('$lib/concord/founding.js', () => ({
   foundConcordArea: vi.fn()
 }));
 
+vi.mock(
+  '$lib/components/shared/ContactSearchInput.svelte',
+  () => import('./fixtures/ContactSearchInputStub.svelte')
+);
+
 // Two invitable members (self is filtered out by the component).
 vi.mock('$lib/helpers/contentTypes.js', () => ({
   getVerifiedMembers: () => ({
@@ -163,5 +168,77 @@ describe('ChannelCreateWizard', () => {
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('chan-2'));
     expect(toastSpy.mock.calls[0][1]).toBe('success');
+  });
+});
+
+describe('ChannelCreateWizard visibility + picker', () => {
+  const PK_A = 'a'.repeat(64);
+
+  function makeCommunity() {
+    return {
+      createChannel: vi.fn(() => Promise.resolve('new-chan')),
+      grantChannelAccess: vi.fn(() => Promise.resolve())
+    };
+  }
+
+  it('creates a PRIVATE channel by default', async () => {
+    const community = makeCommunity();
+    render(ChannelCreateWizard, {
+      props: {
+        communikeyEvent: { pubkey: PUBKEY },
+        community,
+        onClose: () => {},
+        onCreated: () => {}
+      }
+    });
+    await walkToCreate();
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+    await waitFor(() =>
+      expect(community.createChannel).toHaveBeenCalledWith('Staff room', { private: true })
+    );
+  });
+
+  it('creates an OPEN channel when public is chosen', async () => {
+    const community = makeCommunity();
+    render(ChannelCreateWizard, {
+      props: {
+        communikeyEvent: { pubkey: PUBKEY },
+        community,
+        onClose: () => {},
+        onCreated: () => {}
+      }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Staff room' } });
+    await fireEvent.click(screen.getByTestId('concord-visibility-public'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
+    await fireEvent.click(screen.getByTestId('concord-wizard-ack-checkbox'));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+    await waitFor(() =>
+      expect(community.createChannel).toHaveBeenCalledWith('Staff room', { private: false })
+    );
+  });
+
+  it('invites a pasted npub from step 2 via the picker', async () => {
+    const community = makeCommunity();
+    render(ChannelCreateWizard, {
+      props: {
+        communikeyEvent: { pubkey: PUBKEY },
+        community,
+        onClose: () => {},
+        onCreated: () => {}
+      }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Staff room' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1 (invite)
+    await fireEvent.click(await screen.findByTestId('stub-raw-a'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
+    await fireEvent.click(screen.getByTestId('concord-wizard-ack-checkbox'));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+    await waitFor(() =>
+      expect(community.grantChannelAccess).toHaveBeenCalledWith('new-chan', PK_A)
+    );
   });
 });

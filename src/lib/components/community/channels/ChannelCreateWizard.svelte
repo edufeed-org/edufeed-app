@@ -11,6 +11,7 @@
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import { getContext } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -24,6 +25,7 @@
 
   let step = $state(0);
   let name = $state('');
+  let isPrivate = $state(true);
   // NOTE: no description field — CORD ChannelMetadata has no description and
   // createChannel only takes {private, voice}; don't collect what we can't store.
   /** @type {string[]} */
@@ -79,7 +81,7 @@
           communitySigner
         }));
       }
-      const channelId = await target.createChannel(name.trim(), { private: true });
+      const channelId = await target.createChannel(name.trim(), { private: isPrivate });
       // Past this point the channel EXISTS — a retry must never re-create it,
       // and the wizard must always close onto the channel. Each grant fails
       // in isolation (failed invitees can be re-invited later via the invite
@@ -145,10 +147,44 @@
           placeholder={m.concord_wizard_name_placeholder()}
         />
       </label>
+      <fieldset class="mb-3">
+        <legend class="label-text mb-1 font-bold">{m.concord_channel_visibility_label()}</legend>
+        <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
+          <input
+            type="radio"
+            class="radio mt-0.5 radio-sm"
+            data-testid="concord-visibility-private"
+            checked={isPrivate}
+            onchange={() => (isPrivate = true)}
+          />
+          <span
+            >🔒 <b>{m.concord_channel_visibility_private()}</b> — {m.concord_channel_visibility_private_hint()}</span
+          >
+        </label>
+        <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
+          <input
+            type="radio"
+            class="radio mt-0.5 radio-sm"
+            data-testid="concord-visibility-public"
+            checked={!isPrivate}
+            onchange={() => (isPrivate = false)}
+          />
+          <span
+            ># <b>{m.concord_channel_visibility_public()}</b> — {m.concord_channel_visibility_public_hint()}</span
+          >
+        </label>
+      </fieldset>
       <div class="alert text-sm">{m.concord_wizard_invisible_hint()}</div>
     {:else if step === 1}
       <p class="mb-3 text-sm text-base-content/70">{m.concord_wizard_invite_lead()}</p>
-      <div class="flex max-h-64 flex-col gap-1 overflow-y-auto">
+      <ContactSearchInput
+        acceptPubkeyInput
+        placeholder={m.concord_invite_search_placeholder()}
+        exclude={selected}
+        onselect={(/** @type {{ pubkey: string }} */ c) => toggle(c.pubkey)}
+        onrawpubkey={(/** @type {string} */ hex) => toggle(hex)}
+      />
+      <div class="mt-2 flex max-h-52 flex-col gap-1 overflow-y-auto">
         {#each invitable as pubkey (pubkey)}
           <button
             class="btn justify-start gap-2 btn-ghost btn-sm {selected.includes(pubkey)
@@ -177,6 +213,9 @@
         />
         {m.concord_wizard_ack()}
       </label>
+      {#if !isPrivate}
+        <p class="mt-3 text-xs text-base-content/60">{m.concord_wizard_public_note()}</p>
+      {/if}
     {/if}
 
     <div class="modal-action justify-between">
