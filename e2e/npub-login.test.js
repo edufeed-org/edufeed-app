@@ -60,14 +60,10 @@ test.describe('npub read-only login', () => {
     await page.locator('[data-testid="npub-input"]').fill(NPUB);
     await page.locator('[data-testid="npub-login-submit"]').click();
 
-    // After successful add, `onAccountCreated` transitions the modal manager
-    // back to 'login' — so the npub modal closing may re-open the login modal.
-    // Assert on the login modal re-opening (more reliable than asserting the
-    // npub modal's non-visibility, which can race with the transition) and
-    // close it before navigating.
-    await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#global-login-modal')).not.toBeVisible({ timeout: 5000 });
+    // A successful add ends the login flow: the npub modal closes and nothing
+    // takes its place. (It used to transition back to the login modal, leaving
+    // the user logged in but still staring at a login dialog.)
+    await expect(page.locator('dialog[open]')).toHaveCount(0, { timeout: 5000 });
 
     // /inbox is a client-side redirect stub -> the real inbox page lives at
     // /c/inbox (src/routes/c/(dashboard)/inbox/+page.svelte), where

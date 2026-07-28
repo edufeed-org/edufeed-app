@@ -42,26 +42,11 @@ export const test = base.extend({
     // Click the login button (btn-primary class)
     await page.locator('#global-private-key-modal button.btn-primary').click();
 
-    // After successful login, modal transitions to login modal showing accounts.
-    // Wait for the transition and then close the modal.
-    await page.waitForTimeout(1500);
-
-    // Close any open modal by pressing Escape multiple times
-    for (let i = 0; i < 3; i++) {
-      const hasOpenModal = await page.locator('dialog[open]').isVisible();
-      if (hasOpenModal) {
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
-      } else {
-        break;
-      }
-    }
-
-    // Verify no modal is blocking
-    await expect(async () => {
-      const modalVisible = await page.locator('dialog[open]').isVisible();
-      expect(modalVisible).toBe(false);
-    }).toPass({ timeout: 10_000 });
+    // A successful login closes the whole modal stack on its own. This used to
+    // need Escape-mashing because the modal manager transitioned back to the
+    // login modal on success — don't reintroduce that workaround, it would
+    // hide the regression.
+    await expect(page.locator('dialog[open]')).toHaveCount(0, { timeout: 10_000 });
 
     await use(page);
   }

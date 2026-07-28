@@ -116,6 +116,20 @@
     bunkerUrl = '';
   }
 
+  /**
+   * End the login flow: close this dialog, then tell the parent the flow is
+   * done so it can clear the modal store. Order matters — `onAccountCreated`
+   * unmounts this component, so anything still on screen (the "already logged
+   * in" notice) has to have had its time before we call it.
+   */
+  function finishLogin() {
+    const dialog = /** @type {HTMLDialogElement | null} */ (document.getElementById(modalId));
+    dialog?.close?.();
+    if (onAccountCreated) {
+      onAccountCreated();
+    }
+  }
+
   function getRelays() {
     // Always include wss://relay.nsec.app (the NIP-46 rendezvous relay) —
     // most bunkers publish their Connect ack only there. See
@@ -159,18 +173,11 @@
       nostrConnectUri = '';
 
       if (alreadyExisted) {
+        // Give the user a moment to read the info message before closing.
         infoMessage = m.auth_login_bunker_already_logged_in();
-      }
-
-      if (onAccountCreated) {
-        onAccountCreated();
-      }
-
-      if (alreadyExisted) {
-        closeTimer = setTimeout(() => {
-          const dialog = /** @type {HTMLDialogElement | null} */ (document.getElementById(modalId));
-          dialog?.close();
-        }, 1200);
+        closeTimer = setTimeout(finishLogin, 1200);
+      } else {
+        finishLogin();
       }
     } catch (error) {
       if (isAborting || /** @type {Error} */ (error).name === 'AbortError') {
@@ -228,18 +235,11 @@
       bunkerUrl = '';
 
       if (alreadyExisted) {
+        // Give the user a moment to read the info message before closing.
         infoMessage = m.auth_login_bunker_already_logged_in();
-      }
-
-      if (onAccountCreated) {
-        onAccountCreated();
-      }
-
-      if (alreadyExisted) {
-        closeTimer = setTimeout(() => {
-          const dialog = /** @type {HTMLDialogElement | null} */ (document.getElementById(modalId));
-          dialog?.close();
-        }, 1200);
+        closeTimer = setTimeout(finishLogin, 1200);
+      } else {
+        finishLogin();
       }
     } catch (error) {
       console.error('Bunker connection error:', error);

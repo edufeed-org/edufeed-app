@@ -9,7 +9,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/svelte';
+import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import LoginWithBunker from '../LoginWithBunker.svelte';
 
 const mocks = vi.hoisted(() => ({
@@ -144,12 +144,16 @@ describe('LoginWithBunker — URL flow duplicate handling', () => {
     await submitBunkerUrl(container);
 
     expect(mocks.registerBunkerAccount).toHaveBeenCalledTimes(1);
-    expect(onAccountCreated).toHaveBeenCalledTimes(1);
 
     await findByText('Bunker already logged in');
     // Must NOT show the cryptic raw applesauce error
     expect(queryByText('Cant find account with that ID')).toBeNull();
     expect(queryByText(/^Failed to/)).toBeNull();
+
+    // The notice gets its moment on screen BEFORE the flow ends — the parent
+    // tears this component down when onAccountCreated fires.
+    expect(onAccountCreated).not.toHaveBeenCalled();
+    await waitFor(() => expect(onAccountCreated).toHaveBeenCalledTimes(1), { timeout: 3000 });
   });
 
   it('does not show the info message on the new-account path', async () => {
