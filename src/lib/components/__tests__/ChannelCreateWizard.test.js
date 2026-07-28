@@ -38,6 +38,9 @@ vi.mock('$lib/concord/founding.js', () => ({
   foundConcordArea: vi.fn()
 }));
 
+const directInviteToArea = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock('$lib/concord/area-invite.js', () => ({ directInviteToArea }));
+
 vi.mock(
   '$lib/components/shared/ContactSearchInput.svelte',
   () => import('./fixtures/ContactSearchInputStub.svelte')
@@ -240,5 +243,27 @@ describe('ChannelCreateWizard visibility + picker', () => {
     await waitFor(() =>
       expect(community.grantChannelAccess).toHaveBeenCalledWith('new-chan', PK_A)
     );
+  });
+
+  it('public channel: invitee from step 2 goes through directInviteToArea', async () => {
+    const community = makeCommunity();
+    render(ChannelCreateWizard, {
+      props: {
+        communikeyEvent: { pubkey: PUBKEY },
+        community,
+        onClose: () => {},
+        onCreated: () => {}
+      }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Open room' } });
+    await fireEvent.click(screen.getByTestId('concord-visibility-public'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1
+    await fireEvent.click(await screen.findByTestId('stub-raw-a')); // pick a member
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
+    await fireEvent.click(screen.getByTestId('concord-wizard-ack-checkbox'));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+    await waitFor(() => expect(directInviteToArea).toHaveBeenCalledWith(community, PK_A));
+    expect(community.grantChannelAccess).not.toHaveBeenCalled();
   });
 });

@@ -89,9 +89,18 @@
       let failed = 0;
       for (const pubkey of selected) {
         try {
-          await target.grantChannelAccess(channelId, pubkey);
+          if (isPrivate) {
+            await target.grantChannelAccess(channelId, pubkey);
+          } else {
+            // Public channels have no private key to hand over — invite via
+            // the AREA (community-membership) path instead. See
+            // area-invite.js's header comment. Dynamic import keeps
+            // applesauce-concord out of this component's (and SSR's) bundle.
+            const { directInviteToArea } = await import('$lib/concord/area-invite.js');
+            await directInviteToArea(target, pubkey);
+          }
         } catch (error) {
-          console.error('concord: grantChannelAccess failed for', pubkey, error);
+          console.error('concord: invite failed for', pubkey, error);
           failed++;
         }
       }
