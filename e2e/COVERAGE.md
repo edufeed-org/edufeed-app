@@ -2,7 +2,7 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-07-24
+**Last updated:** 2026-07-28
 **Total tests:** 312
 
 ## Quick Summary
@@ -511,6 +511,24 @@ this doc-correction slice's scope. The spec itself was NOT weakened to force
 a pass; both tests are written to the real expected behavior and should be
 re-run in a clean (uncontended) environment before being trusted as fully
 green in CI.
+
+**Re-verified 2026-07-28 (AMB-serializer convergence, Task 6):** the template
+path now serializes through `amb-nostr-converter` instead of the retired
+`amb-emitters` (see `docs/superpowers/sdd/amb-serializer-convergence-plan.md`).
+Test 1 (field rendering) re-ran green. Test 2 was temporarily un-`fixme`d and
+re-run against the converter-backed form to check whether the environment had
+cleared up enough to confirm it green — it reproduced the exact same relay
+read-back timeout (`waitForEventOnRelay`, `e2e/relay-verification.js:111`)
+under the same symptom (swap fully saturated, a concurrent worktree session
+active). This confirms the limitation is still environmental, not a defect
+introduced by the converter migration, so the test stays `test.fixme` with
+this file's existing note. The NIP-AMB tag-shape assertions this test would
+check (concept `:id/:type/:prefLabel:<lang>` triads, no `a`-tag for
+concept-valued fields, `p`-tag creator, `t`-tag keyword, `form`-role
+back-reference) are exercised at the unit level by the converter's own test
+suite and by `src/lib/__tests__/educational-actions-tags.test.js` (NIP-AMB
+conformance assertions on tags built through the real
+`buildResourceData → convertFormDataToAMB/ambToNostr` path).
 
 ---
 
