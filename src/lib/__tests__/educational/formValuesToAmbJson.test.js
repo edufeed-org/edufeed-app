@@ -76,10 +76,19 @@ describe('formValuesToAmbJson → ambToNostr golden', () => {
     ]);
   });
   it('emits a nostr p-tag for a creator with a pubkey (id = nostr:npub…), no creator:* for them', () => {
-    const f2 = { ...form, fields: [{ id: 'creators', type: 'creator', output: 'amb:creator' }] };
+    const f2 = {
+      ...form,
+      fields: [
+        { id: 'title', type: 'text', output: 'amb:name' },
+        { id: 'creators', type: 'creator', output: 'amb:creator' }
+      ]
+    };
     const { amb } = formValuesToAmbJson(
       f2,
-      { creators: [{ name: 'Bob', type: 'Person', pubkey: 'aa'.repeat(32) }] },
+      {
+        title: "Bob's Resource",
+        creators: [{ name: 'Bob', type: 'Person', pubkey: 'aa'.repeat(32) }]
+      },
       {}
     );
     expect(amb.creator[0].id).toMatch(/^nostr:npub1/);

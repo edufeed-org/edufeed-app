@@ -102,7 +102,6 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
     if (raw != null && raw !== '') amb[prop] = String(raw);
   }
   if (!amb.id) amb.id = `${form.pubkey}/${form.dTag}`; // ambToNostr needs an id → d; caller reconciles the real d-tag
-  if (!amb.name) amb.name = amb.id; // ambToNostr requires a name; caller's title field normally supplies this
   return { amb, extras: { externalUrls } };
 }
 
