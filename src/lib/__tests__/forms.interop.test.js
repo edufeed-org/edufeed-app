@@ -42,6 +42,28 @@ describe('NIP-101 interop', () => {
     ]);
   });
 
+  it('normalizes a Formstr renderElement on the spec example shape', () => {
+    const withRenderElement = {
+      ...nip101SpecExample,
+      tags: [
+        ...nip101SpecExample.tags.slice(0, 3),
+        [
+          'field',
+          'bY2',
+          'option',
+          'Favourite drink?',
+          JSON.stringify([
+            ['o1', 'Coffee'],
+            ['o2', 'Tea']
+          ]),
+          JSON.stringify({ renderElement: 'radioButton' })
+        ]
+      ]
+    };
+    const p = parseFormTemplate(withRenderElement);
+    expect(p.fields[0].type).toBe('radio');
+  });
+
   it('tolerates a real encrypted Formstr template (captured 2026-07-16 from relay.damus.io)', () => {
     const encrypted = {
       kind: 30168,

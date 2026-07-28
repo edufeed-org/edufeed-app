@@ -137,6 +137,28 @@ export function buildFormTemplateTags(dTag, fields, options = {}) {
   return tags;
 }
 
+/**
+ * Foreign renderElement vocabulary (Formstr et al.) → our canonical field types.
+ * Our own type names are absent here and pass through unchanged; unknown names
+ * pass through too (FieldsRenderer degrades them to a text input, per NIP-101).
+ * `checkboxes` is Formstr's MULTI-select choice → our `select` with multiple=true
+ * (NOT our boolean `checkbox`); handled specially in parseFormTemplate.
+ * @type {Record<string, string>}
+ */
+export const RENDER_ELEMENT_SYNONYMS = {
+  shortText: 'text',
+  longText: 'textarea',
+  paragraph: 'textarea',
+  radioButton: 'radio',
+  dropdown: 'select',
+  checkboxes: 'select' // + multiple=true, applied in parseFormTemplate
+};
+
+/** @param {string} name @returns {string} */
+export function normalizeRenderElement(name) {
+  return RENDER_ELEMENT_SYNONYMS[name] || name;
+}
+
 /** @param {string} raw @returns {any} */
 function safeJson(raw) {
   try {
@@ -183,9 +205,10 @@ export function parseFormTemplate(event) {
           });
         opts.options = uniqueBy(parsedOptions, (o) => o.id);
       }
+      if (renderElement === 'checkboxes') opts.multiple = true;
       return {
         id: t[1],
-        type: renderElement || (t[2] === 'option' ? 'select' : 'text'),
+        type: normalizeRenderElement(renderElement || (t[2] === 'option' ? 'select' : 'text')),
         label: t[3],
         defaultValue: defaultValue || '',
         options: opts
