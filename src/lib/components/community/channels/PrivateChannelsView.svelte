@@ -187,6 +187,38 @@
       dissolving = false;
     }
   }
+
+  let deletingChannel = $state(false);
+  async function deleteActiveChannel() {
+    if (deletingChannel || !activeChannel || channels.length <= 1) return;
+    deletingChannel = true;
+    try {
+      const remaining = channels.filter((c) => c.channel_id !== activeChannel.channel_id);
+      await concord.community.deleteChannel(activeChannel.channel_id);
+      if (remaining[0] && concord.communityId)
+        selectConcordChannel(concord.communityId, remaining[0].channel_id);
+      showToast(m.concord_channel_deleted(), 'success');
+      overlay = null;
+    } catch (error) {
+      console.error('concord: deleteChannel failed', error);
+      showToast(m.concord_channel_delete_failed(), 'error');
+    } finally {
+      deletingChannel = false;
+    }
+  }
+
+  // Typed confirmation for the permanent, whole-area dissolve.
+  let dissolveConfirmText = $state('');
+  const dissolveExpected = $derived(
+    (communityProfile?.name || '').trim() || m.concord_dissolve_confirm_fallback()
+  );
+  const dissolveConfirmed = $derived(
+    dissolveConfirmText.trim().toLowerCase() === dissolveExpected.toLowerCase()
+  );
+  // Clear the typed value whenever the dissolve modal isn't open.
+  $effect(() => {
+    if (overlay !== 'dissolve' && dissolveConfirmText) dissolveConfirmText = '';
+  });
 </script>
 
 <!-- Flag off must hide the UI entirely (global constraint): the tab is
@@ -349,6 +381,7 @@
             channel={activeChannel}
             dissolved={concord.dissolved}
             isOwner={isConcordOwner}
+            channelCount={channels.length}
             openOverlay={(/** @type {string} */ name) => (overlay = name)}
             onBack={() => (mobileChat = false)}
           />
@@ -372,7 +405,7 @@
     <ChannelCreateWizard
       {communikeyEvent}
       {communityProfile}
-      community={concord.community}
+      community={concord.dissolved ? undefined : concord.community}
       onClose={() => (overlay = null)}
       onCreated={(/** @type {string} */ channelId) => {
         overlay = null;
@@ -404,21 +437,61 @@
     <ChannelExplainer onClose={() => (overlay = null)} />
   {:else if overlay === 'backup'}
     <KeyBackupModal onClose={() => (overlay = null)} />
-  {:else if overlay === 'dissolve' && concord.community}
-    <!-- Same confirm skeleton as Task 13's ChannelMembersModal kick/ban
-      dialog. Scope is honest in the copy: dissolve() is community-level (it
-      tombstones the whole private area, all channels), matching the dist —
-      there is no per-channel hard delete surfaced in Phase 1. -->
+  {:else if overlay === 'delete-channel' && concord.community && activeChannel}
     <div class="modal-open modal" role="dialog">
       <div class="modal-box max-w-sm text-center">
-        <h3 class="text-lg font-extrabold">{m.concord_dissolve_title()}</h3>
-        <p class="my-3 text-sm text-base-content/70">{m.concord_dissolve_body()}</p>
+        <h3 class="text-lg font-extrabold">{m.concord_delete_channel_title()}</h3>
+        <p class="my-3 text-sm text-base-content/70">
+          {m.concord_delete_channel_body({ name: activeChannel.name })}
+        </p>
         <div class="modal-action justify-center">
           <button class="btn btn-ghost" onclick={() => (overlay = null)}
             >{m.concord_cancel()}</button
           >
-          <button class="btn btn-error" disabled={dissolving} onclick={dissolve}
-            >{m.concord_dissolve_action()}</button
+          <button
+            class="btn btn-error"
+            data-testid="concord-delete-channel-confirm"
+            disabled={deletingChannel}
+            onclick={deleteActiveChannel}>{m.concord_delete_channel_action()}</button
+          >
+        </div>
+      </div>
+    </div>
+  {:else if overlay === 'dissolve' && concord.community}
+    <!-- Same confirm skeleton as Task 13's ChannelMembersModal kick/ban
+      dialog. Scope is honest in the copy: dissolve() is community-level (it
+      tombstones the whole private area, all channels), matching the dist —
+      there is no per-channel hard delete surfaced in Phase 1. Typed
+      confirmation (dissolveConfirmed) guards the permanent, whole-area
+      action behind re-typing the area name (or the fallback word when the
+      area has no name), matching the delete-channel modal's higher bar for
+      a destructive action that can't be scoped to just one channel. -->
+    <div class="modal-open modal" role="dialog">
+      <div class="modal-box max-w-sm text-center">
+        <h3 class="text-lg font-extrabold">{m.concord_dissolve_title()}</h3>
+        <p class="my-3 text-sm text-base-content/70">{m.concord_dissolve_body()}</p>
+        <label
+          class="mb-1 block text-left text-xs text-base-content/60"
+          for="concord-dissolve-confirm-input"
+        >
+          {m.concord_dissolve_confirm_label({ name: dissolveExpected })}
+        </label>
+        <input
+          id="concord-dissolve-confirm-input"
+          class="input-bordered input input-sm mb-3 w-full"
+          data-testid="concord-dissolve-confirm-input"
+          placeholder={m.concord_dissolve_confirm_placeholder()}
+          bind:value={dissolveConfirmText}
+        />
+        <div class="modal-action justify-center">
+          <button class="btn btn-ghost" onclick={() => (overlay = null)}
+            >{m.concord_cancel()}</button
+          >
+          <button
+            class="btn btn-error"
+            data-testid="concord-dissolve-confirm"
+            disabled={dissolving || !dissolveConfirmed}
+            onclick={dissolve}>{m.concord_dissolve_action()}</button
           >
         </div>
       </div>
