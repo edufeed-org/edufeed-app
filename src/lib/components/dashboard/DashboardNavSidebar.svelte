@@ -12,6 +12,7 @@
   } from '$lib/components/icons';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
+  import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
   import { getDashboardActiveSection } from '$lib/helpers/dashboardNavigation.js';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -101,6 +102,13 @@
               class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-secondary"
             >
               {getUnreadDmCount() > 99 ? '99+' : getUnreadDmCount()}
+            </span>
+          {:else if section.id === 'communities' && getPendingInviteCount() > 0}
+            <span
+              class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-secondary"
+              data-testid="communities-invite-badge"
+            >
+              {getPendingInviteCount() > 99 ? '99+' : getPendingInviteCount()}
             </span>
           {/if}
         </span>

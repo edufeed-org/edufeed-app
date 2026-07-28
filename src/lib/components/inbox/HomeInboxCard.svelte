@@ -21,6 +21,8 @@
   import { filterNotificationsByType } from '$lib/helpers/inbox.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { BellIcon, ChevronRightIcon } from '$lib/components/icons';
   import InboxItem from './InboxItem.svelte';
   import InboxDmItem from './InboxDmItem.svelte';
@@ -163,6 +165,20 @@
       </button>
     {/each}
   </div>
+
+  {#if getPendingInviteCount() > 0}
+    <button
+      class="flex w-full items-center gap-3 border-t border-base-300 bg-primary/5 px-4 py-3 text-left hover:bg-primary/10"
+      data-testid="invite-inbox-cta"
+      onclick={() => modalStore.openModal('concordInvites')}
+    >
+      <span aria-hidden="true">🔒</span>
+      <span class="flex-1 text-sm font-medium"
+        >{m.concord_invite_inbox_cta({ count: getPendingInviteCount() })}</span
+      >
+      <span class="text-sm font-semibold text-primary">{m.concord_invite_inbox_action()}</span>
+    </button>
+  {/if}
 
   {#if mergedItems.length === 0}
     <div class="border-t border-base-300 p-5 text-center text-sm text-base-content/60">
