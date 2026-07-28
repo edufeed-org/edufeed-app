@@ -12,7 +12,7 @@
   } from '$lib/concord/unlinked-areas.svelte.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
-  import { HomeIcon, LockOpenIcon } from '$lib/components/icons';
+  import { HomeIcon, LockOpenIcon, ChevronDownIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
@@ -59,13 +59,52 @@
       onCommunitySelect(pubkey);
     }
   }
+
+  // Scroll affordance for the hidden-scrollbar rail (design page "Rail Fix"):
+  // edge fades + a chevron appear only while more content exists in that
+  // direction. `railEl` is $state so the effect below re-runs once bind:this
+  // lands (project gotcha: bind:this as DOM-ready signal).
+  /** @type {HTMLElement | undefined} */
+  let railEl = $state();
+  let canScrollUp = $state(false);
+  let canScrollDown = $state(false);
+
+  function updateScrollHints() {
+    if (!railEl) return;
+    canScrollUp = railEl.scrollTop > 4;
+    canScrollDown = railEl.scrollTop + railEl.clientHeight < railEl.scrollHeight - 4;
+  }
+
+  $effect(() => {
+    // Read list lengths first so the effect re-runs when entries are added or
+    // removed (avatars/areas loading in changes scrollHeight without a scroll
+    // or resize event).
+    void sortedCommunities.length;
+    void unlinkedAreas.length;
+    const el = railEl;
+    if (!el) return;
+    updateScrollHints();
+    const observer = new ResizeObserver(updateScrollHints);
+    observer.observe(el);
+    return () => observer.disconnect();
+  });
 </script>
 
 <!-- Desktop: Flex sibling in chrome row -->
 <div
   data-testid="community-sidebar"
-  class="hidden w-(--sidebar-icon-w) flex-col overflow-x-hidden overflow-y-auto bg-base-200 lg:flex"
+  class="scrollbar-none hidden w-(--sidebar-icon-w) flex-col overflow-x-hidden overflow-y-auto bg-base-200 lg:flex"
+  bind:this={railEl}
+  onscroll={updateScrollHints}
 >
+  <!-- Sticky edge fades: pinned to the visible top/bottom of the scroll
+    container, negative margins keep them out of the layout flow. They replace
+    the (hidden) scrollbar as the "there is more" signal. -->
+  <div
+    class="pointer-events-none sticky top-0 z-10 -mb-7 h-7 shrink-0 bg-gradient-to-b from-base-200 to-transparent transition-opacity duration-200 {canScrollUp
+      ? 'opacity-100'
+      : 'opacity-0'}"
+  ></div>
   <div class="flex flex-col items-center space-y-3 py-4">
     <!-- Home button -->
     <div class="tooltip tooltip-right" data-tip={m.dashboard_home_tooltip()}>
@@ -160,6 +199,13 @@
         </div>
       {/each}
     {/if}
+  </div>
+  <div
+    class="pointer-events-none sticky bottom-0 z-10 -mt-7 flex h-7 shrink-0 items-end justify-center bg-gradient-to-t from-base-200 to-transparent transition-opacity duration-200 {canScrollDown
+      ? 'opacity-100'
+      : 'opacity-0'}"
+  >
+    <ChevronDownIcon class_="h-3.5 w-3.5 text-base-content/50" />
   </div>
 </div>
 
