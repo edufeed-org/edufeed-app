@@ -156,7 +156,11 @@ export const RENDER_ELEMENT_SYNONYMS = {
 
 /** @param {string} name @returns {string} */
 export function normalizeRenderElement(name) {
-  return RENDER_ELEMENT_SYNONYMS[name] || name;
+  // renderElement is untrusted event-tag input: own-property lookup only, so a
+  // crafted name ('constructor', 'toString', …) can't leak an inherited member.
+  return typeof name === 'string' && Object.hasOwn(RENDER_ELEMENT_SYNONYMS, name)
+    ? RENDER_ELEMENT_SYNONYMS[name]
+    : name;
 }
 
 /** @param {string} raw @returns {any} */

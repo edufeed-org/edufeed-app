@@ -38,6 +38,11 @@ describe('normalizeRenderElement', () => {
   it('leaves an unknown name as-is (degrades to text downstream)', () => {
     expect(normalizeRenderElement('holo9000')).toBe('holo9000');
   });
+  it('does not leak inherited prototype members for crafted names', () => {
+    expect(normalizeRenderElement('constructor')).toBe('constructor');
+    expect(normalizeRenderElement('toString')).toBe('toString');
+    expect(normalizeRenderElement('hasOwnProperty')).toBe('hasOwnProperty');
+  });
 });
 
 describe('parseFormTemplate normalizes foreign renderElement', () => {
