@@ -306,7 +306,7 @@ git commit -m "refactor(forms): template path serializes via amb-nostr-converter
 
 ## SLICE B — Wizard EKW/Konfi through amb.ext
 
-> **CONFORMANCE (normative `ext:` grammar — see spec):** `ns` and `facet` MUST be colon-free. Non-konfi EKW facets stay under namespace `ekw` (`ext:ekw:gradeLevel:id` — already legal). **Konfi facets move under a SEPARATE namespace `ekw.konfi`** (`ext:ekw.konfi:<slug>:id`) — do NOT key them `ekw['konfi:<slug>']` (that emits the illegal 5-segment `ext:ekw:konfi:<slug>:id`). Define the konfi namespace as ONE exported constant `EKW_KONFI_NS = 'ekw.konfi'` in `ekwNamespace.js` (reverse-DNS `org.edufeed.ekw.konfi` is a one-line swap pending NIP-BOSS).
+> **CONFORMANCE (normative `ext:` grammar — see spec):** `ns` and `facet` MUST be colon-free. Non-konfi EKW facets stay under namespace `ekw` (`ext:ekw:gradeLevel:id` — already legal). **Konfi facets move under a SEPARATE namespace `org.edufeed.ekw.konfi`** (`ext:org.edufeed.ekw.konfi:<slug>:id`) — do NOT key them `ekw['konfi:<slug>']` (that emits the illegal 5-segment `ext:ekw:konfi:<slug>:id`). Define the konfi namespace as ONE exported constant `EKW_KONFI_NS = 'org.edufeed.ekw.konfi'` in `ekwNamespace.js` (DECIDED 2026-07-28: NIP-BOSS reverse-DNS). The legacy non-konfi `ekw` namespace stays `ekw` — do NOT reverse-DNS it.
 
 ### Task 4: `convertFormDataToAMB` builds `amb.ext` for EKW/Konfi
 
@@ -318,9 +318,9 @@ git commit -m "refactor(forms): template path serializes via amb-nostr-converter
 
 **Interfaces:**
 - Produces: `formDataToAmbExt(formData) → Record<string, Record<facet, Concept[] | string[]>> | undefined`. Two namespaces: `ekw` (non-konfi facets: concept facets carry ALL languages from `SelectedConcept.labels`; scalars `methodOther`/`bibleReference` as string arrays) and `[EKW_KONFI_NS]` (konfi facets keyed by bare slug — `zielgruppen`, `themen`, `dimensionen`, …).
-- Adds: `EKW_KONFI_NS` exported const (`'ekw.konfi'`) in `ekwNamespace.js`.
+- Adds: `EKW_KONFI_NS` exported const (`'org.edufeed.ekw.konfi'`) in `ekwNamespace.js`.
 
-- [ ] **Step 1: Write the failing test** — assert `formDataToAmbExt` produces `{ ekw: { gradeLevel: [{id, type:'Concept', prefLabel:{de,en}}], methodOther: ['…'] }, 'ekw.konfi': { zielgruppen: [{id, type:'Concept', prefLabel:{…}}] } }` from representative EKW/Konfi formData, and that feeding it to `ambToNostr` yields `ext:ekw:gradeLevel:id`/`:prefLabel:de`/`:prefLabel:en`/`:type` for EKW **and `ext:ekw.konfi:zielgruppen:id`/`:prefLabel:<lang>`/`:type` for Konfi** (NOT `ext:ekw:konfi:zielgruppen:*`). Assert NO emitted key matches `ext:ekw:konfi:` (the illegal shape). Use existing `formDataToEkwTags.test.js`/`konfiTags.test.js` fixtures as the input-shape reference.
+- [ ] **Step 1: Write the failing test** — assert `formDataToAmbExt` produces `{ ekw: { gradeLevel: [{id, type:'Concept', prefLabel:{de,en}}], methodOther: ['…'] }, 'org.edufeed.ekw.konfi': { zielgruppen: [{id, type:'Concept', prefLabel:{…}}] } }` from representative EKW/Konfi formData, and that feeding it to `ambToNostr` yields `ext:ekw:gradeLevel:id`/`:prefLabel:de`/`:prefLabel:en`/`:type` for EKW **and `ext:org.edufeed.ekw.konfi:zielgruppen:id`/`:prefLabel:<lang>`/`:type` for Konfi** (NOT `ext:ekw:konfi:zielgruppen:*`). Assert NO emitted key matches `ext:ekw:konfi:` (the illegal shape). Use existing `formDataToEkwTags.test.js`/`konfiTags.test.js` fixtures as the input-shape reference.
 
 - [ ] **Step 2: Run — FAIL. Step 3: Implement** `formDataToAmbExt.js` reading the same formData fields `formDataToEkwTags`/`formDataToKonfiTags` read (mirror their field access), emitting Concept objects with full `labels` instead of `:de`-only, placing konfi facets under the `EKW_KONFI_NS` key. Wire it into `convertFormDataToAMB`: `const ext = formDataToAmbExt(formData); if (ext) amb.ext = ext;`.
 
@@ -336,26 +336,26 @@ git commit -m "feat(educational): convertFormDataToAMB builds amb.ext for EKW/Ko
 ### Task 5: Repoint Konfi read namespace; remove hand-appended EKW/Konfi; preview fixed; conformance + round-trip
 
 **Files:**
-- Modify: `src/lib/helpers/educational/konfiTags.js` (repoint `KONFI_PREFIX` from `ext:ekw:konfi:` to `ext:${EKW_KONFI_NS}:` = `ext:ekw.konfi:` — moves both retiring-emit and surviving-parse in lockstep)
+- Modify: `src/lib/helpers/educational/konfiTags.js` (repoint `KONFI_PREFIX` from `ext:ekw:konfi:` to `ext:${EKW_KONFI_NS}:` = `ext:org.edufeed.ekw.konfi:` — moves both retiring-emit and surviving-parse in lockstep)
 - Modify: `src/lib/stores/educational-actions.svelte.js` (remove the `formDataToEkwTags`/`konfiTags` push loops)
 - Modify: `src/lib/__tests__/educational-actions-tags.test.js`, `src/lib/__tests__/buildPreviewResource.test.js` (EKW/Konfi now via `ambToNostr`, conformant keys)
 - Possibly delete: `src/lib/helpers/educational/formDataToEkwTags.js`, `konfiTags.js` emit helpers (`emitKonfiVocabTags`/`emitKonfiScalarTags`) IF no remaining caller (keep the parsers `parseEkwTagsToFormData`/`parseKonfiTags`)
 
 **Interfaces:** Consumes Task 4's `amb.ext` (now emitted by `ambToNostr`) and `EKW_KONFI_NS`.
 
-- [ ] **Step 1: Repoint Konfi namespace.** In `konfiTags.js`, change `const KONFI_PREFIX = ${EKW_TAG_PREFIX}konfi:` to `` const KONFI_PREFIX = `ext:${EKW_KONFI_NS}:` `` (import `EKW_KONFI_NS` from `ekwNamespace.js`). This alone repoints `parseKonfiTags` (the surviving reader) to the new `ext:ekw.konfi:<slug>:…` shape. **No back-compat read of the old `ext:ekw:konfi:*`** — deliberate (Bumble re-publishes; see spec grammar note). Update `konfiTags.test.js` expectations to the new prefix.
+- [ ] **Step 1: Repoint Konfi namespace.** In `konfiTags.js`, change `const KONFI_PREFIX = ${EKW_TAG_PREFIX}konfi:` to `` const KONFI_PREFIX = `ext:${EKW_KONFI_NS}:` `` (import `EKW_KONFI_NS` from `ekwNamespace.js`). This alone repoints `parseKonfiTags` (the surviving reader) to the new `ext:org.edufeed.ekw.konfi:<slug>:…` shape. **No back-compat read of the old `ext:ekw:konfi:*`** — deliberate (Bumble re-publishes; see spec grammar note). Update `konfiTags.test.js` expectations to the new prefix.
 
-- [ ] **Step 2: Write/adjust the failing tests** — in `educational-actions-tags.test.js`, assert a resource built via `createResource` (or `buildAMBEventTagsFromFormData`) with EKW/Konfi formData carries `ext:ekw:gradeLevel:id` (EKW) and `ext:ekw.konfi:zielgruppen:id` (Konfi), now sourced from `ambToNostr`. **Conformance assertion (B5):** every `ext:*` tag key splits into `ext:<ns>:<facet>[:sub]` with `ns`/`facet` colon-free and `sub ∈ {id,type,name}` or `prefLabel:<lang>` or bare — i.e. NO `ext:ekw:konfi:*` key exists. In `buildPreviewResource.test.js`, assert the preview tags NOW include `ext:ekw:*` and `ext:ekw.konfi:*` (they don't today — the bug fix); RED before removing the hand-append + Task 4, GREEN after.
+- [ ] **Step 2: Write/adjust the failing tests** — in `educational-actions-tags.test.js`, assert a resource built via `createResource` (or `buildAMBEventTagsFromFormData`) with EKW/Konfi formData carries `ext:ekw:gradeLevel:id` (EKW) and `ext:org.edufeed.ekw.konfi:zielgruppen:id` (Konfi), now sourced from `ambToNostr`. **Conformance assertion (B5):** every `ext:*` tag key splits into `ext:<ns>:<facet>[:sub]` with `ns`/`facet` colon-free and `sub ∈ {id,type,name}` or `prefLabel:<lang>` or bare — i.e. NO `ext:ekw:konfi:*` key exists. In `buildPreviewResource.test.js`, assert the preview tags NOW include `ext:ekw:*` and `ext:org.edufeed.ekw.konfi:*` (they don't today — the bug fix); RED before removing the hand-append + Task 4, GREEN after.
 
 - [ ] **Step 3: Run — FAIL (preview lacks EKW/Konfi). Step 4: Remove** the `for (const t of ekwTags) tags.push(t)` and `for (const t of konfiTags) tags.push(t)` loops in `educational-actions.svelte.js#createResource` and `#updateResource` (EKW/Konfi now come from `ambToNostr` via `amb.ext`). Grep for any remaining caller of `formDataToEkwTags`/`emitKonfiVocabTags`/`emitKonfiScalarTags`; delete the now-dead emit helpers only if none remain (keep parsers + `formDataToKonfiTags` if the wizard still uses it to shape `formData` — verify).
 
-- [ ] **Step 5: Round-trip test** — assert a wizard resource's EKW/Konfi round-trips through `parseEkwTagsToFormData` + the repointed `parseKonfiTags` (multi-language now present, read from `ext:ekw.konfi:*`). Note: there is NO old-namespace back-compat, so do NOT add a test asserting an un-migrated `ext:ekw:konfi:*` event still reads — that shape is deliberately ignored now.
+- [ ] **Step 5: Round-trip test** — assert a wizard resource's EKW/Konfi round-trips through `parseEkwTagsToFormData` + the repointed `parseKonfiTags` (multi-language now present, read from `ext:org.edufeed.ekw.konfi:*`). Note: there is NO old-namespace back-compat, so do NOT add a test asserting an un-migrated `ext:ekw:konfi:*` event still reads — that shape is deliberately ignored now.
 
 - [ ] **Step 6: Verify + commit.** `pnpm vitest run src/lib/__tests__/educational-actions-tags.test.js src/lib/__tests__/buildPreviewResource.test.js src/lib/__tests__/konfiRoundTrip.test.js src/lib/__tests__/parseEkwTagsToFormData.test.js src/lib/__tests__/konfiTags.test.js`; `pnpm run check`; `pnpm run lint`.
 
 ```bash
 git add -A
-git commit -m "refactor(educational): EKW/Konfi via ambToNostr; move Konfi to conformant ext:ekw.konfi ns; fix live preview"
+git commit -m "refactor(educational): EKW/Konfi via ambToNostr; move Konfi to conformant ext:org.edufeed.ekw.konfi ns; fix live preview"
 ```
 
 ---
@@ -376,9 +376,27 @@ git add -A && git commit -m "test: full verification for AMB-serializer converge
 
 ---
 
+### Task 7: Migrate existing Konfi events to the new namespace (GATED — after Task 6 verified)
+
+**Authorization:** the key holder (`s.roertgen`) holds the EKW/Konfi signing key and authorized re-publishing existing events into the new namespace *after* confirming the new pipeline works. This rewrites LIVE data — treat it as a reviewed, dry-run-first migration script, NOT an automatic step.
+
+**Files:**
+- Create: `scripts/migrate-konfi-namespace.mjs` (Node, standalone; reuses the app's Nostr query/publish helpers or a minimal `WebSocket` client per [[verifying-nostr-queries-from-node]]).
+
+**Preconditions (all must hold before running):** Tasks 1–6 complete and verified; the relay-side `nostr_amb.go` fix + `amb-nostr-converter` write/parse guards are live (coordinate with NIP-BOSS — otherwise re-published events may still be mis-indexed); a fresh dev-server smoke test of a new Konfi publish confirms the `ext:org.edufeed.ekw.konfi:*` shape round-trips end to end.
+
+- [ ] **Step 1:** Query the AMB relays for kind-30142 events authored by the key holder that carry any `ext:ekw:konfi:*` tag (the old illegal shape). List them (count, ids, d-tags) — **do not modify anything yet**.
+- [ ] **Step 2: Dry run.** For each, build the re-published event: replace every `ext:ekw:konfi:<slug>:<sub>` tag key with `ext:org.edufeed.ekw.konfi:<slug>:<sub>` (mechanical prefix swap — values unchanged), keep the same `d`-tag (replaceable → supersedes the old event), keep all other tags. Print a per-event before/after diff of the changed keys. Confirm no non-konfi tag is touched and the key count matches.
+- [ ] **Step 3:** Present the dry-run summary to the key holder; get explicit go-ahead. Sign with the holder's key and publish (the holder runs it, or provides signing) to the AMB relays. **REQ each event back to verify** it landed with the new keys ([[relay-shadow-drops-kind1]]).
+- [ ] **Step 4:** Spot-check in the app: open a migrated resource for edit → Konfi fields populate (proves the repointed `parseKonfiTags` reads the re-published shape). Record counts + verification in the ledger.
+
+> **Sequencing:** between Slice B shipping and this migration completing, un-migrated resources show empty Konfi fields on edit (no back-compat read shim, deliberate). Run this migration promptly after Slice B + the relay/converter guards are live to minimize that window.
+
+---
+
 ## Out of scope
 
-Wizard read-side convergence (`getAMB*` + EKW/Konfi readers → `nostrToAmb`); changes to `amb-nostr-converter`; the branch merge.
+Wizard read-side convergence (`getAMB*` + EKW/Konfi readers → `nostrToAmb`); changes to `amb-nostr-converter`; the relay `nostr_amb.go` fix + converter guards (NIP-BOSS); the branch merge.
 
 ## Self-review notes
 
