@@ -62,4 +62,46 @@ describe('ambJsonToFormValues round-trip', () => {
     expect(sc.about[0].id).toBe('http://w3id.org/kim/schulfaecher/s1017');
     expect(sc.about[0].labels.de).toBe('Mathematik');
   });
+
+  it('recovers creator pubkey, amb-relation coordinate, and ext concept facet', () => {
+    const hexPubkey = 'aa'.repeat(32);
+    const relationPubkey = 'bb'.repeat(32);
+    const relCoordinate = `30142:${relationPubkey}:some-d`;
+
+    const extForm = {
+      pubkey: 'pk',
+      dTag: 'demo2',
+      fields: [
+        { id: 'title', type: 'text', output: 'amb:name' },
+        { id: 'creators', type: 'creator', output: 'amb:creator' },
+        { id: 'related', type: 'amb-relation', output: 'amb:hasPart' },
+        { id: 'custom', type: 'select', vocab: { address: '39737:p:d3' }, output: 'ext' }
+      ]
+    };
+    const extValues = {
+      title: 'Test resource',
+      creators: [{ pubkey: hexPubkey, name: 'Jane Doe', type: 'Person' }],
+      related: [{ coordinate: relCoordinate, relayHint: 'wss://relay.example/' }]
+    };
+    const extSelectedConcepts = {
+      custom: [{ id: 'urn:x', labels: { de: 'X' } }]
+    };
+
+    const { amb } = formValuesToAmbJson(extForm, extValues, extSelectedConcepts);
+    const { data } = ambToNostr(amb, { pubkey: 'pk', timestamp: 0 });
+    const event = {
+      kind: 30142,
+      pubkey: 'pk',
+      content: '',
+      created_at: 0,
+      tags: /** @type {any} */ (data).tags
+    };
+    const { data: parsedAmb } = nostrToAmb(event);
+    const { values: v, selectedConcepts: sc } = ambJsonToFormValues(parsedAmb, extForm);
+
+    expect(v.creators[0].pubkey).toBe(hexPubkey);
+    expect(v.related[0].coordinate).toBe(relCoordinate);
+    expect(sc.custom[0].id).toBe('urn:x');
+    expect(sc.custom[0].labels.de).toBe('X');
+  });
 });
