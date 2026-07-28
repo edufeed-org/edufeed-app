@@ -18,7 +18,7 @@
   const enabled = $derived(cfg?.enabled === true);
   const formAddress = $derived(cfg?.formAddress || '');
   const handleDomain = $derived(cfg?.handleDomain || '');
-  const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
+  const adminPubkeys = $derived(cfg?.adminPubkeys || []);
 
   /** @type {import('nostr-tools').NostrEvent | null} */
   let existingResponse = $state(null);
@@ -94,8 +94,13 @@
         const isEncrypted = response.tags.some((/** @type {string[]} */ t) => t[0] === 'encrypted');
         let tags;
         if (isEncrypted) {
-          if (!adminPubkey || !active.signer?.nip44?.decrypt) return;
-          const plaintext = await active.signer.nip44.decrypt(adminPubkey, response.content);
+          // Each fan-out copy is encrypted to the admin in its own p-tag.
+          const counterparty =
+            response.tags.find((/** @type {string[]} */ t) => t[0] === 'p')?.[1] ||
+            adminPubkeys[0] ||
+            '';
+          if (!counterparty || !active.signer?.nip44?.decrypt) return;
+          const plaintext = await active.signer.nip44.decrypt(counterparty, response.content);
           tags = JSON.parse(plaintext);
         } else {
           tags = response.tags.filter((/** @type {string[]} */ t) => t[0] === 'response');
