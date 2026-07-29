@@ -70,7 +70,7 @@ describe('buildExtensionSections', () => {
     expect(grade?.label).toMatch(/Grade Level|Klassenstufe/i);
     const method = sections[0].facets.find((f) => f.facetName === 'methodOther');
     expect(method?.label).toMatch(/Method \(Free-text\)|Methode \(Freitext\)/i);
-    expect(method?.items).toEqual(['Freie Methode A', 'Freie Methode B']);
+    expect(method?.scalars).toEqual(['Freie Methode A', 'Freie Methode B']);
   });
 
   it('treats legacy ekw:* tags identically (regression)', () => {
@@ -173,5 +173,37 @@ describe('buildExtensionCards', () => {
       ['ext:ekw:schoolType:type', 'Concept']
     ]);
     expect(cards[0].wide).toBe(true);
+  });
+
+  it('renders BOTH halves of a mixed facet on one card (vocab picks + custom value)', () => {
+    // The Konfi `allowCustom` shape. The custom value used to vanish here
+    // because the facet was locked to `concept` by the leading `:id` tag.
+    const NS = 'org.edufeed.ekw.konfi';
+    const cards = cardsFrom([
+      [`ext:${NS}:zeitstruktur:id`, 'urn:doppelstunde'],
+      [`ext:${NS}:zeitstruktur:prefLabel:de`, 'Doppelstunde'],
+      [`ext:${NS}:zeitstruktur:type`, 'Concept'],
+      [`ext:${NS}:zeitstruktur`, '2 x 90 Min.']
+    ]);
+
+    const card = cards.find((c) => c.key.endsWith(':zeitstruktur'));
+    expect(card).toBeDefined();
+    expect(card?.scalars?.map((s) => s.text)).toEqual(['Doppelstunde', '2 x 90 Min.']);
+  });
+
+  it('does not classify a mixed facet as a boolean flag', () => {
+    // A single 'true' scalar alongside concepts is not a boolean flag — the
+    // concepts would be thrown away with it.
+    const NS = 'org.edufeed.ekw.konfi';
+    const cards = cardsFrom([
+      [`ext:${NS}:lernformat:id`, 'urn:x'],
+      [`ext:${NS}:lernformat:prefLabel:de`, 'Freizeit'],
+      [`ext:${NS}:lernformat:type`, 'Concept'],
+      [`ext:${NS}:lernformat`, 'true']
+    ]);
+
+    const card = cards.find((c) => c.key.endsWith(':lernformat'));
+    expect(card?.value).not.toBe('✓');
+    expect(card?.scalars?.map((s) => s.text)).toEqual(['Freizeit', 'true']);
   });
 });

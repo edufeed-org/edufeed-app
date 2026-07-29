@@ -29,21 +29,19 @@
  * (the amb-nostr-converter serializer): `:id`, `:prefLabel:*`, `:type` per
  * concept.
  *
- * KNOWN LIMITATION — mixed facets. A facet is resolved to a single `kind` by
- * whichever tag is seen first, and later tags of the other kind are skipped. So
- * a facet carrying both concepts and free-text scalars loses one half, and
- * which half depends on tag order. `ambToNostr` emits exactly this shape for an
- * `amb.ext` facet whose array mixes `Concept` objects and plain strings — which
- * is how the Konfi "custom value alongside vocabulary picks" case now
- * serializes. Corpus impact today is one event (a single `zeitstruktur:custom`
- * key, 8,476 kind-30142 events scanned 2026-07-29), and the wizard edit path is
- * unaffected because `parseKonfiTags` reads the bare tag itself — this only
- * affects the read-only extension sections on the resource view. Fixing it
- * means widening the `Facet` union, which `extensionMetadata.js` switches on;
- * deliberately left out of the grammar fix to keep that change reviewable.
+ * MIXED FACETS. A facet may carry both concepts and free-text scalars at once —
+ * `ambToNostr` emits exactly that for an `amb.ext` facet whose array mixes
+ * `Concept` objects and plain strings, which is how the Konfi "custom value
+ * alongside vocabulary picks" case serializes (concept triples first, then a
+ * bare `ext:<ns>:<facet>` tag for the custom string). Both halves are kept:
+ * `concepts` and `scalars` are separate arrays and `kind` is derived from which
+ * of them are populated. This mirrors the reference implementation in
+ * `nostrlib/eventstore/typesense30142/nostr_amb.go`, which accumulates concept
+ * instances and scalars independently and concatenates them — keeping the two
+ * readers from drifting apart again.
  *
  * @typedef {{ id: string, prefLabels: Record<string, string>, name?: string }} ConceptItem
- * @typedef {{ kind: 'concept', items: ConceptItem[] } | { kind: 'scalar', items: string[] }} Facet
+ * @typedef {{ kind: 'concept' | 'scalar' | 'mixed', concepts: ConceptItem[], scalars: string[] }} Facet
  * @typedef {{ facets: Map<string, Facet> }} Namespace
  *
  * @param {{ tags?: string[][] | null } | null | undefined} event
@@ -68,27 +66,20 @@ export function parseExtensionTags(event) {
       namespaces.set(ns, nsEntry);
     }
 
-    if (sub === null) {
-      // Scalar
-      let f = nsEntry.facets.get(facet);
-      if (!f) {
-        f = { kind: 'scalar', items: [] };
-        nsEntry.facets.set(facet, f);
-      }
-      if (f.kind !== 'scalar') continue; // mixed shapes — ignore
-      if (value) f.items.push(value);
-    } else {
-      // Concept (id / prefLabel:<lang> / type)
-      let f = nsEntry.facets.get(facet);
-      if (!f) {
-        f = { kind: 'concept', items: [] };
-        nsEntry.facets.set(facet, f);
-      }
-      if (f.kind !== 'concept') continue;
+    let f = nsEntry.facets.get(facet);
+    if (!f) {
+      f = { kind: 'scalar', concepts: [], scalars: [] };
+      nsEntry.facets.set(facet, f);
+    }
 
+    if (sub === null) {
+      // Scalar (bare `ext:<ns>:<facet>` tag) — one item per tag, in tag order.
+      if (value) f.scalars.push(value);
+    } else {
+      // Concept (id / prefLabel:<lang> / type / name)
       if (sub === 'id') {
         if (!value) continue;
-        f.items.push({ id: value, prefLabels: {} });
+        f.concepts.push({ id: value, prefLabels: {} });
       } else if (sub === 'type') {
         // value ignored; presence is signal enough
       } else if (sub === 'name') {
@@ -97,24 +88,34 @@ export function parseExtensionTags(event) {
         // vanish. Like prefLabel, it attaches to the concept opened by the
         // preceding `:id`. Unlike amb-nostr-converter's `reconstructExt`, a
         // name with no open concept is dropped instead of starting an id-less
-        // entry: items here are keyed on `id` and consumers assume it. No
+        // entry: concepts here are keyed on `id` and consumers assume it. No
         // `ext:*:*:name` tag exists in the corpus today (0 of 8476 events
         // scanned 2026-07-29), so this branch is currently unreachable.
-        const last = f.items[f.items.length - 1];
+        const last = f.concepts[f.concepts.length - 1];
         if (last && value) last.name = value;
       } else if (sub.startsWith('prefLabel:')) {
         const lang = sub.slice('prefLabel:'.length);
         if (!lang) continue;
-        const last = f.items[f.items.length - 1];
+        const last = f.concepts[f.concepts.length - 1];
         if (last) last.prefLabels[lang] = value;
       }
     }
   }
 
-  // Drop any facets that ended up empty (e.g. only :type tags, no :id)
+  // Derive `kind` from what actually landed, and drop facets that ended up
+  // empty (e.g. only `:type` tags, no `:id`).
   for (const [nsName, nsEntry] of namespaces) {
     for (const [facetName, facet] of nsEntry.facets) {
-      if (facet.items.length === 0) nsEntry.facets.delete(facetName);
+      if (facet.concepts.length === 0 && facet.scalars.length === 0) {
+        nsEntry.facets.delete(facetName);
+        continue;
+      }
+      facet.kind =
+        facet.concepts.length > 0 && facet.scalars.length > 0
+          ? 'mixed'
+          : facet.concepts.length > 0
+            ? 'concept'
+            : 'scalar';
     }
     if (nsEntry.facets.size === 0) namespaces.delete(nsName);
   }
