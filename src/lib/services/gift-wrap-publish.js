@@ -14,6 +14,7 @@
  */
 import { pool as defaultPool } from '$lib/stores/nostr-infrastructure.svelte';
 import { getReadRelays as defaultGetReadRelays } from '$lib/services/relay-service.svelte.js';
+import { publishToRelays } from '$lib/services/publish-service.js';
 
 export const GIFT_WRAP_KIND = 1059;
 
@@ -36,14 +37,13 @@ export async function publishGiftWrap(event, relays, deps = {}) {
     const recipient = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'p')?.[1];
     if (recipient) targets = (await getReadRelays(recipient)) || [];
   }
-  targets = [...new Set(targets)];
-  if (targets.length === 0) {
-    return { success: false, relays: [], successCount: 0 };
-  }
 
-  const results = await Promise.allSettled(
-    targets.map((url) => pool.relay(url).publish(event, { timeout: PUBLISH_TIMEOUT_MS }))
-  );
-  const successCount = results.filter((r) => r.status === 'fulfilled').length;
-  return { success: successCount > 0, relays: targets, successCount };
+  // This module only decides *which* relays a gift wrap may reach; the fan-out
+  // itself is the shared primitive, so a relay that answers OK:false is counted
+  // as the rejection it is rather than as a delivered DM.
+  return publishToRelays(event, targets, {
+    timeout: PUBLISH_TIMEOUT_MS,
+    label: '[gift-wrap]',
+    pool
+  });
 }

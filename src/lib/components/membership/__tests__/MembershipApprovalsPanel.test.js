@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, screen } from '@testing-library/svelte';
 
 const ADMIN_PUBKEY = 'a'.repeat(64);
+const ADMIN2_PUBKEY = 'c'.repeat(64);
 const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
 const APPLICANT_PUBKEY = 'b'.repeat(64);
 
@@ -11,16 +12,32 @@ const APPLICANT_PUBKEY = 'b'.repeat(64);
 const hoisted = vi.hoisted(() => ({
   /** @type {{ events: any[] }} */
   timelineState: { events: [] },
+  /** @type {{ pubkey: string, subscribers: ((account: any) => void)[] }} */
+  activeState: { pubkey: 'a'.repeat(64), subscribers: [] },
+  /** @type {{ pubkeys: string[] }} */
+  adminState: { pubkeys: ['a'.repeat(64)] },
+  formResponseLoaderMock: vi.fn(() => () => ({
+    subscribe: () => ({ unsubscribe: () => {} })
+  })),
   nip44DecryptMock: vi.fn(),
   actionRunnerOptimisticRunMock: vi.fn(),
   /** Stub for SendWrappedMessage. We compare identity so the test can verify
    *  approve() passes the right builder to the action runner. */
   sendWrappedMessageMock: vi.fn(
     /** @param {any[]} args */ (...args) => ({ __action: 'SendWrappedMessage', args })
-  )
+  ),
+  ensureRecipientDmRelaysMock: vi.fn().mockResolvedValue(undefined)
 }));
-const { timelineState, nip44DecryptMock, actionRunnerOptimisticRunMock, sendWrappedMessageMock } =
-  hoisted;
+const {
+  timelineState,
+  activeState,
+  adminState,
+  formResponseLoaderMock,
+  nip44DecryptMock,
+  actionRunnerOptimisticRunMock,
+  sendWrappedMessageMock,
+  ensureRecipientDmRelaysMock
+} = hoisted;
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
@@ -28,29 +45,48 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
       return {
         enabled: true,
         handleDomain: 'edufeed.org',
-        formAddress: 'a'.repeat(64).padStart(0) && `30168:${'a'.repeat(64)}:edufeed-membership`,
-        adminPubkeys: ['a'.repeat(64)]
+        formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
+        adminPubkeys: hoisted.adminState.pubkeys
       };
     }
   }
 }));
 
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: {
-    active: {
-      pubkey: 'a'.repeat(64),
-      signer: {
-        nip44: { decrypt: hoisted.nip44DecryptMock },
-        signEvent: async (/** @type {any} */ draft) => ({
-          ...draft,
-          id: 'sig-id',
-          pubkey: 'a'.repeat(64),
-          sig: 'sig'
-        })
+vi.mock('$lib/stores/accounts.svelte', () => {
+  const makeActive = () => ({
+    pubkey: hoisted.activeState.pubkey,
+    signer: {
+      nip44: { decrypt: hoisted.nip44DecryptMock },
+      signEvent: async (/** @type {any} */ draft) => ({
+        ...draft,
+        id: 'sig-id',
+        pubkey: hoisted.activeState.pubkey,
+        sig: 'sig'
+      })
+    }
+  });
+  return {
+    manager: {
+      get active() {
+        return makeActive();
+      },
+      // BehaviorSubject-shaped: replays the current account on subscribe and
+      // lets tests emit account switches via activeState.subscribers.
+      active$: {
+        subscribe(/** @type {(account: any) => void} */ cb) {
+          hoisted.activeState.subscribers.push(cb);
+          cb(makeActive());
+          return {
+            unsubscribe: () => {
+              const i = hoisted.activeState.subscribers.indexOf(cb);
+              if (i >= 0) hoisted.activeState.subscribers.splice(i, 1);
+            }
+          };
+        }
       }
     }
-  }
-}));
+  };
+});
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
@@ -66,7 +102,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/loaders/community.js', () => ({
-  formResponseLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  formResponseLoader: hoisted.formResponseLoaderMock
 }));
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
@@ -84,6 +120,10 @@ vi.mock('$lib/services/dm-relay-backfill.js', () => ({
   ensureDmRelayList: vi.fn().mockResolvedValue(undefined)
 }));
 
+vi.mock('$lib/services/dm-recipient-relays.js', () => ({
+  ensureRecipientDmRelays: hoisted.ensureRecipientDmRelaysMock
+}));
+
 vi.mock('applesauce-actions/actions', () => ({
   SendWrappedMessage: hoisted.sendWrappedMessageMock
 }));
@@ -97,14 +137,14 @@ vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: () => (
 import MembershipApprovalsPanel from '../MembershipApprovalsPanel.svelte';
 
 /** @returns {any} */
-function makeResponse(wishedHandle = 'maria') {
+function makeResponse(wishedHandle = 'maria', { id = 'resp-1', pTag = ADMIN_PUBKEY } = {}) {
   return {
-    id: 'resp-1',
+    id,
     kind: 1069,
     pubkey: APPLICANT_PUBKEY,
     created_at: 1_700_000_000,
     content: '<encrypted>',
-    tags: [['a', FORM_ADDRESS], ['p', ADMIN_PUBKEY], ['encrypted']],
+    tags: [['a', FORM_ADDRESS], ['p', pTag], ['encrypted']],
     _wishedHandle: wishedHandle
   };
 }
@@ -128,14 +168,27 @@ function mockFetch({ wellKnown, proxyPost }) {
 
 const emptyWellKnown = () => new Response(JSON.stringify({ names: {} }), { status: 200 });
 
+/** Simulate an account switch: update the active pubkey and notify active$ subscribers. */
+function emitActive(/** @type {string} */ pubkey) {
+  activeState.pubkey = pubkey;
+  for (const cb of [...activeState.subscribers]) {
+    cb({ pubkey, signer: { nip44: { decrypt: nip44DecryptMock } } });
+  }
+}
+
 describe('MembershipApprovalsPanel', () => {
   beforeEach(() => {
     timelineState.events = [];
+    activeState.pubkey = ADMIN_PUBKEY;
+    activeState.subscribers = [];
+    adminState.pubkeys = [ADMIN_PUBKEY];
+    formResponseLoaderMock.mockClear();
     nip44DecryptMock.mockClear();
     nip44DecryptMock.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
     actionRunnerOptimisticRunMock.mockReset();
     actionRunnerOptimisticRunMock.mockResolvedValue(undefined);
     sendWrappedMessageMock.mockClear();
+    ensureRecipientDmRelaysMock.mockClear();
     vi.restoreAllMocks();
   });
 
@@ -251,6 +304,29 @@ describe('MembershipApprovalsPanel', () => {
     expect(body).toMatch(/maria@edufeed\.org/);
   });
 
+  it('loads the applicant DM relay list before sending the notify-DM', async () => {
+    // SendWrappedMessage resolves the recipient's relays from the EventStore
+    // only. Without this prefetch the gift wrap falls through to the public
+    // fallback relays instead of the applicant's kind 10050 inbox.
+    timelineState.events = [makeResponse('maria')];
+    mockFetch({
+      wellKnown: emptyWellKnown(),
+      proxyPost: new Response(JSON.stringify({ name: 'maria', pubkey: APPLICANT_PUBKEY }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' }
+      })
+    });
+
+    const { findByRole } = render(MembershipApprovalsPanel);
+    await fireEvent.click(await findByRole('button', { name: /Approve|Genehmigen/i }));
+
+    await waitFor(() => expect(actionRunnerOptimisticRunMock).toHaveBeenCalled());
+    expect(ensureRecipientDmRelaysMock).toHaveBeenCalledWith([APPLICANT_PUBKEY]);
+    expect(ensureRecipientDmRelaysMock.mock.invocationCallOrder[0]).toBeLessThan(
+      actionRunnerOptimisticRunMock.mock.invocationCallOrder[0]
+    );
+  });
+
   it('still marks the row approved if the notify-DM fails', async () => {
     timelineState.events = [makeResponse('maria')];
     actionRunnerOptimisticRunMock.mockRejectedValueOnce(new Error('relay down'));
@@ -287,5 +363,44 @@ describe('MembershipApprovalsPanel', () => {
 
     await findByText(/already taken|bereits vergeben|vergeben/i);
     expect(actionRunnerOptimisticRunMock).not.toHaveBeenCalled();
+  });
+
+  it('subscribes to responses addressed to the logged-in admin, not adminPubkeys[0]', () => {
+    adminState.pubkeys = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    activeState.pubkey = ADMIN2_PUBKEY;
+
+    render(MembershipApprovalsPanel);
+
+    expect(formResponseLoaderMock).toHaveBeenCalledWith(FORM_ADDRESS, ADMIN2_PUBKEY);
+  });
+
+  it('shows only the response copy addressed to the logged-in admin', async () => {
+    adminState.pubkeys = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    activeState.pubkey = ADMIN2_PUBKEY;
+    // Fan-out publishes one copy per admin; this admin must only see their own.
+    timelineState.events = [
+      makeResponse('maria', { id: 'copy-for-admin1', pTag: ADMIN_PUBKEY }),
+      makeResponse('maria', { id: 'copy-for-admin2', pTag: ADMIN2_PUBKEY })
+    ];
+    mockFetch({ wellKnown: emptyWellKnown() });
+
+    const { findAllByRole } = render(MembershipApprovalsPanel);
+
+    const approveButtons = await findAllByRole('button', { name: /Approve|Genehmigen/i });
+    expect(approveButtons).toHaveLength(1);
+  });
+
+  it('re-subscribes with the new admin pubkey when the active account switches', async () => {
+    adminState.pubkeys = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    activeState.pubkey = ADMIN_PUBKEY;
+
+    render(MembershipApprovalsPanel);
+    expect(formResponseLoaderMock).toHaveBeenCalledWith(FORM_ADDRESS, ADMIN_PUBKEY);
+
+    emitActive(ADMIN2_PUBKEY);
+
+    await waitFor(() =>
+      expect(formResponseLoaderMock).toHaveBeenCalledWith(FORM_ADDRESS, ADMIN2_PUBKEY)
+    );
   });
 });

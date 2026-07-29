@@ -22,9 +22,7 @@
   import { formResponseLoader } from '$lib/loaders/community.js';
   import { parseResponseTags, parseFormTemplate, nip44DecryptWith } from '$lib/helpers/forms.js';
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
-  import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
-  import { SendWrappedMessage } from 'applesauce-actions/actions';
-  import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
+  import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -43,8 +41,19 @@
 
   const cfg = $derived(runtimeConfig.membership);
   const formAddress = $derived(cfg?.formAddress || '');
-  const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
   const handleDomain = $derived(cfg?.handleDomain || '');
+
+  // `manager.active` is an RxJS-backed property (not a Svelte rune), so we
+  // subscribe to `manager.active$` and mirror into local $state for reactivity
+  // — otherwise an account switch would keep the previous admin's filter.
+  let activeAccount = $state(/** @type {any} */ (null));
+  $effect(() => {
+    const sub = manager.active$.subscribe((account) => {
+      activeAccount = account;
+    });
+    return () => sub.unsubscribe();
+  });
+  const activePubkey = $derived(activeAccount?.pubkey || '');
 
   /** @type {import('nostr-tools').NostrEvent[]} */
   let responses = $state.raw([]);
@@ -122,16 +131,21 @@
     else expandedApproved.add(id);
   }
 
-  // Subscribe to kind 1069 responses for this form.
+  // Subscribe to kind 1069 responses for this form. Applications are fanned
+  // out as one encrypted copy per admin, so load and show only the copies
+  // addressed to the logged-in admin — the others are undecryptable here.
   $effect(() => {
-    if (!formAddress || !adminPubkey) return;
+    const myPubkey = activePubkey;
+    if (!formAddress || !myPubkey) return;
 
-    const loader = formResponseLoader(formAddress, adminPubkey);
+    const loader = formResponseLoader(formAddress, myPubkey);
     const sub = loader().subscribe();
 
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
-      responses = (events || []).filter((e) =>
-        e.tags.some((t) => t[0] === 'a' && t[1] === formAddress)
+      responses = (events || []).filter(
+        (e) =>
+          e.tags.some((t) => t[0] === 'a' && t[1] === formAddress) &&
+          e.tags.some((t) => t[0] === 'p' && t[1] === myPubkey)
       );
     });
 
@@ -252,8 +266,12 @@
           const dmBody = m.admin_membership_notify_dm({
             address: `${name}@${handleDomain}`
           });
-          await ensureDmRelayList();
-          await actionRunnerOptimistic.run(SendWrappedMessage, response.pubkey, dmBody);
+          // sendWrappedDm settles both relay lists first. The recipient one
+          // matters most here: SendWrappedMessage resolves DM relays from the
+          // EventStore and never hits the network, so without it the wrap
+          // misses the applicant's kind 10050 inbox and falls through to the
+          // public fallback relays.
+          await sendWrappedDm(response.pubkey, dmBody);
         } catch (notifyErr) {
           console.warn('Failed to send approval notification DM', notifyErr);
         }

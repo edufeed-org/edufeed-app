@@ -42,7 +42,9 @@ vi.mock('$lib/loaders/base.js', () => ({
   }
 }));
 
-const { fetchRelayList, clearRelayListCache } = await import('../services/relay-service.svelte.js');
+const { fetchRelayList, fetchRelayListResolution, clearRelayListCache } = await import(
+  '../services/relay-service.svelte.js'
+);
 
 const PUBKEY_A = 'a'.repeat(64);
 const PUBKEY_B = 'b'.repeat(64);
@@ -156,5 +158,66 @@ describe('fetchRelayList', () => {
     // Double-resolve safety: a late loader completion after the model already
     // settled the promise must not throw or produce an unhandled rejection.
     expect(() => loaderObserver?.complete?.()).not.toThrow();
+  });
+});
+
+describe('fetchRelayListResolution', () => {
+  // A null list means "nothing to route with" either way, which is all the
+  // routing callers need. A caller that would *publish* a default list on the
+  // strength of that null needs to know whether absence was confirmed —
+  // backfilling after a timeout would supersede a list that does exist.
+  it('reports absence as confirmed when the loader completes empty', async () => {
+    mockLoaderSubscribe.mockImplementation((observer) => {
+      observer?.complete?.();
+      return { unsubscribe: () => {} };
+    });
+
+    const { relayList, outcome } = await fetchRelayListResolution(PUBKEY_B);
+
+    expect(relayList).toBeNull();
+    expect(outcome).toBe('absent');
+  });
+
+  it('reports the hard-cap timeout as unknown, not absent', async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const promise = fetchRelayListResolution(PUBKEY_C);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const { relayList, outcome } = await promise;
+
+    expect(relayList).toBeNull();
+    expect(outcome).toBe('unknown');
+    warnSpy.mockRestore();
+  });
+
+  it('reports a loader error as unknown', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockLoaderSubscribe.mockImplementation((observer) => {
+      observer?.error?.(new Error('boom'));
+      return { unsubscribe: () => {} };
+    });
+
+    const { outcome } = await fetchRelayListResolution('e'.repeat(64));
+
+    expect(outcome).toBe('unknown');
+    warnSpy.mockRestore();
+  });
+
+  it('reports a found list, cache hit included', async () => {
+    mockModelSubscribe.mockImplementation((cb) => {
+      cb(RELAY_LIST);
+      return { unsubscribe: () => {} };
+    });
+
+    const first = await fetchRelayListResolution(PUBKEY_A);
+    expect(first.outcome).toBe('found');
+    expect(first.relayList?.writeRelays).toEqual(['wss://write.example']);
+
+    // Second call is served from the cache — still 'found', not a fresh lookup.
+    mockAddressLoader.mockClear();
+    const second = await fetchRelayListResolution(PUBKEY_A);
+    expect(second.outcome).toBe('found');
+    expect(mockAddressLoader).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,12 @@ export {
   generateFieldId,
   generateOptionId
 } from './forms/format.js';
-export { nip44EncryptWith, nip44DecryptWith, signerHasNip44 } from './forms/crypto.js';
+export {
+  nip44EncryptWith,
+  nip44DecryptWith,
+  signerHasNip44,
+  signerCanNip44Encrypt
+} from './forms/crypto.js';
 import { FORM_TEMPLATE_KIND, FORM_RESPONSE_KIND, buildFormTemplateTags } from './forms/format.js';
 
 /** @typedef {import('./forms/format.js').FormField} FormField */

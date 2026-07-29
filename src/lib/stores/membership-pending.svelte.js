@@ -39,10 +39,9 @@ export function useMembershipPendingCount() {
     const adminPubkeys = cfg?.adminPubkeys || [];
     const isAdmin = !!pubkey && adminPubkeys.includes(pubkey);
     const formAddress = cfg?.formAddress || '';
-    const adminPubkey = adminPubkeys[0] || '';
     const handleDomain = cfg?.handleDomain || '';
 
-    if (!enabled || !isAdmin || !formAddress || !adminPubkey || !pubkey) {
+    if (!enabled || !isAdmin || !formAddress || !pubkey) {
       count = 0;
       return;
     }
@@ -67,8 +66,13 @@ export function useMembershipPendingCount() {
         // localStorage unavailable — treat nothing as rejected.
       }
 
-      const matching = cachedEvents.filter((e) =>
-        e.tags.some((t) => t[0] === 'a' && t[1] === formAddress)
+      // Applications are fanned out one copy per admin — count only the
+      // copies addressed to the active admin, or each application counts
+      // once per configured admin.
+      const matching = cachedEvents.filter(
+        (e) =>
+          e.tags.some((t) => t[0] === 'a' && t[1] === formAddress) &&
+          e.tags.some((t) => t[0] === 'p' && t[1] === activePubkey)
       );
       count = matching.filter((e) => !rejectedIds[e.id] && !approvedPubkeys[e.pubkey]).length;
     }
@@ -96,7 +100,7 @@ export function useMembershipPendingCount() {
       window.addEventListener('focus', refreshApproved);
     }
 
-    const loader = formResponseLoader(formAddress, adminPubkey);
+    const loader = formResponseLoader(formAddress, activePubkey);
     const loaderSub = loader().subscribe();
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
       cachedEvents = events || [];

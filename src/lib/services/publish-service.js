@@ -66,6 +66,60 @@ function notifyStatusUpdate(status) {
 }
 
 /**
+ * Publish a signed event to exactly the given relays — no outbox union, no
+ * app-relay or fallback expansion. This is the primitive the *scoped*
+ * publishers need: content that must not reach the author's public write
+ * relays (gift wraps, membership applications) picks its own relay set and
+ * hands it here.
+ *
+ * `publishEvent` below is the outbox-model counterpart: it computes a relay
+ * set and then does this same fan-out. It still carries its own copy of the
+ * loop; migrating it is a follow-up.
+ *
+ * @param {import('nostr-tools').NostrEvent} signedEvent - The signed Nostr event
+ * @param {string[]} relays - Exact relay URLs to publish to
+ * @param {Object} [opts] - Options
+ * @param {number} [opts.timeout] - Timeout per relay in ms (default 5000)
+ * @param {number} [opts.retries] - Transport-error retries per relay (default 2)
+ * @param {string} [opts.label] - Prefix for the rejection warning, e.g. '[membership]'
+ * @param {any} [opts.pool] - Relay pool (injectable for tests)
+ * @returns {Promise<{success: boolean, relays: string[], successCount: number}>}
+ */
+export async function publishToRelays(signedEvent, relays, opts = {}) {
+  const { timeout = 5000, retries = 2, label = '', pool: relayPool = pool } = opts;
+  const targets = [...new Set((relays || []).filter(Boolean))];
+  if (targets.length === 0) {
+    return { success: false, relays: [], successCount: 0 };
+  }
+
+  // pool.publish is applesauce's own multi-relay fan-out, and it does what our
+  // hand-rolled Promise.allSettled did plus one thing it could not: it retries
+  // a relay that failed to *reach*. Errors stay isolated per relay
+  // (errorToPublishResponse turns them into { ok: false }), so one dead relay
+  // still cannot reject the whole publish.
+  //
+  // Both defaults are overridden deliberately. The library's 30s timeout is far
+  // too long behind a submit button, and retries are capped so a fully dead
+  // relay set cannot stack 3 x 30s. Retries fire only on a *thrown* error —
+  // a relay that answers OK:false has made a decision, and resubscribing would
+  // just ask a second time and get the same no.
+  /** @type {{ ok: boolean, message?: string, from: string }[]} */
+  const responses = await relayPool.publish(targets, signedEvent, { timeout, retries });
+
+  for (const response of responses) {
+    if (!response?.ok) {
+      console.warn(
+        `${label} relay ${response?.from} rejected the event:`.trim(),
+        response?.message
+      );
+    }
+  }
+
+  const successCount = responses.filter((r) => r?.ok).length;
+  return { success: successCount > 0, relays: targets, successCount };
+}
+
+/**
  * Publish an event using outbox model + app relays + community relays
  *
  * @param {import('nostr-tools').NostrEvent} signedEvent - The signed Nostr event

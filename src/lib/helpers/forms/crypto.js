@@ -22,3 +22,15 @@ export async function nip44DecryptWith(signer, counterpartyPubkey, ciphertext) {
 export function signerHasNip44(signer) {
   return !!(signer?.nip44?.decrypt || signer?.nip44Decrypt);
 }
+
+/**
+ * Whether the signer can ENCRYPT with NIP-44. Deliberately separate from
+ * signerHasNip44, which asks about decryption: a prefill site needs decrypt,
+ * a submit site needs encrypt, and a signer offering only one would otherwise
+ * pass the wrong guard and throw halfway through.
+ *
+ * @param {any} signer
+ */
+export function signerCanNip44Encrypt(signer) {
+  return !!(signer?.nip44?.encrypt || signer?.nip44Encrypt);
+}

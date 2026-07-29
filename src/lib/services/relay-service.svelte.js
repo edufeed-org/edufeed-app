@@ -38,20 +38,27 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const FETCH_RELAY_LIST_TIMEOUT = 8_000;
 
 /**
- * Fetch relay list for a pubkey (with caching).
+ * Fetch relay list for a pubkey (with caching), reporting *why* it came back
+ * empty.
  *
  * Resolution order: cached entry → model emission (kind 10002 already in or
  * arriving into EventStore) → loader completion with nothing found (confirmed
- * absence, resolves null fast) → hard timeout (resolves null, warns).
+ * absence, resolves fast) → hard timeout (warns).
+ *
+ * Routing decisions only care about the list, so most callers want the plain
+ * `fetchRelayList`. The outcome matters when the caller would *write* on the
+ * strength of an empty answer: 'absent' means the lookup relays said so, while
+ * 'unknown' means they hung or errored — publishing a default list on 'unknown'
+ * would supersede a real one we simply never saw.
  *
  * @param {string} pubkey - User's public key
- * @returns {Promise<{writeRelays: string[], readRelays: string[]} | null>}
+ * @returns {Promise<{relayList: {writeRelays: string[], readRelays: string[]} | null, outcome: 'found' | 'absent' | 'unknown'}>}
  */
-export async function fetchRelayList(pubkey) {
+export async function fetchRelayListResolution(pubkey) {
   // Check cache
   const cached = relayListCache.get(pubkey);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-    return cached;
+    return { relayList: cached, outcome: 'found' };
   }
 
   // Fetch from relays
@@ -62,8 +69,14 @@ export async function fetchRelayList(pubkey) {
     /** @type {import('rxjs').Subscription | undefined} */
     let loaderSub;
 
-    /** @param {{writeRelays: string[], readRelays: string[]} | null} relayList */
-    const settle = (relayList) => {
+    /**
+     * A list always settles as 'found'; `outcome` only distinguishes *why*
+     * there is none, so it is required exactly when relayList is null.
+     *
+     * @param {{writeRelays: string[], readRelays: string[]} | null} relayList
+     * @param {'absent' | 'unknown'} [outcome]
+     */
+    const settle = (relayList, outcome) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
@@ -77,9 +90,11 @@ export async function fetchRelayList(pubkey) {
         /** @type {any} */
         const cacheEntry = { ...relayList, fetchedAt: Date.now() };
         relayListCache.set(pubkey, cacheEntry);
-        resolve(cacheEntry);
+        resolve({ relayList: cacheEntry, outcome: 'found' });
       } else {
-        resolve(null);
+        // Default to the conservative verdict: an unlabelled empty settle is
+        // not proof of absence, and write-path callers must not backfill on it.
+        resolve({ relayList: null, outcome: outcome || 'unknown' });
       }
     };
 
@@ -88,7 +103,7 @@ export async function fetchRelayList(pubkey) {
         `[relay-service] kind 10002 lookup timed out for ${pubkey.slice(0, 8)}… — ` +
           'callers will fall back to default relays'
       );
-      settle(null);
+      settle(null, 'unknown');
     }, FETCH_RELAY_LIST_TIMEOUT);
 
     // Emits synchronously when the 10002 is already in EventStore (IDB
@@ -110,17 +125,30 @@ export async function fetchRelayList(pubkey) {
     // and dedupes concurrent requests for the same pointer.
     if (!resolved) {
       loaderSub = addressLoader({ kind: 10002, pubkey, relays: getLookupRelays() }).subscribe({
-        complete: () => settle(null),
+        complete: () => settle(null, 'absent'),
         error: (/** @type {unknown} */ err) => {
           console.warn(
             `[relay-service] kind 10002 lookup errored for ${pubkey.slice(0, 8)}… — falling back to default relays`,
             err
           );
-          settle(null);
+          settle(null, 'unknown');
         }
       });
     }
   });
+}
+
+/**
+ * Fetch relay list for a pubkey (with caching). Null means "no list to route
+ * with", whether that was confirmed or merely not answered in time — see
+ * `fetchRelayListResolution` when the difference matters.
+ *
+ * @param {string} pubkey - User's public key
+ * @returns {Promise<{writeRelays: string[], readRelays: string[]} | null>}
+ */
+export async function fetchRelayList(pubkey) {
+  const { relayList } = await fetchRelayListResolution(pubkey);
+  return relayList;
 }
 
 /**
