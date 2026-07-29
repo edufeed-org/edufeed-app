@@ -25,6 +25,7 @@
  * relay list we simply never received.
  */
 import { pool as defaultPool } from '$lib/stores/nostr-infrastructure.svelte';
+import { publishToRelays as defaultPublishToRelays } from '$lib/services/publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getCommunikeyRelays as defaultGetCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -53,7 +54,10 @@ export function getApplicationRelays(deps = {}) {
     getCommunikeyRelays = defaultGetCommunikeyRelays
   } = deps;
 
-  const appRelays = [...new Set((getAppRelays() || []).filter(Boolean))];
+  /** @param {string[] | null | undefined} list */
+  const clean = (list) => [...new Set((list || []).filter(Boolean))];
+
+  const appRelays = clean(getAppRelays());
   if (appRelays.length > 0) return appRelays;
 
   // A deployment with no dedicated communikey relay has no private place to
@@ -62,7 +66,7 @@ export function getApplicationRelays(deps = {}) {
   console.warn(
     '[membership] no communikey relay configured — publishing applications to the fallback relay set'
   );
-  return [...new Set((getCommunikeyRelays() || []).filter(Boolean))];
+  return clean(getCommunikeyRelays());
 }
 
 /**
@@ -73,29 +77,16 @@ export function getApplicationRelays(deps = {}) {
  * @param {any} [deps.pool]
  * @param {() => string[]} [deps.getAppRelays]
  * @param {() => string[]} [deps.getCommunikeyRelays]
+ * @param {typeof defaultPublishToRelays} [deps.publishToRelays]
  * @returns {Promise<{ success: boolean, relays: string[], successCount: number }>}
  */
 export async function publishApplicationCopy(signedEvent, deps = {}) {
-  const { pool = defaultPool } = deps;
-  const relays = getApplicationRelays(deps);
-  if (relays.length === 0) {
-    return { success: false, relays: [], successCount: 0 };
-  }
-
-  const results = await Promise.allSettled(
-    relays.map(async (url) => {
-      // relay.publish RESOLVES with {ok:false} on rejection; it only throws on
-      // connection/timeout errors.
-      const response = await pool.relay(url).publish(signedEvent, { timeout: PUBLISH_TIMEOUT_MS });
-      if (response && response.ok === false) {
-        console.warn(`[membership] relay ${url} rejected the application:`, response.message);
-        return false;
-      }
-      return true;
-    })
-  );
-  const successCount = results.filter((r) => r.status === 'fulfilled' && r.value).length;
-  return { success: successCount > 0, relays, successCount };
+  const { pool = defaultPool, publishToRelays = defaultPublishToRelays } = deps;
+  return publishToRelays(signedEvent, getApplicationRelays(deps), {
+    pool,
+    timeout: PUBLISH_TIMEOUT_MS,
+    label: '[membership]'
+  });
 }
 
 /**
@@ -134,13 +125,14 @@ export async function ensureApplicantRelayLists(deps = {}) {
     // empty (equally unroutable, and proof in itself), earns a default one.
     const { relayList, outcome } = await fetchRelayListResolution(pubkey);
     const declared = (relayList?.writeRelays?.length || 0) + (relayList?.readRelays?.length || 0);
-    if (declared === 0 && outcome !== 'unknown') {
+    // Disqualify first, then act — same shape as the kind 10050 block below.
+    if (outcome === 'unknown') {
+      console.warn('[membership] kind 10002 lookup did not settle — not backfilling');
+    } else if (declared === 0) {
       await publishDefaultRelayList(signer);
       // The empty-list case is cached for 5 minutes; drop it so the publish
       // below and everything after sees the fresh 10002.
       invalidateRelayListCache(pubkey);
-    } else if (outcome === 'unknown') {
-      console.warn('[membership] kind 10002 lookup did not settle — not backfilling');
     }
   } catch (err) {
     console.warn('[membership] kind 10002 check/backfill failed:', err);

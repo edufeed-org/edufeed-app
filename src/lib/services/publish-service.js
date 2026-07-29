@@ -66,6 +66,50 @@ function notifyStatusUpdate(status) {
 }
 
 /**
+ * Publish a signed event to exactly the given relays — no outbox union, no
+ * app-relay or fallback expansion. This is the primitive the *scoped*
+ * publishers need: content that must not reach the author's public write
+ * relays (gift wraps, membership applications) picks its own relay set and
+ * hands it here.
+ *
+ * `publishEvent` below is the outbox-model counterpart: it computes a relay
+ * set and then does this same fan-out. Both it and `publishGiftWrap` still
+ * carry their own copy of the loop; migrating them is a follow-up, not a
+ * change to make while tidying an unrelated feature.
+ *
+ * @param {import('nostr-tools').NostrEvent} signedEvent - The signed Nostr event
+ * @param {string[]} relays - Exact relay URLs to publish to
+ * @param {Object} [opts] - Options
+ * @param {number} [opts.timeout] - Timeout per relay in ms (default 5000)
+ * @param {string} [opts.label] - Prefix for the rejection warning, e.g. '[membership]'
+ * @param {any} [opts.pool] - Relay pool (injectable for tests)
+ * @returns {Promise<{success: boolean, relays: string[], successCount: number}>}
+ */
+export async function publishToRelays(signedEvent, relays, opts = {}) {
+  const { timeout = 5000, label = '', pool: relayPool = pool } = opts;
+  const targets = [...new Set((relays || []).filter(Boolean))];
+  if (targets.length === 0) {
+    return { success: false, relays: [], successCount: 0 };
+  }
+
+  const results = await Promise.allSettled(
+    targets.map(async (relayUrl) => {
+      // relay.publish RESOLVES with {ok:false, message} when the relay rejects
+      // the event — it only throws on connection/timeout errors.
+      const response = await relayPool.relay(relayUrl).publish(signedEvent, { timeout });
+      if (response && response.ok === false) {
+        console.warn(`${label} relay ${relayUrl} rejected the event:`.trim(), response.message);
+        return false;
+      }
+      return true;
+    })
+  );
+
+  const successCount = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+  return { success: successCount > 0, relays: targets, successCount };
+}
+
+/**
  * Publish an event using outbox model + app relays + community relays
  *
  * @param {import('nostr-tools').NostrEvent} signedEvent - The signed Nostr event

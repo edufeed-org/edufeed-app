@@ -70,10 +70,13 @@ export async function fetchRelayListResolution(pubkey) {
     let loaderSub;
 
     /**
+     * A list always settles as 'found'; `outcome` only distinguishes *why*
+     * there is none, so it is required exactly when relayList is null.
+     *
      * @param {{writeRelays: string[], readRelays: string[]} | null} relayList
-     * @param {'found' | 'absent' | 'unknown'} [outcome]
+     * @param {'absent' | 'unknown'} [outcome]
      */
-    const settle = (relayList, outcome = 'found') => {
+    const settle = (relayList, outcome) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
@@ -89,7 +92,9 @@ export async function fetchRelayListResolution(pubkey) {
         relayListCache.set(pubkey, cacheEntry);
         resolve({ relayList: cacheEntry, outcome: 'found' });
       } else {
-        resolve({ relayList: null, outcome });
+        // Default to the conservative verdict: an unlabelled empty settle is
+        // not proof of absence, and write-path callers must not backfill on it.
+        resolve({ relayList: null, outcome: outcome || 'unknown' });
       }
     };
 

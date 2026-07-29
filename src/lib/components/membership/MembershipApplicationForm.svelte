@@ -225,15 +225,22 @@
         return;
       }
 
+      const factory = createAppEventFactory({ signer });
+
       // An approval is answered with a NIP-17 DM, and everything else about
       // the applicant routes via NIP-65. Settle both lists before the
       // application exists, so an admin can never approve someone the reply
       // cannot reach. Never throws — see membership-publish.js.
-      await ensureApplicantRelayLists();
-
-      const factory = createAppEventFactory({ signer });
-      const aTag = await buildATagWithHint(formAddress);
-      const pTags = await buildPTagsWithHints(adminPubkeys);
+      //
+      // These three resolve relay hints for disjoint pubkeys — the applicant,
+      // the form author, the admins — so nothing here reads what another
+      // writes. Run together: each can sit out an 8s relay-lookup timeout, and
+      // serialized that is three of them before the form even starts signing.
+      const [, aTag, pTags] = await Promise.all([
+        ensureApplicantRelayLists(),
+        buildATagWithHint(formAddress),
+        buildPTagsWithHints(adminPubkeys)
+      ]);
 
       // NIP-44 is pairwise, so publish one copy per admin — each encrypted to
       // (and p-tagged with) its own recipient.
