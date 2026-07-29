@@ -3,7 +3,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { formTemplateLoader } from '$lib/loaders/community.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { formEventToNaddr } from '$lib/helpers/forms.js';
+  import { formEventToNaddr, parseFormTemplate } from '$lib/helpers/forms.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { PlusIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -59,9 +59,10 @@
   {:else}
     <div class="space-y-2">
       {#each forms as form (form.id)}
-        {@const name = form.tags.find((t) => t[0] === 'name')?.[1] || 'Untitled Form'}
-        {@const desc = form.tags.find((t) => t[0] === 'description')?.[1] || ''}
-        {@const fieldCount = form.tags.filter((t) => t[0] === 'field').length}
+        {@const parsed = parseFormTemplate(form)}
+        {@const name = parsed.name || 'Untitled Form'}
+        {@const desc = parsed.description}
+        {@const fieldCount = parsed.fields.length}
         {@const relays = getCommunikeyRelays().slice(0, 2)}
         <a
           href="/forms/{formEventToNaddr(form, relays)}"
@@ -73,7 +74,7 @@
           {/if}
           <div class="mt-2 text-xs text-base-content/40">
             {fieldCount} field{fieldCount !== 1 ? 's' : ''}
-            {#if form.tags.some((t) => t[0] === 'public')}
+            {#if parsed.isPublic}
               · {m.forms_public()}
             {:else}
               · {m.forms_encrypted()}

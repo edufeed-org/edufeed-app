@@ -10,7 +10,10 @@
   import {
     buildResponseTags,
     buildUserResponseFilter,
-    parseResponseTags
+    parseResponseTags,
+    nip44EncryptWith,
+    nip44DecryptWith,
+    signerHasNip44
   } from '$lib/helpers/forms.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { formatTimestamp } from '$lib/helpers/dates.js';
@@ -121,11 +124,11 @@
         /** @type {string[][]} */
         let tags;
         if (isEncrypted) {
-          if (!active.signer?.nip44) {
+          if (!signerHasNip44(active.signer)) {
             prefilledValues = {};
             return;
           }
-          const plaintext = await active.signer.nip44.decrypt(adminPubkey, response.content);
+          const plaintext = await nip44DecryptWith(active.signer, adminPubkey, response.content);
           tags = JSON.parse(plaintext);
         } else {
           tags = response.tags.filter((t) => t[0] === 'response');
@@ -209,15 +212,10 @@
         ['p', adminPubkey]
       ];
 
-      let content = '';
       const signer = manager.active.signer;
-      if (signer?.nip44Encrypt) {
-        const plaintext = JSON.stringify(responseTags);
-        content = await signer.nip44Encrypt(adminPubkey, plaintext);
-        tags.push(['encrypted']);
-      } else {
-        tags.push(...responseTags);
-      }
+      const plaintext = JSON.stringify(responseTags);
+      const content = await nip44EncryptWith(signer, adminPubkey, plaintext);
+      tags.push(['encrypted']);
 
       const factory = createAppEventFactory({ signer });
       const template = await factory.build({ kind: 1069, tags, content });

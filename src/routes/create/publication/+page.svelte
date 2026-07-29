@@ -116,7 +116,7 @@
     };
   }
 
-  /** @param {import('$lib/helpers/form-to-amb.js').SelectedConcept} rich */
+  /** @param {import('$lib/helpers/educational/formReference.js').SelectedConcept} rich */
   function toCompactConcept(rich) {
     const locale = getLocale();
     const labels = rich.labels || {};

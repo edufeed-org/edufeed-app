@@ -1,65 +1,9 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import {
-  emitKonfiVocabTags,
-  emitKonfiScalarTags,
-  parseKonfiTags
-} from '$lib/helpers/educational/konfiTags.js';
-
-describe('emitKonfiVocabTags', () => {
-  it('emits the id/prefLabel:de/type triple per concept', () => {
-    const concepts = [
-      { id: 'https://edufeed.org/ns/konfi-zielgruppen#ku3', labels: { de: 'KU3' } },
-      { id: 'https://edufeed.org/ns/konfi-zielgruppen#ku4', labels: { de: 'KU4' } }
-    ];
-    expect(emitKonfiVocabTags('zielgruppen', concepts)).toEqual([
-      ['ext:ekw:konfi:zielgruppen:id', 'https://edufeed.org/ns/konfi-zielgruppen#ku3'],
-      ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU3'],
-      ['ext:ekw:konfi:zielgruppen:type', 'Concept'],
-      ['ext:ekw:konfi:zielgruppen:id', 'https://edufeed.org/ns/konfi-zielgruppen#ku4'],
-      ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU4'],
-      ['ext:ekw:konfi:zielgruppen:type', 'Concept']
-    ]);
-  });
-
-  it('omits prefLabel:de when no de label present', () => {
-    const concepts = [{ id: 'urn:x', labels: { en: 'X' } }];
-    expect(emitKonfiVocabTags('themen', concepts)).toEqual([
-      ['ext:ekw:konfi:themen:id', 'urn:x'],
-      ['ext:ekw:konfi:themen:type', 'Concept']
-    ]);
-  });
-
-  it('returns [] for empty / undefined input', () => {
-    expect(emitKonfiVocabTags('zielgruppen', [])).toEqual([]);
-    expect(emitKonfiVocabTags('zielgruppen', undefined)).toEqual([]);
-  });
-});
-
-describe('emitKonfiScalarTags', () => {
-  it('emits a single tag for a non-empty string', () => {
-    expect(emitKonfiScalarTags('subtitle', 'Konfi-Tag 2026')).toEqual([
-      ['ext:ekw:konfi:subtitle', 'Konfi-Tag 2026']
-    ]);
-  });
-
-  it('emits "true" for true booleans', () => {
-    expect(emitKonfiScalarTags('plainLanguage', true)).toEqual([
-      ['ext:ekw:konfi:plainLanguage', 'true']
-    ]);
-  });
-
-  it('returns [] for false / empty string / undefined / null', () => {
-    expect(emitKonfiScalarTags('plainLanguage', false)).toEqual([]);
-    expect(emitKonfiScalarTags('subtitle', '')).toEqual([]);
-    expect(emitKonfiScalarTags('subtitle', undefined)).toEqual([]);
-    expect(emitKonfiScalarTags('subtitle', null)).toEqual([]);
-  });
-
-  it('trims whitespace-only strings to nothing', () => {
-    expect(emitKonfiScalarTags('subtitle', '   ')).toEqual([]);
-  });
-});
+import { ambToNostr } from 'amb-nostr-converter';
+import { parseKonfiTags } from '$lib/helpers/educational/konfiTags.js';
+import { formDataToAmbExt } from '$lib/helpers/educational/formDataToAmbExt.js';
+import { BILDUNGSBEREICHE } from '$lib/helpers/educational/bildungsbereich.js';
 
 /** @type {import('$lib/helpers/educational/bildungsbereich.js').SubStepConfig[]} */
 const SUB_STEPS = [
@@ -102,12 +46,12 @@ const SUB_STEPS = [
 describe('parseKonfiTags', () => {
   it('reconstructs Ids + Labels for vocab fields', () => {
     const tags = [
-      ['ext:ekw:konfi:zielgruppen:id', 'urn:ku3'],
-      ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU3'],
-      ['ext:ekw:konfi:zielgruppen:type', 'Concept'],
-      ['ext:ekw:konfi:zielgruppen:id', 'urn:ku4'],
-      ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU4'],
-      ['ext:ekw:konfi:zielgruppen:type', 'Concept']
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:id', 'urn:ku3'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:prefLabel:de', 'KU3'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:type', 'Concept'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:id', 'urn:ku4'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:prefLabel:de', 'KU4'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:type', 'Concept']
     ];
     expect(parseKonfiTags(tags, SUB_STEPS)).toEqual({
       konfiZielgruppenIds: ['urn:ku3', 'urn:ku4'],
@@ -120,8 +64,8 @@ describe('parseKonfiTags', () => {
 
   it('falls back label = id when prefLabel:de missing', () => {
     const tags = [
-      ['ext:ekw:konfi:themen:id', 'urn:x'],
-      ['ext:ekw:konfi:themen:type', 'Concept']
+      ['ext:org.edufeed.ekw.konfi:themen:id', 'urn:x'],
+      ['ext:org.edufeed.ekw.konfi:themen:type', 'Concept']
     ];
     expect(parseKonfiTags(tags, SUB_STEPS)).toEqual({
       konfiThemenIds: ['urn:x'],
@@ -131,8 +75,8 @@ describe('parseKonfiTags', () => {
 
   it('parses scalar string and boolean fields', () => {
     const tags = [
-      ['ext:ekw:konfi:subtitle', 'Konfi-Tag 2026'],
-      ['ext:ekw:konfi:plainLanguage', 'true']
+      ['ext:org.edufeed.ekw.konfi:subtitle', 'Konfi-Tag 2026'],
+      ['ext:org.edufeed.ekw.konfi:plainLanguage', 'true']
     ];
     expect(parseKonfiTags(tags, SUB_STEPS)).toEqual({
       subtitle: 'Konfi-Tag 2026',
@@ -154,7 +98,12 @@ describe('parseKonfiTags', () => {
 });
 
 describe('parseKonfiTags — allowCustom', () => {
-  it('reads <tagSlug>:custom into <schemeKey>Custom for allowCustom fields', () => {
+  // ambToNostr serializes a facet's mixed Concept[]/string[] items in
+  // emission order: each Concept as an `:id`/`:prefLabel:*`/`:type` run,
+  // each plain string as a BARE `ext:<ns>:<facet>` tag — there is no
+  // `:custom` sub-key on the wire (see formDataToAmbExt.buildKonfiFacets +
+  // ambToNostr's ext-emission loop). `parseKonfiTags` mirrors that shape.
+  it('reads the bare facet tag into <schemeKey>Custom for allowCustom fields', () => {
     const subSteps =
       /** @type {import('$lib/helpers/educational/konfiTags.js').SubStepConfig[]} */ ([
         {
@@ -173,17 +122,17 @@ describe('parseKonfiTags — allowCustom', () => {
         }
       ]);
     const tags = [
-      ['ext:ekw:konfi:zeitstruktur:id', 'urn:zt:wochenende'],
-      ['ext:ekw:konfi:zeitstruktur:prefLabel:de', 'Wochenende'],
-      ['ext:ekw:konfi:zeitstruktur:type', 'Concept'],
-      ['ext:ekw:konfi:zeitstruktur:custom', '3-Tage-Freizeit']
+      ['ext:org.edufeed.ekw.konfi:zeitstruktur:id', 'urn:zt:wochenende'],
+      ['ext:org.edufeed.ekw.konfi:zeitstruktur:prefLabel:de', 'Wochenende'],
+      ['ext:org.edufeed.ekw.konfi:zeitstruktur:type', 'Concept'],
+      ['ext:org.edufeed.ekw.konfi:zeitstruktur', '3-Tage-Freizeit']
     ];
     const out = parseKonfiTags(tags, subSteps);
     expect(out.konfiZeitstrukturIds).toEqual(['urn:zt:wochenende']);
     expect(out.konfiZeitstrukturCustom).toBe('3-Tage-Freizeit');
   });
 
-  it('reads custom-only (no vocab picks) when only the custom tag is present', () => {
+  it('reads custom-only (no vocab picks) when only the bare facet tag is present', () => {
     const subSteps =
       /** @type {import('$lib/helpers/educational/konfiTags.js').SubStepConfig[]} */ ([
         {
@@ -201,13 +150,13 @@ describe('parseKonfiTags — allowCustom', () => {
           ]
         }
       ]);
-    const tags = [['ext:ekw:konfi:zeitstruktur:custom', 'monatlich']];
+    const tags = [['ext:org.edufeed.ekw.konfi:zeitstruktur', 'monatlich']];
     const out = parseKonfiTags(tags, subSteps);
     expect(out.konfiZeitstrukturCustom).toBe('monatlich');
     expect(out.konfiZeitstrukturIds).toBeUndefined();
   });
 
-  it('does not read custom for vocab fields without allowCustom', () => {
+  it('does not read a bare facet tag as custom for vocab fields without allowCustom', () => {
     const subSteps =
       /** @type {import('$lib/helpers/educational/konfiTags.js').SubStepConfig[]} */ ([
         {
@@ -224,30 +173,50 @@ describe('parseKonfiTags — allowCustom', () => {
           ]
         }
       ]);
-    const tags = [['ext:ekw:konfi:lernformat:custom', 'should be ignored']];
+    const tags = [['ext:org.edufeed.ekw.konfi:lernformat', 'should be ignored']];
     const out = parseKonfiTags(tags, subSteps);
     expect(out.konfiLernformatCustom).toBeUndefined();
   });
 });
 
-describe('konfi tag round-trip', () => {
+describe('konfi tag round-trip (production emit path: formDataToAmbExt → ambToNostr → parseKonfiTags)', () => {
+  // formDataToAmbExt is hardwired to walk the REAL BILDUNGSBEREICHE.konfi
+  // config (not this file's fictional SUB_STEPS fixture above, which has no
+  // production meaning to the emit side) — so parsing back must use the same
+  // real config too.
+  const REAL_SUB_STEPS = BILDUNGSBEREICHE.konfi.step4SubSteps ?? [];
+
   it('emit → parse is stable for vocab + scalar mix', () => {
-    const concepts = [
-      { id: 'urn:t1', labels: { de: 'Thema 1' } },
-      { id: 'urn:t2', labels: { de: 'Thema 2' } }
-    ];
-    const tags = [
-      ...emitKonfiVocabTags('themen', concepts),
-      ...emitKonfiScalarTags('subtitle', 'My subtitle'),
-      ...emitKonfiScalarTags('plainLanguage', true)
-    ];
-    expect(parseKonfiTags(tags, SUB_STEPS)).toEqual({
+    const formData = {
       konfiThemenIds: ['urn:t1', 'urn:t2'],
       konfiThemenLabels: [
         { id: 'urn:t1', label: 'Thema 1' },
         { id: 'urn:t2', label: 'Thema 2' }
       ],
-      subtitle: 'My subtitle',
+      requiredMaterialsNote: 'Bibel, Wasser, Tuch',
+      plainLanguage: true
+    };
+    const ext = formDataToAmbExt(formData);
+    const amb = {
+      id: 'x',
+      type: ['LearningResource'],
+      name: 'n',
+      description: 'd',
+      inLanguage: ['de'],
+      license: { id: 'https://creativecommons.org/licenses/by/4.0/' },
+      ext
+    };
+    const result = ambToNostr(/** @type {any} */ (amb), { pubkey: 'pk', timestamp: 0 });
+    expect(result.success).toBe(true);
+    const tags = /** @type {any} */ (result.data).tags;
+
+    expect(parseKonfiTags(tags, REAL_SUB_STEPS)).toEqual({
+      konfiThemenIds: ['urn:t1', 'urn:t2'],
+      konfiThemenLabels: [
+        { id: 'urn:t1', label: 'Thema 1' },
+        { id: 'urn:t2', label: 'Thema 2' }
+      ],
+      requiredMaterialsNote: 'Bibel, Wasser, Tuch',
       plainLanguage: true
     });
   });

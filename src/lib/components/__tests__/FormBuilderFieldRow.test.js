@@ -46,6 +46,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_option_new: () => 'New option',
   form_builder_add_option: () => 'Add option',
   form_builder_field_allow_multiple: () => 'Allow multiple',
+  form_builder_option_route_label: () => 'Go to section',
+  form_builder_option_route_none: () => '— continue —',
   form_builder_min_value: () => 'Min',
   form_builder_max_value: () => 'Max',
   form_builder_min_length: () => 'Min length',
@@ -77,12 +79,28 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_output_amb_license: () => 'License (amb:license)',
   form_builder_field_output_amb_inLanguage: () => 'Language (amb:inLanguage)',
   form_builder_field_output_amb_keywords: () => 'Keywords (amb:keywords)',
+  form_builder_field_output_amb_id: () => 'Identifier (amb:id)',
+  form_builder_field_output_amb_image: () => 'Image (amb:image)',
+  form_builder_field_output_amb_datePublished: () => 'Date published (amb:datePublished)',
+  form_builder_field_output_amb_dateCreated: () => 'Date created (amb:dateCreated)',
+  form_builder_field_output_amb_isAccessibleForFree: () =>
+    'Free to access (amb:isAccessibleForFree)',
+  form_builder_field_output_amb_creator: () => 'Creator (amb:creator)',
+  form_builder_field_output_amb_hasPart: () => 'Has part (amb:hasPart)',
+  form_builder_field_output_amb_isPartOf: () => 'Is part of (amb:isPartOf)',
+  form_builder_field_output_amb_refs: () => 'References (amb:refs)',
+  form_builder_field_output_relation_unset: () => 'Choose a relation…',
   form_builder_field_output_ext: () => 'Custom field / non-AMB (ext)',
   form_builder_field_source_prompt: () => 'How should options be configured?',
   form_builder_field_source_manual: () => 'Add options manually',
   form_builder_field_source_vocab: () => 'Use a vocabulary',
   form_builder_field_source_switch_to_manual: () => 'Add options manually instead',
-  form_builder_field_source_switch_to_vocab: () => 'Use a vocabulary instead'
+  form_builder_field_source_switch_to_vocab: () => 'Use a vocabulary instead',
+  form_builder_showif_label: () => 'Show only if',
+  form_builder_showif_always: () => 'always',
+  form_builder_showif_equals: () => 'equals',
+  form_builder_showif_notEquals: () => 'is not',
+  form_builder_showif_contains: () => 'contains'
 }));
 
 vi.mock('$lib/helpers/educational/skosLoader.js', () => ({
@@ -359,10 +377,11 @@ describe('FormBuilderFieldRow vocab picker', () => {
         )
       ).toBe(false);
 
-      // No vocab picker, no vocab naddr input, no output selector
+      // No vocab picker, no vocab naddr input — but the output select DOES
+      // render for every field type now (not just choice/vocab fields).
       expect(container.querySelector('[role="combobox"]')).toBeFalsy();
       expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
-      expect(container.querySelector('[data-testid="field-output-select"]')).toBeFalsy();
+      expect(container.querySelector('[data-testid="field-output-select"]')).toBeTruthy();
 
       // Placeholder input DOES render for non-choice types — it's meaningful
       // for text-like inputs.
@@ -467,7 +486,10 @@ describe('FormBuilderFieldRow source switch (manual ↔ vocab)', () => {
     /** @type {any} */
     let latest;
     const initialField = makeField();
-    initialField.selectOptions = ['Ja', 'Nein']; // pre-seeded manual mode
+    initialField.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ]; // pre-seeded manual mode
     const { container } = render(FormBuilderFieldRowTestWrapper, {
       props: {
         initialField,
@@ -611,6 +633,117 @@ async function renderAndPickHochschul(initialField) {
   return { container, getField: () => latestField };
 }
 
+describe('FormBuilderFieldRow output picker (every field type)', () => {
+  it('shows the output picker for a non-choice text field', async () => {
+    const field = makeField();
+    field.type = 'text';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    expect(container.querySelector('[data-testid="field-output-select"]')).toBeTruthy();
+  });
+
+  it('lists the extended AMB outputs including amb:id and amb:image', async () => {
+    const field = makeField();
+    field.type = 'text';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toContain('amb:name');
+    expect(values).toContain('amb:id');
+    expect(values).toContain('amb:image');
+    expect(values).toContain('amb:datePublished');
+    expect(values).toContain('amb:isAccessibleForFree');
+  });
+});
+
+describe('FormBuilderFieldRow rich field types (creator/amb-relation/external-urls)', () => {
+  it('shows a locked, disabled output select for creator with amb:creator selected', async () => {
+    const field = makeField();
+    field.type = 'creator';
+    field.output = 'amb:creator';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe('amb:creator');
+  });
+
+  it('shows a locked, disabled output select for external-urls with amb:refs selected', async () => {
+    const field = makeField();
+    field.type = 'external-urls';
+    field.output = 'amb:refs';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe('amb:refs');
+  });
+
+  it('offers only amb:hasPart / amb:isPartOf for amb-relation', async () => {
+    const field = makeField();
+    field.type = 'amb-relation';
+    field.output = '';
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false }
+    });
+    await Promise.resolve();
+
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(false);
+    const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toEqual(['', 'amb:hasPart', 'amb:isPartOf']);
+  });
+
+  it('renders only label + required + output for rich types (no options/vocab/min-max UI)', async () => {
+    for (const type of ['creator', 'amb-relation', 'external-urls']) {
+      cleanup();
+      const field = makeField();
+      field.type = type;
+      const { container } = render(FormBuilderFieldRow, {
+        props: { field, fields: [field], fieldIndex: 0, existing: false }
+      });
+      await Promise.resolve();
+
+      expect(container.querySelector('[data-testid="field-output-select"]')).toBeTruthy();
+      expect(container.querySelector('[data-testid="field-vocab-input"]')).toBeFalsy();
+      expect(container.querySelector('[role="combobox"]')).toBeFalsy();
+      expect(
+        Array.from(container.querySelectorAll('button')).some((b) =>
+          (b.textContent || '').includes('Add options manually')
+        )
+      ).toBe(false);
+      const placeholderInput = Array.from(container.querySelectorAll('input')).find(
+        (i) => i.placeholder === 'Placeholder'
+      );
+      expect(placeholderInput).toBeFalsy();
+    }
+  });
+});
+
 describe('FormBuilderFieldRow vocab preview (post-selection)', () => {
   it('renders the scheme description after selection', async () => {
     const field = makeField();
@@ -653,5 +786,95 @@ describe('FormBuilderFieldRow vocab preview (post-selection)', () => {
     });
     expect(getField().vocabNaddrInput).toBe('');
     expect(getField().vocabError).toBe('');
+  });
+});
+
+describe('FormBuilderFieldRow option → section routing', () => {
+  const sections = [
+    { id: 'sec-1', title: 'Section One' },
+    { id: 'sec-2', title: 'Section Two' }
+  ];
+
+  it('renders a "→ section" select for each option when sections are available', async () => {
+    const field = makeField();
+    field.type = 'radio';
+    field.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ];
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false, sections }
+    });
+    await Promise.resolve();
+
+    const routeSelects = container.querySelectorAll('select[aria-label="Go to section"]');
+    expect(routeSelects.length).toBe(2);
+    for (const select of routeSelects) {
+      const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+      expect(values).toEqual(['', 'sec-1', 'sec-2']);
+    }
+  });
+
+  it('does not render routing selects when there are no sections', async () => {
+    const field = makeField();
+    field.type = 'radio';
+    field.selectOptions = [{ id: 'ja', label: 'Ja' }];
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false, sections: [] }
+    });
+    await Promise.resolve();
+
+    expect(container.querySelectorAll('select[aria-label="Go to section"]').length).toBe(0);
+  });
+
+  it('does not render routing selects for checkbox fields even when sections are available', async () => {
+    const field = makeField();
+    field.type = 'checkbox';
+    field.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ];
+    const { container } = render(FormBuilderFieldRow, {
+      props: { field, fields: [field], fieldIndex: 0, existing: false, sections }
+    });
+    await Promise.resolve();
+
+    expect(container.querySelectorAll('select[aria-label="Go to section"]').length).toBe(0);
+  });
+
+  it('selecting a section sets option.nextSection on the bound field', async () => {
+    /** @type {any} */
+    let latest;
+    const initialField = makeField();
+    initialField.type = 'radio';
+    initialField.selectOptions = [
+      { id: 'ja', label: 'Ja' },
+      { id: 'nein', label: 'Nein' }
+    ];
+    const { container } = render(FormBuilderFieldRowTestWrapper, {
+      props: {
+        initialField,
+        fieldIndex: 0,
+        existing: false,
+        sections,
+        onUpdate: (/** @type {any} */ f) => {
+          latest = f;
+        }
+      }
+    });
+
+    const routeSelects = /** @type {HTMLSelectElement[]} */ (
+      Array.from(container.querySelectorAll('select[aria-label="Go to section"]'))
+    );
+    expect(routeSelects.length).toBe(2);
+
+    await fireEvent.change(routeSelects[1], { target: { value: 'sec-2' } });
+
+    await waitFor(() => {
+      if (latest.selectOptions[1].nextSection !== 'sec-2')
+        throw new Error('nextSection not set yet');
+    });
+    expect(latest.selectOptions[0].nextSection).toBeUndefined();
+    expect(latest.selectOptions[1].label).toBe('Nein');
   });
 });

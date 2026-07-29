@@ -25,73 +25,18 @@ import { hexToBytes } from 'nostr-tools/utils';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { nip19 } from 'nostr-tools';
 import { RelayPool } from 'applesauce-relay';
+// Pure tag building lives in scripts/lib so it's unit-testable without this
+// module's side effects (dotenv credential loading, relay pool).
+import { req, buildFormTemplate } from './lib/publish-forms-build.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FORMS_DATA_PATH = resolve(__dirname, 'data/edufeed-forms.json');
-
-function req(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env: ${name}`);
-  return v;
-}
 
 function sign(template, skHex) {
   return finalizeEvent(
     { ...template, created_at: Math.floor(Date.now() / 1000) },
     hexToBytes(skHex)
   );
-}
-
-function vocabEnvName(d) {
-  return `SCHEME_NADDR_${d.toUpperCase().replace(/-/g, '_')}`;
-}
-
-function naddrToCoord(naddr) {
-  const { type, data } = nip19.decode(naddr);
-  if (type !== 'naddr') throw new Error('expected naddr');
-  return {
-    address: `${data.kind}:${data.pubkey}:${data.identifier}`,
-    relay: (data.relays || [])[0] || ''
-  };
-}
-
-/**
- * Emit tags for a single form field, including optional vocab + output tags.
- */
-function emitFieldTags(field, vocabCoord) {
-  const options = {};
-  if (field.required) options.required = true;
-  if (field.multiple) options.multiple = true;
-  if (field.min !== undefined) options.min = field.min;
-  if (field.max !== undefined) options.max = field.max;
-  if (field.pattern) options.pattern = field.pattern;
-  if (field.placeholder) options.placeholder = field.placeholder;
-  const tags = [
-    ['field', field.id, field.type, field.label, field.defaultValue || '', JSON.stringify(options)]
-  ];
-  if (vocabCoord) tags.push(['field-vocab', field.id, 'a', vocabCoord.address, vocabCoord.relay]);
-  if (field.output) tags.push(['field-output', field.id, field.output]);
-  return tags;
-}
-
-/**
- * Build a kind-30168 form template from a form definition, resolving
- * each field's vocabRef via env.
- */
-function buildFormTemplate(form) {
-  /** @type {string[][]} */
-  const tags = [
-    ['d', form.d],
-    ['name', form.name]
-  ];
-  if (form.description) tags.push(['description', form.description]);
-
-  for (const field of form.fields) {
-    const vocabCoord = field.vocabRef ? naddrToCoord(req(vocabEnvName(field.vocabRef))) : undefined;
-    for (const t of emitFieldTags(field, vocabCoord)) tags.push(t);
-  }
-
-  return { kind: 30168, tags, content: '' };
 }
 
 async function publishAll(pool, relays, events) {
@@ -140,7 +85,11 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only publish when executed directly (allows importing buildFormTemplate
+// for verification without touching live relays).
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

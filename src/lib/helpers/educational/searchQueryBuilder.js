@@ -48,7 +48,8 @@ function extPathToSearchPath(extKey) {
 }
 
 /**
- * Convert an ext path key (colon-separated) into the event tag key used by form-to-amb.
+ * Convert an ext path key (colon-separated) into the event tag key used by
+ * `formValuesToAmbJson.js` + `ambToNostr` (the amb-nostr-converter serializer).
  * "30168:<pub>:<d>:<fieldId>" → "ext:30168:<pub>:<d>:<fieldId>"
  * @param {string} extKey
  * @returns {string}

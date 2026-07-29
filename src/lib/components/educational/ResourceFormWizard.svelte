@@ -95,7 +95,6 @@
   import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
   import { inferBildungsbereich } from '$lib/helpers/educational/inferBildungsbereich.js';
   import { parseKonfiTagsToFormData } from '$lib/helpers/educational/parseKonfiTagsToFormData.js';
-  import { formDataToKonfiTags } from '$lib/helpers/educational/formDataToKonfiTags.js';
   import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
   import {
     advanceStepOrSubStep,
@@ -687,7 +686,7 @@
    * Adapt a compact `{id, label}` to the rich shape FormConceptPicker takes.
    * @param {CompactConcept} c
    * @param {string} [vocabRelay]
-   * @returns {import('$lib/helpers/form-to-amb.js').SelectedConcept}
+   * @returns {import('$lib/helpers/educational/formReference.js').SelectedConcept}
    */
   function toRichConcept(c, vocabRelay = '') {
     const locale = getLocale();
@@ -702,7 +701,7 @@
   /**
    * Inverse adapter — FormConceptPicker emits rich concepts; keep only the bits
    * the form data shape cares about.
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept} rich
+   * @param {import('$lib/helpers/educational/formReference.js').SelectedConcept} rich
    * @returns {CompactConcept}
    */
   function toCompactConcept(rich) {
@@ -835,7 +834,7 @@
       bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
     };
 
-    // Merge Konfi facets parsed from ext:ekw:konfi:* tags (no-op for non-Konfi).
+    // Merge Konfi facets parsed from ext:org.edufeed.ekw.konfi:* tags (no-op for non-Konfi).
     if (inferred === 'konfi') {
       const subSteps = BILDUNGSBEREICHE.konfi.step4SubSteps ?? [];
       const konfi = parseKonfiTagsToFormData(editEvent, subSteps);
@@ -1309,11 +1308,6 @@
 
       const resourceData = buildResourceData(formData, {
         about: mergedAbout(),
-        konfiTags: formDataToKonfiTags(
-          formData,
-          bildungsbereichConfig?.step4SubSteps ?? [],
-          bildungsbereichConfig?.bildungsbereichTag
-        ),
         hasNoUrl
       });
 
@@ -1614,7 +1608,7 @@
 
   /**
    * FormConceptPicker change handler for the educationalLevel picker.
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
+   * @param {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} rich
    */
   function handleEduLevelChange(rich) {
     formData.educationalLevels = rich.map(toCompactConcept);
@@ -1625,7 +1619,9 @@
    * @param {string} vocabKey
    */
   function makeAboutHandler(vocabKey) {
-    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+    return (
+      /** @type {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} */ rich
+    ) => {
       aboutByVocab = { ...aboutByVocab, [vocabKey]: rich.map(toCompactConcept) };
     };
   }
@@ -1639,7 +1635,9 @@
    * @param {'gradeLevelLabels'|'schoolTypeLabels'|'didacticConceptLabels'|'methodLabels'} labelsKey
    */
   function makeEkwPairHandler(idsKey, labelsKey) {
-    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+    return (
+      /** @type {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} */ rich
+    ) => {
       const compact = rich.map(toCompactConcept);
       formData[idsKey] = compact.map((c) => c.id);
       formData[labelsKey] = compact;

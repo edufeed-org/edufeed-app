@@ -19,7 +19,8 @@ import {
   appendVariantLabelTags
 } from '$lib/helpers/educational/eventTags.js';
 import { appendCoverColorTag } from '$lib/helpers/educational/coverColor.js';
-import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js';
+import { BILDUNGSBEREICHE } from '$lib/helpers/educational/bildungsbereich.js';
+import { bildungsbereichToNip32Tags } from '$lib/helpers/educational/bildungsbereichNamespace.js';
 
 /**
  * @typedef {Object} Creator
@@ -80,6 +81,7 @@ import { formDataToEkwTags } from '$lib/helpers/educational/formDataToEkwTags.js
  * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [teaches] - AMB: SKOS Concepts for pedagogical "teaches" relation
  * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [assesses] - AMB: SKOS Concepts for pedagogical "assesses" relation
  * @property {{id: string, type: 'Concept', prefLabel: {de: string}}[]} [competencyRequired] - AMB: SKOS Concepts for required competencies
+ * @property {string} [bildungsbereich] - Wizard step-1 pick ('schule'|'hochschule'|'extra'|'konfi'|''); drives the Konfi required-field skip and the Bildungsbereich NIP-32 detection tag
  */
 
 /**
@@ -120,6 +122,21 @@ function buildRelatedEventsMap(formData) {
     };
   }
   return map;
+}
+
+/**
+ * Resolve the NIP-32 `l` slug for the wizard's Bildungsbereich pick
+ * (`formData.bildungsbereich`, forwarded verbatim by `buildResourceData`).
+ * Returns undefined for the AMB variant (no Bildungsbereich picker) or an
+ * unrecognized/empty value.
+ *
+ * @param {any} formData
+ * @returns {string | undefined}
+ */
+function getBildungsbereichTag(formData) {
+  const key = formData?.bildungsbereich;
+  if (!key) return undefined;
+  return /** @type {any} */ (BILDUNGSBEREICHE)[key]?.bildungsbereichTag;
 }
 
 /**
@@ -214,11 +231,10 @@ export function createEducationalActions() {
       }
       // Note: slug is optional - will auto-generate random ID if empty
       // Konfi resources don't render the LRT/Fach pickers — their Bildungsbereich
-      // config replaces those AMB axes with Konfi-specific facets emitted as
-      // ext:ekw:konfi:* tags. Detect the Konfi path by the presence of those tags.
-      const isKonfi =
-        Array.isArray(/** @type any */ (formData).konfiTags) &&
-        /** @type any */ (formData).konfiTags.length > 0;
+      // config replaces those AMB axes with Konfi-specific facets emitted under
+      // the ext:org.edufeed.ekw.konfi:* namespace. Detect the Konfi path via
+      // the wizard's step-1 Bildungsbereich pick.
+      const isKonfi = /** @type any */ (formData).bildungsbereich === 'konfi';
       if (!isKonfi && !formData.learningResourceType) {
         throw new Error('Learning resource type is required');
       }
@@ -245,13 +261,12 @@ export function createEducationalActions() {
         appendVariantLabelTags(tags, variantId);
         appendCoverColorTag(tags, formData.coverHue);
 
-        const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
-        for (const t of ekwTags) tags.push(t);
-
-        // Konfi tags (pre-computed by the wizard from its Bildungsbereich config)
-        const konfiTags = /** @type any */ (formData).konfiTags;
-        if (Array.isArray(konfiTags)) {
-          for (const t of konfiTags) tags.push(t);
+        // Bildungsbereich NIP-32 detection tag (schule/hochschule/extra/konfi).
+        // EKW/Konfi ext:<ns>:<facet> facets themselves come from `amb.ext` via
+        // `buildAMBEventTagsFromFormData` above — no separate hand-append.
+        const bildungsbereichTag = getBildungsbereichTag(formData);
+        if (bildungsbereichTag) {
+          for (const t of bildungsbereichToNip32Tags(bildungsbereichTag)) tags.push(t);
         }
 
         // Image hash (NIP-94 cross-reference). Set when an upload happened
@@ -336,13 +351,12 @@ export function createEducationalActions() {
         appendVariantLabelTags(tags, variantId);
         appendCoverColorTag(tags, formData.coverHue);
 
-        const ekwTags = formDataToEkwTags(/** @type {any} */ (formData));
-        for (const t of ekwTags) tags.push(t);
-
-        // Konfi tags (pre-computed by the wizard from its Bildungsbereich config)
-        const konfiTags = /** @type any */ (formData).konfiTags;
-        if (Array.isArray(konfiTags)) {
-          for (const t of konfiTags) tags.push(t);
+        // Bildungsbereich NIP-32 detection tag (schule/hochschule/extra/konfi).
+        // EKW/Konfi ext:<ns>:<facet> facets themselves come from `amb.ext` via
+        // `buildAMBEventTagsFromFormData` above — no separate hand-append.
+        const bildungsbereichTag = getBildungsbereichTag(formData);
+        if (bildungsbereichTag) {
+          for (const t of bildungsbereichToNip32Tags(bildungsbereichTag)) tags.push(t);
         }
 
         const imageHash = resolveImageHash(formData);

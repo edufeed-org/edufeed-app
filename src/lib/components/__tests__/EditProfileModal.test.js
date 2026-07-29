@@ -113,7 +113,14 @@ vi.mock('$lib/loaders/base.js', () => ({
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => [],
   getEventLoaderLookupRelays: () => [],
-  getCommunikeyRelays: () => []
+  getCommunikeyRelays: () => [],
+  // Read at import time by the shared loaders barrel (loaders/index.js),
+  // whose per-domain community loaders (articles.js, amb.js, calendar.js)
+  // resolve relays eagerly at module init — see c640a759 for the same
+  // pattern in other suites.
+  getArticleRelays: () => [],
+  getEducationalRelays: () => [],
+  getCalendarRelays: () => []
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({

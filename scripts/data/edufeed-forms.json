@@ -48,6 +48,100 @@
           "label": "Lizenz-URI",
           "required": true,
           "output": "amb:license"
+        },
+        {
+          "id": "url",
+          "type": "url",
+          "label": "URL / Identifier",
+          "output": "amb:id"
+        },
+        {
+          "id": "image",
+          "type": "url",
+          "label": "Vorschaubild-URL",
+          "output": "amb:image"
+        },
+        {
+          "id": "datePublished",
+          "type": "date",
+          "label": "Veröffentlicht am",
+          "output": "amb:datePublished"
+        },
+        {
+          "id": "isAccessibleForFree",
+          "type": "checkbox",
+          "label": "Frei zugänglich",
+          "output": "amb:isAccessibleForFree"
+        },
+        {
+          "id": "educationalLevel",
+          "type": "select",
+          "label": "Bildungsstufe",
+          "multiple": true,
+          "vocabRef": "educational-level",
+          "output": "amb:educationalLevel"
+        },
+        {
+          "id": "keywords",
+          "type": "text-array",
+          "label": "Schlagwörter",
+          "output": "amb:keywords"
+        },
+        {
+          "id": "creators",
+          "type": "creator",
+          "label": "Urheber:innen",
+          "output": "amb:creator"
+        },
+        {
+          "id": "externalUrls",
+          "type": "external-urls",
+          "label": "Weitere Quellen",
+          "output": "amb:refs"
+        },
+        {
+          "id": "hasPart",
+          "type": "amb-relation",
+          "label": "Enthält (hasPart)",
+          "output": "amb:hasPart"
+        },
+        {
+          "id": "isPartOf",
+          "type": "amb-relation",
+          "label": "Teil von (isPartOf)",
+          "output": "amb:isPartOf"
+        }
+      ],
+      "sections": [
+        {
+          "id": "sec-basics",
+          "title": "Grunddaten",
+          "questionIds": ["name", "description", "url", "inLanguage", "image", "datePublished"],
+          "order": 0
+        },
+        {
+          "id": "sec-classification",
+          "title": "Einordnung",
+          "questionIds": ["about", "learningResourceType", "educationalLevel", "keywords"],
+          "order": 1
+        },
+        {
+          "id": "sec-rights",
+          "title": "Rechte",
+          "questionIds": ["license", "isAccessibleForFree"],
+          "order": 2
+        },
+        {
+          "id": "sec-content",
+          "title": "Inhalt & Urheber",
+          "questionIds": ["creators", "externalUrls"],
+          "order": 3
+        },
+        {
+          "id": "sec-relations",
+          "title": "Beziehungen",
+          "questionIds": ["hasPart", "isPartOf"],
+          "order": 4
         }
       ]
     },

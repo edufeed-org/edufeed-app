@@ -20,6 +20,8 @@ const eventStoreAddSpy = vi.hoisted(() => vi.fn());
 const nip44EncryptSpy = vi.hoisted(() =>
   vi.fn(async (_pub, plaintext) => `encrypted:${plaintext}`)
 );
+// Swappable signer so individual tests can simulate signers without NIP-44.
+const activeSigner = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
 // When true, the eventStore mock delivers the form event via setTimeout —
 // like a first-time relay load (signup wizard) instead of a warm cache hit.
 const formEventDelivery = vi.hoisted(() => ({ async: false }));
@@ -105,16 +107,29 @@ vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
-}));
+// The new FieldsRenderer field-type registry (form-field-types.js) statically
+// imports CreatorFieldAdapter → CreatorInput → profile-subscription.js →
+// loaders/profile.js and RelationFieldAdapter → AMBResourceSearchInput →
+// loaders/amb-search.js, which (with the barrel) evaluate createAddressLoader/
+// createReactionsLoader at module init. Same test-mock-completeness class as
+// c640a759 / e0455525 — complete the loader mock so collection succeeds.
+// NB: vi.mock is hoisted, so the noop factory must be inlined (no top-level ref).
+vi.mock('applesauce-loaders/loaders', () => {
+  const noopLoader = () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) });
+  return {
+    createTimelineLoader: noopLoader,
+    createAddressLoader: noopLoader,
+    createEventLoader: noopLoader,
+    createReactionsLoader: noopLoader
+  };
+});
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: {
     active: {
       pubkey: 'user-pub',
-      signer: {
-        nip44Encrypt: nip44EncryptSpy
+      get signer() {
+        return activeSigner.current;
       }
     }
   }
@@ -122,7 +137,16 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://communikey.example'],
-  getAllLookupRelays: () => ['wss://lookup.example']
+  getAllLookupRelays: () => ['wss://lookup.example'],
+  // Barrel community loaders + profile/amb-search chain read these at module
+  // init once the FieldsRenderer registry pulls the new adapters in.
+  getArticleRelays: () => [],
+  getEducationalRelays: () => [],
+  getCalendarRelays: () => [],
+  getKanbanRelays: () => [],
+  getProfileLookupRelays: () => [],
+  getEventLoaderLookupRelays: () => [],
+  getFallbackRelays: () => []
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
@@ -146,6 +170,7 @@ describe('MembershipApplicationForm', () => {
 
   beforeEach(() => {
     formEventDelivery.async = false;
+    activeSigner.current = { nip44Encrypt: nip44EncryptSpy };
     buildSpy.mockClear();
     signSpy.mockClear();
     publishEventSpy.mockClear();
@@ -271,5 +296,41 @@ describe('MembershipApplicationForm', () => {
     // encryption used
     expect(nip44EncryptSpy).toHaveBeenCalled();
     expect(builtTemplate.tags.some((/** @type {string[]} */ t) => t[0] === 'encrypted')).toBe(true);
+  });
+
+  it('errors instead of publishing plaintext when the signer has no NIP-44 surface', async () => {
+    // Signer exposes neither nip44.encrypt nor nip44Encrypt — the old code
+    // silently fell back to plaintext response tags here.
+    activeSigner.current = {};
+
+    const { findByLabelText, findByRole, findByText } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    const submitBtn = await findByRole('button', { name: /Antrag|Submit/i });
+    await fireEvent.click(submitBtn);
+    vi.useRealTimers();
+
+    // A visible error surfaces (nip44EncryptWith's message mentions NIP-44)
+    expect(await findByText(/NIP-44/)).toBeTruthy();
+
+    // Nothing was built or published — no plaintext response tags anywhere
+    expect(publishEventSpy).not.toHaveBeenCalled();
+    expect(eventStoreAddSpy).not.toHaveBeenCalled();
+    expect(buildSpy).not.toHaveBeenCalled();
+    for (const call of buildSpy.mock.calls) {
+      const tpl = /** @type {any} */ (call[0]);
+      expect(tpl.tags.some((/** @type {string[]} */ t) => t[0] === 'response')).toBe(false);
+    }
   });
 });

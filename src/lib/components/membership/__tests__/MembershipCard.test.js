@@ -65,7 +65,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
         return { unsubscribe: () => {} };
       }
     })
-  }
+  },
+  // Read at module init by loaders/profile.js + loaders/amb-search.js once the
+  // FieldsRenderer registry pulls the new adapters in — see c640a759 / e0455525.
+  pool: {}
 }));
 
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
@@ -88,13 +91,33 @@ vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({})
 }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
-}));
+// The new FieldsRenderer field-type registry (form-field-types.js) statically
+// imports CreatorFieldAdapter → CreatorInput → profile-subscription.js →
+// loaders/profile.js and RelationFieldAdapter → AMBResourceSearchInput →
+// loaders/amb-search.js, which (with the barrel) evaluate createAddressLoader/
+// createReactionsLoader at module init — complete the mock so collection
+// succeeds. NB: vi.mock is hoisted, so inline the noop factory.
+vi.mock('applesauce-loaders/loaders', () => {
+  const noopLoader = () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) });
+  return {
+    createTimelineLoader: noopLoader,
+    createAddressLoader: noopLoader,
+    createEventLoader: noopLoader,
+    createReactionsLoader: noopLoader
+  };
+});
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => [],
-  getAllLookupRelays: () => []
+  getAllLookupRelays: () => [],
+  // Barrel community loaders + profile/amb-search chain read these at module init.
+  getArticleRelays: () => [],
+  getEducationalRelays: () => [],
+  getCalendarRelays: () => [],
+  getKanbanRelays: () => [],
+  getProfileLookupRelays: () => [],
+  getEventLoaderLookupRelays: () => [],
+  getFallbackRelays: () => []
 }));
 
 vi.mock('$lib/helpers/event-factory.js', () => ({

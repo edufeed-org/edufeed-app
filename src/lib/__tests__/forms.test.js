@@ -32,7 +32,8 @@ describe('forms — tag building', () => {
       description: 'A test form'
     });
     expect(tags).toContainEqual(['name', 'My Form']);
-    expect(tags).toContainEqual(['description', 'A test form']);
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({ description: 'A test form' });
   });
 
   it('builds field tags with correct format', () => {
@@ -51,26 +52,28 @@ describe('forms — tag building', () => {
       'full-name',
       'text',
       'Full Name',
-      '',
-      '{"required":true}'
+      '[]',
+      '{"renderElement":"text","required":true}'
     ]);
   });
 
   it('includes public tag when specified', () => {
     const tags = buildFormTemplateTags('my-form', [], { public: true });
-    expect(tags).toContainEqual(['public']);
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({ publicForm: true });
   });
 
   it('includes confirmation_message tag', () => {
     const tags = buildFormTemplateTags('my-form', [], { confirmationMessage: 'Thanks!' });
-    expect(tags).toContainEqual(['confirmation_message', 'Thanks!']);
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({ confirmationMessage: 'Thanks!' });
   });
 
   it('omits optional tags when not provided', () => {
     const tags = buildFormTemplateTags('my-form', [], {});
     expect(tags.find((t) => t[0] === 'name')).toBeUndefined();
-    expect(tags.find((t) => t[0] === 'public')).toBeUndefined();
-    expect(tags.find((t) => t[0] === 'confirmation_message')).toBeUndefined();
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({});
   });
 });
 
@@ -237,8 +240,8 @@ describe('forms — response tags', () => {
   it('builds response tags from field values', () => {
     const values = { 'full-name': 'Bob', reason: 'I want in' };
     const tags = buildResponseTags(values);
-    expect(tags).toContainEqual(['response', 'full-name', 'Bob']);
-    expect(tags).toContainEqual(['response', 'reason', 'I want in']);
+    expect(tags).toContainEqual(['response', 'full-name', 'Bob', '{}']);
+    expect(tags).toContainEqual(['response', 'reason', 'I want in', '{}']);
   });
 
   it('parses response tags back to values', () => {
