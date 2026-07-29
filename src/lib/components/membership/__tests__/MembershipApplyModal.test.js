@@ -23,7 +23,9 @@ const nip44EncryptSpy = vi.hoisted(() =>
 );
 
 const ADMIN_PUBKEY = 'a'.repeat(64);
+const ADMIN2_PUBKEY = 'c'.repeat(64);
 const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
+const membershipAdmins = vi.hoisted(() => ({ list: /** @type {string[]} */ ([]) }));
 
 const formEvent = {
   kind: 30168,
@@ -152,7 +154,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
         enabled: true,
         handleDomain: 'edufeed.org',
         formAddress: FORM_ADDRESS,
-        adminPubkeys: [ADMIN_PUBKEY]
+        adminPubkeys: membershipAdmins.list
       };
     }
   }
@@ -165,9 +167,15 @@ describe('MembershipApplyModal', () => {
   let fetchSpy;
 
   beforeEach(() => {
+    membershipAdmins.list = [ADMIN_PUBKEY];
     closeModalMock.mockClear();
     publishEventSpy.mockClear();
-    publishApplicationCopySpy.mockClear();
+    publishApplicationCopySpy.mockReset();
+    publishApplicationCopySpy.mockResolvedValue({
+      success: true,
+      relays: ['wss://relay.edufeed.org'],
+      successCount: 1
+    });
     eventStoreAddSpy.mockClear();
     buildSpy.mockClear();
     fetchSpy = vi
@@ -191,9 +199,17 @@ describe('MembershipApplyModal', () => {
     expect(closeModalMock).toHaveBeenCalled();
   });
 
-  it('closes itself once the application is published', async () => {
+  /**
+   * Fill and submit the application. Timers are faked around the handle
+   * availability debounce, then restored so the submit's promises can settle.
+   *
+   * @param {{
+   *   findByLabelText: (matcher: RegExp) => Promise<HTMLElement>,
+   *   findByRole: (role: string, options: { name: RegExp }) => Promise<HTMLElement>
+   * }} queries
+   */
+  async function submitApplication({ findByLabelText, findByRole }) {
     vi.useFakeTimers();
-    const { findByLabelText, findByRole } = render(MembershipApplyModal);
     const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
     const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
     const motivationInput = /** @type {HTMLTextAreaElement} */ (
@@ -208,11 +224,52 @@ describe('MembershipApplyModal', () => {
 
     await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
     vi.useRealTimers();
+  }
+
+  it('closes itself once the application is published', async () => {
+    const rendered = render(MembershipApplyModal);
+    await submitApplication(rendered);
 
     await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalled());
     // The event is in the local store before we close, so whatever opened the
     // modal re-renders as "waiting for review" rather than re-offering "apply".
     await waitFor(() => expect(closeModalMock).toHaveBeenCalled());
     expect(eventStoreAddSpy).toHaveBeenCalled();
+  });
+
+  it('stays open when only some reviewers were reached, so the warning is readable', async () => {
+    // Closing on submit is what made this warning unobservable in the app: the
+    // form sets it and the host unmounts the form on the same tick, so it never
+    // painted a single frame. The surface behind the modal cannot say this —
+    // it flips to "waiting for review" off the mirrored event either way.
+    membershipAdmins.list = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    publishApplicationCopySpy.mockImplementation(async () =>
+      publishApplicationCopySpy.mock.calls.length === 1
+        ? { success: false, relays: [], successCount: 0 }
+        : { success: true, relays: ['wss://relay.edufeed.org'], successCount: 1 }
+    );
+
+    const rendered = render(MembershipApplyModal);
+    await submitApplication(rendered);
+
+    const notice = await rendered.findByTestId('membership-partial-delivery');
+    expect(notice.textContent).toMatch(/1/);
+    expect(closeModalMock).not.toHaveBeenCalled();
+  });
+
+  it('still lets the applicant dismiss a partial-delivery warning by hand', async () => {
+    membershipAdmins.list = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    publishApplicationCopySpy.mockImplementation(async () =>
+      publishApplicationCopySpy.mock.calls.length === 1
+        ? { success: false, relays: [], successCount: 0 }
+        : { success: true, relays: ['wss://relay.edufeed.org'], successCount: 1 }
+    );
+
+    const rendered = render(MembershipApplyModal);
+    await submitApplication(rendered);
+    await rendered.findByTestId('membership-partial-delivery');
+
+    await fireEvent.click(rendered.getByTestId('membership-apply-close'));
+    expect(closeModalMock).toHaveBeenCalled();
   });
 });
