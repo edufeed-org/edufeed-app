@@ -49,6 +49,10 @@
   let isSubmitting = $state(false);
   let submitted = $state(false);
   let error = $state('');
+  // Set when the application reached some admins but not all. Not an error —
+  // any one admin can act on it — but the applicant should know the review may
+  // be slower than usual rather than be told everything went perfectly.
+  let partialDelivery = $state(/** @type {{ delivered: number, total: number } | null} */ (null));
 
   /** @type {{ kind: number, pubkey: string, tags: string[][], content: string, created_at: number, id: string, sig: string } | null} */
   let existingResponse = $state(null);
@@ -242,8 +246,11 @@
         buildPTagsWithHints(adminPubkeys)
       ]);
 
-      // NIP-44 is pairwise, so publish one copy per admin — each encrypted to
-      // (and p-tagged with) its own recipient.
+      // NIP-44 is pairwise, so there is one copy per admin — each encrypted to
+      // (and p-tagged with) its own recipient. Signing stays sequential: it is
+      // local work, and some signers (NIP-07 extensions) serialize requests
+      // anyway. Every copy is signed before any is published, so a failure
+      // while encrypting cannot leave one admin holding an application.
       /** @type {import('nostr-tools').NostrEvent[]} */
       const signedCopies = [];
       for (const pTag of pTags) {
@@ -255,22 +262,36 @@
         tags.push(['encrypted']);
 
         const template = await factory.build({ kind: 1069, tags, content });
-        const signed = await factory.sign(template);
-        // Scoped publisher, not the outbox model: an application must not be
-        // fanned out to the applicant's public write relays.
-        const result = await publishApplicationCopy(signed);
-        // The application now targets a short, app-managed relay set. If none
-        // of them accepted the copy, no admin will ever see it — telling the
-        // applicant "we will be in touch" would strand them for good.
-        if (!result.success) throw new Error(m.membership_submit_failed());
-        signedCopies.push(signed);
+        signedCopies.push(await factory.sign(template));
       }
 
-      // Mirror into the local store only after every copy is out — a mid-loop
-      // add flips the "existing response" UI while the submit is still running.
-      for (const signed of signedCopies) {
-        eventStore.add(signed);
+      // Publish the copies together rather than one after another. Sequentially,
+      // the first admin's relays failing meant the rest were never even tried,
+      // and anything that killed the page mid-loop left admin 1 holding an
+      // application admin 2 never saw. allSettled, not all: one admin's outcome
+      // must not cancel another's, and we need every result to report on.
+      // Scoped publisher, not the outbox model — an application must not be
+      // fanned out to the applicant's public write relays.
+      const results = await Promise.allSettled(signedCopies.map((s) => publishApplicationCopy(s)));
+      const delivered = results.filter((r) => r.status === 'fulfilled' && r.value?.success).length;
+
+      // Any single admin can act on an application, so one copy landing is
+      // enough to promise "we will be in touch". Zero is not: no admin would
+      // ever see it, and saying otherwise strands the applicant for good.
+      if (delivered === 0) throw new Error(m.membership_submit_failed());
+      if (delivered < signedCopies.length) {
+        // Reachable, but not by everyone. Say so rather than report a clean
+        // success — approvals may sit until the admin who has it looks.
+        console.warn(`[membership] application reached ${delivered}/${signedCopies.length} admins`);
+        partialDelivery = { delivered, total: signedCopies.length };
       }
+
+      // Mirror into the local store only after the publishes have settled — an
+      // earlier add flips the "existing response" UI while the submit is still
+      // running. Only the copies that actually landed somewhere.
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value?.success) eventStore.add(signedCopies[i]);
+      });
 
       submitted = true;
       onsubmitted?.();
@@ -366,6 +387,14 @@
   <div class="alert alert-warning">{m.membership_submit_login_required()}</div>
 {:else if submitted}
   <div class="alert alert-success">{m.membership_submit_success()}</div>
+  {#if partialDelivery}
+    <div class="mt-2 alert alert-warning" data-testid="membership-partial-delivery">
+      {m.membership_submit_partial({
+        delivered: partialDelivery.delivered,
+        total: partialDelivery.total
+      })}
+    </div>
+  {/if}
 {:else if formEvent}
   {#if showHeader && existingResponse}
     <div class="mb-4 alert alert-info">

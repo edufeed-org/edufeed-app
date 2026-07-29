@@ -1145,6 +1145,7 @@
   "membership_submit_success": "Your application was sent. We will be in touch.",
   "membership_submit_login_required": "Please sign in to submit an application.",
   "membership_submit_failed": "Application could not be sent.",
+  "membership_submit_partial": "Your application reached {delivered} of {total} reviewers. It will still be reviewed, but it may take a little longer.",
   "membership_submit_encryption_unavailable": "Your signer cannot encrypt (NIP-44), so the application cannot be sent securely. Please use a signer with NIP-44 support.",
   "membership_already_applied": "You already submitted an application on {date}.",
   "membership_already_applied_update": "Update application",

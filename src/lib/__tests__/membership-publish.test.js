@@ -82,15 +82,19 @@ describe('getApplicationRelays', () => {
 
 describe('publishApplicationCopy', () => {
   /** @type {ReturnType<typeof vi.fn>} */
-  let relayPublish;
-  /** @type {{ relay: ReturnType<typeof vi.fn> }} */
+  let poolPublish;
+  /** @type {{ publish: ReturnType<typeof vi.fn> }} */
   let pool;
 
   const signed = { kind: 1069, id: 'app1', pubkey: 'applicant', tags: [], content: 'enc' };
 
   beforeEach(() => {
-    relayPublish = vi.fn().mockResolvedValue({ ok: true });
-    pool = { relay: vi.fn(() => ({ publish: relayPublish })) };
+    // applesauce's pool.publish answers with one PublishResponse per relay, and
+    // reports an unreachable relay as { ok: false } rather than throwing.
+    poolPublish = vi.fn(async (/** @type {string[]} */ relays) =>
+      relays.map((from) => ({ ok: true, from }))
+    );
+    pool = { publish: poolPublish };
   });
 
   /** @param {object} [deps] */
@@ -110,14 +114,16 @@ describe('publishApplicationCopy', () => {
   it('publishes to exactly the application relays', async () => {
     const result = await run();
 
-    expect(pool.relay).toHaveBeenCalledTimes(2);
-    expect(pool.relay.mock.calls.map((c) => c[0])).toEqual(APP_RELAYS);
+    expect(poolPublish).toHaveBeenCalledTimes(1);
+    expect(poolPublish.mock.calls[0][0]).toEqual(APP_RELAYS);
     expect(result.success).toBe(true);
     expect(result.relays).toEqual(APP_RELAYS);
   });
 
   it('reports failure when every relay rejects the event', async () => {
-    relayPublish.mockResolvedValue({ ok: false, message: 'blocked' });
+    poolPublish.mockResolvedValue(
+      APP_RELAYS.map((from) => ({ ok: false, message: 'blocked', from }))
+    );
     const result = await run();
 
     expect(result.success).toBe(false);
@@ -125,7 +131,10 @@ describe('publishApplicationCopy', () => {
   });
 
   it('succeeds when at least one relay accepts', async () => {
-    relayPublish.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ ok: true });
+    poolPublish.mockResolvedValue([
+      { ok: false, message: 'offline', from: APP_RELAYS[0] },
+      { ok: true, from: APP_RELAYS[1] }
+    ]);
     const result = await run();
 
     expect(result.success).toBe(true);
@@ -135,7 +144,7 @@ describe('publishApplicationCopy', () => {
   it('fails without publishing when no relay is configured', async () => {
     const result = await run({ getAppRelays: () => [], getCommunikeyRelays: () => [] });
 
-    expect(pool.relay).not.toHaveBeenCalled();
+    expect(poolPublish).not.toHaveBeenCalled();
     expect(result.success).toBe(false);
   });
 });

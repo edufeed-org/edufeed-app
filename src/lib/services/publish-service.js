@@ -80,31 +80,42 @@ function notifyStatusUpdate(status) {
  * @param {string[]} relays - Exact relay URLs to publish to
  * @param {Object} [opts] - Options
  * @param {number} [opts.timeout] - Timeout per relay in ms (default 5000)
+ * @param {number} [opts.retries] - Transport-error retries per relay (default 2)
  * @param {string} [opts.label] - Prefix for the rejection warning, e.g. '[membership]'
  * @param {any} [opts.pool] - Relay pool (injectable for tests)
  * @returns {Promise<{success: boolean, relays: string[], successCount: number}>}
  */
 export async function publishToRelays(signedEvent, relays, opts = {}) {
-  const { timeout = 5000, label = '', pool: relayPool = pool } = opts;
+  const { timeout = 5000, retries = 2, label = '', pool: relayPool = pool } = opts;
   const targets = [...new Set((relays || []).filter(Boolean))];
   if (targets.length === 0) {
     return { success: false, relays: [], successCount: 0 };
   }
 
-  const results = await Promise.allSettled(
-    targets.map(async (relayUrl) => {
-      // relay.publish RESOLVES with {ok:false, message} when the relay rejects
-      // the event — it only throws on connection/timeout errors.
-      const response = await relayPool.relay(relayUrl).publish(signedEvent, { timeout });
-      if (response && response.ok === false) {
-        console.warn(`${label} relay ${relayUrl} rejected the event:`.trim(), response.message);
-        return false;
-      }
-      return true;
-    })
-  );
+  // pool.publish is applesauce's own multi-relay fan-out, and it does what our
+  // hand-rolled Promise.allSettled did plus one thing it could not: it retries
+  // a relay that failed to *reach*. Errors stay isolated per relay
+  // (errorToPublishResponse turns them into { ok: false }), so one dead relay
+  // still cannot reject the whole publish.
+  //
+  // Both defaults are overridden deliberately. The library's 30s timeout is far
+  // too long behind a submit button, and retries are capped so a fully dead
+  // relay set cannot stack 3 x 30s. Retries fire only on a *thrown* error —
+  // a relay that answers OK:false has made a decision, and resubscribing would
+  // just ask a second time and get the same no.
+  /** @type {{ ok: boolean, message?: string, from: string }[]} */
+  const responses = await relayPool.publish(targets, signedEvent, { timeout, retries });
 
-  const successCount = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+  for (const response of responses) {
+    if (!response?.ok) {
+      console.warn(
+        `${label} relay ${response?.from} rejected the event:`.trim(),
+        response?.message
+      );
+    }
+  }
+
+  const successCount = responses.filter((r) => r?.ok).length;
   return { success: successCount > 0, relays: targets, successCount };
 }
 

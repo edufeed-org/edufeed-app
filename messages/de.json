@@ -1145,6 +1145,7 @@
   "membership_submit_success": "Dein Antrag wurde gesendet. Wir melden uns.",
   "membership_submit_login_required": "Bitte melde dich an, um einen Antrag zu stellen.",
   "membership_submit_failed": "Antrag konnte nicht gesendet werden.",
+  "membership_submit_partial": "Dein Antrag hat {delivered} von {total} Prüfenden erreicht. Er wird trotzdem bearbeitet, es kann aber etwas länger dauern.",
   "membership_submit_encryption_unavailable": "Dein Signer kann nicht verschlüsseln (NIP-44), daher lässt sich der Antrag nicht sicher senden. Bitte nutze einen Signer mit NIP-44-Unterstützung.",
   "membership_already_applied": "Du hast bereits am {date} einen Antrag gesendet.",
   "membership_already_applied_update": "Antrag aktualisieren",

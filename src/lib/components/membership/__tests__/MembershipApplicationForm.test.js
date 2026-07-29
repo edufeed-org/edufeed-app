@@ -177,6 +177,26 @@ describe('MembershipApplicationForm', () => {
   /** @type {ReturnType<typeof vi.spyOn>} */
   let fetchSpy;
 
+  /**
+   * Fill the three required fields and let the handle-availability debounce
+   * settle, leaving the form submittable.
+   * @param {{ findByLabelText: (m: RegExp) => Promise<HTMLElement> }} screen
+   */
+  async function fillApplication({ findByLabelText }) {
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+  }
+
   beforeEach(() => {
     formEventDelivery.async = false;
     membershipAdmins.list = [ADMIN_PUBKEY];
@@ -426,6 +446,85 @@ describe('MembershipApplicationForm', () => {
     // Adding a copy to the store mid-loop flips the "existing response" state
     // while the submit is still running — all publishes must complete first.
     expect(callOrder.log).toEqual(['ensure-relays', 'publish', 'publish', 'add', 'add']);
+  });
+
+  // The copies used to be published one after another, with a throw on the
+  // first failure. That meant the first admin's relays being unreachable
+  // stopped the rest from ever being tried, and anything that killed the page
+  // mid-loop left admin 1 holding an application admin 2 never saw.
+  it('still publishes to the second admin when the first copy fails', async () => {
+    membershipAdmins.list = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    publishApplicationCopySpy.mockImplementation(async () => {
+      callOrder.log.push('publish');
+      return publishApplicationCopySpy.mock.calls.length === 1
+        ? { success: false, relays: [], successCount: 0 }
+        : { success: true, relays: ['wss://relay.edufeed.org'], successCount: 1 };
+    });
+
+    const { findByLabelText, findByRole, findByText } = render(MembershipApplicationForm);
+    await fillApplication({ findByLabelText });
+    await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
+    vi.useRealTimers();
+
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalledTimes(2));
+    // One admin has it, so the applicant is genuinely in the queue.
+    expect(await findByText(/Wir melden uns|We will be in touch/i)).toBeTruthy();
+  });
+
+  it('tells the applicant when only some reviewers were reached', async () => {
+    membershipAdmins.list = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    publishApplicationCopySpy.mockImplementation(async () =>
+      publishApplicationCopySpy.mock.calls.length === 1
+        ? { success: false, relays: [], successCount: 0 }
+        : { success: true, relays: ['wss://relay.edufeed.org'], successCount: 1 }
+    );
+
+    const { findByLabelText, findByRole, findByTestId } = render(MembershipApplicationForm);
+    await fillApplication({ findByLabelText });
+    await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
+    vi.useRealTimers();
+
+    // A clean success message would hide that one reviewer never got it, and
+    // the review can only move as fast as the admin who did.
+    const notice = await findByTestId('membership-partial-delivery');
+    expect(notice.textContent).toMatch(/1/);
+  });
+
+  it('mirrors only the copies that actually landed into the event store', async () => {
+    membershipAdmins.list = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    publishApplicationCopySpy.mockImplementation(async () =>
+      publishApplicationCopySpy.mock.calls.length === 1
+        ? { success: false, relays: [], successCount: 0 }
+        : { success: true, relays: ['wss://relay.edufeed.org'], successCount: 1 }
+    );
+
+    const { findByLabelText, findByRole } = render(MembershipApplicationForm);
+    await fillApplication({ findByLabelText });
+    await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
+    vi.useRealTimers();
+
+    // A copy no relay accepted does not exist anywhere but here; storing it
+    // would show the applicant an application that was never delivered.
+    await waitFor(() => expect(eventStoreAddSpy).toHaveBeenCalledTimes(1));
+  });
+
+  it('reports a failure when no admin could be reached at all', async () => {
+    membershipAdmins.list = [ADMIN_PUBKEY, ADMIN2_PUBKEY];
+    publishApplicationCopySpy.mockImplementation(async () => ({
+      success: false,
+      relays: [],
+      successCount: 0
+    }));
+
+    const { findByLabelText, findByRole, findByText, queryByText } =
+      render(MembershipApplicationForm);
+    await fillApplication({ findByLabelText });
+    await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
+    vi.useRealTimers();
+
+    expect(await findByText(/konnte nicht gesendet werden|could not be sent/i)).toBeTruthy();
+    expect(queryByText(/Wir melden uns|We will be in touch/i)).toBeNull();
+    expect(eventStoreAddSpy).not.toHaveBeenCalled();
   });
 
   it('settles the applicant relay lists before the application goes out', async () => {
