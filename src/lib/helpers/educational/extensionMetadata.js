@@ -56,7 +56,12 @@ export function buildExtensionSections(event, formEvent) {
   /** @type {ExtensionSection[]} */
   const out = [];
   for (const [ns, nsEntry] of parsed.namespaces) {
-    const isFormDriven = !!formCoord && ns === formCoordToNs(formCoord);
+    // Form-emitted ext uses the form's bare `d`-tag as <ns> (colon-free per the
+    // NIP-AMB grammar); the form author's pubkey lives in the `a` back-ref, not
+    // in the tag key. This previously compared against the full
+    // `30168:<pub>:<d>` coordinate, which is not a legal <ns> and no longer
+    // survives parseExtensionTags.
+    const isFormDriven = !!formCoord && ns === formCoord.identifier;
     const nsLabels = EXTENSION_NAMESPACE_LABELS[ns] ?? variantLabelsByNs.get(ns);
 
     const sectionLabel = isFormDriven
@@ -225,13 +230,6 @@ function parseFormCoord(address) {
   const parts = address.split(':');
   if (parts.length < 3 || parts[0] !== '30168') return null;
   return { pubkey: parts[1], identifier: parts.slice(2).join(':') };
-}
-
-/**
- * @param {{ pubkey: string, identifier: string }} c
- */
-function formCoordToNs(c) {
-  return `30168:${c.pubkey}:${c.identifier}`;
 }
 
 /**

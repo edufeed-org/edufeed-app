@@ -2,30 +2,47 @@
  * Parse a kind-30142 event's tags into a normalized map of extension metadata,
  * grouped by namespace and facet.
  *
- * Recognizes two tag-key shapes (NIP-AMB flattening convention):
+ * Implements the normative NIP-AMB ext-key grammar (see `nips/AMB.md`):
  *
- *   1. `ext:<ns>:<facet>(:<sub>)?` — forward-compatible prefixed shape.
- *      `<ns>` may itself contain colons. For form-emitted extensions
- *      `<ns>` is the form coordinate `30168:<pub>:<d>`. The facet is the
- *      single segment immediately preceding the optional sub-key
- *      (`id` / `prefLabel:<lang>` / `type`).
+ *   ext-key = "ext" ":" ns ":" facet [ ":" sub ]
+ *   sub     = "id" / "type" / "name" / "prefLabel" ":" lang
  *
- *   2. `ekw:<facet>(:<sub>)?` — legacy unprefixed shape emitted by the
- *      EKW wizard before the prefix migration. Treated as if it were
- *      `ext:ekw:<facet>(:<sub>)?`.
+ * `<ns>` and `<facet>` MUST NOT contain `:` (`.` is permitted; reverse-DNS is
+ * RECOMMENDED), so keys are parsed **left-anchored with fixed arity** and a key
+ * that falls outside the grammar is ignored outright, never guessed at. See
+ * `parseTagKey` for the details and for why surplus-segment keys such as the
+ * legacy `ext:ekw:konfi:<slug>:id` are dropped rather than mis-bucketed.
+ *
+ * Also recognizes the legacy unprefixed `ekw:<facet>(:<sub>)?` shape emitted by
+ * the EKW wizard before the prefix migration — treated as `ns = 'ekw'`.
  *
  * Sub-keys:
  *   - `:id`                 → concept facet, sets the entry's URI
  *   - `:prefLabel:<lang>`   → concept facet, attaches a localized label
+ *   - `:name`               → concept facet, attaches a plain name
  *   - `:type`               → concept facet, value ignored (always 'Concept')
  *   - none (bare key)       → scalar facet; multiple tags become multiple items
  *
  * Concept entries within a facet are positionally aligned: each new `:id`
- * starts a new entry; subsequent `:prefLabel:*` / `:type` tags attach to the
- * most recent entry. This matches the emission order of `ambToNostr` (the
- * amb-nostr-converter serializer): `:id`, `:prefLabel:*`, `:type` per concept.
+ * starts a new entry; subsequent `:prefLabel:*` / `:name` / `:type` tags attach
+ * to the most recent entry. This matches the emission order of `ambToNostr`
+ * (the amb-nostr-converter serializer): `:id`, `:prefLabel:*`, `:type` per
+ * concept.
  *
- * @typedef {{ id: string, prefLabels: Record<string, string> }} ConceptItem
+ * KNOWN LIMITATION — mixed facets. A facet is resolved to a single `kind` by
+ * whichever tag is seen first, and later tags of the other kind are skipped. So
+ * a facet carrying both concepts and free-text scalars loses one half, and
+ * which half depends on tag order. `ambToNostr` emits exactly this shape for an
+ * `amb.ext` facet whose array mixes `Concept` objects and plain strings — which
+ * is how the Konfi "custom value alongside vocabulary picks" case now
+ * serializes. Corpus impact today is one event (a single `zeitstruktur:custom`
+ * key, 8,476 kind-30142 events scanned 2026-07-29), and the wizard edit path is
+ * unaffected because `parseKonfiTags` reads the bare tag itself — this only
+ * affects the read-only extension sections on the resource view. Fixing it
+ * means widening the `Facet` union, which `extensionMetadata.js` switches on;
+ * deliberately left out of the grammar fix to keep that change reviewable.
+ *
+ * @typedef {{ id: string, prefLabels: Record<string, string>, name?: string }} ConceptItem
  * @typedef {{ kind: 'concept', items: ConceptItem[] } | { kind: 'scalar', items: string[] }} Facet
  * @typedef {{ facets: Map<string, Facet> }} Namespace
  *
@@ -74,6 +91,17 @@ export function parseExtensionTags(event) {
         f.items.push({ id: value, prefLabels: {} });
       } else if (sub === 'type') {
         // value ignored; presence is signal enough
+      } else if (sub === 'name') {
+        // `name` is in the NIP's closed sub set, so parseTagKey accepts it —
+        // give it an explicit branch rather than letting it fall through and
+        // vanish. Like prefLabel, it attaches to the concept opened by the
+        // preceding `:id`. Unlike amb-nostr-converter's `reconstructExt`, a
+        // name with no open concept is dropped instead of starting an id-less
+        // entry: items here are keyed on `id` and consumers assume it. No
+        // `ext:*:*:name` tag exists in the corpus today (0 of 8476 events
+        // scanned 2026-07-29), so this branch is currently unreachable.
+        const last = f.items[f.items.length - 1];
+        if (last && value) last.name = value;
       } else if (sub.startsWith('prefLabel:')) {
         const lang = sub.slice('prefLabel:'.length);
         if (!lang) continue;
@@ -98,16 +126,23 @@ export function parseExtensionTags(event) {
  * Split a tag key into `{ ns, facet, sub }`. Returns null if the key is not a
  * recognized extension shape.
  *
- * Algorithm: split on `:`; require ≥ 2 segments. Strip the `ext:` prefix if
- * present (forward-compatible shape) — otherwise the key must start with
- * `ekw:` (legacy fallback). The trailing 1-2 segments determine the sub-key:
+ * Implements the normative NIP-AMB grammar (see `nips/AMB.md`):
  *
- *   - `…:id`                 → sub = 'id', last 1 segment consumed
- *   - `…:type`               → sub = 'type', last 1 segment consumed
- *   - `…:prefLabel:<lang>`   → sub = 'prefLabel:<lang>', last 2 segments consumed
- *   - otherwise              → sub = null (scalar), no segments consumed
+ *   ext-key = "ext" ":" ns ":" facet [ ":" sub ]
+ *   sub     = "id" / "type" / "name" / "prefLabel" ":" lang
  *
- * Whatever remains: last segment = facet, prior segments joined by `:` = ns.
+ * `ns` and `facet` MUST NOT contain `:` — so the key is parsed **left-anchored
+ * with fixed arity**: `ns` and `facet` are the first two segments after the
+ * prefix, and everything after them is the sub. A key whose sub falls outside
+ * the closed set is returned as null and MUST be ignored by the caller — it is
+ * never guessed at. Surplus-segment keys such as the legacy
+ * `ext:ekw:konfi:<slug>:id` are exactly this case: their two possible
+ * segmentations (`ns=ekw,facet=konfi` vs `ns=ekw:konfi,facet=<slug>`) are
+ * indistinguishable, so they are dropped rather than mis-bucketed. They are
+ * migrated to `ext:org.edufeed.ekw.konfi:<slug>:id` by
+ * `scripts/migrate-konfi-namespace.mjs`; there is deliberately no read shim.
+ *
+ * The legacy unprefixed `ekw:` shape keeps ns='ekw' and is parsed the same way.
  *
  * @param {string} key
  * @returns {{ ns: string, facet: string, sub: string | null } | null}
@@ -115,41 +150,30 @@ export function parseExtensionTags(event) {
 function parseTagKey(key) {
   if (!key) return null;
   const segments = key.split(':');
-  if (segments.length < 2) return null;
 
-  let body;
+  let offset;
   if (segments[0] === 'ext') {
-    body = segments.slice(1);
+    offset = 1;
   } else if (segments[0] === 'ekw') {
-    // Legacy: synthesize ns='ekw', the rest is the facet path
-    body = segments;
+    // Legacy unprefixed shape: ns is the literal 'ekw' at index 0.
+    offset = 0;
   } else {
     return null;
   }
 
-  if (body.length < 2) return null;
-
-  // Detect optional sub at the tail
-  /** @type {string | null} */
-  let sub = null;
-  let tail = body.length;
-  const lastSeg = body[body.length - 1];
-  const prevSeg = body[body.length - 2];
-
-  if (prevSeg === 'prefLabel') {
-    if (!lastSeg) return null;
-    sub = `prefLabel:${lastSeg}`;
-    tail = body.length - 2;
-  } else if (lastSeg === 'id' || lastSeg === 'type') {
-    sub = lastSeg;
-    tail = body.length - 1;
-  }
-
-  if (tail < 2) return null; // need at least ns + facet
-
-  const facet = body[tail - 1];
-  const ns = body.slice(0, tail - 1).join(':');
+  const ns = segments[offset];
+  const facet = segments[offset + 1];
   if (!ns || !facet) return null;
 
-  return { ns, facet, sub };
+  const rest = segments.slice(offset + 2).join(':');
+  if (rest === '') return { ns, facet, sub: null }; // bare scalar
+
+  const legal =
+    rest === 'id' ||
+    rest === 'type' ||
+    rest === 'name' ||
+    (rest.startsWith('prefLabel:') && rest.slice('prefLabel:'.length) !== '');
+  if (!legal) return null;
+
+  return { ns, facet, sub: rest };
 }

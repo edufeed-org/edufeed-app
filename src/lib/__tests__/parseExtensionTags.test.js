@@ -110,7 +110,10 @@ describe('parseExtensionTags', () => {
     expect(facet?.items).toEqual(['Freie Methode A', 'Freie Methode B']);
   });
 
-  it('parses a form-coordinate namespace (ext:30168:<pub>:<d>:*) keeping pub:d as part of <ns>', () => {
+  it('ignores a form-coordinate namespace (ext:30168:<pub>:<d>:*) — surplus segments are not legal <ns>', () => {
+    // `<ns>` and `<facet>` MUST NOT contain `:`, so these keys have surplus
+    // segments and their segmentation is ambiguous. The normative rule is to
+    // ignore them outright rather than guess — see nips/AMB.md.
     const pub = 'a'.repeat(64);
     const event = {
       tags: [
@@ -121,8 +124,23 @@ describe('parseExtensionTags', () => {
       ]
     };
     const parsed = parseExtensionTags(event);
+    expect(parsed.namespaces.size).toBe(0);
+  });
 
-    const ns = parsed.namespaces.get(`30168:${pub}:my-form`);
+  it('parses form-emitted ext using the form d-tag as <ns>', () => {
+    // The conformant replacement for the shape above: <ns> is the form's bare
+    // `d`-tag, and the author pubkey lives in the resource's `a` back-ref.
+    const event = {
+      tags: [
+        ['ext:my-form:kompetenz:id', 'https://example.org/komp/arg'],
+        ['ext:my-form:kompetenz:prefLabel:de', 'Argumentieren'],
+        ['ext:my-form:kompetenz:type', 'Concept'],
+        ['ext:my-form:klassenstufe', '7']
+      ]
+    };
+    const parsed = parseExtensionTags(event);
+
+    const ns = parsed.namespaces.get('my-form');
     expect(ns).toBeDefined();
     expect(ns?.facets.get('kompetenz')?.kind).toBe('concept');
     expect(ns?.facets.get('kompetenz')?.items).toEqual([
@@ -130,6 +148,24 @@ describe('parseExtensionTags', () => {
     ]);
     expect(ns?.facets.get('klassenstufe')?.kind).toBe('scalar');
     expect(ns?.facets.get('klassenstufe')?.items).toEqual(['7']);
+  });
+
+  it('ignores legacy surplus-segment konfi keys (no back-compat read shim)', () => {
+    const parsed = parseExtensionTags({
+      tags: [
+        ['ext:ekw:konfi:themen:id', 'urn:t1'],
+        ['ext:ekw:konfi:themen:prefLabel:de', 'Thema 1'],
+        ['ext:ekw:konfi:themen:type', 'Concept']
+      ]
+    });
+    expect(parsed.namespaces.size).toBe(0);
+  });
+
+  it('ignores an unknown sub rather than guessing at it', () => {
+    const parsed = parseExtensionTags({
+      tags: [['ext:ekw:gradeLevel:bogusSub', 'x']]
+    });
+    expect(parsed.namespaces.size).toBe(0);
   });
 
   it('isolates mixed namespaces in the same event', () => {

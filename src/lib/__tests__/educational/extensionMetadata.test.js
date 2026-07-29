@@ -95,13 +95,16 @@ describe('buildExtensionSections', () => {
   it('uses the form authors field labels when a 30168 form event is supplied', () => {
     const formPubkey = 'b'.repeat(64);
     const formDTag = 'my-form';
-    const ns = `30168:${formPubkey}:${formDTag}`;
+    const coord = `30168:${formPubkey}:${formDTag}`;
+    // Per the NIP-AMB grammar, form-emitted ext keys use the form's bare
+    // `d`-tag as <ns> — colon-free, no pubkey. The pubkey is discoverable only
+    // via the `a` back-ref below.
     const event = {
       tags: [
-        ['a', ns, 'wss://relay.example', 'form'],
-        [`ext:${ns}:kompetenzen:id`, 'https://example.org/komp/arg'],
-        [`ext:${ns}:kompetenzen:prefLabel:de`, 'Argumentieren'],
-        [`ext:${ns}:kompetenzen:type`, 'Concept']
+        ['a', coord, 'wss://relay.example', 'form'],
+        [`ext:${formDTag}:kompetenzen:id`, 'https://example.org/komp/arg'],
+        [`ext:${formDTag}:kompetenzen:prefLabel:de`, 'Argumentieren'],
+        [`ext:${formDTag}:kompetenzen:type`, 'Concept']
       ]
     };
     const formEvent = {
