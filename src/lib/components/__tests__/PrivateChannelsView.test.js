@@ -35,7 +35,9 @@ const holders = vi.hoisted(() => ({
     channels: [],
     phase: 'idle',
     dissolved: false,
-    signerHasNip44: false
+    signerHasNip44: false,
+    canManageChannels: false,
+    canCreateInvite: false
   })
 }));
 vi.mock('$lib/concord/community.svelte.js', () => ({
@@ -64,16 +66,38 @@ describe('PrivateChannelsView — owner gating', () => {
   it('renders the new-channel affordance for a Concord-owned community with no communikeyEvent (standalone route)', () => {
     holders.concord = {
       ...holders.concord,
-      community: { material: { owner: OWNER } }
+      community: { material: { owner: OWNER } },
+      canManageChannels: true
     };
     render(PrivateChannelsView, { props: { communityId: 'c'.repeat(64) } });
     expect(screen.getAllByTestId('concord-new-channel').length).toBeGreaterThan(0);
   });
 
-  it('hides the new-channel affordance when material.owner is not the active user', () => {
+  it('hides the new-channel affordance when material.owner is not the active user and canManageChannels is false', () => {
     holders.concord = {
       ...holders.concord,
-      community: { material: { owner: OTHER } }
+      community: { material: { owner: OTHER } },
+      canManageChannels: false
+    };
+    render(PrivateChannelsView, { props: { communityId: 'c'.repeat(64) } });
+    expect(screen.queryByTestId('concord-new-channel')).toBeNull();
+  });
+
+  it('renders the new-channel affordance for a non-owner with canManageChannels (delegated admin)', () => {
+    holders.concord = {
+      ...holders.concord,
+      community: { material: { owner: OTHER } },
+      canManageChannels: true
+    };
+    render(PrivateChannelsView, { props: { communityId: 'c'.repeat(64) } });
+    expect(screen.getAllByTestId('concord-new-channel').length).toBeGreaterThan(0);
+  });
+
+  it('hides the new-channel affordance for the owner when canManageChannels is false', () => {
+    holders.concord = {
+      ...holders.concord,
+      community: { material: { owner: OWNER } },
+      canManageChannels: false
     };
     render(PrivateChannelsView, { props: { communityId: 'c'.repeat(64) } });
     expect(screen.queryByTestId('concord-new-channel')).toBeNull();

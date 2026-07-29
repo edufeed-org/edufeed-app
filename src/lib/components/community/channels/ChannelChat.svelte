@@ -38,6 +38,8 @@
     channel,
     dissolved = false,
     isOwner = false,
+    canCreateInvite = false,
+    canManageChannels = false,
     channelCount = 1,
     openOverlay,
     onBack
@@ -264,7 +266,7 @@
       >
     </p>
   </div>
-  {#if !dissolved}
+  {#if !dissolved && canCreateInvite}
     <button
       class="btn btn-ghost btn-sm"
       data-testid="concord-header-invite"
@@ -290,7 +292,7 @@
       <ul
         class="dropdown-content menu z-30 w-60 rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
       >
-        {#if !dissolved}
+        {#if !dissolved && canCreateInvite}
           <li>
             <button
               data-testid="concord-menu-invite"
@@ -329,7 +331,7 @@
             </button>
           </li>
         {/each}
-        {#if isOwner && !dissolved && channelCount > 1}
+        {#if canManageChannels && !dissolved && channelCount > 1}
           <li>
             <button
               class="text-error"

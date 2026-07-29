@@ -223,7 +223,14 @@ describe('ChannelChat header invite button', () => {
     const community = makeCommunity([]);
 
     const { container } = render(ChannelChat, {
-      props: { community, channel: CHANNEL, dissolved: false, openOverlay, onBack: () => {} }
+      props: {
+        community,
+        channel: CHANNEL,
+        dissolved: false,
+        canCreateInvite: true,
+        openOverlay,
+        onBack: () => {}
+      }
     });
     await Promise.resolve();
     await Promise.resolve();
@@ -245,6 +252,26 @@ describe('ChannelChat header invite button', () => {
         community,
         channel: CHANNEL,
         dissolved: true,
+        canCreateInvite: true,
+        openOverlay: () => {},
+        onBack: () => {}
+      }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[data-testid="concord-header-invite"]')).toBeNull();
+  });
+
+  it('hides the header invite button when canCreateInvite is false, even when live', async () => {
+    const community = makeCommunity([]);
+
+    const { container } = render(ChannelChat, {
+      props: {
+        community,
+        channel: CHANNEL,
+        dissolved: false,
+        canCreateInvite: false,
         openOverlay: () => {},
         onBack: () => {}
       }
@@ -389,11 +416,12 @@ describe('ChannelChat delete + dissolved recovery', () => {
     return utils;
   }
 
-  it('shows "Kanal löschen" and calls openOverlay(delete-channel) when owner, live, >1 channel', async () => {
+  it('shows "Kanal löschen" and calls openOverlay(delete-channel) when canManageChannels, live, >1 channel', async () => {
     const openOverlay = vi.fn();
     const { container } = await renderChat({
       openOverlay,
       isOwner: true,
+      canManageChannels: true,
       dissolved: false,
       channelCount: 2
     });
@@ -408,6 +436,7 @@ describe('ChannelChat delete + dissolved recovery', () => {
     const { container } = await renderChat({
       openOverlay: vi.fn(),
       isOwner: true,
+      canManageChannels: true,
       dissolved: false,
       channelCount: 1
     });
@@ -415,6 +444,93 @@ describe('ChannelChat delete + dissolved recovery', () => {
       /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
     );
     expect(screen.queryByRole('button', { name: /Kanal löschen|Delete channel/ })).toBeNull();
+  });
+
+  it('hides "Kanal löschen" when canManageChannels is false, even for the owner and >1 channel', async () => {
+    const { container } = await renderChat({
+      openOverlay: vi.fn(),
+      isOwner: true,
+      canManageChannels: false,
+      dissolved: false,
+      channelCount: 2
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    expect(screen.queryByRole('button', { name: /Kanal löschen|Delete channel/ })).toBeNull();
+  });
+
+  it('shows "Kanal löschen" for a non-owner with canManageChannels (delegated admin)', async () => {
+    const openOverlay = vi.fn();
+    const { container } = await renderChat({
+      openOverlay,
+      isOwner: false,
+      canManageChannels: true,
+      dissolved: false,
+      channelCount: 2
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    expect(screen.queryByRole('button', { name: /Kanal löschen|Delete channel/ })).not.toBeNull();
+  });
+
+  it('hides the ⋯ menu dissolve item for a non-owner even with full manage capabilities', async () => {
+    const { container } = await renderChat({
+      openOverlay: vi.fn(),
+      isOwner: false,
+      canManageChannels: true,
+      canCreateInvite: true,
+      dissolved: false,
+      channelCount: 2
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    expect(screen.queryByRole('button', { name: /Bereich auflösen|Dissolve/ })).toBeNull();
+  });
+
+  it('shows the ⋯ menu dissolve item for the owner, unchanged, regardless of caps', async () => {
+    const { container } = await renderChat({
+      openOverlay: vi.fn(),
+      isOwner: true,
+      canManageChannels: false,
+      canCreateInvite: false,
+      dissolved: false,
+      channelCount: 2
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    expect(screen.getByRole('button', { name: /Bereich auflösen|Dissolve/ })).toBeTruthy();
+  });
+
+  it('hides the ⋯ menu invite item when canCreateInvite is false', async () => {
+    const { container } = await renderChat({
+      openOverlay: vi.fn(),
+      isOwner: true,
+      canCreateInvite: false,
+      dissolved: false,
+      channelCount: 1
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    expect(container.querySelector('[data-testid="concord-menu-invite"]')).toBeNull();
+  });
+
+  it('shows the ⋯ menu invite item when canCreateInvite is true', async () => {
+    const { container } = await renderChat({
+      openOverlay: vi.fn(),
+      isOwner: false,
+      canCreateInvite: true,
+      dissolved: false,
+      channelCount: 1
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="concord-chat-menu"]'))
+    );
+    expect(container.querySelector('[data-testid="concord-menu-invite"]')).not.toBeNull();
   });
 
   it('shows the dissolved recover button (owner) and calls openOverlay(create)', async () => {

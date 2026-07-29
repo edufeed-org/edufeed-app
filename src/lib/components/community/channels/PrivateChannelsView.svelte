@@ -312,7 +312,7 @@
           <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
         </button>
       {/each}
-      {#if concord.community && isConcordOwner && !concord.dissolved}
+      {#if concord.community && concord.canManageChannels && !concord.dissolved}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
           data-testid="concord-new-channel"
@@ -389,6 +389,8 @@
             channel={activeChannel}
             dissolved={concord.dissolved}
             isOwner={isConcordOwner}
+            canCreateInvite={concord.canCreateInvite}
+            canManageChannels={concord.canManageChannels}
             channelCount={channels.length}
             openOverlay={(/** @type {string} */ name) => (overlay = name)}
             onBack={() => (mobileChat = false)}
@@ -439,6 +441,10 @@
       channel={activeChannel}
       isOwner={isConcordOwner}
       signerHasNip44={concord.signerHasNip44}
+      canModerate={concord.canModerate}
+      canManageRoles={concord.canManageRoles}
+      canPromoteAdmin={concord.canPromoteAdmin}
+      myTier={concord.myTier}
       onClose={() => (overlay = null)}
     />
   {:else if overlay === 'explainer'}
