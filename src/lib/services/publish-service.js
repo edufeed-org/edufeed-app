@@ -73,9 +73,8 @@ function notifyStatusUpdate(status) {
  * hands it here.
  *
  * `publishEvent` below is the outbox-model counterpart: it computes a relay
- * set and then does this same fan-out. Both it and `publishGiftWrap` still
- * carry their own copy of the loop; migrating them is a follow-up, not a
- * change to make while tidying an unrelated feature.
+ * set and then does this same fan-out. It still carries its own copy of the
+ * loop; migrating it is a follow-up.
  *
  * @param {import('nostr-tools').NostrEvent} signedEvent - The signed Nostr event
  * @param {string[]} relays - Exact relay URLs to publish to

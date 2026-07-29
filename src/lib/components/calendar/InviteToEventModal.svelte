@@ -9,9 +9,7 @@
 <script>
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
-  import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
-  import { SendWrappedMessage } from 'applesauce-actions/actions';
-  import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
+  import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
@@ -74,14 +72,11 @@
     if (!rawEvent || targets.length === 0 || isSending) return;
     isSending = true;
     const content = buildInviteContent();
-    try {
-      await ensureDmRelayList();
-    } catch (err) {
-      console.warn('ensureDmRelayList failed, continuing with defaults', err);
-    }
     for (const pubkey of targets) {
       try {
-        await actionRunnerOptimistic.run(SendWrappedMessage, pubkey, content);
+        // sendWrappedDm settles both relay lists first — ours so the reply can
+        // reach us, theirs so the wrap goes to the inbox they actually read.
+        await sendWrappedDm(pubkey, content);
         sendStatus = { ...sendStatus, [pubkey]: 'sent' };
       } catch (err) {
         console.warn('Invite DM failed for', pubkey, err);

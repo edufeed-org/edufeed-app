@@ -83,4 +83,25 @@ describe('publishGiftWrap', () => {
     expect(result.success).toBe(false);
     expect(result.successCount).toBe(0);
   });
+
+  it('counts a relay that answers OK: false as a failure, not a delivery', async () => {
+    // relay.publish RESOLVES with {ok:false} when the relay *rejects* the
+    // event; it only throws on connection/timeout errors. Treating that as a
+    // success tells the sender their DM was delivered when no relay took it.
+    relayPublish.mockResolvedValue({ ok: false, message: 'blocked: not allowed' });
+    const result = await run(giftWrap(), ['wss://a', 'wss://b']);
+
+    expect(result.success).toBe(false);
+    expect(result.successCount).toBe(0);
+  });
+
+  it('still reports success when one relay rejects and another accepts', async () => {
+    relayPublish
+      .mockResolvedValueOnce({ ok: false, message: 'blocked' })
+      .mockResolvedValueOnce({ ok: true });
+    const result = await run(giftWrap(), ['wss://a', 'wss://b']);
+
+    expect(result.success).toBe(true);
+    expect(result.successCount).toBe(1);
+  });
 });
