@@ -8,20 +8,28 @@
  * trail for why widening it would fan out a fresh channel key to the whole
  * community.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/svelte';
 import { BehaviorSubject, of } from 'rxjs';
 
 const OWNER = 'o'.repeat(64);
 const ADMIN = 'a'.repeat(64);
 const ADMIN2 = 'b'.repeat(64); // second admin, used as an "outranks-me" target
 const MODERATOR = 'm'.repeat(64);
+const MODERATOR2 = 'n'.repeat(64); // second moderator, used as a peer-outranks-me target
 const LURKER = 'l'.repeat(64); // community member, never posted in this channel
-const ACTIVE = OWNER; // active user is the owner for these tests
+
+// Mutable so individual tests can act as a non-owner (e.g. a moderator) —
+// defaults to OWNER, reset after each test.
+let activeUser = OWNER;
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: ACTIVE })
+  useActiveUser: () => () => ({ pubkey: activeUser })
 }));
+
+afterEach(() => {
+  activeUser = OWNER;
+});
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: (/** @type {() => Iterable<string>} */ getPubkeys) => () => {
@@ -131,6 +139,7 @@ describe('ChannelMembersModal — community-wide roster', () => {
         channel: CHANNEL,
         isOwner: true,
         canModerate: true,
+        myTier: 'owner',
         signerHasNip44: true,
         onClose: () => {}
       }
@@ -301,5 +310,57 @@ describe('ChannelMembersModal — role actions (capability-gated)', () => {
     });
 
     expect(screen.queryAllByTestId('concord-member-ban').length).toBe(0);
+  });
+
+  it('moderator actor: kick/ban outrank-gated per target — present on roleless, absent on owner/admin/peer-moderator', () => {
+    // Regression test for the authority-gating bug: kick/ban used to be
+    // gated only on `canModerate && !self`, with no per-target outrank
+    // check (unlike role actions, which use canActOnTier). A moderator
+    // would see kick/ban on EVERY non-self row, including the owner and
+    // admins — canModerateTier(myTier, targetTier) must restrict this to
+    // roleless targets only for a moderator actor.
+    // Active user IS the moderator (not the owner, unlike the other tests
+    // in this file) — otherwise the `!self` check alone would hide the
+    // owner's own row and the test would pass without exercising
+    // canModerateTier at all. MODERATOR2 is a distinct peer moderator (not
+    // the actor) so the "moderator can't act on another moderator" branch
+    // is genuinely exercised, not just hidden behind the self-check.
+    activeUser = MODERATOR;
+    const community = fakeCommunity({
+      members: [OWNER, ADMIN, MODERATOR, MODERATOR2, LURKER],
+      roles: [ADMIN_ROLE, MOD_ROLE],
+      grants: new Map([
+        [ADMIN, ['r-admin']],
+        [MODERATOR, ['r-mod']],
+        [MODERATOR2, ['r-mod']]
+      ])
+    });
+    render(ChannelMembersModal, {
+      props: {
+        community,
+        channel: CHANNEL,
+        isOwner: false,
+        signerHasNip44: true,
+        canModerate: true,
+        canManageRoles: false,
+        canPromoteAdmin: false,
+        myTier: 'moderator',
+        onClose: () => {}
+      }
+    });
+
+    // Roleless member (LURKER): kick/ban present.
+    const lurkerRow = /** @type {HTMLElement} */ (
+      screen.getByText('Name-' + LURKER.slice(0, 4)).closest('div')
+    );
+    expect(within(lurkerRow).queryByTestId('concord-member-ban')).toBeTruthy();
+
+    // Owner, admin, and peer moderator (MODERATOR2, not self): kick/ban absent.
+    for (const target of [OWNER, ADMIN, MODERATOR2]) {
+      const row = /** @type {HTMLElement} */ (
+        screen.getByText('Name-' + target.slice(0, 4)).closest('div')
+      );
+      expect(within(row).queryByTestId('concord-member-ban')).toBeNull();
+    }
   });
 });

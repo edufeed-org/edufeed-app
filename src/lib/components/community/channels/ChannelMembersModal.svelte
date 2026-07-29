@@ -21,13 +21,15 @@
     list is community-wide but per-channel activity can lag.
   - `rotateChannel`/`ban` are gated on `canModerate` (tier ∈ {owner, admin,
     moderator} — see community.svelte.js's capability getters), not
-    `isOwner`-only anymore. Caveat carried over from moderation.js's header
-    comment: `rotateChannel` itself throws synchronously if the caller lacks
-    MANAGE_CHANNELS — the Moderator preset (`MOD_PERMS` in roles.js) does
-    NOT include that bit, so a moderator-initiated kick/ban still surfaces
-    as a caught rejection → `concord_moderation_failed` toast rather than a
-    silent no-op. Tightening `canModerate` further (e.g. splitting it by
-    MANAGE_CHANNELS) is left for a follow-up; not fixed here.
+    `isOwner`-only anymore. `MOD_PERMS` (roles.js) DOES include
+    MANAGE_CHANNELS, so a moderator's kick/ban of an OUTRANKABLE target (a
+    roleless member) succeeds server-side rather than throwing. Because of
+    that, kick/ban buttons are additionally gated per-target via
+    `canModerateTier` (owner→anyone-but-owner; admin→{moderator,roleless};
+    moderator→{roleless}) so a moderator can never even attempt to act on
+    the owner/admins/peer moderators — without this, `community.ban()` has
+    no server-side outrank check and would partially commit (poison the
+    banlist) before the unrelated `rotateChannel` outrank check throws.
   - **New:** per-member role actions ("Zum Admin machen" / "Zum Moderator
     machen" / "Rolle entfernen") are gated on `canPromoteAdmin`/
     `canManageRoles` + the `canActOnTier` outrank check (owner acts on
@@ -52,17 +54,19 @@
   import * as m from '$lib/paraglide/messages';
 
   // `isOwner` was this modal's only gate pre-roles (kick/ban); now fully
-  // superseded by the capability props below (canModerate for kick/ban,
-  // canPromoteAdmin/canManageRoles for role actions), so it's read nowhere
-  // in this file. Still accepted (renamed to `_isOwner`, unused-var-safe)
-  // rather than dropped from the prop type — PrivateChannelsView still
-  // passes it here until it's re-gated onto the capability props too.
+  // superseded by the capability props below (canPromoteAdmin/canManageRoles
+  // for role actions; kick/ban is gated by canModerateTier(myTier, ...)
+  // below, which subsumes canModerate's actor-tier check with a per-target
+  // outrank check), so neither `isOwner` nor `canModerate` is read anywhere
+  // in this file. Both are still accepted (renamed with a `_` prefix,
+  // unused-var-safe) rather than dropped from the prop type — call sites
+  // still pass them.
   let {
     community,
     channel,
     isOwner: _isOwner = false,
     signerHasNip44 = false,
-    canModerate = false,
+    canModerate: _canModerate = false,
     canManageRoles = false,
     canPromoteAdmin = false,
     myTier = null,
@@ -83,6 +87,25 @@
     if (targetTier === 'owner') return false;
     if (actorTier === 'owner') return true;
     if (actorTier === 'admin') return targetTier === 'moderator' || targetTier === null;
+    return false;
+  }
+
+  // Kick/ban outrank check (separate from canActOnTier above): unlike role
+  // changes, a moderator's kick/ban of a ROLELESS member is a legitimate,
+  // server-accepted action (MOD_PERMS includes MANAGE_CHANNELS) — reusing
+  // canActOnTier here would wrongly hide that button, since canActOnTier
+  // returns false for every moderator actor. Mirrors rotateChannel's
+  // strict-outrank-by-position rule: owner→anyone-but-owner;
+  // admin→{moderator,roleless}; moderator→{roleless}.
+  /**
+   * @param {'owner'|'admin'|'moderator'|null} actorTier
+   * @param {'owner'|'admin'|'moderator'|null} targetTier
+   */
+  function canModerateTier(actorTier, targetTier) {
+    if (targetTier === 'owner') return false;
+    if (actorTier === 'owner') return true;
+    if (actorTier === 'admin') return targetTier === 'moderator' || targetTier === null;
+    if (actorTier === 'moderator') return targetTier === null;
     return false;
   }
 
@@ -263,7 +286,7 @@
         </button>
       {/if}
     {/if}
-    {#if canModerate && !self}
+    {#if !self && canModerateTier(myTier, targetTier)}
       <button
         class="btn btn-ghost btn-xs"
         title={signerHasNip44 ? m.concord_kick() : m.concord_moderate_needs_nip44()}
