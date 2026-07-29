@@ -10,6 +10,8 @@ import { parseConcordPointer } from './pointer.js';
 import { getConcordState, getConcordClient } from './client.svelte.js';
 import { useObservable } from './bridge.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { useActiveUser } from '$lib/stores/accounts.svelte';
+import { memberTier } from './roles.js';
 
 /**
  * Visibility rule for the community "channels" tab (spec §7):
@@ -52,9 +54,21 @@ export function deriveVisibleChannels(channels, heldChannelIds) {
  * off / logged out) or `getCommunityId()` returning undefined — every
  * accessor chain uses optional chaining and getters return safe defaults.
  * @param {() => string|undefined} getCommunityId Concord community id getter
- * @returns {() => { enabled: boolean, communityId: string|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean }}
+ * @returns {() => { enabled: boolean, communityId: string|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean, myTier: 'owner'|'admin'|'moderator'|null, canManageChannels: boolean, canCreateInvite: boolean, canModerate: boolean, canManageRoles: boolean, canPromoteAdmin: boolean }}
  */
 export function useConcordArea(getCommunityId) {
+  const getActiveUser = useActiveUser();
+  const getRoles = useObservable(() => {
+    const communityId = getCommunityId();
+    const _tick = getConcordState().communities;
+    return communityId ? getConcordClient()?.getCommunity(communityId)?.roles$ : undefined;
+  }, /** @type {any[]} */ ([]));
+  const getGrants = useObservable(() => {
+    const communityId = getCommunityId();
+    const _tick = getConcordState().communities;
+    return communityId ? getConcordClient()?.getCommunity(communityId)?.grants$ : undefined;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- initial value only, useObservable wraps it in $state.raw()
+  }, /** @type {Map<string,string[]>} */ (new Map()));
   const getChannels = useObservable(() => {
     const communityId = getCommunityId();
     const _tick = getConcordState().communities; // re-run when memberships change
@@ -102,6 +116,12 @@ export function useConcordArea(getCommunityId) {
     const heldChannelIds = (community?.material?.channels ?? []).map(
       (/** @type {{id: string}} */ k) => k.id
     );
+    const myTier = memberTier(
+      getRoles(),
+      getGrants(),
+      community?.material?.owner,
+      getActiveUser()?.pubkey
+    );
     return {
       enabled: !!runtimeConfig.concord?.enabled,
       communityId,
@@ -117,7 +137,16 @@ export function useConcordArea(getCommunityId) {
       // mounted before the async client setup finished would miss the
       // capability forever. state.client is set/cleared in the same
       // reassignments as the rest of the client lifecycle.
-      signerHasNip44: !!getConcordState().client?.signer?.nip44
+      signerHasNip44: !!getConcordState().client?.signer?.nip44,
+      // Owner-inclusive capability booleans (CORD-04 tiers). `myTier` is null
+      // for roleless members / before roles$+grants$ have loaded, which
+      // correctly yields false for every capability below.
+      myTier,
+      canManageChannels: myTier === 'owner' || myTier === 'admin',
+      canCreateInvite: myTier === 'owner' || myTier === 'admin' || myTier === 'moderator',
+      canModerate: myTier === 'owner' || myTier === 'admin' || myTier === 'moderator',
+      canManageRoles: myTier === 'owner' || myTier === 'admin',
+      canPromoteAdmin: myTier === 'owner'
     };
   };
 }
@@ -130,7 +159,7 @@ export function useConcordArea(getCommunityId) {
  * — which gate visibility on the pointer's mere existence, independent of
  * membership).
  * @param {() => any} getCommunikeyEvent kind 10222 event getter
- * @returns {() => { enabled: boolean, pointer: {communityId: string, relay: string|undefined}|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean }}
+ * @returns {() => { enabled: boolean, pointer: {communityId: string, relay: string|undefined}|undefined, community: any, membership: 'none'|'member', channels: any[], phase: string, dissolved: boolean, signerHasNip44: boolean, myTier: 'owner'|'admin'|'moderator'|null, canManageChannels: boolean, canCreateInvite: boolean, canModerate: boolean, canManageRoles: boolean, canPromoteAdmin: boolean }}
  */
 export function useConcordCommunity(getCommunikeyEvent) {
   const getArea = useConcordArea(() => parseConcordPointer(getCommunikeyEvent())?.communityId);
