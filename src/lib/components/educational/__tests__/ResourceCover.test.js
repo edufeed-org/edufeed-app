@@ -118,8 +118,10 @@ describe('ResourceCover — unloadable cover image (issue #51)', () => {
   // to leave a grey placeholder box carrying the license pill. It now falls
   // through to the same branches an absent cover uses.
   /**
-   * Error out every source stage of the cover image (size="card" → proxy stage
-   * then original stage). Scoped to the image branch so a PDF-thumbnail img
+   * Error out every source stage of the cover image (proxy stage then original
+   * stage — the chain is the same length for size="card" and size="thumbnail",
+   * only the proxy dimensions differ). Loops rather than counting stages, so it
+   * holds either way. Scoped to the image branch so a PDF-thumbnail img
    * rendered afterwards isn't failed too.
    * @param {Element} container
    */
@@ -149,6 +151,40 @@ describe('ResourceCover — unloadable cover image (issue #51)', () => {
       props: { resource: buildResource(), size: 'full', aspect: 'wide' }
     });
     expect(queryByTestId('license-caution')).not.toBeNull();
+
+    await failEveryStage(container);
+
+    expect(queryByTestId('license-caution')).toBeNull();
+  });
+
+  // The list-variant card. `size` reaches ImageWithFallback only as the proxy
+  // dimension preset, so it cannot change the stage chain or when the chain is
+  // exhausted — but that is an argument from reading the code, and this branch
+  // is not reachable from Discover today (no list/grid toggle), so it went
+  // untested by hand. These two pin it.
+  it('falls back to TypoCover in the thumbnail variant too', async () => {
+    const { container, queryByTestId } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'thumbnail', aspect: 'wide' }
+    });
+    expect(queryByTestId('resource-cover-image')).not.toBeNull();
+
+    await failEveryStage(container);
+
+    expect(queryByTestId('resource-cover-image')).toBeNull();
+    expect(queryByTestId('image-fallback-placeholder')).toBeNull();
+    expect(queryByTestId('typo-cover-card')).not.toBeNull();
+  });
+
+  it('drops the dot-variant license caution with the broken image', async () => {
+    licenseState.current = { event: null, status: 'missing' };
+    const { container, queryByTestId } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'thumbnail', aspect: 'wide' }
+    });
+    const caution = queryByTestId('license-caution');
+    expect(caution).not.toBeNull();
+    // Guard against this silently re-testing the pill: at size="thumbnail" the
+    // overlay renders the icon alone, without the "No license info" label.
+    expect(caution?.textContent).not.toContain('No license info');
 
     await failEveryStage(container);
 
