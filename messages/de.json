@@ -2987,6 +2987,7 @@
   "concord_remove_role": "Rolle entfernen",
   "concord_role_change_confirm_title": "Rolle ändern?",
   "concord_role_change_confirm_body": "„{name}“ erhält die Rolle {role}. Das ändert, was diese Person im Bereich tun darf.",
+  "concord_role_remove_confirm_body": "„{name}“ verliert die zugewiesene Rolle und die damit verbundenen Rechte im Bereich.",
   "concord_role_changed_toast": "Rolle aktualisiert.",
   "concord_role_change_failed": "Rolle konnte nicht geändert werden.",
   "concord_rail_channels": "Kanäle",

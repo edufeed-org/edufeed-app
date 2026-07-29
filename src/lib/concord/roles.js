@@ -1,6 +1,13 @@
 // Concord role presets + tier logic (CORD-04). Two preset tiers only — Admin
-// (all perms) and Moderator (kick/ban/messages/invite). The owner is implicit
-// (material.owner) and outranks everyone.
+// (all perms) and Moderator (kick/ban/messages/invite + manage-channels). The
+// owner is implicit (material.owner) and outranks everyone.
+//
+// Moderator carries MANAGE_CHANNELS on purpose: this app's kick/ban
+// (moderation.js) rekeys the channel via community.rotateChannel(), which the
+// SDK gates on MANAGE_CHANNELS — without it a moderator's kick/ban would be
+// folded away. The channel *create/delete* UI stays admin-only regardless,
+// because that button gates on the TIER capability (owner|admin), not the raw
+// permission bit.
 //
 // The CORD-04 §3 permission bits are FROZEN (applesauce-concord types.js PERM);
 // mirrored here as local BigInts so classification + preset-building stay
@@ -29,7 +36,8 @@ export const ADMIN_PERMS =
   PERM.VIEW_AUDIT_LOG |
   PERM.MENTION_EVERYONE;
 
-export const MOD_PERMS = PERM.KICK | PERM.BAN | PERM.MANAGE_MESSAGES | PERM.CREATE_INVITE;
+export const MOD_PERMS =
+  PERM.KICK | PERM.BAN | PERM.MANAGE_MESSAGES | PERM.CREATE_INVITE | PERM.MANAGE_CHANNELS;
 
 /** @type {Record<'admin'|'moderator', {name:string, position:number, perms:bigint}>} */
 const PRESETS = {

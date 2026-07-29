@@ -2987,6 +2987,7 @@
   "concord_remove_role": "Remove role",
   "concord_role_change_confirm_title": "Change role?",
   "concord_role_change_confirm_body": "\"{name}\" will get the {role} role. This changes what they can do in the area.",
+  "concord_role_remove_confirm_body": "\"{name}\" loses their assigned role and its permissions in the area.",
   "concord_role_changed_toast": "Role updated.",
   "concord_role_change_failed": "Couldn't change the role.",
   "concord_rail_channels": "Channels",

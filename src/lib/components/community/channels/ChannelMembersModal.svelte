@@ -316,7 +316,9 @@
               : m.concord_remove_role()}
         <h3 class="text-lg font-extrabold">{m.concord_role_change_confirm_title()}</h3>
         <p class="my-3 text-sm text-base-content/70">
-          {m.concord_role_change_confirm_body({ name, role: roleLabel })}
+          {confirm.tier === null
+            ? m.concord_role_remove_confirm_body({ name })
+            : m.concord_role_change_confirm_body({ name, role: roleLabel })}
         </p>
         <div class="modal-action justify-center">
           <button class="btn btn-ghost" onclick={() => (confirm = null)}
