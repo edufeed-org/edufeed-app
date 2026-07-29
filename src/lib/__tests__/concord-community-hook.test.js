@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { shouldShowChannelsTab, deriveVisibleChannels } from '$lib/concord/community.svelte.js';
-import { memberTier } from '$lib/concord/roles.js';
+import { memberTier, ADMIN_PERMS, MOD_PERMS } from '$lib/concord/roles.js';
 
 describe('shouldShowChannelsTab', () => {
   const base = { enabled: true, pointer: undefined, isOwner: false, isMember: false };
@@ -43,18 +43,10 @@ describe('concord hook capability mapping (myTier -> capability booleans)', () =
     };
   }
 
-  const ADMIN_PERMS_STR = (
-    (1n << 0n) |
-    (1n << 1n) |
-    (1n << 2n) |
-    (1n << 3n) |
-    (1n << 4n) |
-    (1n << 5n) |
-    (1n << 6n) |
-    (1n << 8n) |
-    (1n << 9n)
-  ).toString();
-  const MOD_PERMS_STR = ((1n << 3n) | (1n << 4n) | (1n << 5n) | (1n << 6n)).toString();
+  // Track the source-of-truth preset bitmasks (roles.js) so this fixture can't
+  // drift from the real presets (it did when MOD_PERMS gained MANAGE_CHANNELS).
+  const ADMIN_PERMS_STR = ADMIN_PERMS.toString();
+  const MOD_PERMS_STR = MOD_PERMS.toString();
 
   const owner = 'owner-pubkey';
   const admin = 'admin-pubkey';
