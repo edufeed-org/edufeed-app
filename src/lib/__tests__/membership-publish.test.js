@@ -28,7 +28,6 @@ vi.mock('$lib/services/relay-list-backfill.js', () => ({
   publishDefaultRelayList: async () => null
 }));
 vi.mock('$lib/services/dm-relay-backfill.js', () => ({ ensureDmRelayList: async () => {} }));
-vi.mock('$lib/services/dm-service.svelte.js', () => ({ getDmRelayCheckStatus: () => 'absent' }));
 
 const APP_RELAYS = ['wss://relay.edufeed.org', 'wss://dev.relay.edufeed.org'];
 const PUBLIC_FALLBACKS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://nostr.wine'];
@@ -163,8 +162,7 @@ describe('ensureApplicantRelayLists', () => {
       publishDefaultRelayList,
       ensureDmRelayList,
       fetchRelayListResolution,
-      invalidateRelayListCache,
-      getDmRelayCheckStatus: () => 'absent'
+      invalidateRelayListCache
     };
   });
 
@@ -192,6 +190,12 @@ describe('ensureApplicantRelayLists', () => {
   });
 
   it('backfills the kind 10050 so the approval DM has an inbox to land in', async () => {
+    // Unconditionally: the "have we proved they have none" gate used to live
+    // here, but it belongs to the write itself — every DM send site needs the
+    // same proof. ensureDmRelayList now waits for the DM service's settle-aware
+    // verdict and writes only on 'absent', so a second copy of the check here
+    // could only ever disagree with the one that matters. Covered by
+    // dm-relay-backfill.test.js.
     await run();
 
     expect(ensureDmRelayList).toHaveBeenCalledTimes(1);
@@ -229,31 +233,6 @@ describe('ensureApplicantRelayLists', () => {
     await run();
 
     expect(invalidateRelayListCache).toHaveBeenCalledWith('applicant');
-  });
-
-  it('does not backfill a kind 10050 while the self-check is still running', async () => {
-    // ensureDmRelayList reads the EventStore only, so it cannot tell "no kind
-    // 10050" from "not fetched yet". Publishing a default over a custom DM
-    // inbox that had simply not loaded would silently move the user's inbox.
-    await run({ getDmRelayCheckStatus: () => 'checking' });
-
-    expect(ensureDmRelayList).not.toHaveBeenCalled();
-  });
-
-  it('does not backfill a kind 10050 when the self-check never ran', async () => {
-    // 'idle' means the DM service was never initialised for this account, so
-    // the EventStore says nothing about their inbox either way.
-    await run({ getDmRelayCheckStatus: () => 'idle' });
-
-    expect(ensureDmRelayList).not.toHaveBeenCalled();
-  });
-
-  it('leaves a confirmed DM relay list alone', async () => {
-    // The DM service queried the user's own write relays plus the indexers and
-    // saw a non-empty 10050 — nothing to do.
-    await run({ getDmRelayCheckStatus: () => 'present' });
-
-    expect(ensureDmRelayList).not.toHaveBeenCalled();
   });
 
   it('still checks the DM side when the kind 10002 lookup throws', async () => {

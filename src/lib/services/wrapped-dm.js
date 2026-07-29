@@ -39,9 +39,19 @@ export async function sendWrappedDm(recipients, content, opts = {}) {
   const { action = SendWrappedMessage, args } = opts;
   const pubkeys = (Array.isArray(recipients) ? recipients : [recipients]).filter(Boolean);
 
-  // Disjoint work — our own list vs. theirs — so run both at once. Neither may
-  // block the send: relay bookkeeping failing is not a reason to lose a message.
-  await Promise.allSettled([ensureDmRelayList(), ensureRecipientDmRelays(pubkeys)]);
+  // Only the recipient's list routes this wrap, so only that one is worth
+  // waiting for — and even then best-effort: a dead lookup relay must not
+  // swallow the message.
+  //
+  // Our own kind 10050 is where *replies* land, so the send does not depend on
+  // it at all. ensureDmRelayList now waits for the DM-relay check to reach a
+  // conclusion rather than guessing at one (it publishes a replaceable event,
+  // so an unproven absence could destroy a real list) — which can take
+  // seconds. Firing it alongside keeps that off every send's critical path.
+  ensureDmRelayList().catch((err) => console.warn('[dm] sender relay backfill failed:', err));
+  await ensureRecipientDmRelays(pubkeys).catch((err) =>
+    console.warn('[dm] recipient relay prefetch failed:', err)
+  );
 
   return actionRunnerOptimistic.run(action, ...(args ?? [recipients, content]));
 }

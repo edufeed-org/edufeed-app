@@ -236,6 +236,7 @@
   "dm_relay_banner_use_cta": "Empfohlene Einrichtung verwenden",
   "dm_relay_banner_customize_cta": "Selbst einrichten",
   "dm_relay_banner_dismiss": "Schließen",
+  "dm_relay_autosetup_notice": "Dein Konto hatte noch kein Postfach für Direktnachrichten, deshalb haben wir eines mit den empfohlenen Relays eingerichtet — sonst hätten Antworten an dich nirgendwo ankommen können. Du kannst es unter Einstellungen › DM-Relays ändern.",
   "relay_list_banner_title": "Richte dein Konto fertig ein",
   "relay_list_banner_body": "Du hast noch keine Relay-Liste veröffentlicht, daher finden andere Menschen und Apps deine Beiträge möglicherweise nicht. Beim Veröffentlichen wird ein Event mit deinem Schlüssel signiert.",
   "relay_list_banner_body_nsec": "Du hast noch keine Relay-Liste veröffentlicht, daher finden andere Menschen und Apps deine Beiträge möglicherweise nicht. Da du mit einem privaten Schlüssel angemeldet bist, wird beim Klick auf „Empfohlene verwenden“ direkt ein Event mit deinem Schlüssel signiert und veröffentlicht — es erscheint keine separate Signatur-Abfrage.",

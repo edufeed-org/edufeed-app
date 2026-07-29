@@ -51,6 +51,17 @@ describe('sendWrappedDm', () => {
     );
   });
 
+  it('does not make the send wait for the sender backfill to finish', async () => {
+    // The sender's own kind 10050 is where *replies* land — it never routes
+    // this wrap. ensureDmRelayList now waits out the DM-relay check rather
+    // than guessing at it, which can take seconds; awaiting that would add the
+    // delay to every DM for a list the message does not depend on.
+    ensureDmRelayList.mockReturnValueOnce(new Promise(() => {}));
+
+    await expect(sendWrappedDm('peer1', 'hi')).resolves.toBe('sent');
+    expect(ensureDmRelayList).toHaveBeenCalledTimes(1);
+  });
+
   it('accepts a bare pubkey and passes it to the action unchanged', async () => {
     // Applesauce accepts either shape; normalising would change what the
     // existing call sites hand the action.

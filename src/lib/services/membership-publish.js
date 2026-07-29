@@ -35,7 +35,6 @@ import {
 } from '$lib/services/relay-service.svelte.js';
 import { publishDefaultRelayList as defaultPublishDefaultRelayList } from '$lib/services/relay-list-backfill.js';
 import { ensureDmRelayList as defaultEnsureDmRelayList } from '$lib/services/dm-relay-backfill.js';
-import { getDmRelayCheckStatus as defaultGetDmRelayCheckStatus } from '$lib/services/dm-service.svelte.js';
 
 /** Per-relay publish timeout, matching the other publishers. */
 const PUBLISH_TIMEOUT_MS = 5000;
@@ -101,7 +100,6 @@ export async function publishApplicationCopy(signedEvent, deps = {}) {
  * @param {(pubkey: string) => void} [deps.invalidateRelayListCache]
  * @param {(signer: any) => Promise<any>} [deps.publishDefaultRelayList]
  * @param {() => Promise<void>} [deps.ensureDmRelayList]
- * @param {() => string} [deps.getDmRelayCheckStatus]
  * @returns {Promise<void>}
  */
 export async function ensureApplicantRelayLists(deps = {}) {
@@ -110,8 +108,7 @@ export async function ensureApplicantRelayLists(deps = {}) {
     fetchRelayListResolution = defaultFetchRelayListResolution,
     invalidateRelayListCache = defaultInvalidateRelayListCache,
     publishDefaultRelayList = defaultPublishDefaultRelayList,
-    ensureDmRelayList = defaultEnsureDmRelayList,
-    getDmRelayCheckStatus = defaultGetDmRelayCheckStatus
+    ensureDmRelayList = defaultEnsureDmRelayList
   } = deps;
 
   const pubkey = account?.pubkey;
@@ -139,18 +136,14 @@ export async function ensureApplicantRelayLists(deps = {}) {
   }
 
   try {
-    // Same rule on the DM side. ensureDmRelayList reads the EventStore only, so
-    // on its own it cannot tell "no kind 10050" from "not fetched yet". The DM
-    // service already runs a settle-aware self-check at login against the
-    // user's own write relays plus the indexers — the very check that drives
-    // the app's missing-DM-relay nudge. Reuse its verdict: only 'absent' is
-    // conclusive enough to publish over.
-    const dmStatus = getDmRelayCheckStatus();
-    if (dmStatus === 'absent') {
-      await ensureDmRelayList();
-    } else if (dmStatus !== 'present') {
-      console.warn(`[membership] kind 10050 self-check is '${dmStatus}' — not backfilling`);
-    }
+    // Same rule on the DM side, but the gate lives inside ensureDmRelayList
+    // rather than here: it waits for the DM service's settle-aware verdict and
+    // publishes only on a conclusive 'absent'. Every DM send site needs that
+    // proof too, so a copy of the check here could only disagree with the one
+    // guarding the write. Awaited — unlike a DM send, an application is a
+    // once-ever action, and by the time a form has been filled in the check has
+    // long since settled, so this is effectively instant.
+    await ensureDmRelayList();
   } catch (err) {
     console.warn('[membership] kind 10050 backfill failed:', err);
   }

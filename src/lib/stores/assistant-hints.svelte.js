@@ -318,8 +318,13 @@ export function useAssistantHints() {
     // Fire-and-forget like the banners: on success the underlying store flips
     // the confirmation reactively ('done'); on failure clearing the running
     // flag drops the hint back to 'open'.
+    // announce: false — the user tapped this hint themselves and the card
+    // flips to 'done' in front of them. A toast telling them we set up an
+    // inbox on their behalf belongs to the paths where they did not ask.
     const action =
-      id === 'relays' ? publishDefaultRelayList(manager.active?.signer) : ensureDmRelayList();
+      id === 'relays'
+        ? publishDefaultRelayList(manager.active?.signer)
+        : ensureDmRelayList({ announce: false });
     action.catch(() => {}).then(() => setRunning(id, false));
   }
 
