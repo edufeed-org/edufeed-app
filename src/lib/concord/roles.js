@@ -57,7 +57,14 @@ function toBig(s) {
 export function memberTier(roles, grants, owner, member) {
   if (!member) return null;
   if (member === owner) return 'owner';
-  const byId = new Map((roles ?? []).filter((r) => r && !r.deleted).map((r) => [r.role_id, r]));
+  // Server-scoped only — the presets are server roles; a channel-scoped role
+  // that happened to match a preset bitmask must not read as a server tier
+  // (mirrors presetRoleId's scope filter).
+  const byId = new Map(
+    (roles ?? [])
+      .filter((r) => r && !r.deleted && r.scope?.kind !== 'channel')
+      .map((r) => [r.role_id, r])
+  );
   const ids = grants?.get?.(member) ?? [];
   /** @type {'admin'|'moderator'|null} */
   let tier = null;
