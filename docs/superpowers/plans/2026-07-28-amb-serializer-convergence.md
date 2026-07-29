@@ -391,8 +391,13 @@ git add -A && git commit -m "test: full verification for AMB-serializer converge
 
 **Preconditions (all must hold before running):** Tasks 1–6 complete and verified; the relay-side `nostr_amb.go` fix + `amb-nostr-converter` write/parse guards are live (coordinate with NIP-BOSS — otherwise re-published events may still be mis-indexed); a fresh dev-server smoke test of a new Konfi publish confirms the `ext:org.edufeed.ekw.konfi:*` shape round-trips end to end.
 
-- [ ] **Step 1:** Query the AMB relays for kind-30142 events authored by the key holder that carry any `ext:ekw:konfi:*` tag (the old illegal shape). List them (count, ids, d-tags) — **do not modify anything yet**.
-- [ ] **Step 2: Dry run.** For each, build the re-published event: replace every `ext:ekw:konfi:<slug>:<sub>` tag key with `ext:org.edufeed.ekw.konfi:<slug>:<sub>` (mechanical prefix swap — values unchanged), keep the same `d`-tag (replaceable → supersedes the old event), keep all other tags. Print a per-event before/after diff of the changed keys. Confirm no non-konfi tag is touched and the key count matches.
+- [ ] **Step 1:** Query the AMB relays for kind-30142 events under `#l=ekw` and select **every ext-bearing event**, not only those carrying `ext:ekw:konfi:*` keys. List them (count, ids, d-tags) — **do not modify anything yet**.
+
+  > **Do not select by konfi-key presence.** It looks right and is wrong. On the current corpus, 8 of 25 ext-bearing events carry only bare scalars (`ext:ekw:bibleReference`, `ext:ekw:methodOther`) and zero konfi keys. Those events are already NIP-conformant; their defect is that the pre-fix relay dropped 3-segment scalars from the index. Conversion runs at *index* time (nostrlib `typesense30142/replace.go`), so the only thing that re-indexes them is a re-publish. A konfi-keyed selector skips them and they stay invisible after the migration is declared done. `#l=ekw` is a verified-safe superset: a paginated scan of 8,476 kind-30142 events (2026-07-29) found **0** ext-bearing events lacking that label. (`ext:*` keys are multi-char and not REQ-filterable; `l` is.)
+  >
+  > Expected shape of the set: 25 ext-bearing of 32 labelled — 6 konfi-only, 5 konfi+scalar, 8 scalar-only, 6 already clean. Use this as the dry-run assertion.
+
+- [ ] **Step 2: Dry run.** For each, build the re-published event: replace every `ext:ekw:konfi:<slug>:<sub>` tag key with `ext:org.edufeed.ekw.konfi:<slug>:<sub>` (mechanical prefix swap — values unchanged) **where present**, and re-sign unchanged where not; keep the same `d`-tag (replaceable → supersedes the old event), keep all other tags. **Always bump `created_at` and re-sign** so the event id changes — a byte-identical re-publish has a byte-identical id, and id-level dedupe exists in client caches and broadcast paths even though this relay's `ReplaceEvent` upserts unconditionally. Print a per-event before/after diff of the changed keys. Confirm no non-konfi tag is touched and the key count matches.
 - [ ] **Step 3:** Present the dry-run summary to the key holder; get explicit go-ahead. Sign with the holder's key and publish (the holder runs it, or provides signing) to the AMB relays. **REQ each event back to verify** it landed with the new keys ([[relay-shadow-drops-kind1]]).
 - [ ] **Step 4:** Spot-check in the app: open a migrated resource for edit → Konfi fields populate (proves the repointed `parseKonfiTags` reads the re-published shape). Record counts + verification in the ledger.
 
@@ -400,9 +405,22 @@ git add -A && git commit -m "test: full verification for AMB-serializer converge
 
 ---
 
+### Task 8: `parseExtensionTags` — normative left-anchored grammar (added 2026-07-29)
+
+The read path still implemented the right-anchored heuristic (*"last segment = facet, prior segments joined by `:` = ns"*) that the amended NIP-AMB replaced. On conformant data it agrees with left-anchored parsing, so nothing broke — but it *guesses* at surplus-segment keys, which means edufeed-app kept happily reading un-migrated `ext:ekw:konfi:*` events that the relay and every other conformant consumer must drop. Landed here rather than in a second worktree because this branch already owns the file.
+
+- [x] **Step 1:** Replace `parseTagKey` (`src/lib/helpers/educational/parseExtensionTags.js`) with left-anchored fixed arity, ported from `amb-nostr-converter@ff26856` `src/converters/nostrToAmb.ts`: split on `:`; offset 1 for `ext:`, 0 for legacy `ekw:`; `ns = segments[offset]`, `facet = segments[offset+1]`, `sub = segments.slice(offset+2).join(':')` or null; validate `sub ∈ {id, type, name, prefLabel:<lang>}` and return null otherwise. Delete the doc comment describing the old heuristic — it documented the bug.
+- [x] **Step 2:** Give `sub === 'name'` a real branch. It is in the NIP's closed sub set, so it now passes validation and would otherwise be parsed, accepted, and silently dropped — the same failure class NIP-BOSS found in the converter's `reconstructExt`.
+- [x] **Step 3:** `extensionMetadata.js` — `isFormDriven` compared `ns` against the full `30168:<pub>:<d>` coordinate, which is not a legal `<ns>` and no longer survives parsing. Compare against the form's bare `d`-tag instead and drop `formCoordToNs`.
+- [x] **Step 4:** Tests — invert the form-coordinate case to assert it is *ignored*, add the conformant `ext:<form-d-tag>:*` replacement, and add negative cases for legacy konfi keys and unknown subs.
+
+> **Intended behaviour change:** edufeed-app stops reading un-migrated `ext:ekw:konfi:*`. This matches the no-shim ruling — the two segmentations are indistinguishable, so conformant consumers must ignore them rather than guess. It makes Task 7 the thing that restores those facets, which is the point.
+
+---
+
 ## Out of scope
 
-Wizard read-side convergence (`getAMB*` + EKW/Konfi readers → `nostrToAmb`); changes to `amb-nostr-converter`; the relay `nostr_amb.go` fix + converter guards (NIP-BOSS); the branch merge.
+Wizard read-side convergence (`getAMB*` + EKW/Konfi readers → `nostrToAmb`) — note Task 8 fixes the `parseExtensionTags` grammar *in place*, it does not route it through `nostrToAmb`; changes to `amb-nostr-converter`; the relay `nostr_amb.go` fix + converter guards (NIP-BOSS); the branch merge.
 
 ## Self-review notes
 
