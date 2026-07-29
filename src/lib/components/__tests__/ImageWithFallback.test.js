@@ -76,6 +76,35 @@ describe('ImageWithFallback', () => {
     expect(container.querySelector('[data-testid="image-fallback-placeholder"]')).toBeNull();
   });
 
+  it('notifies onexhausted once when every source stage has failed', async () => {
+    const onexhausted = vi.fn();
+    const { container } = render(ImageWithFallback, {
+      props: { src: SRC, alt: 'pic', size: 'card', onexhausted }
+    });
+    await fireEvent.error(container.querySelector('img'));
+    expect(onexhausted).not.toHaveBeenCalled();
+    await fireEvent.error(container.querySelector('img'));
+    expect(onexhausted).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onexhausted when src is empty (nothing was ever tried)', () => {
+    const onexhausted = vi.fn();
+    render(ImageWithFallback, { props: { src: '', alt: 'pic', onexhausted } });
+    expect(onexhausted).not.toHaveBeenCalled();
+  });
+
+  it('re-arms onexhausted when src changes', async () => {
+    const onexhausted = vi.fn();
+    const { container, rerender } = render(ImageWithFallback, {
+      props: { src: SRC, alt: 'pic', onexhausted }
+    });
+    await fireEvent.error(container.querySelector('img'));
+    expect(onexhausted).toHaveBeenCalledTimes(1);
+    await rerender({ src: 'https://img.example/other.jpg' });
+    await fireEvent.error(container.querySelector('img'));
+    expect(onexhausted).toHaveBeenCalledTimes(2);
+  });
+
   it('shows the placeholder immediately when src is empty', () => {
     const { container } = render(ImageWithFallback, { props: { src: '', alt: 'pic' } });
     expect(container.querySelector('img')).toBeNull();
