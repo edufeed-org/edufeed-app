@@ -14,6 +14,8 @@ import { BehaviorSubject, of } from 'rxjs';
 
 const OWNER = 'o'.repeat(64);
 const ADMIN = 'a'.repeat(64);
+const ADMIN2 = 'b'.repeat(64); // second admin, used as an "outranks-me" target
+const MODERATOR = 'm'.repeat(64);
 const LURKER = 'l'.repeat(64); // community member, never posted in this channel
 const ACTIVE = OWNER; // active user is the owner for these tests
 
@@ -40,8 +42,18 @@ vi.mock('$lib/concord/moderation.js', async () => {
   };
 });
 
+vi.mock('$lib/concord/roles.js', async () => {
+  const actual = /** @type {any} */ (await vi.importActual('$lib/concord/roles.js'));
+  return {
+    ...actual,
+    assignTier: vi.fn().mockResolvedValue(undefined),
+    removeTier: vi.fn().mockResolvedValue(undefined)
+  };
+});
+
 import ChannelMembersModal from '$lib/components/community/channels/ChannelMembersModal.svelte';
 import { kickFromChannel } from '$lib/concord/moderation.js';
+import { assignTier, removeTier, ADMIN_PERMS, MOD_PERMS } from '$lib/concord/roles.js';
 
 /**
  * Build a fake ConcordCommunity exposing just what the modal reads:
@@ -114,7 +126,14 @@ describe('ChannelMembersModal — community-wide roster', () => {
     });
 
     render(ChannelMembersModal, {
-      props: { community, channel: CHANNEL, isOwner: true, signerHasNip44: true, onClose: () => {} }
+      props: {
+        community,
+        channel: CHANNEL,
+        isOwner: true,
+        canModerate: true,
+        signerHasNip44: true,
+        onClose: () => {}
+      }
     });
 
     const banButtons = screen.getAllByTestId('concord-member-ban');
@@ -129,5 +148,158 @@ describe('ChannelMembersModal — community-wide roster', () => {
     expect(banFromChannel).toHaveBeenCalled();
     const keepListArg = /** @type {any} */ (banFromChannel).mock.calls[0][3];
     expect(keepListArg).not.toContain(LURKER);
+  });
+});
+
+// Preset roles as recognized by roles.js's real memberTier() — permissions
+// must equal the frozen ADMIN_PERMS/MOD_PERMS bitmask exactly (as decimal
+// strings, matching the `permissions:string` shape) or memberTier falls back
+// to null, same as a custom/non-preset role.
+const ADMIN_ROLE = {
+  role_id: 'r-admin',
+  name: 'Admin',
+  position: 1,
+  permissions: String(ADMIN_PERMS)
+};
+const MOD_ROLE = {
+  role_id: 'r-mod',
+  name: 'Moderator',
+  position: 2,
+  permissions: String(MOD_PERMS)
+};
+
+function fakeRoledCommunity() {
+  return fakeCommunity({
+    members: [OWNER, ADMIN, ADMIN2, MODERATOR, LURKER],
+    roles: [ADMIN_ROLE, MOD_ROLE],
+    grants: new Map([
+      [ADMIN, ['r-admin']],
+      [ADMIN2, ['r-admin']],
+      [MODERATOR, ['r-mod']]
+    ])
+  });
+}
+
+describe('ChannelMembersModal — role actions (capability-gated)', () => {
+  it('owner actor: sees make-admin + make-moderator on a roleless member; make-admin assigns the admin tier', async () => {
+    const community = fakeRoledCommunity();
+    render(ChannelMembersModal, {
+      props: {
+        community,
+        channel: CHANNEL,
+        isOwner: true,
+        signerHasNip44: true,
+        canModerate: true,
+        canManageRoles: true,
+        canPromoteAdmin: true,
+        myTier: 'owner',
+        onClose: () => {}
+      }
+    });
+
+    expect(screen.getByTestId(`concord-make-admin-${LURKER}`)).toBeTruthy();
+    expect(screen.getByTestId(`concord-make-moderator-${LURKER}`)).toBeTruthy();
+
+    await fireEvent.click(screen.getByTestId(`concord-make-admin-${LURKER}`));
+    await fireEvent.click(screen.getByTestId('concord-confirm-action'));
+
+    expect(assignTier).toHaveBeenCalledWith(community, LURKER, 'admin');
+  });
+
+  it('admin actor (canPromoteAdmin=false): sees make-moderator but not make-admin; can demote a moderator; no role actions on another admin/owner row', async () => {
+    const community = fakeRoledCommunity();
+    render(ChannelMembersModal, {
+      props: {
+        community,
+        channel: CHANNEL,
+        isOwner: false,
+        signerHasNip44: true,
+        canModerate: true,
+        canManageRoles: true,
+        canPromoteAdmin: false,
+        myTier: 'admin',
+        onClose: () => {}
+      }
+    });
+
+    // No "make admin" button anywhere in the roster.
+    expect(screen.queryByTestId(`concord-make-admin-${LURKER}`)).toBeNull();
+    expect(screen.queryByTestId(`concord-make-admin-${MODERATOR}`)).toBeNull();
+
+    // Can offer to promote a roleless member to moderator.
+    expect(screen.getByTestId(`concord-make-moderator-${LURKER}`)).toBeTruthy();
+
+    // Can demote the moderator (remove their role) — confirm calls removeTier.
+    const removeButton = screen.getByTestId(`concord-remove-role-${MODERATOR}`);
+    await fireEvent.click(removeButton);
+    await fireEvent.click(screen.getByTestId('concord-confirm-action'));
+    expect(removeTier).toHaveBeenCalledWith(community, MODERATOR);
+
+    // No role actions at all on another admin's row (admin can't outrank admin) or the owner's row.
+    expect(screen.queryByTestId(`concord-make-moderator-${ADMIN2}`)).toBeNull();
+    expect(screen.queryByTestId(`concord-remove-role-${ADMIN2}`)).toBeNull();
+    expect(screen.queryByTestId(`concord-remove-role-${OWNER}`)).toBeNull();
+    expect(screen.queryByTestId(`concord-make-moderator-${OWNER}`)).toBeNull();
+  });
+
+  it('moderator actor (canManageRoles=false): no role actions anywhere', () => {
+    const community = fakeRoledCommunity();
+    render(ChannelMembersModal, {
+      props: {
+        community,
+        channel: CHANNEL,
+        isOwner: false,
+        signerHasNip44: true,
+        canModerate: true,
+        canManageRoles: false,
+        canPromoteAdmin: false,
+        myTier: 'moderator',
+        onClose: () => {}
+      }
+    });
+
+    for (const target of [OWNER, ADMIN, ADMIN2, MODERATOR, LURKER]) {
+      expect(screen.queryByTestId(`concord-make-admin-${target}`)).toBeNull();
+      expect(screen.queryByTestId(`concord-make-moderator-${target}`)).toBeNull();
+      expect(screen.queryByTestId(`concord-remove-role-${target}`)).toBeNull();
+    }
+  });
+
+  it('kick/ban show for a non-owner actor when canModerate is true (re-gated from isOwner-only)', () => {
+    const community = fakeRoledCommunity();
+    render(ChannelMembersModal, {
+      props: {
+        community,
+        channel: CHANNEL,
+        isOwner: false,
+        signerHasNip44: true,
+        canModerate: true,
+        canManageRoles: false,
+        canPromoteAdmin: false,
+        myTier: 'moderator',
+        onClose: () => {}
+      }
+    });
+
+    expect(screen.getAllByTestId('concord-member-ban').length).toBeGreaterThan(0);
+  });
+
+  it('kick/ban are hidden for a non-owner actor when canModerate is false', () => {
+    const community = fakeRoledCommunity();
+    render(ChannelMembersModal, {
+      props: {
+        community,
+        channel: CHANNEL,
+        isOwner: false,
+        signerHasNip44: true,
+        canModerate: false,
+        canManageRoles: false,
+        canPromoteAdmin: false,
+        myTier: null,
+        onClose: () => {}
+      }
+    });
+
+    expect(screen.queryAllByTestId('concord-member-ban').length).toBe(0);
   });
 });
