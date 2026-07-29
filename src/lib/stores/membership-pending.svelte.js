@@ -1,7 +1,9 @@
 /**
  * Reactive count of *unprocessed* membership applications for the active admin.
  *
- * Loads kind 1069 responses for the configured form, then excludes:
+ * Loads kind 1069 responses for the configured form, narrows them to the
+ * newest submission per applicant addressed to this admin
+ * (`selectAdminApplications`), then excludes:
  *   - locally-rejected rows (localStorage set, mirrors MembershipApprovalsPanel)
  *   - rows whose applicant pubkey is already in the upstream NIP-05 directory
  *     (i.e. already approved — fetched once from `/.well-known/nostr.json`,
@@ -16,6 +18,7 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { formResponseLoader } from '$lib/loaders/community.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { selectAdminApplications } from '$lib/helpers/membership-applications.js';
 
 /** @param {string} pubkey */
 function rejectedKey(pubkey) {
@@ -66,14 +69,9 @@ export function useMembershipPendingCount() {
         // localStorage unavailable — treat nothing as rejected.
       }
 
-      // Applications are fanned out one copy per admin — count only the
-      // copies addressed to the active admin, or each application counts
-      // once per configured admin.
-      const matching = cachedEvents.filter(
-        (e) =>
-          e.tags.some((t) => t[0] === 'a' && t[1] === formAddress) &&
-          e.tags.some((t) => t[0] === 'p' && t[1] === activePubkey)
-      );
+      // One row per applicant, addressed to this admin — see
+      // selectAdminApplications for why both narrowings are needed.
+      const matching = selectAdminApplications(cachedEvents, formAddress, activePubkey);
       count = matching.filter((e) => !rejectedIds[e.id] && !approvedPubkeys[e.pubkey]).length;
     }
 

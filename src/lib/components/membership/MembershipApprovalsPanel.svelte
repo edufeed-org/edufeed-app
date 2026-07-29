@@ -20,6 +20,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { formResponseLoader } from '$lib/loaders/community.js';
+  import { selectAdminApplications } from '$lib/helpers/membership-applications.js';
   import { parseResponseTags, parseFormTemplate, nip44DecryptWith } from '$lib/helpers/forms.js';
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
@@ -134,6 +135,9 @@
   // Subscribe to kind 1069 responses for this form. Applications are fanned
   // out as one encrypted copy per admin, so load and show only the copies
   // addressed to the logged-in admin — the others are undecryptable here.
+  // selectAdminApplications also collapses re-submissions to the newest one
+  // per applicant: approving a superseded copy would provision the handle the
+  // applicant asked for before they edited their application.
   $effect(() => {
     const myPubkey = activePubkey;
     if (!formAddress || !myPubkey) return;
@@ -142,11 +146,7 @@
     const sub = loader().subscribe();
 
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
-      responses = (events || []).filter(
-        (e) =>
-          e.tags.some((t) => t[0] === 'a' && t[1] === formAddress) &&
-          e.tags.some((t) => t[0] === 'p' && t[1] === myPubkey)
-      );
+      responses = selectAdminApplications(events, formAddress, myPubkey);
     });
 
     return () => {
