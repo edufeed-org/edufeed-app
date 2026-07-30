@@ -15,7 +15,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { env } from '$env/dynamic/private';
-import { parseHttpUrl, isPrivateIp, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import { parseHttpUrl, isBlockedHost, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
 import { renderPdfThumbnail } from '$lib/server/pdfThumbnail.js';
 
 const MAX_UPSTREAM_SIZE = 50 * 1024 * 1024; // 50MB
@@ -46,7 +46,7 @@ export async function GET({ url }) {
   if (!parsed) {
     return new Response('URL must be a valid http or https URL', { status: 400 });
   }
-  if (isPrivateIp(parsed)) {
+  if (await isBlockedHost(parsed)) {
     return new Response('Private/local URLs are not allowed', { status: 400 });
   }
 
