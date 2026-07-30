@@ -7,6 +7,7 @@
  * 3. Community relays: if event targets a community (h-tag present)
  */
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
+import { uncacheEvent } from '$lib/stores/event-cache.svelte.js';
 import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.js';
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
 import { getFallbackRelays } from '$lib/helpers/relay-helper.js';
@@ -331,6 +332,18 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
 
       // Remove optimistically added event since publish failed completely
       eventStore.remove(signedEvent);
+
+      // `eventStore.remove` only clears memory. The event was offered to the
+      // IDB cache the moment it was added, and that pipeline is insert-only,
+      // so without this the phantom outlives the failure — and for a
+      // replaceable kind it OVERWRITES the last good version at its address
+      // (nostr-idb keys by `kind:pubkey:d`), which a cache hit then serves
+      // forever without asking a relay. Failure is detected only after
+      // `Promise.allSettled` against a 5000ms timeout while the cache batches
+      // at 1000ms, so by now the write has usually already flushed.
+      // Best-effort and awaited by nothing: the publish has already failed and
+      // the user has been told. (#64)
+      uncacheEvent(signedEvent);
     }
   })();
 }
