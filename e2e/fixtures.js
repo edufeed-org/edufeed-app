@@ -161,11 +161,25 @@ export async function openCreateHub(page) {
  * matched nothing. Names come from src/lib/config/create-actions.js — e.g.
  * 'Create new event', 'Create new calendar', 'Create poll'.
  *
+ * `.first()` is load-bearing and route-dependent. `GlobalFAB`'s "Suggested"
+ * section maps route-suggested ids back onto the *same* action objects the
+ * "Create" section lists (`suggestedActions` at GlobalFAB.svelte:97-104 looks
+ * each id up in `visibleActions`), so on `/calendar` the identical
+ * 'Create new event' button renders in both sections. Both carry the same
+ * aria-label and both call `runAction` on the same object, so either click is
+ * equivalent.
+ *
+ * Note this is the *opposite* case to the event context menu, where `.first()`
+ * was deliberately removed: there the matches are genuinely different actions
+ * and taking the first silently clicked "Share to communities". Same operator,
+ * opposite justification — check which situation you are in before copying
+ * either.
+ *
  * @param {import('@playwright/test').Page} page
  * @param {string} ariaLabel
  */
 export async function clickCreateAction(page, ariaLabel) {
-  const tile = page.locator(`div[role="menu"] button[aria-label="${ariaLabel}"]`);
+  const tile = page.locator(`div[role="menu"] button[aria-label="${ariaLabel}"]`).first();
   await expect(tile).toBeVisible({ timeout: 5000 });
   await tile.click();
 }

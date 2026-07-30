@@ -156,8 +156,14 @@ test.describe('Calendar Event Creation - Happy Path', () => {
       timeout: 10000
     });
 
-    // Verify description/summary is visible
-    await expect(page.getByText(eventSummary)).toBeVisible({ timeout: 5000 });
+    // Scoped to the description card rather than a bare getByText: the summary
+    // is rendered through MarkdownRenderer, so the wrapper and the paragraph it
+    // produces both contain the text and a page-wide getByText resolves to two
+    // elements. Anchoring on the card also makes the assertion say what it
+    // means — the summary is in the description card, not merely on the page.
+    // See CalendarEventDetailView.svelte:218-224.
+    const descriptionCard = page.locator('.card-body').filter({ hasText: eventSummary });
+    await expect(descriptionCard).toBeVisible({ timeout: 5000 });
   });
 });
 
