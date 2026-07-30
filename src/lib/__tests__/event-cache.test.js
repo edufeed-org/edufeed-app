@@ -726,3 +726,147 @@ describe('failed-publish orderings against IDB (#64)', () => {
     expect((await nostrIDB.event(UID))?.id).toBe(phantom.id);
   });
 });
+
+describe('recacheEvent (#64, from-cache restore)', () => {
+  beforeEach(async () => {
+    mockEventStore = new EventStore();
+    mockEventStore.verifyEvent = () => true;
+    const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
+    globalThis.indexedDB = /** @type {IDBFactory} */ (/** @type {unknown} */ (new FDBFactory()));
+    vi.resetModules();
+  });
+
+  const PK = 'b'.repeat(64);
+  const UID = `30142:${PK}:res-1`;
+  const FROM_CACHE = Symbol.for('from-cache');
+
+  /**
+   * @param {string} idChar
+   * @param {number} created_at
+   */
+  const version = (idChar, created_at) =>
+    /** @type {any} */ ({
+      id: idChar.repeat(64),
+      kind: 30142,
+      pubkey: PK,
+      created_at,
+      tags: [['d', 'res-1']],
+      content: '',
+      sig: 'f'.repeat(128)
+    });
+
+  it('the insert$ pipeline DROPS an event marked from-cache — which is the bug', async () => {
+    // applesauce's persistEventsToCache filters on !isFromCache. A predecessor
+    // that reached the app through cacheRequest carries the marker, so re-adding
+    // it to the EventStore restores memory and silently never reaches IDB.
+    const { dbReady, nostrIDB: _nostrIDB } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const addSpy = vi.spyOn(nostrIDB, 'add');
+    const cached = version('1', 1000);
+    Reflect.set(cached, FROM_CACHE, true);
+    const keeper = version('9', 1000);
+    keeper.tags = [['d', 'keeper']];
+
+    mockEventStore.add(cached);
+    mockEventStore.add(keeper);
+
+    // Wait for the batch to actually run, so the absence below is not vacuous.
+    await vi.waitFor(
+      () => expect(addSpy.mock.calls.some((c) => c[0].id === keeper.id)).toBe(true),
+      { timeout: 20_000, interval: 50 }
+    );
+
+    expect(addSpy.mock.calls.some((c) => c[0].id === cached.id)).toBe(false);
+  });
+
+  it('object spread does NOT strip the marker', async () => {
+    // Ruling out the tempting one-liner: spread copies own enumerable symbol
+    // properties, so {...previous} is still from-cache.
+    const { isFromCache } = await import('applesauce-core/helpers/event');
+    const cached = version('1', 1000);
+    Reflect.set(cached, FROM_CACHE, true);
+
+    expect(isFromCache({ ...cached })).toBe(true);
+  });
+
+  it('writes a from-cache event to IDB anyway', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      recacheEvent
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const cached = version('1', 1000);
+    Reflect.set(cached, FROM_CACHE, true);
+
+    await recacheEvent(cached);
+
+    expect((await nostrIDB.event(UID))?.id).toBe(cached.id);
+  });
+
+  it('restores the predecessor at an address the phantom had taken', async () => {
+    // The full failure sequence, with a from-cache predecessor: this is the
+    // path a user takes after any page reload.
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      uncacheEvent,
+      recacheEvent
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const good = version('1', 1000);
+    Reflect.set(good, FROM_CACHE, true);
+    const phantom = version('2', 1001);
+
+    await nostrIDB.add(good);
+    await nostrIDB.writeQueue?.flush?.();
+    await nostrIDB.add(phantom);
+    await nostrIDB.writeQueue?.flush?.();
+    expect((await nostrIDB.event(UID))?.id).toBe(phantom.id);
+
+    await uncacheEvent(phantom);
+    expect(await nostrIDB.event(UID)).toBeUndefined();
+
+    await recacheEvent(good);
+    expect((await nostrIDB.event(UID))?.id).toBe(good.id);
+  });
+
+  it('refuses a kind the cache deliberately does not persist', async () => {
+    // A direct write must not smuggle past the CACHEABLE_KINDS filter that the
+    // insert$ writer applies.
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      recacheEvent
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+
+    const reaction = version('3', 1000);
+    reaction.kind = 7;
+    reaction.tags = [];
+
+    await recacheEvent(reaction);
+
+    expect(await nostrIDB.event(reaction.id)).toBeUndefined();
+  });
+
+  it('degrades to a no-op when IDB throws', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      recacheEvent
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+    vi.spyOn(nostrIDB, 'add').mockRejectedValueOnce(new Error('boom'));
+
+    await expect(recacheEvent(version('1', 1000))).resolves.toBeUndefined();
+  });
+});

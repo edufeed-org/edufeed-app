@@ -186,6 +186,50 @@ export async function uncacheEvent(event) {
 }
 
 /**
+ * Write a single event straight to IDB, bypassing the `insert$` pipeline.
+ *
+ * Needed for exactly one case: putting a version back after `uncacheEvent`
+ * deleted the phantom that replaced it. Going through `eventStore.add` is not
+ * enough there, because `persistEventsToCache` drops anything carrying the
+ * from-cache marker:
+ *
+ * ```js
+ * // applesauce-core/dist/helpers/event-cache.js
+ * filter((e) => !isFromCache(e))
+ * ```
+ *
+ * A predecessor that reached the app through `cacheRequest` carries
+ * `Symbol.for('from-cache')`, so re-adding that same object is silently not
+ * persisted. The marker's premise — it is already in the cache, no need to
+ * write it back — was true when it was set and is FALSE by the time we restore,
+ * because we just deleted that row. And the marker is not something you can
+ * spread away: object spread copies own enumerable symbol properties.
+ *
+ * Writing directly also avoids depending on an applesauce internal keeping its
+ * current shape. The caller still does `eventStore.add` for the in-memory/UI
+ * side; this only covers the durable side. (#64, found by TestOER on `dev`)
+ *
+ * Honours CACHEABLE_KINDS, which the `insert$` writer applies too — a direct
+ * write must not smuggle in a kind we deliberately do not persist.
+ *
+ * Degrades to a no-op on any failure.
+ *
+ * @param {import('nostr-tools').Event} event - The signed event to persist.
+ * @returns {Promise<void>}
+ */
+export async function recacheEvent(event) {
+  if (!nostrIDB) return;
+  if (!CACHEABLE_KINDS.has(event.kind)) return;
+  try {
+    await dbReady;
+    await nostrIDB.add(event);
+    await nostrIDB.writeQueue?.flush?.();
+  } catch (err) {
+    console.warn('[event-cache] recacheEvent failed', err);
+  }
+}
+
+/**
  * Replay cached NIP-09 deletion events (kind 5) into the event store on boot.
  *
  * nostr-idb has no deletion semantics — it stores events blindly, so the

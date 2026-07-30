@@ -39,6 +39,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
 vi.mock('$lib/stores/event-cache.svelte.js', () => ({
   uncacheEvent: vi.fn(async (e) => {
     calls.push(`uncache:${e.id.slice(0, 4)}`);
+  }),
+  recacheEvent: vi.fn(async (e) => {
+    calls.push(`recache:${e.id.slice(0, 4)}`);
   })
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
@@ -57,7 +60,7 @@ vi.mock('$lib/helpers/communityRelays.js', () => ({
 
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
-import { uncacheEvent } from '$lib/stores/event-cache.svelte.js';
+import { uncacheEvent, recacheEvent } from '$lib/stores/event-cache.svelte.js';
 
 const PK = 'a'.repeat(64);
 
@@ -156,6 +159,45 @@ describe('failed optimistic publish restores the replaced version (#64)', () => 
 
     expect(eventStore.getReplaceable).not.toHaveBeenCalled();
     expect(calls.filter((c) => c.startsWith('add:'))).toHaveLength(1);
+  });
+
+  it('writes the restored version to IDB directly, not only to the EventStore', async () => {
+    // eventStore.add alone is not enough: applesauce's persistEventsToCache
+    // filters on !isFromCache, and a predecessor loaded through cacheRequest
+    // carries Symbol.for('from-cache'). So on any normal page load the memory
+    // restore lands and the durable one silently does not — which is the 404
+    // this whole path exists to prevent. Measured on dev by TestOER.
+    replaceable = PREVIOUS;
+    allRelaysReject();
+
+    await runToFailure(PHANTOM);
+
+    await vi.waitFor(() => expect(recacheEvent).toHaveBeenCalledWith(PREVIOUS));
+    expect(calls).toContain(`add:${PREVIOUS.id.slice(0, 4)}`);
+  });
+
+  it('recaches AFTER the phantom is un-cached', async () => {
+    // Same ordering constraint as the memory restore: nostr-idb only writes a
+    // replaceable event when it is newer than the entry at its address.
+    replaceable = PREVIOUS;
+    allRelaysReject();
+
+    await runToFailure(PHANTOM);
+    await vi.waitFor(() => expect(calls).toContain(`recache:${PREVIOUS.id.slice(0, 4)}`));
+
+    const uncacheAt = calls.indexOf(`uncache:${PHANTOM.id.slice(0, 4)}`);
+    const recacheAt = calls.indexOf(`recache:${PREVIOUS.id.slice(0, 4)}`);
+    expect(uncacheAt).toBeGreaterThan(-1);
+    expect(recacheAt).toBeGreaterThan(uncacheAt);
+  });
+
+  it('does not recache when there was nothing to replace', async () => {
+    replaceable = undefined;
+    allRelaysReject();
+
+    await runToFailure(PHANTOM);
+
+    expect(recacheEvent).not.toHaveBeenCalled();
   });
 
   it('does not re-add when the store returns the same event', async () => {
