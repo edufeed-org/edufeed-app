@@ -10,6 +10,7 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
+  import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { getEducationalRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 
@@ -157,12 +158,32 @@
             : undefined
       });
 
-      const template = { kind: 30142, tags, content };
+      // In edit mode this replaces `resourceEvent`, so created_at must be
+      // strictly newer than it — a same-second save is dropped by the relay
+      // tie-break and deterministically by the IDB cache, and the user is told
+      // it worked. See nextCreatedAt. (#62/#64)
+      const template = {
+        kind: 30142,
+        tags,
+        content,
+        created_at: nextCreatedAt(isEditMode ? resourceEvent : null)
+      };
       const factory = createAppEventFactory({ signer: manager.signer });
       const built = await factory.build(template);
       const signed = await factory.sign(built);
-      eventStore.add(signed);
-      await publishEvent(signed, []);
+
+      // Offer to the EventStore only AFTER the publish lands. Adding first is
+      // the shape that caused #64: `publishEvent` — unlike
+      // `publishEventOptimistic` — has no failure path, so nothing removes the
+      // event when no relay accepted it. Kind 30142 is cacheable, so that
+      // leaves a version which exists on no relay cached at its address, and a
+      // cache hit ends the address loader before any relay is asked. (#64)
+      const result = await publishEvent(signed, []);
+      if (!result.success) {
+        error = 'Veröffentlichung fehlgeschlagen: kein Relay hat das Event angenommen.';
+        return;
+      }
+      cachePublishedEvent(signed, result);
 
       const naddr = nip19.naddrEncode({
         kind: 30142,
