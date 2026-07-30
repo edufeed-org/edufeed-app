@@ -11,6 +11,7 @@ import { canSign } from '$lib/helpers/signing-guard.js';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
 import {
@@ -367,10 +368,14 @@ export function createEducationalActions() {
         // Create the updated event
         const eventFactory = createAppEventFactory();
 
+        // Strictly newer than the version being replaced — a same-second edit
+        // is dropped by the relay tie-break and deterministically by the
+        // cache. (#62/#64)
         const eventTemplate = await eventFactory.build({
           kind: AMB_RESOURCE_KIND,
           content,
-          tags
+          tags,
+          created_at: nextCreatedAt(existingEvent)
         });
 
         // Sign and publish optimistically (adds to store immediately)

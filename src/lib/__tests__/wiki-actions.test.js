@@ -187,4 +187,15 @@ describe('updateWiki', () => {
     const hTag = lastSignedEvent.tags.find((/** @type {any} */ t) => t[0] === 'h')?.[1];
     expect(hTag).toBe('community123');
   });
+
+  it('stamps created_at strictly newer than the version it replaces (#64)', async () => {
+    // A same-second edit ties, and on a tie nostr-idb keeps the OLD version
+    // deterministically — the cache then serves it without asking a relay.
+    // Same bug as the calendar edit path in #62.
+    const future = { ...existingEvent, created_at: Math.floor(Date.now() / 1000) + 3600 };
+
+    await updateWiki({ title: 'Updated', content: 'New content', topic: 'test' }, future);
+
+    expect(lastSignedEvent.created_at).toBe(future.created_at + 1);
+  });
 });
