@@ -146,6 +146,32 @@ describe('updateEvent EventStore write (#62)', () => {
     warn.mockRestore();
   });
 
+  it('stamps created_at strictly newer than the event it replaces', async () => {
+    // A replacement sharing a wall-clock second with its predecessor is
+    // dropped by three layers with two different tie-breaks: relays and
+    // applesauce's EventStore keep the LOWER id (a coin flip), and nostr-idb
+    // requires strictly-greater so the IDB write is ALWAYS rejected. The
+    // cache being first in the loader sequence then makes the stale read
+    // permanent. Reachable by editing straight after creating.
+    const now = Math.floor(Date.now() / 1000);
+    const actions = createCalendarActions('');
+    await actions.updateEvent(FORM_DATA, { ...EXISTING, created_at: now });
+
+    expect(eventStoreAdd.mock.calls[0][0].created_at).toBe(now + 1);
+  });
+
+  it('uses wall-clock time when the existing event is genuinely older', async () => {
+    // Control for the above: the bump must not run away from real time on
+    // every edit, only close a tie.
+    const now = Math.floor(Date.now() / 1000);
+    const actions = createCalendarActions('');
+    await actions.updateEvent(FORM_DATA, { ...EXISTING, created_at: now - 3600 });
+
+    const stamped = eventStoreAdd.mock.calls[0][0].created_at;
+    expect(stamped).toBeGreaterThanOrEqual(now);
+    expect(stamped).toBeLessThanOrEqual(now + 1);
+  });
+
   it('caches only after the publish resolves, never before', async () => {
     // Ordering control: if the add ran first, a failed publish could not be
     // distinguished from a successful one by the assertion above.
