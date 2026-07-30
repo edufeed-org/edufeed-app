@@ -11,8 +11,13 @@ const RELAY_URLS = {
 // Blossom server for file uploads
 const BLOSSOM_SERVER_URL = 'http://localhost:13000';
 
-// Web server port - Using 14173 to avoid conflicts with other projects
-const WEB_SERVER_PORT = 14173;
+// Web server port - Using 14173 to avoid conflicts with other projects.
+// Overridable because the port was a hardcoded constant while
+// `reuseExistingServer` is true outside CI: a preview server left running by
+// another worktree on the same port gets *reused*, so the run silently
+// exercises that worktree's build instead of this one. Set E2E_PORT to a free
+// port when running two trees at once. Default unchanged.
+const WEB_SERVER_PORT = Number(process.env.E2E_PORT) || 14173;
 
 export default defineConfig({
   testDir: 'e2e',

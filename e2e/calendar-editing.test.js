@@ -4,7 +4,7 @@
  * Tests the edit button visibility, modal pre-population, and event update flow.
  * All tests require authentication (uses authenticatedPage fixture).
  */
-import { test, expect } from './fixtures.js';
+import { test, expect, openCreateHub, clickCreateAction } from './fixtures.js';
 import { setupErrorCapture, waitForEventDetail } from './test-utils.js';
 import { TEST_NADDRS } from './test-data.js';
 
@@ -40,18 +40,34 @@ async function navigateToEvent(page, naddr) {
  * Helper to open the edit modal from the event detail page.
  * @param {import('@playwright/test').Page} page
  */
+/**
+ * The event context menu trigger on the detail page. The page renders
+ * CalendarEventDetailView -> DetailHeader -> EventContextMenu, whose trigger is
+ * aria-label="Event menu". EventManagementActions ("Manage event") still exists
+ * but only inside CalendarEventDetailsModal, which the detail page never mounts.
+ */
+const EVENT_MENU = 'button[aria-label="Event menu"]';
+
+/** The Edit item inside the open context menu — labelled m.common_edit() = 'Edit'. */
+const editItem = (/** @type {import('@playwright/test').Locator} */ menuButton) =>
+  menuButton
+    .locator('..')
+    .locator('.dropdown-content li button')
+    .filter({ hasText: /^\s*Edit\s*$/ });
+
 async function openEditModal(page) {
-  // Click the "Manage event" dropdown trigger button
-  const manageButton = page.locator('button[aria-label="Manage event"]');
-  await expect(manageButton).toBeVisible({ timeout: 5000 });
-  await manageButton.click();
+  const menuButton = page.locator(EVENT_MENU);
+  await expect(menuButton).toBeVisible({ timeout: 5000 });
+  await menuButton.click();
 
   // Wait for dropdown to open
   await page.waitForTimeout(300);
 
-  // Click "Edit" in the dropdown - it's the first li button in the EventManagementActions dropdown
-  // The dropdown is inside the same parent div as the manage button
-  const editOption = manageButton.locator('..').locator('.dropdown-content li button').first();
+  // Filter by label rather than taking `.first()`. In EventContextMenu the
+  // author actions are conditional (`{#if onEdit}`), so the first item is Edit
+  // for an owner and "Share to communities" / "Copy link" for everyone else —
+  // `.first()` would silently click the wrong thing instead of failing.
+  const editOption = editItem(menuButton);
   await expect(editOption).toBeVisible();
   await editOption.click();
 
@@ -69,20 +85,18 @@ test.describe('Calendar Event Editing - Edit Button Visibility', () => {
     await navigateToEvent(page, TEST_NADDRS.calendarDate);
     await waitForEventDetail(page);
 
-    // The "Manage event" button should be visible for the owner
-    const manageButton = page.locator('button[aria-label="Manage event"]');
-    await expect(manageButton).toBeVisible({ timeout: 5000 });
+    // The event menu should be visible for the owner
+    const menuButton = page.locator(EVENT_MENU);
+    await expect(menuButton).toBeVisible({ timeout: 5000 });
 
     // Click to verify Edit option exists in dropdown
-    await manageButton.click();
+    await menuButton.click();
     await page.waitForTimeout(300);
 
-    // Edit option should be visible in dropdown (inside the same dropdown parent)
-    const editOption = manageButton.locator('..').locator('.dropdown-content li button').first();
-    await expect(editOption).toBeVisible();
+    await expect(editItem(menuButton)).toBeVisible();
   });
 
-  test('edit button hidden for non-owner', async ({ page }) => {
+  test('edit option hidden for non-owner', async ({ page }) => {
     // Navigate to event without logging in (anonymous user)
     await page.goto('/discover');
     await page.waitForTimeout(2000);
@@ -90,9 +104,22 @@ test.describe('Calendar Event Editing - Edit Button Visibility', () => {
     await navigateToEvent(page, TEST_NADDRS.calendarDate);
     await waitForEventDetail(page);
 
-    // The "Manage event" button should NOT be visible for non-owners
-    const manageButton = page.locator('button[aria-label="Manage event"]');
-    await expect(manageButton).not.toBeVisible({ timeout: 3000 });
+    // The *trigger* is no longer owner-gated: EventContextMenu renders for
+    // everyone because it also carries Copy link / Copy event ID. Only the
+    // author actions are conditional, so the assertion has to move from the
+    // trigger to the Edit item — otherwise this test would fail on a correct
+    // build for the wrong reason.
+    const menuButton = page.locator(EVENT_MENU);
+    await expect(menuButton).toBeVisible({ timeout: 5000 });
+    await menuButton.click();
+    await page.waitForTimeout(300);
+
+    await expect(editItem(menuButton)).toHaveCount(0);
+    // Positive control: the menu really did open, so a count of 0 above means
+    // "no Edit item" rather than "no menu".
+    await expect(
+      menuButton.locator('..').locator('.dropdown-content li button').first()
+    ).toBeVisible();
   });
 });
 
@@ -149,18 +176,21 @@ test.describe('Calendar Event Editing - Form Pre-population', () => {
 // Event Update Tests
 // ============================================================================
 
+// KNOWN FAILING — see issue #62, not a selector problem.
+// 'can update title and save' and 'can update description and save' both create
+// an event, open the edit modal (which prefills correctly), change one field,
+// save, and then wait for the new value. It never arrives. Left failing rather
+// than skipped: whether the replacement is not published, not accepted by the
+// e2e relay, or not re-read by the client is still open, and a skip would hide
+// it. Do not "fix" these by relaxing the assertions.
 test.describe('Calendar Event Editing - Update Flow', () => {
   test('can update title and save', async ({ authenticatedPage: page }) => {
     // First create an event to edit (so we don't modify seeded data)
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    // Click the FAB to expand it
-    await page.locator('.fab [role="button"]').click();
-    await page.waitForTimeout(300);
-
-    // Click the "Create Event" button
-    await page.locator('button[data-tip="Create Event"]').click();
+    await openCreateHub(page);
+    await clickCreateAction(page, 'Create new event');
     await expect(page.locator('dialog[open] .modal-box')).toBeVisible({ timeout: 5000 });
 
     // Create an event
@@ -205,9 +235,8 @@ test.describe('Calendar Event Editing - Update Flow', () => {
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    await page.locator('.fab [role="button"]').click();
-    await page.waitForTimeout(300);
-    await page.locator('button[data-tip="Create Event"]').click();
+    await openCreateHub(page);
+    await clickCreateAction(page, 'Create new event');
     await expect(page.locator('dialog[open] .modal-box')).toBeVisible({ timeout: 5000 });
 
     const eventTitle = `Description Test Event ${Date.now()}`;
@@ -270,14 +299,16 @@ test.describe('Calendar Event Editing - Form Validation', () => {
     expect(modalStillOpen || validationError).toBe(true);
   });
 
+  // KNOWN FAILING — same root cause as the two in the Update Flow block above.
+  // See issue #62. This one is the most direct statement of it: it hard-navigates
+  // back to the naddr after saving and still reads the old title.
   test('updated event shows new data after reload', async ({ authenticatedPage: page }) => {
     // Create an event to edit
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    await page.locator('.fab [role="button"]').click();
-    await page.waitForTimeout(300);
-    await page.locator('button[data-tip="Create Event"]').click();
+    await openCreateHub(page);
+    await clickCreateAction(page, 'Create new event');
     await expect(page.locator('dialog[open] .modal-box')).toBeVisible({ timeout: 5000 });
 
     const eventTitle = `Reload Test ${Date.now()}`;
