@@ -34,6 +34,10 @@
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
   import ResourceCover from './ResourceCover.svelte';
+  import {
+    describeLinkedMaterials,
+    formatMaterialSize
+  } from '$lib/helpers/educational/linkedMaterials.js';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -70,12 +74,42 @@
   const isList = $derived(variant === 'list');
 
   // Attached files (encoding:*) + external references (r tags) — shown as a
-  // hover badge on the cover so users know there is material behind the card.
-  const linkedMaterialsCount = $derived(
-    (resource?.tags ?? []).filter(
-      (/** @type {string[]} */ t) => t[0] === 'encoding:contentUrl' || t[0] === 'r'
-    ).length
-  );
+  // hover badge on the cover so users know what is behind the card.
+  const linkedMaterials = $derived(describeLinkedMaterials(resource?.tags ?? []));
+
+  /** @type {Record<import('$lib/helpers/educational/linkedMaterials.js').MaterialType, () => string>} */
+  const MATERIAL_TYPE_LABEL = {
+    pdf: m.amb_card_linked_material_type_pdf,
+    image: m.amb_card_linked_material_type_image,
+    video: m.amb_card_linked_material_type_video,
+    audio: m.amb_card_linked_material_type_audio,
+    presentation: m.amb_card_linked_material_type_presentation,
+    spreadsheet: m.amb_card_linked_material_type_spreadsheet,
+    document: m.amb_card_linked_material_type_document,
+    archive: m.amb_card_linked_material_type_archive,
+    text: m.amb_card_linked_material_type_text,
+    link: m.amb_card_linked_material_type_link,
+    file: m.amb_card_linked_material_type_file
+  };
+
+  // A single material says what it is — "PDF · 2,4 MB" — which is the point of
+  // #57. Several fall back to the count: a per-item list does not fit in a
+  // badge, and the resource page already lists them. When the lone item told us
+  // nothing at all (no usable mime, no extension, no size) the count string is
+  // still the most honest thing to show.
+  const linkedMaterialsLabel = $derived.by(() => {
+    const { count, items } = linkedMaterials;
+    if (count === 0) return null;
+    if (count > 1) return m.amb_card_linked_materials({ count });
+
+    const item = items[0];
+    const size = formatMaterialSize(item.size, getLocale());
+    const typeIsKnown = item.type !== 'file' && item.type !== 'link';
+    if (!typeIsKnown && !size) return m.amb_card_linked_materials_one();
+
+    const label = MATERIAL_TYPE_LABEL[item.type]();
+    return size ? `${label} · ${size}` : label;
+  });
 
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, resource.pubkey.slice(0, 8) + '...'));
@@ -385,12 +419,12 @@
     {#if !compact}
       <div class="group relative mb-3">
         <ResourceCover {resource} size="full" aspect="wide" />
-        {#if linkedMaterialsCount > 0}
+        {#if linkedMaterialsLabel}
           <span
             class="absolute right-2 bottom-2 badge badge-sm opacity-0 shadow transition-opacity duration-150 badge-neutral group-hover:opacity-100"
             data-testid="linked-materials-badge"
           >
-            📎 {m.amb_card_linked_materials({ count: linkedMaterialsCount })}
+            📎 {linkedMaterialsLabel}
           </span>
         {/if}
       </div>
