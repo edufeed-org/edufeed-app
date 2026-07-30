@@ -5,6 +5,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import {
   validateEventForm,
   convertFormDataToEvent,
@@ -195,7 +196,35 @@ export function createCalendarActions(_communityPubkey) {
         const participantPubkeys = (formData.participants || [])
           .map((/** @type {{pubkey: string}} */ p) => p.pubkey)
           .filter(Boolean);
-        await publishEvent(updatedEvent, participantPubkeys, { communityEvent });
+        const publishResult = await publishEvent(updatedEvent, participantPubkeys, {
+          communityEvent
+        });
+
+        // The detail page reads through addressLoader, whose FIRST step is the
+        // IndexedDB cache — and a cache hit ends applesauce's loading sequence
+        // before any relay is queried. publishEvent, unlike
+        // publishEventOptimistic, never touches the EventStore, and the cache
+        // is fed from eventStore.insert$. Without this add the pre-edit version
+        // stays cached and every reload renders the OLD event even though the
+        // relay holds only the new one. Updating calendarStore above is not
+        // enough: that is the list view, not the detail page's read path. (#62)
+        //
+        // Gated on success for the same reason publishEventOptimistic removes
+        // the event when no relay accepts it — the cache must not outlive a
+        // publish that never landed.
+        //
+        // Best-effort: eventStore.add validates the event and throws on a
+        // malformed one. The publish has already landed at this point, so a
+        // cache-write failure must not be reported to the user as a failed
+        // update — it degrades to the stale-read behaviour, matching the
+        // "cache is ADDITIVE" contract in stores/event-cache.svelte.js.
+        if (publishResult?.success) {
+          try {
+            eventStore.add(updatedEvent);
+          } catch (cacheError) {
+            console.warn('[calendar] updated event not added to EventStore', cacheError);
+          }
+        }
 
         // Return the updated event
         return eventWithDTag;
