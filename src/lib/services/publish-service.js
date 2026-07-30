@@ -7,7 +7,7 @@
  * 3. Community relays: if event targets a community (h-tag present)
  */
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
-import { uncacheEvent } from '$lib/stores/event-cache.svelte.js';
+import { uncacheEvent, recacheEvent } from '$lib/stores/event-cache.svelte.js';
 import { isAddressableKind, isReplaceableKind } from 'applesauce-core/helpers/event';
 import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.js';
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
@@ -389,12 +389,21 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
       // nostr-idb only writes a replaceable event when it is newer than the
       // entry at that address, and the phantom is newer than what it replaced.
       // Restoring first would be silently rejected.
+      //
+      // Two writes, because the memory restore does NOT imply the durable one.
+      // `persistEventsToCache` drops anything carrying the from-cache marker,
+      // and a predecessor that reached the app through `cacheRequest` carries
+      // it — so on any normal page load (open app, open resource, edit) the
+      // `eventStore.add` below is correctly reflected in the UI and silently
+      // never reaches IDB, leaving the 404 this restore exists to prevent.
+      // `recacheEvent` writes it directly. (#64)
       if (previousVersion && previousVersion.id !== signedEvent.id) {
         try {
           eventStore.add(previousVersion);
         } catch (err) {
           console.warn('Failed to restore the replaced event after a failed publish:', err);
         }
+        await recacheEvent(previousVersion);
       }
     }
   })();
