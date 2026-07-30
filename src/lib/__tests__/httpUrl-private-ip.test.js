@@ -108,10 +108,34 @@ describe('isPrivateIp — literal IPv6', () => {
     expect(ip('http://[ff02::1]/x.png')).toBe(true);
   });
 
+  it('unwraps the RFC2765 IPv4-translated form, whose 0xffff sits two bytes earlier', () => {
+    // ::ffff:0:a.b.c.d is ::ffff:0:0/96 — the 0xffff is at bytes 8-9, not 10-11,
+    // so it is a near-miss of the mapped form and needs its own branch.
+    expect(ip('http://[::ffff:0:127.0.0.1]/x.png')).toBe(true);
+    expect(ip('http://[::ffff:0:169.254.169.254]/x.png')).toBe(true);
+    expect(ip('http://[::ffff:0:10.0.0.1]/x.png')).toBe(true);
+    // Control: the public payload must survive, or this is a blanket v6 block.
+    expect(ip('http://[::ffff:0:8.8.8.8]/x.png')).toBe(false);
+  });
+
+  it('blocks v6 transition tunnels and deprecated site-local', () => {
+    expect(ip('http://[2002:7f00:1::]/x.png')).toBe(true); // 6to4
+    expect(ip('http://[2002::1]/x.png')).toBe(true);
+    expect(ip('http://[2001:0:0:0:0:0:7f00:1]/x.png')).toBe(true); // Teredo
+    expect(ip('http://[2001::1]/x.png')).toBe(true);
+    expect(ip('http://[fec0::1]/x.png')).toBe(true); // site-local, RFC3879
+    expect(ip('http://[feff:ffff::1]/x.png')).toBe(true);
+  });
+
   it('leaves global unicast v6 reachable', () => {
     expect(ip('http://[2606:4700:4700::1111]/x.png')).toBe(false); // Cloudflare
     expect(ip('http://[2001:4860:4860::8888]/x.png')).toBe(false); // Google
-    expect(ip('http://[fec0::1]/x.png')).toBe(false); // deprecated site-local, outside fe80::/10
+    // Boundary controls for the two tunnel prefixes. 2001::/32 is Teredo, but
+    // 2001:db8:: and 2001:4860:: are ordinary global unicast — a check written as
+    // `bytes[0]==0x20 && bytes[1]==0x01` alone would swallow both.
+    expect(ip('http://[2001:db8::1]/x.png')).toBe(false);
+    expect(ip('http://[2003::1]/x.png')).toBe(false); // just above 2002::/16
+    expect(ip('http://[2000::1]/x.png')).toBe(false); // just below
   });
 });
 
@@ -124,11 +148,25 @@ describe('isPrivateIp — hostnames', () => {
     expect(ip('http://nas.home.arpa/x.png')).toBe(true);
   });
 
+  it('blocks the fully-qualified trailing-dot forms of those names', () => {
+    // `URL.hostname` preserves the trailing dot, so an exact match on 'localhost'
+    // and a `.local` suffix match both miss without normalisation. These resolve
+    // to the same addresses as the dotless forms.
+    expect(ip('http://localhost./x.png')).toBe(true);
+    expect(ip('http://printer.local./x.png')).toBe(true);
+    expect(ip('http://app.localhost./x.png')).toBe(true);
+    expect(ip('http://db.internal./x.png')).toBe(true);
+    expect(ip('http://nas.home.arpa./x.png')).toBe(true);
+  });
+
   it('does not block public names that merely contain those words', () => {
     expect(ip('https://upload.wikimedia.org/x.png')).toBe(false);
     expect(ip('https://openverse.org/x.png')).toBe(false);
     expect(ip('https://localhost.example.com/x.png')).toBe(false);
     expect(ip('https://internal-affairs.example.org/x.png')).toBe(false);
+    // Trailing-dot normalisation must not turn public FQDNs into blocked ones.
+    expect(ip('https://upload.wikimedia.org./x.png')).toBe(false);
+    expect(ip('https://localhost.example.com./x.png')).toBe(false);
   });
 });
 

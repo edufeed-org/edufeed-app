@@ -123,9 +123,9 @@ function v6ToBytes(addr) {
 
 /**
  * True if a literal IP address string falls in a blocked range. Handles both
- * families; IPv4-mapped, IPv4-compatible and NAT64-embedded IPv6 addresses are
- * unwrapped and checked against the IPv4 blocks, so `[::ffff:127.0.0.1]`
- * cannot smuggle loopback past an IPv4-only check.
+ * families; every IPv6 form that embeds an IPv4 address is unwrapped and checked
+ * against the IPv4 blocks, so `[::ffff:127.0.0.1]` cannot smuggle loopback past
+ * an IPv4-only check.
  *
  * @param {string} addr
  * @returns {boolean}
@@ -146,6 +146,18 @@ export function isBlockedIp(addr) {
   if (zeroPrefix(10) && bytes[10] === 0xff && bytes[11] === 0xff) {
     return isBlockedV4Bytes(bytes.slice(12));
   }
+  // ::ffff:0:a.b.c.d — RFC2765 "IPv4-translated", ::ffff:0:0/96. The 0xffff sits
+  // at bytes 8-9 rather than 10-11, so this is a near-miss of the mapped form
+  // above and slips past both zeroPrefix(10) and zeroPrefix(12).
+  if (
+    zeroPrefix(8) &&
+    bytes[8] === 0xff &&
+    bytes[9] === 0xff &&
+    bytes[10] === 0 &&
+    bytes[11] === 0
+  ) {
+    return isBlockedV4Bytes(bytes.slice(12));
+  }
   if (zeroPrefix(12)) {
     return isBlockedV4Bytes(bytes.slice(12));
   }
@@ -153,10 +165,40 @@ export function isBlockedIp(addr) {
     return isBlockedV4Bytes(bytes.slice(12));
   }
 
+  // 6to4 (2002::/16) and Teredo (2001::/32) are transition-tunnel prefixes that
+  // carry an IPv4 destination in the middle of the address — 6to4 at bytes 2-5,
+  // Teredo as an obfuscated client field at bytes 12-15. Blocked wholesale
+  // rather than unwrapped: nothing this app legitimately fetches lives behind a
+  // v6 transition tunnel, and a blanket refusal removes a whole class of
+  // "did we unwrap the right four bytes" reasoning error from a security check.
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) return true; // 2002::/16 6to4
+  if (bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0 && bytes[3] === 0) return true; // 2001::/32 Teredo
+
   if ((bytes[0] & 0xfe) === 0xfc) return true; // fc00::/7 unique-local
   if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) return true; // fe80::/10 link-local
+  if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0xc0) return true; // fec0::/10 site-local, deprecated by RFC3879
   if (bytes[0] === 0xff) return true; // ff00::/8 multicast
   return false;
+}
+
+/**
+ * Normalise `URL.hostname` into something comparable: lowercased, IPv6 brackets
+ * removed, and one trailing dot stripped.
+ *
+ * The trailing dot matters. `http://localhost./` and `http://printer.local./`
+ * are the fully-qualified forms of names this module blocks, they resolve to the
+ * same addresses, and `URL.hostname` preserves the dot — so without stripping it
+ * an exact match on 'localhost' and a `.local` suffix match both miss. Only one
+ * dot is stripped, because that is all a hostname may legally carry.
+ *
+ * @param {string} hostname
+ * @returns {string}
+ */
+function bareHost(hostname) {
+  let bare = hostname.toLowerCase();
+  if (bare.startsWith('[') && bare.endsWith(']')) return bare.slice(1, -1);
+  if (bare.endsWith('.')) bare = bare.slice(0, -1);
+  return bare;
 }
 
 /**
@@ -176,9 +218,7 @@ export function isBlockedIp(addr) {
  * @returns {boolean}
  */
 export function isPrivateIp(parsedUrl) {
-  const hostname = parsedUrl.hostname.toLowerCase();
-  const bare =
-    hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  const bare = bareHost(parsedUrl.hostname);
 
   if (bare === 'localhost') return true;
   if (BLOCKED_SUFFIXES.some((suffix) => bare.endsWith(suffix))) return true;
@@ -213,12 +253,15 @@ export async function resolvesToPrivateIp(
   hostname,
   lookup = /** @type {DnsLookupAll} */ (dns.lookup)
 ) {
-  const bare =
+  const unbracketed =
     hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
-  if (net.isIP(bare)) return isBlockedIp(bare);
+  if (net.isIP(bareHost(hostname))) return isBlockedIp(bareHost(hostname));
 
   try {
-    const records = await lookup(bare, { all: true });
+    // Resolve the name as given, trailing dot included: the dot is meaningful to
+    // a resolver (absolute vs search-domain-suffixed), so normalising it away
+    // here could change which addresses we check.
+    const records = await lookup(unbracketed, { all: true });
     return records.some((record) => isBlockedIp(record.address));
   } catch {
     return false;
