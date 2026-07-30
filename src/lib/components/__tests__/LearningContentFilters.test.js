@@ -9,6 +9,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import LearningContentFilters from '../educational/LearningContentFilters.svelte';
+import { buildSearchFilterObject } from '$lib/helpers/educational/searchQueryBuilder.js';
 
 // Mock vocab-store so ext facet chip-lists resolve concepts offline
 vi.mock('$lib/stores/vocab-store.svelte.js', () => ({
@@ -209,9 +210,39 @@ describe('LearningContentFilters ext facets (Phase D)', () => {
 
     expect(lastFilters).toBeTruthy();
     expect(lastFilters.extFields).toBeTruthy();
-    const key = '30168:formPub:amb-full:interactivityType';
+    // "<ns>:<facet>" — ns is the form's d-tag, facet is the field id, matching
+    // what formValuesToAmbJson writes (amb.ext[form.dTag][field.id]). The kind
+    // and the author pubkey are deliberately absent: `ns` and `facet` MUST NOT
+    // contain ':', so the old 4-segment key had no valid reading and produced
+    // a filter that silently matched nothing.
+    const key = 'amb-full:interactivityType';
     expect(lastFilters.extFields[key]).toEqual([
       { id: 'http://purl.org/dcx/lrmi-vocabs/interactivityType/active' }
     ]);
+  });
+
+  it('the emitted key survives buildSearchFilterObject as a usable tag filter', async () => {
+    // The regression that matters end to end: the UI's key and the builder's
+    // grammar have to agree, or the chip produces a filter the relay cannot
+    // match. Asserting them separately is what let them drift apart.
+    /** @type {any} */
+    let lastFilters = null;
+    render(LearningContentFilters, {
+      props: {
+        form: extFormEvent,
+        onfilterchange: (/** @type {any} */ f) => {
+          lastFilters = f;
+        }
+      }
+    });
+
+    await fireEvent.click(await screen.findByText('Active'));
+
+    const { tagFilters } = buildSearchFilterObject(lastFilters);
+    expect(tagFilters).toEqual({
+      '#ext:amb-full:interactivityType:id': [
+        'http://purl.org/dcx/lrmi-vocabs/interactivityType/active'
+      ]
+    });
   });
 });

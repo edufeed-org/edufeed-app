@@ -17,13 +17,13 @@
  * @property {Array<{id: string, prefLabel: Object<string, string>}>} [learningResourceType] - Selected resource types
  * @property {Array<{id: string, prefLabel: Object<string, string>}>} [about] - Selected subjects/topics
  * @property {Array<{id: string, prefLabel: Object<string, string>}>} [audience] - Selected target audiences
- * @property {Record<string, ExtFieldValue[]>} [extFields] - Form-driven ext fields, keyed by ext path "30168:<pub>:<d>:<fieldId>"
+ * @property {Record<string, ExtFieldValue[]>} [extFields] - Form-driven ext fields, keyed "<ns>:<facet>" — the NIP-AMB grammar, where a form-driven field serializes with ns = the form's d-tag and facet = the field id (see formValuesToAmbJson.js)
  */
 
 /**
  * @typedef {Object} SearchFilterObject
  * @property {string} search - NIP-50 search string
- * @property {Record<string, string[]>} tagFilters - Multi-letter tag filters keyed by "#ext:..." for compatibility with relays that don't yet parse ext.* paths
+ * @property {Record<string, string[]>} tagFilters - Multi-letter `#ext:<ns>:<facet>[:id]` tag filters, the exact-match mechanism for ext facets
  */
 
 /**
@@ -38,24 +38,26 @@ function escapeSearchValue(value) {
 }
 
 /**
- * Convert an ext path key (colon-separated) into a Typesense search path (dot-separated).
- * "30168:<pub>:<d>:<fieldId>" → "ext.30168.<pub>.<d>.<fieldId>"
+ * Convert an ext filter key into the event tag key that `formValuesToAmbJson.js`
+ * + `ambToNostr` actually write: `ext:<ns>:<facet>`.
+ *
+ * Returns null for anything that is not exactly two non-empty segments. The
+ * NIP-AMB grammar is left-anchored with fixed arity — `ns` and `facet` MUST NOT
+ * contain `:` (see `parseTagKey()` in parseExtensionTags.js) — so a surplus-
+ * segment key like the pre-migration `30168:<pub>:<d>:<fieldId>` has no valid
+ * reading. Callers must **skip** such a key rather than emit a filter from it:
+ * a malformed filter matches nothing, which reads to the user as "no results"
+ * instead of "this filter is broken".
+ *
  * @param {string} extKey
- * @returns {string}
- */
-function extPathToSearchPath(extKey) {
-  return `ext.${extKey.replace(/:/g, '.')}`;
-}
-
-/**
- * Convert an ext path key (colon-separated) into the event tag key used by
- * `formValuesToAmbJson.js` + `ambToNostr` (the amb-nostr-converter serializer).
- * "30168:<pub>:<d>:<fieldId>" → "ext:30168:<pub>:<d>:<fieldId>"
- * @param {string} extKey
- * @returns {string}
+ * @returns {string | null}
  */
 function extPathToTagKey(extKey) {
-  return `ext:${extKey}`;
+  const segments = (extKey ?? '').split(':');
+  if (segments.length !== 2) return null;
+  const [ns, facet] = segments;
+  if (!ns || !facet) return null;
+  return `ext:${ns}:${facet}`;
 }
 
 /**
@@ -113,29 +115,25 @@ export function buildSearchQuery(filters) {
     });
   }
 
-  // Add form-driven ext field filters
-  if (filters.extFields) {
-    for (const [extKey, values] of Object.entries(filters.extFields)) {
-      if (!Array.isArray(values)) continue;
-      const searchPath = extPathToSearchPath(extKey);
-      for (const entry of values) {
-        if (entry?.id) {
-          parts.push(`${searchPath}.id:${escapeSearchValue(entry.id)}`);
-        } else if (entry?.value) {
-          parts.push(`${searchPath}:${escapeSearchValue(entry.value)}`);
-        }
-      }
-    }
-  }
+  // Ext facets are deliberately absent from the NIP-50 `search` string. They
+  // used to be emitted as a dot path (`ext.<ns>.<facet>.id:<uri>`), which is
+  // not merely wrong but unrepairable: with reverse-DNS namespaces
+  // `ext.org.edufeed.ekw.konfi.themen.id` gives no way to tell where the
+  // namespace ends and the facet begins. `buildSearchFilterObject` carries
+  // them as exact-match `#ext:<ns>:<facet>` tag filters instead, which is what
+  // the relay indexes.
 
   return parts.join(' ');
 }
 
 /**
- * Build a dual-emit search filter object: NIP-50 `search` string plus
- * multi-letter `#ext:...` tag filters for relays that don't yet parse
- * ext.* paths. Callers merge the returned object into their pool.request
- * filter.
+ * Build a search filter object: the NIP-50 `search` string for AMB-core
+ * fields, plus exact-match multi-letter `#ext:<ns>:<facet>[:id]` tag filters
+ * for form-driven ext facets. Callers merge the returned object into their
+ * pool.request filter.
+ *
+ * Ext facets travel only as tag filters — see the note in `buildSearchQuery`
+ * for why the dot-path variant was removed rather than repaired.
  *
  * @param {SearchFilters} filters
  * @returns {SearchFilterObject}
@@ -149,6 +147,8 @@ export function buildSearchFilterObject(filters) {
     for (const [extKey, values] of Object.entries(filters.extFields)) {
       if (!Array.isArray(values)) continue;
       const tagKeyBase = extPathToTagKey(extKey);
+      // Malformed key — emit nothing rather than a filter that cannot match.
+      if (!tagKeyBase) continue;
       for (const entry of values) {
         if (entry?.id) {
           const key = `#${tagKeyBase}:id`;
