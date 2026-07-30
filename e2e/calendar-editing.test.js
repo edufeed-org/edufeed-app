@@ -176,13 +176,17 @@ test.describe('Calendar Event Editing - Form Pre-population', () => {
 // Event Update Tests
 // ============================================================================
 
-// KNOWN FAILING — see issue #62, not a selector problem.
-// 'can update title and save' and 'can update description and save' both create
-// an event, open the edit modal (which prefills correctly), change one field,
-// save, and then wait for the new value. It never arrives. Left failing rather
-// than skipped: whether the replacement is not published, not accepted by the
-// e2e relay, or not re-read by the client is still open, and a skip would hide
-// it. Do not "fix" these by relaxing the assertions.
+// These two guard issue #62 (fixed): an edit made in the same wall-clock
+// second as the create used to vanish. `unixNow()` ROUNDS, so a create whose
+// d-tag is minted at .5-.999 stamps created_at in the next second — and the
+// edit that follows lands in that same second. A tie is then dropped by three
+// layers: relays and applesauce's EventStore keep the lower id (a coin flip),
+// and nostr-idb requires strictly-greater so the IDB write is always rejected.
+// The cache being first in the address-loader sequence makes that stale read
+// permanent. updateEvent now stamps max(unixNow(), existing.created_at + 1).
+//
+// They create and edit within ~500ms deliberately. Do NOT add a sleep between
+// the two to "stabilise" them — the tight window is the regression.
 test.describe('Calendar Event Editing - Update Flow', () => {
   test('can update title and save', async ({ authenticatedPage: page }) => {
     // First create an event to edit (so we don't modify seeded data)
@@ -219,7 +223,10 @@ test.describe('Calendar Event Editing - Update Flow', () => {
     await submitButton.click();
 
     // Wait for page to reload by waiting for the network to settle
-    // The modal triggers window.location.reload() after successful update
+    // The modal calls invalidateAll() after a successful update — NOT
+    // window.location.reload(), which is what this comment used to claim. The
+    // difference matters: invalidateAll preserves the JS context, so the
+    // explicit page.goto() below is the only hard navigation in this test.
     await page.waitForTimeout(5000);
 
     // Reload the page explicitly to get the updated data
@@ -268,8 +275,16 @@ test.describe('Calendar Event Editing - Update Flow', () => {
     await page.goto(eventUrl);
     await waitForEventDetail(page);
 
-    // Verify the description is visible
-    await expect(page.getByText(newDescription)).toBeVisible({ timeout: 10000 });
+    // Scope to the description card, not the page: the summary renders through
+    // MarkdownRenderer (CalendarEventDetailView.svelte:218-224), so the wrapper
+    // and the paragraph it produces BOTH contain the text and a page-wide
+    // getByText is a strict-mode violation. Same fix as
+    // calendar-creation.test.js:165 — and worth knowing that while the stale
+    // read of #62 was live this assertion failed as "element(s) not found"
+    // instead, because the pre-edit event had no description and no card
+    // rendered at all. Two different failures, one assertion.
+    const descriptionCard = page.locator('.card-body').filter({ hasText: newDescription });
+    await expect(descriptionCard).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -299,9 +314,10 @@ test.describe('Calendar Event Editing - Form Validation', () => {
     expect(modalStillOpen || validationError).toBe(true);
   });
 
-  // KNOWN FAILING — same root cause as the two in the Update Flow block above.
-  // See issue #62. This one is the most direct statement of it: it hard-navigates
-  // back to the naddr after saving and still reads the old title.
+  // Guards issue #62 (fixed) — same tie described on the Update Flow block
+  // above, and the most direct statement of it: it hard-navigates back to the
+  // naddr after saving, so a pass means the cached read is genuinely fresh
+  // rather than a stale in-memory view surviving a soft invalidation.
   test('updated event shows new data after reload', async ({ authenticatedPage: page }) => {
     // Create an event to edit
     await page.goto('/calendar');

@@ -35,6 +35,10 @@ vi.mock('$lib/services/publish-service.js', () => ({
   buildETagWithHint: vi.fn(),
   buildPTagsWithHints: vi.fn()
 }));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: { add: vi.fn() },
+  pool: {}
+}));
 vi.mock('$lib/stores/calendar-events.svelte.js', () => ({
   calendarStore: { events: [], setEvents: vi.fn() }
 }));

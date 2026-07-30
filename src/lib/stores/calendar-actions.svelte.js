@@ -5,6 +5,8 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { unixNow } from 'applesauce-core/helpers/time';
 import {
   validateEventForm,
   convertFormDataToEvent,
@@ -164,11 +166,29 @@ export function createCalendarActions(_communityPubkey) {
         // Build NIP-52 compliant tags (reuses original d-tag for replacement)
         const tags = buildCalendarEventTags(formData, eventData, dTag, hTags);
 
-        // Build and sign the updated calendar event
+        // Build and sign the updated calendar event.
+        //
+        // created_at MUST be strictly greater than the event being replaced.
+        // A replacement that lands in the same wall-clock second as its
+        // predecessor is silently dropped by three independent layers, each
+        // with a different tie-break:
+        //   - relays (NIP-01): on equal created_at the LOWER id wins — a coin
+        //     flip, so the edit is lost about half the time;
+        //   - applesauce's EventStore: same rule, lower id wins
+        //     (event-store.js `incomingBeatsWinner`);
+        //   - nostr-idb: strict `event.created_at > existing` (database/
+        //     insert.js), so on a tie the IDB write is ALWAYS rejected — and
+        //     since the cache is the first step of the address loader and a
+        //     cache hit ends the sequence, no relay ever corrects it.
+        // Only the relay layer is a coin flip; the cache is deterministically
+        // stale, which is why a same-second edit reads as "the save did
+        // nothing" even when the relay accepted it. Reachable by a user
+        // editing straight after creating, and by two tabs. (#62)
         const eventTemplate = await eventFactory.build({
           kind: eventData.kind || existingEvent.kind,
           content: eventData.summary || '',
-          tags: tags
+          tags: tags,
+          created_at: Math.max(unixNow(), (existingEvent.created_at ?? 0) + 1)
         });
 
         const updatedEvent = await currentAccount.signEvent(eventTemplate);
@@ -195,7 +215,35 @@ export function createCalendarActions(_communityPubkey) {
         const participantPubkeys = (formData.participants || [])
           .map((/** @type {{pubkey: string}} */ p) => p.pubkey)
           .filter(Boolean);
-        await publishEvent(updatedEvent, participantPubkeys, { communityEvent });
+        const publishResult = await publishEvent(updatedEvent, participantPubkeys, {
+          communityEvent
+        });
+
+        // The detail page reads through addressLoader, whose FIRST step is the
+        // IndexedDB cache — and a cache hit ends applesauce's loading sequence
+        // before any relay is queried. publishEvent, unlike
+        // publishEventOptimistic, never touches the EventStore, and the cache
+        // is fed from eventStore.insert$. Without this add the pre-edit version
+        // stays cached and every reload renders the OLD event even though the
+        // relay holds only the new one. Updating calendarStore above is not
+        // enough: that is the list view, not the detail page's read path. (#62)
+        //
+        // Gated on success for the same reason publishEventOptimistic removes
+        // the event when no relay accepts it — the cache must not outlive a
+        // publish that never landed.
+        //
+        // Best-effort: eventStore.add validates the event and throws on a
+        // malformed one. The publish has already landed at this point, so a
+        // cache-write failure must not be reported to the user as a failed
+        // update — it degrades to the stale-read behaviour, matching the
+        // "cache is ADDITIVE" contract in stores/event-cache.svelte.js.
+        if (publishResult?.success) {
+          try {
+            eventStore.add(updatedEvent);
+          } catch (cacheError) {
+            console.warn('[calendar] updated event not added to EventStore', cacheError);
+          }
+        }
 
         // Return the updated event
         return eventWithDTag;
