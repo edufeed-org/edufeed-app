@@ -123,8 +123,55 @@ export async function loginWithNsec(page, nsec) {
 }
 
 /**
+ * The GlobalFAB trigger. There is no `.fab` class any more — the daisyUI
+ * speed-dial was replaced by a single `btn-circle` whose accessible name comes
+ * from `m.fab_open_menu()`. Note the create-hub sheet carries the *same*
+ * aria-label on a `div[role="menu"]`, so the `button` qualifier is load-bearing.
+ *
+ * Routed through this one constant because six e2e files hard-coded the old
+ * markup and all six broke together. See src/lib/components/shared/GlobalFAB.svelte.
+ */
+export const FAB_TRIGGER = 'button[aria-label="Open actions menu"]';
+
+/**
+ * Open the GlobalFAB create hub and wait for the sheet to be on screen.
+ *
+ * The FAB renders only when `getActiveUser()` is truthy and the route is not a
+ * `[naddr=naddr]` detail page, `/create/*`, a chat view or `/c/messages` with a
+ * thread open (src/routes/+layout.svelte:379, GlobalFAB.svelte:151) — so call
+ * this from a list route while authenticated, not from a detail page.
+ *
+ * @param {import('@playwright/test').Page} page
+ */
+export async function openCreateHub(page) {
+  const trigger = page.locator(FAB_TRIGGER);
+  await expect(trigger).toBeVisible({ timeout: 15_000 });
+  await trigger.click();
+  await expect(page.locator('div[role="menu"][aria-label="Open actions menu"]')).toBeVisible({
+    timeout: 5000
+  });
+}
+
+/**
+ * Click a create-hub action tile by its accessible name.
+ *
+ * Tiles are keyed on `aria-label` (the action's `ariaLabel`), not `data-tip`:
+ * `data-tip` carries the *description* and is absent entirely for actions with
+ * no description (e.g. poll), so the old `button[data-tip="Create Event"]`
+ * matched nothing. Names come from src/lib/config/create-actions.js — e.g.
+ * 'Create new event', 'Create new calendar', 'Create poll'.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} ariaLabel
+ */
+export async function clickCreateAction(page, ariaLabel) {
+  const tile = page.locator(`div[role="menu"] button[aria-label="${ariaLabel}"]`);
+  await expect(tile).toBeVisible({ timeout: 5000 });
+  await tile.click();
+}
+
+/**
  * Helper to open the event creation modal on the calendar page.
- * Clicks the FAB and then the "Create Event" button.
  * @param {import('@playwright/test').Page} page
  */
 export async function openEventCreationModal(page) {
@@ -132,12 +179,8 @@ export async function openEventCreationModal(page) {
   await page.goto('/calendar');
   await page.waitForTimeout(2000);
 
-  // Click the FAB to expand it (the main button with role="button")
-  await page.locator('.fab [role="button"]').click();
-  await page.waitForTimeout(300);
-
-  // Click the "Create Event" button
-  await page.locator('button[data-tip="Create Event"]').click();
+  await openCreateHub(page);
+  await clickCreateAction(page, 'Create new event');
 
   // Wait for modal to appear
   await expect(page.locator('dialog[open] .modal-box')).toBeVisible({ timeout: 5000 });

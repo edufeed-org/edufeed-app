@@ -1429,7 +1429,7 @@ correct.
 
 | Test                                     | What it verifies                                                                                                                                                          |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create poll button is wired into the FAB | After login + FAB focus, `[data-tip="Create poll"]` is rendered with poll-related `aria-label`                                                                            |
+| Create poll button is wired into the FAB | After login, opening the create hub renders a tile with `aria-label="Create poll"`                                                                                        |
 | publish poll → vote → tally updates      | Full path: open modal, fill question + 2 options, publish kind 1068, navigate to nevent, render PollCard, cast vote (kind 1018), verify "1 voter" + "100%" + "✓ Option A" |
 
 ---
