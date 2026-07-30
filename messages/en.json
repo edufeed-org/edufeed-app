@@ -506,6 +506,7 @@
   "event_modal_type_label": "Event Type",
   "event_modal_type_all_day": "All Day Event",
   "event_modal_type_timed": "Timed Event",
+  "event_modal_type_locked_hint": "Cannot be changed after creation — all-day and timed events are different NIP-52 kinds, so switching would create a second event instead of replacing this one.",
   "event_modal_title_label": "Event Title",
   "event_modal_title_placeholder": "Enter event title",
   "event_modal_description_label": "Description",

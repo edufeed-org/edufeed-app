@@ -463,6 +463,7 @@
   "event_modal_type_label": "Veranstaltungstyp",
   "event_modal_type_all_day": "Ganztägige Veranstaltung",
   "event_modal_type_timed": "Zeitgebundene Veranstaltung",
+  "event_modal_type_locked_hint": "Nach dem Erstellen nicht mehr änderbar — ganztägige und zeitgebundene Veranstaltungen sind unterschiedliche NIP-52-Kinds. Ein Wechsel würde eine zweite Veranstaltung erzeugen, statt diese zu ersetzen.",
   "event_modal_title_label": "Veranstaltungstitel",
   "event_modal_title_placeholder": "Veranstaltungstitel eingeben",
   "event_modal_description_label": "Beschreibung",
