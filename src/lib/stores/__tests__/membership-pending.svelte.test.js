@@ -62,12 +62,12 @@ vi.mock('$lib/loaders/community.js', () => ({
 
 const { useMembershipPendingCount } = await import('../membership-pending.svelte.js');
 
-function makeCopy(id, pTag) {
+function makeCopy(id, pTag, createdAt = 1_700_000_000) {
   return {
     id,
     kind: 1069,
     pubkey: APPLICANT_PUBKEY,
-    created_at: 1_700_000_000,
+    created_at: createdAt,
     content: '<encrypted>',
     tags: [['a', FORM_ADDRESS], ['p', pTag], ['encrypted']]
   };
@@ -120,6 +120,44 @@ describe('useMembershipPendingCount (multi-admin)', () => {
     flushSync();
 
     expect(getCount()).toBe(1);
+    cleanup();
+  });
+
+  it('counts an applicant who updated their application once, not once per submission', () => {
+    // Kind 1069 is a regular event, so an update adds a copy rather than
+    // replacing the original — the badge must not double-count the applicant.
+    timelineState.events = [
+      makeCopy('updated-copy', ADMIN_PUBKEY, 1_700_000_500),
+      makeCopy('original-copy', ADMIN_PUBKEY, 1_700_000_000)
+    ];
+
+    let getCount;
+    const cleanup = $effect.root(() => {
+      getCount = useMembershipPendingCount();
+    });
+    flushSync();
+
+    expect(getCount()).toBe(1);
+    cleanup();
+  });
+
+  it('drops the applicant entirely when the newest submission is rejected', () => {
+    // Rejection is keyed by event id. Superseded copies are already filtered
+    // out, so rejecting the row the admin actually saw must not resurface an
+    // older submission from the same applicant.
+    timelineState.events = [
+      makeCopy('updated-copy', ADMIN_PUBKEY, 1_700_000_500),
+      makeCopy('original-copy', ADMIN_PUBKEY, 1_700_000_000)
+    ];
+    localStorage.setItem(`membership-rejected:${ADMIN_PUBKEY}`, JSON.stringify(['updated-copy']));
+
+    let getCount;
+    const cleanup = $effect.root(() => {
+      getCount = useMembershipPendingCount();
+    });
+    flushSync();
+
+    expect(getCount()).toBe(0);
     cleanup();
   });
 });
