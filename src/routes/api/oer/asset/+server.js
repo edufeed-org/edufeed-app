@@ -8,14 +8,14 @@
  * No transcode (unlike /api/image): we hash exactly what the source served.
  *
  * Same SSRF threat model as /api/image (arbitrary URLs from search results):
- * http(s) only + shared isPrivateIp guard, non-image rejection, size + timeout
+ * http(s) only + shared isBlockedHost guard, non-image rejection, size + timeout
  * caps. On the homelab the upstream proxy/imgproxy adds ASSET_PROXY_ALLOWED_
  * DOMAINS + network isolation for defence in depth.
  */
 
 import { json } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
-import { parseHttpUrl, isPrivateIp } from '$lib/server/httpUrl.js';
+import { parseHttpUrl, isBlockedHost } from '$lib/server/httpUrl.js';
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB
 const FETCH_TIMEOUT = 15_000;
@@ -27,7 +27,7 @@ export async function GET({ url }) {
   if (!parsed) {
     return json({ error: 'Missing or invalid url' }, { status: 400 });
   }
-  if (isPrivateIp(parsed)) {
+  if (await isBlockedHost(parsed)) {
     return json({ error: 'Private/local URLs are not allowed' }, { status: 400 });
   }
 
