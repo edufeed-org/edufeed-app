@@ -24,8 +24,13 @@
   import { formatTimestamp } from '$lib/helpers/dates.js';
 
   /**
+   * `onsubmitted` receives the delivery outcome, because a host that unmounts
+   * this form on submit would otherwise destroy the partial-delivery warning
+   * on the tick it becomes visible — that warning is the only signal the
+   * applicant gets that a reviewer was missed.
+   *
    * @type {{
-   *   onsubmitted?: () => void,
+   *   onsubmitted?: (result: { partialDelivery: { delivered: number, total: number } | null }) => void,
    *   showHeader?: boolean
    * }}
    */
@@ -311,7 +316,7 @@
       });
 
       submitted = true;
-      onsubmitted?.();
+      onsubmitted?.({ partialDelivery });
     } catch (err) {
       error = err instanceof Error ? err.message : m.membership_submit_failed();
     } finally {

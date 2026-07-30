@@ -9,7 +9,8 @@
 
   On submit the form has already mirrored the published event into the
   eventStore, so closing here lets the surface behind the modal (Termi hint /
-  settings card) flip to "waiting for review" in place.
+  settings card) flip to "waiting for review" in place. A partial fan-out is
+  the exception — see handleSubmitted.
 -->
 
 <script>
@@ -22,6 +23,22 @@
 
   function handleClose() {
     modalStore.closeModal();
+  }
+
+  /**
+   * Close on a clean submit, stay open on a partial one.
+   *
+   * The surface behind this modal shows "waiting for review" either way — it
+   * reads the mirrored event, which a partial fan-out still produces. So
+   * closing here would swallow the one thing that surface cannot say: that
+   * some reviewers never received the application and the wait may be longer
+   * than usual. The applicant closes it themselves once they have read it.
+   *
+   * @param {{ partialDelivery: { delivered: number, total: number } | null }} [result]
+   */
+  function handleSubmitted(result) {
+    if (result?.partialDelivery) return;
+    handleClose();
   }
 </script>
 
@@ -42,7 +59,7 @@
     </div>
     <p class="mb-4 text-sm text-base-content/70">{m.auth_signup_modal_membership_help()}</p>
 
-    <MembershipApplicationForm onsubmitted={handleClose} />
+    <MembershipApplicationForm onsubmitted={handleSubmitted} />
   </div>
   <form method="dialog" class="modal-backdrop">
     <button onclick={handleClose}>{m.common_close()}</button>
