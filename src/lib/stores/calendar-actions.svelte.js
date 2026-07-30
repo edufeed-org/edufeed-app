@@ -160,6 +160,40 @@ export function createCalendarActions(_communityPubkey) {
         // Convert form data to event object
         const eventData = convertFormDataToEvent(formData, existingEvent.pubkey);
 
+        // An update MUST NOT change the kind.
+        //
+        // NIP-52 splits calendar events by kind: 31922 is date-based (all-day,
+        // `start` is YYYY-MM-DD) and 31923 is time-based (`start` is a unix
+        // timestamp, plus a required `D` tag). Toggling all-day therefore
+        // forces a different kind — there is no legal way to express an
+        // all-day event as a 31923, so this cannot be fixed by keeping the
+        // existing kind and clearing the time fields.
+        //
+        // But a replaceable event is addressed by (kind, pubkey, d-tag), so a
+        // new kind is a NEW COORDINATE: the original is not replaced, both
+        // events stay live, and the naddr already in the URL still resolves to
+        // the pre-edit one. The user sees a save that silently did nothing —
+        // the same symptom as #62, which no cache fix can touch because the
+        // edit genuinely went somewhere else.
+        //
+        // Delete-and-recreate is not a safe alternative: NIP-52 calendars
+        // (kind 31924) reference their events by `a` = <kind>:<pubkey>:<d>,
+        // and that list is held by the CALENDAR owner, who need not be the
+        // person editing — this client cannot re-point references it cannot
+        // sign. The NIP also says explicitly that it "is intentionally not
+        // defining what happens if a calendar event changes after an RSVP is
+        // submitted", so there is no spec-blessed migration to implement.
+        //
+        // Refusing is the only option that cannot corrupt anything, and it
+        // takes nothing away that works today. (#65)
+        if (eventData.kind && eventData.kind !== existingEvent.kind) {
+          throw new Error(
+            'Cannot change an event between all-day and timed after it has been created. ' +
+              'The two use different NIP-52 kinds, so the change would create a second ' +
+              'event instead of replacing this one. Delete this event and create a new one instead.'
+          );
+        }
+
         // Create the calendar event using EventFactory with the SAME d-tag
         const eventFactory = createAppEventFactory();
 
