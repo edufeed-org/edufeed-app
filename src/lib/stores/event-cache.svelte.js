@@ -73,14 +73,21 @@ export const dbReady = (async () => {
         // `hasEvent` re-checks membership at FLUSH time, not at insert time.
         // Events reach this callback through an rxjs buffer, so up to
         // `batchTime` passes between the insert and the write — long enough for
-        // the event to have left the store again (a failed optimistic publish
-        // removing it, a replaceable version being superseded, a NIP-09
-        // deletion). Persisting one of those writes an event to IDB that the
-        // app no longer holds, and for a replaceable kind that is worse than a
-        // leak: nostr-idb keys by `kind:pubkey:d`, so it OVERWRITES the entry
-        // at that address and the cache-hit short-circuit means no relay is
-        // ever asked to correct it. Never persist what the store has dropped.
-        // (#64)
+        // the event to have left the store again (a replaceable version being
+        // superseded, a NIP-09 deletion). Persisting one of those writes an
+        // event to IDB that the app no longer holds, and for a replaceable kind
+        // that is worse than a leak: nostr-idb keys by `kind:pubkey:d`, so it
+        // OVERWRITES the entry at that address and the cache-hit short-circuit
+        // means no relay is ever asked to correct it.
+        //
+        // NOT reached by a failed optimistic publish, despite the shape
+        // suggesting it. TestOER measured the timing in a browser: the fastest
+        // possible failure — a relay answering OK:false — reports at
+        // 1006-1015ms (5/5), because `getPublishRelays` does a relay-list
+        // lookup before publishing even starts. The batch flushes at 1000ms, so
+        // the write has always already happened. Deleting this guard left the
+        // outcome identical in 5/5 trials. `uncacheEvent` is what handles that
+        // path; this is the invariant for everything else. (#64)
         const cacheable = events.filter(
           (e) => CACHEABLE_KINDS.has(e.kind) && eventStore.hasEvent(e.id)
         );

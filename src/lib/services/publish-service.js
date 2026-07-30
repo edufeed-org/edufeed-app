@@ -8,6 +8,7 @@
  */
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { uncacheEvent } from '$lib/stores/event-cache.svelte.js';
+import { isAddressableKind, isReplaceableKind } from 'applesauce-core/helpers/event';
 import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.js';
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
 import { getFallbackRelays } from '$lib/helpers/relay-helper.js';
@@ -226,6 +227,28 @@ export function publishEventInBackground(signedEvent, taggedPubkeys = [], onComp
 }
 
 /**
+ * The version an event is about to replace, or undefined if there is none.
+ *
+ * Only meaningful for replaceable and addressable kinds — a regular event
+ * replaces nothing, so there is nothing to put back if its publish fails.
+ *
+ * @param {import('nostr-tools').NostrEvent} signedEvent
+ * @returns {import('nostr-tools').NostrEvent | undefined}
+ */
+function getReplacedVersion(signedEvent) {
+  const { kind, pubkey, tags } = signedEvent;
+  if (!isReplaceableKind(kind) && !isAddressableKind(kind)) return undefined;
+  const identifier = isAddressableKind(kind)
+    ? (tags.find((t) => t[0] === 'd')?.[1] ?? '')
+    : undefined;
+  try {
+    return eventStore.getReplaceable(kind, pubkey, identifier);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Optimistic publish - adds event to EventStore immediately, publishes in background
  * Returns as soon as ONE relay succeeds. Shows alert if all relays fail.
  *
@@ -241,7 +264,16 @@ export function publishEventInBackground(signedEvent, taggedPubkeys = [], onComp
 export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {}) {
   const { timeout = 5000, communityEvent = null, additionalRelays = [], onStatusChange } = opts;
 
-  // 1. Immediately add to EventStore for instant UI update
+  // 1. Immediately add to EventStore for instant UI update.
+  //
+  // Capture the version this one replaces FIRST. Adding a replacement drops
+  // its predecessor from the EventStore (keepOldVersions is off) and, once
+  // the cache batch flushes, overwrites it in IDB too — nostr-idb keys
+  // replaceable events by `kind:pubkey:d`. So by the time a total publish
+  // failure is detected there is nothing left anywhere to fall back to, and
+  // removing the phantom would leave the address EMPTY rather than restored.
+  // This is the only moment the previous version is still reachable. (#64)
+  const previousVersion = getReplacedVersion(signedEvent);
   eventStore.add(signedEvent);
 
   // 2. Initialize status
@@ -340,10 +372,30 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
       // (nostr-idb keys by `kind:pubkey:d`), which a cache hit then serves
       // forever without asking a relay. Failure is detected only after
       // `Promise.allSettled` against a 5000ms timeout while the cache batches
-      // at 1000ms, so by now the write has usually already flushed.
-      // Best-effort and awaited by nothing: the publish has already failed and
-      // the user has been told. (#64)
-      uncacheEvent(signedEvent);
+      // at 1000ms. Measured in a browser by TestOER across four dead-relay
+      // modes: the phantom is in IDB every time, and this delete is what turns
+      // "renders fabricated data forever" into a cache miss. (#64)
+      await uncacheEvent(signedEvent);
+
+      // Put the replaced version back. Deleting the phantom on its own leaves
+      // the address EMPTY, not restored: the predecessor was evicted from
+      // memory when the replacement was added and overwritten in IDB when the
+      // batch flushed. Empty is not stuck — a cache miss falls through to the
+      // relays — but with the publish having just failed, the relays are
+      // exactly what is not answering, so the user would see their content
+      // vanish rather than revert.
+      //
+      // Ordering is load-bearing: this must run AFTER uncacheEvent, because
+      // nostr-idb only writes a replaceable event when it is newer than the
+      // entry at that address, and the phantom is newer than what it replaced.
+      // Restoring first would be silently rejected.
+      if (previousVersion && previousVersion.id !== signedEvent.id) {
+        try {
+          eventStore.add(previousVersion);
+        } catch (err) {
+          console.warn('Failed to restore the replaced event after a failed publish:', err);
+        }
+      }
     }
   })();
 }
