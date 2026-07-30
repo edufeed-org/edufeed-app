@@ -176,6 +176,13 @@ test.describe('Calendar Event Editing - Form Pre-population', () => {
 // Event Update Tests
 // ============================================================================
 
+// KNOWN FAILING — see issue #62, not a selector problem.
+// 'can update title and save' and 'can update description and save' both create
+// an event, open the edit modal (which prefills correctly), change one field,
+// save, and then wait for the new value. It never arrives. Left failing rather
+// than skipped: whether the replacement is not published, not accepted by the
+// e2e relay, or not re-read by the client is still open, and a skip would hide
+// it. Do not "fix" these by relaxing the assertions.
 test.describe('Calendar Event Editing - Update Flow', () => {
   test('can update title and save', async ({ authenticatedPage: page }) => {
     // First create an event to edit (so we don't modify seeded data)
@@ -292,6 +299,9 @@ test.describe('Calendar Event Editing - Form Validation', () => {
     expect(modalStillOpen || validationError).toBe(true);
   });
 
+  // KNOWN FAILING — same root cause as the two in the Update Flow block above.
+  // See issue #62. This one is the most direct statement of it: it hard-navigates
+  // back to the naddr after saving and still reads the old title.
   test('updated event shows new data after reload', async ({ authenticatedPage: page }) => {
     // Create an event to edit
     await page.goto('/calendar');
