@@ -1,9 +1,13 @@
 /**
- * Server-side PDF page-1 → WebP thumbnail rendering.
+ * Server-side PDF page-1 → WebP thumbnail rendering, plus the page count.
  *
  * pdf.js (legacy Node build) + @napi-rs/canvas render the first page,
  * sharp encodes the WebP. Heavy imports are lazy so the module costs
  * nothing until the first thumbnail request.
+ *
+ * The page count comes back from the same parse (#57): the document is already
+ * open, so `numPages` is free here and would otherwise cost a second fetch and
+ * a second parse of the same file.
  */
 
 /** Target thumbnail width in CSS pixels. */
@@ -14,7 +18,7 @@ export const THUMBNAIL_WIDTH = 400;
  *
  * @param {Uint8Array} data - the PDF bytes
  * @param {number} [width] - target width; height follows the page ratio
- * @returns {Promise<Buffer>} WebP bytes
+ * @returns {Promise<{ webp: Buffer, numPages: number }>}
  * @throws when the document cannot be parsed or rendered
  */
 export async function renderPdfThumbnail(data, width = THUMBNAIL_WIDTH) {
@@ -40,7 +44,29 @@ export async function renderPdfThumbnail(data, width = THUMBNAIL_WIDTH) {
     await page.render({ canvasContext: /** @type {any} */ (ctx), viewport }).promise;
 
     const png = canvas.toBuffer('image/png');
-    return await sharp(png).webp({ quality: 80 }).toBuffer();
+    const webp = await sharp(png).webp({ quality: 80 }).toBuffer();
+    return { webp, numPages: doc.numPages };
+  } finally {
+    doc.destroy().catch(() => {});
+  }
+}
+
+/**
+ * Read a PDF's page count without rendering anything.
+ *
+ * Only for the case where no thumbnail was ever rendered for this file — the
+ * thumbnail path returns the count from its own parse. Skips canvas and sharp
+ * entirely.
+ *
+ * @param {Uint8Array} data - the PDF bytes
+ * @returns {Promise<number>}
+ * @throws when the document cannot be parsed
+ */
+export async function readPdfPageCount(data) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
+  try {
+    return doc.numPages;
   } finally {
     doc.destroy().catch(() => {});
   }
