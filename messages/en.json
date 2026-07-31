@@ -2753,6 +2753,8 @@
   "amb_card_linked_material_type_text": "Text file",
   "amb_card_linked_material_type_link": "Link",
   "amb_card_linked_material_type_file": "File",
+  "amb_card_linked_material_pages_one": "1 page",
+  "amb_card_linked_material_pages": "{count} pages",
   "event_invite_button": "Invite",
   "invite_modal_title": "Invite to event",
   "invite_modal_recipients_label": "Recipients",

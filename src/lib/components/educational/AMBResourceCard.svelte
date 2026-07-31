@@ -38,6 +38,11 @@
     describeLinkedMaterials,
     formatMaterialSize
   } from '$lib/helpers/educational/linkedMaterials.js';
+  import {
+    canDeriveThumbnail,
+    getThumbnailSourceUrl
+  } from '$lib/helpers/educational/pdfThumbnailGate.js';
+  import { loadPdfPageCount } from '$lib/helpers/educational/pdfPageCount.js';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -92,11 +97,34 @@
     file: m.amb_card_linked_material_type_file
   };
 
-  // A single material says what it is — "PDF · 2,4 MB" — which is the point of
-  // #57. Several fall back to the count: a per-item list does not fit in a
-  // badge, and the resource page already lists them. When the lone item told us
-  // nothing at all (no usable mime, no extension, no size) the count string is
-  // still the most honest thing to show.
+  // Page count for a single linked PDF. Not on the event — AMB's encoding:* has
+  // no such field — so it comes from /api/pdf-info, gated by the same rights
+  // policy as the thumbnail because it means fetching the file. Only for
+  // attached files: an `r` link carries no attestation, so an external PDF
+  // deliberately gets no page count.
+  const pdfPageCountUrl = $derived.by(() => {
+    const { count, items } = linkedMaterials;
+    if (count !== 1 || items[0].source !== 'upload' || items[0].type !== 'pdf') return null;
+    if (!canDeriveThumbnail(resource?.tags)) return null;
+    return getThumbnailSourceUrl(resource?.tags);
+  });
+
+  let pdfPageCount = $state(/** @type {number | null} */ (null));
+
+  // Fetched on first hover rather than on render: the badge is hover-only, and a
+  // feed of cards must not fire a request per card just to sit there. Memoised
+  // per URL in the helper, so re-hovering costs nothing.
+  async function loadBadgePageCount() {
+    const url = pdfPageCountUrl;
+    if (!url || pdfPageCount !== null) return;
+    pdfPageCount = await loadPdfPageCount(url);
+  }
+
+  // A single material says what it is — "PDF · 12 Seiten · 2,4 MB" — which is
+  // the point of #57. Several fall back to the count: a per-item list does not
+  // fit in a badge, and the resource page already lists them. When the lone item
+  // told us nothing at all (no usable mime, no extension, no size) the count
+  // string is still the most honest thing to show.
   const linkedMaterialsLabel = $derived.by(() => {
     const { count, items } = linkedMaterials;
     if (count === 0) return null;
@@ -107,8 +135,16 @@
     const typeIsKnown = item.type !== 'file' && item.type !== 'link';
     if (!typeIsKnown && !size) return m.amb_card_linked_materials_one();
 
-    const label = MATERIAL_TYPE_LABEL[item.type]();
-    return size ? `${label} · ${size}` : label;
+    const parts = [MATERIAL_TYPE_LABEL[item.type]()];
+    if (pdfPageCount !== null) {
+      parts.push(
+        pdfPageCount === 1
+          ? m.amb_card_linked_material_pages_one()
+          : m.amb_card_linked_material_pages({ count: pdfPageCount })
+      );
+    }
+    if (size) parts.push(size);
+    return parts.join(' · ');
   });
 
   // Get author info
@@ -415,9 +451,21 @@
     </div>
 
     <!-- Resource cover — image at 2:1 when present, typo cover at 3:4 (capped) when absent.
-         On hover, a badge signals attached/linked materials behind the cover. -->
+         On hover, a badge names what is behind the cover (#57). The pointer
+         handler only fills in a linked PDF's page count, which cannot come off
+         the event; everything else in the badge is already rendered, so nothing
+         is hidden from a keyboard or touch user that CSS hover was not already
+         hiding. -->
     {#if !compact}
-      <div class="group relative mb-3">
+      <!-- eslint-disable-next-line svelte/a11y-mouse-events-have-key-events -- lazy enrichment of already-rendered text, not an interaction -->
+      <!-- Deliberately NOT given a role: this div is not interactive and must
+           not announce itself as one. `pointerenter` is a cache warm-up, and
+           the badge renders its type and size with or without it, so a user who
+           never produces a pointer event loses nothing that `group-hover` was
+           not already hiding. A role here would be the accessibility
+           regression. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="group relative mb-3" onpointerenter={loadBadgePageCount}>
         <ResourceCover {resource} size="full" aspect="wide" />
         {#if linkedMaterialsLabel}
           <span

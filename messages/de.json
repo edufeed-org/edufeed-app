@@ -2753,6 +2753,8 @@
   "amb_card_linked_material_type_text": "Textdatei",
   "amb_card_linked_material_type_link": "Link",
   "amb_card_linked_material_type_file": "Datei",
+  "amb_card_linked_material_pages_one": "1 Seite",
+  "amb_card_linked_material_pages": "{count} Seiten",
   "event_invite_button": "Einladen",
   "invite_modal_title": "Zum Termin einladen",
   "invite_modal_recipients_label": "Empfänger:innen",

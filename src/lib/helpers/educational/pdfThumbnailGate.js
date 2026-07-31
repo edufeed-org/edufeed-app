@@ -67,3 +67,17 @@ export function canDeriveThumbnail(tags) {
 export function pdfThumbnailEndpoint(pdfUrl) {
   return `/api/pdf-thumbnail?url=${encodeURIComponent(pdfUrl)}`;
 }
+
+/**
+ * Endpoint URL for the app-side page count of a PDF (#57).
+ *
+ * Gated by the same `canDeriveThumbnail` policy: reading the page count means
+ * fetching the file, which is the same act the thumbnail gate exists to
+ * authorise.
+ *
+ * @param {string} pdfUrl
+ * @returns {string}
+ */
+export function pdfInfoEndpoint(pdfUrl) {
+  return `/api/pdf-info?url=${encodeURIComponent(pdfUrl)}`;
+}
