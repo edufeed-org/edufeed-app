@@ -36,6 +36,7 @@
     { key: 'messages', label: () => m.inbox_filter_messages() },
     { key: 'reaction', label: () => m.inbox_filter_reactions() },
     { key: 'comment', label: () => m.inbox_filter_comments() },
+    { key: 'reply', label: () => m.inbox_filter_replies() },
     { key: 'mention', label: () => m.inbox_filter_mentions() },
     { key: 'rsvp', label: () => m.inbox_filter_rsvps() }
   ];

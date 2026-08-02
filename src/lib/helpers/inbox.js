@@ -23,6 +23,11 @@ const KIND_TO_TYPE = {
  */
 export function getNotificationType(event) {
   if (event.kind === 7 && isWave(event)) return 'wave';
+  // Kind 1 is both: a NIP-10 reply when it points at another event, otherwise
+  // just a note that name-dropped the user.
+  if (event.kind === 1) {
+    return event.tags?.some((t) => t[0] === 'e') ? 'reply' : 'mention';
+  }
   return KIND_TO_TYPE[event.kind] ?? null;
 }
 
@@ -99,6 +104,12 @@ export function getNotificationUrl(event) {
     } catch {
       return null;
     }
+  }
+
+  // Kind 1 replies and note mentions — open the note itself, the thread view
+  // resolves its ancestors
+  if (event.kind === 1) {
+    return `/${encodePointer({ id: event.id, relays: [] })}`;
   }
 
   if (type === 'mention') {

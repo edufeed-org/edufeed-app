@@ -56,8 +56,25 @@ describe('getNotificationType', () => {
   it('returns "pollVote" for kind 1018', () => {
     expect(getNotificationType({ kind: 1018 })).toBe('pollVote');
   });
+  it('returns "reply" for a kind 1 note that e-tags another event', () => {
+    expect(
+      getNotificationType({
+        kind: 1,
+        tags: [
+          ['e', 'a'.repeat(64), '', 'root'],
+          ['p', 'b'.repeat(64)]
+        ]
+      })
+    ).toBe('reply');
+  });
+  it('returns "mention" for a kind 1 note with no e-tag', () => {
+    expect(getNotificationType({ kind: 1, tags: [['p', 'b'.repeat(64)]] })).toBe('mention');
+  });
+  it('returns "mention" for a kind 1 note with no tags at all', () => {
+    expect(getNotificationType({ kind: 1 })).toBe('mention');
+  });
   it('returns null for unknown kind', () => {
-    expect(getNotificationType({ kind: 1 })).toBe(null);
+    expect(getNotificationType({ kind: 30023 })).toBe(null);
   });
 });
 
@@ -148,6 +165,23 @@ describe('getNotificationUrl', () => {
     expect(url).toMatch(/^\/forms\/naddr1/);
     expect(url).toContain('?tab=responses');
     expect(url).toContain('#response-abc123');
+  });
+  it('returns nevent URL encoding a kind 1 reply itself', () => {
+    const replyId = 'e'.repeat(64);
+    const event = {
+      kind: 1,
+      id: replyId,
+      tags: [
+        ['e', 'a'.repeat(64), '', 'root'],
+        ['p', validPubkey]
+      ]
+    };
+    expect(getNotificationUrl(event)).toMatch(/^\/nevent1/);
+  });
+  it('returns nevent URL encoding a kind 1 mention itself', () => {
+    const noteId = 'f'.repeat(64);
+    const event = { kind: 1, id: noteId, tags: [['p', validPubkey]] };
+    expect(getNotificationUrl(event)).toMatch(/^\/nevent1/);
   });
   it('returns community URL for kind 9 with h tag', () => {
     const event = { kind: 9, tags: [['h', 'communitypubkey123']] };

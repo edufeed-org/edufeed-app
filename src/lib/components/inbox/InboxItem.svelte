@@ -44,6 +44,7 @@
     wave: BellIcon,
     reaction: HeartIcon,
     comment: ChatIcon,
+    reply: ChatIcon,
     mention: BellIcon,
     rsvp: CalendarIcon,
     pollVote: PollIcon
@@ -149,8 +150,13 @@
         &nbsp;{m.inbox_action_reaction({ contentTitle })}
       {:else if type === 'comment'}
         &nbsp;{m.inbox_action_comment({ contentTitle })}
+      {:else if type === 'reply'}
+        &nbsp;{m.inbox_action_reply()}
       {:else if type === 'mention'}
-        &nbsp;{m.inbox_action_mention({ communityName: contentTitle })}
+        <!-- kind 9 mentions happen inside a community, kind 1 mentions do not -->
+        &nbsp;{event.kind === 1
+          ? m.inbox_action_note_mention()
+          : m.inbox_action_mention({ communityName: contentTitle })}
       {:else if type === 'rsvp'}
         &nbsp;{m.inbox_action_rsvp({ eventTitle: contentTitle })}
       {:else if type === 'pollVote'}

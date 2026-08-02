@@ -60,10 +60,16 @@ describe('inbox-service pure functions', () => {
     it('creates combined filter array with #p and #P', () => {
       const filters = buildMainFilter('userpubkey', 1000);
       expect(filters).toEqual([
-        { kinds: [1070, 1069, 7, 9], '#p': ['userpubkey'], since: 1000 },
+        { kinds: [1, 1070, 1069, 7, 9], '#p': ['userpubkey'], since: 1000 },
         { kinds: [1111], '#p': ['userpubkey'], since: 1000 },
         { kinds: [1111], '#P': ['userpubkey'], since: 1000 }
       ]);
+    });
+
+    it('includes kind 1 so NIP-10 replies from other clients are notified', () => {
+      const filters = buildMainFilter('userpubkey', 1000);
+      const pTagged = filters.filter((f) => f['#p']?.includes('userpubkey'));
+      expect(pTagged.some((f) => f.kinds?.includes(1))).toBe(true);
     });
   });
 
