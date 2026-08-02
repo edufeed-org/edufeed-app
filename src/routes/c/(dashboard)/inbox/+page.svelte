@@ -31,6 +31,7 @@
     { key: 'reaction', label: () => m.inbox_filter_reactions() },
     { key: 'wave', label: () => m.inbox_filter_waves() },
     { key: 'comment', label: () => m.inbox_filter_comments() },
+    { key: 'reply', label: () => m.inbox_filter_replies() },
     { key: 'mention', label: () => m.inbox_filter_mentions() },
     { key: 'rsvp', label: () => m.inbox_filter_rsvps() }
   ];
