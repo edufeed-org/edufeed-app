@@ -9,7 +9,8 @@
   import { parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
   import {
     builderStateToTags,
-    builderStateToPreviewEvent
+    builderStateToPreviewEvent,
+    fieldToState
   } from '$lib/helpers/forms/builder-state.js';
   import {
     interleaveSections,
@@ -84,54 +85,8 @@
    * @property {string} [vocabError]
    * @property {{ rules: { questionId: string, operator: string, value: string }[] } | undefined} [displayIf] - single-condition show-if rule, authored via FormBuilderConditionRow
    * @property {string} [title] - only used when type === 'section'
-   * @property {string} [description] - only used when type === 'section'
+   * @property {string} [description] - per-field help text, or section text when type === 'section'
    */
-
-  /**
-   * Encode a vocab {address, relay} back to an naddr for the UI.
-   * @param {{ address: string, relay: string } | undefined} vocab
-   * @returns {string}
-   */
-  function vocabToNaddr(vocab) {
-    if (!vocab?.address) return '';
-    const [kindStr, pubkey, ...rest] = vocab.address.split(':');
-    const identifier = rest.join(':');
-    try {
-      return nip19.naddrEncode({
-        kind: Number(kindStr),
-        pubkey,
-        identifier,
-        relays: vocab.relay ? [vocab.relay] : []
-      });
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Map a parsed FormField to builder FieldState.
-   * @param {import('$lib/helpers/forms.js').FormField} f
-   * @returns {FieldState}
-   */
-  function fieldToState(f) {
-    return {
-      id: f.id,
-      type: f.type,
-      label: f.label,
-      defaultValue: f.defaultValue || '',
-      required: f.options?.required || false,
-      placeholder: f.options?.placeholder || '',
-      min: f.options?.min,
-      max: f.options?.max,
-      selectOptions: f.options?.options || [],
-      multiple: f.options?.multiple || false,
-      vocab: f.vocab,
-      output: LOCKED_FIELD_OUTPUTS[f.type] ?? f.output,
-      vocabNaddrInput: vocabToNaddr(f.vocab),
-      vocabError: '',
-      displayIf: f.options?.displayIf
-    };
-  }
 
   /**
    * Map a section marker (from interleaveSections) to builder FieldState.
@@ -195,6 +150,7 @@
       label: '',
       defaultValue: '',
       required: false,
+      description: '',
       placeholder: '',
       min: undefined,
       max: undefined,

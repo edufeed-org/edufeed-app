@@ -2087,6 +2087,7 @@
   "form_builder_fields_label": "Felder",
   "form_builder_field_name_placeholder": "Feldname eingeben",
   "form_builder_field_placeholder_text": "Platzhaltertext",
+  "form_builder_field_description_text": "Beschreibung / Hilfetext (optional)",
   "form_builder_field_option_new": "Neue Option",
   "form_builder_field_options_label": "Optionen:",
   "form_builder_field_allow_multiple": "Mehrfachauswahl erlauben",

@@ -42,6 +42,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_name_placeholder: () => 'Field label',
   form_builder_field_required: () => 'Required',
   form_builder_field_placeholder_text: () => 'Placeholder',
+  form_builder_field_description_text: () => 'Description',
   form_builder_field_options_label: () => 'Options',
   form_builder_field_option_new: () => 'New option',
   form_builder_add_option: () => 'Add option',

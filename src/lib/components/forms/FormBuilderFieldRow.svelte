@@ -24,6 +24,7 @@
    * @property {string} defaultValue
    * @property {boolean} required
    * @property {string} placeholder
+   * @property {string} [description] - per-field help text shown under the label
    * @property {number | undefined} min
    * @property {number | undefined} max
    * @property {import('$lib/helpers/forms.js').FormFieldOption[]} selectOptions
@@ -309,6 +310,16 @@
       />
     {/if}
   </div>
+
+  <!-- Per-field help text, shown under the label wherever the field renders.
+       A textarea, not an input: authored line breaks (bullet lists) are kept
+       by the renderer's whitespace-pre-line. -->
+  <textarea
+    class="textarea-bordered textarea w-full textarea-xs"
+    rows="2"
+    placeholder={m.form_builder_field_description_text()}
+    bind:value={field.description}
+  ></textarea>
 
   <!-- Output picker: every field type can map to an AMB (or ext) property. -->
   <div class="flex items-center gap-2 text-sm">

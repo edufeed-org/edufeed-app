@@ -10,8 +10,9 @@
  * builder state would preview something that is not the artifact, and could
  * drift from it silently — so keep this the only path to template tags.
  */
+import { nip19 } from 'nostr-tools';
 import { buildFormTemplateTags, CHOICE_TYPES, FORM_TEMPLATE_KIND } from './format.js';
-import { extractSections } from './builder-sections.js';
+import { extractSections, LOCKED_FIELD_OUTPUTS } from './builder-sections.js';
 
 /** @typedef {import('./format.js').FormField} FormField */
 /** @typedef {import('./builder-sections.js').SectionMarker} SectionMarker */
@@ -38,6 +39,7 @@ export function builderItemFromState(f) {
     defaultValue: f.defaultValue,
     options: {
       ...(f.required && { required: true }),
+      ...(f.description && { description: f.description }),
       ...(f.placeholder && { placeholder: f.placeholder }),
       ...(f.min !== undefined && { min: f.min }),
       ...(f.max !== undefined && { max: f.max }),
@@ -50,6 +52,58 @@ export function builderItemFromState(f) {
     },
     ...(f.vocab?.address ? { vocab: f.vocab } : {}),
     ...(f.output ? { output: f.output } : {})
+  };
+}
+
+/**
+ * Mirror a field's vocab binding into the naddr text input the builder shows.
+ * @param {{ address: string, relay: string } | undefined} vocab
+ * @returns {string}
+ */
+function vocabToNaddr(vocab) {
+  if (!vocab?.address) return '';
+  const [kindStr, pubkey, ...rest] = vocab.address.split(':');
+  const identifier = rest.join(':');
+  try {
+    return nip19.naddrEncode({
+      kind: Number(kindStr),
+      pubkey,
+      identifier,
+      relays: vocab.relay ? [vocab.relay] : []
+    });
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Map a parsed FormField back to builder FieldState — the edit direction,
+ * inverse of `builderItemFromState`. Lives here rather than in FormBuilder so
+ * the whole edit cycle (parse -> state -> tags) is testable as a pure round
+ * trip: a property this mapping drops is silently erased the first time an
+ * author re-opens their own form, and that failure is invisible from the
+ * publish direction alone.
+ * @param {import('./format.js').FormField} f
+ * @returns {any}
+ */
+export function fieldToState(f) {
+  return {
+    id: f.id,
+    type: f.type,
+    label: f.label,
+    defaultValue: f.defaultValue || '',
+    required: f.options?.required || false,
+    description: f.options?.description || '',
+    placeholder: f.options?.placeholder || '',
+    min: f.options?.min,
+    max: f.options?.max,
+    selectOptions: f.options?.options || [],
+    multiple: f.options?.multiple || false,
+    vocab: f.vocab,
+    output: LOCKED_FIELD_OUTPUTS[f.type] ?? f.output,
+    vocabNaddrInput: vocabToNaddr(f.vocab),
+    vocabError: '',
+    displayIf: f.options?.displayIf
   };
 }
 

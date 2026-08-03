@@ -37,6 +37,16 @@
         </label>
       {/if}
 
+      {#if field.options?.description}
+        <!-- whitespace-pre-line keeps authored line breaks (bullet lists) -->
+        <p
+          data-testid="field-description"
+          class="mb-1 text-sm whitespace-pre-line text-base-content/60"
+        >
+          {field.options.description}
+        </p>
+      {/if}
+
       {#if field.vocab}
         <FormConceptPicker
           {field}
