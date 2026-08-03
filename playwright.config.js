@@ -74,7 +74,10 @@ export default defineConfig({
     command: `pnpm run build && pnpm run preview --port ${WEB_SERVER_PORT} --strictPort`,
     port: WEB_SERVER_PORT,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // `command` runs a full production build first, so this budget covers a
+    // COLD build, not just server startup. 120s assumed a warm one and expired
+    // before a single test ran in a freshly-installed worktree.
+    timeout: 300_000,
     env: {
       CALENDAR_RELAYS: RELAY_URLS.calendar,
       COMMUNIKEY_RELAYS: RELAY_URLS.strfry,
