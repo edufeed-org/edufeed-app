@@ -63,6 +63,15 @@ export const ALL_VARIANTS = [
         bibleReference: 'amb_resource_ekw_bible_reference'
       }
     }
+  },
+  {
+    // Template-driven only: exposed by a deployment ONLY together with a
+    // RESOURCE_FORM_TEMPLATE_NADDR_HOCHSCHULE — without one it would fall
+    // back to the hardcoded wizard, which this variant does not configure.
+    id: 'hochschule',
+    labelKey: 'resource_form_variant_hochschule_label',
+    descriptionKey: 'resource_form_variant_hochschule_description',
+    bildungsbereichKeys: ['hochschule']
   }
 ];
 

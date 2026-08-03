@@ -102,4 +102,61 @@ describe('publish-edufeed-forms — buildFormTemplate (NIP-101 regression)', () 
       ]);
     });
   });
+
+  describe('ekkw-hochschule (sections, inline options, field descriptions)', () => {
+    beforeEach(() => {
+      vi.stubEnv('SCHEME_NADDR_FACHSYSTEMATIK_THEOLOGIE', fakeNaddr('fachsystematik-theologie'));
+    });
+    afterEach(() => vi.unstubAllEnvs());
+
+    const buildEkkw = () => buildFormTemplate(forms.find((f) => f.d === 'ekkw-hochschule'));
+
+    it('encodes inline selectOptions as an option field with the option list JSON', () => {
+      const template = buildEkkw();
+      const pubtype = template.tags.find((t) => t[0] === 'field' && t[1] === 'pubtype');
+      expect(pubtype[2]).toBe('option');
+      expect(JSON.parse(pubtype[4])).toEqual([
+        ['zeitschrift', 'Zeitschrift'],
+        ['sammelband', 'Sammelband']
+      ]);
+      expect(JSON.parse(pubtype[5])).toMatchObject({ renderElement: 'radio', required: true });
+    });
+
+    it('carries the per-field description in the field settings bag', () => {
+      const template = buildEkkw();
+      const doi = template.tags.find((t) => t[0] === 'field' && t[1] === 'doi');
+      expect(JSON.parse(doi[5]).description).toMatch(/Digital Object Identifier/);
+    });
+
+    it('carries the sections (with questionIds) in the template settings', () => {
+      const template = buildEkkw();
+      const settings = JSON.parse(template.tags.find((t) => t[0] === 'settings')[1]);
+      expect(settings.sections.map((s) => s.id)).toEqual([
+        'publikationstyp',
+        'quelle',
+        'inhalt',
+        'personen'
+      ]);
+      expect(settings.sections[0].questionIds).toEqual(['pubtype']);
+    });
+
+    it('round-trips through the app parser: options, descriptions and sections survive', () => {
+      const template = buildEkkw();
+      const parsed = parseFormTemplate({
+        kind: 30168,
+        pubkey: PUBKEY,
+        tags: template.tags,
+        content: '',
+        created_at: 1
+      });
+      const pubtype = parsed.fields.find((f) => f.id === 'pubtype');
+      expect(pubtype.type).toBe('radio');
+      expect(pubtype.options.options.map((o) => o.label)).toEqual(['Zeitschrift', 'Sammelband']);
+      const doi = parsed.fields.find((f) => f.id === 'doi');
+      expect(doi.options.description).toMatch(/Digital Object Identifier/);
+      expect(parsed.sections).toHaveLength(4);
+      const herausgeber = parsed.fields.find((f) => f.id === 'herausgeber');
+      expect(herausgeber.output).toBe('amb:contributor');
+    });
+  });
 });

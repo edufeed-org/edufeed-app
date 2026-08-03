@@ -29,6 +29,10 @@ picker clients skip schemes without it.
 pnpm run publish:vocabs
 ```
 
+Both publish scripts accept `--only d1,d2` to publish just the named
+schemes/forms — publishing one NEW entry must not re-sign and re-stamp
+every other one. Unknown names abort before anything is published.
+
 The script logs the `naddr` of each published scheme. Paste them into
 `.env` under the matching `SCHEME_NADDR_<UPPER_SNAKE>` variables before
 running `publish:forms`.

@@ -35,9 +35,10 @@ export function naddrToCoord(naddr) {
 /**
  * Map a JSON field definition (flat required/min/max/… keys) to the FormField
  * shape expected by buildFormTemplateTags (constraints nested under options).
- * Assumes select/radio fields always carry a vocabRef — the JSON schema has
- * no inline option lists yet, so the builder's inline-`option` branch is
- * never hit by this data.
+ * Choice fields either carry a vocabRef (field-vocab binding) or an inline
+ * `selectOptions` list ([{id,label,nextSection?}]), which maps onto the
+ * builder's inline-`option` branch. A `description` becomes the settings-bag
+ * key the app renders as the per-field explanation text.
  */
 function toFormField(field, vocabCoord) {
   const options = {};
@@ -47,6 +48,8 @@ function toFormField(field, vocabCoord) {
   if (field.max !== undefined) options.max = field.max;
   if (field.pattern) options.pattern = field.pattern;
   if (field.placeholder) options.placeholder = field.placeholder;
+  if (field.description) options.description = field.description;
+  if (field.selectOptions?.length) options.options = field.selectOptions;
   const formField = {
     id: field.id,
     type: field.type,

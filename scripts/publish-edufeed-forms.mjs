@@ -65,7 +65,18 @@ async function main() {
 
   const { forms } = JSON.parse(readFileSync(FORMS_DATA_PATH, 'utf8'));
 
-  for (const form of forms) {
+  // `--only d1,d2` publishes just the named forms — publishing one NEW form
+  // must not re-sign (and bump created_at on) every other template.
+  const onlyIdx = process.argv.indexOf('--only');
+  const only = onlyIdx !== -1 ? (process.argv[onlyIdx + 1] || '').split(',').filter(Boolean) : null;
+  if (only) {
+    const known = new Set(forms.map((f) => f.d));
+    const unknown = only.filter((d) => !known.has(d));
+    if (unknown.length) throw new Error(`--only names unknown form(s): ${unknown.join(', ')}`);
+  }
+  const selected = only ? forms.filter((f) => only.includes(f.d)) : forms;
+
+  for (const form of selected) {
     console.log(`\n=== ${form.d} ===`);
     const template = buildFormTemplate(form);
     const signed = sign(template, skHex);
