@@ -6,9 +6,12 @@
   import { nip19 } from 'nostr-tools';
   import { goto } from '$app/navigation';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { buildFormTemplateTags, parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
+  import { parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
   import {
-    extractSections,
+    builderStateToTags,
+    builderStateToPreviewEvent
+  } from '$lib/helpers/forms/builder-state.js';
+  import {
     interleaveSections,
     isSectionMarker,
     LOCKED_FIELD_OUTPUTS
@@ -331,6 +334,47 @@
     parentFormName = '';
   }
 
+  let previewOpen = $state(false);
+  /** @type {import('nostr-tools').NostrEvent | null} */
+  let previewEvent = $state(null);
+
+  /**
+   * Loaded on demand rather than imported statically: rendering a form pulls in
+   * FormRenderer's whole field-adapter chain (AMB resource search, creator
+   * input, concept picker), none of which the builder needs until someone
+   * actually opens the preview.
+   * @type {any}
+   */
+  let PreviewComponent = $state(null);
+
+  /**
+   * Snapshot the current builder state into a renderable template and open the
+   * preview. Snapshot-on-open rather than a live-bound side panel: FormRenderer
+   * seeds its values once per instance, so a live preview has to remount on
+   * every edit — which would steal focus mid-keystroke and throw away whatever
+   * the author had typed into the preview. One snapshot per open avoids that
+   * entirely and is what an author actually wants: a look at the form as it
+   * stands.
+   */
+  async function openPreview() {
+    previewEvent = builderStateToPreviewEvent(
+      fields,
+      {
+        dTag,
+        name: formName,
+        description: formDescription,
+        public: isPublic,
+        confirmationMessage,
+        ...(forkOf ? { forkOf } : {})
+      },
+      manager.active?.pubkey || ''
+    );
+    if (!PreviewComponent) {
+      PreviewComponent = (await import('./FormPreview.svelte')).default;
+    }
+    previewOpen = true;
+  }
+
   async function publish() {
     if (!manager.active) {
       error = m.form_builder_error_login();
@@ -345,45 +389,14 @@
     error = '';
 
     try {
-      /**
-       * @type {(import('$lib/helpers/forms.js').FormField | import('$lib/helpers/forms/builder-sections.js').SectionMarker)[]}
-       */
-      const items = fields.map((f) =>
-        f.type === 'section'
-          ? {
-              id: f.id,
-              type: 'section',
-              title: f.title || '',
-              ...(f.description ? { description: f.description } : {})
-            }
-          : {
-              id: f.id,
-              type: f.type,
-              label: f.label,
-              defaultValue: f.defaultValue,
-              options: {
-                ...(f.required && { required: true }),
-                ...(f.placeholder && { placeholder: f.placeholder }),
-                ...(f.min !== undefined && { min: f.min }),
-                ...(f.max !== undefined && { max: f.max }),
-                ...((f.type === 'select' || f.type === 'radio') &&
-                  f.selectOptions.length > 0 && { options: f.selectOptions }),
-                ...(f.multiple && { multiple: true }),
-                ...(f.displayIf ? { displayIf: f.displayIf } : {})
-              },
-              ...(f.vocab?.address ? { vocab: f.vocab } : {}),
-              ...(f.output ? { output: f.output } : {})
-            }
-      );
-      const { fields: formFields, sections } = extractSections(items);
-
-      const tags = buildFormTemplateTags(dTag, formFields, {
+      // Same encoder the preview uses — see helpers/forms/builder-state.js.
+      const tags = builderStateToTags(fields, {
+        dTag,
         name: formName,
         description: formDescription,
         public: isPublic,
         confirmationMessage,
-        ...(forkOf ? { forkOf } : {}),
-        ...(sections.length > 0 ? { sections } : {})
+        ...(forkOf ? { forkOf } : {})
       });
 
       const factory = createAppEventFactory({ signer: manager.active.signer });
@@ -419,6 +432,9 @@
           {m.form_builder_fork_from()}
         </button>
       {/if}
+      <button class="btn btn-ghost btn-sm" data-testid="open-preview" onclick={openPreview}>
+        {m.forms_preview_tab()}
+      </button>
       <a href="/forms" class="btn btn-ghost btn-sm">{m.common_cancel()}</a>
       <button class="btn btn-sm btn-primary" onclick={publish} disabled={isPublishing}>
         {isPublishing
@@ -613,3 +629,22 @@
     bind:value={confirmationMessage}
   />
 </div>
+
+{#if previewOpen && previewEvent && PreviewComponent}
+  <dialog class="modal-open modal" data-testid="preview-dialog">
+    <div class="modal-box max-w-3xl">
+      <div class="mb-4 flex items-center justify-between">
+        <h3 class="text-lg font-bold">{m.forms_preview_tab()}</h3>
+        <button
+          class="btn btn-ghost btn-sm"
+          data-testid="close-preview"
+          onclick={() => (previewOpen = false)}>{m.common_close()}</button
+        >
+      </div>
+      <PreviewComponent formEvent={previewEvent} />
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button onclick={() => (previewOpen = false)}>{m.common_close()}</button>
+    </form>
+  </dialog>
+{/if}

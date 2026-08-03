@@ -23,7 +23,9 @@ vi.mock('$lib/paraglide/runtime.js', () => ({
 vi.mock('$lib/paraglide/messages', () => ({
   form_select_placeholder: () => '— Select —',
   form_min_characters: (/** @type {{ min: number }} */ { min }) => `Min ${min}`,
-  form_encrypted_info: () => 'encrypted'
+  form_encrypted_info: () => 'encrypted',
+  // matches messages/en.json — the submit button is i18n'd, not a literal
+  form_submit: () => 'Submit'
 }));
 
 // FormConceptPicker pulls in nostr/applesauce machinery — stub it.

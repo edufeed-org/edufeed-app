@@ -208,7 +208,7 @@
         {#if hasSections && sectionHistory.length > 0}
           <button class="btn btn-ghost" onclick={goBack}>{m.form_section_back()}</button>
         {/if}
-        <button class="btn flex-1 btn-primary" onclick={handleSubmit}>Submit</button>
+        <button class="btn flex-1 btn-primary" onclick={handleSubmit}>{m.form_submit()}</button>
       </div>
     {/if}
   {/if}

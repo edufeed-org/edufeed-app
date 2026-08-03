@@ -3569,5 +3569,9 @@
   "interactive_html_confirm_question": "Treat this HTML file as an interactive app?",
   "interactive_html_confirm_yes": "Wrap as app",
   "interactive_html_confirm_no": "Upload as plain file",
-  "fab_create_interactive": "Share interactive material"
+  "fab_create_interactive": "Share interactive material",
+  "form_preview_notice": "Preview — this is how the form will look to someone filling it in. Nothing is published.",
+  "form_preview_empty": "Add a field to see the preview.",
+  "form_preview_submitted_notice": "This is the confirmation a respondent would see. Nothing was published.",
+  "form_preview_restart": "Start over"
 }

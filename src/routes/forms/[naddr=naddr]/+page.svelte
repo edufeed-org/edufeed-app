@@ -4,7 +4,7 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { decodeFormNaddr, parseFormTemplate, formEventToNaddr } from '$lib/helpers/forms.js';
-  import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
+  import FormPreview from '$lib/components/forms/FormPreview.svelte';
   import FormResponses from '$lib/components/forms/FormResponses.svelte';
   import SendFormModal from '$lib/components/forms/SendFormModal.svelte';
   import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
@@ -156,7 +156,7 @@
 
     <!-- Tab content -->
     {#if activeTab === 'preview'}
-      <FormRenderer {formEvent} readonly />
+      <FormPreview {formEvent} />
     {:else if activeTab === 'responses' && isOwner}
       <FormResponses {formEvent} {formAddress} />
     {/if}

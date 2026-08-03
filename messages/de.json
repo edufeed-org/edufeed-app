@@ -3569,5 +3569,9 @@
   "interactive_html_confirm_question": "Diese HTML-Datei als interaktive App behandeln?",
   "interactive_html_confirm_yes": "Als App verpacken",
   "interactive_html_confirm_no": "Als normale Datei hochladen",
-  "fab_create_interactive": "Interaktives Material teilen"
+  "fab_create_interactive": "Interaktives Material teilen",
+  "form_preview_notice": "Vorschau — so sieht das Formular für ausfüllende Personen aus. Es wird nichts veröffentlicht.",
+  "form_preview_empty": "Füge ein Feld hinzu, um die Vorschau zu sehen.",
+  "form_preview_submitted_notice": "Das ist die Bestätigung, die ausfüllende Personen sehen würden. Es wurde nichts veröffentlicht.",
+  "form_preview_restart": "Von vorn beginnen"
 }
