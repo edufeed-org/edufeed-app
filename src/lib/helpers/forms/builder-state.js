@@ -10,7 +10,7 @@
  * builder state would preview something that is not the artifact, and could
  * drift from it silently — so keep this the only path to template tags.
  */
-import { buildFormTemplateTags, FORM_TEMPLATE_KIND } from './format.js';
+import { buildFormTemplateTags, CHOICE_TYPES, FORM_TEMPLATE_KIND } from './format.js';
 import { extractSections } from './builder-sections.js';
 
 /** @typedef {import('./format.js').FormField} FormField */
@@ -43,7 +43,7 @@ export function builderItemFromState(f) {
       ...(f.max !== undefined && { max: f.max }),
       // `?.` (publish itself indexes this unguarded): the preview encodes
       // half-built state where a freshly added row may not have the array yet.
-      ...((f.type === 'select' || f.type === 'radio') &&
+      ...(CHOICE_TYPES.includes(f.type) &&
         f.selectOptions?.length > 0 && { options: f.selectOptions }),
       ...(f.multiple && { multiple: true }),
       ...(f.displayIf ? { displayIf: f.displayIf } : {})

@@ -228,6 +228,28 @@ describe('forms — field validation', () => {
     expect(validateField(field, 'true')).toBeNull();
   });
 
+  it('checkbox required accepts a raw boolean, not only the string form', () => {
+    // FieldsRenderer emits `e.currentTarget.checked` — a boolean. In the app it
+    // never arrives here raw: FormRenderer.handleFieldChange stringifies it at
+    // the boundary, and always has. So this pins the contract of THIS function
+    // against a value its type now admits; it is not a regression test for a
+    // user-facing bug. Measured on the published route — there isn't one.
+    const field = { id: 'terms', type: 'checkbox', label: 'Terms', options: { required: true } };
+    expect(validateField(field, true)).toBeNull();
+    expect(validateField(field, false)).toBe('Terms is required');
+  });
+
+  it('checkbox required with options wants a chosen option, not a tick', () => {
+    const field = {
+      id: 'flavours',
+      type: 'checkbox',
+      label: 'Flavours',
+      options: { required: true, options: [{ id: 'a', label: 'A' }] }
+    };
+    expect(validateField(field, '')).toBe('Flavours is required');
+    expect(validateField(field, 'a')).toBeNull();
+  });
+
   it('select required must have value', () => {
     const field = { id: 'tier', type: 'select', label: 'Tier', options: { required: true } };
     expect(validateField(field, '')).toBe('Tier is required');

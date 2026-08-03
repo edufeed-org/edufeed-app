@@ -4,6 +4,7 @@
   import { useSchemeConcepts, useConceptSchemes } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { generateFieldId, generateOptionId } from '$lib/helpers/forms.js';
+  import { CHOICE_TYPES } from '$lib/helpers/forms/format.js';
   import {
     schemeEventsToSkosConcepts,
     pickSchemeDescription,
@@ -235,7 +236,6 @@
 
   // Vocab binding is only meaningful for choice-based fields. Everything else
   // (text, number, email, date, …) must hide the entire options/vocab section.
-  const CHOICE_TYPES = ['select', 'checkbox', 'radio'];
   const isChoiceType = $derived(CHOICE_TYPES.includes(field.type));
 
   // Rich composite field types (creator/amb-relation/external-urls) render

@@ -88,7 +88,9 @@
           oninput={(e) =>
             onchange(field.id, /** @type {HTMLTextAreaElement} */ (e.currentTarget).value)}
         ></textarea>
-      {:else if field.type === 'checkbox'}
+      {:else if field.type === 'checkbox' && !field.options?.options?.length}
+        <!-- Optionless checkbox = a single boolean consent/toggle. With options
+             it is a multi-select group and falls through to the branch below. -->
         <label class="label cursor-pointer justify-start gap-2">
           <input
             type="checkbox"
@@ -138,7 +140,7 @@
             >+ Hinzufügen</button
           >
         </div>
-      {:else if field.type === 'select' && field.options?.multiple}
+      {:else if field.type === 'checkbox' || (field.type === 'select' && field.options?.multiple)}
         <div class="mt-1 flex flex-col gap-2">
           {#each field.options?.options || [] as opt (opt.id)}
             {@const selected = (values[field.id] || '').split(';').filter(Boolean)}

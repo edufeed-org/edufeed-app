@@ -158,4 +158,82 @@ test.describe('Form builder: preview without publishing (E2E)', () => {
     await expect(preview).toHaveCount(0);
     await expect(colorRow.getByPlaceholder('Enter field name')).toHaveValue('Color');
   });
+
+  /**
+   * Regression for the checkbox report on #77.
+   *
+   * The spec above builds its form from `radio` and `text` only, so it passed
+   * while a checkbox field previewed as a single bare toggle with its options
+   * discarded. Three defects produced that, all older than the preview: the
+   * encoder serialised `options` for select/radio but not checkbox, a SECOND
+   * gate in buildFormTemplateTags did the same 80 lines away, and the renderer
+   * had no multi-checkbox branch for `type:'checkbox'`. The validator's
+   * `value !== 'true'` rule then rejected every selection the fixed group
+   * produces — so it had to move too.
+   *
+   * A green run over two field types is no evidence about a third: that is why
+   * this drives the type the builder offers and the earlier spec skips.
+   */
+  test('previews a checkbox field as a real multi-select group, options and all', async ({
+    authenticatedPage: page
+  }) => {
+    test.setTimeout(120000);
+
+    await page.goto('/forms/new');
+    const nameInput = page.getByPlaceholder(/Form name/i);
+    await expect(nameInput).toBeVisible({ timeout: 15000 });
+    await nameInput.fill(`E2E Preview Checkbox ${RUN_ID}`);
+
+    await page.getByRole('button', { name: 'checkbox', exact: true }).click();
+    const cbRow = fieldRow(page, 0);
+    const cbLabelInput = cbRow.getByPlaceholder('Enter field name');
+    await cbLabelInput.fill('chr j');
+    await cbLabelInput.blur();
+    await cbRow.getByLabel('Required').check();
+
+    await cbRow.getByRole('button', { name: 'Add options manually' }).click();
+    const newOptionInput = cbRow.getByPlaceholder('New option');
+    for (const opt of ['test', 'test2', 'test3']) {
+      await newOptionInput.fill(opt);
+      await newOptionInput.press('Enter');
+    }
+
+    const urlBeforePreview = page.url();
+    await page.getByTestId('open-preview').click();
+
+    const preview = page.getByTestId('preview-dialog');
+    await expect(preview).toBeVisible({ timeout: 15000 });
+
+    // One box per option, each with its own label — the reported bug rendered
+    // a single unlabelled toggle and dropped all three options.
+    await expect(preview.locator('input[type="checkbox"]')).toHaveCount(3);
+    for (const opt of ['test', 'test2', 'test3']) {
+      await expect(preview.getByLabel(opt, { exact: true })).toBeVisible();
+    }
+
+    // Required actually fires...
+    const submit = preview.getByRole('button', { name: 'Submit', exact: true });
+    await submit.click();
+    await expect(preview.getByText('chr j is required')).toBeVisible();
+
+    // ...and is satisfiable by choosing. This is the half that was genuinely
+    // broken: `value !== 'true'` rejected every selection a group can produce,
+    // and a required checkbox group had no other way to validate. (The boolean
+    // toggle was never broken — FormRenderer stringifies it at the boundary.)
+    await preview.getByLabel('test2', { exact: true }).check();
+    await submit.click();
+    await expect(preview.getByText('chr j is required')).toHaveCount(0);
+    await expect(preview.getByTestId('preview-restart')).toBeVisible();
+
+    // Multi-select, not single-choice: a second tick must not clear the first.
+    await preview.getByTestId('preview-restart').click();
+    await preview.getByLabel('test', { exact: true }).check();
+    await preview.getByLabel('test3', { exact: true }).check();
+    await expect(preview.getByLabel('test', { exact: true })).toBeChecked();
+    await expect(preview.getByLabel('test3', { exact: true })).toBeChecked();
+
+    // Still nothing published.
+    expect(page.url()).toBe(urlBeforePreview);
+    expect(page.url()).not.toMatch(/naddr1/);
+  });
 });

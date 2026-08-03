@@ -69,11 +69,47 @@ describe('builderItemFromState', () => {
     expect(item(state()).options).toEqual({});
   });
 
-  it('carries select/radio choices, and drops them for non-choice types', () => {
+  it('carries choices for every type the builder offers an options editor for', () => {
     const opts = [{ id: 'red', label: 'Red' }];
-    expect(item(state({ type: 'radio', selectOptions: opts })).options.options).toEqual(opts);
+    // Must stay in step with FormBuilderFieldRow's CHOICE_TYPES. Checkbox was
+    // missing here while the builder happily collected options for it, so an
+    // author's choices were dropped silently at publish.
+    for (const type of ['select', 'radio', 'checkbox']) {
+      expect(item(state({ type, selectOptions: opts })).options.options).toEqual(opts);
+    }
     // same options array on a text field must NOT reach the wire
     expect(item(state({ type: 'text', selectOptions: opts })).options.options).toBeUndefined();
+  });
+
+  it('round-trips choices through the TAGS, for every choice type', () => {
+    // The assertion above stops at builderItemFromState — an intermediate. A
+    // second, independent gate in buildFormTemplateTags also listed only
+    // select/radio, so checkbox options died at the tag layer with that test
+    // still green. This asserts where the requirement is actually stated: what
+    // a respondent's parser gets back.
+    const opts = [
+      { id: 'test', label: 'test' },
+      { id: 'test2', label: 'test2' }
+    ];
+    for (const type of ['select', 'radio', 'checkbox']) {
+      const tags = builderStateToTags([state({ type, label: 'Choice', selectOptions: opts })], {
+        dTag: 'd1'
+      });
+      const field = parse(tags).fields[0];
+      expect(field.type, `${type} survives the round trip`).toBe(type);
+      expect(field.options?.options, `${type} keeps its choices`).toEqual(opts);
+    }
+  });
+
+  it('keeps an optionless checkbox a boolean toggle on the wire', () => {
+    // The boolean consent-checkbox case: no choices, so it must NOT be marked
+    // as an option field. Existing published forms depend on this shape.
+    const tags = builderStateToTags([state({ type: 'checkbox', label: 'Terms' })], { dTag: 'd1' });
+    const fieldTag = tags.find((t) => t[0] === 'field');
+    expect(fieldTag?.[2]).toBe('text');
+    const field = parse(tags).fields[0];
+    expect(field.type).toBe('checkbox');
+    expect(field.options?.options).toBeUndefined();
   });
 
   it('survives a half-built choice row with no selectOptions array', () => {

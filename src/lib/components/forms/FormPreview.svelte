@@ -65,7 +65,11 @@
       <span>{parsed?.confirmationMessage || m.forms_submit_success()}</span>
     </div>
     <p class="text-sm text-base-content/60">{m.form_preview_submitted_notice()}</p>
-    <button class="btn btn-outline btn-sm" onclick={() => (submittedValues = null)}>
+    <button
+      class="btn btn-outline btn-sm"
+      data-testid="preview-restart"
+      onclick={() => (submittedValues = null)}
+    >
       {m.form_preview_restart()}
     </button>
   {:else}
