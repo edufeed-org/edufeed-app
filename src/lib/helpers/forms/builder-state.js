@@ -100,7 +100,15 @@ export function fieldToState(f) {
     selectOptions: f.options?.options || [],
     multiple: f.options?.multiple || false,
     vocab: f.vocab,
-    output: LOCKED_FIELD_OUTPUTS[f.type] ?? f.output,
+    // creator: normalize legacy/stale outputs (e.g. the parse-time amb:<id>
+    // default on fields published before field-output tags existed) to
+    // amb:creator, but let amb:contributor round-trip — that choice is real.
+    output:
+      f.type === 'creator'
+        ? f.output === 'amb:contributor'
+          ? 'amb:contributor'
+          : 'amb:creator'
+        : (LOCKED_FIELD_OUTPUTS[f.type] ?? f.output),
     vocabNaddrInput: vocabToNaddr(f.vocab),
     vocabError: '',
     displayIf: f.options?.displayIf

@@ -2146,6 +2146,8 @@
   "form_builder_field_output_amb_dateCreated": "Erstellungsdatum (amb:dateCreated)",
   "form_builder_field_output_amb_isAccessibleForFree": "Kostenfrei zugänglich (amb:isAccessibleForFree)",
   "form_builder_field_output_amb_creator": "Urheber:in (amb:creator)",
+  "form_builder_field_output_amb_contributor": "Beitragende / Herausgeber (amb:contributor)",
+  "form_relation_name_placeholder": "Oder Namen eintragen (Zeitschrift, Sammelband)…",
   "form_builder_field_output_amb_hasPart": "Enthält Teil (amb:hasPart)",
   "form_builder_field_output_amb_isPartOf": "Ist Teil von (amb:isPartOf)",
   "form_builder_field_output_amb_refs": "Verweise (amb:refs)",

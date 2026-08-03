@@ -2146,6 +2146,8 @@
   "form_builder_field_output_amb_dateCreated": "Date created (amb:dateCreated)",
   "form_builder_field_output_amb_isAccessibleForFree": "Free to access (amb:isAccessibleForFree)",
   "form_builder_field_output_amb_creator": "Creator (amb:creator)",
+  "form_builder_field_output_amb_contributor": "Contributor / Editor (amb:contributor)",
+  "form_relation_name_placeholder": "Or type a container name (journal, edited volume)…",
   "form_builder_field_output_amb_hasPart": "Has part (amb:hasPart)",
   "form_builder_field_output_amb_isPartOf": "Is part of (amb:isPartOf)",
   "form_builder_field_output_amb_refs": "References (amb:refs)",

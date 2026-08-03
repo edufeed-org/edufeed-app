@@ -19,7 +19,10 @@ export function isSectionMarker(item) {
 // (implied default on add + normalize-on-load) and FormBuilderFieldRow
 // (locked, disabled output select).
 /** @type {Record<string, string>} */
-export const LOCKED_FIELD_OUTPUTS = { creator: 'amb:creator', 'external-urls': 'amb:refs' };
+// creator is deliberately NOT locked: it may target amb:creator (default)
+// or amb:contributor (Herausgeber). Locking it here would silently revert
+// a contributor field to creator via fieldToState on every edit.
+export const LOCKED_FIELD_OUTPUTS = { 'external-urls': 'amb:refs' };
 
 /**
  * Split an editing list into real fields + section grouping.

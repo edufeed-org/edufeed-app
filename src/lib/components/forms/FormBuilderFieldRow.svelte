@@ -245,6 +245,13 @@
   const RICH_TYPES = ['creator', 'amb-relation', 'external-urls'];
   const isRichType = $derived(RICH_TYPES.includes(field.type));
 
+  // creator-typed fields pick between the two person-list props: authors
+  // (amb:creator, the default) or Herausgeber/editors (amb:contributor).
+  const CREATOR_OUTPUTS = [
+    { value: 'amb:creator', label: () => m.form_builder_field_output_amb_creator() },
+    { value: 'amb:contributor', label: () => m.form_builder_field_output_amb_contributor() }
+  ];
+
   // amb-relation always targets one of these two coordinate-relation props.
   const RELATION_OUTPUTS = [
     { value: 'amb:hasPart', label: () => m.form_builder_field_output_amb_hasPart() },
@@ -324,7 +331,7 @@
   <!-- Output picker: every field type can map to an AMB (or ext) property. -->
   <div class="flex items-center gap-2 text-sm">
     <span class="text-xs text-base-content/50">{m.form_builder_field_output_label()}</span>
-    {#if field.type === 'creator' || field.type === 'external-urls'}
+    {#if field.type === 'external-urls'}
       {@const lockedValue = field.output || LOCKED_FIELD_OUTPUTS[field.type]}
       <select
         class="select-bordered select flex-1 select-xs"
@@ -335,6 +342,17 @@
         <option value={lockedValue}>
           {AMB_OUTPUTS.find((out) => out.value === lockedValue)?.label() ?? lockedValue}
         </option>
+      </select>
+    {:else if field.type === 'creator'}
+      <select
+        class="select-bordered select flex-1 select-xs"
+        data-testid="field-output-select"
+        value={field.output || 'amb:creator'}
+        onchange={handleOutputChange}
+      >
+        {#each CREATOR_OUTPUTS as out (out.value)}
+          <option value={out.value}>{out.label()}</option>
+        {/each}
       </select>
     {:else if field.type === 'amb-relation'}
       <select

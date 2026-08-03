@@ -71,7 +71,8 @@ export function ambJsonToFormValues(amb, form) {
     }
 
     if (field.type === 'creator') {
-      values[field.id] = asArray(amb?.creator).map((c) => {
+      const personProp = out === 'amb:contributor' ? 'contributor' : 'creator';
+      values[field.id] = asArray(amb?.[personProp]).map((c) => {
         if (typeof c?.id === 'string' && c.id.startsWith('nostr:')) {
           const pubkey = decodeCreatorPubkey(c.id);
           if (pubkey) return { pubkey, name: c.name || '', type: c.type || 'Person' };
@@ -90,8 +91,13 @@ export function ambJsonToFormValues(amb, form) {
     if (field.type === 'amb-relation') {
       const role = out === 'amb:isPartOf' ? 'isPartOf' : 'hasPart';
       values[field.id] = asArray(amb?.[role])
-        .filter((r) => typeof r?.id === 'string' && r.id.startsWith('nostr:'))
-        .map((r) => decodeRelation(r.id))
+        .map((r) =>
+          typeof r?.id === 'string' && r.id.startsWith('nostr:')
+            ? decodeRelation(r.id)
+            : r?.name
+              ? { name: r.name }
+              : null
+        )
         .filter(Boolean);
       continue;
     }

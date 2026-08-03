@@ -202,12 +202,13 @@ describe('FormBuilder: rich field palette (creator/amb-relation/external-urls)',
     const { container } = render(FormBuilder, { props: { existingEvent } });
     await Promise.resolve();
 
-    // The disabled locked select displays the normalized value, not the stale one.
+    // The (now enabled) creator picker displays the normalized value, not the
+    // stale one — normalization moved with the unlock (EKKW, 2026-08-03).
     const select = /** @type {HTMLSelectElement} */ (
       container.querySelector('[data-testid="field-output-select"]')
     );
     expect(select).toBeTruthy();
-    expect(select.disabled).toBe(true);
+    expect(select.disabled).toBe(false);
     expect(select.value).toBe('amb:creator');
 
     // Save republishes amb:creator, not the stale amb:creators fallback.
