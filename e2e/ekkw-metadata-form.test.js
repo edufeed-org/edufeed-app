@@ -252,7 +252,8 @@ test.describe('EKKW metadata form (30168 template with steps → kind 30142)', (
 
     const event = await waitForEventOnRelay(
       { kinds: [30142], authors: [resPubkey], '#d': [resD] },
-      () => true,
+      (/** @type {{ tags: string[][] }} */ e) =>
+        e.tags.some((t) => t[0] === 'name' && t[1] === title),
       { relay: RELAY_URLS.amb, timeout: 60000 }
     );
 
