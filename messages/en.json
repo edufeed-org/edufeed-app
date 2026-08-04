@@ -3066,5 +3066,19 @@
   "concord_poll_votes": "{count} votes",
   "concord_poll_ended": "Poll ended",
   "concord_poll_vote": "Vote",
-  "concord_events_title": "{count} upcoming events"
+  "concord_events_title": "{count} upcoming events",
+  "groups_title": "Relay groups",
+  "groups_join_placeholder": "Group address (host'id)",
+  "groups_add": "Open",
+  "groups_empty": "No groups yet — paste a group address to join one.",
+  "groups_join": "Join",
+  "groups_leave": "Leave",
+  "groups_join_sent": "Join request sent",
+  "groups_leave_sent": "Leave request sent",
+  "groups_join_failed": "Request failed",
+  "groups_send_failed": "Message could not be sent",
+  "groups_auth_required": "This relay requires authentication for this group — join first, then reload.",
+  "groups_reply": "Reply",
+  "groups_input_placeholder": "Message {name}",
+  "groups_invalid_pointer": "Not a valid group address"
 }

@@ -3066,5 +3066,19 @@
   "concord_poll_votes": "{count} Stimmen",
   "concord_poll_ended": "Umfrage beendet",
   "concord_poll_vote": "Abstimmen",
-  "concord_events_title": "{count} anstehende Termine"
+  "concord_events_title": "{count} anstehende Termine",
+  "groups_title": "Relay-Gruppen",
+  "groups_join_placeholder": "Gruppenadresse (host'id)",
+  "groups_add": "Öffnen",
+  "groups_empty": "Noch keine Gruppen — füge eine Gruppenadresse ein, um beizutreten.",
+  "groups_join": "Beitreten",
+  "groups_leave": "Verlassen",
+  "groups_join_sent": "Beitrittsanfrage gesendet",
+  "groups_leave_sent": "Austrittsanfrage gesendet",
+  "groups_join_failed": "Anfrage fehlgeschlagen",
+  "groups_send_failed": "Nachricht konnte nicht gesendet werden",
+  "groups_auth_required": "Dieses Relay verlangt eine Authentifizierung für diese Gruppe — erst beitreten, dann neu laden.",
+  "groups_reply": "Antworten",
+  "groups_input_placeholder": "Nachricht an {name}",
+  "groups_invalid_pointer": "Keine gültige Gruppenadresse"
 }
