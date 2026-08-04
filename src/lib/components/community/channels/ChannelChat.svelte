@@ -26,9 +26,11 @@
     applyMention
   } from '$lib/concord/chat-helpers.js';
   import { getMessageAttachments, stripAttachmentUrls } from '$lib/concord/attachments.js';
+  import { aggregateThreads } from '$lib/concord/threads.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
+  import ThreadPanel from './ThreadPanel.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import MentionAutocomplete from './MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -88,6 +90,17 @@
   const reactionsByTarget = $derived(
     aggregateChannelReactions(getReactions(), getActiveUser()?.pubkey)
   );
+
+  // Kind-1111 thread comments live in the same per-channel store; they are
+  // NOT timeline rows (NIP-C7 keeps threads out of the main chat) — only the
+  // per-root badge and the ThreadPanel consume them.
+  const getComments = useObservable(
+    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [1111] }]),
+    /** @type {any[]} */ ([])
+  );
+  const threadsByRoot = $derived(aggregateThreads(getComments()));
+  /** Root rumor of the open thread, or null. @type {any} */
+  let threadRoot = $state(null);
 
   let text = $state('');
   let sending = $state(false);
@@ -429,12 +442,35 @@
           {/if}
         {/snippet}
         {#snippet reactions(/** @type {any} */ msg)}
-          <ReactionChips
-            aggregated={reactionsByTarget.get(msg.id) ?? new Map()}
-            addButtonOnHover
-            onToggle={(emoji, summary) => toggleReaction(msg, emoji, summary)}
-            onPick={(emoji) => react(msg, emoji)}
-          />
+          {@const thread = threadsByRoot.get(msg.id)}
+          <div class="flex items-center gap-2">
+            <ReactionChips
+              aggregated={reactionsByTarget.get(msg.id) ?? new Map()}
+              addButtonOnHover
+              onToggle={(emoji, summary) => toggleReaction(msg, emoji, summary)}
+              onPick={(emoji) => react(msg, emoji)}
+            />
+            {#if thread}
+              <button
+                type="button"
+                class="btn gap-1 text-xs text-primary btn-ghost btn-xs"
+                data-testid="thread-badge"
+                onclick={() => (threadRoot = message)}
+              >
+                💬 {m.concord_thread_replies({ count: thread.count })}
+              </button>
+            {:else}
+              <button
+                type="button"
+                class="btn opacity-0 btn-ghost transition-opacity btn-xs group-hover:opacity-70 hover:!opacity-100"
+                data-testid="thread-start"
+                title={m.concord_thread_open()}
+                onclick={() => (threadRoot = message)}
+              >
+                💬
+              </button>
+            {/if}
+          </div>
         {/snippet}
       </ChatMessageRow>
     {/snippet}
@@ -490,4 +526,14 @@
       >
     </form>
   </div>
+{/if}
+
+{#if threadRoot}
+  <ThreadPanel
+    {community}
+    {channel}
+    root={threadRoot}
+    readOnly={dissolved}
+    onClose={() => (threadRoot = null)}
+  />
 {/if}

@@ -3056,5 +3056,11 @@
   "concord_dissolve_confirm_label": "Tippe zur Bestätigung den Namen des Bereichs: {name}",
   "concord_dissolve_confirm_placeholder": "Name des Bereichs",
   "concord_dissolve_confirm_fallback": "AUFLÖSEN",
-  "concord_attachment_unavailable": "Anhang nicht verfügbar"
+  "concord_attachment_unavailable": "Anhang nicht verfügbar",
+  "concord_thread_title": "Thread",
+  "concord_thread_close": "Thread schließen",
+  "concord_thread_replies": "{count} Antworten",
+  "concord_thread_reply_placeholder": "Im Thread antworten…",
+  "concord_thread_send": "Senden",
+  "concord_thread_open": "Im Thread antworten"
 }

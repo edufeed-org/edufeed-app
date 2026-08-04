@@ -3056,5 +3056,11 @@
   "concord_dissolve_confirm_label": "Type the area name to confirm: {name}",
   "concord_dissolve_confirm_placeholder": "Area name",
   "concord_dissolve_confirm_fallback": "DISSOLVE",
-  "concord_attachment_unavailable": "Attachment unavailable"
+  "concord_attachment_unavailable": "Attachment unavailable",
+  "concord_thread_title": "Thread",
+  "concord_thread_close": "Close thread",
+  "concord_thread_replies": "{count} replies",
+  "concord_thread_reply_placeholder": "Reply in thread…",
+  "concord_thread_send": "Send",
+  "concord_thread_open": "Reply in thread"
 }

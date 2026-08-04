@@ -110,7 +110,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   concord_notif_level_label: () => 'Notify me',
   concord_notif_level_all: () => 'All messages',
   concord_notif_level_mentions: () => 'Mentions only',
-  concord_notif_level_nothing: () => 'Nothing'
+  concord_notif_level_nothing: () => 'Nothing',
+  concord_thread_title: () => 'Thread',
+  concord_thread_close: () => 'Close thread',
+  concord_thread_replies: (/** @type {{ count: number }} */ { count }) => `${count} replies`,
+  concord_thread_reply_placeholder: () => 'Reply in thread…',
+  concord_thread_send: () => 'Send',
+  concord_thread_open: () => 'Reply in thread'
 }));
 
 const { default: ChannelChat } = await import(
@@ -627,5 +633,93 @@ describe('ChannelChat imeta attachments', () => {
     expect(contents.some((c) => c?.includes(BLOB_URL))).toBe(false);
     // …while the plain message's content is untouched.
     expect(contents).toContain('hello');
+  });
+});
+
+describe('ChannelChat threads', () => {
+  const rootMsg = {
+    id: 'msg-root',
+    kind: 9,
+    pubkey: OTHER_PUBKEY,
+    content: 'thread me',
+    created_at: 1700000000,
+    tags: []
+  };
+  const commentRumor = {
+    id: 'cmt-1',
+    kind: 1111,
+    pubkey: ACTIVE_PUBKEY,
+    content: 'a reply',
+    created_at: 1700000010,
+    tags: [
+      ['K', '9'],
+      ['E', 'msg-root', '', OTHER_PUBKEY],
+      ['P', OTHER_PUBKEY],
+      ['k', '9'],
+      ['e', 'msg-root', '', OTHER_PUBKEY],
+      ['p', OTHER_PUBKEY]
+    ]
+  };
+
+  function makeThreadCommunity() {
+    return {
+      channelStore: () => ({
+        timeline: (/** @type {any[]} */ filters) => {
+          const kind = filters?.[0]?.kinds?.[0];
+          if (kind === 7) return of([]);
+          if (kind === 1111) return of([commentRumor]);
+          return of([rootMsg]);
+        }
+      }),
+      members$: new BehaviorSubject(new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])),
+      react: vi.fn(),
+      sendEvent: vi.fn().mockResolvedValue('rumor-id')
+    };
+  }
+
+  it('shows a reply-count badge on the thread root and opens the ThreadPanel on click', async () => {
+    const { container } = render(ChannelChat, {
+      props: {
+        community: makeThreadCommunity(),
+        channel: CHANNEL,
+        openOverlay: () => {},
+        onBack: () => {}
+      }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const badge = container.querySelector('[data-testid="thread-badge"]');
+    expect(badge?.textContent).toContain('1 replies');
+    expect(screen.queryByText('Thread')).toBeNull(); // panel closed
+
+    await fireEvent.click(/** @type {HTMLElement} */ (badge));
+    await Promise.resolve();
+
+    expect(screen.getByText('Thread')).toBeTruthy(); // panel open
+    // the panel shows the reply
+    const contents = [...container.querySelectorAll('[data-testid="ncr-content"]')].map(
+      (el) => el.textContent
+    );
+    expect(contents).toContain('a reply');
+  });
+
+  it('offers a hover start-thread button on messages without replies', async () => {
+    const community = makeThreadCommunity();
+    community.channelStore = () => ({
+      timeline: (/** @type {any[]} */ filters) => {
+        const kind = filters?.[0]?.kinds?.[0];
+        if (kind === 7 || kind === 1111) return of([]);
+        return of([rootMsg]);
+      }
+    });
+    const { container } = render(ChannelChat, {
+      props: { community, channel: CHANNEL, openOverlay: () => {}, onBack: () => {} }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[data-testid="thread-badge"]')).toBeNull();
+    expect(container.querySelector('[data-testid="thread-start"]')).toBeTruthy();
   });
 });
