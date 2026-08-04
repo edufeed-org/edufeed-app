@@ -14,8 +14,29 @@
   /** @type {{poll: import('$lib/concord/polls.js').ParsedPoll, tally: import('$lib/concord/polls.js').PollTally, ended: boolean, onVote: (optionIds: string[]) => void}} */
   let { poll, tally, ended, onVote } = $props();
 
-  /** Local multi-choice selection, seeded from my prior vote. */
-  const selection = new SvelteSet(tally.myVote ?? []);
+  /**
+   * Local multi-choice selection, seeded from my prior vote. Kind-1018 votes
+   * can hydrate AFTER mount, so the $effect below re-seeds whenever the
+   * CONTENT of tally.myVote changes. It must key on content, not identity:
+   * ChannelChat rebuilds the tally object on every render, and an
+   * equal-content rebuild must not clobber in-flight user toggles.
+   */
+  // svelte-ignore state_referenced_locally
+  const initialVote = tally.myVote;
+  const selection = new SvelteSet(initialVote ?? []);
+  let seededFrom = voteKey(initialVote);
+
+  function voteKey(/** @type {Set<string> | undefined} */ vote) {
+    return vote && vote.size ? [...vote].sort().join('\n') : '';
+  }
+
+  $effect(() => {
+    const key = voteKey(tally.myVote);
+    if (key === seededFrom) return;
+    seededFrom = key;
+    selection.clear();
+    for (const id of tally.myVote ?? []) selection.add(id);
+  });
 
   function toggle(/** @type {string} */ id) {
     if (selection.has(id)) selection.delete(id);
