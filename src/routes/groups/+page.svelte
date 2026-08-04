@@ -18,7 +18,11 @@
   import * as m from '$lib/paraglide/messages';
 
   const getActiveUser = useActiveUser();
-  /** @type {any[]} */ let listEvents = $state([]);
+  // $state.raw: the events are external store objects — deep-proxying them
+  // makes applesauce's Symbol-cache writes (getPublicGroups) illegal inside
+  // $derived (state_unsafe_mutation) and breaks event identity. TimelineModel
+  // emits fresh arrays, so plain reassignment stays reactive.
+  /** @type {any[]} */ let listEvents = $state.raw([]);
 
   $effect(() => {
     const me = getActiveUser()?.pubkey;
