@@ -79,6 +79,11 @@ vi.mock(
   '$lib/components/community/channels/MessageAttachments.svelte',
   () => import('./fixtures/MessageAttachmentsStub.svelte')
 );
+// Prop-capturing stub — real render behavior covered by PollMessage.test.js.
+vi.mock(
+  '$lib/components/community/channels/PollMessage.svelte',
+  () => import('./fixtures/PollMessageStub.svelte')
+);
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub }));
 
@@ -721,5 +726,98 @@ describe('ChannelChat threads', () => {
 
     expect(container.querySelector('[data-testid="thread-badge"]')).toBeNull();
     expect(container.querySelector('[data-testid="thread-start"]')).toBeTruthy();
+  });
+});
+
+describe('ChannelChat polls', () => {
+  const pollRumor = {
+    id: 'poll-1',
+    kind: 1068,
+    pubkey: OTHER_PUBKEY,
+    content: 'Best bee?',
+    created_at: 1700000000,
+    tags: [
+      ['option', 'opt-a', 'Honey bee'],
+      ['option', 'opt-b', 'Bumble bee'],
+      ['polltype', 'singlechoice']
+    ]
+  };
+  const voteRumor = {
+    id: 'vote-1',
+    kind: 1018,
+    pubkey: ACTIVE_PUBKEY,
+    content: '',
+    created_at: 1700000010,
+    ms: 1700000010000,
+    tags: [
+      ['e', 'poll-1'],
+      ['response', 'opt-a']
+    ]
+  };
+
+  function makePollCommunity(sendEvent = vi.fn().mockResolvedValue('rumor-id')) {
+    return {
+      channelStore: () => ({
+        timeline: (/** @type {any[]} */ filters) => {
+          const kinds = filters?.[0]?.kinds ?? [];
+          if (kinds.includes(9)) return of([pollRumor]); // message timeline (9 + 1068)
+          if (kinds.includes(1018)) return of([voteRumor]);
+          return of([]);
+        }
+      }),
+      members$: new BehaviorSubject(new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])),
+      react: vi.fn(),
+      sendEvent
+    };
+  }
+
+  it('requests kinds 9+1068 for the timeline and renders a poll row with its tally', async () => {
+    const { container } = render(ChannelChat, {
+      props: {
+        community: makePollCommunity(),
+        channel: CHANNEL,
+        openOverlay: () => {},
+        onBack: () => {}
+      }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const stub = container.querySelector('[data-testid="poll-message-stub"]');
+    expect(stub).toBeTruthy();
+    const poll = JSON.parse(stub?.getAttribute('data-poll') ?? '{}');
+    expect(poll.id).toBe('poll-1');
+    expect(poll.question).toBe('Best bee?');
+    expect(poll.options).toHaveLength(2);
+    expect(stub?.getAttribute('data-total-voters')).toBe('1'); // the kind-1018 vote counted
+    expect(stub?.getAttribute('data-ended')).toBe('false');
+  });
+
+  it('publishes a kind-1018 vote through community.sendEvent', async () => {
+    const sendEvent = vi.fn().mockResolvedValue('rumor-id');
+    const { container } = render(ChannelChat, {
+      props: {
+        community: makePollCommunity(sendEvent),
+        channel: CHANNEL,
+        openOverlay: () => {},
+        onBack: () => {}
+      }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="poll-vote-stub"]'))
+    );
+    await Promise.resolve();
+
+    expect(sendEvent).toHaveBeenCalledTimes(1);
+    const [channelId, template] = sendEvent.mock.calls[0];
+    expect(channelId).toBe('chan-1');
+    expect(template.kind).toBe(1018);
+    expect(template.tags).toEqual([
+      ['e', 'poll-1'],
+      ['response', 'opt-a']
+    ]);
   });
 });

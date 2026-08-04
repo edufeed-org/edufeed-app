@@ -3062,5 +3062,8 @@
   "concord_thread_replies": "{count} Antworten",
   "concord_thread_reply_placeholder": "Im Thread antworten…",
   "concord_thread_send": "Senden",
-  "concord_thread_open": "Im Thread antworten"
+  "concord_thread_open": "Im Thread antworten",
+  "concord_poll_votes": "{count} Stimmen",
+  "concord_poll_ended": "Umfrage beendet",
+  "concord_poll_vote": "Abstimmen"
 }

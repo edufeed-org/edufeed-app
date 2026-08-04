@@ -27,10 +27,18 @@
   } from '$lib/concord/chat-helpers.js';
   import { getMessageAttachments, stripAttachmentUrls } from '$lib/concord/attachments.js';
   import { aggregateThreads } from '$lib/concord/threads.js';
+  import {
+    parsePoll,
+    collectVotes,
+    tallyPollVotes,
+    buildVoteTemplate,
+    isPollEnded
+  } from '$lib/concord/polls.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
   import ThreadPanel from './ThreadPanel.svelte';
+  import PollMessage from './PollMessage.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import MentionAutocomplete from './MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -62,8 +70,10 @@
   // applesauce-core-concord's EventModels#timeline — same TimelineModel the
   // rest of the app uses) — newest-first, like every other TimelineModel
   // consumer (see Chat.svelte), so we reverse before rendering.
+  // Kind-1068 NIP-88 polls are timeline rows alongside kind-9 messages
+  // (Armada renders both in the main chat; votes stay side events).
   const getMessages = useObservable(
-    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [9] }]),
+    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [9, 1068] }]),
     /** @type {any[]} */ ([])
   );
   const messages = $derived([...getMessages()].reverse());
@@ -101,6 +111,24 @@
   const threadsByRoot = $derived(aggregateThreads(getComments()));
   /** Root rumor of the open thread, or null. @type {any} */
   let threadRoot = $state(null);
+
+  // Kind-1018 poll votes, bucketed by the poll they e-reference. The tally
+  // itself (latest-per-pubkey, endsAt cutoff) happens per poll row below.
+  const getVotes = useObservable(
+    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [1018] }]),
+    /** @type {any[]} */ ([])
+  );
+  const votesByPoll = $derived(collectVotes(getVotes()));
+
+  /** @param {import('$lib/concord/polls.js').ParsedPoll} poll @param {string[]} optionIds */
+  async function votePoll(poll, optionIds) {
+    try {
+      await community.sendEvent(channel.channel_id, buildVoteTemplate(poll.id, optionIds));
+    } catch (err) {
+      console.error('poll vote failed', err);
+      showToast(m.concord_send_failed(), 'error');
+    }
+  }
 
   let text = $state('');
   let sending = $state(false);
@@ -439,6 +467,20 @@
         {#snippet attachments()}
           {#if atts.length > 0}
             <MessageAttachments attachments={atts} />
+          {/if}
+          {#if message.kind === 1068}
+            {@const poll = parsePoll(message)}
+            <PollMessage
+              {poll}
+              tally={tallyPollVotes(
+                votesByPoll.get(poll.id) ?? [],
+                poll.options,
+                poll.endsAt,
+                getActiveUser()?.pubkey
+              )}
+              ended={isPollEnded(poll.endsAt)}
+              onVote={(optionIds) => votePoll(poll, optionIds)}
+            />
           {/if}
         {/snippet}
         {#snippet reactions(/** @type {any} */ msg)}
