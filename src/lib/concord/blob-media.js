@@ -161,3 +161,62 @@ export async function fetchDecryptedBlobUrl(pointer, options = {}) {
   cache.set(hash, resolved); // replace the in-flight promise with its settled value
   return resolved;
 }
+
+// Chat-attachment cache, keyed by attachment URL (a Blossom URL embeds the
+// ciphertext hash, so it is content-addressed and safe to cache on). Kept
+// separate from `blobUrlCache` (keyed by plaintext hash) so the two schemes
+// can never collide. Same Phase-1 no-revoke decision applies — bounded by
+// attachments actually viewed this tab session.
+const attachmentUrlCache = new Map();
+
+/**
+ * Resolve a chat-message `MediaAttachment` (see attachments.js) to a
+ * displayable URL. Unencrypted attachments pass through as their own URL —
+ * no fetch. Encrypted ones are fetched, AES-256-GCM-decrypted with the
+ * imeta-carried key/nonce, verified against `originalSha256` (NIP-92 `ox`,
+ * the plaintext hash) WHEN the sender provided one, and returned as a
+ * `blob:` object URL. Returns `null` on any failure (missing url, network,
+ * decrypt, hash mismatch) — failures are cached so a broken attachment
+ * warns once, not once per re-render.
+ *
+ * Browser-only (fetch + URL.createObjectURL): call from a `$effect`, never
+ * during SSR/module load — same contract as `fetchDecryptedBlobUrl`.
+ * @param {{url?: string, type?: string, originalSha256?: string, encryption?: {algorithm: string, key: string, nonce: string}, [key: string]: any} | null | undefined} att
+ * @param {{cache?: Map<string, Promise<string|null>|string|null>}} [options]
+ * @returns {Promise<string|null>}
+ */
+export async function fetchDecryptedAttachmentUrl(att, options = {}) {
+  const cache = options.cache ?? attachmentUrlCache;
+
+  if (!att?.url) return null;
+  if (!att.encryption) return att.url;
+  const { url, originalSha256 } = att;
+  const { key, nonce } = att.encryption;
+
+  if (cache.has(url)) return cache.get(url);
+
+  const pending = (async () => {
+    try {
+      if (typeof fetch !== 'function' || typeof URL?.createObjectURL !== 'function') return null;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`fetch failed with status ${response.status}`);
+      const cipherBytes = new Uint8Array(await response.arrayBuffer());
+      const plainBytes = await decryptBlob(cipherBytes, key, nonce);
+      if (originalSha256) {
+        const digest = await crypto.subtle.digest('SHA-256', /** @type {any} */ (plainBytes));
+        if (bytesToHex(new Uint8Array(digest)) !== originalSha256.toLowerCase()) {
+          throw new Error('decrypted plaintext sha256 does not match imeta ox');
+        }
+      }
+      return URL.createObjectURL(new Blob([/** @type {any} */ (plainBytes)]));
+    } catch (err) {
+      console.warn('[concord] failed to decrypt chat attachment', err);
+      return null;
+    }
+  })();
+
+  cache.set(url, pending);
+  const resolved = await pending;
+  cache.set(url, resolved); // replace the in-flight promise with its settled value
+  return resolved;
+}

@@ -67,8 +67,18 @@ vi.mock('$lib/helpers/message-utils.js', async () => {
 });
 
 function Stub() {}
-vi.mock('$lib/components/shared/NostrContentRenderer.svelte', () => ({ default: Stub }));
+// Renders event.content verbatim (data-testid="ncr-content") so the
+// attachment tests can assert the URL-stripped clone reaches the renderer.
+vi.mock(
+  '$lib/components/shared/NostrContentRenderer.svelte',
+  () => import('./fixtures/NostrContentStub.svelte')
+);
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
+// Prop-capturing stub — real render behavior covered by MessageAttachments.test.js.
+vi.mock(
+  '$lib/components/community/channels/MessageAttachments.svelte',
+  () => import('./fixtures/MessageAttachmentsStub.svelte')
+);
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub }));
 
@@ -547,5 +557,75 @@ describe('ChannelChat delete + dissolved recovery', () => {
     expect(
       screen.queryByRole('button', { name: /Neuen Bereich gründen|Start a new area/ })
     ).toBeNull();
+  });
+});
+
+describe('ChannelChat imeta attachments', () => {
+  const BLOB_URL = 'https://blossom.example/aabbccddeeff.bin';
+  const attMessage = {
+    id: 'msg-att',
+    pubkey: OTHER_PUBKEY,
+    content: `look at this ${BLOB_URL}`,
+    created_at: 1700000100,
+    tags: [
+      [
+        'imeta',
+        `url ${BLOB_URL}`,
+        'm image/jpeg',
+        'encryption-algorithm aes-gcm',
+        `decryption-key ${'f'.repeat(64)}`,
+        `decryption-nonce ${'0'.repeat(32)}`
+      ]
+    ]
+  };
+
+  /** Community whose kind-9 timeline carries one plain + one attachment message. */
+  function makeAttachmentCommunity() {
+    return {
+      channelStore: () => ({
+        timeline: (/** @type {any[]} */ filters) => {
+          const kind = filters?.[0]?.kinds?.[0];
+          if (kind === 7) return of([]);
+          return of([message1, attMessage]);
+        }
+      }),
+      members$: new BehaviorSubject(new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])),
+      react: vi.fn()
+    };
+  }
+
+  it('hands MessageAttachments the parsed imeta attachment and strips its URL from the rendered content', async () => {
+    const { container } = render(ChannelChat, {
+      props: {
+        community: makeAttachmentCommunity(),
+        channel: CHANNEL,
+        openOverlay: () => {},
+        onBack: () => {}
+      }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const stubs = container.querySelectorAll('[data-testid="message-attachments-stub"]');
+    expect(stubs).toHaveLength(1); // only the imeta-bearing message gets one
+
+    const atts = JSON.parse(stubs[0].getAttribute('data-attachments') ?? '[]');
+    expect(atts).toHaveLength(1);
+    expect(atts[0].url).toBe(BLOB_URL);
+    expect(atts[0].type).toBe('image/jpeg');
+    expect(atts[0].encryption).toEqual({
+      algorithm: 'aes-gcm',
+      key: 'f'.repeat(64),
+      nonce: '0'.repeat(32)
+    });
+
+    // The attachment message's bubble renders the STRIPPED clone…
+    const contents = [...container.querySelectorAll('[data-testid="ncr-content"]')].map(
+      (el) => el.textContent
+    );
+    expect(contents).toContain('look at this');
+    expect(contents.some((c) => c?.includes(BLOB_URL))).toBe(false);
+    // …while the plain message's content is untouched.
+    expect(contents).toContain('hello');
   });
 });

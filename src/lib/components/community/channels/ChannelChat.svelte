@@ -25,8 +25,10 @@
     detectMentionQuery,
     applyMention
   } from '$lib/concord/chat-helpers.js';
+  import { getMessageAttachments, stripAttachmentUrls } from '$lib/concord/attachments.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
+  import MessageAttachments from './MessageAttachments.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import MentionAutocomplete from './MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -399,8 +401,11 @@
       {@const mine = message.pubkey === getActiveUser()?.pubkey}
       {@const parentId = getConcordReplyParentId(message)}
       {@const replyParent = parentId ? messages.find((p) => p.id === parentId) : null}
+      {@const atts = getMessageAttachments(message)}
       <ChatMessageRow
-        {message}
+        message={atts.length > 0
+          ? { ...message, content: stripAttachmentUrls(message.content, atts) }
+          : message}
         isOwnMessage={mine}
         displayName={getUserDisplayName(message.pubkey, getProfiles().get(message.pubkey))}
         timestamp={formatMessageTimestamp(message.created_at)}
@@ -418,6 +423,11 @@
           (replyTo = { id: msg.id, author: msg.pubkey, preview: msg.content.slice(0, 80) })}
         replyTitle={m.concord_reply()}
       >
+        {#snippet attachments()}
+          {#if atts.length > 0}
+            <MessageAttachments attachments={atts} />
+          {/if}
+        {/snippet}
         {#snippet reactions(/** @type {any} */ msg)}
           <ReactionChips
             aggregated={reactionsByTarget.get(msg.id) ?? new Map()}

@@ -2,7 +2,11 @@
 // runs in node, where Web Crypto is natively global.
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { decryptBlob, fetchDecryptedBlobUrl } from '$lib/concord/blob-media.js';
+import {
+  decryptBlob,
+  fetchDecryptedBlobUrl,
+  fetchDecryptedAttachmentUrl
+} from '$lib/concord/blob-media.js';
 
 /** @param {Uint8Array} bytes */
 function toHex(bytes) {
@@ -218,5 +222,116 @@ describe('fetchDecryptedBlobUrl', () => {
     };
     expect(await fetchDecryptedBlobUrl(pointer, { cache })).toBeNull();
     expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fetchDecryptedAttachmentUrl', () => {
+  /** @type {Map<string, any>} */
+  let cache;
+  /** @type {Uint8Array} */
+  let plaintext;
+  /** @type {string} */
+  let keyHex;
+  /** @type {string} */
+  let nonceHex;
+  /** @type {string} */
+  let oxHex;
+  /** @type {Uint8Array} */
+  let ciphertext;
+
+  beforeEach(async () => {
+    cache = new Map();
+    const keyBytes = crypto.getRandomValues(new Uint8Array(32));
+    const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+    plaintext = new TextEncoder().encode('attachment photo bytes');
+    keyHex = toHex(keyBytes);
+    nonceHex = toHex(nonceBytes);
+    ciphertext = await encryptWithWebCrypto(plaintext, keyBytes, nonceBytes);
+    const digest = await crypto.subtle.digest('SHA-256', /** @type {any} */ (plaintext));
+    oxHex = toHex(new Uint8Array(digest));
+    vi.restoreAllMocks();
+  });
+
+  it('passes an unencrypted attachment URL through without fetching', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const att = { url: 'https://blossom.example/plain.jpg', type: 'image/jpeg' };
+    expect(await fetchDecryptedAttachmentUrl(att, { cache })).toBe(
+      'https://blossom.example/plain.jpg'
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null for a missing url without fetching', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    expect(await fetchDecryptedAttachmentUrl(undefined, { cache })).toBeNull();
+    expect(await fetchDecryptedAttachmentUrl({ type: 'image/png' }, { cache })).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('fetches, decrypts, verifies ox (plaintext hash), and returns an object URL', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      /** @type {any} */ ({ ok: true, status: 200, arrayBuffer: async () => ciphertext.buffer })
+    );
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-attachment-url');
+
+    const att = {
+      url: 'https://blossom.example/enc.bin',
+      type: 'image/jpeg',
+      originalSha256: oxHex,
+      encryption: { algorithm: 'aes-gcm', key: keyHex, nonce: nonceHex }
+    };
+    expect(await fetchDecryptedAttachmentUrl(att, { cache })).toBe('blob:mock-attachment-url');
+  });
+
+  it('decrypts without hash verification when the attachment has no ox field', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      /** @type {any} */ ({ ok: true, status: 200, arrayBuffer: async () => ciphertext.buffer })
+    );
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-attachment-url');
+
+    const att = {
+      url: 'https://blossom.example/enc.bin',
+      encryption: { algorithm: 'aes-gcm', key: keyHex, nonce: nonceHex }
+    };
+    expect(await fetchDecryptedAttachmentUrl(att, { cache })).toBe('blob:mock-attachment-url');
+  });
+
+  it('returns null and warns once on an ox mismatch (failure cached by url)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      /** @type {any} */ ({ ok: true, status: 200, arrayBuffer: async () => ciphertext.buffer })
+    );
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const att = {
+      url: 'https://blossom.example/enc.bin',
+      originalSha256: 'f'.repeat(64),
+      encryption: { algorithm: 'aes-gcm', key: keyHex, nonce: nonceHex }
+    };
+    expect(await fetchDecryptedAttachmentUrl(att, { cache })).toBeNull();
+    expect(await fetchDecryptedAttachmentUrl(att, { cache })).toBeNull();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('caches by url — concurrent and repeat calls share one fetch', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        /** @type {any} */ ({ ok: true, status: 200, arrayBuffer: async () => ciphertext.buffer })
+      );
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-attachment-url');
+
+    const att = {
+      url: 'https://blossom.example/enc.bin',
+      originalSha256: oxHex,
+      encryption: { algorithm: 'aes-gcm', key: keyHex, nonce: nonceHex }
+    };
+    const [a, b] = await Promise.all([
+      fetchDecryptedAttachmentUrl(att, { cache }),
+      fetchDecryptedAttachmentUrl(att, { cache })
+    ]);
+    await fetchDecryptedAttachmentUrl(att, { cache });
+    expect(a).toBe('blob:mock-attachment-url');
+    expect(b).toBe('blob:mock-attachment-url');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,7 +10,7 @@
 // `parseImeta`'s for the same tags, so drift from the pinned dist fails CI.
 
 /**
- * @typedef {{algorithm: 'aes-gcm', key: string, nonce: string}} AttachmentEncryption
+ * @typedef {{algorithm: string, key: string, nonce: string}} AttachmentEncryption
  * @typedef {{url: string, type?: string, sha256?: string, originalSha256?: string,
  *            size?: number, dimensions?: string, blurhash?: string, alt?: string,
  *            thumbnail?: string, image?: string, summary?: string, magnet?: string,
@@ -18,7 +18,11 @@
  *            encryption?: AttachmentEncryption}} MediaAttachment
  */
 
-/** Lowercase-hex validator (even length; optional exact length) — mirrors the dist. */
+/**
+ * Lowercase-hex validator (even length; optional exact length) — mirrors the dist.
+ * @param {string | undefined} s
+ * @param {number} [len]
+ */
 function isHex(s, len) {
   if (!s) return false;
   if (len !== undefined && s.length !== len) return false;
@@ -84,7 +88,7 @@ function parseImetaTag(tag) {
 /**
  * All media attachments on a chat rumor, in tag order. Invalid imeta tags
  * (no url) are skipped. Safe on rumors without tags.
- * @param {{tags?: string[][]} | null | undefined} message
+ * @param {{tags?: string[][], content?: string, [key: string]: any} | null | undefined} message
  * @returns {MediaAttachment[]}
  */
 export function getMessageAttachments(message) {

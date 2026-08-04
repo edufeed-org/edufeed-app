@@ -30,6 +30,7 @@
    * @property {string} [replyTitle] - title attribute for the reply button (default "Reply", override for i18n)
    * @property {boolean} [showLinkPreviews] - render LinkPreviewList below the message content (default false)
    * @property {import('svelte').Snippet<[any]>} [reactions] - rendered inside chat-footer, receives `message`
+   * @property {import('svelte').Snippet<[any]>} [attachments] - rendered inside the bubble below the content, receives `message` (e.g. concord imeta media)
    */
 
   /** @type {Props} */
@@ -44,7 +45,8 @@
     onReply = null,
     replyTitle = 'Reply',
     showLinkPreviews = false,
-    reactions = undefined
+    reactions = undefined,
+    attachments = undefined
   } = $props();
 </script>
 
@@ -96,6 +98,9 @@
       </div>
     {/if}
     <NostrContentRenderer event={message} />
+    {#if attachments}
+      {@render attachments(message)}
+    {/if}
     {#if showLinkPreviews}
       <LinkPreviewList event={message} />
     {/if}
