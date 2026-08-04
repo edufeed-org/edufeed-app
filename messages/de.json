@@ -3065,5 +3065,6 @@
   "concord_thread_open": "Im Thread antworten",
   "concord_poll_votes": "{count} Stimmen",
   "concord_poll_ended": "Umfrage beendet",
-  "concord_poll_vote": "Abstimmen"
+  "concord_poll_vote": "Abstimmen",
+  "concord_events_title": "{count} anstehende Termine"
 }

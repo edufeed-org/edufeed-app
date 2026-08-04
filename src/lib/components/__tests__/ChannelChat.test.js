@@ -121,7 +121,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   concord_thread_replies: (/** @type {{ count: number }} */ { count }) => `${count} replies`,
   concord_thread_reply_placeholder: () => 'Reply in thread…',
   concord_thread_send: () => 'Send',
-  concord_thread_open: () => 'Reply in thread'
+  concord_thread_open: () => 'Reply in thread',
+  concord_events_title: (/** @type {{ count: number }} */ { count }) => `${count} upcoming events`
 }));
 
 const { default: ChannelChat } = await import(
@@ -818,6 +819,63 @@ describe('ChannelChat polls', () => {
     expect(template.tags).toEqual([
       ['e', 'poll-1'],
       ['response', 'opt-a']
+    ]);
+  });
+});
+
+describe('ChannelChat calendar events', () => {
+  const FUTURE = Math.floor(Date.now() / 1000) + 86400;
+  const eventRumor = {
+    id: 'ev-1',
+    kind: 31923,
+    pubkey: OTHER_PUBKEY,
+    content: '',
+    created_at: 1700000000,
+    tags: [
+      ['d', 'standup'],
+      ['title', 'Standup'],
+      ['start', String(FUTURE)]
+    ]
+  };
+
+  it('surfaces channel events in the bar and publishes RSVPs via sendEvent', async () => {
+    const sendEvent = vi.fn().mockResolvedValue('rumor-id');
+    const community = {
+      channelStore: () => ({
+        timeline: (/** @type {any[]} */ filters) => {
+          const kinds = filters?.[0]?.kinds ?? [];
+          if (kinds.includes(31922)) return of([eventRumor]);
+          if (kinds.includes(9)) return of([message1]);
+          return of([]);
+        }
+      }),
+      members$: new BehaviorSubject(new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])),
+      react: vi.fn(),
+      sendEvent
+    };
+
+    const { container } = render(ChannelChat, {
+      props: { community, channel: CHANNEL, openOverlay: () => {}, onBack: () => {} }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const toggle = container.querySelector('[data-testid="events-bar-toggle"]');
+    expect(toggle?.textContent).toContain('1 upcoming events');
+
+    await fireEvent.click(/** @type {HTMLElement} */ (toggle));
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="rsvp-accepted"]'))
+    );
+    await Promise.resolve();
+
+    expect(sendEvent).toHaveBeenCalledTimes(1);
+    const [channelId, template] = sendEvent.mock.calls[0];
+    expect(channelId).toBe('chan-1');
+    expect(template.kind).toBe(31925);
+    expect(template.tags).toEqual([
+      ['e', 'ev-1'],
+      ['status', 'accepted']
     ]);
   });
 });

@@ -34,11 +34,17 @@
     buildVoteTemplate,
     isPollEnded
   } from '$lib/concord/polls.js';
+  import {
+    parseChannelEvents,
+    collectRsvps,
+    buildRsvpTemplate
+  } from '$lib/concord/channel-events.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
   import ThreadPanel from './ThreadPanel.svelte';
   import PollMessage from './PollMessage.svelte';
+  import ChannelEventsBar from './ChannelEventsBar.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import MentionAutocomplete from './MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -126,6 +132,29 @@
       await community.sendEvent(channel.channel_id, buildVoteTemplate(poll.id, optionIds));
     } catch (err) {
       console.error('poll vote failed', err);
+      showToast(m.concord_send_failed(), 'error');
+    }
+  }
+
+  // NIP-52 events (31922/31923) + RSVPs (31925) — surfaced in the events bar
+  // above the chat, never as timeline rows (CORD.md "Calendar Events").
+  const getChannelEvents = useObservable(
+    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [31922, 31923] }]),
+    /** @type {any[]} */ ([])
+  );
+  const channelEvents = $derived(parseChannelEvents(getChannelEvents()));
+  const getRsvps = useObservable(
+    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [31925] }]),
+    /** @type {any[]} */ ([])
+  );
+  const rsvpsByEvent = $derived(collectRsvps(getRsvps()));
+
+  /** @param {string} eventId @param {import('$lib/concord/channel-events.js').RsvpStatus} status */
+  async function sendRsvp(eventId, status) {
+    try {
+      await community.sendEvent(channel.channel_id, buildRsvpTemplate(eventId, status));
+    } catch (err) {
+      console.error('rsvp failed', err);
       showToast(m.concord_send_failed(), 'error');
     }
   }
@@ -431,6 +460,13 @@
   min-height:auto lets this grow to full message-list content height instead
   of shrinking to the pane's allotted space, pushing the composer off-screen
   and leaking scroll up to the page/main level on long chats. -->
+<ChannelEventsBar
+  events={channelEvents}
+  {rsvpsByEvent}
+  myPubkey={getActiveUser()?.pubkey}
+  readOnly={dissolved}
+  onRsvp={sendRsvp}
+/>
 <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" bind:this={scrollContainer}>
   <div class="mx-auto max-w-md py-3 text-center text-sm text-base-content/60">
     <div class="text-lg">🔒</div>
