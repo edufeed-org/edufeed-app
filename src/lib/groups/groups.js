@@ -36,11 +36,35 @@ export function parseGroupInput(input) {
   if (!trimmed) return null;
   try {
     const pointer = decodeGroupPointer(trimmed);
-    if (!pointer?.relay) return null;
+    if (!pointer?.relay || !isValidRelayUrl(pointer.relay)) return null;
     return { relay: pointer.relay, id: pointer.id || '_' };
   } catch {
     return null;
   }
+}
+
+/**
+ * True when the relay URL carries a DNS-shaped host. Chrome's URL parser
+ * percent-encodes forbidden host bytes (e.g. spaces) instead of throwing
+ * like Node's does, so "new URL succeeded" proves nothing in a browser —
+ * the host must be validated explicitly.
+ * @param {string} relay
+ */
+export function isValidRelayUrl(relay) {
+  /** @type {string} */
+  let hostname;
+  try {
+    hostname = new URL(relay).hostname;
+  } catch {
+    return false;
+  }
+  // IPv6 literals arrive bracketed; unwrap and allow colons for them only.
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    return /^[0-9a-f:]+$/i.test(hostname.slice(1, -1));
+  }
+  // DNS labels: alnum with inner hyphens, dot-separated. Rejects the
+  // percent-escapes a lenient parser smuggles into the host.
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(hostname);
 }
 
 /**

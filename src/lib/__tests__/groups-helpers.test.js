@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseGroupInput,
+  isValidRelayUrl,
   buildGroupMessageTemplate,
   buildJoinRequestTemplate,
   buildLeaveRequestTemplate,
@@ -33,6 +34,38 @@ describe('parseGroupInput', () => {
     });
     expect(parseGroupInput('')).toBeNull();
     expect(parseGroupInput('   ')).toBeNull();
+  });
+
+  it('rejects garbage input in BOTH URL-parser dialects', () => {
+    // In Node `new URL('wss://not a pointer')` throws; Chrome instead
+    // percent-encodes the space into the host and parses "fine" (TestOER,
+    // 2026-08-04, measured on :5180). This case is green here in node-env
+    // regardless — the cross-dialect guarantee is the isValidRelayUrl block
+    // below, which tests the exact string Chrome produces.
+    expect(parseGroupInput('not a pointer')).toBeNull();
+  });
+});
+
+describe('isValidRelayUrl', () => {
+  it('rejects the exact relay string Chrome fabricates from garbage', () => {
+    // Verbatim Chrome output for parseGroupInput("not a pointer"): the
+    // lenient parser percent-encodes forbidden host bytes instead of
+    // throwing, so URL-parse success proves nothing in a browser.
+    expect(isValidRelayUrl('wss://not%20a%20pointer/')).toBe(false);
+  });
+
+  it('accepts real relay shapes', () => {
+    expect(isValidRelayUrl('wss://groups.example.com/')).toBe(true);
+    expect(isValidRelayUrl('wss://relay.groups.nip29.com')).toBe(true);
+    expect(isValidRelayUrl('ws://localhost:10547')).toBe(true);
+    expect(isValidRelayUrl('wss://[::1]:7777')).toBe(true);
+  });
+
+  it('rejects non-hostname shapes a lenient parser lets through', () => {
+    expect(isValidRelayUrl('wss://a..b/')).toBe(false);
+    expect(isValidRelayUrl('wss://-leading.example.com/')).toBe(false);
+    expect(isValidRelayUrl('not-a-url')).toBe(false);
+    expect(isValidRelayUrl('')).toBe(false);
   });
 });
 
