@@ -58,6 +58,9 @@ importers:
       cally:
         specifier: ^0.9.2
         version: 0.9.2
+      light-bolt11-decoder:
+        specifier: 3.2.0
+        version: 3.2.0
       linkedom:
         specifier: ^0.18.12
         version: 0.18.12
@@ -81,7 +84,7 @@ importers:
         version: 0.34.5
       ts-mls:
         specifier: 2.0.0-rc.13
-        version: 2.0.0-rc.13(@noble/ciphers@2.2.0)
+        version: 2.0.0-rc.13(@noble/ciphers@2.2.0)(@noble/curves@2.2.0)
     devDependencies:
       '@djot/djot':
         specifier: ^0.3.2
@@ -7272,10 +7275,12 @@ snapshots:
 
   trough@2.2.0: {}
 
-  ts-mls@2.0.0-rc.13(@noble/ciphers@2.2.0):
+  ts-mls@2.0.0-rc.13(@noble/ciphers@2.2.0)(@noble/curves@2.2.0):
     dependencies:
       '@hpke/core': 1.9.0
       '@noble/ciphers': 2.2.0
+    optionalDependencies:
+      '@noble/curves': 2.2.0
 
   tslib@2.8.1: {}
 

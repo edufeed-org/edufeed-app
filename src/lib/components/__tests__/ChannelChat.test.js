@@ -879,3 +879,83 @@ describe('ChannelChat calendar events', () => {
     ]);
   });
 });
+
+describe('ChannelChat zaps', () => {
+  it('shows a verified zap tally chip on the target message (on-chain rail)', async () => {
+    const onchainZap = {
+      id: 'zap-1',
+      kind: 8333,
+      pubkey: ACTIVE_PUBKEY,
+      content: '',
+      created_at: 1700000010,
+      tags: [
+        ['e', 'msg-1'],
+        ['i', `bitcoin:tx:${'f'.repeat(64)}`],
+        ['amount', '21'] // sats
+      ]
+    };
+    const community = {
+      channelStore: () => ({
+        timeline: (/** @type {any[]} */ filters) => {
+          const kinds = filters?.[0]?.kinds ?? [];
+          if (kinds.includes(9735)) return of([onchainZap]);
+          if (kinds.includes(9)) return of([message1]);
+          return of([]);
+        }
+      }),
+      members$: new BehaviorSubject(new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])),
+      react: vi.fn()
+    };
+
+    const { container } = render(ChannelChat, {
+      props: { community, channel: CHANNEL, openOverlay: () => {}, onBack: () => {} }
+    });
+    // the verdict resolves through a promise chain -> flush microtasks + a tick
+    await Promise.resolve();
+    await Promise.resolve();
+    await tick();
+    await Promise.resolve();
+    await tick();
+
+    const chip = container.querySelector('[data-testid="zap-tally"]');
+    expect(chip?.textContent).toContain('⚡ 21');
+    expect(chip?.getAttribute('title')).toBe('1×');
+  });
+
+  it('never shows a chip for an unverifiable zap rumor', async () => {
+    const bogusZap = {
+      id: 'zap-bad',
+      kind: 8333,
+      pubkey: ACTIVE_PUBKEY,
+      content: '',
+      created_at: 1700000010,
+      tags: [
+        ['e', 'msg-1'],
+        ['i', 'bitcoin:tx:nothex'],
+        ['amount', '21']
+      ]
+    };
+    const community = {
+      channelStore: () => ({
+        timeline: (/** @type {any[]} */ filters) => {
+          const kinds = filters?.[0]?.kinds ?? [];
+          if (kinds.includes(9735)) return of([bogusZap]);
+          if (kinds.includes(9)) return of([message1]);
+          return of([]);
+        }
+      }),
+      members$: new BehaviorSubject(new Set([ACTIVE_PUBKEY, OTHER_PUBKEY])),
+      react: vi.fn()
+    };
+
+    const { container } = render(ChannelChat, {
+      props: { community, channel: CHANNEL, openOverlay: () => {}, onBack: () => {} }
+    });
+    await Promise.resolve();
+    await tick();
+    await Promise.resolve();
+    await tick();
+
+    expect(container.querySelector('[data-testid="zap-tally"]')).toBeNull();
+  });
+});

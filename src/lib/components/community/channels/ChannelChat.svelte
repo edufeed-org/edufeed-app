@@ -39,6 +39,7 @@
     collectRsvps,
     buildRsvpTemplate
   } from '$lib/concord/channel-events.js';
+  import { verifyZapRumor, verifyOnchainZapRumor, tallyZaps } from '$lib/concord/zaps.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
@@ -158,6 +159,45 @@
       showToast(m.concord_send_failed(), 'error');
     }
   }
+
+  // CORD.md zaps (9735 payer receipts + 8333 on-chain). Verification is
+  // async (WebCrypto sha256 of the preimage) and a rumor's tags never
+  // change, so verdicts cache per rumor id; only VERIFIED payments reach
+  // the tally, deduped by payment proof (hash/txid), never by rumor id.
+  const getZapRumors = useObservable(
+    () => community?.channelStore(channel.channel_id).timeline([{ kinds: [9735, 8333] }]),
+    /** @type {any[]} */ ([])
+  );
+  /** rumor id -> verified zap entry | null (failed). @type {Record<string, any>} */
+  let zapVerdicts = $state({});
+  // Deliberately NOT a SvelteSet: the $effect below both reads and mutates
+  // it — a reactive set would make the effect depend on its own writes.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const zapInFlight = new Set();
+  $effect(() => {
+    for (const rumor of getZapRumors()) {
+      if (rumor.id in zapVerdicts || zapInFlight.has(rumor.id)) continue;
+      zapInFlight.add(rumor.id);
+      resolveZap(rumor).then((verdict) => {
+        zapVerdicts[rumor.id] = verdict;
+      });
+    }
+  });
+  /** @param {any} rumor */
+  async function resolveZap(rumor) {
+    const target = rumor.tags?.find((/** @type {string[]} */ t) => t[0] === 'e')?.[1];
+    if (!target) return null;
+    const amount = Number(rumor.tags?.find((/** @type {string[]} */ t) => t[0] === 'amount')?.[1]);
+    const ms = rumor.ms ?? (rumor.created_at ?? 0) * 1000;
+    if (rumor.kind === 8333) {
+      const txid = verifyOnchainZapRumor(rumor);
+      // on-chain amounts are whole sats; tallies are msat-denominated
+      return txid ? { target, proof: txid, pubkey: rumor.pubkey, msats: amount * 1000, ms } : null;
+    }
+    const hash = await verifyZapRumor(rumor);
+    return hash ? { target, proof: hash, pubkey: rumor.pubkey, msats: amount, ms } : null;
+  }
+  const zapTallies = $derived(tallyZaps(Object.values(zapVerdicts).filter(Boolean)));
 
   let text = $state('');
   let sending = $state(false);
@@ -521,7 +561,15 @@
         {/snippet}
         {#snippet reactions(/** @type {any} */ msg)}
           {@const thread = threadsByRoot.get(msg.id)}
+          {@const zaps = zapTallies.get(msg.id)}
           <div class="flex items-center gap-2">
+            {#if zaps}
+              <span
+                class="badge gap-0.5 badge-ghost text-xs"
+                data-testid="zap-tally"
+                title="{zaps.count}×">⚡ {Math.floor(zaps.totalMsats / 1000)}</span
+              >
+            {/if}
             <ReactionChips
               aggregated={reactionsByTarget.get(msg.id) ?? new Map()}
               addButtonOnHover
