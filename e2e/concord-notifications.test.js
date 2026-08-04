@@ -277,7 +277,9 @@ test.describe('Concord notifications', () => {
     const targetMessage = vis(guest.locator('.chat').filter({ hasText: 'reply to me please' }));
     await expect(targetMessage).toBeVisible({ timeout: 30_000 });
     await targetMessage.hover();
-    await targetMessage.getByTitle('Reply').click();
+    // exact: the thread feature added a sibling "Reply in thread" button whose
+    // title substring-matches 'Reply' and trips strict mode.
+    await targetMessage.getByTitle('Reply', { exact: true }).click();
     await guestInput().fill('here I am');
     await guestInput().press('Enter');
 
