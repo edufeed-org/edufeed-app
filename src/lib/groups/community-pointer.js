@@ -33,7 +33,7 @@ const ACCESS_MARKERS = ['members', 'invited'];
  * @param {{id?: string, relay?: string}} pointer
  * @returns {string | null} null when the pointer is not addressable
  */
-function channelKey(pointer) {
+export function channelKey(pointer) {
   if (!pointer || typeof pointer.id !== 'string' || !pointer.id.trim()) return null;
   if (typeof pointer.relay !== 'string' || !isRelayUrl(pointer.relay)) return null;
   return `${pointer.id}@${normalizeURL(pointer.relay)}`;
