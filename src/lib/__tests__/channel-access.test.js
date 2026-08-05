@@ -1,0 +1,86 @@
+/** @vitest-environment node */
+import { describe, it, expect } from 'vitest';
+import { channelAccessLevel, channelGlyph } from '$lib/groups/channel-access.js';
+
+const R = 'wss://groups.example';
+
+/** kind:39000 as a spec-current relay emits it. */
+const meta = (/** @type {string[][]} */ extra = []) => ({
+  kind: 39000,
+  tags: [['d', 'allgemein'], ...extra]
+});
+
+const ptr = (/** @type {string} */ access) => ({ id: 'allgemein', relay: R, access });
+
+describe('channelAccessLevel', () => {
+  it('is "world" when the group carries no private tag', () => {
+    expect(channelAccessLevel(meta([['restricted']]), ptr('members'))).toBe('world');
+  });
+
+  // The old NIP-29 draft had inverse tags `public`/`open`; the current spec
+  // dropped them and states openness by OMITTING `private`. applesauce's
+  // getGroupMetadata still reads the dead tags into isPublic/isOpen, so a
+  // genuinely world-open group has isPublic === false. Deriving "world" from
+  // isPublic would call every open channel closed.
+  it('is "world" for a spec-current open group, which carries no public tag', () => {
+    const event = meta();
+    expect(event.tags.some((t) => t[0] === 'public')).toBe(false);
+    expect(channelAccessLevel(event, ptr('members'))).toBe('world');
+  });
+
+  it('is "members" for a private group our community marks as open', () => {
+    expect(channelAccessLevel(meta([['private'], ['closed']]), ptr('members'))).toBe('members');
+  });
+
+  it('is "invited" for a private group our community marks as restricted', () => {
+    expect(channelAccessLevel(meta([['private'], ['closed']]), ptr('invited'))).toBe('invited');
+  });
+
+  // Fail closed: a lock on something open understates it and misleads nobody;
+  // a # on something locked tells people colleagues are reading when they are not.
+  it('falls back to "invited" when our pointer carries no marker', () => {
+    // A pointer written before the marker existed: no `access` at all.
+    const unmarked = /** @type {any} */ ({ id: 'allgemein', relay: R });
+    expect(channelAccessLevel(meta([['private']]), unmarked)).toBe('invited');
+    expect(channelAccessLevel(meta([['private']]), ptr('nonsense'))).toBe('invited');
+  });
+
+  it('is "unknown" while the metadata event has not arrived', () => {
+    for (const missing of [null, undefined]) {
+      expect(channelAccessLevel(missing, ptr('members'))).toBe('unknown');
+    }
+  });
+
+  it('is "unknown" for an event that is not group metadata', () => {
+    expect(channelAccessLevel({ kind: 9, tags: [['h', 'allgemein']] }, ptr('members'))).toBe(
+      'unknown'
+    );
+  });
+
+  // Same hazard as the pointer parser: community/channel events live in Svelte
+  // state, and applesauce's getGroupMetadata memoises onto a Symbol (061c05c9).
+  it('does not write a cache symbol onto the metadata event', () => {
+    const event = meta([['private']]);
+    channelAccessLevel(event, ptr('members'));
+    expect(Object.getOwnPropertySymbols(event)).toEqual([]);
+  });
+});
+
+describe('channelGlyph', () => {
+  it('uses # for both open levels and the lock only for invited', () => {
+    expect(channelGlyph('world').symbol).toBe('#');
+    expect(channelGlyph('members').symbol).toBe('#');
+    expect(channelGlyph('invited').symbol).toBe('\u{1F512}');
+  });
+
+  it('adds the globe only for world-readable channels', () => {
+    expect(channelGlyph('world').worldReadable).toBe(true);
+    expect(channelGlyph('members').worldReadable).toBe(false);
+    expect(channelGlyph('invited').worldReadable).toBe(false);
+  });
+
+  it('shows the lock while the level is unknown, never the open glyph', () => {
+    expect(channelGlyph('unknown').symbol).toBe('\u{1F512}');
+    expect(channelGlyph('unknown').worldReadable).toBe(false);
+  });
+});

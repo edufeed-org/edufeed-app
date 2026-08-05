@@ -56,6 +56,25 @@ describe('parseGroupPointers', () => {
     expect(p.name).toBe('Leitungsrunde');
   });
 
+  // 5th element: the community's intent for a PRIVATE channel — "everyone in
+  // here" vs "only the invited". The relay cannot express that split (both are
+  // a private group with a member list), so it lives in our own event.
+  it('keeps the access marker from the 5th element', () => {
+    const [p] = parseGroupPointers(evt([['group', 'allgemein', R, 'Allgemein', 'members']]));
+    expect(p.access).toBe('members');
+  });
+
+  it('accepts an access marker without a name', () => {
+    const [p] = parseGroupPointers(evt([['group', 'allgemein', R, '', 'members']]));
+    expect(p.access).toBe('members');
+    expect(p.name).toBeUndefined();
+  });
+
+  it('drops an unrecognised access marker rather than passing it on', () => {
+    const [p] = parseGroupPointers(evt([['group', 'allgemein', R, '', 'sometimes']]));
+    expect(p.access).toBeUndefined();
+  });
+
   // Tag values are untrusted network input — same rule the concord pointer applies.
   it('drops pointers whose relay is not a well-formed relay URL', () => {
     const out = parseGroupPointers(
@@ -111,6 +130,33 @@ describe('buildGroupPointerTag', () => {
       'Nm'
     ]);
     expect(buildGroupPointerTag({ id: 'x', relay: R, name: '' })).toEqual(['group', 'x', R]);
+  });
+
+  it('holds the name slot open when there is an access marker but no name', () => {
+    expect(buildGroupPointerTag({ id: 'x', relay: R, access: 'members' })).toEqual([
+      'group',
+      'x',
+      R,
+      '',
+      'members'
+    ]);
+  });
+
+  it('writes name and access together', () => {
+    expect(buildGroupPointerTag({ id: 'x', relay: R, name: 'Nm', access: 'invited' })).toEqual([
+      'group',
+      'x',
+      R,
+      'Nm',
+      'invited'
+    ]);
+  });
+
+  it('round-trips through the parser', () => {
+    const tag = buildGroupPointerTag({ id: 'x', relay: R, name: 'Nm', access: 'members' });
+    expect(parseGroupPointers({ tags: [tag] })).toEqual([
+      { id: 'x', relay: R, name: 'Nm', access: 'members' }
+    ]);
   });
 });
 

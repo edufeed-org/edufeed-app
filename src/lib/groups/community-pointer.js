@@ -18,8 +18,14 @@ import { normalizeURL } from 'applesauce-core/helpers/url';
 import { isValidRelayUrl } from './groups.js';
 
 /**
- * @typedef {{id: string, relay: string, name?: string}} CommunityGroupPointer
+ * @typedef {{id: string, relay: string, name?: string, access?: 'members'|'invited'}} CommunityGroupPointer
  */
+
+// 5th element: the community's intent for a PRIVATE channel — readable by
+// everyone in the community, or only by the people put in it. The relay cannot
+// express that split (both are a private group with a member list), so it
+// lives here. Purely presentational; see src/lib/groups/channel-access.js.
+const ACCESS_MARKERS = ['members', 'invited'];
 
 /**
  * Identity of a channel: group id on a relay, compared after URL
@@ -69,11 +75,11 @@ export function parseGroupPointers(event) {
     if (!Array.isArray(tag) || tag[0] !== 'group') continue;
     const pointer = getGroupPointerFromGroupTag(tag);
     if (!channelKey(pointer)) continue;
-    pointers.push(
-      pointer.name
-        ? { id: pointer.id, relay: pointer.relay, name: pointer.name }
-        : { id: pointer.id, relay: pointer.relay }
-    );
+    /** @type {CommunityGroupPointer} */
+    const out = { id: pointer.id, relay: pointer.relay };
+    if (pointer.name) out.name = pointer.name;
+    if (ACCESS_MARKERS.includes(tag[4])) out.access = /** @type {'members'|'invited'} */ (tag[4]);
+    pointers.push(out);
   }
   return pointers;
 }
@@ -84,7 +90,11 @@ export function parseGroupPointers(event) {
  */
 export function buildGroupPointerTag(pointer) {
   const tag = ['group', pointer.id, pointer.relay];
+  // The access marker sits in the 5th slot, so an unnamed channel that has one
+  // still holds the name slot open rather than shifting access into it.
   if (pointer.name) tag.push(pointer.name);
+  else if (pointer.access) tag.push('');
+  if (pointer.access) tag.push(pointer.access);
   return tag;
 }
 
