@@ -159,6 +159,7 @@
         {@const isActive = selectedContentType === type.id}
         {@const Icon = type.icon}
         <button
+          data-testid="content-nav-{type.id}"
           onclick={() => handleContentTypeClick(type.id)}
           class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
             ? 'bg-primary text-primary-content'
