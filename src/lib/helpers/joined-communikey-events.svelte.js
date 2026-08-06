@@ -39,9 +39,13 @@ const requestedPubkeys = new Set();
  * @param {() => boolean} [isEnabled] when it returns false, no subscriptions
  *   and no fetches happen and the result is empty. Read reactively, so
  *   flipping it on after mount starts the work.
+ * @param {() => string[]} [getExtraPubkeys] communities to include beyond the
+ *   joined set. The owner of a community does not necessarily "join" it, so
+ *   without this their own community's rooms read as unclaimed and duplicate
+ *   into the sidebar — measured in Chrome, not reasoned about.
  * @returns {() => any[]}
  */
-export function useJoinedCommunikeyEvents(isEnabled = () => true) {
+export function useJoinedCommunikeyEvents(isEnabled = () => true, getExtraPubkeys = () => []) {
   const getJoinedCommunities = useJoinedCommunitiesList();
 
   // Reset (not reuse) on every effect re-run: joined pubkeys can
@@ -54,7 +58,7 @@ export function useJoinedCommunikeyEvents(isEnabled = () => true) {
       return;
     }
 
-    const pubkeys = getJoinedCommunities();
+    const pubkeys = [...new Set([...getJoinedCommunities(), ...getExtraPubkeys()])];
     if (pubkeys.length === 0) {
       communikeyEvents = [];
       return;

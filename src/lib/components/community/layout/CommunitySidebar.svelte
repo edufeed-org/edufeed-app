@@ -10,6 +10,8 @@
     useUnlinkedConcordAreas,
     useConcordListLocked
   } from '$lib/concord/unlinked-areas.svelte.js';
+  import { useUnlinkedGroups } from '$lib/groups/unlinked-groups.svelte.js';
+  import { groupHref } from '$lib/groups/groups.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import { HomeIcon, LockOpenIcon, ChevronDownIcon } from '$lib/components/icons';
@@ -27,6 +29,12 @@
 
   // Create non-mutating copy to avoid Svelte 5 state mutation error
   const sortedCommunities = $derived([...joinedCommunities]);
+
+  // NIP-29 groups the user belongs to that no followed community shows as a
+  // channel — the same idea as the unlinked Concord areas, one protocol over
+  // (laoc 2026-08-06: "wie vorher die Concord Gruppen").
+  const getUnlinkedGroups = useUnlinkedGroups();
+  const unlinkedGroupRows = $derived(getUnlinkedGroups());
 
   const getUnlinkedAreas = useUnlinkedConcordAreas();
   const unlinkedAreas = $derived(
@@ -191,6 +199,19 @@
         </a>
       {/each}
     {/if}
+    {#each unlinkedGroupRows as row (row.key)}
+      <a
+        title={row.name}
+        href={groupHref(row.pointer)}
+        data-testid="sidebar-group-icon"
+        class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
+      >
+        <span
+          class="flex h-12 w-12 items-center justify-center rounded-full bg-base-300 text-base"
+          aria-hidden="true">{row.symbol}</span
+        >
+      </a>
+    {/each}
   </div>
   <div
     class="pointer-events-none sticky bottom-0 z-10 -mt-7 flex h-7 shrink-0 items-end justify-center bg-gradient-to-t from-base-200 to-transparent transition-opacity duration-200 {canScrollDown
@@ -309,6 +330,34 @@
             </span>
           </span>
           <span class="flex-1 truncate text-left text-sm font-medium">{area.name}</span>
+        </a>
+      {/each}
+    {/if}
+
+    {#if unlinkedGroupRows.length > 0}
+      <div class="border-b border-base-300"></div>
+      <p class="px-3 pt-1 text-xs font-semibold tracking-wider text-base-content/50 uppercase">
+        {m.groups_sidebar_my_groups()}
+      </p>
+      {#each unlinkedGroupRows as row (row.key)}
+        <a
+          href={groupHref(row.pointer)}
+          data-testid="sidebar-group-row"
+          class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300"
+        >
+          <span
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-300 text-sm"
+            aria-hidden="true">{row.symbol}</span
+          >
+          <span class="flex-1 truncate text-left text-sm font-medium">{row.name}</span>
+          {#if row.worldReadable}
+            <span
+              aria-hidden="true"
+              data-testid="sidebar-group-world-readable"
+              title={m.groups_channel_world_readable()}
+              class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
+            >
+          {/if}
         </a>
       {/each}
     {/if}

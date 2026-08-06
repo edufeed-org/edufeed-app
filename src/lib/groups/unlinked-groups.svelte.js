@@ -67,7 +67,17 @@ export function useMyGroups() {
  */
 export function useUnlinkedGroups() {
   const getMyGroups = useMyGroups();
-  const getCommunikeyEvents = useJoinedCommunikeyEvents();
+  // The user's OWN community counts too: an owner does not necessarily appear
+  // in their own joined list, and without this their community's channels
+  // duplicate into the sidebar as if nobody had claimed them.
+  const getSelf = useActiveUser();
+  const getCommunikeyEvents = useJoinedCommunikeyEvents(
+    () => true,
+    () => {
+      const me = getSelf()?.pubkey;
+      return me ? [me] : [];
+    }
+  );
   const getChannelMeta = useChannelMetadata(() => getMyGroups());
 
   return () =>
