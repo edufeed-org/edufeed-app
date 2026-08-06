@@ -80,7 +80,10 @@
               {/if}
             </span>
             {#if row.about}
-              <span class="line-clamp-2 text-sm text-base-content/60">{row.about}</span>
+              <span
+                data-testid="channel-card-topic"
+                class="line-clamp-2 text-sm text-base-content/60">{row.about}</span
+              >
             {/if}
             <span class="badge badge-outline badge-xs" data-testid="channel-card-access"
               >{accessLabel(row.level)}</span

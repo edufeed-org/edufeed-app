@@ -107,9 +107,12 @@ describe('ChannelOverview', () => {
       }
     });
     render(ChannelOverview, { props: { rows } });
-    expect(screen.getByText('Alles Weitere')).toBeTruthy();
-    // Two cards, exactly one topic line.
+    // Two cards, exactly ONE topic line — asserting only that the text is
+    // present would pass just as well on a card that always reserves the line.
     expect(screen.getAllByTestId('channel-card')).toHaveLength(2);
+    const topics = screen.getAllByTestId('channel-card-topic');
+    expect(topics).toHaveLength(1);
+    expect(topics[0].textContent).toBe('Alles Weitere');
   });
 
   it('shows what the host announces about itself, above the cards', () => {
