@@ -3096,5 +3096,9 @@
   "groups_pick_channel_title": "Wähle einen Kanal",
   "groups_pick_channel_body": "Die Kanäle dieser Community stehen in der Liste. Öffne einen, um mitzulesen und zu schreiben.",
   "groups_attach_title": "Kanal hinzufügen",
-  "groups_sidebar_my_groups": "Meine Gruppen"
+  "groups_sidebar_my_groups": "Meine Gruppen",
+  "groups_badge_members_only": "Nur für Mitglieder",
+  "groups_badge_invite_only": "Beitritt nur mit Einladung",
+  "groups_badge_auth_required": "Anmeldung erforderlich",
+  "groups_badge_nip29": "NIP-29"
 }

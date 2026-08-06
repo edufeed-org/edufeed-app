@@ -71,7 +71,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
         // keep the subscription open after replay so unsubscribe paths run
         subscription: () => rxMerge(rxOf(chatEvent), rxNever),
         publish: publishMock,
-        authenticate: vi.fn().mockResolvedValue({ ok: true })
+        authenticate: vi.fn().mockResolvedValue({ ok: true }),
+        // The header's badges read the relay's NIP-11 document. A fake relay
+        // without it is not a relay: applesauce's Relay always exposes this,
+        // and leaving it out only hides the wiring from the test.
+        information$: rxOf({
+          limitation: { auth_required: true },
+          supported_nips: [1, 29, 42],
+          software: 'git+https://github.com/fiatjaf/pyramid',
+          version: '1.2'
+        })
       };
     },
     group: () => ({ request: () => rxOf() })
@@ -123,7 +132,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_send_failed: () => 'Message could not be sent',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
-  groups_input_placeholder: (/** @type {{ name: string }} */ { name }) => `Message ${name}`
+  groups_input_placeholder: (/** @type {{ name: string }} */ { name }) => `Message ${name}`,
+  groups_badge_members_only: () => 'Members only',
+  groups_badge_invite_only: () => 'Invite only',
+  groups_badge_auth_required: () => 'Sign-in required',
+  groups_badge_nip29: () => 'NIP-29'
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
@@ -187,5 +200,31 @@ describe('GroupChat', () => {
     const listEvent = publishOptimisticMock.mock.calls[0][0];
     expect(listEvent.kind).toBe(10009);
     expect(listEvent.tags).toContainEqual(['group', 'beechat', GROUP_RELAY]);
+  });
+
+  // The header's small labels, end to end: what the RELAY announces about
+  // itself (NIP-11) and what the group says about getting in.
+  it('shows what the relay announces about itself', async () => {
+    render(GroupChat, { props: { pointer } });
+    await screen.findByTestId('group-name');
+
+    const badges = await screen.findByTestId('group-badges');
+    expect(badges.textContent).toContain('Sign-in required');
+    expect(badges.textContent).toContain('NIP-29');
+    // NIP-11 `software` is a URL by convention; the last segment is the name.
+    expect(badges.textContent).toContain('pyramid 1.2');
+  });
+
+  // The fixture carries `public`/`open` — the dead inverse tags of an older
+  // NIP-29 draft, which applesauce still reads. A group with neither
+  // `private` nor `closed` is open, and the header must not invent a
+  // restriction out of tags that mean nothing today.
+  it('claims no access restriction for a group the relay leaves open', async () => {
+    render(GroupChat, { props: { pointer } });
+    await screen.findByTestId('group-name');
+    await screen.findByTestId('group-badges');
+
+    expect(screen.queryByTestId('group-badge-members')).toBeNull();
+    expect(screen.queryByTestId('group-badge-invite')).toBeNull();
   });
 });

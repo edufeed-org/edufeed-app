@@ -30,6 +30,8 @@
     buildLeaveRequestTemplate,
     buildGroupsListTemplate
   } from '$lib/groups/groups.js';
+  import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
+  import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
   import {
@@ -50,6 +52,17 @@
   const getActiveUser = useActiveUser();
 
   /** @type {any} */ let metadata = $state(null);
+  // The RAW kind:39000 as well as the parsed metadata: the access badges read
+  // the tags directly, because applesauce's parser drops `restricted`/`hidden`
+  // and reads openness from the inverse tags of an older NIP-29 draft.
+  /** @type {any} */ let metadataEvent = $state.raw(null);
+
+  // Small labels on the group's home (laoc, design round 1). Two sources:
+  // what the HOST announces about itself, and what THIS group says about
+  // getting in.
+  const getRelayInfo = useRelayInformation(() => pointer.relay);
+  const hostBadges = $derived(relayBadges(getRelayInfo()));
+  const accessBadges = $derived(channelBadges(metadataEvent));
   /** @type {Set<string>} */ let members = $state(new Set());
   let authRequired = $state(false);
   let isLoading = $state(true);
@@ -67,7 +80,10 @@
       )
       .subscribe({
         next: (/** @type {any} */ event) => {
-          if (event.kind === GROUP_METADATA_KIND) metadata = getGroupMetadata(event);
+          if (event.kind === GROUP_METADATA_KIND) {
+            metadata = getGroupMetadata(event);
+            metadataEvent = event;
+          }
           if (event.kind === GROUP_MEMBERS_KIND) {
             members = new Set(getGroupMembers(event) ?? []);
           }
@@ -266,6 +282,24 @@
         {new URL(pointer.relay).hostname}{members.size ? ` · ${members.size}` : ''}
         {#if metadata?.about}&nbsp;— {metadata.about}{/if}
       </p>
+      {#if accessBadges.length || hostBadges.length}
+        <div class="mt-1 flex flex-wrap items-center gap-1" data-testid="group-badges">
+          {#each accessBadges as badge (badge.id)}
+            <span class="badge badge-outline badge-xs" data-testid="group-badge-{badge.id}">
+              {badge.id === 'members'
+                ? m.groups_badge_members_only()
+                : m.groups_badge_invite_only()}
+            </span>
+          {/each}
+          {#each hostBadges as badge (badge.id)}
+            <span class="badge badge-ghost badge-xs" data-testid="group-badge-{badge.id}">
+              {#if badge.id === 'auth'}{m.groups_badge_auth_required()}
+              {:else if badge.id === 'nip29'}{m.groups_badge_nip29()}
+              {:else}{badge.text}{/if}
+            </span>
+          {/each}
+        </div>
+      {/if}
     </div>
     {#if myPubkey}
       {#if isMember}

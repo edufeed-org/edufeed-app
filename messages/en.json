@@ -3096,5 +3096,9 @@
   "groups_pick_channel_title": "Pick a channel",
   "groups_pick_channel_body": "This community's channels are in the list. Open one to read along and write.",
   "groups_attach_title": "Add channel",
-  "groups_sidebar_my_groups": "My groups"
+  "groups_sidebar_my_groups": "My groups",
+  "groups_badge_members_only": "Members only",
+  "groups_badge_invite_only": "Invite only",
+  "groups_badge_auth_required": "Sign-in required",
+  "groups_badge_nip29": "NIP-29"
 }
