@@ -282,7 +282,14 @@
     );
     // jsdom has no scrollIntoView at all, and a folded-away row has no node.
     if (row && typeof (/** @type {any} */ (row).scrollIntoView) === 'function') {
-      /** @type {HTMLElement} */ (row).scrollIntoView({ block: 'nearest' });
+      // Already on screen: leave the rail exactly where the reader put it.
+      // Off screen: 'center' rather than 'nearest', which parks the row on the
+      // very edge — half of a 48px icon at the fold reads as clipped, not as
+      // selected (measured in Chrome, the row landed at y=875 of 900).
+      const rail = el.getBoundingClientRect();
+      const box = row.getBoundingClientRect();
+      const onScreen = box.top >= rail.top && box.bottom <= rail.bottom;
+      if (!onScreen) /** @type {HTMLElement} */ (row).scrollIntoView({ block: 'center' });
     }
   });
 </script>

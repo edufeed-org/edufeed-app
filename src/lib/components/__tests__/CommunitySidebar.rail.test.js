@@ -376,18 +376,32 @@ describe('CommunitySidebar — which container you are in', () => {
     expect(screen.getByTestId('rail-folder-tile').getAttribute('data-folder-active')).toBe('false');
   });
 
-  // The rail is taller than the screen for anyone with a dozen containers, so
-  // the mark is worth nothing if the marked row is below the fold.
-  it('scrolls the container you are in into view', () => {
+  /**
+   * Render with the marked row placed inside or outside the rail's own box.
+   *
+   * jsdom gives every element a zero-size rect, so without this the row and
+   * the rail are the same empty box and the "already on screen" branch is the
+   * only one that can ever run.
+   * @param {{rowTop: number}} where
+   * @returns {string[]} the anchors that were scrolled to
+   */
+  function renderWithGeometry({ rowTop }) {
     holders.groups = [GROUP];
     /** @type {string[]} */
     const scrolled = [];
-    const original = Element.prototype.scrollIntoView;
-    // jsdom has no scrollIntoView at all; installing it here is also what
-    // makes this test able to fail — without the call, `scrolled` stays empty.
+    const originalScroll = Element.prototype.scrollIntoView;
+    const originalRect = Element.prototype.getBoundingClientRect;
     Element.prototype.scrollIntoView = function () {
       const anchor = /** @type {Element} */ (this).getAttribute('data-rail-anchor');
       if (anchor) scrolled.push(anchor);
+    };
+    Element.prototype.getBoundingClientRect = function () {
+      const el = /** @type {Element} */ (this);
+      if (el.getAttribute('data-testid') === 'community-sidebar')
+        return /** @type {any} */ ({ top: 0, bottom: 100, height: 100 });
+      if (el.getAttribute('data-rail-anchor'))
+        return /** @type {any} */ ({ top: rowTop, bottom: rowTop + 48, height: 48 });
+      return /** @type {any} */ ({ top: 0, bottom: 0, height: 0 });
     };
     try {
       render(CommunitySidebar, {
@@ -396,9 +410,22 @@ describe('CommunitySidebar — which container you are in', () => {
           currentPath: `/relays/${encodeURIComponent('wss://relay.example.com')}`
         }
       });
-      expect(scrolled).toContain('relay:wss://relay.example.com');
     } finally {
-      Element.prototype.scrollIntoView = original;
+      Element.prototype.scrollIntoView = originalScroll;
+      Element.prototype.getBoundingClientRect = originalRect;
     }
+    return scrolled;
+  }
+
+  // The rail is taller than the screen for anyone with a dozen containers, so
+  // the mark is worth nothing if the marked row is below the fold.
+  it('scrolls the container you are in into view when it is below the fold', () => {
+    expect(renderWithGeometry({ rowTop: 400 })).toContain('relay:wss://relay.example.com');
+  });
+
+  // …and only then: scrolling a rail that already shows the row would move it
+  // under the reader's pointer for no reason.
+  it('leaves the rail alone when that row is already on screen', () => {
+    expect(renderWithGeometry({ rowTop: 20 })).toEqual([]);
   });
 });
