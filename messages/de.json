@@ -3094,5 +3094,6 @@
   "groups_attach_success": "Kanal hinzugefügt",
   "groups_attach_failed": "Kanal konnte nicht hinzugefügt werden. Bitte versuche es erneut.",
   "groups_pick_channel_title": "Wähle einen Kanal",
-  "groups_pick_channel_body": "Die Kanäle dieser Community stehen in der Liste. Öffne einen, um mitzulesen und zu schreiben."
+  "groups_pick_channel_body": "Die Kanäle dieser Community stehen in der Liste. Öffne einen, um mitzulesen und zu schreiben.",
+  "groups_attach_title": "Kanal hinzufügen"
 }

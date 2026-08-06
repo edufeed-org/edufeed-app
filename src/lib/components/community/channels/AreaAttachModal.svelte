@@ -103,7 +103,7 @@
       >✕</button
     >
     <h3 class="flex items-center gap-2 text-lg font-extrabold">
-      🔗 {m.concord_attach_title()}
+      🔗 {activeTab === 'group' ? m.groups_attach_title() : m.concord_attach_title()}
       <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
     </h3>
 
