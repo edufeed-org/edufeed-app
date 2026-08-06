@@ -19,6 +19,7 @@ import {
   LEAVE_REQUEST_KIND,
   getPublicGroups
 } from 'applesauce-common/helpers/groups';
+import { normalizeURL } from 'applesauce-core/helpers/url';
 
 /**
  * @typedef {{relay: string, id: string}} GroupPointer
@@ -68,11 +69,34 @@ export function isValidRelayUrl(relay) {
 }
 
 /**
- * App route for a group, with the `host'id` pointer URL-encoded once.
+ * The pointer as a string, in the shortest form that still addresses the SAME
+ * relay.
+ *
+ * `encodeGroupPointer` emits `new URL(relay).hostname`, so a port and a `ws:`
+ * scheme are silently dropped — the resulting pointer then names a different
+ * relay, and the failure is a connection to nothing rather than an error.
+ * `decodeGroupPointer` reads the spelled-out relay losslessly, so fall back to
+ * that whenever the short form would not decode back to where we started.
+ * @param {GroupPointer} pointer
+ * @returns {string}
+ */
+export function groupPointerString(pointer) {
+  const short = encodeGroupPointer(pointer);
+  try {
+    const decoded = decodeGroupPointer(short);
+    if (decoded?.relay && normalizeURL(decoded.relay) === normalizeURL(pointer.relay)) return short;
+  } catch {
+    // unparseable short form — spell it out
+  }
+  return `${pointer.relay}'${pointer.id}`;
+}
+
+/**
+ * App route for a group, with the pointer URL-encoded once.
  * @param {GroupPointer} pointer
  */
 export function groupHref(pointer) {
-  return `/groups/${encodeURIComponent(encodeGroupPointer(pointer))}`;
+  return `/groups/${encodeURIComponent(groupPointerString(pointer))}`;
 }
 
 /**

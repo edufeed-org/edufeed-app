@@ -70,12 +70,37 @@ describe('isValidRelayUrl', () => {
 });
 
 describe('groupHref', () => {
-  it('round-trips a pointer through the URL param', () => {
-    const pointer = { relay: 'wss://groups.example.com/', id: 'beechat' };
+  /** @param {{relay: string, id: string}} pointer */
+  function roundTrip(pointer) {
     const href = groupHref(pointer);
     expect(href.startsWith('/groups/')).toBe(true);
-    const param = decodeURIComponent(href.slice('/groups/'.length));
-    expect(parseGroupInput(param)).toEqual(pointer);
+    return parseGroupInput(decodeURIComponent(href.slice('/groups/'.length)));
+  }
+
+  it('round-trips a pointer through the URL param', () => {
+    const pointer = { relay: 'wss://groups.example.com/', id: 'beechat' };
+    expect(roundTrip(pointer)).toEqual(pointer);
+  });
+
+  // applesauce's encodeGroupPointer emits only the HOSTNAME, so a port and a
+  // ws: scheme are dropped: the link then addresses a DIFFERENT relay, and it
+  // fails by connecting to nothing rather than by erroring. Found in Chrome
+  // against a relay on a non-default port — every unit test was green.
+  it('keeps a non-default port', () => {
+    const pointer = { relay: 'wss://groups.example.com:8443/', id: 'beechat' };
+    expect(roundTrip(pointer)).toEqual(pointer);
+  });
+
+  it('keeps an insecure scheme (local relays)', () => {
+    const pointer = { relay: 'ws://127.0.0.1:17020/', id: 'allgemein' };
+    expect(roundTrip(pointer)).toEqual(pointer);
+  });
+
+  // The short `host'id` form is what people paste and read, so it must stay
+  // the shape for the ordinary case.
+  it('still uses the short host’id form when nothing would be lost', () => {
+    const href = groupHref({ relay: 'wss://groups.example.com/', id: 'beechat' });
+    expect(decodeURIComponent(href.slice('/groups/'.length))).toBe("groups.example.com'beechat");
   });
 });
 
