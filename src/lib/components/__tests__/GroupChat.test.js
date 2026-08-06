@@ -248,4 +248,15 @@ describe('GroupChat', () => {
     expect(link.getAttribute('href')).toBe(`/relays/${encodeURIComponent(GROUP_RELAY)}`);
     expect(link.textContent).toContain('groups.example.com');
   });
+
+  // A relay on another port is another relay, so the label has to carry it —
+  // found by mutation: with a portless fixture, `hostname` and `host` read the
+  // same and the test above could not tell them apart.
+  it('keeps the port in the host it names', async () => {
+    render(GroupChat, {
+      props: { pointer: { relay: 'wss://groups.example.com:8443/', id: 'beechat' } }
+    });
+    const link = await screen.findByTestId('group-host-link');
+    expect(link.textContent).toContain('groups.example.com:8443');
+  });
 });
