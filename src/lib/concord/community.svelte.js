@@ -16,10 +16,17 @@ import { memberTier } from './roles.js';
 /**
  * Visibility rule for the community "channels" tab (spec §7):
  * flag on AND (member OR pointer exists OR owner).
- * @param {{enabled: boolean, pointer: object|undefined, isOwner: boolean, isMember: boolean}} args
+ *
+ * NIP-29 channels are a SECOND source for the same tab and are not Concord:
+ * a community extended by groups has no Concord pointer, no Concord
+ * membership and need not have the Concord flag on, so every Concord input
+ * here is false for it. Its channels open the tab on their own — otherwise
+ * the only list they have would be unreachable.
+ * @param {{enabled: boolean, pointer: object|undefined, isOwner: boolean, isMember: boolean, hasGroupChannels?: boolean}} args
  * @returns {boolean}
  */
-export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember }) {
+export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember, hasGroupChannels }) {
+  if (hasGroupChannels) return true;
   if (!enabled) return false;
   return isMember || !!pointer || isOwner;
 }

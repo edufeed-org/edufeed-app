@@ -17,6 +17,7 @@
   } from '$lib/components/icons';
   import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
   import { shouldShowChannelsTab, useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -91,7 +92,10 @@
         enabled: concord.enabled,
         pointer: concord.pointer,
         isOwner,
-        isMember: concord.membership === 'member'
+        isMember: concord.membership === 'member',
+        // Second source for the same tab, and not Concord: a community
+        // extended by NIP-29 groups has none of the Concord inputs above.
+        hasGroupChannels: parseGroupPointers(communityEvent).length > 0
       })
     ) {
       // Insert after 'chat' to sit next to the public channels — but a

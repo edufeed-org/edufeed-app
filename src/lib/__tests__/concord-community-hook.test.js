@@ -5,10 +5,23 @@ import { memberTier, ADMIN_PERMS, MOD_PERMS } from '$lib/concord/roles.js';
 
 describe('shouldShowChannelsTab', () => {
   const base = { enabled: true, pointer: undefined, isOwner: false, isMember: false };
-  it('hidden when flag off, regardless of everything else', () => {
+  it('hidden when flag off, whatever the Concord side says', () => {
     expect(
       shouldShowChannelsTab({ ...base, enabled: false, pointer: {}, isOwner: true, isMember: true })
     ).toBe(false);
+  });
+  // A community extended by NIP-29 groups has no Concord area, no Concord
+  // pointer and no Concord membership — every input above is false for it.
+  // Gating its channels on the Concord flag would hide the only list they
+  // have.
+  it('visible for a community with group channels, even with the flag off', () => {
+    expect(shouldShowChannelsTab({ ...base, enabled: false, hasGroupChannels: true })).toBe(true);
+  });
+  it('visible for a stranger when the community lists group channels', () => {
+    expect(shouldShowChannelsTab({ ...base, hasGroupChannels: true })).toBe(true);
+  });
+  it('still hidden for a stranger with the flag on and no channels anywhere', () => {
+    expect(shouldShowChannelsTab({ ...base, hasGroupChannels: false })).toBe(false);
   });
   it('visible for members even without pointer (invite-first join)', () => {
     expect(shouldShowChannelsTab({ ...base, isMember: true })).toBe(true);
