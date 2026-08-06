@@ -9,6 +9,7 @@
 // new static edge into the concord dep tree.
 import { withoutConcordPointer, isConcordCommunityId } from './pointer.js';
 import { buildPointerUpdate } from './founding.js';
+import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
 
 /**
  * Unsigned kind-10222 template with the concord pointer removed. Preserves
@@ -24,27 +25,10 @@ export function buildPointerRemoval(communikeyEvent) {
   };
 }
 
-/**
- * Sign a 10222 template with the community signer and publish it through the
- * normal outbox path, including the community's own configured relays (same
- * rationale as foundConcordArea: they may not overlap the deployment's shared
- * communikey relays). Adds the signed event to the EventStore as an
- * optimistic local echo so pointer-derived UI (channels tab, settings card)
- * flips immediately.
- * @param {any} template
- * @param {any} communitySigner
- */
-async function signAndPublish(template, communitySigner) {
-  const signed = await communitySigner.signEvent(template);
-  const [{ publishEvent }, { eventStore }, { getCommunityGlobalRelays }] = await Promise.all([
-    import('$lib/services/publish-service.js'),
-    import('$lib/stores/nostr-infrastructure.svelte'),
-    import('$lib/helpers/communityRelays.js')
-  ]);
-  await publishEvent(signed, [], { additionalRelays: getCommunityGlobalRelays(signed) });
-  eventStore.add(signed);
-  return signed;
-}
+// The sign-and-publish path moved to helpers/publishCommunityUpdate.js so the
+// NIP-29 channel pointers use exactly this path rather than a second copy.
+// Behaviour is unchanged; only the home of the function moved.
+const signAndPublish = publishCommunityUpdate;
 
 /**
  * Link an existing Concord area to a Communikey community. The caller is
