@@ -195,4 +195,36 @@ describe('HostChannelSidebar', () => {
     render(HostChannelSidebar, { props: { relay: RELAY } });
     expect(holders.askedRelays.map((get) => get())).toContain(RELAY);
   });
+
+  // The directory page already holds this host's channels for its card grid.
+  // Fetching them a second time would mean two identical subscriptions on one
+  // page — and on a gated relay, two NIP-42 handshakes.
+  it('opens nothing of its own when the caller hands it the channels', () => {
+    const given = {
+      rows: [
+        {
+          key: 'group:x',
+          source: 'group',
+          name: 'von der Seite',
+          symbol: '#',
+          worldReadable: false,
+          accessible: true,
+          pending: false,
+          category: 'channel',
+          level: 'members',
+          pointer: { id: 'x', relay: RELAY }
+        }
+      ],
+      information: { name: 'Beispiel-Relay' },
+      authRequired: false,
+      authRefused: null,
+      loading: false
+    };
+    render(HostChannelSidebar, { props: { relay: RELAY, host: given } });
+
+    expect(rowNames()).toEqual(['# von der Seite']);
+    // The hook is still constructed (it cannot be called conditionally), but
+    // it must be asked for NO relay, which is what makes it idle.
+    expect(holders.askedRelays.map((get) => get())).not.toContain(RELAY);
+  });
 });

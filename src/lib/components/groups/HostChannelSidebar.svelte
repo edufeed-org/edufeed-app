@@ -34,11 +34,19 @@
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{relay: string | null, activeChannelId?: string | null}} */
-  let { relay, activeChannelId = null } = $props();
+  /**
+   * `host` is for a caller that already holds this host's channels — the
+   * directory page does, for its card grid. Passing it keeps the route to ONE
+   * relay subscription instead of two identical ones, which on a gated relay
+   * would also mean two NIP-42 handshakes for one page.
+   * @type {{relay: string | null, activeChannelId?: string | null, host?: any}}
+   */
+  let { relay, activeChannelId = null, host: given = null } = $props();
 
-  const getHost = useHostChannels(() => relay);
-  const host = $derived(getHost());
+  // The hook is always called (a hook cannot be called conditionally) but idles
+  // on a null relay, so a caller that supplies `host` opens nothing.
+  const getOwn = useHostChannels(() => (given ? null : relay));
+  const host = $derived(given ?? getOwn());
   const sections = $derived(splitChannelSections(host.rows));
   const hostBadges = $derived(relayBadges(host.information));
   const title = $derived(relay ? relayDisplayName(host.information, relay) : '');

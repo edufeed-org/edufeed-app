@@ -55,7 +55,9 @@
   </div>
 {:else}
   <div class="flex h-[calc(100vh-4rem)] min-h-0 overflow-hidden">
-    <HostChannelSidebar {relay} />
+    <!-- The page already holds this host's channels, so the column reads
+           them instead of opening a second identical subscription. -->
+    <HostChannelSidebar {relay} {host} />
     <div class="flex min-w-0 flex-1 flex-col">
       <!-- A refusal is the relay's own sentence and says more than ours would;
            "sign in" is only right when nobody has tried yet. Both beat a
