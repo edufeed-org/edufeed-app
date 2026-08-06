@@ -3081,6 +3081,7 @@
   "groups_reply": "Reply",
   "groups_input_placeholder": "Message {name}",
   "groups_channel_world_readable": "Open to the world — readable from outside the community",
+  "groups_rail_direct_messages": "Direct messages",
   "groups_invalid_pointer": "Not a valid group address",
   "groups_attach_tab": "Closed group",
   "concord_attach_tab": "Encrypted area",

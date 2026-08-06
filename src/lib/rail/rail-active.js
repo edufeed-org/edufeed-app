@@ -33,6 +33,34 @@ function decodeSegment(/** @type {string} */ segment) {
 }
 
 /**
+ * The host route you are on: which relay, and which of its channels is open.
+ *
+ * Two surfaces need this, and they must never disagree. The rail wants only
+ * the host (a channel IS a group and a group lives on exactly one host, so
+ * reading a channel is being inside that host). The channel sidebar wants the
+ * host AND the channel, to mark the row you are reading — and on a relay's
+ * directory there is no channel open, which is a state and not a failure.
+ *
+ * @param {string | null | undefined} pathname
+ * @returns {{relay: string, channelId: string | null} | null}
+ */
+export function hostRouteOf(pathname) {
+  const [head, tail] = String(pathname ?? '')
+    .split('/')
+    .filter(Boolean);
+  if (!head || !tail) return null;
+  const raw = decodeSegment(tail);
+  if (!raw) return null;
+
+  if (head === 'relays') return { relay: raw, channelId: null };
+  if (head === 'groups') {
+    const pointer = parseGroupInput(raw);
+    return pointer?.relay ? { relay: pointer.relay, channelId: pointer.id } : null;
+  }
+  return null;
+}
+
+/**
  * The container the current route is inside, or null for a route that is
  * inside none of them.
  *
@@ -49,22 +77,16 @@ export function activeRailTarget({
   if (isDashboardActive) return null;
   if (communityPubkey) return { kind: 'community', pubkey: communityPubkey };
 
+  // A channel route is the host's route as far as the rail is concerned — the
+  // same decoder the sidebar reads, so the two cannot drift.
+  const host = hostRouteOf(pathname);
+  if (host) return { kind: 'relay', relay: host.relay };
+
   const [head, tail] = String(pathname ?? '')
     .split('/')
     .filter(Boolean);
   if (!head || !tail) return null;
 
-  if (head === 'relays') {
-    const relay = decodeSegment(tail);
-    return relay ? { kind: 'relay', relay } : null;
-  }
-  if (head === 'groups') {
-    // A channel is a group and a group lives on one host, so a channel route
-    // is the host's route as far as the rail is concerned.
-    const raw = decodeSegment(tail);
-    const pointer = raw ? parseGroupInput(raw) : null;
-    return pointer?.relay ? { kind: 'relay', relay: pointer.relay } : null;
-  }
   if (head === 'private') {
     const communityId = decodeSegment(tail);
     return communityId ? { kind: 'area', communityId } : null;

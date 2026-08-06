@@ -9,78 +9,40 @@
 
   The card grid and the host badges are the ones the community channel
   overview already uses — a channel list is a channel list, and the reader
-  should not be able to tell which container produced it.
+  should not be able to tell which container produced it. The sidebar beside
+  it is the same one every channel of this host shows, so entering a channel
+  changes the pane and leaves the navigation where it was.
 -->
 <script>
   import { isValidRelayUrl } from '$lib/groups/groups.js';
-  import {
-    relayLabel,
-    relayDisplayName,
-    relayIconUrl,
-    announcesNip29
-  } from '$lib/groups/relay-directory.js';
-  import { useRelayDirectory } from '$lib/groups/relay-directory.svelte.js';
-  import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
-  import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
-  import { channelKey } from '$lib/groups/community-pointer.js';
-  import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
+  import { relayLabel, relayDisplayName, relayIconUrl } from '$lib/groups/relay-directory.js';
+  import { useHostChannels } from '$lib/groups/host-channels.svelte.js';
   import { relayBadges } from '$lib/groups/group-badges.js';
+  import { announcesNip29 } from '$lib/groups/relay-directory.js';
   import ChannelOverview from '$lib/components/community/channels/ChannelOverview.svelte';
+  import HostChannelSidebar from '$lib/components/groups/HostChannelSidebar.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { data } = $props();
 
   const relay = $derived(isValidRelayUrl(data.rawRelay) ? data.rawRelay : null);
 
-  // The user's own list, narrowed to THIS relay: it is one of the three
-  // sources, and the only one that can name a channel the relay hides.
-  const getMyGroups = useMyGroups();
-  const remembered = $derived(
-    getMyGroups()
-      .filter((group) => group.relay === relay)
-      .map((group) => group.id)
-  );
-
-  const getDirectory = useRelayDirectory(
-    () => relay,
-    () => remembered
-  );
-  const directory = $derived(getDirectory());
-
-  const getInformation = useRelayInformation(() => relay);
-  const hostBadges = $derived(relayBadges(getInformation()));
-  // The host's own name heads the page, the way another client shows it; the
-  // bare address stays in the browser tab.
-
-  // Metadata events -> the same row shape the community overview renders, so
-  // the glyph, the access wording and the "still loading" state are decided in
-  // exactly one place for both containers.
-  const rows = $derived.by(() => {
-    if (!relay) return [];
-    /** @type {Record<string, any>} */
-    const metadataByKey = {};
-    /** @type {Array<{id: string, relay: string}>} */
-    const pointers = [];
-    for (const event of directory.metadata) {
-      const id = (event?.tags ?? []).find((/** @type {string[]} */ t) => t?.[0] === 'd')?.[1];
-      if (!id) continue;
-      const pointer = { id, relay };
-      const key = channelKey(pointer);
-      if (!key) continue;
-      metadataByKey[key] = event;
-      pointers.push(pointer);
-    }
-    return buildChannelRows({ groupPointers: pointers, metadataByKey });
-  });
+  // The three sources, the NIP-42 handling and the merge into rows all live in
+  // useHostChannels — shared with the sidebar, so the page and the column
+  // beside it can never show different channel lists.
+  const getHost = useHostChannels(() => relay);
+  const host = $derived(getHost());
+  const rows = $derived(host.rows);
+  const hostBadges = $derived(relayBadges(host.information));
 
   // "Nothing here" and "nothing YET" are different sentences, and a relay that
   // simply has not answered must never render as an empty host.
-  const settling = $derived(directory.loading && rows.length === 0);
+  const settling = $derived(host.loading && rows.length === 0);
   // Measured on relay.damus.io: a general-purpose relay carries stray
   // kind:39000s from ordinary users, and pinning `authors` to the key its
   // NIP-11 names filters them out — a correct zero that reads like a broken
   // page unless we say why.
-  const notNip29 = $derived(announcesNip29(getInformation()) === false && rows.length === 0);
+  const notNip29 = $derived(announcesNip29(host.information) === false && rows.length === 0);
 </script>
 
 <svelte:head>
@@ -92,35 +54,38 @@
     {m.relay_directory_invalid()}
   </div>
 {:else}
-  <div class="flex h-[calc(100vh-4rem)] flex-col">
-    <!-- A refusal is the relay's own sentence and says more than ours would;
-         "sign in" is only right when nobody has tried yet. Both beat a
-         spinner that can never end: a gated request emits nothing at all. -->
-    {#if directory.authRefused && rows.length === 0}
-      <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-auth-refused">
-        {m.relay_directory_auth_refused({ reason: directory.authRefused })}
-      </p>
-    {:else if directory.authRequired && rows.length === 0}
-      <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-auth">
-        {m.relay_directory_auth_required()}
-      </p>
-    {:else if notNip29}
-      <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-not-nip29">
-        {m.relay_directory_not_nip29()}
-      </p>
-    {:else if settling}
-      <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-loading">
-        {m.relay_directory_loading()}
-      </p>
-    {:else}
-      <ChannelOverview
-        {rows}
-        {hostBadges}
-        title={relayDisplayName(getInformation(), relay)}
-        titleIcon={relayIconUrl(getInformation()) ?? ''}
-        lead={m.relay_directory_lead()}
-        empty={m.relay_directory_empty()}
-      />
-    {/if}
+  <div class="flex h-[calc(100vh-4rem)] min-h-0 overflow-hidden">
+    <HostChannelSidebar {relay} />
+    <div class="flex min-w-0 flex-1 flex-col">
+      <!-- A refusal is the relay's own sentence and says more than ours would;
+           "sign in" is only right when nobody has tried yet. Both beat a
+           spinner that can never end: a gated request emits nothing at all. -->
+      {#if host.authRefused && rows.length === 0}
+        <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-auth-refused">
+          {m.relay_directory_auth_refused({ reason: host.authRefused })}
+        </p>
+      {:else if host.authRequired && rows.length === 0}
+        <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-auth">
+          {m.relay_directory_auth_required()}
+        </p>
+      {:else if notNip29}
+        <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-not-nip29">
+          {m.relay_directory_not_nip29()}
+        </p>
+      {:else if settling}
+        <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-loading">
+          {m.relay_directory_loading()}
+        </p>
+      {:else}
+        <ChannelOverview
+          {rows}
+          {hostBadges}
+          title={relayDisplayName(host.information, relay)}
+          titleIcon={relayIconUrl(host.information) ?? ''}
+          lead={m.relay_directory_lead()}
+          empty={m.relay_directory_empty()}
+        />
+      {/if}
+    </div>
   </div>
 {/if}

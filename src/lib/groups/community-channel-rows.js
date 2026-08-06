@@ -26,6 +26,7 @@ import { safeImageUrl } from './relay-directory.js';
  * @typedef {ChannelRowBase & {source: 'concord', channel_id: string}} ConcordChannelRow
  * @typedef {ChannelRowBase & {
  *   source: 'group',
+ *   category: 'channel' | 'dm',
  *   level: import('./channel-access.js').ChannelAccessLevel,
  *   about?: string,
  *   picture?: string,
@@ -81,6 +82,7 @@ export function buildChannelRows({ concordChannels = [], groupPointers = [], met
       // locked meanwhile, and callers can show that it is still settling.
       pending: level === 'unknown',
       source: 'group',
+      category: channelCategory(metadata),
       level,
       ...(metadataTag(metadata, 'about') ? { about: metadataTag(metadata, 'about') } : {}),
       // A channel's own picture, when its kind:39000 carries one. Absent is
@@ -94,6 +96,29 @@ export function buildChannelRows({ concordChannels = [], groupPointers = [], met
   }
 
   return rows.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+}
+
+/**
+ * Whether a group is a conversation between people or a channel.
+ *
+ * NIP-29 has one object for both, so the only honest source is what the group
+ * says about ITSELF: the `t` tag on its kind:39000. Buzz relays write
+ * `t=stream` on a channel and `t=dm` on a direct message; a host that uses no
+ * such convention writes no `t`, and everything it has is a channel.
+ *
+ * Deliberately NOT read: the `hidden` tag. Armada treats it as a second DM
+ * signal because early Buzz DMs carried no `t`; the relay measured here writes
+ * both, so the weaker signal buys nothing and would misfile a merely unlisted
+ * channel on any other host.
+ *
+ * @param {{tags?: string[][]} | null | undefined} metadata
+ * @returns {'channel' | 'dm'}
+ */
+function channelCategory(metadata) {
+  // Every `t`, not just the first: a group may carry more than one topic tag,
+  // and being a DM is a property of the group, not of tag order.
+  const tags = Array.isArray(metadata?.tags) ? metadata.tags : [];
+  return tags.some((t) => t[0] === 't' && t[1] === 'dm') ? 'dm' : 'channel';
 }
 
 /** @param {{tags?: string[][]} | null | undefined} metadata */

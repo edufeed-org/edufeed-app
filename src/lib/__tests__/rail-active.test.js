@@ -11,7 +11,7 @@
  * comparison that decides whether an entry IS that container.
  */
 import { describe, it, expect } from 'vitest';
-import { activeRailTarget, isEntryActive } from '$lib/rail/rail-active.js';
+import { activeRailTarget, hostRouteOf, isEntryActive } from '$lib/rail/rail-active.js';
 
 const COMMUNITY = 'a'.repeat(64);
 
@@ -123,5 +123,45 @@ describe('isEntryActive', () => {
     expect(isEntryActive(communityEntry, null)).toBe(false);
     expect(isEntryActive(areaEntry, null)).toBe(false);
     expect(isEntryActive(relayEntry('wss://relay.example.com'), null)).toBe(false);
+  });
+});
+
+// The rail only ever needed the HOST out of a route. A channel sidebar needs
+// the channel too — which row to mark, and whether there is one at all (a
+// relay directory is inside the host with no channel open). One decoder
+// answers both questions, so the two surfaces can never disagree about which
+// host you are looking at.
+describe('hostRouteOf', () => {
+  it('reads a channel and its host out of a group route', () => {
+    const path = `/groups/${encodeURIComponent("wss://relay.example.com'general")}`;
+    expect(hostRouteOf(path)).toEqual({ relay: 'wss://relay.example.com/', channelId: 'general' });
+  });
+
+  it('reads the host out of a directory route, with no channel open', () => {
+    const path = `/relays/${encodeURIComponent('wss://relay.example.com')}`;
+    expect(hostRouteOf(path)).toEqual({ relay: 'wss://relay.example.com', channelId: null });
+  });
+
+  it('is nothing outside a host route, and never throws on a broken one', () => {
+    expect(hostRouteOf('/discover')).toBeNull();
+    expect(hostRouteOf('/private/area-1')).toBeNull();
+    expect(hostRouteOf('/relays')).toBeNull();
+    expect(hostRouteOf('/relays/%')).toBeNull();
+    expect(hostRouteOf('/groups/not%20a%20pointer')).toBeNull();
+    expect(hostRouteOf('')).toBeNull();
+  });
+
+  // The rail's answer has to stay derived from this one, or the sidebar could
+  // mark a host the rail does not.
+  it('agrees with the rail about which host a route is inside', () => {
+    for (const path of [
+      `/groups/${encodeURIComponent("wss://relay.example.com'general")}`,
+      `/relays/${encodeURIComponent('wss://edufeed.communities.buzz.xyz')}`
+    ]) {
+      expect(activeRailTarget({ pathname: path })).toEqual({
+        kind: 'relay',
+        relay: /** @type {any} */ (hostRouteOf(path)).relay
+      });
+    }
   });
 });

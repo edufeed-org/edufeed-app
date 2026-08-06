@@ -38,6 +38,7 @@
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
   import { get } from 'svelte/store';
+  import ChannelRailRow from './ChannelRailRow.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelOverview from './ChannelOverview.svelte';
   import ChannelChat from './ChannelChat.svelte';
@@ -321,64 +322,40 @@
           <span class="block">{m.concord_legend_private()}</span>
         </p>
       {/if}
-      <!-- Tighter, list-style rows (Armada-parity cleanup) — deliberately NOT
-        `btn` (its min-height/border/shadow chrome reads as a toolbar, not a
-        channel list). Active state reuses the app's existing subtle
-        active-nav treatment (BottomTabBar.svelte: bg-primary/10 text-primary)
-        instead of the previous btn-active fill. -->
+      <!-- Tighter, list-style rows (Armada-parity cleanup). The row markup
+        itself lives in ChannelRailRow, shared with the host sidebar — the two
+        rails must not drift apart channel by channel. -->
       {#each channelRows as row (row.key)}
         {#if row.source === 'concord'}
           {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
-          <button
-            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-150 {activeChannel?.channel_id ===
-            row.channel_id
-              ? 'bg-primary/10 font-semibold text-primary'
-              : 'text-base-content/80 hover:bg-base-300/60'}"
+          <ChannelRailRow
+            symbol={row.symbol}
+            name={row.name}
+            active={activeChannel?.channel_id === row.channel_id}
+            dimmed={!row.accessible}
+            bold={flags.unread}
             onclick={() => {
               if (concord.communityId && row.channel_id)
                 selectConcordChannel(concord.communityId, row.channel_id);
               mobileChat = true;
             }}
           >
-            <span
-              aria-hidden="true"
-              title={row.symbol === '#' ? m.concord_legend_public() : m.concord_legend_private()}
-              >{row.symbol}</span
-            >
-            <span
-              class="min-w-0 flex-1 truncate {row.accessible ? '' : 'opacity-50'} {flags.unread
-                ? 'font-bold'
-                : ''}">{row.name}</span
-            >
-            <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
-          </button>
+            {#snippet trailing()}
+              <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+            {/snippet}
+          </ChannelRailRow>
         {:else}
           <!-- A NIP-29 channel is a group of its own, and the group chat that
             renders it already exists at /groups/<host'id> — so the rail links
             there rather than duplicating the chat stack. -->
-          <a
+          <ChannelRailRow
             href={groupHref(row.pointer)}
-            data-testid="group-channel-row"
-            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-base-content/80 transition-colors duration-150 hover:bg-base-300/60"
-          >
-            <span
-              aria-hidden="true"
-              title={row.symbol === '#' ? m.concord_legend_public() : m.concord_legend_private()}
-              >{row.symbol}</span
-            >
-            <span class="min-w-0 flex-1 truncate {row.pending ? 'opacity-50' : ''}">{row.name}</span
-            >
-            {#if row.worldReadable}
-              <!-- Weltoffen: readable from outside the community entirely.
-                An addition to the # glyph, never a third category. -->
-              <span
-                aria-hidden="true"
-                data-testid="world-readable-badge"
-                title={m.groups_channel_world_readable()}
-                class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
-              >
-            {/if}
-          </a>
+            testid="group-channel-row"
+            symbol={row.symbol}
+            name={row.name}
+            dimmed={row.pending}
+            worldReadable={row.worldReadable}
+          />
         {/if}
       {/each}
       {#if extendedByGroups && canAttachGroup}
