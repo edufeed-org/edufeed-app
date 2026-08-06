@@ -135,6 +135,22 @@ describe('HostChannelSidebar', () => {
     expect(rowNames()?.at(-1)).toContain('DM');
   });
 
+  // '#' stands for both "world-readable" and "everyone here", so the globe is
+  // the only thing in the row that tells the two apart.
+  it('marks a world-readable channel, and only that one', () => {
+    holders.directory.metadata = [
+      meta('offen', [['name', 'offen']]),
+      meta('intern', [['name', 'intern'], ['private']])
+    ];
+    render(HostChannelSidebar, { props: { relay: RELAY } });
+
+    const rows = screen.getAllByTestId('host-channel-row');
+    expect(rows).toHaveLength(2);
+    const withGlobe = rows.filter((r) => r.querySelector('[data-testid="world-readable-badge"]'));
+    expect(withGlobe).toHaveLength(1);
+    expect(withGlobe[0].textContent).toContain('offen');
+  });
+
   // Most hosts do not use the `t` convention at all. An empty "Direct
   // messages" heading would be a section we invented.
   it('has no direct-message section on a host that names none', () => {

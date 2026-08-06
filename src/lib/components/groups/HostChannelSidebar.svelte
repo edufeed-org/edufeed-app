@@ -108,6 +108,11 @@
           </div>
           {#each section.rows as row (row.key)}
             {#if row.source === 'group'}
+              <!-- `active` needs no `activeChannelId &&` guard: a row's id is
+                   always a non-empty string (channelKey rejects anything
+                   else), so the compare is already false on a directory
+                   route. The guard was unreachable, and an unreachable line
+                   is one no test can ever measure. -->
               <ChannelRailRow
                 href={groupHref(row.pointer)}
                 testid="host-channel-row"
@@ -115,7 +120,7 @@
                 name={row.name}
                 dimmed={row.pending}
                 worldReadable={row.worldReadable}
-                active={!!activeChannelId && row.pointer.id === activeChannelId}
+                active={row.pointer.id === activeChannelId}
               />
             {/if}
           {/each}

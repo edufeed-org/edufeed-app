@@ -110,6 +110,15 @@ describe('splitChannelSections', () => {
     expect(dms).toEqual([]);
   });
 
+  // The rows arrive from a network-fed builder through two call sites; a hole
+  // in the list must not become a row in a section.
+  it('drops a hole in the list rather than sectioning it', () => {
+    const [row] = rowsFor({ allgemein: [['name', 'allgemein']] });
+    const { channels, dms } = splitChannelSections(/** @type {any} */ ([null, row, undefined]));
+    expect(channels).toEqual([row]);
+    expect(dms).toEqual([]);
+  });
+
   it('survives an empty list', () => {
     expect(splitChannelSections([])).toEqual({ channels: [], dms: [] });
     expect(splitChannelSections(/** @type {any} */ (undefined))).toEqual({ channels: [], dms: [] });
