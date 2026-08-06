@@ -230,8 +230,15 @@ describe('CommunitySidebar — the arrangeable rail', () => {
     holders.locked = true;
     render(CommunitySidebar, { props: PROPS });
     // Present — otherwise this would pass on a rail that simply never renders
-    // it — but not a slot, so it can never be dragged into a folder.
-    expect(screen.getAllByTestId('concord_unlock_areas').length).toBeGreaterThan(0);
+    // it — but not draggable and carrying no anchor, so it can neither be
+    // moved nor filed into a folder. Found by mutation: asserting only on the
+    // slot testid passed while the button carried a rail anchor.
+    const buttons = screen.getAllByTestId('concord_unlock_areas');
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.getAttribute('draggable')).not.toBe('true');
+      expect(button.closest('[data-rail-anchor]')).toBeNull();
+    }
     expect(anchors()).toEqual([`community:${COMMUNITY_A}`, `community:${COMMUNITY_B}`]);
   });
 });

@@ -187,6 +187,18 @@ describe('moveEntry', () => {
     expect(moveEntry(layout, 'nothing', { beforeKey: 'a' })).toEqual(layout);
   });
 
+  // Found by mutation: returning the layout with the dragged entry already
+  // lifted out broke no test. A drop onto a row that is not in the layout —
+  // a container that left while the drag was in flight — would then take the
+  // dragged one off the rail with it.
+  it('keeps the entry when the drop target is not in the layout', () => {
+    const layout = normalizeLayout([item('a'), folder('f1', 'F', ['b'])], live);
+    expect(moveEntry(layout, 'a', { beforeKey: 'left-the-rail' })).toEqual(layout);
+    expect(moveEntry(layout, 'a', { afterKey: 'left-the-rail' })).toEqual(layout);
+    expect(moveEntry(layout, folderAnchor('f1'), { beforeKey: 'left-the-rail' })).toEqual(layout);
+    expect(flattenLayout(moveEntry(layout, 'a', { beforeKey: 'left-the-rail' }))).toContain('a');
+  });
+
   it('leaves the layout it was given untouched', () => {
     const layout = normalizeLayout([], live);
     const before = JSON.stringify(layout);
