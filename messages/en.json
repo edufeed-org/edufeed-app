@@ -3095,5 +3095,6 @@
   "groups_attach_failed": "The channel could not be added. Please try again.",
   "groups_pick_channel_title": "Pick a channel",
   "groups_pick_channel_body": "This community's channels are in the list. Open one to read along and write.",
-  "groups_attach_title": "Add channel"
+  "groups_attach_title": "Add channel",
+  "groups_sidebar_my_groups": "My groups"
 }

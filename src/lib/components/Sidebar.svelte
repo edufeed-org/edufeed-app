@@ -16,6 +16,11 @@
     useConcordListLocked
   } from '$lib/concord/unlinked-areas.svelte.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
+  // NIP-29 groups the user belongs to that no followed community shows as a
+  // channel — the same idea as the unlinked Concord areas below, one section
+  // further down (laoc 2026-08-06: "wie vorher die Concord Gruppen").
+  import { useUnlinkedGroups } from '$lib/groups/unlinked-groups.svelte.js';
+  import { groupHref } from '$lib/groups/groups.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import { LockOpenIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
@@ -30,6 +35,9 @@
 
   const getUnlinkedAreas = useUnlinkedConcordAreas();
   const unlinkedAreas = $derived(getUnlinkedAreas());
+
+  const getUnlinkedGroups = useUnlinkedGroups();
+  const unlinkedGroupRows = $derived(getUnlinkedGroups());
 
   // "Sync private areas" affordance (Fix 2): with autoUnlock:false the
   // Community List (kind 13302) stays encrypted after initial sync — with
@@ -189,6 +197,40 @@
           >
             {area.name}
           </p>
+        </a>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+{#if unlinkedGroupRows.length > 0}
+  <div class="mt-4 space-y-2">
+    <h2 class="text-base font-semibold text-base-content">{m.groups_sidebar_my_groups()}</h2>
+    <div class="space-y-2">
+      {#each unlinkedGroupRows as row (row.key)}
+        <a
+          href={groupHref(row.pointer)}
+          data-testid="sidebar-group-row"
+          class="flex transform cursor-pointer items-center gap-2 rounded-lg border border-base-200 bg-base-100 p-3 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:border-primary/20 hover:shadow-md"
+        >
+          <span
+            aria-hidden="true"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-200 text-sm"
+            >{row.symbol}</span
+          >
+          <p
+            class="min-w-0 flex-1 truncate text-sm font-medium text-base-content transition-colors duration-300 hover:text-primary"
+          >
+            {row.name}
+          </p>
+          {#if row.worldReadable}
+            <span
+              aria-hidden="true"
+              data-testid="sidebar-group-world-readable"
+              title={m.groups_channel_world_readable()}
+              class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
+            >
+          {/if}
         </a>
       {/each}
     </div>
