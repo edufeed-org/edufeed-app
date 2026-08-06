@@ -37,6 +37,12 @@ describe('relayBadges', () => {
     expect(relayBadges({ supported_nips: [1, 11] }).map((b) => b.id)).not.toContain('nip29');
   });
 
+  // A substring match would read "1,129" as containing 29. The list must be
+  // searched as a list, not as text.
+  it('does not read 29 out of a neighbouring number', () => {
+    expect(relayBadges({ supported_nips: [1, 129] }).map((b) => b.id)).not.toContain('nip29');
+  });
+
   // A NIP-11 document is untrusted network input; a relay may send anything.
   it('survives a supported_nips that is not a list', () => {
     expect(() => relayBadges({ supported_nips: 'twentynine' })).not.toThrow();

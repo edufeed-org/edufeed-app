@@ -31,7 +31,17 @@ function signWith(template, sk) {
 const metadataEvent = signWith(
   {
     kind: 39000,
-    tags: [['d', 'beechat'], ['name', 'Bee Chat'], ['about', 'buzzing'], ['public'], ['open']]
+    // `private` alongside the dead `public`/`open` tags of an older draft:
+    // this group IS members-only, and a reader that trusts the old tags would
+    // say the opposite.
+    tags: [
+      ['d', 'beechat'],
+      ['name', 'Bee Chat'],
+      ['about', 'buzzing'],
+      ['private'],
+      ['public'],
+      ['open']
+    ]
   },
   RELAY_SK
 );
@@ -215,16 +225,17 @@ describe('GroupChat', () => {
     expect(badges.textContent).toContain('pyramid 1.2');
   });
 
-  // The fixture carries `public`/`open` — the dead inverse tags of an older
-  // NIP-29 draft, which applesauce still reads. A group with neither
-  // `private` nor `closed` is open, and the header must not invent a
-  // restriction out of tags that mean nothing today.
-  it('claims no access restriction for a group the relay leaves open', async () => {
+  // The fixture is `private` AND carries the dead `public`/`open` tags of an
+  // older NIP-29 draft — the ones applesauce still reads. Reading access off
+  // the PARSED metadata instead of the event's own tags would label this
+  // members-only group as open, so this is the test that makes the choice of
+  // input load-bearing rather than incidental.
+  it('reads access from the group event, not from the dead openness tags', async () => {
     render(GroupChat, { props: { pointer } });
     await screen.findByTestId('group-name');
-    await screen.findByTestId('group-badges');
 
-    expect(screen.queryByTestId('group-badge-members')).toBeNull();
+    expect(await screen.findByTestId('group-badge-members')).toBeTruthy();
+    // `closed` is absent, and members-only already says what a reader needs.
     expect(screen.queryByTestId('group-badge-invite')).toBeNull();
   });
 });
