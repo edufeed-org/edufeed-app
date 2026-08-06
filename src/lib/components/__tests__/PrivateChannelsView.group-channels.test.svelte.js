@@ -35,7 +35,9 @@ const holders = vi.hoisted(() => ({
     canCreateInvite: false
   }),
   /** @type {Record<string, any[]>} events the fake relay hands back */
-  events: /** @type {any} */ ({})
+  events: /** @type {any} */ ({}),
+  /** @type {any} the relay's NIP-11 document; null = the relay never answers */
+  relayInfo: /** @type {any} */ (null)
 }));
 vi.mock('$lib/concord/community.svelte.js', () => ({
   useConcordArea: () => () => holders.concord
@@ -56,7 +58,17 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async (importOriginal) => {
             for (const event of holders.events[relay] ?? []) handlers.next(event);
             return { unsubscribe() {} };
           }
-        })
+        }),
+        // The channel overview reads the relay's NIP-11 document. This fake
+        // answers with whatever the test put in `holders.relayInfo` — a relay
+        // that never answers (the default) simply has no badges, which is what
+        // the rail tests here are about.
+        information$: {
+          subscribe: (/** @type {any} */ handlers) => {
+            if (holders.relayInfo) handlers.next(holders.relayInfo);
+            return { unsubscribe() {} };
+          }
+        }
       })
     }
   };

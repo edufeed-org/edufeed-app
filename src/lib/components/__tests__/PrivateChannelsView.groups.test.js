@@ -24,7 +24,10 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: mockManager,
   useActiveUser: () => () => mockManager.active
 }));
-vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: { concord: { enabled: false } } }));
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: { concord: { enabled: false } },
+  configReady: { subscribe: () => () => {} }
+}));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 
 const holders = vi.hoisted(() => ({

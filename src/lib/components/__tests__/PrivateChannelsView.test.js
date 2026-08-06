@@ -22,7 +22,8 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: { concord: { enabled: true } }
+  runtimeConfig: { concord: { enabled: true } },
+  configReady: { subscribe: () => () => {} }
 }));
 
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));

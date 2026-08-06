@@ -17,8 +17,14 @@ import { BehaviorSubject } from 'rxjs';
 import { flushSync } from 'svelte';
 import { useConcordCommunity } from '$lib/concord/community.svelte.js';
 
+// `configReady` as well as `runtimeConfig`: accounts.svelte.js imports this
+// module dynamically during account persistence setup, and a mock that omits
+// the store makes THAT throw — in whichever worker vitest happens to schedule
+// this file into. A partial mock of a module someone else imports is a hazard
+// that only shows up when the sharding moves.
 vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: { concord: { enabled: true } }
+  runtimeConfig: { concord: { enabled: true } },
+  configReady: { subscribe: () => () => {} }
 }));
 
 // Mutable holders so each test can swap the mocked client/state without
