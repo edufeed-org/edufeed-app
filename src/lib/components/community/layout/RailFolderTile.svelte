@@ -7,7 +7,7 @@
   worse than the flat list it replaces.
 -->
 <script>
-  import { relayLabel } from '$lib/groups/relay-directory.js';
+  import RailRelayIcon from './RailRelayIcon.svelte';
   import { GridIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
@@ -51,10 +51,7 @@
         class="h-full w-full"
       />
     {:else}
-      <span
-        class="flex h-full w-full items-center justify-center rounded-full bg-base-100 text-[0.6rem] font-bold uppercase"
-        aria-hidden="true">{relayLabel(entry.relay).slice(0, 1)}</span
-      >
+      <RailRelayIcon relay={entry.relay} size="h-full w-full" />
     {/if}
   {/each}
   {#if preview.length === 0}

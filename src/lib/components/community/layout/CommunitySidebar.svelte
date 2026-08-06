@@ -25,7 +25,9 @@
   // order the user controls, with Discord-style folders. Every rule is pure
   // and lives in $lib/rail; this component only wires the gesture to it.
   import { buildRailEntries, entriesOf } from '$lib/rail/rail-entries.js';
-  import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
+  import { relayHref } from '$lib/groups/relay-directory.js';
+  import RailRelayIcon from './RailRelayIcon.svelte';
+  import RelayLabel from './RelayLabel.svelte';
   import {
     folderAnchor,
     dropIntent,
@@ -525,11 +527,10 @@
       data-relay={entry.relay}
       class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300"
     >
-      <span
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-300 text-sm font-bold uppercase"
-        aria-hidden="true">{relayLabel(entry.relay).slice(0, 1)}</span
-      >
-      <span class="flex-1 truncate text-left text-sm font-medium">{relayLabel(entry.relay)}</span>
+      <RailRelayIcon relay={entry.relay} size="h-8 w-8" rounded="rounded-lg" />
+      <span class="flex-1 truncate text-left text-sm font-medium">
+        <RelayLabel relay={entry.relay} />
+      </span>
       <span class="shrink-0 text-[0.7rem] opacity-70">{entry.rows.length}</span>
     </a>
   {/if}

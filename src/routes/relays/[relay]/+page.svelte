@@ -13,7 +13,12 @@
 -->
 <script>
   import { isValidRelayUrl } from '$lib/groups/groups.js';
-  import { relayLabel } from '$lib/groups/relay-directory.js';
+  import {
+    relayLabel,
+    relayDisplayName,
+    relayIconUrl,
+    announcesNip29
+  } from '$lib/groups/relay-directory.js';
   import { useRelayDirectory } from '$lib/groups/relay-directory.svelte.js';
   import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
@@ -44,6 +49,8 @@
 
   const getInformation = useRelayInformation(() => relay);
   const hostBadges = $derived(relayBadges(getInformation()));
+  // The host's own name heads the page, the way another client shows it; the
+  // bare address stays in the browser tab.
 
   // Metadata events -> the same row shape the community overview renders, so
   // the glyph, the access wording and the "still loading" state are decided in
@@ -69,6 +76,11 @@
   // "Nothing here" and "nothing YET" are different sentences, and a relay that
   // simply has not answered must never render as an empty host.
   const settling = $derived(directory.loading && rows.length === 0);
+  // Measured on relay.damus.io: a general-purpose relay carries stray
+  // kind:39000s from ordinary users, and pinning `authors` to the key its
+  // NIP-11 names filters them out — a correct zero that reads like a broken
+  // page unless we say why.
+  const notNip29 = $derived(announcesNip29(getInformation()) === false && rows.length === 0);
 </script>
 
 <svelte:head>
@@ -92,6 +104,10 @@
       <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-auth">
         {m.relay_directory_auth_required()}
       </p>
+    {:else if notNip29}
+      <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-not-nip29">
+        {m.relay_directory_not_nip29()}
+      </p>
     {:else if settling}
       <p class="p-8 text-center text-sm opacity-70" data-testid="relay-directory-loading">
         {m.relay_directory_loading()}
@@ -100,7 +116,8 @@
       <ChannelOverview
         {rows}
         {hostBadges}
-        title={relayLabel(relay)}
+        title={relayDisplayName(getInformation(), relay)}
+        titleIcon={relayIconUrl(getInformation()) ?? ''}
         lead={m.relay_directory_lead()}
         empty={m.relay_directory_empty()}
       />

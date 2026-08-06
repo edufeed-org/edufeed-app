@@ -205,3 +205,33 @@ describe('buildChannelRows', () => {
     expect(Object.getOwnPropertySymbols(event)).toEqual([]);
   });
 });
+
+describe('channel pictures', () => {
+  const key = 'general@wss://r.example/';
+  const pointer = { id: 'general', relay: 'wss://r.example/' };
+  /** @param {string[][]} tags */
+  const meta = (tags) => ({ [key]: { kind: 39000, tags: [['d', 'general'], ...tags] } });
+
+  it('carries the picture a kind:39000 publishes', () => {
+    const [row] = buildChannelRows({
+      groupPointers: [pointer],
+      metadataByKey: meta([['picture', 'https://example.test/a.png']])
+    });
+    expect(/** @type {any} */ (row).picture).toBe('https://example.test/a.png');
+  });
+
+  // Omitted, not null: a card must not reserve space for a picture nobody
+  // published, and "no key" is what the template checks.
+  it('omits the key when there is no picture', () => {
+    const [row] = buildChannelRows({ groupPointers: [pointer], metadataByKey: meta([]) });
+    expect('picture' in /** @type {any} */ (row)).toBe(false);
+  });
+
+  it('drops a picture that is not an http(s) URL', () => {
+    const [row] = buildChannelRows({
+      groupPointers: [pointer],
+      metadataByKey: meta([['picture', 'javascript:alert(1)']])
+    });
+    expect('picture' in /** @type {any} */ (row)).toBe(false);
+  });
+});

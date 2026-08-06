@@ -9,6 +9,7 @@
 // Rows are plain data. Rendering (PrivateChannelsView) stays presentational.
 import { channelAccessLevel, channelGlyph } from './channel-access.js';
 import { channelKey } from './community-pointer.js';
+import { safeImageUrl } from './relay-directory.js';
 
 // A row is one of two shapes, and which one is decided by `source`. Modelling
 // that as a union rather than two optional fields lets the rail narrow on
@@ -27,6 +28,7 @@ import { channelKey } from './community-pointer.js';
  *   source: 'group',
  *   level: import('./channel-access.js').ChannelAccessLevel,
  *   about?: string,
+ *   picture?: string,
  *   pointer: {id: string, relay: string, name?: string, access?: string}
  * }} GroupChannelRow
  * @typedef {ConcordChannelRow | GroupChannelRow} ChannelRow
@@ -81,6 +83,12 @@ export function buildChannelRows({ concordChannels = [], groupPointers = [], met
       source: 'group',
       level,
       ...(metadataTag(metadata, 'about') ? { about: metadataTag(metadata, 'about') } : {}),
+      // A channel's own picture, when its kind:39000 carries one. Absent is
+      // the norm, so the key is omitted rather than set to null — a card
+      // reserves no space for a picture nobody published.
+      ...(safeImageUrl(metadataTag(metadata, 'picture'))
+        ? { picture: /** @type {string} */ (safeImageUrl(metadataTag(metadata, 'picture'))) }
+        : {}),
       pointer
     });
   }

@@ -3115,5 +3115,6 @@
   "relay_directory_loading": "Asking the relay for its channels…",
   "relay_directory_invalid": "That is not a relay address.",
   "relay_directory_source_private": "Only your own records name this channel — the relay does not list it publicly.",
-  "relay_directory_auth_refused": "This relay would not let you in: {reason}"
+  "relay_directory_auth_refused": "This relay would not let you in: {reason}",
+  "relay_directory_not_nip29": "This host does not announce NIP-29 groups, so it has no channel list to show."
 }

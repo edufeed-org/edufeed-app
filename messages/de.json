@@ -3115,5 +3115,6 @@
   "relay_directory_loading": "Frage das Relay nach seinen Kanälen…",
   "relay_directory_invalid": "Das ist keine Relay-Adresse.",
   "relay_directory_source_private": "Diesen Kanal kennen nur deine eigenen Einträge — das Relay listet ihn nicht öffentlich.",
-  "relay_directory_auth_refused": "Dieses Relay hat dich abgewiesen: {reason}"
+  "relay_directory_auth_refused": "Dieses Relay hat dich abgewiesen: {reason}",
+  "relay_directory_not_nip29": "Dieser Host kündigt keine NIP-29-Gruppen an, hat also keine Kanalliste."
 }

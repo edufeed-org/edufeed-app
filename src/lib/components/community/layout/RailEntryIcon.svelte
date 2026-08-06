@@ -11,7 +11,9 @@
 -->
 <script>
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
-  import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
+  import { relayHref, relayDisplayName } from '$lib/groups/relay-directory.js';
+  import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
+  import RailRelayIcon from './RailRelayIcon.svelte';
   import { resolve } from '$app/paths';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
@@ -27,6 +29,12 @@
    * }}
    */
   let { entry, isActive = false, size = 'h-12 w-12', onSelect } = $props();
+
+  // Null for anything that is not a relay: the hook subscribes to nothing for
+  // a null URL, so this costs a community or area entry nothing.
+  const getRelayInfo = useRelayInformation(() =>
+    entry.kind === 'relay' ? /** @type {any} */ (entry).relay : null
+  );
 </script>
 
 {#if entry.kind === 'community'}
@@ -60,16 +68,13 @@
        an access level for all of them, so the icon carries the host's initial
        and the tooltip names it in full. -->
   <a
-    title="{relayLabel(entry.relay)} · {entry.rows.length}"
+    title="{relayDisplayName(getRelayInfo(), entry.relay)} · {entry.rows.length}"
     href={relayHref(entry.relay)}
     data-testid="sidebar-relay-icon"
     data-relay={entry.relay}
     draggable="false"
     class="btn btn-circle {size} shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
   >
-    <span
-      class="flex {size} items-center justify-center rounded-full bg-base-300 text-base font-bold uppercase"
-      aria-hidden="true">{relayLabel(entry.relay).slice(0, 1)}</span
-    >
+    <RailRelayIcon relay={entry.relay} {size} />
   </a>
 {/if}

@@ -4,7 +4,11 @@ import {
   relayMetadataAuthors,
   groupsByRelay,
   relayLabel,
-  relayHref
+  relayHref,
+  safeImageUrl,
+  relayIconUrl,
+  relayDisplayName,
+  announcesNip29
 } from '$lib/groups/relay-directory.js';
 
 const RELAY_KEY = '12f6870117eff1a6318bd38c82a65d51dd19879b7489f57247114d0ee8a96de3';
@@ -173,5 +177,75 @@ describe('relayHref', () => {
   it('keeps scheme and port, which a shortened pointer would drop', () => {
     const href = relayHref('ws://127.0.0.1:17020');
     expect(decodeURIComponent(href.replace('/relays/', ''))).toBe('ws://127.0.0.1:17020');
+  });
+});
+
+describe('safeImageUrl', () => {
+  it('accepts http and https', () => {
+    expect(safeImageUrl('https://example.test/a.png')).toBe('https://example.test/a.png');
+    expect(safeImageUrl('http://example.test/a.png')).toBe('http://example.test/a.png');
+  });
+
+  // A NIP-11 document and a kind:39000 are both whatever their author typed,
+  // and this value goes straight into an <img src> on every rail render.
+  it('refuses a javascript: URL', () => {
+    expect(safeImageUrl('javascript:alert(1)')).toBeNull();
+  });
+
+  it('refuses data: and anything that will not parse', () => {
+    expect(safeImageUrl('data:image/png;base64,AAAA')).toBeNull();
+    expect(safeImageUrl('not a url')).toBeNull();
+    expect(safeImageUrl('')).toBeNull();
+    expect(safeImageUrl('   ')).toBeNull();
+    expect(safeImageUrl(undefined)).toBeNull();
+    expect(safeImageUrl(42)).toBeNull();
+  });
+});
+
+describe('relayIconUrl', () => {
+  it('is the NIP-11 icon', () => {
+    expect(relayIconUrl({ icon: 'https://damus.io/img/logo.png' })).toBe(
+      'https://damus.io/img/logo.png'
+    );
+  });
+
+  it('is null when the relay publishes none, or an unusable one', () => {
+    expect(relayIconUrl({})).toBeNull();
+    expect(relayIconUrl(null)).toBeNull();
+    expect(relayIconUrl({ icon: 'javascript:alert(1)' })).toBeNull();
+  });
+});
+
+describe('relayDisplayName', () => {
+  it('prefers the name the relay gives itself', () => {
+    expect(relayDisplayName({ name: 'Buzz Relay' }, 'wss://edufeed.communities.buzz.xyz')).toBe(
+      'Buzz Relay'
+    );
+  });
+
+  it('falls back to the host when there is no NIP-11 name', () => {
+    expect(relayDisplayName(null, 'wss://edufeed.communities.buzz.xyz')).toBe(
+      'edufeed.communities.buzz.xyz'
+    );
+    expect(relayDisplayName({ name: '   ' }, 'ws://127.0.0.1:17020')).toBe('127.0.0.1:17020');
+  });
+});
+
+describe('announcesNip29', () => {
+  it('is true when 29 is in supported_nips', () => {
+    expect(announcesNip29({ supported_nips: [1, 11, 29, 42] })).toBe(true);
+  });
+
+  it('is false when the list is there without it', () => {
+    expect(announcesNip29({ supported_nips: [1, 11, 42] })).toBe(false);
+  });
+
+  // Three states, not two: "not yet asked" must not render as "does not
+  // support it", or every page says so for its first second.
+  it('is null while the document has not arrived, or carries no list', () => {
+    expect(announcesNip29(null)).toBeNull();
+    expect(announcesNip29(undefined)).toBeNull();
+    expect(announcesNip29({})).toBeNull();
+    expect(announcesNip29({ supported_nips: 'nope' })).toBeNull();
   });
 });

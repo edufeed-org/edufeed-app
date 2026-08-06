@@ -162,3 +162,64 @@ export function relayLabel(relay) {
 export function relayHref(relay) {
   return `/relays/${encodeURIComponent(relay)}`;
 }
+
+/**
+ * An image URL off an untrusted document, or null.
+ *
+ * Only `http:`/`https:` survive: a NIP-11 document and a kind:39000 are both
+ * whatever their author typed, and `javascript:` in an `<img src>` is a
+ * scripting hole we would be opening on every rail render.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function safeImageUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The relay's own picture, from its NIP-11 document.
+ * @param {{icon?: unknown} | null | undefined} info
+ * @returns {string | null}
+ */
+export function relayIconUrl(info) {
+  return safeImageUrl(info?.icon);
+}
+
+/**
+ * What to call the relay: the name it gives itself, else its host.
+ *
+ * "Buzz Relay" is what the host calls itself and what other clients show;
+ * `edufeed.communities.buzz.xyz` is only the fallback for a relay that
+ * publishes no NIP-11 name.
+ * @param {{name?: unknown} | null | undefined} info
+ * @param {string} relay
+ * @returns {string}
+ */
+export function relayDisplayName(info, relay) {
+  const name = typeof info?.name === 'string' ? info.name.trim() : '';
+  return name || relayLabel(relay);
+}
+
+/**
+ * Does this host announce NIP-29 at all?
+ *
+ * `null` while the NIP-11 document has not arrived — three states, not two:
+ * "does not support it" and "we have not asked yet" must not share a screen.
+ * A relay that does not announce 29 can still hold a stray kind:39000 (anyone
+ * may publish one anywhere); an empty channel list there means "wrong kind of
+ * host", not "empty host", and saying so beats a silent zero.
+ * @param {{supported_nips?: unknown} | null | undefined} info
+ * @returns {boolean | null}
+ */
+export function announcesNip29(info) {
+  if (!info) return null;
+  const nips = info.supported_nips;
+  if (!Array.isArray(nips)) return null;
+  return nips.includes(29);
+}

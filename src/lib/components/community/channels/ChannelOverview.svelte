@@ -18,12 +18,14 @@
 <script>
   import { groupHref } from '$lib/groups/groups.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
    * @type {{
    *   rows?: import('$lib/groups/community-channel-rows.js').ChannelRow[],
    *   hostBadges?: import('$lib/groups/group-badges.js').Badge[],
+   *   titleIcon?: string,
    *   title?: string,
    *   lead?: string,
    *   empty?: string
@@ -36,6 +38,7 @@
   let {
     rows = [],
     hostBadges = [],
+    titleIcon = '',
     title = m.groups_overview_title(),
     lead = m.groups_overview_lead(),
     empty = m.groups_overview_empty()
@@ -57,7 +60,20 @@
 <div class="flex-1 overflow-y-auto p-6">
   <div class="mx-auto max-w-3xl">
     <header class="mb-5">
-      <h2 class="text-xl font-extrabold" data-testid="channel-overview-title">
+      <h2
+        class="flex items-center gap-3 text-xl font-extrabold"
+        data-testid="channel-overview-title"
+      >
+        {#if titleIcon}
+          <span class="shrink-0" data-testid="channel-overview-icon">
+            <ImageWithFallback
+              src={titleIcon}
+              alt=""
+              fallbackType="community"
+              class="h-10 w-10 rounded-xl object-cover"
+            />
+          </span>
+        {/if}
         {title}
       </h2>
       <p class="mt-1 text-sm text-base-content/60">{lead}</p>
@@ -79,6 +95,19 @@
             class="flex flex-col gap-2 rounded-2xl border border-base-300 bg-base-100 p-4 transition-colors hover:border-primary/50"
           >
             <span class="flex items-center gap-2">
+              {#if row.picture}
+                <!-- The channel's own picture, when its kind:39000 carries
+                     one. The glyph stays: it is the access level, which a
+                     picture cannot say. -->
+                <span class="shrink-0" data-testid="channel-card-picture">
+                  <ImageWithFallback
+                    src={row.picture}
+                    alt=""
+                    fallbackType="community"
+                    class="h-8 w-8 rounded-lg object-cover"
+                  />
+                </span>
+              {/if}
               <span aria-hidden="true" class="opacity-70">{row.symbol}</span>
               <span class="min-w-0 flex-1 truncate font-bold {row.pending ? 'opacity-50' : ''}"
                 >{row.name}</span
