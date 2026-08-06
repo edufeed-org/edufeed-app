@@ -7,7 +7,8 @@
 // them is pure and lives in unlinked-groups.js.
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
-import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { storeEvents } from 'applesauce-relay/operators';
 import { TimelineModel } from 'applesauce-core/models';
 import { GROUPS_LIST_KIND, getPublicGroups } from 'applesauce-common/helpers/groups';
@@ -35,13 +36,29 @@ export function useMyGroups() {
       return;
     }
     const filter = { kinds: [GROUPS_LIST_KIND], authors: [me] };
+    // The same two-step the joined-communities store uses, and for the same
+    // reason: a kind-10009 is a USER-OWNED list, so it may live only on that
+    // user's own write relays and nowhere in the app's set. Asking just the
+    // fallback list made an unfound list look like an empty one.
     /** @type {string[]} */
-    const relays = runtimeConfig.fallbackRelays || [];
-    const reqSub = pool
-      .group(relays)
-      .request(filter, { timeout: 8000 })
-      .pipe(storeEvents(eventStore))
-      .subscribe({ error: () => {} });
+    const relays = getAllLookupRelays();
+    /** @type {import('rxjs').Subscription | undefined} */
+    let writeRelaySub;
+    const ask = (/** @type {string[]} */ where) =>
+      pool
+        .group(where)
+        .request(filter, { timeout: 8000 })
+        .pipe(storeEvents(eventStore))
+        .subscribe({ error: () => {} });
+
+    const reqSub = ask(relays);
+    // A mailbox lookup that fails must not take the first request with it.
+    getWriteRelays(me)
+      .then((writeRelays) => {
+        const extra = (writeRelays || []).filter((r) => !relays.includes(r));
+        if (extra.length > 0) writeRelaySub = ask(extra);
+      })
+      .catch(() => {});
     // Accumulate nowhere and only WRITE the reactive state — the same rule
     // the channel-metadata hook follows, for the same reason.
     const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
@@ -49,6 +66,7 @@ export function useMyGroups() {
     });
     return () => {
       reqSub.unsubscribe();
+      writeRelaySub?.unsubscribe();
       modelSub.unsubscribe();
     };
   });
