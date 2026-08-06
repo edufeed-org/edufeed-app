@@ -3080,5 +3080,6 @@
   "groups_auth_required": "Dieses Relay verlangt eine Authentifizierung für diese Gruppe — erst beitreten, dann neu laden.",
   "groups_reply": "Antworten",
   "groups_input_placeholder": "Nachricht an {name}",
+  "groups_channel_world_readable": "Weltoffen — auch von außerhalb der Community lesbar",
   "groups_invalid_pointer": "Keine gültige Gruppenadresse"
 }

@@ -3080,5 +3080,6 @@
   "groups_auth_required": "This relay requires authentication for this group — join first, then reload.",
   "groups_reply": "Reply",
   "groups_input_placeholder": "Message {name}",
+  "groups_channel_world_readable": "Open to the world — readable from outside the community",
   "groups_invalid_pointer": "Not a valid group address"
 }

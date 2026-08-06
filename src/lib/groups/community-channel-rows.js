@@ -10,6 +10,9 @@
 import { channelAccessLevel, channelGlyph } from './channel-access.js';
 import { channelKey } from './community-pointer.js';
 
+// A row is one of two shapes, and which one is decided by `source`. Modelling
+// that as a union rather than two optional fields lets the rail narrow on
+// `source` instead of re-checking that the field it needs happens to be there.
 /**
  * @typedef {{
  *   key: string,
@@ -17,11 +20,14 @@ import { channelKey } from './community-pointer.js';
  *   symbol: string,
  *   worldReadable: boolean,
  *   accessible: boolean,
- *   pending: boolean,
- *   source: 'concord' | 'group',
- *   channel_id?: string,
- *   pointer?: {id: string, relay: string, name?: string, access?: string}
- * }} ChannelRow
+ *   pending: boolean
+ * }} ChannelRowBase
+ * @typedef {ChannelRowBase & {source: 'concord', channel_id: string}} ConcordChannelRow
+ * @typedef {ChannelRowBase & {
+ *   source: 'group',
+ *   pointer: {id: string, relay: string, name?: string, access?: string}
+ * }} GroupChannelRow
+ * @typedef {ConcordChannelRow | GroupChannelRow} ChannelRow
  */
 
 /**

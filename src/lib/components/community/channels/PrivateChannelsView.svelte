@@ -25,6 +25,13 @@
     selectConcordChannel,
     getSelectedConcordChannel
   } from '$lib/concord/active-channel.svelte.js';
+  // NIP-29 channels of the same community. A community is extended by ONE
+  // protected area — a Concord area OR a set of NIP-29 groups — but the rail
+  // is one list either way, so both sources are merged before rendering.
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
+  import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
+  import { groupHref } from '$lib/groups/groups.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
   import { get } from 'svelte/store';
@@ -125,6 +132,20 @@
   );
   const activeChannel = $derived(
     channels.find((c) => c.channel_id === selectedChannelId) ?? channels[0]
+  );
+
+  // The community's NIP-29 channels, each a standalone group listed on the
+  // 10222. Sorting happens in buildChannelRows so both sources interleave by
+  // name; `channels` above stays as it is because the Concord chat pane,
+  // deletion and unread logic all key off it.
+  const groupPointers = $derived(parseGroupPointers(communikeyEvent));
+  const getChannelMeta = useChannelMetadata(() => groupPointers);
+  const channelRows = $derived(
+    buildChannelRows({
+      concordChannels: channels,
+      groupPointers,
+      metadataByKey: getChannelMeta().byKey
+    })
   );
 
   // Mirror the on-screen channel into the shared active-channel store and
@@ -232,7 +253,11 @@
 <!-- Flag off must hide the UI entirely (global constraint): the tab is
   already gated, but ?view=channels is reachable by direct URL — render
   nothing when the feature is disabled. -->
-{#if concord.enabled}
+<!-- A community extended by NIP-29 groups has no Concord area at all, so the
+  rail has to render for those too — otherwise the feature is invisible in
+  exactly the case it was built for. The Concord flag still gates every
+  Concord-specific surface below. -->
+{#if concord.enabled || groupPointers.length > 0}
   <div class="flex h-full min-h-0">
     <!-- rail — full width in mobile single-column mode (below md, only one
       of rail/pane is ever visible at once via mobileChat), fixed 288px once
@@ -287,30 +312,60 @@
         channel list). Active state reuses the app's existing subtle
         active-nav treatment (BottomTabBar.svelte: bg-primary/10 text-primary)
         instead of the previous btn-active fill. -->
-      {#each channels as channel (channel.channel_id)}
-        {@const flags = channelUnreadState(concord.communityId, channel.channel_id)}
-        <button
-          class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-150 {activeChannel?.channel_id ===
-          channel.channel_id
-            ? 'bg-primary/10 font-semibold text-primary'
-            : 'text-base-content/80 hover:bg-base-300/60'}"
-          onclick={() => {
-            if (concord.communityId) selectConcordChannel(concord.communityId, channel.channel_id);
-            mobileChat = true;
-          }}
-        >
-          <span
-            aria-hidden="true"
-            title={channel.private ? m.concord_legend_private() : m.concord_legend_public()}
-            >{channel.private ? '🔒' : '#'}</span
+      {#each channelRows as row (row.key)}
+        {#if row.source === 'concord'}
+          {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
+          <button
+            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-150 {activeChannel?.channel_id ===
+            row.channel_id
+              ? 'bg-primary/10 font-semibold text-primary'
+              : 'text-base-content/80 hover:bg-base-300/60'}"
+            onclick={() => {
+              if (concord.communityId && row.channel_id)
+                selectConcordChannel(concord.communityId, row.channel_id);
+              mobileChat = true;
+            }}
           >
-          <span
-            class="min-w-0 flex-1 truncate {channel.accessible ? '' : 'opacity-50'} {flags.unread
-              ? 'font-bold'
-              : ''}">{channel.name}</span
+            <span
+              aria-hidden="true"
+              title={row.symbol === '#' ? m.concord_legend_public() : m.concord_legend_private()}
+              >{row.symbol}</span
+            >
+            <span
+              class="min-w-0 flex-1 truncate {row.accessible ? '' : 'opacity-50'} {flags.unread
+                ? 'font-bold'
+                : ''}">{row.name}</span
+            >
+            <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+          </button>
+        {:else}
+          <!-- A NIP-29 channel is a group of its own, and the group chat that
+            renders it already exists at /groups/<host'id> — so the rail links
+            there rather than duplicating the chat stack. -->
+          <a
+            href={groupHref(row.pointer)}
+            data-testid="group-channel-row"
+            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-base-content/80 transition-colors duration-150 hover:bg-base-300/60"
           >
-          <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
-        </button>
+            <span
+              aria-hidden="true"
+              title={row.symbol === '#' ? m.concord_legend_public() : m.concord_legend_private()}
+              >{row.symbol}</span
+            >
+            <span class="min-w-0 flex-1 truncate {row.pending ? 'opacity-50' : ''}">{row.name}</span
+            >
+            {#if row.worldReadable}
+              <!-- Weltoffen: readable from outside the community entirely.
+                An addition to the # glyph, never a third category. -->
+              <span
+                aria-hidden="true"
+                data-testid="world-readable-badge"
+                title={m.groups_channel_world_readable()}
+                class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
+              >
+            {/if}
+          </a>
+        {/if}
       {/each}
       {#if concord.community && concord.canManageChannels && !concord.dissolved}
         <button
