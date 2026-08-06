@@ -300,6 +300,12 @@ describe('CommunitySidebar — which container you are in', () => {
       }
     });
     expect(activeAnchors()).toEqual(['relay:wss://relay.example.com']);
+    // The slot's attribute is what these tests read, but the ICON is what a
+    // reader sees — asserting only the attribute would pass on a rail that
+    // marks the right row invisibly.
+    expect(screen.getAllByTestId('sidebar-relay-icon')[0].getAttribute('aria-current')).toBe(
+      'page'
+    );
   });
 
   // Opening a channel from the host page leaves /relays — and the container
@@ -319,6 +325,7 @@ describe('CommunitySidebar — which container you are in', () => {
     holders.areas = [AREA];
     render(CommunitySidebar, { props: { ...PROPS, currentPath: '/private/area-1' } });
     expect(activeAnchors()).toEqual(['area:area-1']);
+    expect(screen.getAllByTestId('rail-area-icon')[0].getAttribute('aria-current')).toBe('page');
   });
 
   // The Home button carries its own ring on the dashboard; a container marked
