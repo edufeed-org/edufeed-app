@@ -41,14 +41,17 @@ const FOLDER_PREFIX = 'folder:';
  *
  * @param {{kind: 'community', pubkey: string}
  *   | {kind: 'area', communityId: string}
- *   | {kind: 'group', key: string}} entry
+ *   | {kind: 'relay', relay: string}} entry
  * @returns {string | null} null when the entry cannot be addressed
  */
 export function railKey(entry) {
   if (!entry) return null;
   if (entry.kind === 'community') return entry.pubkey ? `community:${entry.pubkey}` : null;
   if (entry.kind === 'area') return entry.communityId ? `area:${entry.communityId}` : null;
-  if (entry.kind === 'group') return entry.key ? `group:${entry.key}` : null;
+  // A layout stored before the rail grouped by host still holds `group:` keys.
+  // They no longer resolve, so normalize() drops them and appends the relay
+  // entries — the safe direction: an order is lost, never a container.
+  if (entry.kind === 'relay') return entry.relay ? `relay:${entry.relay}` : null;
   return null;
 }
 

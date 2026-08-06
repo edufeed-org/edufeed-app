@@ -9,19 +9,20 @@
 // stays in CommunitySidebar, and so does the profile lookup for a community —
 // that is a rune hook per entry and cannot live in a plain function.
 import { railKey } from './rail-layout.js';
+import { groupsByRelay } from '$lib/groups/relay-directory.js';
 
 /**
  * @typedef {{key: string, kind: 'community', pubkey: string}} CommunityEntry
  * @typedef {{key: string, kind: 'area', area: any}} AreaEntry
- * @typedef {{key: string, kind: 'group', row: any}} GroupEntry
- * @typedef {CommunityEntry | AreaEntry | GroupEntry} RailEntry
+ * @typedef {{key: string, kind: 'relay', relay: string, rows: any[]}} RelayEntry
+ * @typedef {CommunityEntry | AreaEntry | RelayEntry} RailEntry
  */
 
 /**
  * @param {{
  *   communityPubkeys?: string[],
  *   areas?: Array<{communityId: string}>,
- *   groups?: Array<{key: string}>
+ *   groups?: Array<{key: string, pointer?: {id?: string, relay?: string}}>
  * }} input
  * @returns {RailEntry[]}
  */
@@ -53,11 +54,16 @@ export function buildRailEntries({ communityPubkeys = [], areas = [], groups = [
       area
     }));
   }
-  for (const row of groups) {
-    push(railKey({ kind: 'group', key: row?.key }), () => ({
-      key: /** @type {string} */ (railKey({ kind: 'group', key: row.key })),
-      kind: 'group',
-      row
+  // One entry per HOST, not per channel. NIP-29 has no object above a channel,
+  // so the relay is the only container a set of them shares — and a rail of
+  // single channels made a ten-channel host look like the one channel our own
+  // kind-10009 happened to name.
+  for (const { relay, rows } of groupsByRelay(groups)) {
+    push(railKey({ kind: 'relay', relay }), () => ({
+      key: /** @type {string} */ (railKey({ kind: 'relay', relay })),
+      kind: 'relay',
+      relay,
+      rows
     }));
   }
 

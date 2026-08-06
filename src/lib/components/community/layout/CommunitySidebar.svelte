@@ -11,7 +11,7 @@
     useConcordListLocked
   } from '$lib/concord/unlinked-areas.svelte.js';
   import { useUnlinkedGroups } from '$lib/groups/unlinked-groups.svelte.js';
-  import { groupHref } from '$lib/groups/groups.js';
+
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -25,6 +25,7 @@
   // order the user controls, with Discord-style folders. Every rule is pure
   // and lives in $lib/rail; this component only wires the gesture to it.
   import { buildRailEntries, entriesOf } from '$lib/rail/rail-entries.js';
+  import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import {
     folderAnchor,
     dropIntent,
@@ -515,24 +516,21 @@
       <span class="flex-1 truncate text-left text-sm font-medium">{entry.area.name}</span>
     </a>
   {:else}
+    <!-- The drawer's row for a HOST. It names the relay and how many of its
+         channels we can already name; the glyph belonged to a single channel
+         and cannot stand for a set of them. -->
     <a
-      href={groupHref(entry.row.pointer)}
-      data-testid="sidebar-group-row"
+      href={relayHref(entry.relay)}
+      data-testid="sidebar-relay-row"
+      data-relay={entry.relay}
       class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300"
     >
       <span
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-300 text-sm"
-        aria-hidden="true">{entry.row.symbol}</span
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-300 text-sm font-bold uppercase"
+        aria-hidden="true">{relayLabel(entry.relay).slice(0, 1)}</span
       >
-      <span class="flex-1 truncate text-left text-sm font-medium">{entry.row.name}</span>
-      {#if entry.row.worldReadable}
-        <span
-          aria-hidden="true"
-          data-testid="sidebar-group-world-readable"
-          title={m.groups_channel_world_readable()}
-          class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
-        >
-      {/if}
+      <span class="flex-1 truncate text-left text-sm font-medium">{relayLabel(entry.relay)}</span>
+      <span class="shrink-0 text-[0.7rem] opacity-70">{entry.rows.length}</span>
     </a>
   {/if}
 {/snippet}

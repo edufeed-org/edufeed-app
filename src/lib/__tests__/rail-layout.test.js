@@ -43,9 +43,7 @@ describe('railKey', () => {
   it('gives each kind of container its own namespace', () => {
     expect(railKey({ kind: 'community', pubkey: PUBKEY })).toBe(`community:${PUBKEY}`);
     expect(railKey({ kind: 'area', communityId: 'abc' })).toBe('area:abc');
-    expect(railKey({ kind: 'group', key: 'allgemein@wss://r.example/' })).toBe(
-      'group:allgemein@wss://r.example/'
-    );
+    expect(railKey({ kind: 'relay', relay: 'wss://r.example/' })).toBe('relay:wss://r.example/');
   });
 
   // A community pubkey and a Concord community id are both 64 hex chars, so

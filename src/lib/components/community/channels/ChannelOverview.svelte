@@ -23,10 +23,23 @@
   /**
    * @type {{
    *   rows?: import('$lib/groups/community-channel-rows.js').ChannelRow[],
-   *   hostBadges?: import('$lib/groups/group-badges.js').Badge[]
+   *   hostBadges?: import('$lib/groups/group-badges.js').Badge[],
+   *   title?: string,
+   *   lead?: string,
+   *   empty?: string
    * }}
    */
-  let { rows = [], hostBadges = [] } = $props();
+  // The relay directory renders the same grid under a different heading — a
+  // host is not a community, and saying "in this community" over a relay's
+  // channel list would name the wrong container. Defaults keep every existing
+  // call site unchanged.
+  let {
+    rows = [],
+    hostBadges = [],
+    title = m.groups_overview_title(),
+    lead = m.groups_overview_lead(),
+    empty = m.groups_overview_empty()
+  } = $props();
 
   const channels = $derived(/** @type {any[]} */ (rows).filter((row) => row.source === 'group'));
 
@@ -45,9 +58,9 @@
   <div class="mx-auto max-w-3xl">
     <header class="mb-5">
       <h2 class="text-xl font-extrabold" data-testid="channel-overview-title">
-        {m.groups_overview_title()}
+        {title}
       </h2>
-      <p class="mt-1 text-sm text-base-content/60">{m.groups_overview_lead()}</p>
+      <p class="mt-1 text-sm text-base-content/60">{lead}</p>
       <GroupBadges host={hostBadges} class="mt-2" />
     </header>
 
@@ -55,7 +68,7 @@
       <p
         class="rounded-2xl border border-dashed border-base-300 p-8 text-center text-sm text-base-content/60"
       >
-        {m.groups_overview_empty()}
+        {empty}
       </p>
     {:else}
       <div class="grid gap-3 sm:grid-cols-2">

@@ -127,7 +127,26 @@ describe('CommunitySidebar — the arrangeable rail', () => {
       `community:${COMMUNITY_A}`,
       `community:${COMMUNITY_B}`,
       'area:area-1',
-      'group:g@wss://r/'
+      'relay:wss://r'
+    ]);
+  });
+
+  // Grouping by host is what makes a ten-channel relay one container instead
+  // of the one channel our own kind-10009 happened to name.
+  it('gives a host with several channels ONE row', () => {
+    holders.areas = [];
+    holders.groups = [
+      { key: 'a@wss://r/', name: 'Allgemein', symbol: '#', pointer: { id: 'a', relay: 'wss://r' } },
+      {
+        key: 'b@wss://r/',
+        name: 'Leitung',
+        symbol: '\u{1F512}',
+        pointer: { id: 'b', relay: 'wss://r' }
+      }
+    ];
+    render(CommunitySidebar, { props: PROPS });
+    expect(anchors().filter((/** @type {string} */ a) => a.startsWith('relay:'))).toEqual([
+      'relay:wss://r'
     ]);
   });
 

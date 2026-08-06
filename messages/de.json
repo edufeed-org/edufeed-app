@@ -3108,5 +3108,12 @@
   "rail_folder_edit": "Ordner",
   "rail_folder_edit_title": "Ordner bearbeiten",
   "rail_folder_dissolve": "Auflösen",
-  "rail_folder_save": "Speichern"
+  "rail_folder_save": "Speichern",
+  "relay_directory_lead": "Alle Kanäle, die dieses Relay für dich hat.",
+  "relay_directory_empty": "Dieses Relay hat keine für dich sichtbaren Kanäle.",
+  "relay_directory_auth_required": "Dieses Relay möchte eine Anmeldung, bevor es seine Kanäle auflistet.",
+  "relay_directory_loading": "Frage das Relay nach seinen Kanälen…",
+  "relay_directory_invalid": "Das ist keine Relay-Adresse.",
+  "relay_directory_source_private": "Diesen Kanal kennen nur deine eigenen Einträge — das Relay listet ihn nicht öffentlich.",
+  "relay_directory_auth_refused": "Dieses Relay hat dich abgewiesen: {reason}"
 }

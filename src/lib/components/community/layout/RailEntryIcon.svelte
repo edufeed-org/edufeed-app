@@ -11,7 +11,7 @@
 -->
 <script>
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
-  import { groupHref } from '$lib/groups/groups.js';
+  import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import { resolve } from '$app/paths';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
@@ -56,16 +56,20 @@
     </span>
   </a>
 {:else}
+  <!-- A host, not a channel: the glyph of any ONE of its channels would claim
+       an access level for all of them, so the icon carries the host's initial
+       and the tooltip names it in full. -->
   <a
-    title={entry.row.name}
-    href={groupHref(entry.row.pointer)}
-    data-testid="sidebar-group-icon"
+    title="{relayLabel(entry.relay)} · {entry.rows.length}"
+    href={relayHref(entry.relay)}
+    data-testid="sidebar-relay-icon"
+    data-relay={entry.relay}
     draggable="false"
     class="btn btn-circle {size} shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
   >
     <span
-      class="flex {size} items-center justify-center rounded-full bg-base-300 text-base"
-      aria-hidden="true">{entry.row.symbol}</span
+      class="flex {size} items-center justify-center rounded-full bg-base-300 text-base font-bold uppercase"
+      aria-hidden="true">{relayLabel(entry.relay).slice(0, 1)}</span
     >
   </a>
 {/if}

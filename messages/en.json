@@ -3108,5 +3108,12 @@
   "rail_folder_edit": "Folder",
   "rail_folder_edit_title": "Edit folder",
   "rail_folder_dissolve": "Dissolve",
-  "rail_folder_save": "Save"
+  "rail_folder_save": "Save",
+  "relay_directory_lead": "Every channel this relay has for you.",
+  "relay_directory_empty": "This relay has no channels you can see.",
+  "relay_directory_auth_required": "This relay wants you to sign in before it lists its channels.",
+  "relay_directory_loading": "Asking the relay for its channels…",
+  "relay_directory_invalid": "That is not a relay address.",
+  "relay_directory_source_private": "Only your own records name this channel — the relay does not list it publicly.",
+  "relay_directory_auth_refused": "This relay would not let you in: {reason}"
 }
