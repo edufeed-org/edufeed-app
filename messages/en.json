@@ -3103,5 +3103,10 @@
   "groups_overview_lead": "Open a channel to read along and write.",
   "groups_overview_empty": "This community has no channels yet.",
   "groups_badge_world_readable": "World-readable",
-  "groups_badge_access_pending": "Access still loading"
+  "groups_badge_access_pending": "Access still loading",
+  "rail_folder_default_name": "New folder",
+  "rail_folder_edit": "Folder",
+  "rail_folder_edit_title": "Edit folder",
+  "rail_folder_dissolve": "Dissolve",
+  "rail_folder_save": "Save"
 }

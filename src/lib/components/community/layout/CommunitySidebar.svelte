@@ -14,11 +14,33 @@
   import { groupHref } from '$lib/groups/groups.js';
   import { getConcordState, unlockConcordLists } from '$lib/concord/client.svelte.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
-  import { HomeIcon, LockOpenIcon, ChevronDownIcon } from '$lib/components/icons';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { HomeIcon, LockOpenIcon, ChevronDownIcon, TrashIcon } from '$lib/components/icons';
   import { resolve } from '$app/paths';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
+  // The rail is one arrangeable list now (Armada parity, laoc 2026-08-06):
+  // communities, unlinked Concord areas and unlinked NIP-29 groups share one
+  // order the user controls, with Discord-style folders. Every rule is pure
+  // and lives in $lib/rail; this component only wires the gesture to it.
+  import { buildRailEntries, entriesOf } from '$lib/rail/rail-entries.js';
+  import {
+    folderAnchor,
+    dropIntent,
+    resolveDrop,
+    renameFolder,
+    dissolveFolder
+  } from '$lib/rail/rail-layout.js';
+  import {
+    useRailLayout,
+    writeRailLayout,
+    readOpenFolders,
+    writeOpenFolders,
+    nextFolderId
+  } from '$lib/rail/rail-layout-store.svelte.js';
+  import RailEntryIcon from './RailEntryIcon.svelte';
+  import RailFolderTile from './RailFolderTile.svelte';
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -66,6 +88,119 @@
     if (onCommunitySelect) {
       onCommunitySelect(pubkey);
     }
+  }
+
+  // ---- the arrangeable rail -------------------------------------------------
+
+  const getActiveUser = useActiveUser();
+  const me = $derived(getActiveUser()?.pubkey ?? null);
+
+  const railEntries = $derived(
+    buildRailEntries({
+      communityPubkeys: sortedCommunities,
+      areas: unlinkedAreas,
+      groups: unlinkedGroupRows
+    })
+  );
+  const entriesByKey = $derived(new Map(railEntries.map((entry) => [entry.key, entry])));
+  const getLayout = useRailLayout(
+    () => me,
+    () => railEntries.map((entry) => entry.key)
+  );
+  const layout = $derived(getLayout());
+  const openFolders = $derived(readOpenFolders(me));
+
+  /** The entry currently being dragged, or a `folder:<id>` anchor. */
+  let dragAnchor = $state(/** @type {string | null} */ (null));
+  /** Where it would land right now: the row under the pointer and how. */
+  let dropAt = $state(/** @type {{anchor: string, intent: string} | null} */ (null));
+  /** The folder whose name is being edited. */
+  let editingFolder = $state(/** @type {string | null} */ (null));
+  let editingName = $state('');
+
+  /** @param {string} id */
+  function toggleFolder(id) {
+    const next = openFolders.includes(id)
+      ? openFolders.filter((f) => f !== id)
+      : [...openFolders, id];
+    writeOpenFolders(me, next);
+  }
+
+  /**
+   * @param {DragEvent} event
+   * @param {string} anchor
+   */
+  function onRowDragOver(event, anchor) {
+    if (!dragAnchor || anchor === dragAnchor) return;
+    // Without preventDefault the browser refuses the drop entirely, so this
+    // has to run before any decision about where the entry would land.
+    event.preventDefault();
+    const rect = /** @type {HTMLElement} */ (event.currentTarget).getBoundingClientRect();
+    dropAt = { anchor, intent: dropIntent(event.clientY - rect.top, rect.height) };
+  }
+
+  /**
+   * @param {DragEvent} event
+   * @param {string} anchor
+   */
+  function onRowDrop(event, anchor) {
+    event.preventDefault();
+    const source = dragAnchor;
+    const intent = dropAt?.anchor === anchor ? dropAt.intent : 'into';
+    dragAnchor = null;
+    dropAt = null;
+    if (!source) return;
+    const next = resolveDrop(
+      layout,
+      source,
+      anchor,
+      /** @type {any} */ (intent),
+      m.rail_folder_default_name(),
+      () => nextFolderId(layout)
+    );
+    if (next !== layout) writeRailLayout(me, next);
+  }
+
+  function endDrag() {
+    dragAnchor = null;
+    dropAt = null;
+  }
+
+  /** @param {string} id */
+  function startRename(id) {
+    editingFolder = id;
+    const node = layout.find((n) => n.type === 'folder' && n.id === id);
+    editingName = node?.type === 'folder' ? node.name : '';
+  }
+
+  function commitRename() {
+    if (!editingFolder) return;
+    const next = renameFolder(layout, editingFolder, editingName);
+    if (next !== layout) writeRailLayout(me, next);
+    editingFolder = null;
+  }
+
+  /** @param {string} id */
+  function removeFolder(id) {
+    const next = dissolveFolder(layout, id);
+    if (next !== layout) writeRailLayout(me, next);
+    writeOpenFolders(
+      me,
+      openFolders.filter((f) => f !== id)
+    );
+    editingFolder = null;
+  }
+
+  /**
+   * The ring a row wears while a drag hovers it. 'into' means "these belong
+   * together", so it reads as a highlight; the reorder readings draw a line on
+   * the edge the entry would land on.
+   * @param {string} anchor
+   */
+  function dropClass(anchor) {
+    if (dropAt?.anchor !== anchor) return '';
+    if (dropAt.intent === 'into') return 'rail-drop-into';
+    return dropAt.intent === 'before' ? 'rail-drop-before' : 'rail-drop-after';
   }
 
   // Scroll affordance for the hidden-scrollbar rail (design page "Rail Fix"):
@@ -129,89 +264,110 @@
     </button>
     <div class="w-8 border-b border-base-300"></div>
 
-    {#each sortedCommunities as communityPubKey (communityPubKey)}
-      {@const getCommunityProfile = useUserProfile(communityPubKey)}
-      {@const communityProfile = getCommunityProfile()}
-      {@const isActive = !isDashboardActive && currentCommunityId === communityPubKey}
-
-      <button
-        title={getDisplayName(communityProfile)}
-        onclick={() => handleCommunityClick(communityPubKey)}
-        class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
-          ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
-          : ''}"
-      >
-        <div class="avatar">
-          <div class="h-12 w-12 rounded-full">
-            <ImageWithFallback
-              src={getProfilePicture(communityProfile) || `https://robohash.org/${communityPubKey}`}
-              alt={getDisplayName(communityProfile)}
-              fallbackType="community"
-              class="h-full w-full rounded-full object-cover"
+    <!-- One arrangeable list. Drag an icon onto another to fold them into a
+      folder; drag to an icon's top or bottom edge to reorder (dropIntent
+      splits each row — a 48px column has no room for separate targets). -->
+    {#each layout as node (node.type === 'item' ? node.key : folderAnchor(node.id))}
+      {#if node.type === 'item'}
+        {@const entry = entriesByKey.get(node.key)}
+        {#if entry}
+          <div
+            role="listitem"
+            draggable="true"
+            data-testid="rail-slot"
+            data-rail-anchor={node.key}
+            class="rail-slot {dragAnchor === node.key ? 'opacity-40' : ''} {dropClass(node.key)}"
+            ondragstart={() => (dragAnchor = node.key)}
+            ondragend={endDrag}
+            ondragover={(e) => onRowDragOver(e, node.key)}
+            ondrop={(e) => onRowDrop(e, node.key)}
+          >
+            <RailEntryIcon
+              {entry}
+              isActive={!isDashboardActive &&
+                entry.kind === 'community' &&
+                currentCommunityId === entry.pubkey}
+              onSelect={handleCommunityClick}
             />
           </div>
+        {/if}
+      {:else}
+        {@const anchor = folderAnchor(node.id)}
+        {@const members = entriesOf(node.keys, entriesByKey)}
+        <div
+          role="listitem"
+          draggable="true"
+          data-testid="rail-slot"
+          data-rail-anchor={anchor}
+          class="rail-slot {dragAnchor === anchor ? 'opacity-40' : ''} {dropClass(anchor)}"
+          ondragstart={() => (dragAnchor = anchor)}
+          ondragend={endDrag}
+          ondragover={(e) => onRowDragOver(e, anchor)}
+          ondrop={(e) => onRowDrop(e, anchor)}
+        >
+          <RailFolderTile
+            name={node.name}
+            entries={members}
+            open={openFolders.includes(node.id)}
+            onToggle={() => toggleFolder(node.id)}
+          />
         </div>
-      </button>
+        {#if openFolders.includes(node.id)}
+          <!-- Members render in place under the tile, indented, and stay
+            draggable: dragging one out to a top-level edge is how you leave a
+            folder, and the model dissolves a folder that loses its last one. -->
+          {#each members as entry (entry.key)}
+            <div
+              role="listitem"
+              draggable="true"
+              data-testid="rail-slot"
+              data-rail-anchor={entry.key}
+              class="rail-slot rail-slot-nested {dragAnchor === entry.key
+                ? 'opacity-40'
+                : ''} {dropClass(entry.key)}"
+              ondragstart={() => (dragAnchor = entry.key)}
+              ondragend={endDrag}
+              ondragover={(e) => onRowDragOver(e, entry.key)}
+              ondrop={(e) => onRowDrop(e, entry.key)}
+            >
+              <RailEntryIcon
+                {entry}
+                size="h-10 w-10"
+                isActive={!isDashboardActive &&
+                  entry.kind === 'community' &&
+                  currentCommunityId === entry.pubkey}
+                onSelect={handleCommunityClick}
+              />
+            </div>
+          {/each}
+          <button
+            type="button"
+            class="btn h-6 min-h-0 w-12 shrink-0 px-0 text-[0.6rem] btn-ghost"
+            data-testid="rail-folder-edit"
+            onclick={() => startRename(node.id)}>{m.rail_folder_edit()}</button
+          >
+        {/if}
+      {/if}
     {/each}
 
-    {#if unlinkedAreas.length > 0 || showUnlockAffordance}
-      <!-- Aligned one-rail model (design spec 2026-07-28): unlinked areas flow
-        directly after the communities at the same size — the badge's corner
-        lock chip carries the distinction, not a separate divider/section.
-        Only the unlock TOOL keeps a divider, since it's an action, not an
-        entry. -->
-      {#if showUnlockAffordance}
-        <div class="w-8 border-b border-base-300"></div>
-        <button
-          title={signerHasNip44 ? m.concord_unlock_areas() : m.concord_direct_needs_nip44()}
-          class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
-          data-testid="concord_unlock_areas"
-          disabled={!signerHasNip44 || unlocking}
-          onclick={handleUnlockAreas}
-        >
-          {#if unlocking}
-            <span class="loading loading-sm loading-spinner"></span>
-          {:else}
-            <LockOpenIcon class_="h-5 w-5" />
-          {/if}
-        </button>
-      {/if}
-      {#each unlinkedAreas as area (area.communityId)}
-        {@const areaFlags = areaUnreadState(area.communityId)}
-        <a
-          title="{area.name} · {m.concord_sidebar_area_tooltip()}"
-          href={resolve(`/private/${area.communityId}`)}
-          class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {area.dissolved
-            ? 'opacity-50'
-            : ''}"
-        >
-          <span class="relative shrink-0">
-            <ConcordAreaBadge
-              name={area.name}
-              communityId={area.communityId}
-              iconPointer={area.iconPointer}
-              class="h-12 w-12"
-            />
-            <span class="absolute -top-0.5 -right-0.5">
-              <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
-            </span>
-          </span>
-        </a>
-      {/each}
-    {/if}
-    {#each unlinkedGroupRows as row (row.key)}
-      <a
-        title={row.name}
-        href={groupHref(row.pointer)}
-        data-testid="sidebar-group-icon"
+    {#if showUnlockAffordance}
+      <!-- The unlock TOOL keeps its divider: it is an action, not an entry,
+        so it stays out of the arrangeable list entirely. -->
+      <div class="w-8 border-b border-base-300"></div>
+      <button
+        title={signerHasNip44 ? m.concord_unlock_areas() : m.concord_direct_needs_nip44()}
         class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
+        data-testid="concord_unlock_areas"
+        disabled={!signerHasNip44 || unlocking}
+        onclick={handleUnlockAreas}
       >
-        <span
-          class="flex h-12 w-12 items-center justify-center rounded-full bg-base-300 text-base"
-          aria-hidden="true">{row.symbol}</span
-        >
-      </a>
-    {/each}
+        {#if unlocking}
+          <span class="loading loading-sm loading-spinner"></span>
+        {:else}
+          <LockOpenIcon class_="h-5 w-5" />
+        {/if}
+      </button>
+    {/if}
   </div>
   <div
     class="pointer-events-none sticky bottom-0 z-10 -mt-7 flex h-7 shrink-0 items-end justify-center bg-gradient-to-t from-base-200 to-transparent transition-opacity duration-200 {canScrollDown
@@ -239,31 +395,29 @@
     </button>
     <div class="border-b border-base-300"></div>
 
-    {#each sortedCommunities as communityPubKey (communityPubKey)}
-      {@const getCommunityProfile = useUserProfile(communityPubKey)}
-      {@const communityProfile = getCommunityProfile()}
-      {@const isActive = !isDashboardActive && currentCommunityId === communityPubKey}
-
-      <button
-        onclick={() => handleCommunityClick(communityPubKey)}
-        class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {isActive
-          ? 'bg-primary text-primary-content'
-          : 'hover:bg-base-300'}"
-      >
-        <div class="avatar">
-          <div class="h-10 w-10 rounded-full">
-            <ImageWithFallback
-              src={getProfilePicture(communityProfile) || `https://robohash.org/${communityPubKey}`}
-              alt={getDisplayName(communityProfile)}
-              fallbackType="community"
-              class="h-full w-full rounded-full object-cover"
-            />
-          </div>
-        </div>
-        <span class="font-community flex-1 truncate text-left text-sm font-medium">
-          {getDisplayName(communityProfile)}
-        </span>
-      </button>
+    <!-- Same arrangement as the desktop rail, read-only: HTML5 drag events do
+      not fire on touch at all, so a draggable row here would simply not work.
+      A pointer-event drag is its own build (Armada does exactly that) — until
+      then the order and the folders you set on a desktop are what shows. -->
+    {#each layout as node (node.type === 'item' ? node.key : folderAnchor(node.id))}
+      {#if node.type === 'item'}
+        {@const entry = entriesByKey.get(node.key)}
+        {#if entry}
+          {@render mobileRow(entry)}
+        {/if}
+      {:else}
+        <div class="border-b border-base-300"></div>
+        <p
+          class="px-3 pt-1 text-xs font-semibold tracking-wider text-base-content/50 uppercase"
+          data-testid="rail-folder-heading"
+        >
+          {node.name}
+        </p>
+        {#each entriesOf(node.keys, entriesByKey) as entry (entry.key)}
+          {@render mobileRow(entry)}
+        {/each}
+        <div class="border-b border-base-300"></div>
+      {/if}
     {/each}
 
     {#if joinedCommunities.length === 0}
@@ -289,77 +443,167 @@
       </div>
     {/if}
 
-    {#if unlinkedAreas.length > 0 || showUnlockAffordance}
+    {#if showUnlockAffordance}
       <div class="border-b border-base-300"></div>
-      <p class="px-3 pt-1 text-xs font-semibold tracking-wider text-base-content/50 uppercase">
-        {m.concord_sidebar_private_areas()}
-      </p>
-      {#if showUnlockAffordance}
-        <button
-          class="btn btn-block gap-2 btn-outline btn-sm"
-          data-testid="concord_unlock_areas"
-          disabled={!signerHasNip44 || unlocking}
-          title={signerHasNip44 ? undefined : m.concord_direct_needs_nip44()}
-          onclick={handleUnlockAreas}
-        >
-          {#if unlocking}
-            <span class="loading loading-xs loading-spinner"></span>
-          {:else}
-            <LockOpenIcon class_="h-4 w-4" />
-          {/if}
-          {m.concord_unlock_areas()}
-        </button>
-      {/if}
-      {#each unlinkedAreas as area (area.communityId)}
-        {@const areaFlags = areaUnreadState(area.communityId)}
-        <a
-          href={resolve(`/private/${area.communityId}`)}
-          class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300 {area.dissolved
-            ? 'opacity-50'
-            : ''}"
-        >
-          <span class="relative shrink-0">
-            <ConcordAreaBadge
-              name={area.name}
-              communityId={area.communityId}
-              iconPointer={area.iconPointer}
-              class="h-8 w-8 shrink-0"
-            />
-            <span class="absolute -top-0.5 -right-0.5">
-              <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
-            </span>
-          </span>
-          <span class="flex-1 truncate text-left text-sm font-medium">{area.name}</span>
-        </a>
-      {/each}
-    {/if}
-
-    {#if unlinkedGroupRows.length > 0}
-      <div class="border-b border-base-300"></div>
-      <p class="px-3 pt-1 text-xs font-semibold tracking-wider text-base-content/50 uppercase">
-        {m.groups_sidebar_my_groups()}
-      </p>
-      {#each unlinkedGroupRows as row (row.key)}
-        <a
-          href={groupHref(row.pointer)}
-          data-testid="sidebar-group-row"
-          class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300"
-        >
-          <span
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-300 text-sm"
-            aria-hidden="true">{row.symbol}</span
-          >
-          <span class="flex-1 truncate text-left text-sm font-medium">{row.name}</span>
-          {#if row.worldReadable}
-            <span
-              aria-hidden="true"
-              data-testid="sidebar-group-world-readable"
-              title={m.groups_channel_world_readable()}
-              class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
-            >
-          {/if}
-        </a>
-      {/each}
+      <button
+        class="btn btn-block gap-2 btn-outline btn-sm"
+        data-testid="concord_unlock_areas"
+        disabled={!signerHasNip44 || unlocking}
+        title={signerHasNip44 ? undefined : m.concord_direct_needs_nip44()}
+        onclick={handleUnlockAreas}
+      >
+        {#if unlocking}
+          <span class="loading loading-xs loading-spinner"></span>
+        {:else}
+          <LockOpenIcon class_="h-4 w-4" />
+        {/if}
+        {m.concord_unlock_areas()}
+      </button>
     {/if}
   </div>
 </div>
+
+<!--
+  One drawer row per container. A snippet rather than a component: it needs
+  exactly the markup the drawer already had, and every caller is in this file.
+-->
+{#snippet mobileRow(/** @type {import('$lib/rail/rail-entries.js').RailEntry} */ entry)}
+  {#if entry.kind === 'community'}
+    {@const getCommunityProfile = useUserProfile(entry.pubkey)}
+    {@const communityProfile = getCommunityProfile()}
+    <button
+      onclick={() => handleCommunityClick(entry.pubkey)}
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {!isDashboardActive &&
+      currentCommunityId === entry.pubkey
+        ? 'bg-primary text-primary-content'
+        : 'hover:bg-base-300'}"
+    >
+      <div class="avatar">
+        <div class="h-10 w-10 rounded-full">
+          <ImageWithFallback
+            src={getProfilePicture(communityProfile) || `https://robohash.org/${entry.pubkey}`}
+            alt={getDisplayName(communityProfile)}
+            fallbackType="community"
+            class="h-full w-full rounded-full object-cover"
+          />
+        </div>
+      </div>
+      <span class="font-community flex-1 truncate text-left text-sm font-medium">
+        {getDisplayName(communityProfile)}
+      </span>
+    </button>
+  {:else if entry.kind === 'area'}
+    {@const areaFlags = areaUnreadState(entry.area.communityId)}
+    <a
+      href={resolve(`/private/${entry.area.communityId}`)}
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300 {entry
+        .area.dissolved
+        ? 'opacity-50'
+        : ''}"
+    >
+      <span class="relative shrink-0">
+        <ConcordAreaBadge
+          name={entry.area.name}
+          communityId={entry.area.communityId}
+          iconPointer={entry.area.iconPointer}
+          class="h-8 w-8 shrink-0"
+        />
+        <span class="absolute -top-0.5 -right-0.5">
+          <ConcordUnreadDot unread={areaFlags.unread} mentioned={areaFlags.mentioned} />
+        </span>
+      </span>
+      <span class="flex-1 truncate text-left text-sm font-medium">{entry.area.name}</span>
+    </a>
+  {:else}
+    <a
+      href={groupHref(entry.row.pointer)}
+      data-testid="sidebar-group-row"
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300"
+    >
+      <span
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-300 text-sm"
+        aria-hidden="true">{entry.row.symbol}</span
+      >
+      <span class="flex-1 truncate text-left text-sm font-medium">{entry.row.name}</span>
+      {#if entry.row.worldReadable}
+        <span
+          aria-hidden="true"
+          data-testid="sidebar-group-world-readable"
+          title={m.groups_channel_world_readable()}
+          class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
+        >
+      {/if}
+    </a>
+  {/if}
+{/snippet}
+
+{#if editingFolder}
+  <!-- Rename and dissolve live in a modal, not inline: the rail is 48px wide
+    and a text field cannot go there. Dissolving is not destructive — the
+    members spill back into the folder's own slot — so it needs no confirm. -->
+  <div class="modal-open modal" role="dialog" data-testid="rail-folder-modal">
+    <div class="modal-box max-w-sm">
+      <h3 class="mb-3 text-lg font-extrabold">{m.rail_folder_edit_title()}</h3>
+      <input
+        class="input-bordered input input-sm w-full"
+        data-testid="rail-folder-name"
+        bind:value={editingName}
+        onkeydown={(e) => e.key === 'Enter' && commitRename()}
+      />
+      <div class="modal-action justify-between">
+        <button
+          class="btn gap-2 text-error btn-ghost btn-sm"
+          data-testid="rail-folder-dissolve"
+          onclick={() => editingFolder && removeFolder(editingFolder)}
+        >
+          <TrashIcon class="h-4 w-4" />
+          {m.rail_folder_dissolve()}
+        </button>
+        <span class="flex gap-2">
+          <button class="btn btn-ghost btn-sm" onclick={() => (editingFolder = null)}
+            >{m.concord_cancel()}</button
+          >
+          <button
+            class="btn btn-sm btn-primary"
+            data-testid="rail-folder-save"
+            onclick={commitRename}>{m.rail_folder_save()}</button
+          >
+        </span>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  /* The drop readings, drawn on the row the pointer is over. */
+  .rail-slot {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  .rail-slot-nested {
+    padding-left: 0.5rem;
+  }
+  .rail-drop-into :global(> *) {
+    outline: 2px solid var(--color-primary, currentColor);
+    outline-offset: 2px;
+    border-radius: 9999px;
+  }
+  .rail-drop-before::before,
+  .rail-drop-after::after {
+    content: '';
+    position: absolute;
+    left: 15%;
+    right: 15%;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--color-primary, currentColor);
+  }
+  .rail-drop-before::before {
+    top: -4px;
+  }
+  .rail-drop-after::after {
+    bottom: -4px;
+  }
+</style>

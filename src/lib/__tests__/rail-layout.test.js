@@ -24,19 +24,20 @@ import {
 
 const PUBKEY = 'a'.repeat(64);
 
-/** shorthand: a top-level item node */
-const item = (/** @type {string} */ key) => ({ type: 'item', key });
-/** shorthand: a folder node */
-const folder = (
-  /** @type {string} */ id,
-  /** @type {string} */ name,
-  /** @type {string[]} */ keys
-) => ({
-  type: 'folder',
-  id,
-  name,
-  keys
-});
+/**
+ * shorthand: a top-level item node
+ * @param {string} key
+ * @returns {import('$lib/rail/rail-layout.js').RailNode}
+ */
+const item = (key) => ({ type: 'item', key });
+/**
+ * shorthand: a folder node
+ * @param {string} id
+ * @param {string} name
+ * @param {string[]} keys
+ * @returns {import('$lib/rail/rail-layout.js').RailNode}
+ */
+const folder = (id, name, keys) => ({ type: 'folder', id, name, keys });
 
 describe('railKey', () => {
   it('gives each kind of container its own namespace', () => {

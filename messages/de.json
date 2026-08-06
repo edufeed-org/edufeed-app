@@ -3103,5 +3103,10 @@
   "groups_overview_lead": "Öffne einen Kanal, um mitzulesen und zu schreiben.",
   "groups_overview_empty": "Diese Community hat noch keine Kanäle.",
   "groups_badge_world_readable": "Weltoffen",
-  "groups_badge_access_pending": "Zugang wird geladen"
+  "groups_badge_access_pending": "Zugang wird geladen",
+  "rail_folder_default_name": "Neuer Ordner",
+  "rail_folder_edit": "Ordner",
+  "rail_folder_edit_title": "Ordner bearbeiten",
+  "rail_folder_dissolve": "Auflösen",
+  "rail_folder_save": "Speichern"
 }
