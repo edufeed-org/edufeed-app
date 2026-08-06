@@ -350,6 +350,7 @@
       <div class="hidden lg:contents">
         <CommunitySidebar
           currentCommunityId={currentCommunityPubkey}
+          currentPath={$page.url.pathname}
           {isDashboardActive}
           onCommunitySelect={handleCommunitySelect}
           onHomeSelect={handleHomeSelect}

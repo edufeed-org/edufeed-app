@@ -261,3 +261,137 @@ describe('CommunitySidebar — the arrangeable rail', () => {
     expect(anchors()).toEqual([`community:${COMMUNITY_A}`, `community:${COMMUNITY_B}`]);
   });
 });
+
+/**
+ * "You are here" for all three kinds of container.
+ *
+ * The rule itself is tested in rail-active.test.js; what these measure is the
+ * WIRING — that the route really reaches every row the rail draws. The ring
+ * existed for a community and for nothing else, so a Concord area and a NIP-29
+ * host left the rail looking as if you were nowhere (laoc 2026-08-06).
+ */
+describe('CommunitySidebar — which container you are in', () => {
+  const AREA = { communityId: 'area-1', name: 'Leitung' };
+  const GROUP = {
+    key: "a@wss://relay.example.com'a",
+    name: 'Allgemein',
+    symbol: '#',
+    pointer: { id: 'a', relay: 'wss://relay.example.com' }
+  };
+
+  /** The anchors of every slot the rail marks as the one you are looking at. */
+  function activeAnchors() {
+    return [...document.querySelectorAll('[data-rail-anchor]')]
+      .filter((el) => el.getAttribute('data-rail-active') === 'true')
+      .map((el) => el.getAttribute('data-rail-anchor'));
+  }
+
+  it('marks the community the layout resolved', () => {
+    render(CommunitySidebar, { props: { ...PROPS, currentCommunityId: COMMUNITY_B } });
+    expect(activeAnchors()).toEqual([`community:${COMMUNITY_B}`]);
+  });
+
+  it('marks the host whose directory is open', () => {
+    holders.groups = [GROUP];
+    render(CommunitySidebar, {
+      props: {
+        ...PROPS,
+        currentPath: `/relays/${encodeURIComponent('wss://relay.example.com')}`
+      }
+    });
+    expect(activeAnchors()).toEqual(['relay:wss://relay.example.com']);
+  });
+
+  // Opening a channel from the host page leaves /relays — and the container
+  // you are in has not changed, so neither may the rail.
+  it('keeps the host marked while one of its channels is open', () => {
+    holders.groups = [GROUP];
+    render(CommunitySidebar, {
+      props: {
+        ...PROPS,
+        currentPath: `/groups/${encodeURIComponent("wss://relay.example.com'a")}`
+      }
+    });
+    expect(activeAnchors()).toEqual(['relay:wss://relay.example.com']);
+  });
+
+  it('marks the Concord area whose page is open', () => {
+    holders.areas = [AREA];
+    render(CommunitySidebar, { props: { ...PROPS, currentPath: '/private/area-1' } });
+    expect(activeAnchors()).toEqual(['area:area-1']);
+  });
+
+  // The Home button carries its own ring on the dashboard; a container marked
+  // at the same time would claim you are in two places.
+  it('marks nothing on the dashboard', () => {
+    holders.areas = [AREA];
+    render(CommunitySidebar, {
+      props: {
+        ...PROPS,
+        currentCommunityId: COMMUNITY_A,
+        currentPath: '/c',
+        isDashboardActive: true
+      }
+    });
+    expect(activeAnchors()).toEqual([]);
+  });
+
+  it('marks nothing on a route inside no container', () => {
+    holders.groups = [GROUP];
+    render(CommunitySidebar, { props: { ...PROPS, currentPath: '/discover' } });
+    expect(activeAnchors()).toEqual([]);
+  });
+
+  // A closed folder hides its members, so without this the mark disappears
+  // the moment someone files the container they use most into a folder.
+  it('marks the folder that holds the container you are in', () => {
+    localStorage.setItem(
+      `rail-layout:${ME}`,
+      JSON.stringify([
+        { type: 'folder', id: 'f1', name: 'Schule', keys: [`community:${COMMUNITY_A}`] },
+        { type: 'item', key: `community:${COMMUNITY_B}` }
+      ])
+    );
+    render(CommunitySidebar, { props: { ...PROPS, currentCommunityId: COMMUNITY_A } });
+    const tile = screen.getByTestId('rail-folder-tile');
+    expect(tile.getAttribute('data-folder-active')).toBe('true');
+  });
+
+  it('leaves a folder unmarked when the container you are in is elsewhere', () => {
+    localStorage.setItem(
+      `rail-layout:${ME}`,
+      JSON.stringify([
+        { type: 'folder', id: 'f1', name: 'Schule', keys: [`community:${COMMUNITY_A}`] },
+        { type: 'item', key: `community:${COMMUNITY_B}` }
+      ])
+    );
+    render(CommunitySidebar, { props: { ...PROPS, currentCommunityId: COMMUNITY_B } });
+    expect(screen.getByTestId('rail-folder-tile').getAttribute('data-folder-active')).toBe('false');
+  });
+
+  // The rail is taller than the screen for anyone with a dozen containers, so
+  // the mark is worth nothing if the marked row is below the fold.
+  it('scrolls the container you are in into view', () => {
+    holders.groups = [GROUP];
+    /** @type {string[]} */
+    const scrolled = [];
+    const original = Element.prototype.scrollIntoView;
+    // jsdom has no scrollIntoView at all; installing it here is also what
+    // makes this test able to fail — without the call, `scrolled` stays empty.
+    Element.prototype.scrollIntoView = function () {
+      const anchor = /** @type {Element} */ (this).getAttribute('data-rail-anchor');
+      if (anchor) scrolled.push(anchor);
+    };
+    try {
+      render(CommunitySidebar, {
+        props: {
+          ...PROPS,
+          currentPath: `/relays/${encodeURIComponent('wss://relay.example.com')}`
+        }
+      });
+      expect(scrolled).toContain('relay:wss://relay.example.com');
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+});

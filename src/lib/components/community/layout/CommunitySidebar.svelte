@@ -44,10 +44,22 @@
   } from '$lib/rail/rail-layout-store.svelte.js';
   import RailEntryIcon from './RailEntryIcon.svelte';
   import RailFolderTile from './RailFolderTile.svelte';
+  import { activeRailTarget, isEntryActive } from '$lib/rail/rail-active.js';
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
-  let { currentCommunityId, onCommunitySelect, isDashboardActive = false, onHomeSelect } = $props();
+  let {
+    currentCommunityId,
+    onCommunitySelect,
+    isDashboardActive = false,
+    onHomeSelect,
+    // The route, because only a route can say which AREA or which HOST you are
+    // looking at — `currentCommunityId` covers exactly one of the rail's three
+    // kinds. Passed in rather than read from $app/stores here: every other
+    // input this component has arrives as a prop, and the two layouts that
+    // mount it already hold the page store.
+    currentPath = ''
+  } = $props();
 
   const getJoinedCommunities = useJoinedCommunitiesList();
   const joinedCommunities = $derived(getJoinedCommunities());
@@ -112,6 +124,24 @@
   );
   const layout = $derived(getLayout());
   const openFolders = $derived(readOpenFolders(me));
+
+  // Where you are, as a container: one rule for all three kinds, so a Concord
+  // area and a NIP-29 host get the same "you are here" a community always had.
+  const activeTarget = $derived(
+    activeRailTarget({
+      pathname: currentPath,
+      communityPubkey: currentCommunityId,
+      isDashboardActive
+    })
+  );
+  /** @param {import('$lib/rail/rail-entries.js').RailEntry} entry */
+  const isActiveEntry = (entry) => isEntryActive(entry, activeTarget);
+  /** @param {import('$lib/rail/rail-entries.js').RailEntry[]} entries */
+  const holdsActive = (entries) => entries.some((entry) => isEntryActive(entry, activeTarget));
+  /** The anchor of the active row, for the scroll-into-view effect below. */
+  const activeAnchor = $derived(
+    railEntries.find((entry) => isEntryActive(entry, activeTarget))?.key ?? null
+  );
 
   /** The entry currently being dragged, or a `folder:<id>` anchor. */
   let dragAnchor = $state(/** @type {string | null} */ (null));
@@ -234,6 +264,27 @@
     observer.observe(el);
     return () => observer.disconnect();
   });
+
+  // The rail is taller than the screen for anyone with a dozen containers, so
+  // a ring on a row below the fold says nothing. This is the answer to "hosts
+  // first, or keep the order?": neither reorders anything — the row you are in
+  // is brought to you, and the order you arranged stays yours.
+  $effect(() => {
+    // Read the layout so this re-runs when the row appears (entries arrive
+    // after the first paint) and when a folder opens or closes.
+    void layout.length;
+    void openFolders.length;
+    const anchor = activeAnchor;
+    const el = railEl;
+    if (!anchor || !el) return;
+    const row = [...el.querySelectorAll('[data-rail-anchor]')].find(
+      (node) => node.getAttribute('data-rail-anchor') === anchor
+    );
+    // jsdom has no scrollIntoView at all, and a folded-away row has no node.
+    if (row && typeof (/** @type {any} */ (row).scrollIntoView) === 'function') {
+      /** @type {HTMLElement} */ (row).scrollIntoView({ block: 'nearest' });
+    }
+  });
 </script>
 
 <!-- Desktop: Flex sibling in chrome row -->
@@ -279,6 +330,7 @@
             draggable="true"
             data-testid="rail-slot"
             data-rail-anchor={node.key}
+            data-rail-active={isActiveEntry(entry) ? 'true' : 'false'}
             class="rail-slot {dragAnchor === node.key ? 'opacity-40' : ''} {dropClass(node.key)}"
             ondragstart={() => (dragAnchor = node.key)}
             ondragend={endDrag}
@@ -287,9 +339,7 @@
           >
             <RailEntryIcon
               {entry}
-              isActive={!isDashboardActive &&
-                entry.kind === 'community' &&
-                currentCommunityId === entry.pubkey}
+              isActive={isActiveEntry(entry)}
               onSelect={handleCommunityClick}
             />
           </div>
@@ -312,6 +362,7 @@
             name={node.name}
             entries={members}
             open={openFolders.includes(node.id)}
+            holdsActive={holdsActive(members)}
             onToggle={() => toggleFolder(node.id)}
           />
         </div>
@@ -325,6 +376,7 @@
               draggable="true"
               data-testid="rail-slot"
               data-rail-anchor={entry.key}
+              data-rail-active={isActiveEntry(entry) ? 'true' : 'false'}
               class="rail-slot rail-slot-nested {dragAnchor === entry.key
                 ? 'opacity-40'
                 : ''} {dropClass(entry.key)}"
@@ -336,9 +388,7 @@
               <RailEntryIcon
                 {entry}
                 size="h-10 w-10"
-                isActive={!isDashboardActive &&
-                  entry.kind === 'community' &&
-                  currentCommunityId === entry.pubkey}
+                isActive={isActiveEntry(entry)}
                 onSelect={handleCommunityClick}
               />
             </div>
@@ -476,8 +526,10 @@
     {@const communityProfile = getCommunityProfile()}
     <button
       onclick={() => handleCommunityClick(entry.pubkey)}
-      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {!isDashboardActive &&
-      currentCommunityId === entry.pubkey
+      data-rail-active={isActiveEntry(entry) ? 'true' : 'false'}
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {isActiveEntry(
+        entry
+      )
         ? 'bg-primary text-primary-content'
         : 'hover:bg-base-300'}"
     >
@@ -499,10 +551,12 @@
     {@const areaFlags = areaUnreadState(entry.area.communityId)}
     <a
       href={resolve(`/private/${entry.area.communityId}`)}
-      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300 {entry
-        .area.dissolved
-        ? 'opacity-50'
-        : ''}"
+      data-rail-active={isActiveEntry(entry) ? 'true' : 'false'}
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {isActiveEntry(
+        entry
+      )
+        ? 'bg-primary text-primary-content'
+        : 'hover:bg-base-300'} {entry.area.dissolved ? 'opacity-50' : ''}"
     >
       <span class="relative shrink-0">
         <ConcordAreaBadge
@@ -525,7 +579,12 @@
       href={relayHref(entry.relay)}
       data-testid="sidebar-relay-row"
       data-relay={entry.relay}
-      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300"
+      data-rail-active={isActiveEntry(entry) ? 'true' : 'false'}
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 {isActiveEntry(
+        entry
+      )
+        ? 'bg-primary text-primary-content'
+        : 'hover:bg-base-300'}"
     >
       <RailRelayIcon relay={entry.relay} size="h-8 w-8" rounded="rounded-lg" />
       <span class="flex-1 truncate text-left text-sm font-medium">

@@ -29,6 +29,7 @@
   title={getDisplayName(profile)}
   data-testid="rail-community-icon"
   onclick={() => onSelect?.(pubkey)}
+  aria-current={isActive ? 'page' : undefined}
   class="btn btn-circle {size} shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
     ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
     : ''}"

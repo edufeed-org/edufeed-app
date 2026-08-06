@@ -76,6 +76,7 @@
   {#if activeUser() && !hasWorkspaceShell}
     <CommunitySidebar
       currentCommunityId={currentCommunityPubkey}
+      currentPath={$page.url.pathname}
       {isDashboardActive}
       onCommunitySelect={handleCommunitySelect}
       onHomeSelect={handleHomeSelect}
@@ -176,6 +177,7 @@
           <div class="h-[calc(100dvh-4rem)] overflow-y-auto">
             <CommunitySidebar
               currentCommunityId={currentCommunityPubkey}
+              currentPath={$page.url.pathname}
               {isDashboardActive}
               onCommunitySelect={handleCommunitySelect}
               onHomeSelect={handleHomeSelect}

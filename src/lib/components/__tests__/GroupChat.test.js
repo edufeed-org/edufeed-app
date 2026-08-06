@@ -238,4 +238,14 @@ describe('GroupChat', () => {
     // `closed` is absent, and members-only already says what a reader needs.
     expect(screen.queryByTestId('group-badge-invite')).toBeNull();
   });
+
+  // A channel opened from a host directory used to be a dead end: the chat
+  // named its host in plain text, so the only way back to that host's other
+  // channels was the browser's back button.
+  it('names the host as a way back to its other channels', async () => {
+    render(GroupChat, { props: { pointer } });
+    const link = await screen.findByTestId('group-host-link');
+    expect(link.getAttribute('href')).toBe(`/relays/${encodeURIComponent(GROUP_RELAY)}`);
+    expect(link.textContent).toContain('groups.example.com');
+  });
 });

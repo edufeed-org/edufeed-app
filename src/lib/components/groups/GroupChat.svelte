@@ -31,6 +31,7 @@
     buildGroupsListTemplate
   } from '$lib/groups/groups.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
+  import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -280,7 +281,14 @@
         {metadata?.name ?? pointer.id}
       </h2>
       <p class="truncate text-xs opacity-60">
-        {new URL(pointer.relay).hostname}{members.size ? ` · ${members.size}` : ''}
+        <!-- The host, as the way back to its OTHER channels. A channel is a
+             group with no parent object, so the relay is the container this
+             chat sits in, and it was previously named here in plain text —
+             a dead end. `relayLabel` keeps the port: a relay on another port
+             is another relay. -->
+        <a href={relayHref(pointer.relay)} data-testid="group-host-link" class="link link-hover"
+          >{relayLabel(pointer.relay)}</a
+        >{members.size ? ` · ${members.size}` : ''}
         {#if metadata?.about}&nbsp;— {metadata.about}{/if}
       </p>
       <GroupBadges access={accessBadges} host={hostBadges} class="mt-1" />

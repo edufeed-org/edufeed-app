@@ -17,10 +17,11 @@
    *   name: string,
    *   entries: import('$lib/rail/rail-entries.js').RailEntry[],
    *   open?: boolean,
+   *   holdsActive?: boolean,
    *   onToggle?: () => void
    * }}
    */
-  let { name, entries, open = false, onToggle } = $props();
+  let { name, entries, open = false, holdsActive = false, onToggle } = $props();
 
   const preview = $derived(entries.slice(0, 4));
 </script>
@@ -30,10 +31,13 @@
   title={name}
   data-testid="rail-folder-tile"
   data-folder-open={open ? 'true' : 'false'}
+  data-folder-active={holdsActive ? 'true' : 'false'}
   onclick={() => onToggle?.()}
-  class="grid h-12 w-12 shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-2xl bg-base-300 p-1 transition-transform duration-200 hover:scale-110 {open
-    ? 'ring-2 ring-primary/60'
-    : ''}"
+  class="grid h-12 w-12 shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-2xl bg-base-300 p-1 transition-transform duration-200 hover:scale-110 {holdsActive
+    ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
+    : open
+      ? 'ring-2 ring-primary/60'
+      : ''}"
 >
   {#each preview as entry (entry.key)}
     {#if entry.kind === 'community'}

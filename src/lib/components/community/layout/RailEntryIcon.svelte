@@ -46,10 +46,10 @@
     href={resolve(`/private/${entry.area.communityId}`)}
     data-testid="rail-area-icon"
     draggable="false"
-    class="btn btn-circle {size} shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {entry
-      .area.dissolved
-      ? 'opacity-50'
-      : ''}"
+    aria-current={isActive ? 'page' : undefined}
+    class="btn btn-circle {size} shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
+      ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
+      : ''} {entry.area.dissolved ? 'opacity-50' : ''}"
   >
     <span class="relative shrink-0">
       <ConcordAreaBadge
@@ -73,7 +73,10 @@
     data-testid="sidebar-relay-icon"
     data-relay={entry.relay}
     draggable="false"
-    class="btn btn-circle {size} shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
+    aria-current={isActive ? 'page' : undefined}
+    class="btn btn-circle {size} shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110 {isActive
+      ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
+      : ''}"
   >
     <RailRelayIcon relay={entry.relay} {size} />
   </a>
