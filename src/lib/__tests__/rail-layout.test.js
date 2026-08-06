@@ -309,12 +309,17 @@ describe('resolveDrop', () => {
 
   // There is no second level in this rail, so a folder dropped on an item has
   // to do nothing rather than half-happen.
+  // Both target shapes are covered because they take DIFFERENT branches: a
+  // bare item goes through makeFolder, an item already inside a folder goes
+  // through moveEntry. resolveDrop repeats neither refusal itself.
   it('refuses to fold a folder into an item', () => {
+    const layout = normalizeLayout([folder('f1', 'Schule', ['a']), item('b')], live);
+    expect(resolveDrop(layout, folderAnchor('f1'), 'b', 'into', 'Neu', id)).toEqual(layout);
+  });
+
+  it('refuses to fold a folder onto an item that is inside another folder', () => {
     const layout = normalizeLayout(
-      [
-        { type: 'folder', id: 'f1', name: 'Schule', keys: ['a'] },
-        { type: 'item', key: 'b' }
-      ],
+      [folder('f1', 'Schule', ['a']), folder('f2', 'Arbeit', ['b']), item('c')],
       live
     );
     expect(resolveDrop(layout, folderAnchor('f1'), 'b', 'into', 'Neu', id)).toEqual(layout);

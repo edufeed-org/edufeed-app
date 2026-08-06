@@ -287,8 +287,11 @@ export function resolveDrop(layout, anchor, targetAnchor, intent, newFolderName,
 
   const targetFolderId = folderIdOf(targetAnchor);
   if (targetFolderId) return moveEntry(layout, anchor, { intoFolder: targetFolderId });
-  // A folder cannot be folded into an item — there is no second level.
-  if (folderIdOf(anchor)) return layout;
+  // There is no second level, so a FOLDER dropped on an item has to do
+  // nothing. That refusal is not repeated here: makeFolder already returns the
+  // layout unchanged for a source that is not an item, and so does moveEntry
+  // on the branch makeFolder takes when the target already sits in a folder.
+  // A guard here as well was measured and found dead — mutation-tested 2026-08-06.
   return makeFolder(layout, anchor, targetAnchor, newFolderName, newId);
 }
 
