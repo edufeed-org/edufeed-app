@@ -10,8 +10,34 @@
 // Only pointer helpers at the top level — SSR-safe, no package imports. The
 // publish path is a dynamic import inside the shared helper, so components can
 // import this without adding a static edge into the publish dep tree.
-import { withGroupPointer, withoutGroupPointer, channelKey } from './community-pointer.js';
+import {
+  withGroupPointer,
+  withoutGroupPointer,
+  channelKey,
+  parseGroupPointers
+} from './community-pointer.js';
+import { parseConcordPointer } from '$lib/concord/pointer.js';
 import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
+
+/**
+ * Which kind of protected area this community may still be extended by.
+ *
+ * A community is extended by EXACTLY ONE protected area — a Concord area or a
+ * set of NIP-29 channels, never both (laoc 2026-08-05; see
+ * PLANS/EDUFEED_APP_GRUPPEN_MERGE.md §1). Both glyphs mean the same thing in
+ * either world only because the line above the channel list says who
+ * "everyone" is — and a community carrying both would have no such line.
+ *
+ * Read off the pointers themselves rather than a stored flag, so a tag that
+ * carries no usable pointer never locks a community out of attaching anything.
+ * @param {{ tags?: string[][] } | null | undefined} communikeyEvent
+ * @returns {{ concord: boolean, group: boolean }}
+ */
+export function attachableAreaModes(communikeyEvent) {
+  const hasConcord = !!parseConcordPointer(communikeyEvent);
+  const hasGroups = parseGroupPointers(communikeyEvent).length > 0;
+  return { concord: !hasGroups, group: !hasConcord };
+}
 
 /**
  * @param {any} communikeyEvent

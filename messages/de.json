@@ -3081,5 +3081,18 @@
   "groups_reply": "Antworten",
   "groups_input_placeholder": "Nachricht an {name}",
   "groups_channel_world_readable": "Weltoffen — auch von außerhalb der Community lesbar",
-  "groups_invalid_pointer": "Keine gültige Gruppenadresse"
+  "groups_invalid_pointer": "Keine gültige Gruppenadresse",
+  "groups_attach_tab": "Geschlossene Gruppe",
+  "concord_attach_tab": "Verschlüsselter Bereich",
+  "groups_attach_lead": "Füge eine bestehende Gruppe als Kanal dieser Community hinzu. Die Gruppe selbst bleibt unverändert — sie steht danach zusätzlich hier in der Kanalliste.",
+  "groups_attach_address_label": "Gruppenadresse",
+  "groups_attach_access_label": "Wer soll mitlesen können?",
+  "groups_attach_access_members": "Alle in dieser Community",
+  "groups_attach_access_invited": "Nur ausgewählte Mitglieder",
+  "groups_attach_access_hint": "Diese Angabe beschriftet nur die Kanalzeile. Wer wirklich mitlesen darf, entscheidet die Gruppe selbst.",
+  "groups_attach_action": "Kanal hinzufügen",
+  "groups_attach_success": "Kanal hinzugefügt",
+  "groups_attach_failed": "Kanal konnte nicht hinzugefügt werden. Bitte versuche es erneut.",
+  "groups_pick_channel_title": "Wähle einen Kanal",
+  "groups_pick_channel_body": "Die Kanäle dieser Community stehen in der Liste. Öffne einen, um mitzulesen und zu schreiben."
 }

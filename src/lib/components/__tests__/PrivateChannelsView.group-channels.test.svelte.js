@@ -143,6 +143,52 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     expect(row.querySelector('[data-testid="world-readable-badge"]')).toBeNull();
   });
 
+  // Without this the feature is a dead end: the first channel can be attached
+  // from the founding pane, the second one has nowhere to come from.
+  it('lets the community owner add another channel once one is listed', async () => {
+    holders.concord = { ...holders.concord, enabled: false };
+    holders.events = {};
+
+    render(PrivateChannelsView, {
+      props: { communikeyEvent: communityEvent([['group', 'allgemein', RELAY]]) }
+    });
+
+    expect(await screen.findByTestId('group-attach-open')).toBeTruthy();
+  });
+
+  // Only the community's own keypair can rewrite its 10222, so offering the
+  // button to anyone else is an offer that cannot be honoured.
+  it('does not offer that to someone who is not the community', async () => {
+    holders.concord = { ...holders.concord, enabled: false };
+    holders.events = {};
+
+    render(PrivateChannelsView, {
+      props: {
+        communikeyEvent: {
+          ...communityEvent([['group', 'allgemein', RELAY]]),
+          pubkey: 'b'.repeat(64)
+        }
+      }
+    });
+
+    await screen.findAllByTestId('group-channel-row');
+    expect(screen.queryByTestId('group-attach-open')).toBeNull();
+  });
+
+  // A community extended by NIP-29 has no Concord area and never will — the
+  // founding offer would be an invitation into the mixed state the design
+  // rules out.
+  it('does not offer to found a concord area for a community extended by groups', () => {
+    holders.concord = { ...holders.concord, enabled: false };
+    holders.events = {};
+
+    render(PrivateChannelsView, {
+      props: { communikeyEvent: communityEvent([['group', 'allgemein', RELAY]]) }
+    });
+
+    expect(screen.queryByTestId('concord-new-channel')).toBeNull();
+  });
+
   it('renders nothing for a community with neither concord nor group channels', () => {
     holders.concord = { ...holders.concord, enabled: false };
     holders.events = {};

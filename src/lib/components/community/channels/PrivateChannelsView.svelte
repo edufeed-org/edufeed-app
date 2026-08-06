@@ -29,6 +29,7 @@
   // protected area — a Concord area OR a set of NIP-29 groups — but the rail
   // is one list either way, so both sources are merged before rendering.
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { attachableAreaModes } from '$lib/groups/community-attach.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { groupHref } from '$lib/groups/groups.js';
@@ -139,6 +140,11 @@
   // name; `channels` above stays as it is because the Concord chat pane,
   // deletion and unread logic all key off it.
   const groupPointers = $derived(parseGroupPointers(communikeyEvent));
+  // A community is extended by exactly ONE protected area, so once it carries
+  // group channels the Concord founding offer has to stop — it would invite the
+  // owner into precisely the mixed state the design rules out.
+  const extendedByGroups = $derived(groupPointers.length > 0);
+  const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
   const getChannelMeta = useChannelMetadata(() => groupPointers);
   const channelRows = $derived(
     buildChannelRows({
@@ -367,6 +373,15 @@
           </a>
         {/if}
       {/each}
+      {#if extendedByGroups && canAttachGroup}
+        <button
+          class="btn justify-start border-dashed btn-outline btn-sm"
+          data-testid="group-attach-open"
+          onclick={() => (overlay = 'attach-area')}
+        >
+          + {m.groups_attach_action()}
+        </button>
+      {/if}
       {#if concord.community && concord.canManageChannels && !concord.dissolved}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
@@ -391,7 +406,14 @@
     <section
       class="flex min-w-0 flex-1 flex-col bg-base-100 {mobileChat ? 'flex' : 'hidden md:flex'}"
     >
-      {#if !concord.community && isCommunikeyOwner}
+      {#if extendedByGroups && !concord.community}
+        <!-- Each NIP-29 channel opens its own route, so this pane is only ever
+          a placeholder — but it must not be the Concord founding offer. -->
+        <ChannelStatePane
+          title={m.groups_pick_channel_title()}
+          body={m.groups_pick_channel_body()}
+        />
+      {:else if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
           <div class="mt-4 flex flex-wrap justify-center gap-2">
             <button
