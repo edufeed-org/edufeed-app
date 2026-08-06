@@ -28,7 +28,9 @@
   // NIP-29 channels of the same community. A community is extended by ONE
   // protected area — a Concord area OR a set of NIP-29 groups — but the rail
   // is one list either way, so both sources are merged before rendering.
-  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { relayBadges } from '$lib/groups/group-badges.js';
+  import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { attachableAreaModes } from '$lib/groups/community-attach.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
@@ -37,6 +39,7 @@
   import { page } from '$app/stores';
   import { get } from 'svelte/store';
   import ChannelStatePane from './ChannelStatePane.svelte';
+  import ChannelOverview from './ChannelOverview.svelte';
   import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
   import AreaAttachModal from './AreaAttachModal.svelte';
@@ -146,6 +149,11 @@
   const extendedByGroups = $derived(groupPointers.length > 0);
   const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
   const getChannelMeta = useChannelMetadata(() => groupPointers);
+  // Relay badges on the overview describe ONE host, so they are only fetched
+  // and shown when every channel of this community lives on the same relay —
+  // see sharedRelayOf. Two relays means the badges are dropped, never guessed.
+  const getOverviewRelayInfo = useRelayInformation(() => sharedRelayOf(groupPointers));
+  const channelHostBadges = $derived(relayBadges(getOverviewRelayInfo()));
   const channelRows = $derived(
     buildChannelRows({
       concordChannels: channels,
@@ -407,12 +415,12 @@
       class="flex min-w-0 flex-1 flex-col bg-base-100 {mobileChat ? 'flex' : 'hidden md:flex'}"
     >
       {#if extendedByGroups && !concord.community}
-        <!-- Each NIP-29 channel opens its own route, so this pane is only ever
-          a placeholder — but it must not be the Concord founding offer. -->
-        <ChannelStatePane
-          title={m.groups_pick_channel_title()}
-          body={m.groups_pick_channel_body()}
-        />
+        <!-- Each NIP-29 channel opens its own route, so this pane never holds a
+          chat — but it must not be the Concord founding offer either, and a
+          bare "pick a channel" placard said nothing the rail beside it did not
+          already say. It is the channel overview instead (Armada parity:
+          ServerPage's welcome pane). -->
+        <ChannelOverview rows={channelRows} hostBadges={channelHostBadges} />
       {:else if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
           <div class="mt-4 flex flex-wrap justify-center gap-2">

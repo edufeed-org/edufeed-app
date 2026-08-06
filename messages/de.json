@@ -3093,12 +3093,15 @@
   "groups_attach_action": "Kanal hinzufügen",
   "groups_attach_success": "Kanal hinzugefügt",
   "groups_attach_failed": "Kanal konnte nicht hinzugefügt werden. Bitte versuche es erneut.",
-  "groups_pick_channel_title": "Wähle einen Kanal",
-  "groups_pick_channel_body": "Die Kanäle dieser Community stehen in der Liste. Öffne einen, um mitzulesen und zu schreiben.",
   "groups_attach_title": "Kanal hinzufügen",
   "groups_sidebar_my_groups": "Meine Gruppen",
   "groups_badge_members_only": "Nur für Mitglieder",
   "groups_badge_invite_only": "Beitritt nur mit Einladung",
   "groups_badge_auth_required": "Anmeldung erforderlich",
-  "groups_badge_nip29": "NIP-29"
+  "groups_badge_nip29": "NIP-29",
+  "groups_overview_title": "Kanäle dieser Community",
+  "groups_overview_lead": "Öffne einen Kanal, um mitzulesen und zu schreiben.",
+  "groups_overview_empty": "Diese Community hat noch keine Kanäle.",
+  "groups_badge_world_readable": "Weltoffen",
+  "groups_badge_access_pending": "Zugang wird geladen"
 }

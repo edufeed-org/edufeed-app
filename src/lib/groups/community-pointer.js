@@ -85,6 +85,34 @@ export function parseGroupPointers(event) {
 }
 
 /**
+ * The one relay every channel of this community lives on, or null.
+ *
+ * The relay badges on the channel overview describe ONE host. A community whose
+ * channels are spread over two relays has no single answer, and picking either
+ * host's badges would attach them to channels that host says nothing about — so
+ * the badges are dropped instead of guessed. Compared after normalisation, for
+ * the same reason {@link channelKey} is.
+ *
+ * Returns the first pointer's relay VERBATIM, not its normalised form: it is
+ * what the community wrote, and it is what every other reader here is handed.
+ *
+ * @param {Array<{relay?: string, [key: string]: any}>} pointers
+ * @returns {string | null}
+ */
+export function sharedRelayOf(pointers) {
+  if (!Array.isArray(pointers) || pointers.length === 0) return null;
+  /** @type {string | null} */
+  let shared = null;
+  for (const pointer of pointers) {
+    if (typeof pointer?.relay !== 'string' || !isRelayUrl(pointer.relay)) return null;
+    const normalised = normalizeURL(pointer.relay);
+    if (shared === null) shared = normalised;
+    else if (shared !== normalised) return null;
+  }
+  return pointers[0].relay ?? null;
+}
+
+/**
  * @param {CommunityGroupPointer} pointer
  * @returns {string[]}
  */

@@ -31,6 +31,7 @@
     buildGroupsListTemplate
   } from '$lib/groups/groups.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
+  import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
@@ -282,24 +283,7 @@
         {new URL(pointer.relay).hostname}{members.size ? ` · ${members.size}` : ''}
         {#if metadata?.about}&nbsp;— {metadata.about}{/if}
       </p>
-      {#if accessBadges.length || hostBadges.length}
-        <div class="mt-1 flex flex-wrap items-center gap-1" data-testid="group-badges">
-          {#each accessBadges as badge (badge.id)}
-            <span class="badge badge-outline badge-xs" data-testid="group-badge-{badge.id}">
-              {badge.id === 'members'
-                ? m.groups_badge_members_only()
-                : m.groups_badge_invite_only()}
-            </span>
-          {/each}
-          {#each hostBadges as badge (badge.id)}
-            <span class="badge badge-ghost badge-xs" data-testid="group-badge-{badge.id}">
-              {#if badge.id === 'auth'}{m.groups_badge_auth_required()}
-              {:else if badge.id === 'nip29'}{m.groups_badge_nip29()}
-              {:else}{badge.text}{/if}
-            </span>
-          {/each}
-        </div>
-      {/if}
+      <GroupBadges access={accessBadges} host={hostBadges} class="mt-1" />
     </div>
     {#if myPubkey}
       {#if isMember}

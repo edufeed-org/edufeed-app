@@ -3093,12 +3093,15 @@
   "groups_attach_action": "Add channel",
   "groups_attach_success": "Channel added",
   "groups_attach_failed": "The channel could not be added. Please try again.",
-  "groups_pick_channel_title": "Pick a channel",
-  "groups_pick_channel_body": "This community's channels are in the list. Open one to read along and write.",
   "groups_attach_title": "Add channel",
   "groups_sidebar_my_groups": "My groups",
   "groups_badge_members_only": "Members only",
   "groups_badge_invite_only": "Invite only",
   "groups_badge_auth_required": "Sign-in required",
-  "groups_badge_nip29": "NIP-29"
+  "groups_badge_nip29": "NIP-29",
+  "groups_overview_title": "Channels in this community",
+  "groups_overview_lead": "Open a channel to read along and write.",
+  "groups_overview_empty": "This community has no channels yet.",
+  "groups_badge_world_readable": "World-readable",
+  "groups_badge_access_pending": "Access still loading"
 }

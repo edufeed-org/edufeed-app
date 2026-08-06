@@ -4,7 +4,8 @@ import {
   parseGroupPointers,
   buildGroupPointerTag,
   withGroupPointer,
-  withoutGroupPointer
+  withoutGroupPointer,
+  sharedRelayOf
 } from '$lib/groups/community-pointer.js';
 
 const R = 'wss://groups.example';
@@ -225,5 +226,41 @@ describe('withoutGroupPointer', () => {
   it('is a no-op for a channel that is not there', () => {
     const tags = [['group', 'allgemein', R]];
     expect(withoutGroupPointer(tags, { id: 'leitung', relay: R })).toEqual(tags);
+  });
+});
+
+describe('sharedRelayOf', () => {
+  it('is the relay when every channel lives on the same one', () => {
+    expect(
+      sharedRelayOf([
+        { id: 'allgemein', relay: R },
+        { id: 'leitung', relay: R }
+      ])
+    ).toBe(R);
+  });
+
+  it('sees through URL normalisation', () => {
+    expect(
+      sharedRelayOf([
+        { id: 'allgemein', relay: 'wss://Groups.Example' },
+        { id: 'leitung', relay: 'wss://groups.example/' }
+      ])
+    ).toBe('wss://Groups.Example');
+  });
+
+  // The relay badges describe ONE host. Two hosts means no single answer, and
+  // showing either one's badges would attach them to channels they say nothing
+  // about.
+  it('is null once two relays are involved', () => {
+    expect(
+      sharedRelayOf([
+        { id: 'allgemein', relay: R },
+        { id: 'leitung', relay: R2 }
+      ])
+    ).toBeNull();
+  });
+
+  it('is null for an empty list', () => {
+    expect(sharedRelayOf([])).toBeNull();
   });
 });

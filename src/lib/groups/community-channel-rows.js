@@ -25,10 +25,15 @@ import { channelKey } from './community-pointer.js';
  * @typedef {ChannelRowBase & {source: 'concord', channel_id: string}} ConcordChannelRow
  * @typedef {ChannelRowBase & {
  *   source: 'group',
+ *   level: import('./channel-access.js').ChannelAccessLevel,
+ *   about?: string,
  *   pointer: {id: string, relay: string, name?: string, access?: string}
  * }} GroupChannelRow
  * @typedef {ConcordChannelRow | GroupChannelRow} ChannelRow
  */
+// `level` rides along with `symbol` because the glyph is lossy: '#' stands for
+// both "world" and "members". The rail only needs the glyph, but the card grid
+// says the level in words, and it cannot get back to the level from a '#'.
 
 /**
  * @param {{
@@ -74,6 +79,8 @@ export function buildChannelRows({ concordChannels = [], groupPointers = [], met
       // locked meanwhile, and callers can show that it is still settling.
       pending: level === 'unknown',
       source: 'group',
+      level,
+      ...(metadataTag(metadata, 'about') ? { about: metadataTag(metadata, 'about') } : {}),
       pointer
     });
   }
@@ -83,6 +90,19 @@ export function buildChannelRows({ concordChannels = [], groupPointers = [], met
 
 /** @param {{tags?: string[][]} | null | undefined} metadata */
 function metadataName(metadata) {
+  return metadataTag(metadata, 'name');
+}
+
+/**
+ * A single-value tag off an untrusted kind:39000. Whitespace-only is the same
+ * as absent — a group that writes `["about", "  "]` has said nothing, and a
+ * card must not reserve a line for it.
+ * @param {{tags?: string[][]} | null | undefined} metadata
+ * @param {string} name
+ * @returns {string | undefined}
+ */
+function metadataTag(metadata, name) {
   if (!metadata || !Array.isArray(metadata.tags)) return undefined;
-  return metadata.tags.find((t) => t[0] === 'name')?.[1] || undefined;
+  const value = metadata.tags.find((t) => t[0] === name)?.[1];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

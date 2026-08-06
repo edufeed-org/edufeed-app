@@ -139,6 +139,65 @@ describe('buildChannelRows', () => {
     expect(rows.map((r) => r.name)).toEqual(['ok']);
   });
 
+  // The card grid says in words what the rail says with a glyph, so the level
+  // has to survive as data — a card cannot re-derive it from the symbol, which
+  // is '#' for two different levels.
+  it('carries the access level, not just the glyph', () => {
+    const open = ptr('ankuendigungen');
+    const members = ptr('allgemein', { access: 'members' });
+    const invited = ptr('leitung', { access: 'invited' });
+    const rows = buildChannelRows({
+      groupPointers: [open, members, invited, ptr('neu')],
+      metadataByKey: {
+        [key(open)]: meta('ankuendigungen', [['restricted']]),
+        [key(members)]: meta('allgemein', [['private']]),
+        [key(invited)]: meta('leitung', [['private']])
+      }
+    });
+    // The union narrows on `source`; these fixtures are all group rows.
+    const groupRows = /** @type {any[]} */ (rows);
+    const level = (/** @type {string} */ name) => groupRows.find((r) => r.name === name)?.level;
+    expect(level('ankuendigungen')).toBe('world');
+    expect(level('allgemein')).toBe('members');
+    expect(level('leitung')).toBe('invited');
+    expect(level('neu')).toBe('unknown');
+    // 'members' and 'world' share the '#' glyph, so the glyph alone could not
+    // have told them apart.
+    expect(rows.find((r) => r.name === 'ankuendigungen')?.symbol).toBe(
+      rows.find((r) => r.name === 'allgemein')?.symbol
+    );
+  });
+
+  it('carries the group topic so a card can show it', () => {
+    const p = ptr('allgemein');
+    const rows = buildChannelRows({
+      groupPointers: [p],
+      metadataByKey: { [key(p)]: meta('allgemein', [['private'], ['about', 'Alles Weitere']]) }
+    });
+    expect(/** @type {any} */ (rows[0]).about).toBe('Alles Weitere');
+  });
+
+  // Written with a channel that HAS a topic in the same fixture: without it
+  // this test passes on an implementation that never reads `about` at all.
+  it('leaves the topic absent when the group states none or only blanks', () => {
+    const has = ptr('a');
+    const none = ptr('b');
+    const blank = ptr('c');
+    const rows = buildChannelRows({
+      groupPointers: [has, none, blank],
+      metadataByKey: {
+        [key(has)]: meta('a', [['private'], ['about', 'Alles Weitere']]),
+        [key(none)]: meta('b', [['private']]),
+        [key(blank)]: meta('c', [['private'], ['about', '   ']])
+      }
+    });
+    const groupRows = /** @type {any[]} */ (rows);
+    const about = (/** @type {string} */ name) => groupRows.find((r) => r.name === name)?.about;
+    expect(about('a')).toBe('Alles Weitere');
+    expect(about('b')).toBeUndefined();
+    expect(about('c')).toBeUndefined();
+  });
+
   it('does not write a cache symbol onto any metadata event', () => {
     const p = ptr('allgemein');
     const event = meta('allgemein', [['private']]);
