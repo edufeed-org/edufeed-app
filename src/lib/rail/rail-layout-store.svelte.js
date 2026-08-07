@@ -40,10 +40,31 @@ export function readRailLayout(pubkey) {
 }
 
 /**
+ * Where an arrangement goes to be synced, when anything is listening.
+ *
+ * Injected rather than imported so this module keeps no dependency on the
+ * signer, the relays or the event store — which is what lets both halves be
+ * tested without either one. Wired up in +layout.svelte.
+ * @type {((pubkey: string, layout: import('./rail-layout.js').RailNode[]) => void) | null}
+ */
+let publisher = null;
+
+/** @param {(pubkey: string, layout: import('./rail-layout.js').RailNode[]) => void} fn */
+export function setRailLayoutPublisher(fn) {
+  publisher = fn;
+}
+
+/**
+ * Write the local copy and nothing else.
+ *
+ * This is the side the sync service mirrors INTO when a layout arrives from
+ * another device — it must not publish, or a received layout would be
+ * immediately republished by the device that just received it.
+ *
  * @param {string | null | undefined} pubkey
  * @param {import('./rail-layout.js').RailNode[]} layout
  */
-export function writeRailLayout(pubkey, layout) {
+export function writeRailLayoutCache(pubkey, layout) {
   if (!pubkey || typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(LAYOUT_PREFIX + pubkey, JSON.stringify(layout));
@@ -52,6 +73,23 @@ export function writeRailLayout(pubkey, layout) {
     // in memory and stays until reload.
   }
   version++;
+}
+
+/**
+ * Store an arrangement the user just made: locally always, and to the relays
+ * when sync is available and it is safe to.
+ *
+ * The local write happens FIRST and unconditionally. Sync can be unavailable,
+ * still loading, or blocked, and in every one of those cases the user's drag
+ * must still stick on the device they made it on.
+ *
+ * @param {string | null | undefined} pubkey
+ * @param {import('./rail-layout.js').RailNode[]} layout
+ */
+export function writeRailLayout(pubkey, layout) {
+  if (!pubkey || typeof localStorage === 'undefined') return;
+  writeRailLayoutCache(pubkey, layout);
+  publisher?.(pubkey, layout);
 }
 
 /**

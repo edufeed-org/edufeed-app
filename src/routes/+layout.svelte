@@ -316,12 +316,26 @@
       import('$lib/services/wave-service.svelte.js').then(({ initializeWaveToasts }) => {
         initializeWaveToasts(account.pubkey);
       });
+      // The rail's arrangement, encrypted to the user themselves. Wired here
+      // rather than imported by the store so the store keeps no dependency on
+      // the signer or the relays.
+      Promise.all([
+        import('$lib/rail/rail-layout-sync.svelte.js'),
+        import('$lib/rail/rail-layout-store.svelte.js')
+      ]).then(([sync, store]) => {
+        sync.setRailLayoutMirror(store.writeRailLayoutCache);
+        store.setRailLayoutPublisher(sync.publishRailLayout);
+        sync.initializeRailLayoutSync(account.pubkey);
+      });
     } else {
       import('$lib/services/inbox-service.svelte.js').then(({ cleanup }) => {
         cleanup();
       });
       import('$lib/services/wave-service.svelte.js').then(({ cleanupWaveToasts }) => {
         cleanupWaveToasts();
+      });
+      import('$lib/rail/rail-layout-sync.svelte.js').then(({ cleanupRailLayoutSync }) => {
+        cleanupRailLayoutSync();
       });
     }
   });
