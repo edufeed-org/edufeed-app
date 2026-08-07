@@ -121,6 +121,40 @@ describe('buildGroupMessageTemplate', () => {
     expect(template.tags).toContainEqual(['e', 'parent-1', '', 'reply']);
     expect(template.tags).toContainEqual(['p', 'a'.repeat(64)]);
   });
+
+  // Replying to a message that is ITSELF a reply. Before root resolution the
+  // template pointed its lone `reply` tag at the clicked message, which made
+  // every reply-to-a-reply the root of a brand-new thread — invisible inside
+  // the thread it was written in. These two cases are the only ones that can
+  // tell the fixed code from the old code; the case above cannot, because
+  // there the parent already IS the root.
+  it('inherits the thread root when replying to a reply', () => {
+    const template = buildGroupMessageTemplate('beechat', 'nested', {
+      id: 'parent-1',
+      pubkey: 'a'.repeat(64),
+      tags: [
+        ['h', 'beechat'],
+        ['e', 'thread-root', '', 'reply']
+      ]
+    });
+    expect(template.tags).toContainEqual(['e', 'thread-root', '', 'root']);
+    expect(template.tags).toContainEqual(['e', 'parent-1', '', 'reply']);
+    expect(template.tags).not.toContainEqual(['e', 'parent-1', '', 'root']);
+  });
+
+  it('inherits the root of an already-nested parent rather than re-rooting at depth 3', () => {
+    const template = buildGroupMessageTemplate('beechat', 'deeper', {
+      id: 'parent-2',
+      pubkey: 'a'.repeat(64),
+      tags: [
+        ['e', 'thread-root', '', 'root'],
+        ['e', 'parent-1', '', 'reply']
+      ]
+    });
+    expect(template.tags).toContainEqual(['e', 'thread-root', '', 'root']);
+    expect(template.tags).toContainEqual(['e', 'parent-2', '', 'reply']);
+    expect(template.tags.filter((t) => t[0] === 'e')).toHaveLength(2);
+  });
 });
 
 describe('join/leave request templates', () => {

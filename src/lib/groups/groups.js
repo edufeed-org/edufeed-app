@@ -20,6 +20,7 @@ import {
   getPublicGroups
 } from 'applesauce-common/helpers/groups';
 import { normalizeURL } from 'applesauce-core/helpers/url';
+import { buildReplyTags } from '$lib/helpers/threading.js';
 
 /**
  * @typedef {{relay: string, id: string}} GroupPointer
@@ -102,16 +103,21 @@ export function groupHref(pointer) {
 /**
  * Kind-9 group chat message: `h` tag first (same shape as the public
  * community chat), optional NIP-10 marked reply.
+ *
+ * `replyTo` is the message being replied to WITH ITS TAGS — the thread root is
+ * resolved from them (see helpers/threading.js). Passing only `{id, pubkey}`
+ * still works and yields the top-level shape, which is correct for a message
+ * that has no tags to inherit a root from.
  * @param {string} groupId
  * @param {string} content
- * @param {{id: string, pubkey: string} | null} [replyTo]
+ * @param {{id: string, pubkey: string, tags?: string[][]} | null} [replyTo]
  * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
  */
 export function buildGroupMessageTemplate(groupId, content, replyTo = null) {
   /** @type {string[][]} */
   const tags = [['h', groupId]];
   if (replyTo) {
-    tags.push(['e', replyTo.id, '', 'reply']);
+    tags.push(...buildReplyTags(replyTo));
     tags.push(['p', replyTo.pubkey]);
   }
   return { kind: 9, content, created_at: Math.floor(Date.now() / 1000), tags };
