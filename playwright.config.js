@@ -50,7 +50,14 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `pnpm run build && pnpm run preview --port ${WEB_SERVER_PORT}`,
+    // --strictPort is load-bearing, not tidiness. Without it vite silently
+    // binds the NEXT free port when this one is taken, while playwright goes on
+    // waiting for WEB_SERVER_PORT — which is then somebody else's server. The
+    // run does not crash; it tests another worktree's build and reports green
+    // or red with nothing in the output naming which build answered. Both of us
+    // hit that within one hour on 2026-08-07, in both directions. With the flag
+    // the preview refuses to start and the failure is immediate and legible.
+    command: `pnpm run build && pnpm run preview --port ${WEB_SERVER_PORT} --strictPort`,
     port: WEB_SERVER_PORT,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
