@@ -24,12 +24,7 @@
 import { test, expect } from '@playwright/test';
 import WebSocket from 'ws';
 import { finalizeEvent, nip19 } from 'nostr-tools';
-import {
-  TEST_AUTHOR,
-  TEST_COMMUNITY,
-  TEST_COMMUNITY_GATED,
-  RELAY_URLS
-} from './test-data.js';
+import { TEST_AUTHOR, TEST_COMMUNITY, TEST_COMMUNITY_GATED, RELAY_URLS } from './test-data.js';
 
 /**
  * Give TEST_AUTHOR two joined communities, so the rail has something to
@@ -100,23 +95,49 @@ async function loginAs(page, nsec) {
   }
 }
 
+/**
+ * The rail is mounted TWICE at once: the desktop rail at
+ * `src/routes/+layout.svelte:373` (`hidden lg:contents`) and the mobile drawer
+ * rail at `src/routes/c/+layout.svelte:178` (`lg:hidden`, guarded only by
+ * `activeUser()`). Both are in the DOM on a `/c/` route, so a bare
+ * `[data-testid="rail-slot"]` matches every row twice and `railOrder` returned
+ * the two rails concatenated — `A|B|A|B`. The cross-device comparison still
+ * held, because both sides doubled identically, but it was comparing something
+ * other than what it read as, and a genuine duplicate entry would have been
+ * indistinguishable from the second mount.
+ *
+ * `:visible` scopes to the one rail the viewport actually shows.
+ */
+const RAIL_SLOT = '[data-testid="rail-slot"]:visible';
+
 /** The rail's entry keys, top to bottom. */
 async function railOrder(page) {
   // data-rail-anchor is the stable key the model orders by; textContent would
   // compare labels, which two containers can share.
   return page
-    .locator('[data-testid="rail-slot"]')
+    .locator(RAIL_SLOT)
     .evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-rail-anchor') ?? ''));
 }
 
 const isLocal = (/** @type {string} */ url) =>
   /^wss?:\/\/(localhost|127\.0\.0\.1|\[::1\])/.test(url);
 
+/** The kind of the event in an `["EVENT", {...}]` frame, or null for anything else. */
+function eventKindOf(/** @type {string} */ payload) {
+  if (!/^\s*\[\s*"EVENT"/.test(payload)) return null;
+  try {
+    const kind = JSON.parse(payload)?.[1]?.kind;
+    return typeof kind === 'number' ? kind : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Watch every websocket for the whole test — no settle window, because a
  * windowed zero cannot be told apart from a real one.
  *
- * Two ledgers, because they answer different questions. `opened` is every
+ * Three ledgers, because they answer different questions. `opened` is every
  * connection, and it is NOT clean here: the app dials production relays from
  * relay hints carried inside naddr config values, which no relay env override
  * can reach. That is a pre-existing property of the sandbox, not of this
@@ -125,15 +146,23 @@ const isLocal = (/** @type {string} */ url) =>
  * `offBoxEvents` is the one this lane must keep empty. It is the first lane
  * that PUBLISHES, so the question that matters is not "did a socket open" but
  * "did an EVENT frame carrying a user's arrangement leave this box".
+ *
+ * `localEvents` exists only to calibrate that zero, and the listener is
+ * attached to local and off-box sockets by the SAME code path — a ledger that
+ * has never been observed producing a row cannot distinguish "nothing leaked"
+ * from "the watcher was never wired". An earlier version of this file attached
+ * `framesent` only inside the off-box branch, so the assertion below rested on
+ * an instrument that, within the test, had never emitted anything at all.
  */
-function watchSockets(page, opened, offBoxEvents) {
+function watchSockets(page, opened, localEvents, offBoxEvents) {
   page.on('websocket', (ws) => {
     const url = ws.url();
     opened.push(url);
-    if (isLocal(url)) return;
+    const sink = isLocal(url) ? localEvents : offBoxEvents;
     ws.on('framesent', (frame) => {
       const payload = typeof frame.payload === 'string' ? frame.payload : '';
-      if (/^\s*\[\s*"EVENT"/.test(payload)) offBoxEvents.push({ url, payload });
+      const kind = eventKindOf(payload);
+      if (kind !== null) sink.push({ url, kind, payload });
     });
   });
 }
@@ -142,7 +171,9 @@ test.describe('rail layout sync', () => {
   test('an arrangement made on one device appears on a second', async ({ browser }) => {
     /** @type {string[]} */
     const sockets = [];
-    /** @type {Array<{url: string, payload: string}>} */
+    /** @type {Array<{url: string, kind: number, payload: string}>} */
+    const localEvents = [];
+    /** @type {Array<{url: string, kind: number, payload: string}>} */
     const offBoxEvents = [];
 
     await seedJoinedCommunities();
@@ -150,29 +181,46 @@ test.describe('rail layout sync', () => {
     // --- device one -------------------------------------------------------
     const deviceOne = await browser.newContext();
     const pageOne = await deviceOne.newPage();
-    watchSockets(pageOne, sockets, offBoxEvents);
+    watchSockets(pageOne, sockets, localEvents, offBoxEvents);
     await loginAs(pageOne, TEST_AUTHOR.nsec);
 
-    const slots = pageOne.locator('[data-testid="rail-slot"]');
+    const slots = pageOne.locator(RAIL_SLOT);
     await expect(slots.first()).toBeVisible({ timeout: 20_000 });
 
-    // Reordering needs something to reorder. Asserted rather than assumed:
-    // with one entry the drag is a no-op and the whole test would pass
-    // without ever exercising sync.
-    const count = await slots.count();
-    expect(
-      count,
-      'the rail needs at least two entries for a reorder to mean anything'
-    ).toBeGreaterThanOrEqual(2);
+    // The two rows this test drags, addressed by the key the model orders by
+    // rather than by index. `nth(1)` names whatever happens to be second,
+    // which in a run that already created a folder is the folder — the drag
+    // then aims at a row that is not what the test means and fails as a
+    // 60s `dragTo` timeout, which reads as a broken harness rather than as
+    // stale state. Naming both anchors is also the "something to reorder"
+    // check: two distinct anchors cannot be one entry.
+    const seededRow = (/** @type {string} */ pubkey) =>
+      pageOne.locator(`${RAIL_SLOT}[data-rail-anchor="community:${pubkey}"]`);
+    const dragged = seededRow(TEST_COMMUNITY_GATED.pubkey);
+    const target = seededRow(TEST_COMMUNITY.pubkey);
+    await expect(dragged, 'the seeded gated community must be on the rail').toBeVisible({
+      timeout: 20_000
+    });
+    await expect(target, 'the seeded community must be on the rail').toBeVisible({
+      timeout: 20_000
+    });
 
     const before = await railOrder(pageOne);
+
+    // Addressing rows by anchor is only sound if an anchor names ONE row.
+    // Asserted rather than assumed: this is what the second mount broke, and
+    // it holds whether or not that mount is ever removed.
+    expect(
+      new Set(before).size,
+      'each rail anchor must appear exactly once in the visible rail'
+    ).toBe(before.length);
 
     // Dropping a row onto the CENTRE of another is the make-a-folder intent
     // (the top and bottom thirds reorder instead), so this drag produces a
     // folder. That is the better arrangement to carry across: a folder holds
     // a name and a member list, so a sync scheme that quietly flattens one
     // fails here, where a bare reorder would still look correct.
-    await slots.nth(1).dragTo(slots.nth(0));
+    await dragged.dragTo(target);
 
     await expect
       .poll(async () => (await railOrder(pageOne)).some((k) => k.startsWith('folder:')), {
@@ -185,7 +233,7 @@ test.describe('rail layout sync', () => {
     // --- device two: a profile that has never seen this user ---------------
     const deviceTwo = await browser.newContext();
     const pageTwo = await deviceTwo.newPage();
-    watchSockets(pageTwo, sockets, offBoxEvents);
+    watchSockets(pageTwo, sockets, localEvents, offBoxEvents);
 
     // The control for the whole test: if storage leaked between contexts,
     // device two would "pass" without the relay having carried anything.
@@ -200,7 +248,7 @@ test.describe('rail layout sync', () => {
     expect(leaked, 'device two must start with no rail layout of its own').toEqual([]);
 
     await loginAs(pageTwo, TEST_AUTHOR.nsec);
-    await expect(pageTwo.locator('[data-testid="rail-slot"]').first()).toBeVisible({
+    await expect(pageTwo.locator(RAIL_SLOT).first()).toBeVisible({
       timeout: 20_000
     });
 
@@ -209,13 +257,29 @@ test.describe('rail layout sync', () => {
       .toBe(after.join('|'));
 
     // --- nothing this feature wrote left the box ---------------------------
-    // The ledger must have seen traffic at all, or an empty result below would
-    // just mean the watcher never fired.
-    expect(sockets.length, 'the ledger must have seen something at all').toBeGreaterThan(0);
+    console.log('[ledger] sockets seen        :', sockets.length);
+    console.log(
+      '[ledger] local  EVENT frames :',
+      localEvents.length,
+      'kinds:',
+      [...new Set(localEvents.map((e) => e.kind))].join(',')
+    );
+    console.log('[ledger] offbox EVENT frames :', offBoxEvents.length);
+    console.log('[ledger] offbox sockets      :', [...new Set(sockets.filter((u) => !isLocal(u)))]);
+
+    // Calibration, and it has to come first: the off-box zero below is only
+    // evidence if this same listener is known to be capable of recording a
+    // row. Asserting on kind 30078 specifically — not just "some frame" —
+    // because 30078 is the frame the off-box assertion is hunting for, so
+    // this proves the instrument can catch the exact thing it must not miss.
     expect(
-      sockets.some(isLocal),
-      'the app must have talked to the sandbox relays'
+      localEvents.some((e) => e.kind === 30078),
+      'the frame watcher must be shown recording the app-data kind it is watching for'
     ).toBe(true);
+
+    // Subsumes the older `sockets.some(isLocal)` check: an EVENT frame on a
+    // local socket cannot happen without a local socket the watcher saw.
+    expect(sockets.length, 'the ledger must have seen something at all').toBeGreaterThan(0);
 
     // The assertion this lane owns: no EVENT frame reached a relay outside the
     // sandbox. Connections to production DO happen here — relay hints inside
