@@ -226,6 +226,19 @@ describe('buildThreadIndex', () => {
     expect(index.replyCount(ROOT)).toBe(3);
   });
 
+  // Witness found by differentially comparing the chain walk against a
+  // variant over 729 enumerated windows: a reply to a SELF-REFERENCING
+  // message. That parent stays in the timeline (the cycle guard puts it
+  // there), so the reply belongs in its thread — not loose in the timeline
+  // beside it.
+  it('files a reply under a self-referencing parent, which is still a timeline row', () => {
+    const selfRef = msg({ id: PARENT, tags: [['e', PARENT, '', 'reply']], created_at: 1 });
+    const answer = lonelyReply(PARENT, { id: 'answer', created_at: 2 });
+    const index = buildThreadIndex([selfRef, answer]);
+    expect(index.timeline.map((e) => e.id)).toEqual([PARENT]);
+    expect(index.repliesFor(PARENT).map((e) => e.id)).toEqual(['answer']);
+  });
+
   // Malformed data, not a thread. Without a cycle guard the walk never ends.
   it('keeps a message whose thread link cycles in the timeline', () => {
     const a = msg({ id: 'a', tags: [['e', 'b', '', 'reply']], created_at: 1 });

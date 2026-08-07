@@ -98,7 +98,10 @@ export function buildReplyTags(replyTo) {
  */
 function resolveThreadRoot(event, byId) {
   const first = getThreadRootId(event);
-  if (!first || first === event.id) return null;
+  if (!first) return null;
+  // `event.id` is seeded so a message pointing AT ITSELF is caught by the
+  // cycle guard below — a self-reference is just the shortest cycle, and a
+  // separate check for it was dead code.
   const seen = new Set([event.id]);
   let currentId = first;
   for (;;) {
@@ -110,6 +113,10 @@ function resolveThreadRoot(event, byId) {
     // Named but not loaded: the orphan case, which the caller keeps visible.
     if (!parent) return currentId;
     const next = getThreadRootId(parent);
+    // `next === parent.id` is a parent that points at itself. It stays in the
+    // timeline (same cycle guard), so it is a legitimate place to file this
+    // reply — dropping the check would leave the reply loose in the timeline
+    // instead, unthreaded from a parent the user can see.
     if (!next || next === parent.id) return parent.id;
     currentId = next;
   }
