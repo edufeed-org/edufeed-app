@@ -22,7 +22,7 @@ import {
   nextLayoutCreatedAt
 } from '$lib/rail/rail-layout-event.js';
 
-/** A layout with every node kind the model has. */
+/** @type {import('$lib/rail/rail-layout.js').RailNode[]} A layout with every node kind the model has. */
 const LAYOUT = [
   { type: 'item', key: 'community:aaa' },
   { type: 'folder', id: 'f1', name: 'Schule', keys: ['area:bbb', 'relay:wss://r.example'] },

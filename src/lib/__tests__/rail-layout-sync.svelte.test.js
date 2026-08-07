@@ -81,6 +81,7 @@ const { unlockAppData } = await import('applesauce-common/helpers/app-data');
 const SECRET = generateSecretKey();
 const ME = getPublicKey(SECRET);
 
+/** @type {import('$lib/rail/rail-layout.js').RailNode[]} */
 const LAYOUT = [
   { type: 'item', key: 'community:aaa' },
   { type: 'folder', id: 'f1', name: 'Privat', keys: ['area:secret-room'] }
@@ -110,7 +111,7 @@ function plainSigner() {
 }
 
 /** Build a real, encrypted layout event as it would arrive from a relay. */
-async function remoteEvent(layout, createdAt = 1000) {
+async function remoteEvent(/** @type {any} */ layout, createdAt = 1000) {
   const ck = nip44.v2.utils.getConversationKey(SECRET, ME);
   return finalizeEvent(
     {
@@ -124,7 +125,7 @@ async function remoteEvent(layout, createdAt = 1000) {
 }
 
 /** Deliver an event the way a relay would: no cached symbols on it. */
-async function deliver(event) {
+async function deliver(/** @type {any} */ event) {
   await state.replaceableSubscriber(JSON.parse(JSON.stringify(event)));
 }
 
@@ -298,7 +299,7 @@ describe('reading a remote layout', () => {
   it('ignores an event older than the one already held', async () => {
     initializeRailLayoutSync(ME);
     await deliver(await remoteEvent(LAYOUT, 2000));
-    const older = [{ type: 'item', key: 'community:zzz' }];
+    const older = /** @type {any} */ ([{ type: 'item', key: 'community:zzz' }]);
     await deliver(await remoteEvent(older, 1000));
 
     expect(getRemoteRailLayout()).toEqual(LAYOUT);
@@ -307,7 +308,7 @@ describe('reading a remote layout', () => {
   it('takes a newer event', async () => {
     initializeRailLayoutSync(ME);
     await deliver(await remoteEvent(LAYOUT, 1000));
-    const newer = [{ type: 'item', key: 'community:zzz' }];
+    const newer = /** @type {any} */ ([{ type: 'item', key: 'community:zzz' }]);
     await deliver(await remoteEvent(newer, 3000));
 
     expect(getRemoteRailLayout()).toEqual(newer);
