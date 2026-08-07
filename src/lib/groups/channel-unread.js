@@ -48,7 +48,9 @@ export function foldHostSummaries(events, myPubkey, relay) {
   const byChannel = {};
   for (const event of events ?? []) {
     const id = (event?.tags ?? []).find((t) => t?.[0] === 'h')?.[1];
-    if (!id) continue;
+    // One gate, not two: channelKey already rejects a missing id, and a second
+    // `if (!id)` above it is a line no test can ever measure — deleting it left
+    // the whole battery green, which is how it was found.
     const key = channelKey({ id, relay });
     if (!key) continue;
     (byChannel[key] ??= []).push(event);

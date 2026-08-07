@@ -16,6 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 
 const MY_SK = generateSecretKey();
@@ -113,11 +114,18 @@ const rowFor = (/** @type {string} */ name) =>
 const nameClassOf = (/** @type {string} */ name) =>
   rowFor(name)?.querySelector('.truncate')?.className ?? '';
 
-/** The newest emission this host has produced, then its end-of-stored-events. */
-const serve = async (/** @type {any[]} */ events) => {
+/** Messages only — the host has NOT said it is done sending. */
+const send = async (/** @type {any[]} */ events) => {
   const stream = holders.streams.at(-1);
   for (const event of events) stream?.next(event);
-  stream?.next('EOSE');
+  await waitFor(() => expect(screen.getAllByTestId('host-channel-row').length).toBeGreaterThan(0));
+  await tick();
+};
+
+/** The newest emission this host has produced, then its end-of-stored-events. */
+const serve = async (/** @type {any[]} */ events) => {
+  await send(events);
+  holders.streams.at(-1)?.next('EOSE');
   await waitFor(() => expect(screen.queryByTestId('host-sidebar-loading')).toBeNull());
 };
 
@@ -178,6 +186,24 @@ describe('HostChannelSidebar unread', () => {
     expect(nameClassOf('allgemein')).not.toContain('font-bold');
   });
 
+  it('holds its marks back until the host says it has finished sending', async () => {
+    // The show-control for the test above: that one asserts nothing is drawn
+    // with NO messages at all, which passes for free. This one has a real
+    // unread message on the wire and still draws nothing, because the relay
+    // has not sent EOSE — the difference between "nothing new" and "we have
+    // not heard everything yet".
+    render(HostChannelSidebar, { props: { relay: RELAY, activeChannelId: null } });
+    await send([chat({ id: 'allgemein', at: T1 })]);
+
+    expect(screen.queryByTestId('concord-unread-dot')).toBeNull();
+    expect(screen.queryByTestId('host-mark-all-read')).toBeNull();
+    expect(nameClassOf('allgemein')).not.toContain('font-bold');
+
+    // ...and the same message, once the host has finished, does show.
+    holders.streams.at(-1)?.next('EOSE');
+    await waitFor(() => expect(screen.getAllByTestId('concord-unread-dot')).toHaveLength(1));
+  });
+
   it('bolds and dots the channel with a message from someone else', async () => {
     render(HostChannelSidebar, { props: { relay: RELAY, activeChannelId: null } });
     await serve([chat({ id: 'allgemein', at: T1 })]);
@@ -222,6 +248,31 @@ describe('HostChannelSidebar unread', () => {
 
     expect(screen.queryByTestId('concord-unread-dot')).toBeNull();
     expect(nameClassOf('allgemein')).not.toContain('font-bold');
+  });
+
+  it('catches the channel you are looking at up when you come back to the tab', async () => {
+    // Suppressing the stamp while the tab is hidden is only half the rule.
+    // Concord has both halves (notifications.svelte.js:353-359); without the
+    // second one the channel on screen goes bold while you are away and STAYS
+    // bold while you look straight at it, until the next message happens to
+    // arrive. Nothing else re-runs the effect: returning to a tab changes no
+    // rune, and `document.visibilityState` is a DOM property, not state.
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    visibility.mockReturnValue('hidden');
+    render(HostChannelSidebar, { props: { relay: RELAY, activeChannelId: 'allgemein' } });
+    await serve([chat({ id: 'allgemein', at: T1 })]);
+
+    await waitFor(() => expect(screen.getAllByTestId('concord-unread-dot')).toHaveLength(1));
+    expect(localStorage.getItem('groups-unread:' + ME)).toBeNull();
+
+    visibility.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await waitFor(() => expect(screen.queryByTestId('concord-unread-dot')).toBeNull());
+    expect(JSON.parse(localStorage.getItem('groups-unread:' + ME) ?? '{}')).toEqual({
+      [KEY('allgemein')]: T1
+    });
+    visibility.mockRestore();
   });
 
   it('does not rebuild the relay subscription when a channel is marked read', async () => {

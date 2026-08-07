@@ -64,6 +64,14 @@ describe('unread markers', () => {
     expect(readUnreadMarkers(ME)).toEqual({});
   });
 
+  it('reads a stored array as no markers, not as index-keyed ones', () => {
+    // An array survives a `typeof === 'object'` check and its entries are
+    // numbers, so without the Array.isArray branch it would come back as
+    // {0: 5, 1: 6} — markers under keys that are not channels.
+    localStorage.setItem('groups-unread:' + ME, '[5,6]');
+    expect(readUnreadMarkers(ME)).toEqual({});
+  });
+
   it('keeps the markers it already had when the quota is full', () => {
     writeUnreadMarkers(ME, { [KEY]: 1700 });
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {

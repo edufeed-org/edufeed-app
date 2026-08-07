@@ -109,21 +109,43 @@ export function useHostUnread(getRelay, getChannelIds, getActiveChannelId) {
   // The channel on screen is read as its messages arrive — including your own,
   // so sending a message does not leave the channel you are looking at bold.
   // Not while the tab is in the background: that would mark messages read that
-  // nobody has seen (same rule as concord/notifications.svelte.js).
-  $effect(() => {
+  // nobody has seen.
+  const stampActive = () => {
     const relay = getRelay();
     const activeId = getActiveChannelId?.();
     const me = getActiveUser()?.pubkey;
-    const current = summaries;
     if (!relay || !activeId || !me) return;
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     const key = channelKey({ id: activeId, relay });
     if (!key) return;
-    untrack(() => {
-      const markers = readUnreadMarkers(me);
-      const next = markRead(markers, current, key);
-      if (next !== markers) writeUnreadMarkers(me, next);
-    });
+    const markers = readUnreadMarkers(me);
+    const next = markRead(markers, summaries, key);
+    if (next !== markers) writeUnreadMarkers(me, next);
+  };
+
+  // As messages arrive. The reads are named here and the body is untracked, so
+  // writing a marker cannot re-trigger the effect that wrote it.
+  $effect(() => {
+    void getRelay();
+    void getActiveChannelId?.();
+    void getActiveUser()?.pubkey;
+    void summaries;
+    untrack(stampActive);
+  });
+
+  // And on the way back to the tab — the OTHER half of the rule, which Concord
+  // has as well (notifications.svelte.js:353-359). Suppressing the stamp while
+  // hidden without this leaves the channel you are looking at bold until the
+  // next message happens to arrive, and nothing else can catch it: coming back
+  // to a tab changes no rune, and `document.visibilityState` is a DOM property,
+  // so reading it inside an effect creates no dependency on it.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') untrack(stampActive);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   });
 
   return () => {
