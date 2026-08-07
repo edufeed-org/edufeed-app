@@ -97,7 +97,9 @@
         <p class="truncate">{replyPreview.content}</p>
       </div>
     {/if}
-    <NostrContentRenderer event={message} />
+    <!-- Chat is the only surface that opts into restricted markdown; the
+         other seven NostrContentRenderer callers keep the plain walk. -->
+    <NostrContentRenderer event={message} markdown />
     {#if attachments}
       {@render attachments(message)}
     {/if}
