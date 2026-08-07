@@ -13,6 +13,7 @@
   import MeetView from '$lib/components/meet/MeetView.svelte';
   import MembersView from '../views/MembersView.svelte';
   import HomeView from '../views/HomeView.svelte';
+  import PrivateChannelsView from '../channels/PrivateChannelsView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
@@ -77,6 +78,12 @@
           {communityProfile}
           communityPubkey={selectedCommunityId}
           {canPublish}
+        />
+      {:else if selectedContentType === 'channels'}
+        <PrivateChannelsView
+          {communikeyEvent}
+          {communityProfile}
+          communityPubkey={selectedCommunityId}
         />
       {:else if selectedContentType === 'calendar'}
         <CalendarView

@@ -282,21 +282,25 @@ describe('ReactionBar', () => {
   });
 
   describe('addButtonOnHover prop', () => {
-    it('wraps the add button in a hover-reveal element when addButtonOnHover=true', () => {
+    it('wraps the add button in an opacity-revealed (not display:none) element when addButtonOnHover=true', () => {
       const { container } = render(ReactionBar, {
         props: { event: mockEvent, relays: [], addButtonOnHover: true }
       });
 
       const wrapper = container.querySelector('[data-testid="add-reaction-wrapper"]');
       expect(wrapper).toBeTruthy();
-      // Collapsed (display:none) until the parent .group is hovered or focused,
-      // so empty footers reserve no vertical space in dense chat lists.
-      expect(wrapper?.className).toContain('hidden');
-      expect(wrapper?.className).toContain('group-hover:inline-flex');
-      expect(wrapper?.className).toContain('group-focus-within:inline-flex');
+      // Faded (opacity-0), NOT display:none, until the parent .group is
+      // hovered or focused — this is the hover-flicker fix (see
+      // ReactionChips.test.js): a display:none -> flex swap on hover used to
+      // collapse/expand the whole footer's box, shifting every row below it
+      // in a scrollable chat list. Space must ALWAYS be reserved.
+      expect(wrapper?.className).not.toContain('hidden');
+      expect(wrapper?.className).toContain('opacity-0');
+      expect(wrapper?.className).toContain('group-hover:opacity-70');
+      expect(wrapper?.className).toContain('group-focus-within:opacity-70');
     });
 
-    it('does not reserve empty vertical space (no min-height) when addButtonOnHover=true', () => {
+    it("does not add an explicit min-height utility when addButtonOnHover=true (the always-rendered add button already reserves the footer's height)", () => {
       const { container } = render(ReactionBar, {
         props: { event: mockEvent, relays: [], addButtonOnHover: true }
       });

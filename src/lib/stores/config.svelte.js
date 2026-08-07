@@ -179,6 +179,19 @@ const defaultConfig = {
     formAddress: '',
     adminPubkeys: /** @type {string[]} */ ([])
   },
+  // Cordn MLS private groups spike
+  cordnGroups: {
+    enabled: false,
+    /** @type {string[]} */
+    coordinatorPubkeys: [],
+    /** @type {string[]} */
+    relays: []
+  },
+  // Concord private channels
+  concord: {
+    enabled: false,
+    relays: /** @type {string[]} */ ([])
+  },
   // Read-only npub login
   npubLogin: {
     enabled: false
@@ -353,6 +366,14 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.membership,
       ...runtimeConfig.membership
     },
+    cordnGroups: {
+      ...defaultConfig.cordnGroups,
+      ...runtimeConfig.cordnGroups
+    },
+    concord: {
+      ...defaultConfig.concord,
+      ...runtimeConfig.concord
+    },
     npubLogin: {
       ...defaultConfig.npubLogin,
       ...runtimeConfig.npubLogin
@@ -464,6 +485,12 @@ export const runtimeConfig = {
   },
   get membership() {
     return config.membership;
+  },
+  get cordnGroups() {
+    return config.cordnGroups;
+  },
+  get concord() {
+    return config.concord;
   },
   get npubLogin() {
     return config.npubLogin;

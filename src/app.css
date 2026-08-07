@@ -8,8 +8,20 @@ body {
 
 /* Layout */
 :root {
-  --sidebar-icon-w: 4rem;
+  /* Icon rail must fit a 48px avatar + active ring (ring-2 + offset-2 = 56px)
+     with breathing room on both sides — 64px clipped the ring (design page
+     "Rail Fix" in the edufeed-comenius project). */
+  --sidebar-icon-w: 4.75rem;
   --sidebar-nav-w: 15rem;
+}
+
+/* Hidden-but-scrollable (Discord icon-rail pattern): wheel/touch scrolling
+   keeps working, no scrollbar eats into the fixed-width rail. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 @plugin '@tailwindcss/typography';

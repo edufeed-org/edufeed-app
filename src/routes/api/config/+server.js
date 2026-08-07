@@ -380,6 +380,23 @@ export function GET() {
       adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
     },
 
+    // Cordn MLS private groups spike (evaluation track alongside Concord).
+    // Coordinator is reached over ContextVM via the listed relays; with the
+    // flag off there is zero Cordn UI and zero Cordn network traffic.
+    cordnGroups: {
+      enabled: parseBool(env.CORDN_GROUPS_ENABLED, false),
+      // Comma-separated list; first entry is the default coordinator.
+      coordinatorPubkeys: parseArray(env.CORDN_COORDINATOR_PUBKEY),
+      relays: parseArray(env.CORDN_CONTEXTVM_RELAYS, ['wss://relay.contextvm.org'])
+    },
+
+    // Concord E2E-encrypted private channels (Beta). Dedicated relay set —
+    // NEVER unioned with outbox/category relays.
+    concord: {
+      enabled: parseBool(env.CONCORD_ENABLED, false),
+      relays: parseArray(env.CONCORD_RELAYS)
+    },
+
     // Read-only npub login ("browse as") — see docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md
     npubLogin: {
       enabled: parseBool(env.NPUB_LOGIN_ENABLED, false)

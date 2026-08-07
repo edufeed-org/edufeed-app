@@ -4,6 +4,7 @@
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { parseCordnGroupsConfig } from '$lib/cordn';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
   import {
     saveRelayList,
@@ -1092,6 +1093,37 @@
           </div>
         </div>
       </div>
+
+      <!-- Cordn Private Groups Card (deployment-gated, per-user opt-in) -->
+      {#if parseCordnGroupsConfig(runtimeConfig.cordnGroups).enabled}
+        <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
+          <div class="card-body">
+            <h2 class="mb-2 card-title text-2xl">
+              <span class="text-2xl">{m.settings_cordn_groups_title()}</span>
+            </h2>
+            <p class="mb-6 text-base-content/70">
+              {m.settings_cordn_groups_description()}
+            </p>
+
+            <div class="form-control">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary"
+                  checked={appSettings.cordnGroupsEnabled}
+                  data-testid="settings-cordn-groups-toggle"
+                  onchange={(e) => {
+                    appSettings.cordnGroupsEnabled = /** @type {HTMLInputElement} */ (
+                      e.currentTarget
+                    ).checked;
+                  }}
+                />
+                <span class="label-text font-medium">{m.settings_cordn_groups_toggle()}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      {/if}
 
       <!-- Gated Mode Card -->
       <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>

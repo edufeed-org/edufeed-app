@@ -16,6 +16,10 @@
     LockOpenIcon
   } from '$lib/components/icons';
   import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
+  import { shouldShowChannelsTab, useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -31,6 +35,10 @@
 
   import { getProfilePicture } from 'applesauce-core/helpers';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
+
+  const getConcord = useConcordCommunity(() => communityEvent);
+  const getActiveUser = useActiveUser();
+  const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
 
   let communityDisplayName = $derived(
     communityProfile?.name || communityProfile?.display_name || 'Community'
@@ -50,7 +58,8 @@
     'social-bookmarks': BookmarkShareIcon,
     meet: MeetIcon,
     polls: PollIcon,
-    settings: SettingsIcon
+    settings: SettingsIcon,
+    channels: LockIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -66,16 +75,41 @@
     'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
     meet: () => m.community_layout_bottom_tab_bar_meet(),
     polls: () => m.community_layout_bottom_tab_bar_polls(),
-    settings: () => m.community_layout_bottom_tab_bar_settings()
+    settings: () => m.community_layout_bottom_tab_bar_settings(),
+    channels: () => m.concord_tab_label()
   };
 
-  let contentTypes = $derived(
-    getCommunityTabs(communityEvent).map((id) => ({
+  let contentTypes = $derived.by(() => {
+    const base = getCommunityTabs(communityEvent).map((id) => ({
       id,
       label: labelMap[id]?.() ?? id,
       icon: iconMap[id] ?? ChatIcon
-    }))
-  );
+    }));
+    const concord = getConcord();
+    const isOwner = !!communityEvent?.pubkey && communityEvent.pubkey === getActiveUser()?.pubkey;
+    if (
+      shouldShowChannelsTab({
+        enabled: concord.enabled,
+        pointer: concord.pointer,
+        isOwner,
+        isMember: concord.membership === 'member'
+      })
+    ) {
+      // Insert after 'chat' to sit next to the public channels — but a
+      // strict-content community may not have a chat tab at all
+      // (getCommunityTabs can omit it), in which case chatIndex is -1 and
+      // `chatIndex + 1` would insert at index 0, BEFORE Home. Insert before
+      // 'settings' (the last tab) instead so Home always stays first.
+      const chatIndex = base.findIndex((t) => t.id === 'chat');
+      const insertAt = chatIndex === -1 ? base.length - 1 : chatIndex + 1;
+      base.splice(insertAt, 0, {
+        id: 'channels',
+        label: m.concord_tab_label(),
+        icon: LockIcon
+      });
+    }
+    return base;
+  });
 
   /**
    * Handle content type selection
@@ -145,6 +179,14 @@
                   <LockIcon class_="w-2.5 h-2.5" />
                 </span>
               {/if}
+            {/if}
+            {#if type.id === 'channels'}
+              <span class="absolute -top-1.5 -right-4">
+                <ConcordUnreadDot
+                  unread={concordAreaFlags.unread}
+                  mentioned={concordAreaFlags.mentioned}
+                />
+              </span>
             {/if}
           </span>
         </button>

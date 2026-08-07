@@ -15,7 +15,8 @@
   import {
     getRestrictedTabIds,
     getAccessibleTabIds,
-    getSectionNameForContentType
+    getSectionNameForContentType,
+    VALID_CONTENT_VIEWS
   } from '$lib/helpers/contentTypes.js';
   import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
@@ -35,33 +36,19 @@
   let communityProfile = $state(/** @type {any} */ (null));
   let communikeyLoaded = $state(false);
 
-  // Valid content types for ?view= query param
-  const validContentTypes = new Set([
-    'home',
-    'chat',
-    'calendar',
-    'learning',
-    'boards',
-    'articles',
-    'forum',
-    'polls',
-    'wikis',
-    'social-bookmarks',
-    'meet',
-    'members',
-    'settings'
-  ]);
-
-  // Sync selectedContentType from child page data or ?view= param
+  // Sync selectedContentType from child page data or ?view= param. Valid views
+  // come from the shared VALID_CONTENT_VIEWS (contentTypes.js) — the SAME set
+  // +page.js validates against, so the nav highlight can't drift from the
+  // rendered content (a local copy here once omitted 'channels').
   $effect(() => {
     const childContentView = $page.data.contentView;
-    if (childContentView && validContentTypes.has(childContentView)) {
+    if (childContentView && VALID_CONTENT_VIEWS.has(childContentView)) {
       selectedContentType = childContentView;
       return;
     }
 
     const viewParam = $page.url.searchParams.get('view');
-    if (viewParam && validContentTypes.has(viewParam)) {
+    if (viewParam && VALID_CONTENT_VIEWS.has(viewParam)) {
       selectedContentType = viewParam;
     } else {
       selectedContentType = 'home';

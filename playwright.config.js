@@ -68,6 +68,8 @@ export default defineConfig({
       RELAY_LIST_LOOKUP_RELAYS: RELAY_URLS.strfry,
       INDEXER_RELAYS: RELAY_URLS.strfry,
       BLOSSOM_SERVER_URL: BLOSSOM_SERVER_URL,
+      CONCORD_ENABLED: 'true',
+      CONCORD_RELAYS: RELAY_URLS.strfry,
       GATED_MODE_DEFAULT: 'true',
       GATED_MODE_FORCE: 'true',
       ORIGIN: `http://localhost:${WEB_SERVER_PORT}`,

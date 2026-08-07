@@ -44,19 +44,34 @@ async function sendMessage(page, content) {
 }
 
 test.describe('Chat Reactions - Authenticated', () => {
-  test('add-reaction button is hidden until the message is hovered', async ({
+  test('add-reaction button is faded until the message is hovered, without shifting the row', async ({
     authenticatedPage: page
   }) => {
     await navigateToChatTab(page);
     const chatMessage = await sendMessage(page, `Hover reveal ${Date.now()}`);
 
     const addBtn = chatMessage.locator('[data-testid="add-reaction-btn"]');
+    // CSS `opacity` composites a subtree visually but is NOT itself an
+    // inherited computed-style value — the wrapper (not the button inside
+    // it) is where opacity is actually set, so assert there.
+    const wrapper = chatMessage.locator('[data-testid="add-reaction-wrapper"]');
 
-    // Hidden (display:none) until the message group is hovered.
-    await expect(addBtn).toBeHidden();
+    // Present (not display:none) but faded pre-hover — reveal is via opacity,
+    // not a display swap, so the footer's box is IDENTICAL size whether
+    // hovered or not. This is the hover-flicker fix: a display:none -> flex
+    // swap used to collapse/expand the footer on hover, shifting every row
+    // below it in the scrollable message list — a visible flicker loop when
+    // the pointer landed near a row boundary. See ReactionChips.test.js.
+    await expect(addBtn).toBeVisible();
+    await expect(wrapper).toHaveCSS('opacity', '0');
+
+    const boxBeforeHover = await chatMessage.boundingBox();
 
     await chatMessage.hover();
-    await expect(addBtn).toBeVisible({ timeout: 5000 });
+    await expect(wrapper).toHaveCSS('opacity', '0.7', { timeout: 5000 });
+
+    const boxDuringHover = await chatMessage.boundingBox();
+    expect(boxDuringHover?.height).toBe(boxBeforeHover?.height);
   });
 
   test('authenticated user can react to a chat message', async ({ authenticatedPage: page }) => {

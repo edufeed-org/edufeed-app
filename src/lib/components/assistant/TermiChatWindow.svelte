@@ -82,6 +82,13 @@
       action: m.termi_hint_profile_cta(),
       secondary: null,
       doing: null
+    },
+    invites: {
+      title: m.concord_invite_hint_title(),
+      body: m.concord_invite_hint_body(),
+      action: m.concord_invite_hint_action(),
+      secondary: null,
+      doing: null
     }
   });
 
@@ -110,7 +117,7 @@
         doing: null
       };
     }
-    return hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} */ (hint.id)];
+    return hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)];
   }
 
   const suggestions = $derived([

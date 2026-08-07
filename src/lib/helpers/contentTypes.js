@@ -5,6 +5,33 @@
 import { parseCommunityContentTypes, hasStrictContentMarker } from './communityRelays.js';
 
 /**
+ * Every valid `?view=` content-view id for a community page. The page load
+ * (`c/[pubkey]/+page.js`) validates the URL param against this, and the
+ * layout (`c/[pubkey]/+layout.svelte`) validates the same param to drive the
+ * left-nav active state. These MUST agree — keep the list here, in ONE place,
+ * so the two can't drift. (A prior drift omitted `'channels'` from the layout
+ * copy, so `?view=channels` rendered the channels content but left the nav
+ * highlighting "Startseite".)
+ * @type {Set<string>}
+ */
+export const VALID_CONTENT_VIEWS = new Set([
+  'home',
+  'chat',
+  'calendar',
+  'learning',
+  'boards',
+  'articles',
+  'forum',
+  'polls',
+  'wikis',
+  'social-bookmarks',
+  'meet',
+  'members',
+  'settings',
+  'channels'
+]);
+
+/**
  * @typedef {Object} ContentTypeConfig
  * @property {number} kind - Nostr event kind number
  * @property {string} name - Display name

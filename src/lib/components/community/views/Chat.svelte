@@ -1,5 +1,4 @@
 <script>
-  import { resolve } from '$app/paths';
   import { getContext } from 'svelte';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -14,17 +13,15 @@
     groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
   import { TimelineModel } from 'applesauce-core/models';
-  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
-  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
-  import ProfileAvatar from '../../shared/ProfileAvatar.svelte';
+  import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
+  import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import { extractMentionPubkeys } from '$lib/helpers/inbox.js';
-  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   const getAllowedAuthors = getContext('allowedAuthors');
 
@@ -284,72 +281,39 @@
         {m.community_views_chat_empty()}
       </div>
     {:else}
-      {#each groupedMessages as item, i (item.type === 'separator' ? `sep-${item.date}-${i}` : item.message.id)}
-        {#if item.type === 'separator'}
-          <div class="divider text-xs text-base-content/40">{item.date}</div>
-        {:else}
-          {@const message = item.message}
+      <ChatMessageList items={groupedMessages}>
+        {#snippet row(/** @type {any} */ message)}
           {@const isOwnMessage = getActiveUser() && message.pubkey === getActiveUser()?.pubkey}
           {@const replyToId = getReplyParentId(message)}
-          <div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
-            {#if !isOwnMessage}
-              <ProfileAvatar
-                pubkey={message.pubkey}
-                profile={userProfiles.get(message.pubkey)}
-                size="sm"
-                linkToProfile
-                class="chat-image"
-              />
-            {/if}
-
-            <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
-              {#if !isOwnMessage}
-                <a href={resolve(profileLink(message.pubkey))} class="font-semibold hover:underline"
-                  >{getUserDisplayName(message.pubkey)}</a
-                >
-                <span>&middot;</span>
-              {/if}
-              <time datetime={new Date(message.created_at * 1000).toISOString()}>
-                {formatMessageTimestamp(message.created_at)}
-              </time>
-              {#if getActiveUser() && canPublish}
-                <button
-                  type="button"
-                  onclick={() => {
-                    replyingTo = message;
-                    messageInput?.focus();
-                  }}
-                  class="ml-1 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
-                  title="Reply"
-                >
-                  <ReplyIcon class="h-3.5 w-3.5" />
-                </button>
-              {/if}
-            </div>
-
-            <div class="chat-bubble {isOwnMessage ? 'chat-bubble-primary' : ''}">
-              <!-- Reply quote preview -->
-              {#if replyToId}
-                {@const parent = displayedMessages.find((msg) => msg.id === replyToId)}
-                {#if parent}
-                  <div
-                    class="mb-1 rounded border-l-2 border-primary/40 bg-base-300/50 px-2 py-1 text-xs text-base-content/70"
-                  >
-                    <span class="font-semibold">{getUserDisplayName(parent.pubkey)}</span>
-                    <p class="truncate">{parent.content}</p>
-                  </div>
-                {/if}
-              {/if}
-              <NostrContentRenderer event={message} />
-              <LinkPreviewList event={message} />
-            </div>
-
-            <div class="chat-footer mt-0.5">
-              <ReactionBar event={message} relays={chatRelays} lazy addButtonOnHover />
-            </div>
-          </div>
-        {/if}
-      {/each}
+          {@const replyParent = replyToId
+            ? displayedMessages.find((msg) => msg.id === replyToId)
+            : null}
+          <ChatMessageRow
+            {message}
+            {isOwnMessage}
+            displayName={getUserDisplayName(message.pubkey)}
+            timestamp={formatMessageTimestamp(message.created_at)}
+            profile={userProfiles.get(message.pubkey)}
+            replyPreview={replyParent
+              ? {
+                  displayName: getUserDisplayName(replyParent.pubkey),
+                  content: replyParent.content
+                }
+              : null}
+            onReply={getActiveUser() && canPublish
+              ? (msg) => {
+                  replyingTo = msg;
+                  messageInput?.focus();
+                }
+              : null}
+            showLinkPreviews
+          >
+            {#snippet reactions(/** @type {any} */ msg)}
+              <ReactionBar event={msg} relays={chatRelays} lazy addButtonOnHover />
+            {/snippet}
+          </ChatMessageRow>
+        {/snippet}
+      </ChatMessageList>
     {/if}
   </div>
 

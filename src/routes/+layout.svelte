@@ -29,6 +29,7 @@
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { recordNavigation } from '$lib/helpers/navigationHistory.js';
+  import { hasStaticOwnBottomUI } from '$lib/helpers/bottomUiVisibility.js';
   import { page, navigating } from '$app/stores';
   import { setContext } from 'svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
@@ -86,10 +87,11 @@
   let hasOwnBottomUI = $derived(
     (() => {
       const pathname = $page.url.pathname;
-      if (pathname.startsWith('/create/')) return true;
-      if ($page.url.searchParams.get('view') === 'chat') return true;
-      if (pathname.startsWith('/c/messages')) {
-        // Page reports whether a thread is currently open
+      if (hasStaticOwnBottomUI({ pathname, viewParam: $page.url.searchParams.get('view') })) {
+        return true;
+      }
+      if (pathname.startsWith('/c/messages') || pathname.startsWith('/c/groups')) {
+        // Page reports whether a thread/group chat is currently open
         return getPageHasOwnBottomUI?.() ?? false;
       }
       return false;
@@ -272,6 +274,23 @@
   $effect(() => {
     if (!browser) return;
     hydrateDeletions();
+  });
+
+  // Start the Concord private-channels session lifecycle (no-op unless
+  // CONCORD_ENABLED). Idempotent — safe even though $effect can re-run.
+  // Dynamic import of the $lib/concord barrel (this is the barrel's intended
+  // non-component call site — see index.js's header comment): the barrel
+  // itself is SSR-clean (it deliberately does not re-export storage.js), but
+  // client.svelte.js's own internal dynamic imports pull in
+  // applesauce-concord/applesauce-core-concord once initConcordService()
+  // actually runs, so this stays a dynamic import rather than a static
+  // top-of-file one to keep that whole dependency tree out of the server
+  // bundle regardless (see CLAUDE.md's Concord SSR note).
+  $effect(() => {
+    if (!browser) return;
+    import('$lib/concord').then(({ initConcordService }) => {
+      initConcordService();
+    });
   });
 
   // Initialize inbox + wave toasts on login, cleanup on logout

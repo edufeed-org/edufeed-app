@@ -1,0 +1,151 @@
+// NIP-29 relay groups — pure helpers for the /groups lane.
+//
+// A group lives ON one relay: `host'id` (Armada/applesauce pointer format,
+// applesauce-common's decodeGroupPointer). Chat is kind 9 with an `h` tag —
+// the same shape the app's public community chat already speaks — so the UI
+// layer reuses the existing chat components wholesale; this module only
+// covers what is NIP-29-specific: pointer parsing, the h-tagged event
+// templates (message/join/leave), and kind-10009 groups-list updates.
+//
+// Event templates follow the app's own idiom (hand-rolled template objects,
+// see Chat.svelte's sendMessage) rather than applesauce's EventFactory —
+// the factory machinery isn't used anywhere in this app yet, and two
+// two-tag templates don't justify introducing it.
+import {
+  decodeGroupPointer,
+  encodeGroupPointer,
+  GROUPS_LIST_KIND,
+  JOIN_REQUEST_KIND,
+  LEAVE_REQUEST_KIND,
+  getPublicGroups
+} from 'applesauce-common/helpers/groups';
+
+/**
+ * @typedef {{relay: string, id: string}} GroupPointer
+ */
+
+/**
+ * Parse user input into a group pointer. Accepts `host'id`,
+ * `wss://host'id`, and bare `host` (NIP-29 root group `_`). Null for
+ * empty/unparseable input.
+ * @param {string} input
+ * @returns {GroupPointer | null}
+ */
+export function parseGroupInput(input) {
+  const trimmed = (input ?? '').trim();
+  if (!trimmed) return null;
+  try {
+    const pointer = decodeGroupPointer(trimmed);
+    if (!pointer?.relay || !isValidRelayUrl(pointer.relay)) return null;
+    return { relay: pointer.relay, id: pointer.id || '_' };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when the relay URL carries a DNS-shaped host. Chrome's URL parser
+ * percent-encodes forbidden host bytes (e.g. spaces) instead of throwing
+ * like Node's does, so "new URL succeeded" proves nothing in a browser —
+ * the host must be validated explicitly.
+ * @param {string} relay
+ */
+export function isValidRelayUrl(relay) {
+  /** @type {string} */
+  let hostname;
+  try {
+    hostname = new URL(relay).hostname;
+  } catch {
+    return false;
+  }
+  // IPv6 literals arrive bracketed; unwrap and allow colons for them only.
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    return /^[0-9a-f:]+$/i.test(hostname.slice(1, -1));
+  }
+  // DNS labels: alnum with inner hyphens, dot-separated. Rejects the
+  // percent-escapes a lenient parser smuggles into the host.
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(hostname);
+}
+
+/**
+ * App route for a group, with the `host'id` pointer URL-encoded once.
+ * @param {GroupPointer} pointer
+ */
+export function groupHref(pointer) {
+  return `/groups/${encodeURIComponent(encodeGroupPointer(pointer))}`;
+}
+
+/**
+ * Kind-9 group chat message: `h` tag first (same shape as the public
+ * community chat), optional NIP-10 marked reply.
+ * @param {string} groupId
+ * @param {string} content
+ * @param {{id: string, pubkey: string} | null} [replyTo]
+ * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
+ */
+export function buildGroupMessageTemplate(groupId, content, replyTo = null) {
+  /** @type {string[][]} */
+  const tags = [['h', groupId]];
+  if (replyTo) {
+    tags.push(['e', replyTo.id, '', 'reply']);
+    tags.push(['p', replyTo.pubkey]);
+  }
+  return { kind: 9, content, created_at: Math.floor(Date.now() / 1000), tags };
+}
+
+/**
+ * Kind-9021 join request (NIP-29). The optional invite code rides as a
+ * `code` tag.
+ * @param {string} groupId
+ * @param {string} [code]
+ */
+export function buildJoinRequestTemplate(groupId, code) {
+  /** @type {string[][]} */
+  const tags = [['h', groupId]];
+  if (code) tags.push(['code', code]);
+  return { kind: JOIN_REQUEST_KIND, content: '', created_at: Math.floor(Date.now() / 1000), tags };
+}
+
+/**
+ * Kind-9022 leave request (NIP-29).
+ * @param {string} groupId
+ */
+export function buildLeaveRequestTemplate(groupId) {
+  return {
+    kind: LEAVE_REQUEST_KIND,
+    content: '',
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [['h', groupId]]
+  };
+}
+
+/**
+ * Kind-10009 groups-list update: preserves every non-`group` tag and the
+ * content (the NIP-51 hidden section) verbatim, then adds or removes ONE
+ * public `["group", id, relay]` entry. Dedupe is by (id, relay).
+ * @param {{content?: string, tags?: string[][]} | null | undefined} existing the current 10009 event, if any
+ * @param {{add?: GroupPointer, remove?: GroupPointer}} change
+ * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
+ */
+export function buildGroupsListTemplate(existing, change) {
+  const keepTags = (existing?.tags ?? []).filter((t) => t[0] !== 'group');
+  /** @type {GroupPointer[]} */
+  let groups = existing ? (getPublicGroups(/** @type {any} */ (existing)) ?? []) : [];
+
+  if (change.remove) {
+    const target = change.remove;
+    groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
+  }
+  if (change.add) {
+    const target = change.add;
+    groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
+    groups.push(target);
+  }
+
+  return {
+    kind: GROUPS_LIST_KIND,
+    content: existing?.content ?? '',
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [...keepTags, ...groups.map((g) => ['group', g.id, g.relay])]
+  };
+}
