@@ -119,7 +119,15 @@ export function initializeRailLayoutSync(pubkey) {
     });
     subscriptions.push(loader);
   } else {
-    status = RAIL_SYNC_STATUS.absent;
+    // NOT `absent`. Nothing was asked, so nothing answered — and `absent`
+    // means "the relays answered and hold no layout", which is what makes it
+    // safe to publish over. Calling this absent would let the first edit
+    // overwrite a layout that exists and was never read: publishEvent builds
+    // its own relay set from the outbox model, so a user with no lookup relays
+    // can still write perfectly well to relays holding their real arrangement.
+    // `unavailable` rather than `loading` because this never resolves on its
+    // own — there is nothing outstanding to wait for.
+    status = RAIL_SYNC_STATUS.unavailable;
   }
 
   const sub = eventStore

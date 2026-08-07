@@ -38,7 +38,12 @@ export const RAIL_SYNC_STATUS = /** @type {const} */ ({
   loaded: 'loaded',
   /** A layout event arrived and could NOT be decrypted. Not the same as absent. */
   locked: 'locked',
-  /** This signer cannot NIP-44, so the rail does not sync. It does not sync in the clear. */
+  /**
+   * Sync cannot work at all and will not start working on its own: no
+   * NIP-44-capable signer, or no relay to ask in the first place. The rail
+   * does not sync. It does NOT sync in the clear, and it does not pretend the
+   * remote is empty.
+   */
   unavailable: 'unavailable'
 });
 

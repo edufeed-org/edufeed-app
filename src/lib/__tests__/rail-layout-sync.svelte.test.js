@@ -194,6 +194,24 @@ describe('the write path never opens on incomplete knowledge', () => {
     expect(state.published).toHaveLength(1);
   });
 
+  // Found by TestOER, 2026-08-07. `absent` means "the relays answered and hold
+  // nothing", which is what makes it safe to publish over. With no lookup
+  // relays NOTHING WAS ASKED — and publishEvent builds its own relay set from
+  // the outbox model, so such a user can still write to relays that hold their
+  // real arrangement. Calling that absent let the first edit overwrite a
+  // layout nobody had read. The `else` branch had no test; the whole suite
+  // ran with one lookup relay configured.
+  it('refuses to publish when there were no lookup relays to ask', async () => {
+    state.lookupRelays = [];
+    initializeRailLayoutSync(ME);
+
+    expect(getRailSyncStatus()).not.toBe(RAIL_SYNC_STATUS.absent);
+    const result = await publishRailLayout(ME, LAYOUT);
+
+    expect(result.published).toBe(false);
+    expect(state.published).toEqual([]);
+  });
+
   it('stays unknown, and closed, when the lookup errors', async () => {
     initializeRailLayoutSync(ME);
     state.loaderObserver.error(new Error('relays unreachable'));
@@ -233,6 +251,48 @@ describe('encryption is not best-effort', () => {
     const result = await publishRailLayout(ME, LAYOUT);
 
     expect(result.published).toBe(false);
+    expect(state.published).toEqual([]);
+  });
+
+  // My own mutation battery exposed this gap: disabling the
+  // getAppDataEncryption guard entirely SURVIVED, because every test until now
+  // encrypted successfully, so the guard never had a chance to fire. That is
+  // precisely the defence-in-depth case — a signer that reports success and
+  // hands back something readable. The applesauce factory's encryption flag
+  // silently produces no encryption at all, so this is not hypothetical.
+  it('refuses to publish when the signer returns readable content', async () => {
+    initializeRailLayoutSync(ME);
+    state.loaderObserver.complete();
+    state.signer = {
+      ...realSigner(),
+      nip44: {
+        // Reports success, encrypts nothing.
+        encrypt: (/** @type {string} */ _p, /** @type {string} */ t) => Promise.resolve(t),
+        decrypt: (/** @type {string} */ _p, /** @type {string} */ c) => Promise.resolve(c)
+      }
+    };
+
+    const result = await publishRailLayout(ME, LAYOUT);
+
+    expect(result.published).toBe(false);
+    expect(result.reason).toBe('not-encrypted');
+    expect(state.published).toEqual([]);
+  });
+
+  // Second survivor from the battery. The gate blocks `unavailable` up front,
+  // so the per-publish capability check only matters when the signer changes
+  // AFTER the gate opened — an account switch mid-flight. Publishing is
+  // refused either way; what the check buys is the accurate reason, and the
+  // reason is what the user gets told.
+  it('names the signer, not the signature, when NIP-44 disappears mid-flight', async () => {
+    initializeRailLayoutSync(ME);
+    state.loaderObserver.complete();
+    state.signer = plainSigner();
+
+    const result = await publishRailLayout(ME, LAYOUT);
+
+    expect(result.published).toBe(false);
+    expect(result.reason).toBe(RAIL_SYNC_STATUS.unavailable);
     expect(state.published).toEqual([]);
   });
 
