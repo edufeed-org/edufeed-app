@@ -67,7 +67,13 @@ vi.mock('$lib/paraglide/messages', () =>
       'dm_relay_banner_title',
       'dm_relay_banner_body',
       'dm_relay_banner_use_cta',
-      'dm_relay_banner_customize_cta'
+      'dm_relay_banner_customize_cta',
+      'termi_hint_nip05_pending_title',
+      'termi_hint_nip05_pending_body',
+      'termi_hint_nip05_ready_title',
+      'termi_hint_nip05_ready_body',
+      'termi_hint_nip05_ready_cta',
+      'termi_hint_nip05_ready_doing'
     ].map((key) => [key, () => key])
   )
 );
@@ -83,7 +89,17 @@ vi.mock('$app/navigation', () => ({ goto: mockGoto }));
 // (.svelte.js), so the box lives in ./__mocks__/reactive-box.svelte.js and is
 // created inside the (async) mock factory — vi.hoisted callbacks run before
 // this file's own imports resolve, so they can't reference it directly.
-const mockManager = vi.hoisted(() => ({ active: { signer: { signEvent: vi.fn() } } }));
+const mockNip44Decrypt = vi.hoisted(() => vi.fn());
+// pubkey matches EXT_PUBKEY — the account most nip05 scenarios activate.
+const mockManager = vi.hoisted(() => ({
+  active: {
+    pubkey: 'b'.repeat(64),
+    signer: {
+      signEvent: vi.fn(),
+      nip44: { decrypt: (...args) => mockNip44Decrypt(...args) }
+    }
+  }
+}));
 vi.mock('$lib/stores/accounts.svelte', async () => {
   const { createReactiveBox } = await import('./__mocks__/reactive-box.svelte.js');
   const activeUserBox = createReactiveBox(null);
@@ -100,9 +116,19 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: mockModalStore }));
 // Relay-list check plumbing: the replaceable subscription emits mockRelayListEvent.
 const mockRelayListEvent = vi.hoisted(() => ({ value: null }));
 const mockProfileEvent = vi.hoisted(() => ({ value: null }));
+/** The active user's own kind 1069 membership applications. */
+const mockApplicationEvents = vi.hoisted(() => ({ value: [] }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {},
   eventStore: {
+    // Membership grant detection (nip05 hint) subscribes to the user's own
+    // kind 1069 applications.
+    timeline: () => ({
+      subscribe: (cb) => {
+        cb(mockApplicationEvents.value);
+        return { unsubscribe: vi.fn() };
+      }
+    }),
     replaceable: (kind) => ({
       subscribe: (cb) => {
         cb(kind === 0 ? mockProfileEvent.value : mockRelayListEvent.value);
@@ -123,7 +149,21 @@ const mockDefaultDmRelays = vi.hoisted(() => ({ value: ['wss://dm.example/'] }))
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getDefaultRelayList: () => mockDefaultRelays.value,
   getDefaultDmRelays: () => mockDefaultDmRelays.value,
+  getCommunikeyRelays: () => [],
   hasMailboxRelays: (e) => !!e && (e.tags || []).some((t) => t[0] === 'r')
+}));
+
+// Pulled in through the nip05 hint's membership-grant detection.
+const mockActionRun = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('$lib/loaders/base.js', () => ({
+  timedPool: () => ({})
+}));
+vi.mock('applesauce-loaders/loaders', () => ({
+  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+}));
+vi.mock('$lib/stores/action-runner.svelte.js', () => ({
+  actionRunner: { run: mockActionRun },
+  actionRunnerOptimistic: { run: vi.fn() }
 }));
 
 const mockPublishDefault = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
@@ -167,6 +207,8 @@ async function openTermi(container) {
   await fireEvent.click(container.querySelector('[data-testid="termi-launcher"]'));
 }
 
+const originalFetch = globalThis.fetch;
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
@@ -180,10 +222,15 @@ beforeEach(() => {
     content: JSON.stringify({ nip05: 'me@edufeed.org' }),
     tags: []
   };
+  mockApplicationEvents.value = [];
+  mockNip44Decrypt.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
+  // Keep the grant hook's .well-known check inert unless a test overrides it.
+  globalThis.fetch = vi.fn(async () => ({ ok: false }));
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  globalThis.fetch = originalFetch;
 });
 
 describe('TermiAssistant launcher + hints', () => {
@@ -275,7 +322,7 @@ describe('TermiAssistant launcher + hints', () => {
     expect(mockEnsureDm).toHaveBeenCalled();
   });
 
-  it('shows the nip05 hint when membership is enabled and the profile has none, action routes to settings', async () => {
+  it('shows the nip05 hint when membership is enabled and the profile has none, action opens the application modal', async () => {
     mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
     mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
     mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
@@ -284,7 +331,94 @@ describe('TermiAssistant launcher + hints', () => {
 
     expect(container.querySelector('[data-testid="termi-hint-nip05"]')).not.toBeNull();
     await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
+    // The form comes to the user, rather than sending them to /settings to
+    // hunt for the membership card and click a second time.
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('membershipApply');
+    expect(mockGoto).not.toHaveBeenCalled();
+  });
+
+  it('one-click activates a granted handle by publishing the profile update', async () => {
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockMembership.value = {
+      enabled: true,
+      handleDomain: 'edufeed.org',
+      formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
+      adminPubkeys: ['a'.repeat(64)]
+    };
+    mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
+    mockApplicationEvents.value = [
+      {
+        id: 'app-1',
+        kind: 1069,
+        pubkey: EXT_PUBKEY,
+        created_at: 1,
+        content: '<ciphertext>',
+        tags: [
+          ['a', `30168:${'a'.repeat(64)}:edufeed-membership`],
+          ['p', 'a'.repeat(64)],
+          ['encrypted']
+        ]
+      }
+    ];
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ names: { maria: EXT_PUBKEY } })
+    }));
+
+    const { container } = render(TermiAssistant);
+    // Let the decrypt → .well-known chain resolve (microtasks, not timers).
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    flushSync();
+    await tick();
+    await openTermi(container);
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
+    expect(mockActionRun).toHaveBeenCalledWith(expect.anything(), {
+      nip05: 'maria@edufeed.org'
+    });
+    expect(mockGoto).not.toHaveBeenCalled();
+  });
+
+  it('routes Activate to settings when the user has no kind 0 profile yet', async () => {
+    // UpdateProfile throws without an existing profile — the one-click must
+    // not fire-and-swallow that; it hands over to the settings flow instead.
+    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockMembership.value = {
+      enabled: true,
+      handleDomain: 'edufeed.org',
+      formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
+      adminPubkeys: ['a'.repeat(64)]
+    };
+    mockProfileEvent.value = null; // no kind 0
+    mockApplicationEvents.value = [
+      {
+        id: 'app-1',
+        kind: 1069,
+        pubkey: EXT_PUBKEY,
+        created_at: 1,
+        content: '<ciphertext>',
+        tags: [
+          ['a', `30168:${'a'.repeat(64)}:edufeed-membership`],
+          ['p', 'a'.repeat(64)],
+          ['encrypted']
+        ]
+      }
+    ];
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ names: { maria: EXT_PUBKEY } })
+    }));
+
+    const { container } = render(TermiAssistant);
+    vi.advanceTimersByTime(5000); // profile check settles via timeout
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    flushSync();
+    await tick();
+    await openTermi(container);
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
     expect(mockGoto).toHaveBeenCalledWith('/settings');
+    expect(mockActionRun).not.toHaveBeenCalled();
   });
 
   it('shows no nip05 hint when the profile has one or membership is disabled', async () => {

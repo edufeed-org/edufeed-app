@@ -12,7 +12,10 @@ import {
   expect,
   navigateToAMBCreation,
   selectBildungsbereich,
-  setupMetadataMock
+  setupMetadataMock,
+  FAB_TRIGGER,
+  openCreateHub,
+  clickCreateAction
 } from './fixtures.js';
 import { setupErrorCapture } from './test-utils.js';
 import { TEST_COMMUNITY } from './test-data.js';
@@ -36,8 +39,8 @@ test.describe('AMB Resource Creation - FAB and Page Navigation', () => {
     await page.locator('nav.menu button', { hasText: 'Learning' }).first().click();
     await page.waitForTimeout(2000);
 
-    // FAB should be visible (use .first() since there's mobile and desktop FAB)
-    await expect(page.locator('.fab').first()).toBeVisible({ timeout: 10000 });
+    // FAB should be visible
+    await expect(page.locator(FAB_TRIGGER)).toBeVisible({ timeout: 10000 });
   });
 
   test('clicking Create Learning Content navigates to creation page', async ({
@@ -54,15 +57,12 @@ test.describe('AMB Resource Creation - FAB and Page Navigation', () => {
     await page.locator('nav.menu button', { hasText: 'Learning' }).first().click();
     await page.waitForTimeout(2000);
 
-    // Wait for FAB
-    await expect(page.locator('.fab').first()).toBeVisible({ timeout: 15000 });
-
-    // Click FAB to expand
-    await page.locator('.fab [role="button"]').first().click();
-    await page.waitForTimeout(300);
-
-    // Click the "Create Learning Content" button
-    await page.locator('button[data-tip="Create Learning Content"]').first().click();
+    // Open the create hub and pick the learning-content tile. Its accessible
+    // name is the action's ariaLabel ('Share learning content'). The old tooltip
+    // selector matched nothing: data-tip holds the action *description*, and
+    // this action has none.
+    await openCreateHub(page);
+    await clickCreateAction(page, 'Share learning content');
 
     // Should navigate to the creation page
     await expect(page).toHaveURL(/\/create\/resource/, { timeout: 10000 });

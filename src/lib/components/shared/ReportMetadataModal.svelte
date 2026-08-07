@@ -8,9 +8,7 @@
 <script>
   import { CloseIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
-  import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
-  import { SendWrappedMessage } from 'applesauce-actions/actions';
+  import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { getCanonicalEventRoute } from '$lib/helpers/eventRouteRedirect.js';
   import { buildMetadataFeedbackMessage } from '$lib/helpers/metadata-feedback.js';
@@ -52,8 +50,9 @@
     const body = buildMetadataFeedbackMessage({ title, url, fieldLabel, comment });
 
     try {
-      await ensureDmRelayList();
-      await actionRunnerOptimistic.run(SendWrappedMessage, [event.pubkey], body);
+      // sendWrappedDm settles both relay lists first — ours so the author's
+      // reply can reach us, theirs so the feedback lands in the inbox they read.
+      await sendWrappedDm([event.pubkey], body);
       showToast(m.report_metadata_success(), 'success');
       modalStore.closeModal();
     } catch (err) {

@@ -73,6 +73,21 @@
     adaptiveRatio = clampCoverAspect(img.naturalWidth, img.naturalHeight);
   }
 
+  // A cover URL that cannot be shown (dead host, 404, hotlink block) is treated
+  // exactly like a cover that was never set: the generated TypoCover says more
+  // than a grey placeholder box, and the license pill goes with the image it
+  // described. Issue #51 — the reported case pointed at an NXDOMAIN host.
+  let imageFailed = $state(false);
+  /** @type {any} */
+  let lastImageSrc = Symbol('uninitialized');
+  $effect(() => {
+    if (resource?.image !== lastImageSrc) {
+      lastImageSrc = resource?.image;
+      imageFailed = false;
+    }
+  });
+  const hasImage = $derived(Boolean(resource?.image) && !imageFailed);
+
   // License-badge centralization: lookup the kind-1063 license event for the
   // image's SHA-256 hash (if the resource carries an `x` tag).
   const imageHash = $derived(
@@ -111,12 +126,12 @@
         : null
   );
 
-  // App-derived PDF page-1 thumbnail (issue #24): used only when the user
-  // set no cover image, gated by the rights policy (open license or attested
+  // App-derived PDF page-1 thumbnail (issue #24): used only when there is no
+  // usable cover image, gated by the rights policy (open license or attested
   // upload). Never written to the event — /api/pdf-thumbnail renders+caches.
   let thumbFailed = $state(false);
   const pdfThumbUrl = $derived.by(() => {
-    if (resource?.image || thumbFailed) return null;
+    if (hasImage || thumbFailed) return null;
     if (!canDeriveThumbnail(resource?.tags)) return null;
     const src = getThumbnailSourceUrl(resource?.tags);
     return src ? pdfThumbnailEndpoint(src) : null;
@@ -166,7 +181,7 @@
   const licenseLabel = $derived(resource?.license?.label ?? null);
 </script>
 
-{#if resource?.image}
+{#if hasImage}
   <div
     class="resource-cover-image relative w-full overflow-hidden rounded-lg bg-base-200 {aspectClass} {className}"
     style:aspect-ratio={aspect === 'adaptive' && adaptiveRatio ? adaptiveRatio : undefined}
@@ -179,6 +194,7 @@
       size={size === 'thumbnail' ? 'thumbnail' : 'card'}
       class="h-full w-full object-cover"
       onload={handleImageLoad}
+      onexhausted={() => (imageFailed = true)}
     />
     <ImageLicenseOverlay
       licenseEvent={licenseStatus.event}

@@ -105,6 +105,18 @@
   });
 
   /**
+   * End the login flow: close this dialog, then tell the parent the flow is
+   * done so it can clear the modal store. Order matters — `onAccountCreated`
+   * unmounts this component, so anything still on screen (the "already logged
+   * in" notice) has to have had its time before we call it.
+   */
+  function finishLogin() {
+    const dialog = /** @type {HTMLDialogElement | null} */ (document.getElementById(modalId));
+    dialog?.close?.();
+    if (onAccountCreated) onAccountCreated();
+  }
+
+  /**
    * Form submit wrapper — prevents the default GET navigation so the browser
    * still fires the "save password?" prompt (it requires a real form submit,
    * not a click handler) but our SPA stays put.
@@ -168,19 +180,11 @@
         manager.setActive(account);
       }
 
-      // Call the callback to notify parent component of successful account creation
-      if (onAccountCreated) {
-        onAccountCreated();
-      }
-
-      const modal = /** @type {HTMLDialogElement} */ (document.getElementById(modalId));
-      if (modal) {
-        if (existing) {
-          // Give the user a moment to read the info message before closing.
-          closeTimer = setTimeout(() => modal.close?.(), 1200);
-        } else {
-          modal.close?.();
-        }
+      if (existing) {
+        // Give the user a moment to read the info message before closing.
+        closeTimer = setTimeout(finishLogin, 1200);
+      } else {
+        finishLogin();
       }
     } catch (error) {
       console.error('Error logging in with private key:', error);

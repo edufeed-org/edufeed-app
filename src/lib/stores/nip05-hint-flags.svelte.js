@@ -22,3 +22,22 @@ export function markNip05HintDismissed(pubkey) {
   }
   version++;
 }
+
+// Separate flag for the "your handle is ready" card: dismissing the early
+// apply reminder must not swallow the later grant notification.
+const READY_DISMISS_PREFIX = 'nip05-ready-hint-dismissed:';
+
+/** @param {string} pubkey */
+export function isNip05ReadyHintDismissed(pubkey) {
+  void version;
+  if (typeof localStorage === 'undefined') return false;
+  return !!localStorage.getItem(READY_DISMISS_PREFIX + pubkey);
+}
+
+/** @param {string} pubkey */
+export function markNip05ReadyHintDismissed(pubkey) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(READY_DISMISS_PREFIX + pubkey, '1');
+  }
+  version++;
+}

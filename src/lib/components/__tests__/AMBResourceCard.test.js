@@ -34,7 +34,24 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   event_tags_more_count: () => '',
   debug_panel_raw_nostr_event: () => '',
   common_copied: () => '',
-  common_copy: () => ''
+  common_copy: () => '',
+  // Linked-materials hover badge (#57). Mirrors messages/en.json — including the
+  // separate singular key, because the bug the issue reports is the badge
+  // rendering "1 linked materials".
+  amb_card_linked_materials: (/** @type {{count: number}} */ { count }) =>
+    `${count} linked materials`,
+  amb_card_linked_materials_one: () => '1 linked material',
+  amb_card_linked_material_type_pdf: () => 'PDF',
+  amb_card_linked_material_type_image: () => 'Image',
+  amb_card_linked_material_type_video: () => 'Video',
+  amb_card_linked_material_type_audio: () => 'Audio',
+  amb_card_linked_material_type_presentation: () => 'Presentation',
+  amb_card_linked_material_type_spreadsheet: () => 'Spreadsheet',
+  amb_card_linked_material_type_document: () => 'Document',
+  amb_card_linked_material_type_archive: () => 'Archive',
+  amb_card_linked_material_type_text: () => 'Text file',
+  amb_card_linked_material_type_link: () => 'Link',
+  amb_card_linked_material_type_file: () => 'File'
 }));
 vi.mock('$lib/paraglide/runtime.js', () => ({
   getLocale: () => 'en'
@@ -532,6 +549,110 @@ describe('AMBResourceCard', () => {
       expect(getByText('Open Content')).toBeTruthy();
       // ResourceCover should be present (no image URL provided → typo cover)
       expect(container.querySelector('[data-testid="resource-cover-typo"]')).toBeTruthy();
+    });
+  });
+
+  // Issue #57 — the badge said only how many materials there are, and said it
+  // with the wrong plural. These assert the rendered badge text rather than the
+  // helper, because the helper being right and the badge showing something else
+  // is exactly how this went unnoticed.
+  describe('linked-materials hover badge', () => {
+    /** @param {string[][]} extraTags */
+    const withMaterialTags = (extraTags) => ({
+      ...mockResource,
+      tags: [...mockResourceTags, ...extraTags]
+    });
+
+    /** @param {HTMLElement} container */
+    const badgeText = (container) =>
+      container.querySelector('[data-testid="linked-materials-badge"]')?.textContent?.trim();
+
+    it('renders no badge when the resource links no material', () => {
+      const { container } = render(AMBResourceCard, { props: { resource: mockResource } });
+      expect(container.querySelector('[data-testid="linked-materials-badge"]')).toBeNull();
+    });
+
+    it('names the type and size of a single attached file', () => {
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: withMaterialTags([
+            ['encoding:contentUrl', 'https://files.example/a'],
+            ['encoding:encodingFormat', 'application/pdf'],
+            ['encoding:contentSize', '2516582']
+          ])
+        }
+      });
+      expect(badgeText(container)).toBe('📎 PDF · 2.4 MB');
+    });
+
+    it('names the type of a single external reference from its extension', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: withMaterialTags([['r', 'https://elsewhere.example/deck.pptx']]) }
+      });
+      expect(badgeText(container)).toBe('📎 Presentation');
+    });
+
+    it('shows the size alone when the type is unknown', () => {
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: withMaterialTags([
+            ['encoding:contentUrl', 'https://files.example/download'],
+            ['encoding:contentSize', '4096']
+          ])
+        }
+      });
+      expect(badgeText(container)).toBe('📎 File · 4 KB');
+    });
+
+    it('falls back to the singular count when the lone item tells us nothing', () => {
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: withMaterialTags([['encoding:contentUrl', 'https://files.example/download']])
+        }
+      });
+      expect(badgeText(container)).toBe('📎 1 linked material');
+    });
+
+    it('never renders the reported "1 linked materials" for a single material', () => {
+      // The exact wording in the screenshot on #57 ("1 Materialien verlinkt").
+      for (const tags of [
+        [['encoding:contentUrl', 'https://files.example/download']],
+        [['encoding:contentUrl', 'https://files.example/a.pdf']],
+        [['r', 'https://elsewhere.example/lesson']]
+      ]) {
+        const { container, unmount } = render(AMBResourceCard, {
+          props: { resource: withMaterialTags(tags) }
+        });
+        expect(badgeText(container)).not.toBe('📎 1 linked materials');
+        unmount();
+      }
+    });
+
+    it('falls back to the count for several materials', () => {
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: withMaterialTags([
+            ['encoding:contentUrl', 'https://files.example/a.pdf'],
+            ['r', 'https://elsewhere.example/one'],
+            ['r', 'https://elsewhere.example/two']
+          ])
+        }
+      });
+      expect(badgeText(container)).toBe('📎 3 linked materials');
+    });
+
+    it('stays hover-only, which is the only reason a badge is an acceptable place for this', () => {
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: withMaterialTags([
+            ['encoding:contentUrl', 'https://files.example/a'],
+            ['encoding:encodingFormat', 'application/pdf']
+          ])
+        }
+      });
+      const badge = container.querySelector('[data-testid="linked-materials-badge"]');
+      expect(badge?.className).toContain('opacity-0');
+      expect(badge?.className).toContain('group-hover:opacity-100');
     });
   });
 });

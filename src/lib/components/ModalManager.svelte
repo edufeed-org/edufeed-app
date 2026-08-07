@@ -27,6 +27,7 @@
   import NoteCreateModal from './notes/NoteCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
   import DeleteCommunityModal from './community/DeleteCommunityModal.svelte';
+  import MembershipApplyModal from './membership/MembershipApplyModal.svelte';
   import InviteInboxModal from './community/channels/InviteInboxModal.svelte';
 
   /**
@@ -289,11 +290,16 @@
   }
 
   /**
-   * Handle successful account creation from LoginWithPrivateKey
-   * Transitions back to login modal to show account options or close flow
+   * Handle a finished login flow (private key / bunker / npub).
+   *
+   * These fire once the sub-modal has closed its own <dialog>, so the login
+   * flow is over and the whole stack must go away. Transitioning back to
+   * 'login' here (the previous behaviour) re-opened the login modal on top of
+   * the freshly authenticated app — the user appeared to be logged in but was
+   * still staring at the login dialog.
    */
   function handleAccountCreated() {
-    modal.transitionModal('privateKey', 'login');
+    modal.closeModal();
   }
 
   function handleBunkerTransition() {
@@ -305,7 +311,7 @@
   }
 
   function handleBunkerAccountCreated() {
-    modal.transitionModal('bunker', 'login');
+    modal.closeModal();
   }
 
   function handleNpubTransition() {
@@ -313,7 +319,7 @@
   }
 
   function handleNpubAccountCreated() {
-    modal.transitionModal('npubLogin', 'login');
+    modal.closeModal();
   }
 
   function handleGoogleTransition() {
@@ -397,6 +403,9 @@
   <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
 {:else if modal.activeModal === 'deleteCommunity'}
   <DeleteCommunityModal modalId={deleteCommunityModalId} />
+{:else if modal.activeModal === 'membershipApply'}
+  <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
+  <MembershipApplyModal />
 {:else if modal.activeModal === 'resourceVariantPicker'}
   <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
   <ResourceVariantPickerModal

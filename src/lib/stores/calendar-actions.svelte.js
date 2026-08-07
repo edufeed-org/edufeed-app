@@ -5,6 +5,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
+import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
 import {
   validateEventForm,
   convertFormDataToEvent,
@@ -158,17 +159,56 @@ export function createCalendarActions(_communityPubkey) {
         // Convert form data to event object
         const eventData = convertFormDataToEvent(formData, existingEvent.pubkey);
 
+        // An update MUST NOT change the kind.
+        //
+        // NIP-52 splits calendar events by kind: 31922 is date-based (all-day,
+        // `start` is YYYY-MM-DD) and 31923 is time-based (`start` is a unix
+        // timestamp, plus a required `D` tag). Toggling all-day therefore
+        // forces a different kind — there is no legal way to express an
+        // all-day event as a 31923, so this cannot be fixed by keeping the
+        // existing kind and clearing the time fields.
+        //
+        // But a replaceable event is addressed by (kind, pubkey, d-tag), so a
+        // new kind is a NEW COORDINATE: the original is not replaced, both
+        // events stay live, and the naddr already in the URL still resolves to
+        // the pre-edit one. The user sees a save that silently did nothing —
+        // the same symptom as #62, which no cache fix can touch because the
+        // edit genuinely went somewhere else.
+        //
+        // Delete-and-recreate is not a safe alternative: NIP-52 calendars
+        // (kind 31924) reference their events by `a` = <kind>:<pubkey>:<d>,
+        // and that list is held by the CALENDAR owner, who need not be the
+        // person editing — this client cannot re-point references it cannot
+        // sign. The NIP also says explicitly that it "is intentionally not
+        // defining what happens if a calendar event changes after an RSVP is
+        // submitted", so there is no spec-blessed migration to implement.
+        //
+        // Refusing is the only option that cannot corrupt anything, and it
+        // takes nothing away that works today. (#65)
+        if (eventData.kind && eventData.kind !== existingEvent.kind) {
+          throw new Error(
+            'Cannot change an event between all-day and timed after it has been created. ' +
+              'The two use different NIP-52 kinds, so the change would create a second ' +
+              'event instead of replacing this one. Delete this event and create a new one instead.'
+          );
+        }
+
         // Create the calendar event using EventFactory with the SAME d-tag
         const eventFactory = createAppEventFactory();
 
         // Build NIP-52 compliant tags (reuses original d-tag for replacement)
         const tags = buildCalendarEventTags(formData, eventData, dTag, hTags);
 
-        // Build and sign the updated calendar event
+        // Build and sign the updated calendar event.
+        //
+        // created_at MUST be strictly greater than the event being replaced —
+        // a same-second replacement is silently dropped by three independent
+        // layers, and deterministically by the cache. See nextCreatedAt. (#62)
         const eventTemplate = await eventFactory.build({
           kind: eventData.kind || existingEvent.kind,
           content: eventData.summary || '',
-          tags: tags
+          tags: tags,
+          created_at: nextCreatedAt(existingEvent)
         });
 
         const updatedEvent = await currentAccount.signEvent(eventTemplate);
@@ -195,7 +235,20 @@ export function createCalendarActions(_communityPubkey) {
         const participantPubkeys = (formData.participants || [])
           .map((/** @type {{pubkey: string}} */ p) => p.pubkey)
           .filter(Boolean);
-        await publishEvent(updatedEvent, participantPubkeys, { communityEvent });
+        const publishResult = await publishEvent(updatedEvent, participantPubkeys, {
+          communityEvent
+        });
+
+        // The detail page reads through addressLoader, whose FIRST step is the
+        // IndexedDB cache — and a cache hit ends applesauce's loading sequence
+        // before any relay is queried. Without this the pre-edit version stays
+        // cached and every reload renders the OLD event even though the relay
+        // holds only the new one. Updating calendarStore above is not enough:
+        // that is the list view, not the detail page's read path. (#62)
+        //
+        // Pass the signed event, not eventWithDTag — eventStore.add validates,
+        // and the app-local dTag property fails validation.
+        cachePublishedEvent(updatedEvent, publishResult);
 
         // Return the updated event
         return eventWithDTag;
@@ -203,39 +256,6 @@ export function createCalendarActions(_communityPubkey) {
         console.error('Error updating calendar event:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Failed to update calendar event: ${errorMessage}`);
-      }
-    },
-
-    /**
-     * Delete a calendar event
-     * @param {string} eventId - Event ID to delete
-     * @returns {Promise<void>}
-     */
-    async deleteEvent(eventId) {
-      // Get current account
-      const currentAccount = manager.active;
-      if (!currentAccount) {
-        throw new Error('No account selected. Please log in to delete events.');
-      }
-
-      try {
-        // Create a deletion event (kind 5) with relay hint for discoverability
-        const eventFactory = createAppEventFactory();
-        const eTagWithHint = await buildETagWithHint(eventId, currentAccount.pubkey);
-
-        const eventTemplate = await eventFactory.build({
-          kind: 5,
-          content: '',
-          tags: [eTagWithHint]
-        });
-
-        // Sign and publish the deletion event
-        const deletionEvent = await currentAccount.signEvent(eventTemplate);
-        await publishEvent(deletionEvent, []);
-      } catch (error) {
-        console.error('Error deleting calendar event:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to delete calendar event: ${errorMessage}`);
       }
     },
 
@@ -276,7 +296,14 @@ export function createCalendarActions(_communityPubkey) {
 
         // Sign and publish the calendar event
         const calendarEvent = await currentAccount.signEvent(eventTemplate);
-        await publishEvent(calendarEvent, []);
+        const publishResult = await publishEvent(calendarEvent, []);
+
+        // Kind 31924 is cacheable and publishEvent does not touch the
+        // EventStore, so without this the new calendar is missing from the
+        // cache until a relay round-trip fills it in. Milder than the update
+        // case — there is no stale prior version to be served — but the same
+        // one-line shape. (#64)
+        cachePublishedEvent(calendarEvent, publishResult);
 
         return calendarEvent;
       } catch (error) {

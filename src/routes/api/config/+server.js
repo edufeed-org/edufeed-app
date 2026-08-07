@@ -344,7 +344,15 @@ export function GET() {
     // Resource form variants (AMB vs EKW, etc.)
     // Order in the env var determines picker display order + default variant.
     resourceFormVariants: {
-      enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb'])
+      enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb']),
+      // naddr references to kind 30168 form templates, keyed by variant id.
+      // Env slug is `RESOURCE_FORM_TEMPLATE_NADDR_<VARIANT_ID upper-cased>`.
+      // When set for a variant, that variant renders via the generic
+      // template-driven form instead of the hardcoded wizard.
+      templateNaddrs: {
+        amb: env.RESOURCE_FORM_TEMPLATE_NADDR_AMB || '',
+        ekw: env.RESOURCE_FORM_TEMPLATE_NADDR_EKW || ''
+      }
     },
 
     // UI settings

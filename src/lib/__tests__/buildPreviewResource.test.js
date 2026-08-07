@@ -227,6 +227,34 @@ describe('buildPreviewResource — x tag', () => {
   });
 });
 
+describe('buildPreviewResource — EKW/Konfi ext facets', () => {
+  it('includes ext:ekw:* facets in the live preview', () => {
+    const formData = {
+      ...emptyFormData(),
+      name: 'EKW preview',
+      gradeLevels: ['https://edufeed.org/v/klassenstufen/5-6'],
+      gradeLevelLabels: [{ id: 'https://edufeed.org/v/klassenstufen/5-6', label: '5–6' }]
+    };
+    const resource = buildPreviewResource(formData, PUBKEY);
+    expect(resource.tags).toContainEqual([
+      'ext:ekw:gradeLevel:id',
+      'https://edufeed.org/v/klassenstufen/5-6'
+    ]);
+  });
+
+  it('includes ext:org.edufeed.ekw.konfi:* facets in the live preview', () => {
+    const formData = {
+      ...emptyFormData(),
+      name: 'Konfi preview',
+      bildungsbereich: 'konfi',
+      konfiZielgruppenIds: ['urn:ku3'],
+      konfiZielgruppenLabels: [{ id: 'urn:ku3', label: 'KU3' }]
+    };
+    const resource = buildPreviewResource(formData, PUBKEY);
+    expect(resource.tags).toContainEqual(['ext:org.edufeed.ekw.konfi:zielgruppen:id', 'urn:ku3']);
+  });
+});
+
 describe('buildPreviewResource — invalid image URLs (mid-typing)', () => {
   it('does not throw while the user is still typing the image URL', () => {
     // Regression: getSha256FromURL does `new URL(...)` and threw for partial

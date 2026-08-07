@@ -28,6 +28,7 @@
    * @property {number} [height] - Intrinsic height hint, passed to the img
    * @property {string} [title] - Title attribute, passed to the img
    * @property {(event: Event) => void} [onload] - Fires when the (possibly fallback) image has loaded; read natural dimensions off `event.currentTarget`
+   * @property {() => void} [onexhausted] - Fires once when every source stage for the current `src` has failed, so callers that own a richer fallback (e.g. a generated cover) can take over the whole frame. Re-arms when `src` changes.
    * @property {import('svelte').Snippet} [fallback] - Rendered when every source stage fails
    */
 
@@ -43,6 +44,7 @@
     height = undefined,
     title = undefined,
     onload = undefined,
+    onexhausted = undefined,
     fallback = undefined
   } = $props();
 
@@ -83,11 +85,24 @@
   // Reset the chain and skeleton when the src prop changes
   /** @type {any} */
   let lastSrc = Symbol('uninitialized');
+  // Plain let, not $state: the notify effect writes it, and a reactive write
+  // there would re-run the effect that produced it.
+  let notifiedExhausted = false;
   $effect(() => {
     if (src !== lastSrc) {
       lastSrc = src;
       failedStages = 0;
       imageLoaded = false;
+      notifiedExhausted = false;
+    }
+  });
+
+  // Tell the caller once the whole chain is spent. An empty `src` is not a
+  // failure — nothing was ever tried — so it stays silent there.
+  $effect(() => {
+    if (exhausted && stages.length > 0 && !notifiedExhausted) {
+      notifiedExhausted = true;
+      onexhausted?.();
     }
   });
 

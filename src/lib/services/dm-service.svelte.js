@@ -96,6 +96,13 @@ let dmRelayCheckStatus = $state('idle');
 let dmRelayCheckTimer = null;
 /** How long to wait for the user's 10050 before declaring it absent. */
 const DM_RELAY_CHECK_SETTLE_MS = 5000;
+/**
+ * Callers parked in waitForDmRelayCheck(), released the moment the check
+ * reaches a conclusion ('present' / 'absent') or the session ends ('idle').
+ * @type {Set<(status: 'idle' | 'checking' | 'present' | 'absent') => void>}
+ */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a promise-resolver registry, never read from a reactive context
+const dmRelayCheckWaiters = new Set();
 let unreadCount = $derived.by(() => {
   let count = 0;
   for (const conv of dmConversations) {
@@ -226,6 +233,51 @@ export function getDmRelayCheckStatus() {
   return dmRelayCheckStatus;
 }
 
+/** Release everyone parked in waitForDmRelayCheck() with the current verdict. */
+function releaseDmRelayCheckWaiters() {
+  if (dmRelayCheckWaiters.size === 0) return;
+  const waiters = [...dmRelayCheckWaiters];
+  dmRelayCheckWaiters.clear();
+  for (const resolve of waiters) resolve(dmRelayCheckStatus);
+}
+
+/**
+ * The DM-relay self-check verdict as a promise rather than a snapshot.
+ *
+ * getDmRelayCheckStatus() is right for a UI hint — it answers "what do we know
+ * right now" — but wrong for anything that *writes*: a caller seeing 'checking'
+ * would have to choose between skipping the backfill (user keeps no DM inbox)
+ * and publishing anyway (a replaceable kind 10050 landing on top of one we
+ * merely had not fetched). This waits for the check to conclude instead.
+ *
+ * Affordable because the user's own kind 10050 is only where *replies* land —
+ * it never routes an outgoing wrap — so no send has to block on it.
+ *
+ * Resolves with the verdict at hand: 'present'/'absent' once concluded, 'idle'
+ * when there is no session to conclude anything about, and 'checking' if the
+ * check is still open when `timeoutMs` runs out (the deadline is deliberately
+ * never armed when there was nowhere to query, so this can happen).
+ *
+ * @param {object} [opts]
+ * @param {number} [opts.timeoutMs] - Cap on the wait. Default comfortably
+ *   exceeds the settle window plus the relay lookups that precede it.
+ * @returns {Promise<'idle' | 'checking' | 'present' | 'absent'>}
+ */
+export function waitForDmRelayCheck({ timeoutMs = 15000 } = {}) {
+  if (dmRelayCheckStatus !== 'checking') return Promise.resolve(dmRelayCheckStatus);
+
+  return new Promise((resolve) => {
+    /** @param {'idle' | 'checking' | 'present' | 'absent'} status */
+    const settle = (status) => {
+      clearTimeout(timer);
+      dmRelayCheckWaiters.delete(settle);
+      resolve(status);
+    };
+    const timer = setTimeout(() => settle(dmRelayCheckStatus), timeoutMs);
+    dmRelayCheckWaiters.add(settle);
+  });
+}
+
 /**
  * Conclude the DM-relay check after the settle window: 'present' if a kind
  * 10050 landed in the store, otherwise 'absent'. Guarded against stale fires
@@ -240,6 +292,7 @@ function settleDmRelayCheck(pubkey) {
   // the last relay) leaves the user unreachable and must still prompt the nudge.
   const event = eventStore.getReplaceable(10050, pubkey);
   dmRelayCheckStatus = event && getDmRelaysFromEvent(event).length > 0 ? 'present' : 'absent';
+  releaseDmRelayCheckWaiters();
 }
 
 /** @returns {{ id: string, participants: string[], lastMessage: any, legacy?: boolean }[]} */
@@ -513,6 +566,7 @@ export function initializeDMs(pubkey, signer) {
       clearTimeout(dmRelayCheckTimer);
       dmRelayCheckTimer = null;
     }
+    releaseDmRelayCheckWaiters();
     hasDedicatedDmRelays = true;
     const additions = newRelays.filter((r) => !subscribedRelays.has(r));
     if (additions.length > 0) {
@@ -635,6 +689,9 @@ export function cleanup() {
     dmRelayCheckTimer = null;
   }
   dmRelayCheckStatus = 'idle';
+  // Nothing more will ever be concluded for this session — a waiter left
+  // parked here would hang until its own timeout.
+  releaseDmRelayCheckWaiters();
   failedUnlockIds = new SvelteSet();
   subscribedRelays = new SvelteSet();
 }

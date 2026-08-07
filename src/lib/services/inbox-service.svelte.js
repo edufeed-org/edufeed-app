@@ -46,8 +46,11 @@ let prefetchedIds = new Set();
  * @returns {import('nostr-tools').Filter[]}
  */
 export function buildMainFilter(pubkey, since) {
+  // Kind 1 is in here for NIP-10 replies and note mentions: most Nostr clients
+  // answer a note with a kind 1 reply rather than a NIP-22 kind 1111 comment,
+  // and the thread view renders both (see loaders/comments.js).
   return [
-    { kinds: [1070, 1069, 7, 9], '#p': [pubkey], since },
+    { kinds: [1, 1070, 1069, 7, 9], '#p': [pubkey], since },
     { kinds: [1111], '#p': [pubkey], since },
     { kinds: [1111], '#P': [pubkey], since }
   ];
@@ -339,18 +342,15 @@ export function initializeInbox(pubkey) {
     subscriptions.push(supplementalLoader().subscribe());
   });
 
-  // Model subscription — watch eventStore for matching events
-  const modelSub = eventStore
-    .model(TimelineModel, [
-      { kinds: [1070, 1069, 7, 9], '#p': [pubkey] },
-      { kinds: [1111], '#p': [pubkey] },
-      { kinds: [1111], '#P': [pubkey] }
-    ])
-    .subscribe((events) => {
-      const filtered = filterSelfNotifications(events || [], pubkey);
-      rawMainNotifications = filtered;
-      prefetchReferencedContent(filtered);
-    });
+  // Model subscription — watch eventStore for matching events. Derived from the
+  // loader filters (minus `since`, the store already holds what was fetched) so
+  // the two can never drift apart on kinds.
+  const modelFilters = filters.map(({ since: _since, ...rest }) => rest);
+  const modelSub = eventStore.model(TimelineModel, modelFilters).subscribe((events) => {
+    const filtered = filterSelfNotifications(events || [], pubkey);
+    rawMainNotifications = filtered;
+    prefetchReferencedContent(filtered);
+  });
   subscriptions.push(modelSub);
 
   // RSVP loading: load user's calendar events, then RSVPs on those
@@ -496,6 +496,7 @@ export async function markAsRead(type) {
       'reaction',
       'wave',
       'comment',
+      'reply',
       'mention',
       'rsvp',
       'pollVote'

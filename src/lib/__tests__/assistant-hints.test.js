@@ -6,7 +6,8 @@ import {
   deriveHintStatus,
   trackEverOpen,
   matchSuggestion,
-  isProfileHintApplicable
+  isProfileHintApplicable,
+  deriveNip05Hint
 } from '$lib/helpers/assistant-hints.js';
 
 describe('deriveHintStatus', () => {
@@ -141,5 +142,74 @@ describe('isProfileHintApplicable', () => {
 
   it('applies to bunker (nostr-connect) accounts too', () => {
     expect(isProfileHintApplicable({ ...base, user: { type: 'nostr-connect' } })).toBe(true);
+  });
+});
+
+describe('deriveNip05Hint', () => {
+  const base = {
+    membershipEnabled: true,
+    profileSettled: true,
+    grantState: /** @type {'none' | 'pending' | 'granted'} */ ('none'),
+    activated: false,
+    hasNip05: false,
+    applyDismissed: false,
+    readyDismissed: false
+  };
+
+  it('is the apply reminder when no application exists', () => {
+    expect(deriveNip05Hint(base)).toEqual({
+      variant: 'apply',
+      applicable: true,
+      confirmed: false
+    });
+  });
+
+  it('switches to the passive pending note while the application awaits review', () => {
+    expect(deriveNip05Hint({ ...base, grantState: 'pending' })).toEqual({
+      variant: 'pending',
+      applicable: true,
+      confirmed: false
+    });
+  });
+
+  it('celebrates a granted handle even when another nip05 is on the profile', () => {
+    expect(deriveNip05Hint({ ...base, grantState: 'granted', hasNip05: true })).toEqual({
+      variant: 'ready',
+      applicable: true,
+      confirmed: false
+    });
+  });
+
+  it('confirms the ready hint once the granted address is on the profile', () => {
+    expect(
+      deriveNip05Hint({ ...base, grantState: 'granted', activated: true, hasNip05: true })
+    ).toEqual({ variant: 'ready', applicable: false, confirmed: true });
+  });
+
+  it('keeps the apply/pending reminder away when any nip05 exists', () => {
+    expect(deriveNip05Hint({ ...base, hasNip05: true }).applicable).toBe(false);
+    expect(deriveNip05Hint({ ...base, hasNip05: true }).confirmed).toBe(true);
+    expect(deriveNip05Hint({ ...base, grantState: 'pending', hasNip05: true }).applicable).toBe(
+      false
+    );
+  });
+
+  it('respects the separate dismissals for reminder and ready card', () => {
+    expect(deriveNip05Hint({ ...base, applyDismissed: true }).applicable).toBe(false);
+    // Dismissing the early reminder must NOT suppress the later grant notice.
+    expect(
+      deriveNip05Hint({ ...base, grantState: 'granted', applyDismissed: true }).applicable
+    ).toBe(true);
+    expect(
+      deriveNip05Hint({ ...base, grantState: 'granted', readyDismissed: true }).applicable
+    ).toBe(false);
+  });
+
+  it('is inapplicable before the profile check settles or without membership', () => {
+    expect(deriveNip05Hint({ ...base, profileSettled: false }).applicable).toBe(false);
+    expect(deriveNip05Hint({ ...base, membershipEnabled: false }).applicable).toBe(false);
+    expect(
+      deriveNip05Hint({ ...base, grantState: 'granted', profileSettled: false }).applicable
+    ).toBe(false);
   });
 });

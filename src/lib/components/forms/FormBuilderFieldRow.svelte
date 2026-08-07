@@ -3,7 +3,7 @@
   import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
   import { useSchemeConcepts, useConceptSchemes } from '$lib/stores/vocab-store.svelte.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-  import { generateFieldId } from '$lib/helpers/forms.js';
+  import { generateFieldId, generateOptionId } from '$lib/helpers/forms.js';
   import {
     schemeEventsToSkosConcepts,
     pickSchemeDescription,
@@ -11,6 +11,8 @@
   } from '$lib/helpers/educational/schemeEventsToSkosConcepts.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
   import SKOSDropdown from '$lib/components/educational/SKOSDropdown.svelte';
+  import FormBuilderConditionRow from './FormBuilderConditionRow.svelte';
+  import { LOCKED_FIELD_OUTPUTS } from '$lib/helpers/forms/builder-sections.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -23,22 +25,32 @@
    * @property {string} placeholder
    * @property {number | undefined} min
    * @property {number | undefined} max
-   * @property {string[]} selectOptions
+   * @property {import('$lib/helpers/forms.js').FormFieldOption[]} selectOptions
    * @property {boolean} multiple
    * @property {{ address: string, relay: string } | undefined} [vocab]
    * @property {string} [output]
    * @property {string} [vocabNaddrInput]
    * @property {string} [vocabError]
+   * @property {{ rules: { questionId: string, operator: string, value: string }[] } | undefined} [displayIf] - single-condition show-if rule authored via FormBuilderConditionRow
    *
    * @typedef {Object} Props
    * @property {FieldState} field
    * @property {FieldState[]} fields
    * @property {number} fieldIndex
    * @property {boolean} existing
+   * @property {{ id: string, title: string }[]} [sections]
+   * @property {{id: string, label: string, type: string, selectOptions?: {id:string,label:string}[]}[]} [earlierQuestions]
    */
 
   /** @type {Props} */
-  let { field = $bindable(), fields, fieldIndex, existing } = $props();
+  let {
+    field = $bindable(),
+    fields,
+    fieldIndex,
+    existing,
+    sections = [],
+    earlierQuestions = []
+  } = $props();
 
   // Common AMB output targets — human-readable label + machine value.
   const AMB_OUTPUTS = [
@@ -64,7 +76,19 @@
     },
     { value: 'amb:license', label: () => m.form_builder_field_output_amb_license() },
     { value: 'amb:inLanguage', label: () => m.form_builder_field_output_amb_inLanguage() },
-    { value: 'amb:keywords', label: () => m.form_builder_field_output_amb_keywords() }
+    { value: 'amb:keywords', label: () => m.form_builder_field_output_amb_keywords() },
+    { value: 'amb:id', label: () => m.form_builder_field_output_amb_id() },
+    { value: 'amb:image', label: () => m.form_builder_field_output_amb_image() },
+    { value: 'amb:datePublished', label: () => m.form_builder_field_output_amb_datePublished() },
+    { value: 'amb:dateCreated', label: () => m.form_builder_field_output_amb_dateCreated() },
+    {
+      value: 'amb:isAccessibleForFree',
+      label: () => m.form_builder_field_output_amb_isAccessibleForFree()
+    },
+    { value: 'amb:creator', label: () => m.form_builder_field_output_amb_creator() },
+    { value: 'amb:hasPart', label: () => m.form_builder_field_output_amb_hasPart() },
+    { value: 'amb:isPartOf', label: () => m.form_builder_field_output_amb_isPartOf() },
+    { value: 'amb:refs', label: () => m.form_builder_field_output_amb_refs() }
   ];
 
   // Concept-count preview — reactive via useSchemeConcepts
@@ -214,6 +238,18 @@
   const CHOICE_TYPES = ['select', 'checkbox', 'radio'];
   const isChoiceType = $derived(CHOICE_TYPES.includes(field.type));
 
+  // Rich composite field types (creator/amb-relation/external-urls) render
+  // via their own adapters (prior phase) — the builder only shows
+  // label + required + output for them, never the choice/vocab/min-max UI.
+  const RICH_TYPES = ['creator', 'amb-relation', 'external-urls'];
+  const isRichType = $derived(RICH_TYPES.includes(field.type));
+
+  // amb-relation always targets one of these two coordinate-relation props.
+  const RELATION_OUTPUTS = [
+    { value: 'amb:hasPart', label: () => m.form_builder_field_output_amb_hasPart() },
+    { value: 'amb:isPartOf', label: () => m.form_builder_field_output_amb_isPartOf() }
+  ];
+
   /**
    * Three-state source chooser: `unset` (show CTA pair), `manual` (show badge
    * editor), `vocab` (show combobox + preview + output). Seed from persisted
@@ -264,7 +300,7 @@
       <input type="checkbox" class="checkbox checkbox-xs" bind:checked={field.required} />
       <span class="label-text text-xs">{m.form_builder_field_required()}</span>
     </label>
-    {#if !isChoiceType}
+    {#if !isChoiceType && !isRichType}
       <input
         type="text"
         class="input-bordered input input-xs flex-1"
@@ -274,7 +310,50 @@
     {/if}
   </div>
 
-  {#if field.type === 'text' || field.type === 'textarea' || field.type === 'number'}
+  <!-- Output picker: every field type can map to an AMB (or ext) property. -->
+  <div class="flex items-center gap-2 text-sm">
+    <span class="text-xs text-base-content/50">{m.form_builder_field_output_label()}</span>
+    {#if field.type === 'creator' || field.type === 'external-urls'}
+      {@const lockedValue = field.output || LOCKED_FIELD_OUTPUTS[field.type]}
+      <select
+        class="select-bordered select flex-1 select-xs"
+        data-testid="field-output-select"
+        value={lockedValue}
+        disabled
+      >
+        <option value={lockedValue}>
+          {AMB_OUTPUTS.find((out) => out.value === lockedValue)?.label() ?? lockedValue}
+        </option>
+      </select>
+    {:else if field.type === 'amb-relation'}
+      <select
+        class="select-bordered select flex-1 select-xs"
+        data-testid="field-output-select"
+        value={field.output || ''}
+        onchange={handleOutputChange}
+      >
+        <option value="" disabled>{m.form_builder_field_output_relation_unset()}</option>
+        {#each RELATION_OUTPUTS as out (out.value)}
+          <option value={out.value}>{out.label()}</option>
+        {/each}
+      </select>
+    {:else}
+      <select
+        class="select-bordered select flex-1 select-xs"
+        data-testid="field-output-select"
+        value={field.output || ''}
+        onchange={handleOutputChange}
+      >
+        <option value="">{m.form_builder_field_output_auto({ id: field.id || 'id' })}</option>
+        {#each AMB_OUTPUTS as out (out.value)}
+          <option value={out.value}>{out.label()}</option>
+        {/each}
+        <option value="ext">{m.form_builder_field_output_ext()}</option>
+      </select>
+    {/if}
+  </div>
+
+  {#if !isRichType && (field.type === 'text' || field.type === 'textarea' || field.type === 'number')}
     {@const isNumeric = field.type === 'number'}
     <div class="flex items-center gap-2 text-sm">
       <span
@@ -292,7 +371,7 @@
     </div>
   {/if}
 
-  {#if isChoiceType}
+  {#if isChoiceType && !isRichType}
     {#if fieldMode === 'unset'}
       <div class="rounded bg-base-200/30 p-2 text-sm">
         <div class="mb-2 text-xs text-base-content/60">
@@ -313,9 +392,26 @@
           {m.form_builder_field_options_label()}
         </div>
         <div class="flex flex-wrap gap-2">
-          {#each field.selectOptions as opt, j (opt + '-' + j)}
+          {#each field.selectOptions as opt, j (opt.id)}
             <span class="badge gap-1 badge-outline">
-              {opt}
+              {opt.label}
+              {#if sections.length > 0 && (field.type === 'select' || field.type === 'radio')}
+                <select
+                  class="select-bordered select select-xs"
+                  value={opt.nextSection || ''}
+                  onchange={(e) =>
+                    (field.selectOptions[j] = {
+                      ...opt,
+                      nextSection: e.currentTarget.value || undefined
+                    })}
+                  aria-label={m.form_builder_option_route_label()}
+                >
+                  <option value="">{m.form_builder_option_route_none()}</option>
+                  {#each sections as s (s.id)}
+                    <option value={s.id}>{s.title || s.id}</option>
+                  {/each}
+                </select>
+              {/if}
               <button
                 class="text-xs opacity-50 hover:opacity-100"
                 onclick={() => field.selectOptions.splice(j, 1)}>×</button
@@ -329,7 +425,13 @@
               placeholder={m.form_builder_field_option_new()}
               onkeydown={(e) => {
                 if (e.key === 'Enter' && e.currentTarget.value) {
-                  field.selectOptions.push(e.currentTarget.value);
+                  field.selectOptions.push({
+                    id: generateOptionId(
+                      e.currentTarget.value,
+                      field.selectOptions.map((o) => o.id)
+                    ),
+                    label: e.currentTarget.value
+                  });
                   e.currentTarget.value = '';
                 }
               }}
@@ -342,7 +444,13 @@
                   e.currentTarget.previousElementSibling
                 );
                 if (input?.value) {
-                  field.selectOptions.push(input.value);
+                  field.selectOptions.push({
+                    id: generateOptionId(
+                      input.value,
+                      field.selectOptions.map((o) => o.id)
+                    ),
+                    label: input.value
+                  });
                   input.value = '';
                   input.focus();
                 }
@@ -423,21 +531,6 @@
             >
           </div>
         {/if}
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-base-content/50">{m.form_builder_field_output_label()}</span>
-          <select
-            class="select-bordered select flex-1 select-xs"
-            data-testid="field-output-select"
-            value={field.output || ''}
-            onchange={handleOutputChange}
-          >
-            <option value="">{m.form_builder_field_output_auto({ id: field.id || 'id' })}</option>
-            {#each AMB_OUTPUTS as out (out.value)}
-              <option value={out.value}>{out.label()}</option>
-            {/each}
-            <option value="ext">{m.form_builder_field_output_ext()}</option>
-          </select>
-        </div>
         <div class="mt-1">
           <button type="button" class="btn px-0 text-xs btn-link btn-xs" onclick={switchToManual}>
             {m.form_builder_field_source_switch_to_manual()}
@@ -446,4 +539,10 @@
       </div>
     {/if}
   {/if}
+
+  <FormBuilderConditionRow
+    value={field.displayIf}
+    availableQuestions={earlierQuestions}
+    onchange={(v) => (field.displayIf = v)}
+  />
 </div>

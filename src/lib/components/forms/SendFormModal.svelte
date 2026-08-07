@@ -8,8 +8,7 @@
     buildPTagsWithHints,
     buildATagWithHint
   } from '$lib/services/publish-service.js';
-  import { FORM_REQUEST_KIND } from '$lib/helpers/forms.js';
-  import { hasNip44 } from '$lib/helpers/nip44.js';
+  import { FORM_REQUEST_KIND, nip44EncryptWith, signerHasNip44 } from '$lib/helpers/forms.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { CloseIcon } from '$lib/components/icons';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
@@ -29,7 +28,7 @@
   let isSending = $state(false);
   let error = $state('');
 
-  const canEncrypt = $derived(hasNip44(manager.active?.signer));
+  const canEncrypt = $derived(signerHasNip44(manager.active?.signer));
 
   /** @type {HTMLDialogElement | undefined} */
   let dialogEl = $state(undefined);
@@ -94,12 +93,12 @@
 
       // Encrypt message content with NIP-44 (button is disabled when not supported,
       // but re-check defensively in case the signer changed mid-flow)
-      if (!hasNip44(signer)) {
+      if (!signerHasNip44(signer)) {
         error = m.send_form_no_encryption();
         return;
       }
       const payload = JSON.stringify({ message: message.trim() });
-      const content = await signer.nip44.encrypt(recipient.pubkey, payload);
+      const content = await nip44EncryptWith(signer, recipient.pubkey, payload);
 
       const factory = createAppEventFactory({ signer });
       const template = await factory.build({ kind: FORM_REQUEST_KIND, tags, content });

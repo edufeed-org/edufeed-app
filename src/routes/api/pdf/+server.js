@@ -8,7 +8,7 @@
  * upstream timeout, content-type check.
  */
 
-import { parseHttpUrl, isPrivateIp, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import { parseHttpUrl, isBlockedHost, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
 
 const MAX_UPSTREAM_SIZE = 50 * 1024 * 1024; // 50MB
 const FETCH_TIMEOUT = 20_000;
@@ -26,7 +26,7 @@ export async function GET({ url }) {
   if (!parsed) {
     return new Response('URL must be a valid http or https URL', { status: 400 });
   }
-  if (isPrivateIp(parsed)) {
+  if (await isBlockedHost(parsed)) {
     return new Response('Private/local URLs are not allowed', { status: 400 });
   }
 

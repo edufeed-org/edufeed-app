@@ -9,7 +9,7 @@
 // testable without a relay or an effect.
 
 import { parseExtensionTags } from './parseExtensionTags.js';
-import { getFormReferenceFromResource } from '../form-to-amb.js';
+import { getFormReferenceFromResource } from './formReference.js';
 import { parseFormTemplate } from '../forms.js';
 import { toDieBibelUrl } from './bibleReference.js';
 import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
@@ -21,7 +21,7 @@ const variantLabelsByNs = new Map(
 );
 
 /**
- * @typedef {{ facetName: string, label: string, kind: 'concept' | 'scalar', items: any[] }} ExtensionFacet
+ * @typedef {{ facetName: string, label: string, kind: 'concept' | 'scalar' | 'mixed', concepts: any[], scalars: string[] }} ExtensionFacet
  * @typedef {{ ns: string, sectionLabel: string, facets: ExtensionFacet[] }} ExtensionSection
  */
 
@@ -56,7 +56,12 @@ export function buildExtensionSections(event, formEvent) {
   /** @type {ExtensionSection[]} */
   const out = [];
   for (const [ns, nsEntry] of parsed.namespaces) {
-    const isFormDriven = !!formCoord && ns === formCoordToNs(formCoord);
+    // Form-emitted ext uses the form's bare `d`-tag as <ns> (colon-free per the
+    // NIP-AMB grammar); the form author's pubkey lives in the `a` back-ref, not
+    // in the tag key. This previously compared against the full
+    // `30168:<pub>:<d>` coordinate, which is not a legal <ns> and no longer
+    // survives parseExtensionTags.
+    const isFormDriven = !!formCoord && ns === formCoord.identifier;
     const nsLabels = EXTENSION_NAMESPACE_LABELS[ns] ?? variantLabelsByNs.get(ns);
 
     const sectionLabel = isFormDriven
@@ -78,7 +83,13 @@ export function buildExtensionSections(event, formEvent) {
       } else {
         label = humanize(facetName);
       }
-      facets.push({ facetName, label, kind: facet.kind, items: facet.items });
+      facets.push({
+        facetName,
+        label,
+        kind: facet.kind,
+        concepts: facet.concepts,
+        scalars: facet.scalars
+      });
     }
     if (facets.length > 0) out.push({ ns, sectionLabel, facets });
   }
@@ -121,7 +132,7 @@ export function buildExtensionCards(sections, locale) {
       }
 
       if (facet.kind === 'concept') {
-        const value = facet.items
+        const value = facet.concepts
           .map((it) => pickLabel(it, locale))
           .filter(Boolean)
           .join(', ');
@@ -134,10 +145,22 @@ export function buildExtensionCards(sections, locale) {
           wide: value.length > 40
         });
       } else {
-        const scalars = facet.items.filter(Boolean).map((/** @type {string} */ v) => {
-          const href = toDieBibelUrl(v) ?? undefined;
-          return { text: v, href, long: !href && (v.includes('\n') || v.length > 40) };
-        });
+        // Scalar or mixed. A mixed facet (vocabulary picks *and* a free-text
+        // custom value — see `formDataToAmbExt.buildKonfiFacets`) renders both
+        // halves through the scalar stack, concept labels first, so nothing is
+        // dropped. MetadataCardGrid renders `scalars` in place of `value`, so
+        // the two cannot be combined on one card; a stacked list is the shape
+        // that shows everything without touching the component.
+        const conceptLabels =
+          facet.kind === 'mixed'
+            ? facet.concepts.map((it) => pickLabel(it, locale)).filter(Boolean)
+            : [];
+        const scalars = [...conceptLabels, ...facet.scalars]
+          .filter(Boolean)
+          .map((/** @type {string} */ v) => {
+            const href = toDieBibelUrl(v) ?? undefined;
+            return { text: v, href, long: !href && (v.includes('\n') || v.length > 40) };
+          });
         const totalLen = scalars.reduce((n, s) => n + s.text.length, 0);
         cards.push({
           key,
@@ -194,14 +217,15 @@ export function deriveChipLabel(sectionLabel) {
 }
 
 /**
- * Classify a scalar facet as a boolean (single 'true' / 'false' value).
- * @param {{ kind: string, items: any[] }} facet
+ * Classify a scalar facet as a boolean (single 'true' / 'false' value). A mixed
+ * facet is never a boolean — it carries concepts too.
+ * @param {{ kind: string, scalars: string[] }} facet
  * @returns {boolean | null}
  */
 function booleanFacetValue(facet) {
-  if (facet.kind === 'concept') return null;
-  if (facet.items.length !== 1) return null;
-  const v = facet.items[0];
+  if (facet.kind !== 'scalar') return null;
+  if (facet.scalars.length !== 1) return null;
+  const v = facet.scalars[0];
   if (v === 'true') return true;
   if (v === 'false') return false;
   return null;
@@ -225,13 +249,6 @@ function parseFormCoord(address) {
   const parts = address.split(':');
   if (parts.length < 3 || parts[0] !== '30168') return null;
   return { pubkey: parts[1], identifier: parts.slice(2).join(':') };
-}
-
-/**
- * @param {{ pubkey: string, identifier: string }} c
- */
-function formCoordToNs(c) {
-  return `30168:${c.pubkey}:${c.identifier}`;
 }
 
 /**

@@ -8,6 +8,7 @@ import { normalizeIdentifier } from 'nostr-tools/nip54';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 
 /** Kind number for NIP-54 wiki articles */
@@ -130,10 +131,13 @@ export async function updateWiki(formData, existingEvent, communityEvent = null)
   const tags = buildWikiTags(formData, dTag, hTag || undefined);
 
   const eventFactory = createAppEventFactory();
+  // Strictly newer than the version being replaced — a same-second edit is
+  // dropped by the relay tie-break and deterministically by the cache. (#62/#64)
   const eventTemplate = await eventFactory.build({
     kind: WIKI_KIND,
     content: formData.content,
-    tags
+    tags,
+    created_at: nextCreatedAt(existingEvent)
   });
 
   const updatedEvent = await currentAccount.signEvent(eventTemplate);

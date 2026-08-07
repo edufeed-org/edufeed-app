@@ -15,7 +15,7 @@
    *   expanded?: boolean,
    *   onToggleExpand: () => void,
    *   onClose: () => void,
-   *   hints: Array<{id: string, status: string}>,
+   *   hints: Array<{id: string, status: string, variant?: string, address?: string}>,
    *   openCount: number,
    *   runHint: (id: any) => void,
    *   customizeHint: (id: any) => void,
@@ -91,6 +91,34 @@
       doing: null
     }
   });
+
+  /**
+   * The nip05 hint tracks the membership application: the copy depends on the
+   * hint's variant ('apply' reminder, passive 'pending' note, celebratory
+   * 'ready' card with one-click activation). Other hints use hintCopy as-is.
+   * @param {{id: string, variant?: string, address?: string}} hint
+   */
+  function copyFor(hint) {
+    if (hint.id === 'nip05' && hint.variant === 'ready') {
+      return {
+        title: m.termi_hint_nip05_ready_title(),
+        body: m.termi_hint_nip05_ready_body({ address: hint.address || '' }),
+        action: m.termi_hint_nip05_ready_cta(),
+        secondary: null,
+        doing: m.termi_hint_nip05_ready_doing()
+      };
+    }
+    if (hint.id === 'nip05' && hint.variant === 'pending') {
+      return {
+        title: m.termi_hint_nip05_pending_title(),
+        body: m.termi_hint_nip05_pending_body(),
+        action: null,
+        secondary: null,
+        doing: null
+      };
+    }
+    return hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)];
+  }
 
   const suggestions = $derived([
     { q: m.termi_sugg_1_q(), a: m.termi_sugg_1_a() },
@@ -218,10 +246,7 @@
     </div>
 
     {#each hints as hint (hint.id)}
-      {@const copy =
-        hintCopy[
-          /** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)
-        ]}
+      {@const copy = copyFor(hint)}
       <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
         <TermiAvatar />
         <div
@@ -253,7 +278,7 @@
               <span class="termi-typing"><i></i><i></i><i></i></span>
               {copy.doing}
             </div>
-          {:else}
+          {:else if copy.action}
             <div class="mt-2.5 flex flex-wrap gap-2">
               <button
                 type="button"

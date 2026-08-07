@@ -7,6 +7,7 @@ import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getSha256FromURL } from 'applesauce-common/helpers';
 
@@ -149,10 +150,13 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
   const tags = buildArticleTags(formData, dTag, hTag || undefined);
 
   const eventFactory = createAppEventFactory();
+  // Strictly newer than the version being replaced — a same-second edit is
+  // dropped by the relay tie-break and deterministically by the cache. (#62/#64)
   const eventTemplate = await eventFactory.build({
     kind: ARTICLE_KIND,
     content: formData.content,
-    tags
+    tags,
+    created_at: nextCreatedAt(existingEvent)
   });
 
   const updatedEvent = await currentAccount.signEvent(eventTemplate);

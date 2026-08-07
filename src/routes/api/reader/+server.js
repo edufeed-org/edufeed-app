@@ -3,28 +3,10 @@ import { parseHTML } from 'linkedom';
 import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
 import { extractMetadataFromHtml } from '$lib/server/metadataExtraction.js';
 import { isHedgedocPage, extractHedgedocArticle } from '$lib/helpers/hedgedocExtractor.js';
-import { parseHttpUrl, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import { parseHttpUrl, isBlockedHost, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
-
-/**
- * @param {URL} parsedUrl
- * @returns {boolean}
- */
-function isPrivateIp(parsedUrl) {
-  const hostname = parsedUrl.hostname;
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '::1' ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('172.') ||
-    hostname === '0.0.0.0' ||
-    hostname.endsWith('.local')
-  );
-}
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function GET({ url }) {
@@ -43,7 +25,7 @@ export async function GET({ url }) {
     );
   }
 
-  if (isPrivateIp(parsedUrl)) {
+  if (await isBlockedHost(parsedUrl)) {
     return Response.json(
       { success: false, error: 'Private/local URLs are not allowed' },
       { status: 400 }

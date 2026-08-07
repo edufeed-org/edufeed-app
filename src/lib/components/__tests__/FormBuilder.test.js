@@ -147,3 +147,83 @@ describe('FormBuilder: vocab + output authoring', () => {
     expect(outputTag[2]).toBe('amb:about');
   });
 });
+
+describe('FormBuilder: rich field palette (creator/amb-relation/external-urls)', () => {
+  beforeEach(() => {
+    buildSpy.mockClear();
+    signSpy.mockClear();
+    publishEventSpy.mockClear();
+    eventStoreAddSpy.mockClear();
+    gotoSpy.mockClear();
+  });
+
+  it('offers creator, amb-relation and external-urls as addable field types', () => {
+    const { getByText } = render(FormBuilder);
+    expect(getByText('creator')).toBeTruthy();
+    expect(getByText('amb-relation')).toBeTruthy();
+    expect(getByText('external-urls')).toBeTruthy();
+  });
+
+  it('gives creator/external-urls an implied output and leaves amb-relation blank', async () => {
+    const { container, getByText } = render(FormBuilder);
+
+    await fireEvent.click(getByText('creator'));
+    await fireEvent.click(getByText('external-urls'));
+    await fireEvent.click(getByText('amb-relation'));
+
+    const selects = Array.from(container.querySelectorAll('[data-testid="field-output-select"]'));
+    expect(selects).toHaveLength(3);
+    const values = selects.map((s) => /** @type {HTMLSelectElement} */ (s).value);
+    expect(values).toContain('amb:creator');
+    expect(values).toContain('amb:refs');
+    expect(values).toContain('');
+  });
+
+  it('normalizes a stale locked output on load and republishes the correct value', async () => {
+    // Existing creator field with NO field-output tag: parseFormTemplate
+    // defaults field.output to the stale `amb:<id>` fallback (amb:creators).
+    // fieldToState must normalize it to the locked amb:creator.
+    const existingEvent = {
+      kind: 30168,
+      pubkey: 'author-pub',
+      created_at: 1,
+      id: 'existing-eid',
+      sig: 'sig',
+      content: '',
+      tags: [
+        ['d', 'my-form'],
+        ['name', 'My Form'],
+        ['settings', JSON.stringify({ description: '' })],
+        ['field', 'creators', 'text', 'Authors', '[]', JSON.stringify({ renderElement: 'creator' })]
+        // deliberately no ['field-output', 'creators', ...] tag
+      ]
+    };
+
+    const { container } = render(FormBuilder, { props: { existingEvent } });
+    await Promise.resolve();
+
+    // The disabled locked select displays the normalized value, not the stale one.
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="field-output-select"]')
+    );
+    expect(select).toBeTruthy();
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe('amb:creator');
+
+    // Save republishes amb:creator, not the stale amb:creators fallback.
+    const saveButton = /** @type {HTMLButtonElement} */ (
+      container.querySelector('button.btn-primary')
+    );
+    await fireEvent.click(saveButton);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(buildSpy).toHaveBeenCalledTimes(1);
+    const template = buildSpy.mock.calls[0][0];
+    const outputTag = template.tags.find(
+      (/** @type {string[]} */ t) => t[0] === 'field-output' && t[1] === 'creators'
+    );
+    expect(outputTag, 'expected a field-output tag for the creator field').toBeTruthy();
+    expect(outputTag[2]).toBe('amb:creator');
+  });
+});

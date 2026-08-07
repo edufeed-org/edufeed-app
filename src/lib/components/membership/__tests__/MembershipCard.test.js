@@ -65,6 +65,18 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
         return { unsubscribe: () => {} };
       }
     })
+  },
+  // Read at module init by loaders/profile.js + loaders/amb-search.js once the
+  // FieldsRenderer registry pulls the new adapters in — see c640a759 / e0455525.
+  pool: {}
+}));
+
+const openModalMock = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/modal.svelte.js', () => ({
+  modalStore: {
+    openModal: (/** @type {any} */ type, /** @type {any} */ ...rest) =>
+      openModalMock(type, ...rest),
+    closeModal: () => {}
   }
 }));
 
@@ -88,13 +100,33 @@ vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({})
 }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
-}));
+// The new FieldsRenderer field-type registry (form-field-types.js) statically
+// imports CreatorFieldAdapter → CreatorInput → profile-subscription.js →
+// loaders/profile.js and RelationFieldAdapter → AMBResourceSearchInput →
+// loaders/amb-search.js, which (with the barrel) evaluate createAddressLoader/
+// createReactionsLoader at module init — complete the mock so collection
+// succeeds. NB: vi.mock is hoisted, so inline the noop factory.
+vi.mock('applesauce-loaders/loaders', () => {
+  const noopLoader = () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) });
+  return {
+    createTimelineLoader: noopLoader,
+    createAddressLoader: noopLoader,
+    createEventLoader: noopLoader,
+    createReactionsLoader: noopLoader
+  };
+});
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => [],
-  getAllLookupRelays: () => []
+  getAllLookupRelays: () => [],
+  // Barrel community loaders + profile/amb-search chain read these at module init.
+  getArticleRelays: () => [],
+  getEducationalRelays: () => [],
+  getCalendarRelays: () => [],
+  getKanbanRelays: () => [],
+  getProfileLookupRelays: () => [],
+  getEventLoaderLookupRelays: () => [],
+  getFallbackRelays: () => []
 }));
 
 vi.mock('$lib/helpers/event-factory.js', () => ({
@@ -115,11 +147,35 @@ describe('MembershipCard', () => {
     actionRunnerRunMock.mockReset();
     updateProfileMock.mockClear();
     addProfileNip05TagMock.mockClear();
+    openModalMock.mockClear();
   });
 
   it('shows CTA when no application exists', () => {
     const { getByRole } = render(MembershipCard);
     expect(getByRole('button', { name: /Jetzt beantragen|Apply now/i })).toBeTruthy();
+  });
+
+  it('opens the application modal instead of expanding an inline form', async () => {
+    const { getByRole } = render(MembershipCard);
+    await fireEvent.click(getByRole('button', { name: /Jetzt beantragen|Apply now/i }));
+    expect(openModalMock).toHaveBeenCalledWith('membershipApply');
+  });
+
+  it('opens the same modal when updating an existing application', async () => {
+    timelineState.events = [
+      {
+        id: 'response-id',
+        kind: 1069,
+        pubkey: 'user-pub',
+        created_at: 1700000000,
+        tags: [['a', FORM_ADDRESS]],
+        content: '',
+        sig: 'sig'
+      }
+    ];
+    const { getByRole } = render(MembershipCard);
+    await fireEvent.click(getByRole('button', { name: /aktualisieren|update/i }));
+    expect(openModalMock).toHaveBeenCalledWith('membershipApply');
   });
 
   it('shows submitted-on text when an application exists', () => {
@@ -174,6 +230,25 @@ describe('MembershipCard', () => {
         await Promise.resolve();
       }
     }
+
+    it('decrypts the application with the admin from its own p-tag', async () => {
+      const ADMIN2_PUBKEY = 'c'.repeat(64);
+      // Fan-out copy addressed to the second admin — must decrypt against
+      // that admin, not adminPubkeys[0].
+      timelineState.events = [
+        {
+          ...encryptedResponse,
+          tags: [['a', FORM_ADDRESS], ['p', ADMIN2_PUBKEY], ['encrypted']]
+        }
+      ];
+      decryptMock.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
+      fetchMock.mockResolvedValue({ ok: false });
+
+      render(MembershipCard);
+      await settle();
+
+      expect(decryptMock).toHaveBeenCalledWith(ADMIN2_PUBKEY, 'encrypted-payload');
+    });
 
     it('shows "Add to profile" when upstream handle maps to user and kind 0 has no nip05', async () => {
       timelineState.events = [encryptedResponse];

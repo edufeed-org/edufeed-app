@@ -42,6 +42,12 @@ vi.mock('$lib/stores/action-runner.svelte.js', () => ({
 vi.mock('$lib/services/dm-relay-backfill.js', () => ({
   ensureDmRelayList: vi.fn(async () => {})
 }));
+const ensureRecipientDmRelaysMock = vi.hoisted(() =>
+  vi.fn(async (/** @type {string[]} */ _pubkeys) => {})
+);
+vi.mock('$lib/services/dm-recipient-relays.js', () => ({
+  ensureRecipientDmRelays: ensureRecipientDmRelaysMock
+}));
 vi.mock('$lib/helpers/nostrUtils.js', async (importOriginal) => {
   const original = /** @type {any} */ (await importOriginal());
   return { ...original, encodeEventToNaddr: vi.fn(() => 'naddr1testxyz') };
@@ -60,6 +66,23 @@ describe('InviteToEventModal', () => {
   beforeEach(() => {
     runMock.mockClear();
     runMock.mockImplementation(async () => {});
+    ensureRecipientDmRelaysMock.mockClear();
+  });
+
+  it('loads each invitee DM relay list before wrapping the invite for them', async () => {
+    // SendWrappedMessage resolves recipient relays from the EventStore only.
+    // Without this the invite falls through to the public fallback relays
+    // instead of the relays the invitee actually reads.
+    const r = render(InviteToEventModal);
+    click(r, 'stub-select-a');
+    click(r, 'stub-select-b');
+    await tick();
+    click(r, 'invite-send');
+    await vi.waitFor(() => expect(runMock).toHaveBeenCalledTimes(2));
+
+    const asked = ensureRecipientDmRelaysMock.mock.calls.flatMap((c) => c[0]);
+    expect(asked).toContain(PK_A);
+    expect(asked).toContain(PK_B);
   });
 
   it('sends one DM per recipient with note and naddr link', async () => {

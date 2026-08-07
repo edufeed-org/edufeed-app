@@ -5,10 +5,11 @@ import { filterNotificationsByType } from '../helpers/inbox.js';
 /**
  * @param {number} kind
  * @param {string[][]} [tags]
+ * @param {string} [id]
  */
-function makeEvent(kind, tags = []) {
+function makeEvent(kind, tags = [], id = `id-${kind}-${tags.length}`) {
   return {
-    id: `id-${kind}-${tags.length}`,
+    id,
     kind,
     created_at: 1000,
     pubkey: 'abc',
@@ -25,7 +26,9 @@ const mention = makeEvent(9);
 const rsvp = makeEvent(31925);
 const formRequest = makeEvent(1070);
 const formResponse = makeEvent(1069);
-const all = [reaction, wave, comment, mention, rsvp, formRequest, formResponse];
+const reply = makeEvent(1, [['e', 'root']], 'id-reply');
+const noteMention = makeEvent(1, [['p', 'abc']], 'id-note-mention');
+const all = [reaction, wave, comment, mention, rsvp, formRequest, formResponse, reply, noteMention];
 
 describe('filterNotificationsByType', () => {
   it('returns everything for "all"', () => {
@@ -41,10 +44,17 @@ describe('filterNotificationsByType', () => {
     expect(filterNotificationsByType(all, 'wave')).toEqual([wave]);
   });
 
-  it('filters comments, mentions and rsvps by type', () => {
+  it('filters comments and rsvps by type', () => {
     expect(filterNotificationsByType(all, 'comment')).toEqual([comment]);
-    expect(filterNotificationsByType(all, 'mention')).toEqual([mention]);
     expect(filterNotificationsByType(all, 'rsvp')).toEqual([rsvp]);
+  });
+
+  it('separates kind 1 replies from NIP-22 comments', () => {
+    expect(filterNotificationsByType(all, 'reply')).toEqual([reply]);
+  });
+
+  it('groups community mentions and kind 1 note mentions under "mention"', () => {
+    expect(filterNotificationsByType(all, 'mention')).toEqual([mention, noteMention]);
   });
 
   it('returns empty array when nothing matches', () => {

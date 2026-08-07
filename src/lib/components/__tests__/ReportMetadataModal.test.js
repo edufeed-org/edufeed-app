@@ -74,6 +74,11 @@ vi.mock('$lib/services/dm-relay-backfill.js', () => ({
   ensureDmRelayList: vi.fn().mockResolvedValue(undefined)
 }));
 
+const mockEnsureRecipientDmRelays = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('$lib/services/dm-recipient-relays.js', () => ({
+  ensureRecipientDmRelays: mockEnsureRecipientDmRelays
+}));
+
 const mockShowToast = vi.hoisted(() => vi.fn());
 vi.mock('$lib/helpers/toast.js', () => ({
   showToast: mockShowToast
@@ -100,6 +105,22 @@ describe('ReportMetadataModal', () => {
     mockRun.mockClear();
     mockRun.mockResolvedValue(undefined);
     mockShowToast.mockClear();
+    mockEnsureRecipientDmRelays.mockClear();
+  });
+
+  it('loads the author DM relay list before wrapping the feedback', async () => {
+    // SendWrappedMessage resolves recipient relays from the EventStore only, so
+    // without this the feedback DM goes to the public fallback relays instead
+    // of the author's own inbox.
+    const screen = render(ReportMetadataModal);
+    await fillForm(screen);
+    await fireEvent.click(screen.getByText('report_metadata_submit'));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockEnsureRecipientDmRelays).toHaveBeenCalledWith([mockEvent.pubkey]);
+    expect(mockEnsureRecipientDmRelays.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRun.mock.invocationCallOrder[0]
+    );
   });
 
   it('disables submit until a field is chosen and the comment is non-empty', async () => {

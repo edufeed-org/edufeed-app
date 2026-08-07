@@ -152,7 +152,12 @@ const defaultConfig = {
   // Resource form variants (AMB vs EKW, etc.). Order defines picker order + default.
   resourceFormVariants: {
     /** @type {string[]} */
-    enabled: ['amb']
+    enabled: ['amb'],
+    // naddr references to kind 30168 form templates, keyed by variant id. When
+    // set for a variant, that variant renders via the generic template-driven
+    // form instead of the hardcoded wizard. See resource-form-variants.js.
+    /** @type {Record<string, string>} */
+    templateNaddrs: {}
   },
   ui: {
     defaultLightTheme: 'light',
@@ -344,7 +349,10 @@ export function initializeConfig(runtimeConfig) {
     },
     resourceFormVariants: {
       enabled:
-        runtimeConfig.resourceFormVariants?.enabled || defaultConfig.resourceFormVariants.enabled
+        runtimeConfig.resourceFormVariants?.enabled || defaultConfig.resourceFormVariants.enabled,
+      templateNaddrs:
+        runtimeConfig.resourceFormVariants?.templateNaddrs ||
+        defaultConfig.resourceFormVariants.templateNaddrs
     },
     ui: {
       ...defaultConfig.ui,

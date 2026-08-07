@@ -44,19 +44,19 @@ const about = [{ id: 'http://w3id.org/kim/schulfaecher/s1055', label: 'Religion'
 
 describe('buildResourceData', () => {
   it('passes image + license event through so the image and x tags can be emitted', () => {
-    const rd = buildResourceData(filledFormData(), { about, konfiTags: [], hasNoUrl: false });
+    const rd = buildResourceData(filledFormData(), { about, hasNoUrl: false });
     expect(rd.image).toBe('https://blossom.example/2d39.png');
     expect(rd.imageLicenseEvent).toEqual({ kind: 1063, tags: [['x', '2d39']] });
   });
 
   it('passes datePublished and dateCreated through', () => {
-    const rd = buildResourceData(filledFormData(), { about, konfiTags: [], hasNoUrl: false });
+    const rd = buildResourceData(filledFormData(), { about, hasNoUrl: false });
     expect(rd.datePublished).toBe('2026-07-01');
     expect(rd.dateCreated).toBe('2026-06-15');
   });
 
   it('passes curriculum relations (teaches/assesses/competencyRequired) through', () => {
-    const rd = buildResourceData(filledFormData(), { about, konfiTags: [], hasNoUrl: false });
+    const rd = buildResourceData(filledFormData(), { about, hasNoUrl: false });
     expect(rd.teaches).toHaveLength(1);
     expect(rd.assesses).toHaveLength(1);
     expect(rd.competencyRequired).toHaveLength(1);
@@ -64,7 +64,7 @@ describe('buildResourceData', () => {
   });
 
   it('keeps the existing field mapping intact', () => {
-    const rd = buildResourceData(filledFormData(), { about, konfiTags: [], hasNoUrl: false });
+    const rd = buildResourceData(filledFormData(), { about, hasNoUrl: false });
     expect(rd.name).toBe('Titel');
     expect(rd.slug).toBe('https://example.org/lesson');
     expect(rd.learningResourceType).toBe('https://w3id.org/kim/hcrt/slide');
@@ -76,13 +76,34 @@ describe('buildResourceData', () => {
   });
 
   it('sends an empty slug for no-URL resources (random d-tag downstream)', () => {
-    const rd = buildResourceData(filledFormData(), { about, konfiTags: [], hasNoUrl: true });
+    const rd = buildResourceData(filledFormData(), { about, hasNoUrl: true });
     expect(rd.slug).toBe('');
   });
 
-  it('forwards konfiTags verbatim', () => {
-    const konfiTags = [['L', 'https://edufeed.org/ns/bildungsbereich#']];
-    const rd = buildResourceData(filledFormData(), { about, konfiTags, hasNoUrl: false });
-    expect(rd.konfiTags).toEqual(konfiTags);
+  it('forwards the wizard bildungsbereich pick', () => {
+    const formData = /** @type {any} */ ({ ...filledFormData(), bildungsbereich: 'konfi' });
+    const rd = buildResourceData(formData, { about, hasNoUrl: false });
+    expect(rd.bildungsbereich).toBe('konfi');
+  });
+
+  it('forwards raw Konfi scheme-key fields (vocab ids/labels/custom + scalar), config-driven off BILDUNGSBEREICHE.konfi', () => {
+    const formData = /** @type {any} */ ({
+      ...filledFormData(),
+      bildungsbereich: 'konfi',
+      konfiZielgruppenIds: ['urn:ku3'],
+      konfiZielgruppenLabels: [{ id: 'urn:ku3', label: 'KU3' }],
+      konfiZeitstrukturIds: ['urn:zt:wochenende'],
+      konfiZeitstrukturLabels: [{ id: 'urn:zt:wochenende', label: 'Wochenende' }],
+      konfiZeitstrukturCustom: '3-Tage-Freizeit',
+      plainLanguage: true,
+      requiredMaterialsNote: 'Bibel, Wasser, Tuch'
+    });
+    const rd = buildResourceData(formData, { about, hasNoUrl: false });
+    expect(rd.konfiZielgruppenIds).toEqual(['urn:ku3']);
+    expect(rd.konfiZielgruppenLabels).toEqual([{ id: 'urn:ku3', label: 'KU3' }]);
+    expect(rd.konfiZeitstrukturIds).toEqual(['urn:zt:wochenende']);
+    expect(rd.konfiZeitstrukturCustom).toBe('3-Tage-Freizeit');
+    expect(rd.plainLanguage).toBe(true);
+    expect(rd.requiredMaterialsNote).toBe('Bibel, Wasser, Tuch');
   });
 });
