@@ -145,8 +145,9 @@ export function buildThreadIndex(messages) {
   const timeline = [];
 
   for (const event of messages) {
-    // A self-reference is not a thread: it would file the message under
-    // itself and hide it from the timeline that is meant to show it.
+    // The END of the chain, not the id this message names — see
+    // resolveThreadRoot. Null for anything that starts a thread, including a
+    // self-reference or a cycle.
     const root = resolveThreadRoot(event, byId);
     if (!root || !byId.has(root)) {
       timeline.push(event);
