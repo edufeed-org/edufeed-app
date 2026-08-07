@@ -94,6 +94,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
 });
 
 import HostChannelSidebar from '$lib/components/groups/HostChannelSidebar.svelte';
+import HostChannelSidebarHost from './fixtures/HostChannelSidebarHost.svelte';
 
 /** kind:39000 as the measured Buzz relay emits it. */
 const meta = (/** @type {string} */ id) => ({
@@ -256,15 +257,18 @@ describe('HostChannelSidebar unread', () => {
     // nothing else can notice the switch. If the stamp only followed new
     // messages, the channel you just opened would sit there bold until someone
     // happened to post in it.
-    const { rerender } = render(HostChannelSidebar, {
-      props: { relay: RELAY, activeChannelId: 'allgemein' }
+    render(HostChannelSidebarHost, {
+      props: { relay: RELAY, initialActive: 'allgemein', next: 'redesign' }
     });
     await serve([chat({ id: 'allgemein', at: T1 }), chat({ id: 'redesign', at: T2 })]);
     await waitFor(() => expect(screen.getAllByTestId('concord-unread-dot')).toHaveLength(1));
 
-    await rerender({ relay: RELAY, activeChannelId: 'redesign' });
+    await fireEvent.click(screen.getByTestId('switch-channel'));
 
     await waitFor(() => expect(screen.queryByTestId('concord-unread-dot')).toBeNull());
+    // Proves this was a SWITCH and not a remount: a remount re-runs every
+    // effect and would stamp the channel read whatever the dependency says.
+    expect(holders.subscribeCalls.length).toBe(1);
     expect(JSON.parse(localStorage.getItem('groups-unread:' + ME) ?? '{}')).toEqual({
       [KEY('allgemein')]: T1,
       [KEY('redesign')]: T2
