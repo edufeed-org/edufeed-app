@@ -250,6 +250,27 @@ describe('HostChannelSidebar unread', () => {
     expect(nameClassOf('allgemein')).not.toContain('font-bold');
   });
 
+  it('reads the next channel you open, without waiting for a message in it', async () => {
+    // Switching channels on one host stays on the same route, so the sidebar is
+    // never unmounted and the subscription is never rebuilt — which is also why
+    // nothing else can notice the switch. If the stamp only followed new
+    // messages, the channel you just opened would sit there bold until someone
+    // happened to post in it.
+    const { rerender } = render(HostChannelSidebar, {
+      props: { relay: RELAY, activeChannelId: 'allgemein' }
+    });
+    await serve([chat({ id: 'allgemein', at: T1 }), chat({ id: 'redesign', at: T2 })]);
+    await waitFor(() => expect(screen.getAllByTestId('concord-unread-dot')).toHaveLength(1));
+
+    await rerender({ relay: RELAY, activeChannelId: 'redesign' });
+
+    await waitFor(() => expect(screen.queryByTestId('concord-unread-dot')).toBeNull());
+    expect(JSON.parse(localStorage.getItem('groups-unread:' + ME) ?? '{}')).toEqual({
+      [KEY('allgemein')]: T1,
+      [KEY('redesign')]: T2
+    });
+  });
+
   it('catches the channel you are looking at up when you come back to the tab', async () => {
     // Suppressing the stamp while the tab is hidden is only half the rule.
     // Concord has both halves (notifications.svelte.js:353-359); without the
