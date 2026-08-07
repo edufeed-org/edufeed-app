@@ -269,12 +269,17 @@ test.describe('rail layout sync', () => {
 
     // Calibration, and it has to come first: the off-box zero below is only
     // evidence if this same listener is known to be capable of recording a
-    // row. Asserting on kind 30078 specifically — not just "some frame" —
-    // because 30078 is the frame the off-box assertion is hunting for, so
-    // this proves the instrument can catch the exact thing it must not miss.
+    // row. Keyed on kind AND this lane's d tag — kind 30078 is every
+    // feature's app-data kind, so an unrelated 30078 (read markers, tab
+    // customization) must not be able to satisfy the calibration. This
+    // proves the instrument can catch the exact event it must not miss.
     expect(
-      localEvents.some((e) => e.kind === 30078),
-      'the frame watcher must be shown recording the app-data kind it is watching for'
+      localEvents.some(
+        (e) =>
+          e.kind === 30078 &&
+          (e.tags ?? []).some(([name, value]) => name === 'd' && value === 'edufeed:rail-layout')
+      ),
+      "the frame watcher must be shown recording this lane's own rail-layout event"
     ).toBe(true);
 
     // Subsumes the older `sockets.some(isLocal)` check: an EVENT frame on a
