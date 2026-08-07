@@ -32,6 +32,7 @@
   } from '$lib/groups/groups.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
+  import { authenticateOnce } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -97,7 +98,6 @@
 
   // One-shot NIP-42 retry: when the relay closes the REQ auth-required,
   // authenticate with the active signer and re-run the subscription effect.
-  let authAttempted = false;
   let retrySeq = $state(0);
 
   // Live chat + reactions from the group relay (same storeEvents +
@@ -124,16 +124,20 @@
           if (String(err?.message ?? err).includes('auth-required')) {
             authRequired = true;
             const user = getActiveUser();
-            if (user?.signer && !authAttempted) {
-              authAttempted = true;
-              pool
-                .relay(pointer.relay)
-                .authenticate(user.signer)
-                .then(() => {
-                  authRequired = false;
-                  retrySeq++;
-                })
-                .catch(() => {});
+            if (user?.signer) {
+              // Shared guard, not a local flag: the sidebar's directory hook
+              // authenticates against this same relay on this same route, and
+              // a second AUTH would make applesauce mark the connection
+              // unauthenticated and block every read on it.
+              authenticateOnce(pool.relay(pointer.relay), user.signer).then((response) => {
+                // A refusal used to land here as success, because
+                // authenticate() RESOLVES with {ok:false} rather than
+                // throwing — so the chat cleared its own warning and retried
+                // against a relay that had just said no.
+                if (!response.ok) return;
+                authRequired = false;
+                retrySeq++;
+              });
             }
           }
         }

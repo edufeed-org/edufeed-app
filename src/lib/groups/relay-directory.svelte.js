@@ -33,7 +33,7 @@ import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 import { useRelayInformation } from './relay-information.svelte.js';
 import { relayChannelIds, relayMetadataAuthors } from './relay-directory.js';
-import { isAuthRequiredError } from './relay-auth.js';
+import { authenticateOnce, isAuthRequiredError } from './relay-auth.js';
 
 const GROUP_METADATA = 39000;
 const PUT_USER = 9000;
@@ -75,7 +75,6 @@ export function useRelayDirectory(getRelay, getRemembered) {
 
   // A successful authenticate() re-runs the requests: one that was already
   // blocked or closed will not necessarily emit on its own.
-  let authAttempted = false;
   let retrySeq = $state(0);
 
   /** @param {string} relay @param {unknown} err */
@@ -108,12 +107,20 @@ export function useRelayDirectory(getRelay, getRemembered) {
   $effect(() => {
     const relay = getRelay();
     const user = getActiveUser();
-    authAttempted = false;
     authRefused = null;
     if (!relay) return;
     const instance = pool.relay(relay);
     const sub = instance.challenge$.subscribe((/** @type {string | null} */ challenge) => {
       if (!challenge) return;
+      // `challenge$` is a BehaviorSubject, so re-subscribing on navigation
+      // REPLAYS the challenge this connection already answered. Acting on that
+      // is not merely redundant: the relay refuses a second AUTH and
+      // applesauce reads the refusal as "not authenticated", which blocks
+      // every later read on this relay. Ask the connection, not the replay.
+      if (instance.authenticated) {
+        authRequired = false;
+        return;
+      }
       // The relay wants credentials. Without a signer we can say so instead of
       // spinning forever on a request that will never answer.
       authRequired = true;
@@ -121,23 +128,15 @@ export function useRelayDirectory(getRelay, getRemembered) {
         loading = false;
         return;
       }
-      if (authAttempted) return;
-      authAttempted = true;
-      instance
-        .authenticate(user.signer)
-        .then((/** @type {any} */ response) => {
-          if (response?.ok === false) {
-            authRefused = response.message || 'refused';
-            loading = false;
-            return;
-          }
-          authRequired = false;
-          retrySeq++;
-        })
-        .catch((/** @type {any} */ err) => {
-          authRefused = String(err?.message ?? err);
+      authenticateOnce(instance, user.signer).then((response) => {
+        if (!response.ok) {
+          authRefused = response.message ?? 'refused';
           loading = false;
-        });
+          return;
+        }
+        authRequired = false;
+        retrySeq++;
+      });
     });
     return () => sub.unsubscribe();
   });

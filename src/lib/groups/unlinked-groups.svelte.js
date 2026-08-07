@@ -62,7 +62,14 @@ export function useMyGroups() {
     // Accumulate nowhere and only WRITE the reactive state — the same rule
     // the channel-metadata hook follows, for the same reason.
     const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
-      groups = getPublicGroups(/** @type {any} */ (events?.[0])) ?? [];
+      // Guard the event, not the RESULT. The timeline emits `[]` until the
+      // list is found — and for anyone who has never saved a group it stays
+      // empty forever — so this runs with `undefined` on the normal path.
+      // `getPublicGroups` passes it to `getOrComputeCachedValue`, which calls
+      // `Reflect.has(undefined, symbol)` and throws, so the `?? []` that used
+      // to sit here could never be reached.
+      const list = events?.[0];
+      groups = list ? (getPublicGroups(/** @type {any} */ (list)) ?? []) : [];
     });
     return () => {
       reqSub.unsubscribe();

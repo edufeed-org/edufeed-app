@@ -42,6 +42,7 @@ import {
   getReadRelays
 } from '$lib/services/relay-service.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { authenticateOnce } from '$lib/groups/relay-auth.js';
 
 // --- Module-level reactive state ---
 let dmRelays = $state.raw(/** @type {string[]} */ ([]));
@@ -701,15 +702,18 @@ function subscribeToGiftWraps(pubkey, relays) {
   for (const url of relays) {
     const relay = pool.relay(url);
     const authSub = relay.challenge$.pipe(filter((c) => !!c)).subscribe(async () => {
-      if (!activeSigner || relay.authenticated) return;
-      try {
-        // activeSigner is typed as EncryptedContentSigner (narrow shape used
-        // for unlocking gift wraps). The real account signer also implements
-        // AuthSigner.signEvent — cast to access it.
-        await relay.authenticate(/** @type {any} */ (activeSigner));
-      } catch (err) {
-        console.warn('[dm] auth failed for', url, err);
-      }
+      if (!activeSigner) return;
+      // authenticateOnce keeps the `relay.authenticated` check this call site
+      // already had, and adds the part it was missing: two challenge
+      // emissions arriving before the first handshake resolves would
+      // otherwise send two AUTHs, and the relay refuses the second in a way
+      // that marks the whole connection unauthenticated.
+      //
+      // activeSigner is typed as EncryptedContentSigner (narrow shape used
+      // for unlocking gift wraps). The real account signer also implements
+      // AuthSigner.signEvent — cast to access it.
+      const response = await authenticateOnce(relay, /** @type {any} */ (activeSigner));
+      if (!response.ok) console.warn('[dm] auth failed for', url, response.message);
     });
     subscriptions.push(authSub);
   }
