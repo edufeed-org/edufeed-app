@@ -128,9 +128,39 @@ describe('parseChatMarkdown — untrusted input', () => {
     expect(links[0].href).toBe(expected);
   });
 
-  it('treats a protocol-relative href as unsafe', () => {
-    // `//evil.example` inherits the page scheme and leaves the app silently.
-    expect(safeHref('//evil.example')).toBeNull();
+  // `//` is NOT the only authority-relative form a browser accepts. Chrome
+  // normalises `\` to `/` and strips TAB/CR/LF from an href outright, so all
+  // of these leave the origin while looking like in-app paths. A regex that
+  // closes the backslash pair still lets the TAB through — the guard has to
+  // parse, not pattern-match. Found by TestOER in Chrome at 3bb89b61.
+  it.each([
+    ['protocol-relative', '//evil.example'],
+    ['backslash', '/\\evil.example'],
+    ['double backslash', '/\\\\evil.example'],
+    ['tab', '/\t/evil.example'],
+    ['carriage return', '/\r/evil.example'],
+    ['newline', '/\n/evil.example'],
+    ['backslash-slash', '/\\/evil.example']
+  ])('treats a %s href as unsafe', (_label, href) => {
+    expect(safeHref(href)).toBeNull();
+  });
+
+  it.each([
+    ['plain path', '/wiki/peace', '/wiki/peace'],
+    ['entity route', '/npub1abc', '/npub1abc'],
+    ['query and hash', '/a/b?c=1#d', '/a/b?c=1#d']
+  ])('keeps a same-origin %s', (_label, href, expected) => {
+    expect(safeHref(href)).toBe(expected);
+  });
+
+  it('does not linkify an off-origin path smuggled through chat content', () => {
+    // Asserted past the last gate: through parseChatMarkdown, not the helper.
+    // The angle-bracket destination form is what lets whitespace survive.
+    for (const source of ['[c](/\\evil.example)', '[c](</\t/evil.example>)']) {
+      const { blocks } = parseChatMarkdown(ev(source));
+      const links = blocks[0].children.filter((/** @type {any} */ c) => c.type === 'link');
+      expect(links, source).toEqual([]);
+    }
   });
 
   it('does not lose an ampersand to double-escaping', () => {

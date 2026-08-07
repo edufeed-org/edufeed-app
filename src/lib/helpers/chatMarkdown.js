@@ -40,13 +40,40 @@ const chatMarked = new Marked({ gfm: true, breaks: true }).use({
 const SAFE_SCHEMES = ['http:', 'https:', 'mailto:', 'nostr:'];
 
 /**
+ * Sentinel origin for resolving in-app relative hrefs. `.invalid` is reserved
+ * by RFC 2606 and can never resolve, so a href that lands on this origin is
+ * genuinely relative and one that escapes it is genuinely off-origin.
+ */
+const RELATIVE_BASE = 'https://relative.invalid/';
+const RELATIVE_BASE_ORIGIN = 'https://relative.invalid';
+
+/**
  * @param {string} href
  * @returns {string | null} the href to use, or null if it must not be linked
  */
 export function safeHref(href) {
   if (typeof href !== 'string' || href === '') return null;
+
   // In-app relative links, as produced by wikilinks and nostr mentions.
-  if (href.startsWith('/') && !href.startsWith('//')) return href;
+  //
+  // `//` is not the only authority-relative form. Chrome normalises `\` to `/`
+  // and strips TAB/CR/LF from an href entirely, so `/\evil.com`, `/\\evil.com`
+  // and `/<TAB>/evil.com` all leave the origin while reading as in-app paths.
+  // Pattern-matching loses this race — a regex closing the backslash pair
+  // still lets the TAB through — so resolve it against a sentinel origin and
+  // let the URL parser answer. Returning the re-serialised path also drops the
+  // stripped characters instead of passing them to the DOM.
+  if (href.startsWith('/')) {
+    let resolved;
+    try {
+      resolved = new URL(href, RELATIVE_BASE);
+    } catch {
+      return null;
+    }
+    if (resolved.origin !== RELATIVE_BASE_ORIGIN) return null;
+    return resolved.pathname + resolved.search + resolved.hash;
+  }
+
   let url;
   try {
     url = new URL(href);
