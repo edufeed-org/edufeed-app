@@ -141,11 +141,17 @@ const got = await page.evaluate(() => {
     ol: by('first item')?.querySelectorAll('ol li').length ?? 0,
     linkHref: by('the docs')?.querySelector('a')?.getAttribute('href') ?? null,
     linkClass: by('the docs')?.querySelector('a')?.className ?? null,
-    badSchemeAnchor: !!by('javascript:alert')?.querySelector('a'),
+    // Anchor on the link TEXT, never the href: the href fragment vanishes from
+    // textContent exactly when the regression links it, so a row keyed on it
+    // cannot go red (TestOER, 2026-08-07 — this row survived its mutation).
+    badSchemeAnchor: !!by('click me')?.querySelector('a'),
+    badSchemeLiteral: !!by('javascript:alert'),
     offOriginAnchor: !!by('looks internal')?.querySelector('a[href*="evil"]'),
     headingEl: !!by('# not a heading')?.querySelector('h1'),
     headingLiteral: !!by('# not a heading'),
-    tableEl: !!by('| a | b |')?.querySelector('table'),
+    // Document-level, so a message dropped to an empty bubble cannot answer it.
+    tableEl: document.querySelectorAll('.chat-bubble table').length,
+    tableLiteral: !!by('| a | b |'),
     // The emoji load is aborted, so ImageWithFallback renders its placeholder,
     // which carries aria-label and NOT an <img alt>.
     emojiFallback: document.querySelectorAll('[aria-label=":sob:"]').length,
@@ -175,10 +181,12 @@ const EXPECT = {
   linkHref: 'https://example.com/docs',
   linkClass: 'link link-primary',
   badSchemeAnchor: false,
+  badSchemeLiteral: true,
   offOriginAnchor: false,
   headingEl: false,
   headingLiteral: true,
-  tableEl: false,
+  tableEl: 0,
+  tableLiteral: true,
   emojiFallback: 1,
   mdImageAlts: ['a helpful caption'],
   galleries: 1,

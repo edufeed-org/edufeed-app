@@ -5,9 +5,10 @@ fixture relay and asserts the restricted-markdown subset on **relay-delivered**
 events — the store/relay path, not component props. Not part of the playwright
 `e2e/` suite (`testMatch` only collects `*.test.js`); run it by hand.
 
-Everything here is regenerable — `mkfixtures.mjs` re-signs the events,
-`keys.json` holds the test key (throwaway, fixtures only) so anything ever
-published stays deletable.
+Everything here is regenerable — `mkfixtures.mjs` mints a **fresh** identity
+and re-creates events + `keys.json` next to itself (regenerating invalidates
+the committed pair, commit both together). The key (hex, throwaway, fixtures
+only) is on disk so anything ever published stays deletable.
 
 ## 1. Relay
 
@@ -38,7 +39,10 @@ reads a healthy server as dead.
 `wss://relay.edufeed.org` via the relay hint embedded in the
 `CURATED_PUBKEYS_SETS_LONGFORM` naddr, which beats every env var at
 `curated-authors-service.svelte.js:421`. Reads only. The probe's socket ledger
-reports any such dial; the chat route itself dials none.
+reports any such dial; the chat route itself dials none. In the HTTP ledger,
+`blossom.edufeed.org` is the `APP_LOGO` fetch (expected), and `example.com`
+appears because the request _event_ fires before route interception answers it
+locally — those requests never leave the box.
 
 ## 3. Drive it
 
@@ -72,3 +76,10 @@ Side effect: the image layer is fully offline.
 - Playwright matches routes in REVERSE registration order — a general image
   route registered after a specific abort silently overrides it. One handler
   branches instead.
+- A row must find its bubble by a fragment that survives the regression it
+  guards. Anchoring on an href or on to-be-transformed syntax (`| a | b |`)
+  makes the row vacuous: the regression removes the fragment from
+  `textContent`, `by()` returns `undefined`, and the absence check passes.
+  Anchor on link/visible text, pair each element check with a literal check,
+  and count forbidden elements document-wide (TestOER's mutation battery
+  caught `badSchemeAnchor` and `tableEl` passing through both regressions).

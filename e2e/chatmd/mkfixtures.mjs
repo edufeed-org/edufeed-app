@@ -1,8 +1,13 @@
 // Signs a NIP-29 group + kind:9 chat messages carrying the markdown cases.
-// Test keys are written to disk so anything published stays deletable.
+// Mints a FRESH identity every run (it does not re-sign under the committed
+// key) and writes the new key to disk so anything published stays deletable.
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 const bytesToHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
 import { writeFileSync } from 'fs';
+
+// Next to this file, not process.cwd() — every other piece of the harness is
+// cwd-independent; running this from elsewhere must not scatter fixtures.
+const out = (name) => new URL(`./${name}`, import.meta.url);
 
 const sk = generateSecretKey();
 const pk = getPublicKey(sk);
@@ -41,6 +46,9 @@ MESSAGES.forEach(([label, content], i) => {
   events.push(finalizeEvent({ kind: 9, created_at: now - 50 + i, tags, content }, sk));
 });
 
-writeFileSync('events.jsonl', events.map((e) => JSON.stringify(e)).join('\n') + '\n');
-writeFileSync('keys.json', JSON.stringify({ nsec: bytesToHex(sk), pubkey: pk, group: GROUP }, null, 2));
+writeFileSync(out('events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+writeFileSync(
+  out('keys.json'),
+  JSON.stringify({ seckeyHex: bytesToHex(sk), pubkey: pk, group: GROUP }, null, 2)
+);
 console.log('events:', events.length, 'author:', pk);
