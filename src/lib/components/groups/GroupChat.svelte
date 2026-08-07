@@ -394,7 +394,11 @@
     baked in, because the same message means "reply in the timeline" on the
     left and "reply inside this thread" in the panel.
   -->
-  {#snippet messageRow(/** @type {any} */ message, /** @type {(msg: any) => void} */ onReply)}
+  {#snippet messageRow(
+    /** @type {any} */ message,
+    /** @type {(msg: any) => void} */ onReply,
+    /** @type {boolean} */ offerThread
+  )}
     {@const parentId = getReplyParentId(message)}
     {@const replyParent = parentId ? displayed.find((p) => p.id === parentId) : null}
     <ChatMessageRow
@@ -416,7 +420,7 @@
       replyTitle={m.groups_reply()}
       replyCount={threads.replyCount(message.id)}
       replyCountLabel={replyCountLabel(threads.replyCount(message.id))}
-      onOpenThread={openThread}
+      onOpenThread={offerThread ? openThread : null}
     >
       {#snippet reactions(/** @type {any} */ msg)}
         <ReactionChips
@@ -439,7 +443,7 @@
         {/if}
         <ChatMessageList items={grouped}>
           {#snippet row(/** @type {any} */ message)}
-            {@render messageRow(message, (msg) => (replyTo = msg))}
+            {@render messageRow(message, (msg) => (replyTo = msg), true)}
           {/snippet}
         </ChatMessageList>
       </div>
@@ -465,7 +469,7 @@
         closeLabel={m.chat_thread_close()}
       >
         {#snippet row(/** @type {any} */ message)}
-          {@render messageRow(message, (msg) => (threadReplyTo = msg))}
+          {@render messageRow(message, (msg) => (threadReplyTo = msg), false)}
         {/snippet}
         {#snippet composer()}
           <ChatComposer

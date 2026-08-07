@@ -99,6 +99,21 @@ const otherReply = signWith(
   },
   OTHER_SK
 );
+// A reply-to-a-reply as the SHIPPED writer emits it: one `reply` tag naming
+// the message that was clicked, which is `firstReply` — a mid-thread message,
+// not the root. These exist on every relay that does not validate ancestry.
+const legacyNested = signWith(
+  {
+    kind: 9,
+    content: 'legacy nested reply',
+    created_at: 1700000030,
+    tags: [
+      ['h', 'beechat'],
+      ['e', firstReply.id, '', 'reply']
+    ]
+  },
+  OTHER_SK
+);
 const nestedReply = signWith(
   {
     kind: 9,
@@ -133,7 +148,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
         request: () => rxOf(metadataEvent, membersEvent),
         // keep the subscription open after replay so unsubscribe paths run
         subscription: () =>
-          rxMerge(rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply), rxNever),
+          rxMerge(
+            rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply, legacyNested),
+            rxNever
+          ),
         publish: publishMock,
         authenticate: vi.fn().mockResolvedValue({ ok: true }),
         // The header's badges read the relay's NIP-11 document. A fake relay
@@ -313,6 +331,11 @@ describe('GroupChat', () => {
     [...container.querySelectorAll('[data-testid="ncr-content"]')].map((el) => el.textContent);
 
   describe('threading', () => {
+    // ORDER MATTERS IN HERE. The EventStore is created once for the module, so
+    // a message published by one test is still in the timeline for the next.
+    // Tests that assert the panel's EXACT contents must therefore come before
+    // any test that sends something; adding a publishing test above them will
+    // break them, and the failure will look like a threading bug.
     /** Timeline order is oldest first: [0] is `otherRoot`, [1] is `chatEvent`. */
     const openLinks = () => screen.getAllByTestId('thread-open');
 
@@ -328,7 +351,7 @@ describe('GroupChat', () => {
       // The count is per-message, not per-timeline, and the older root's
       // single reply exercises the singular label.
       const links = screen.getAllByTestId('thread-open').map((el) => el.textContent);
-      expect(links).toEqual(['1 reply', '2 replies']);
+      expect(links).toEqual(['1 reply', '3 replies']);
       expect(screen.queryByTestId('thread-panel')).toBeNull();
     });
 
@@ -341,11 +364,53 @@ describe('GroupChat', () => {
       await fireEvent.click(openLinks()[1]);
 
       const panel = /** @type {HTMLElement} */ (await screen.findByTestId('thread-panel'));
-      expect(bodies(panel)).toEqual(['hello from armada', 'first reply', 'reply to the reply']);
+      expect(bodies(panel)).toEqual([
+        'hello from armada',
+        'first reply',
+        'reply to the reply',
+        'legacy nested reply'
+      ]);
       // ...and closing it puts the timeline back.
       await fireEvent.click(screen.getByTestId('thread-panel-close'));
       await waitFor(() => expect(screen.queryByTestId('thread-panel')).toBeNull());
       expect(bodies(container)).toContain('hello from armada');
+    });
+
+    // A reply written by the SHIPPED app names a mid-thread message. Filing
+    // by the named id alone put it under a parent that is itself filed away:
+    // absent from the timeline, absent from every reachable thread, gone from
+    // the app entirely. Reachable only where the relay does not validate
+    // ancestry — which is every relay except a Buzz-hosted one.
+    it('shows a reply written by the pre-fix app in the thread it belongs to', async () => {
+      const { container } = render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+
+      expect(bodies(container)).not.toContain('legacy nested reply');
+      await fireEvent.click(openLinks()[1]);
+      const panel = /** @type {HTMLElement} */ (await screen.findByTestId('thread-panel'));
+      expect(bodies(panel)).toEqual([
+        'hello from armada',
+        'first reply',
+        'reply to the reply',
+        'legacy nested reply'
+      ]);
+    });
+
+    // Its own affordance was a trap: the row snippet is shared, so a
+    // mid-thread message with replies filed under it rendered an "N replies"
+    // link inside the panel; clicking it set a root that is not in the
+    // timeline and unmounted the whole panel. Root resolution removes the
+    // cause; this removes the category.
+    it('offers no thread link inside the panel — you are already in the thread', async () => {
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+      await fireEvent.click(openLinks()[1]);
+
+      const panel = /** @type {HTMLElement} */ (await screen.findByTestId('thread-panel'));
+      expect(panel.querySelectorAll('[data-testid="thread-open"]')).toHaveLength(0);
+      // Control: the timeline still has its links, so this is not "the
+      // affordance is gone everywhere".
+      expect(screen.getAllByTestId('thread-open').length).toBe(2);
     });
 
     it('sends a panel reply against the thread root by default', async () => {

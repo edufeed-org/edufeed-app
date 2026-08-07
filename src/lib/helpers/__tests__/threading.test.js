@@ -180,6 +180,68 @@ describe('buildThreadIndex', () => {
     ).toEqual(['aaa', 'bbb']);
   });
 
+  // THE SHIPPED WRITER'S SHAPE. Before this branch, a reply-to-a-reply tagged
+  // the message that was clicked, so it names a MID-THREAD message. Filing by
+  // the named id put it under a parent that is itself filed away: in no
+  // timeline, in no reachable thread, gone. Every such reply already exists on
+  // any relay that does not validate thread ancestry.
+  it('files a legacy reply-to-a-reply under the ultimate root, not its parent', () => {
+    const root = msg({ id: ROOT, created_at: 1 });
+    const first = lonelyReply(ROOT, { id: PARENT, created_at: 2 });
+    const legacy = lonelyReply(PARENT, { id: 'legacy', created_at: 3 });
+    const index = buildThreadIndex([root, first, legacy]);
+    expect(index.timeline.map((e) => e.id)).toEqual([ROOT]);
+    expect(index.repliesFor(ROOT).map((e) => e.id)).toEqual([PARENT, 'legacy']);
+    // Nothing may hang off a message that is not in the timeline: only
+    // timeline rows can open a panel, so such a thread is unreachable — and
+    // the "N replies" link that advertises it is a trap.
+    expect(index.replyCount(PARENT)).toBe(0);
+  });
+
+  it('walks a whole chain of legacy replies back to the same thread', () => {
+    const root = msg({ id: ROOT, created_at: 1 });
+    const a = lonelyReply(ROOT, { id: 'a', created_at: 2 });
+    const b = lonelyReply('a', { id: 'b', created_at: 3 });
+    const c = lonelyReply('b', { id: 'c', created_at: 4 });
+    const index = buildThreadIndex([root, a, b, c]);
+    expect(index.timeline.map((e) => e.id)).toEqual([ROOT]);
+    expect(index.repliesFor(ROOT).map((e) => e.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  // The invariant the whole trap reduces to, asserted over a mixed window.
+  it('never files a message under something outside the timeline', () => {
+    const root = msg({ id: ROOT, created_at: 1 });
+    const first = lonelyReply(ROOT, { id: PARENT, created_at: 2 });
+    const index = buildThreadIndex([
+      root,
+      first,
+      lonelyReply(PARENT, { id: 'legacy', created_at: 3 }),
+      nestedReply(ROOT, PARENT, { id: 'modern', created_at: 4 }),
+      lonelyReply('missing', { id: 'orphan', created_at: 5 })
+    ]);
+    const inTimeline = new Set(index.timeline.map((e) => e.id));
+    for (const event of [root, first, { id: 'legacy' }, { id: 'modern' }, { id: 'orphan' }]) {
+      if (index.replyCount(event.id) > 0) expect(inTimeline.has(event.id)).toBe(true);
+    }
+    expect(index.replyCount(ROOT)).toBe(3);
+  });
+
+  // Malformed data, not a thread. Without a cycle guard the walk never ends.
+  it('keeps a message whose thread link cycles in the timeline', () => {
+    const a = msg({ id: 'a', tags: [['e', 'b', '', 'reply']], created_at: 1 });
+    const b = msg({ id: 'b', tags: [['e', 'a', '', 'reply']], created_at: 2 });
+    const index = buildThreadIndex([a, b]);
+    expect(index.timeline.map((e) => e.id).sort()).toEqual(['a', 'b']);
+  });
+
+  // A legacy reply whose parent is outside the window: the chain cannot be
+  // walked, so it stays visible rather than being filed under a ghost.
+  it('keeps a legacy reply visible when its parent is not loaded', () => {
+    const root = msg({ id: ROOT, created_at: 1 });
+    const index = buildThreadIndex([root, lonelyReply('not-loaded', { id: 'x', created_at: 2 })]);
+    expect(index.timeline.map((e) => e.id)).toEqual([ROOT, 'x']);
+  });
+
   it('orders replies oldest-first regardless of input order', () => {
     const root = msg({ id: ROOT, created_at: 1 });
     const late = lonelyReply(ROOT, { id: 'late', created_at: 9 });

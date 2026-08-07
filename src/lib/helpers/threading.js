@@ -82,27 +82,66 @@ export function buildReplyTags(replyTo) {
  */
 
 /**
+ * Follow the thread link upwards until it reaches a message that starts a
+ * thread. Returns that message's id, or null when `event` starts one itself.
+ *
+ * The single tag a message carries is NOT reliably the thread root. The
+ * writer this branch replaces tagged the message that was CLICKED, so a
+ * reply-to-a-reply written by the shipped app names a mid-thread message, and
+ * every such reply already exists on any relay that does not validate thread
+ * ancestry. Filing by the named id alone would put those replies under a
+ * parent that is itself filed away — leaving them in no timeline and in no
+ * reachable thread.
+ * @param {any} event
+ * @param {Map<string, any>} byId every message in the window
+ * @returns {string | null}
+ */
+function resolveThreadRoot(event, byId) {
+  const first = getThreadRootId(event);
+  if (!first || first === event.id) return null;
+  const seen = new Set([event.id]);
+  let currentId = first;
+  for (;;) {
+    // A cycle is malformed data, not a thread. Bail to the timeline rather
+    // than loop: the message is at least readable there.
+    if (seen.has(currentId)) return null;
+    seen.add(currentId);
+    const parent = byId.get(currentId);
+    // Named but not loaded: the orphan case, which the caller keeps visible.
+    if (!parent) return currentId;
+    const next = getThreadRootId(parent);
+    if (!next || next === parent.id) return parent.id;
+    currentId = next;
+  }
+}
+
+/**
  * Split a message list into the main timeline and per-thread reply lists.
  *
- * A reply is lifted out of the timeline only when its root is present in the
- * same list. The relay window is capped (limit 100), so a reply whose root
- * scrolled out would otherwise vanish entirely — an orphan stays in the
- * timeline, where it is at least readable.
+ * A reply is lifted out of the timeline only when the root it resolves to is
+ * present in the same list. The relay window is capped (limit 100), so a reply
+ * whose root scrolled out would otherwise vanish entirely — an orphan stays in
+ * the timeline, where it is at least readable.
+ *
+ * Because every reply resolves to the END of its chain, and the end of a chain
+ * is by construction a message that starts a thread, nothing is ever filed
+ * under a message that is not itself in the timeline.
  * @param {any[]} messages in timeline order (oldest first)
  * @returns {ThreadIndex}
  */
 export function buildThreadIndex(messages) {
-  const byId = new Set(messages.map((event) => event?.id).filter(Boolean));
+  /** @type {Map<string, any>} */
+  const byId = new Map(messages.filter((event) => event?.id).map((event) => [event.id, event]));
   /** @type {Map<string, any[]>} */
   const replies = new Map();
   /** @type {any[]} */
   const timeline = [];
 
   for (const event of messages) {
-    const root = getThreadRootId(event);
     // A self-reference is not a thread: it would file the message under
     // itself and hide it from the timeline that is meant to show it.
-    if (!root || root === event.id || !byId.has(root)) {
+    const root = resolveThreadRoot(event, byId);
+    if (!root || !byId.has(root)) {
       timeline.push(event);
       continue;
     }
