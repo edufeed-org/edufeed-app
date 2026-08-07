@@ -43,8 +43,11 @@
     getReplyParentId,
     groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
+  import { buildThreadIndex } from '$lib/helpers/threading.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
+  import ChatComposer from '$lib/components/chat/ChatComposer.svelte';
+  import ThreadPanel from '$lib/components/chat/ThreadPanel.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
@@ -164,7 +167,11 @@
   const displayed = $derived(
     messages.filter((event) => event && event.id && event.pubkey).toReversed()
   );
-  const grouped = $derived(groupMessagesByDate(displayed));
+  // Replies live in their thread, not in the timeline. An orphan — a reply
+  // whose root fell outside the 100-event window — stays in the timeline
+  // rather than disappearing.
+  const threads = $derived(buildThreadIndex(displayed));
+  const grouped = $derived(groupMessagesByDate(threads.timeline));
   const getProfiles = useProfileMap(() => displayed.map((event) => event.pubkey));
   const reactionsByTarget = $derived(
     aggregateChannelReactions(reactionEvents, getActiveUser()?.pubkey)
@@ -174,8 +181,43 @@
 
   let text = $state('');
   let sending = $state(false);
-  /** @type {{id: string, pubkey: string, content: string} | null} */
-  let replyTo = $state(null);
+  // The WHOLE message, not a {id, pubkey} projection: the thread root is read
+  // off its tags. `$state.raw` because applesauce events must never be wrapped
+  // in a deep state proxy (state_unsafe_mutation).
+  /** @type {any} */
+  let replyTo = $state.raw(null);
+
+  // Thread panel: which root is open, plus its own draft and reply target.
+  /** @type {string | null} */
+  let openThreadId = $state(null);
+  let threadText = $state('');
+  /** @type {any} */
+  let threadReplyTo = $state.raw(null);
+
+  // Derived from the live index, so the panel follows the data: if the root
+  // falls out of the window the panel closes itself rather than showing a
+  // thread whose head is gone.
+  const openThreadRoot = $derived(
+    openThreadId ? (threads.timeline.find((event) => event.id === openThreadId) ?? null) : null
+  );
+  const openThreadReplies = $derived(openThreadId ? threads.repliesFor(openThreadId) : []);
+
+  /** @param {number} count */
+  const replyCountLabel = (count) =>
+    count === 1 ? m.chat_thread_reply_one() : m.chat_thread_reply_many({ count });
+
+  /** @param {any} message */
+  function openThread(message) {
+    openThreadId = message.id;
+    threadReplyTo = null;
+    threadText = '';
+  }
+
+  function closeThread() {
+    openThreadId = null;
+    threadReplyTo = null;
+    threadText = '';
+  }
 
   /** Sign a template and publish it to the group relay only. @param {any} template */
   async function signAndPublish(template) {
@@ -189,27 +231,48 @@
     return signed;
   }
 
+  /**
+   * @param {string} value
+   * @param {any} replyTarget the message being replied to, tags included
+   * @returns {Promise<boolean>} whether it went out
+   */
+  async function publishMessage(value, replyTarget) {
+    try {
+      const signed = await signAndPublish(
+        buildGroupMessageTemplate(pointer.id, value, replyTarget)
+      );
+      eventStore.add(signed);
+      return true;
+    } catch (err) {
+      console.error('group send failed', err);
+      showToast(m.groups_send_failed(), 'error');
+      return false;
+    }
+  }
+
   async function send() {
     const value = text.trim();
     if (!value || sending) return;
     sending = true;
-    try {
-      const signed = await signAndPublish(
-        buildGroupMessageTemplate(
-          pointer.id,
-          value,
-          replyTo && { id: replyTo.id, pubkey: replyTo.pubkey }
-        )
-      );
-      eventStore.add(signed);
+    if (await publishMessage(value, replyTo)) {
       text = '';
       replyTo = null;
-    } catch (err) {
-      console.error('group send failed', err);
-      showToast(m.groups_send_failed(), 'error');
-    } finally {
-      sending = false;
     }
+    sending = false;
+  }
+
+  async function sendInThread() {
+    const value = threadText.trim();
+    // With no explicit target the reply goes to the thread root, which is what
+    // the panel's own input reads as.
+    const target = threadReplyTo ?? openThreadRoot;
+    if (!value || sending || !target) return;
+    sending = true;
+    if (await publishMessage(value, target)) {
+      threadText = '';
+      threadReplyTo = null;
+    }
+    sending = false;
   }
 
   /**
@@ -326,72 +389,97 @@
     </div>
   {/if}
 
-  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-    {#if isLoading && displayed.length === 0}
-      <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
-    {/if}
-    <ChatMessageList items={grouped}>
-      {#snippet row(/** @type {any} */ message)}
-        {@const parentId = getReplyParentId(message)}
-        {@const replyParent = parentId ? displayed.find((p) => p.id === parentId) : null}
-        <ChatMessageRow
-          {message}
-          isOwnMessage={message.pubkey === myPubkey}
-          displayName={getUserDisplayName(message.pubkey, getProfiles().get(message.pubkey))}
-          timestamp={formatMessageTimestamp(message.created_at)}
-          profile={getProfiles().get(message.pubkey)}
-          replyPreview={replyParent
-            ? {
-                displayName: getUserDisplayName(
-                  replyParent.pubkey,
-                  getProfiles().get(replyParent.pubkey)
-                ),
-                content: replyParent.content
-              }
-            : null}
-          onReply={(msg) => (replyTo = { id: msg.id, pubkey: msg.pubkey, content: msg.content })}
-          replyTitle={m.groups_reply()}
-        >
-          {#snippet reactions(/** @type {any} */ msg)}
-            <ReactionChips
-              aggregated={reactionsByTarget.get(msg.id) ?? new Map()}
-              addButtonOnHover
-              onToggle={(emoji) => react(msg, emoji)}
-              onPick={(emoji) => react(msg, emoji)}
-            />
-          {/snippet}
-        </ChatMessageRow>
-      {/snippet}
-    </ChatMessageList>
-  </div>
-
-  {#if replyTo}
-    <div class="flex items-center gap-2 border-t border-base-300 bg-base-200 px-4 py-1 text-xs">
-      <span class="truncate opacity-70">↩ {replyTo.content.slice(0, 80)}</span>
-      <button type="button" class="btn ml-auto btn-ghost btn-xs" onclick={() => (replyTo = null)}>
-        ✕
-      </button>
-    </div>
-  {/if}
-
-  <form
-    class="m-4 mt-2 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-200 p-1.5"
-    onsubmit={(e) => {
-      e.preventDefault();
-      send();
-    }}
-  >
-    <input
-      class="input flex-1 input-ghost focus:outline-none"
-      data-testid="group-chat-input"
-      bind:value={text}
-      placeholder={m.groups_input_placeholder({ name: metadata?.name ?? pointer.id })}
-      disabled={!myPubkey}
-    />
-    <button
-      class="btn btn-circle btn-sm btn-neutral"
-      type="submit"
-      disabled={sending || !text.trim()}>➤</button
+  <!--
+    One row definition for both surfaces. `onReply` is passed in rather than
+    baked in, because the same message means "reply in the timeline" on the
+    left and "reply inside this thread" in the panel.
+  -->
+  {#snippet messageRow(/** @type {any} */ message, /** @type {(msg: any) => void} */ onReply)}
+    {@const parentId = getReplyParentId(message)}
+    {@const replyParent = parentId ? displayed.find((p) => p.id === parentId) : null}
+    <ChatMessageRow
+      {message}
+      isOwnMessage={message.pubkey === myPubkey}
+      displayName={getUserDisplayName(message.pubkey, getProfiles().get(message.pubkey))}
+      timestamp={formatMessageTimestamp(message.created_at)}
+      profile={getProfiles().get(message.pubkey)}
+      replyPreview={replyParent
+        ? {
+            displayName: getUserDisplayName(
+              replyParent.pubkey,
+              getProfiles().get(replyParent.pubkey)
+            ),
+            content: replyParent.content
+          }
+        : null}
+      {onReply}
+      replyTitle={m.groups_reply()}
+      replyCount={threads.replyCount(message.id)}
+      replyCountLabel={replyCountLabel(threads.replyCount(message.id))}
+      onOpenThread={openThread}
     >
-  </form>
+      {#snippet reactions(/** @type {any} */ msg)}
+        <ReactionChips
+          aggregated={reactionsByTarget.get(msg.id) ?? new Map()}
+          addButtonOnHover
+          onToggle={(emoji) => react(msg, emoji)}
+          onPick={(emoji) => react(msg, emoji)}
+        />
+      {/snippet}
+    </ChatMessageRow>
+  {/snippet}
+
+  <div class="flex min-h-0 flex-1">
+    <!-- On a narrow viewport the panel takes the whole width; the timeline
+         steps aside rather than being squeezed into a column of its own. -->
+    <div class="flex min-h-0 flex-1 flex-col {openThreadRoot ? 'hidden md:flex' : ''}">
+      <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        {#if isLoading && displayed.length === 0}
+          <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
+        {/if}
+        <ChatMessageList items={grouped}>
+          {#snippet row(/** @type {any} */ message)}
+            {@render messageRow(message, (msg) => (replyTo = msg))}
+          {/snippet}
+        </ChatMessageList>
+      </div>
+
+      <ChatComposer
+        bind:value={text}
+        placeholder={m.groups_input_placeholder({ name: metadata?.name ?? pointer.id })}
+        disabled={!myPubkey}
+        {sending}
+        onSubmit={send}
+        {replyTo}
+        onCancelReply={() => (replyTo = null)}
+        testid="group-chat-input"
+      />
+    </div>
+
+    {#if openThreadRoot}
+      <ThreadPanel
+        root={openThreadRoot}
+        replies={openThreadReplies}
+        onClose={closeThread}
+        title={m.chat_thread_title()}
+        closeLabel={m.chat_thread_close()}
+      >
+        {#snippet row(/** @type {any} */ message)}
+          {@render messageRow(message, (msg) => (threadReplyTo = msg))}
+        {/snippet}
+        {#snippet composer()}
+          <ChatComposer
+            bind:value={threadText}
+            placeholder={m.chat_thread_reply_placeholder()}
+            disabled={!myPubkey}
+            {sending}
+            onSubmit={sendInThread}
+            replyTo={threadReplyTo}
+            onCancelReply={() => (threadReplyTo = null)}
+            testid="thread-chat-input"
+          />
+        {/snippet}
+      </ThreadPanel>
+    {/if}
+  </div>
 </div>

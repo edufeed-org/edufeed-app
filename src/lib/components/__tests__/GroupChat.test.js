@@ -59,6 +59,59 @@ const chatEvent = signWith(
   { kind: 9, content: 'hello from armada', tags: [['h', 'beechat']] },
   OTHER_SK
 );
+// The two live reply shapes, both hanging off `chatEvent`: the 872-event form
+// (a lone `reply` marker pointing at the root) and the 3-event form (the
+// conformant root+reply pair). The nested one answers `firstReply`, so a
+// resolver that read the `reply` tag as the root would file it under
+// `firstReply` and it would never appear in this thread.
+const firstReply = signWith(
+  {
+    kind: 9,
+    content: 'first reply',
+    created_at: 1700000010,
+    tags: [
+      ['h', 'beechat'],
+      ['e', chatEvent.id, '', 'reply']
+    ]
+  },
+  OTHER_SK
+);
+// A SECOND top-level message, older than the threaded one, so it sorts first
+// in the timeline. Without it the thread's root is also the first message in
+// the list, and "find the root by id" and "take the first message" cannot be
+// told apart — which is precisely the mistake the panel must not make, since
+// thread reads come back created_at-ordered with ties unbroken.
+const otherRoot = signWith(
+  { kind: 9, content: 'an unrelated message', created_at: 1699999990, tags: [['h', 'beechat']] },
+  OTHER_SK
+);
+// ...and one reply to it, so there are TWO threads. Switching between them
+// without closing the panel in between is a path `closeThread` never sees.
+const otherReply = signWith(
+  {
+    kind: 9,
+    content: 'a reply over there',
+    created_at: 1699999995,
+    tags: [
+      ['h', 'beechat'],
+      ['e', otherRoot.id, '', 'reply']
+    ]
+  },
+  OTHER_SK
+);
+const nestedReply = signWith(
+  {
+    kind: 9,
+    content: 'reply to the reply',
+    created_at: 1700000020,
+    tags: [
+      ['h', 'beechat'],
+      ['e', chatEvent.id, '', 'root'],
+      ['e', firstReply.id, '', 'reply']
+    ]
+  },
+  OTHER_SK
+);
 
 const publishMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
 const relayCalls = vi.hoisted(() => /** @type {string[]} */ ([]));
@@ -79,7 +132,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
       return {
         request: () => rxOf(metadataEvent, membersEvent),
         // keep the subscription open after replay so unsubscribe paths run
-        subscription: () => rxMerge(rxOf(chatEvent), rxNever),
+        subscription: () =>
+          rxMerge(rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply), rxNever),
         publish: publishMock,
         authenticate: vi.fn().mockResolvedValue({ ok: true }),
         // The header's badges read the relay's NIP-11 document. A fake relay
@@ -146,7 +200,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_badge_members_only: () => 'Members only',
   groups_badge_invite_only: () => 'Invite only',
   groups_badge_auth_required: () => 'Sign-in required',
-  groups_badge_nip29: () => 'NIP-29'
+  groups_badge_nip29: () => 'NIP-29',
+  chat_thread_title: () => 'Thread',
+  chat_thread_close: () => 'Close thread',
+  chat_thread_reply_one: () => '1 reply',
+  chat_thread_reply_many: (/** @type {{ count: number }} */ { count }) => `${count} replies`,
+  chat_thread_reply_placeholder: () => 'Reply in thread'
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
@@ -247,6 +306,168 @@ describe('GroupChat', () => {
     const link = await screen.findByTestId('group-host-link');
     expect(link.getAttribute('href')).toBe(`/relays/${encodeURIComponent(GROUP_RELAY)}`);
     expect(link.textContent).toContain('groups.example.com');
+  });
+
+  /** @param {HTMLElement} container */
+  const bodies = (container) =>
+    [...container.querySelectorAll('[data-testid="ncr-content"]')].map((el) => el.textContent);
+
+  describe('threading', () => {
+    /** Timeline order is oldest first: [0] is `otherRoot`, [1] is `chatEvent`. */
+    const openLinks = () => screen.getAllByTestId('thread-open');
+
+    it('keeps replies out of the timeline and offers the thread instead', async () => {
+      const { container } = render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(bodies(container)).toContain('hello from armada'));
+
+      // Both replies hang off `chatEvent`, so neither belongs in the timeline.
+      expect(bodies(container)).not.toContain('first reply');
+      expect(bodies(container)).not.toContain('reply to the reply');
+      expect(bodies(container)).toContain('an unrelated message');
+      expect(bodies(container)).not.toContain('a reply over there');
+      // The count is per-message, not per-timeline, and the older root's
+      // single reply exercises the singular label.
+      const links = screen.getAllByTestId('thread-open').map((el) => el.textContent);
+      expect(links).toEqual(['1 reply', '2 replies']);
+      expect(screen.queryByTestId('thread-panel')).toBeNull();
+    });
+
+    // The nested reply names `firstReply` in its `reply` tag and `chatEvent`
+    // in its `root` tag. Filing by the reply tag would put it in a thread of
+    // its own, so its presence HERE is what proves root resolution ran.
+    it('opens a panel holding the root and every reply in the thread, at any depth', async () => {
+      const { container } = render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+      await fireEvent.click(openLinks()[1]);
+
+      const panel = /** @type {HTMLElement} */ (await screen.findByTestId('thread-panel'));
+      expect(bodies(panel)).toEqual(['hello from armada', 'first reply', 'reply to the reply']);
+      // ...and closing it puts the timeline back.
+      await fireEvent.click(screen.getByTestId('thread-panel-close'));
+      await waitFor(() => expect(screen.queryByTestId('thread-panel')).toBeNull());
+      expect(bodies(container)).toContain('hello from armada');
+    });
+
+    it('sends a panel reply against the thread root by default', async () => {
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+      await fireEvent.click(openLinks()[1]);
+
+      const input = await screen.findByTestId('thread-chat-input');
+      await fireEvent.input(input, { target: { value: 'me too' } });
+      await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
+
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      const signed = publishMock.mock.calls[0][0];
+      expect(signed.content).toBe('me too');
+      // The root is top-level, so the reply keeps the single-tag shape.
+      expect(signed.tags.filter((/** @type {string[]} */ t) => t[0] === 'e')).toEqual([
+        ['e', chatEvent.id, '', 'reply']
+      ]);
+    });
+
+    // The load-bearing publish case: answering a reply from inside the panel
+    // has to inherit the thread root rather than start a new thread.
+    it('sends a reply-to-a-reply as the conformant root+reply pair', async () => {
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+      await fireEvent.click(openLinks()[1]);
+
+      const panel = /** @type {HTMLElement} */ (await screen.findByTestId('thread-panel'));
+      // Second row in the panel is `firstReply` (row 0 is the root).
+      const replyButtons = panel.querySelectorAll('button[title="Reply"]');
+      await fireEvent.click(replyButtons[1]);
+
+      const input = screen.getByTestId('thread-chat-input');
+      await fireEvent.input(input, { target: { value: 'answering the reply' } });
+      await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
+
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      const signed = publishMock.mock.calls[0][0];
+      expect(signed.tags.filter((/** @type {string[]} */ t) => t[0] === 'e')).toEqual([
+        ['e', chatEvent.id, '', 'root'],
+        ['e', firstReply.id, '', 'reply']
+      ]);
+    });
+
+    // The timeline stays beside the panel, so a second thread can be opened
+    // without closing the first. That path never touches `closeThread`, and
+    // an armed target carried across would send the next message into the
+    // thread the user just left.
+    it('forgets the reply target when switching straight to another thread', async () => {
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+      await fireEvent.click(openLinks()[1]);
+
+      const panel = /** @type {HTMLElement} */ (await screen.findByTestId('thread-panel'));
+      await fireEvent.click(panel.querySelectorAll('button[title="Reply"]')[1]);
+      await waitFor(() => expect(screen.queryByTestId('chat-reply-strip')).not.toBeNull());
+
+      // Straight to the other thread — no close in between.
+      await fireEvent.click(openLinks()[0]);
+      await waitFor(() =>
+        expect(bodies(/** @type {HTMLElement} */ (screen.getByTestId('thread-panel')))).toEqual([
+          'an unrelated message',
+          'a reply over there'
+        ])
+      );
+
+      const input = screen.getByTestId('thread-chat-input');
+      await fireEvent.input(input, { target: { value: 'over here now' } });
+      await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
+
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      expect(
+        publishMock.mock.calls[0][0].tags.filter((/** @type {string[]} */ t) => t[0] === 'e')
+      ).toEqual([['e', otherRoot.id, '', 'reply']]);
+    });
+
+    // Aiming at a reply, closing the panel and opening it again must not leave
+    // the old target armed: the next thing typed would silently answer a
+    // message the user is no longer looking at.
+    it('forgets the reply target when the thread is reopened', async () => {
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+      await fireEvent.click(openLinks()[1]);
+
+      const panel = /** @type {HTMLElement} */ (await screen.findByTestId('thread-panel'));
+      await fireEvent.click(panel.querySelectorAll('button[title="Reply"]')[1]);
+      await waitFor(() => expect(screen.queryByTestId('chat-reply-strip')).not.toBeNull());
+
+      await fireEvent.click(screen.getByTestId('thread-panel-close'));
+      await waitFor(() => expect(screen.queryByTestId('thread-panel')).toBeNull());
+      await fireEvent.click(openLinks()[1]);
+      await screen.findByTestId('thread-panel');
+
+      const input = screen.getByTestId('thread-chat-input');
+      await fireEvent.input(input, { target: { value: 'fresh start' } });
+      await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
+
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      expect(
+        publishMock.mock.calls[0][0].tags.filter((/** @type {string[]} */ t) => t[0] === 'e')
+      ).toEqual([['e', chatEvent.id, '', 'reply']]);
+    });
+
+    // Two composers are mounted at once. A single shared draft would leak the
+    // thread reply into the timeline input and vice versa.
+    it('keeps the timeline draft and the thread draft apart', async () => {
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
+      await fireEvent.input(screen.getByTestId('group-chat-input'), {
+        target: { value: 'timeline draft' }
+      });
+      await fireEvent.click(openLinks()[1]);
+
+      const threadInput = /** @type {HTMLInputElement} */ (
+        await screen.findByTestId('thread-chat-input')
+      );
+      expect(threadInput.value).toBe('');
+      await fireEvent.input(threadInput, { target: { value: 'thread draft' } });
+      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
+        'timeline draft'
+      );
+    });
   });
 
   // A relay on another port is another relay, so the label has to carry it —

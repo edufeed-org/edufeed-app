@@ -111,8 +111,11 @@ export function buildThreadIndex(messages) {
     else replies.set(root, [event]);
   }
 
+  // Same-second messages are ordinary in chat, so created_at alone leaves the
+  // order of a tie up to whatever the caller happened to hand us. Break on id:
+  // arbitrary, but the same on every render and on every client.
   for (const bucket of replies.values()) {
-    bucket.sort((a, b) => a.created_at - b.created_at);
+    bucket.sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
   return {

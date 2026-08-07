@@ -122,6 +122,14 @@ describe('buildReplyTags', () => {
   it('returns no tags when there is nothing to reply to', () => {
     expect(buildReplyTags(null)).toEqual([]);
   });
+
+  // A malformed event whose `e` tag names itself. Without the self-root guard
+  // this emits a pair naming the same id twice — a message that is its own
+  // root and its own parent.
+  it('does not build a pair from a message that points at itself', () => {
+    const selfRef = msg({ id: PARENT, tags: [['e', PARENT, '', 'reply']] });
+    expect(buildReplyTags(selfRef)).toEqual([['e', PARENT, '', 'reply']]);
+  });
 });
 
 describe('buildThreadIndex', () => {
@@ -151,6 +159,25 @@ describe('buildThreadIndex', () => {
     expect(index.timeline.map((e) => e.id)).toEqual([ROOT]);
     expect(index.repliesFor(ROOT).map((e) => e.id)).toEqual([PARENT, 'deep']);
     expect(index.repliesFor(PARENT)).toEqual([]);
+  });
+
+  // Two replies in the same second is ordinary in chat. Without an explicit
+  // tie-break the order is whatever the caller's list happened to be, so the
+  // same thread can render differently on two surfaces of the same app.
+  it('breaks a created_at tie deterministically, whichever order it is fed', () => {
+    const root = msg({ id: ROOT, created_at: 1 });
+    const a = lonelyReply(ROOT, { id: 'aaa', created_at: 5 });
+    const b = lonelyReply(ROOT, { id: 'bbb', created_at: 5 });
+    expect(
+      buildThreadIndex([root, b, a])
+        .repliesFor(ROOT)
+        .map((e) => e.id)
+    ).toEqual(['aaa', 'bbb']);
+    expect(
+      buildThreadIndex([root, a, b])
+        .repliesFor(ROOT)
+        .map((e) => e.id)
+    ).toEqual(['aaa', 'bbb']);
   });
 
   it('orders replies oldest-first regardless of input order', () => {
