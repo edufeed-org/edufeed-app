@@ -157,7 +157,7 @@
           >
             <ImageWithFallback
               src={node.href}
-              alt={meta?.alt || ''}
+              alt={meta?.alt || node.mdAlt || ''}
               loading="lazy"
               width={dims?.width}
               height={dims?.height}

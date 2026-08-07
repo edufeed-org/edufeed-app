@@ -249,9 +249,23 @@ function inlinesFrom(tokens, nostrRun, fallbackRaw) {
       // "literal" renders `![alt](` + the image + `)`. Handing over just the
       // URL gives the reader what pasting that URL gives them, and still never
       // emits an <img> from markdown.
-      case 'image':
-        out.push(nostrRun(token.href ?? ''));
+      case 'image': {
+        const run = nostrRun(token.href ?? '');
+        // The image degrades to its URL, but the alt the author typed is
+        // theirs — dropping it would be an accessibility regression against
+        // nothing, since the subset excludes markdown images from *rendering*,
+        // not authored alt text. imeta still wins; this is the fallback.
+        // Safe to tag in place: these nodes were parsed with a null cache key,
+        // so they belong to this run and to nothing else.
+        const alt = token.text ?? '';
+        if (alt) {
+          for (const node of run.nodes) {
+            if (node.type === 'link') node.mdAlt = alt;
+          }
+        }
+        out.push(run);
         break;
+      }
 
       // inline `html` and anything else new in marked: literal.
       default:

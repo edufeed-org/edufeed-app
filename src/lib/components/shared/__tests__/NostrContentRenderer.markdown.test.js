@@ -184,6 +184,45 @@ describe('markdown mode keeps every non-markdown node type', () => {
     expect(img.getAttribute('alt')).toBe('a peace dove');
   });
 
+  it('keeps the alt text an author wrote in a markdown image', () => {
+    // The image degrades to its bare URL, but the alt the author typed is
+    // theirs and there is nothing to gain by dropping it. Raised by TestOER:
+    // discarding it is an accessibility regression against nothing, since the
+    // brief excluded markdown images from rendering, not authored alt text.
+    const { getByTestId } = render(NostrContentRenderer, {
+      event: makeEvent('![a helpful caption](https://example.com/a.png)'),
+      markdown: true
+    });
+
+    const img = /** @type {HTMLImageElement} */ (getByTestId('media-image').querySelector('img'));
+    expect(img.getAttribute('alt')).toBe('a helpful caption');
+  });
+
+  it('prefers an imeta alt over the markdown one', () => {
+    // imeta is the event author's structured metadata and is what every other
+    // surface already honours; the markdown alt is the fallback, not a rival.
+    const { getByTestId } = render(NostrContentRenderer, {
+      event: makeEvent('![typed caption](https://example.com/a.png)', [
+        ['imeta', 'url https://example.com/a.png', 'alt imeta caption']
+      ]),
+      markdown: true
+    });
+
+    const img = /** @type {HTMLImageElement} */ (getByTestId('media-image').querySelector('img'));
+    expect(img.getAttribute('alt')).toBe('imeta caption');
+  });
+
+  it('leaves a bare image URL without an alt', () => {
+    // Control: nothing invents alt text where the author supplied none.
+    const { getByTestId } = render(NostrContentRenderer, {
+      event: makeEvent('https://example.com/a.png'),
+      markdown: true
+    });
+
+    const img = /** @type {HTMLImageElement} */ (getByTestId('media-image').querySelector('img'));
+    expect(img.getAttribute('alt')).toBe('');
+  });
+
   it('keeps a single newline visible as a line break', () => {
     // Markdown mode drops `whitespace-pre-wrap`, so if the break is not
     // emitted explicitly the two lines silently run together.
