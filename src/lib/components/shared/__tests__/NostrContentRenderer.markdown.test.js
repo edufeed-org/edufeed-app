@@ -19,6 +19,11 @@ vi.mock(
   () => import('./fixtures/NostrIdentifierStub.svelte')
 );
 
+vi.mock(
+  '$lib/components/shared/MediaLightbox.svelte',
+  () => import('./fixtures/MediaLightboxStub.svelte')
+);
+
 vi.mock('$lib/helpers/image-proxy.js', () => ({
   getProxiedImageUrl: (/** @type {string} */ url) => url
 }));
@@ -177,5 +182,37 @@ describe('markdown mode keeps every non-markdown node type', () => {
 
     const img = /** @type {HTMLImageElement} */ (getByTestId('media-image').querySelector('img'));
     expect(img.getAttribute('alt')).toBe('a peace dove');
+  });
+
+  it('keeps a single newline visible as a line break', () => {
+    // Markdown mode drops `whitespace-pre-wrap`, so if the break is not
+    // emitted explicitly the two lines silently run together.
+    const { container } = render(NostrContentRenderer, {
+      event: makeEvent('first\nsecond'),
+      markdown: true
+    });
+
+    expect(container.querySelectorAll('br')).toHaveLength(1);
+  });
+});
+
+describe('the lightbox index stays global across markdown blocks', () => {
+  it('opens on the image that was clicked, not on the first one', async () => {
+    // Each block hands `nodeRun` its own offset into the flat node list. Drop
+    // the offset and every image in every later block opens image #0.
+    const { getAllByTestId, getByTestId } = render(NostrContentRenderer, {
+      event: makeEvent('https://example.com/a.png\n\n> https://example.com/b.png'),
+      markdown: true
+    });
+
+    const buttons = getAllByTestId('media-image');
+    expect(buttons).toHaveLength(2);
+
+    buttons[1].click();
+    await Promise.resolve();
+
+    const lightbox = getByTestId('lightbox');
+    expect(lightbox.getAttribute('data-count')).toBe('2');
+    expect(lightbox.getAttribute('data-start-src')).toBe('https://example.com/b.png');
   });
 });
