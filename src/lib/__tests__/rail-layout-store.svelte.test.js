@@ -10,7 +10,10 @@ import {
   writeRailLayout,
   readOpenFolders,
   writeOpenFolders,
-  nextFolderId
+  nextFolderId,
+  useRailLayout,
+  writeRailLayoutCache,
+  setRailLayoutPublisher
 } from '$lib/rail/rail-layout-store.svelte.js';
 
 const ME = 'a'.repeat(64);
@@ -86,5 +89,66 @@ describe('nextFolderId', () => {
 
   it('starts at f1 for an empty rail', () => {
     expect(nextFolderId([])).toBe('f1');
+  });
+});
+
+// --- sync seam -------------------------------------------------------------
+// Added with the encrypted cross-device layout (2026-08-07). The store gained
+// exactly one job here: hand an arrangement to whoever is syncing, WITHOUT
+// letting that concern reach the read path.
+
+describe('the sync seam', () => {
+  it('offers a user edit to the publisher', () => {
+    /** @type {any[]} */
+    const sent = [];
+    setRailLayoutPublisher((/** @type {any} */ p, /** @type {any} */ l) => sent.push([p, l]));
+
+    const layout = [{ type: 'item', key: 'community:x' }];
+    writeRailLayout(ME, /** @type {any} */ (layout));
+
+    expect(sent).toEqual([[ME, layout]]);
+    setRailLayoutPublisher(() => {});
+  });
+
+  // The mirror path. A layout arriving FROM another device must land in the
+  // local cache without being handed straight back to the publisher — that
+  // would have every device republish everything it receives.
+  it('does not publish a layout it merely cached', () => {
+    /** @type {any[]} */
+    const sent = [];
+    setRailLayoutPublisher((/** @type {any} */ p) => sent.push(p));
+
+    writeRailLayoutCache(ME, /** @type {any} */ ([{ type: 'item', key: 'community:x' }]));
+
+    expect(sent).toEqual([]);
+    expect(readRailLayout(ME)).toEqual([{ type: 'item', key: 'community:x' }]);
+    setRailLayoutPublisher(() => {});
+  });
+
+  // The trap the brief names first: one save per render turns "the relay has
+  // not answered yet" into "the user deleted everything". Reading is not
+  // writing, at either level.
+  it('neither stores nor publishes anything from being read', () => {
+    /** @type {any[]} */
+    const sent = [];
+    setRailLayoutPublisher((/** @type {any} */ p) => sent.push(p));
+    localStorage.clear();
+
+    const getLayout = useRailLayout(
+      () => ME,
+      () => ['community:x', 'area:y']
+    );
+    for (let i = 0; i < 10; i++) getLayout();
+
+    expect(sent).toEqual([]);
+    expect(localStorage.length).toBe(0);
+    setRailLayoutPublisher(() => {});
+  });
+
+  it('still stores locally when nothing is listening', () => {
+    setRailLayoutPublisher(/** @type {any} */ (null));
+    const layout = [{ type: 'item', key: 'community:x' }];
+    expect(() => writeRailLayout(ME, /** @type {any} */ (layout))).not.toThrow();
+    expect(readRailLayout(ME)).toEqual(layout);
   });
 });
