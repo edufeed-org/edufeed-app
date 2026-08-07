@@ -72,7 +72,11 @@ export function useHostUnread(getRelay, getChannelIds, getActiveChannelId) {
     const relay = getRelay();
     const ids = getChannelIds() ?? [];
     const me = getActiveUser()?.pubkey;
-    // Another host's summaries must never linger under this one's name.
+    // Hygiene, not correctness, and worth saying so: summaries are keyed by
+    // `id@relay`, so another host's could never be READ under this one's name,
+    // and `loaded` already covers the gap until the new host answers. Deleting
+    // this line leaves every test green — it is here to stop the map growing
+    // for the lifetime of the tab as you move between hosts.
     summaries = {};
     loaded = false;
     if (!relay || !me || ids.length === 0) return;
