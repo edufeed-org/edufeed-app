@@ -29,7 +29,13 @@
   import { relayBadges } from '$lib/groups/group-badges.js';
   import { splitChannelSections } from '$lib/groups/channel-sections.js';
   import { useHostChannels } from '$lib/groups/host-channels.svelte.js';
+  import { useHostUnread } from '$lib/groups/host-unread.svelte.js';
   import ChannelRailRow from '$lib/components/community/channels/ChannelRailRow.svelte';
+  // The Concord-prefixed name is a wart, and reusing it anyway is the point:
+  // the two rails have to be indistinguishable, and one component is the only
+  // way that stays true. Renaming it would churn ten Concord chrome files for
+  // cosmetics, in a lane that owns none of them.
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -48,6 +54,25 @@
   const getOwn = useHostChannels(() => (given ? null : relay));
   const host = $derived(given ?? getOwn());
   const sections = $derived(splitChannelSections(host.rows));
+
+  // Unread is read for the WHOLE host, not per section: the same one REQ
+  // covers a DM and a channel, because on a NIP-29 relay they are the same
+  // object. The ids come from the merged rows, so a channel the directory
+  // lists and a channel unread watches can never be two different sets.
+  // flatMap rather than filter().map(): a filter does not narrow the ChannelRow
+  // union, and a Concord row has no pointer at all.
+  const channelIds = $derived(
+    host.rows.flatMap(
+      (/** @type {import('$lib/groups/community-channel-rows.js').ChannelRow} */ row) =>
+        row.source === 'group' ? [row.pointer.id] : []
+    )
+  );
+  const getUnread = useHostUnread(
+    () => relay,
+    () => channelIds,
+    () => activeChannelId
+  );
+  const unread = $derived(getUnread());
   const hostBadges = $derived(relayBadges(host.information));
   const title = $derived(relay ? relayDisplayName(host.information, relay) : '');
   const icon = $derived(relayIconUrl(host.information) ?? '');
@@ -81,6 +106,22 @@
       <GroupBadges host={hostBadges} class="mt-0.5" />
     </span>
   </a>
+
+  <!-- Only when there IS something to clear. A permanent control would be a
+       button that does nothing most of the time, and while the host has not
+       answered it would also be a claim that we know there is nothing. -->
+  {#if unread.host.unread}
+    <div class="px-3">
+      <button
+        type="button"
+        data-testid="host-mark-all-read"
+        class="btn w-full btn-ghost btn-xs"
+        onclick={() => unread.markAllRead()}
+      >
+        {m.groups_mark_all_read()}
+      </button>
+    </div>
+  {/if}
 
   <nav class="flex flex-col gap-1 px-3 pb-4">
     {#if host.authRefused && host.rows.length === 0}
@@ -116,6 +157,7 @@
           </div>
           {#each section.rows as row (row.key)}
             {#if row.source === 'group'}
+              {@const flags = unread.flags(row.pointer.id)}
               <!-- `active` needs no `activeChannelId &&` guard: a row's id is
                    always a non-empty string (channelKey rejects anything
                    else), so the compare is already false on a directory
@@ -129,7 +171,12 @@
                 dimmed={row.pending}
                 worldReadable={row.worldReadable}
                 active={row.pointer.id === activeChannelId}
-              />
+                bold={flags.unread}
+              >
+                {#snippet trailing()}
+                  <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+                {/snippet}
+              </ChannelRailRow>
             {/if}
           {/each}
         {/if}
