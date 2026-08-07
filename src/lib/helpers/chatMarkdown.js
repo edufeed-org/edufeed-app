@@ -189,7 +189,7 @@ function inlinesFrom(tokens, nostrRun, fallbackRaw) {
           flush();
           out.push(...inlinesFrom(token.tokens, nostrRun));
         } else {
-          pending.push(decodeEntities(token.text ?? ''));
+          pending.push(token.text ?? '');
         }
         continue;
     }
@@ -203,7 +203,7 @@ function inlinesFrom(tokens, nostrRun, fallbackRaw) {
         break;
 
       case 'codespan':
-        out.push({ type: 'codespan', text: decodeEntities(token.text) });
+        out.push({ type: 'codespan', text: token.text });
         break;
 
       case 'link': {
@@ -234,20 +234,4 @@ function inlinesFrom(tokens, nostrRun, fallbackRaw) {
   }
   flush();
   return out;
-}
-
-/**
- * marked HTML-escapes text and codespan tokens because its own renderer emits
- * an HTML string. This path emits Svelte text nodes, which escape again, so
- * without undoing it a typed `&` reaches the reader as `&amp;`.
- *
- * @param {string} text
- */
-function decodeEntities(text) {
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
 }
