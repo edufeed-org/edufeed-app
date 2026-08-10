@@ -9,9 +9,11 @@
 // store, and holding those in deep $state lets a memoising helper write a
 // Symbol onto them from inside a $derived — which crashes the runtime
 // (see 061c05c9, the /groups page).
+import { normalizeURL } from 'applesauce-core/helpers/url';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { metadataRequestsByRelay } from './channel-metadata-requests.js';
 import { subscribeChannelMetadata } from './channel-metadata-subscribe.js';
+import { relayMetadataAuthors } from './relay-directory.js';
 
 /**
  * @param {() => Array<{id: string, relay: string}>} getPointers
@@ -22,9 +24,52 @@ export function useChannelMetadata(getPointers) {
   let byKey = $state.raw({});
   /** @type {string[]} */
   let failedRelays = $state.raw([]);
+  // The relay's own NIP-11 key per relay, so kind:39000 is pinned to the
+  // relay that would legitimately sign it — same rule relay-directory.js
+  // uses for the directory read. $state.raw: written only here, in effect
+  // 1; read only in effect 2 below. Neither effect reads what IT writes, so
+  // this can never loop (same split relay-directory.svelte.js documents).
+  /** @type {Record<string, string[]>} */
+  let authorsByRelay = $state.raw({});
 
+  // Effect 1 — NIP-11 for every relay the pointers touch.
   $effect(() => {
-    const requests = metadataRequestsByRelay(getPointers());
+    // Plain array dedup rather than Set, on purpose (see the note above
+    // `useChannelMetadata`'s own accumulator further down): a Set here would
+    // be pushed to SvelteSet by lint, which is reactive — not what a
+    // hook-local dedup pass needs to be.
+    /** @type {string[]} */
+    const relays = [];
+    for (const relay of getPointers()
+      .map((p) => normalizeURL(p.relay))
+      .filter(Boolean)) {
+      if (!relays.includes(relay)) relays.push(relay);
+    }
+    authorsByRelay = {};
+    if (relays.length === 0) return;
+
+    /** @type {Record<string, string[]>} */
+    const collected = {};
+    const subs = relays.map((relay) =>
+      pool.relay(relay).information$.subscribe({
+        next: (/** @type {any} */ info) => {
+          collected[relay] = relayMetadataAuthors(info);
+          authorsByRelay = { ...collected };
+        },
+        // A relay that refuses NIP-11 simply has no pin — the request below
+        // still goes out, unpinned, same as a relay that never answers.
+        error: () => {}
+      })
+    );
+    return () => subs.forEach((sub) => sub.unsubscribe());
+  });
+
+  // Effect 2 — the metadata itself, pinned once (or as soon as) effect 1
+  // resolves the relay's key.
+  $effect(() => {
+    const pointers = getPointers();
+    const resolvedAuthors = authorsByRelay;
+    const requests = metadataRequestsByRelay(pointers, (relay) => resolvedAuthors[relay]);
     // Drop what the previous pointer set collected: a channel that is no
     // longer listed must not keep drawing itself from a stale event.
     byKey = {};

@@ -45,11 +45,70 @@ export function relayMetadataAuthors(info) {
 }
 
 /**
+ * Whether `event` is signed by a key this relay's `authors` pin allows —
+ * true unconditionally when the relay names no key (see `relayMetadataAuthors`).
+ * The one trust check every kind:39000/9000 consumer in this file shares.
+ * @param {{pubkey?: unknown} | null | undefined} event
+ * @param {string[]} authors
+ * @returns {boolean}
+ */
+export function isTrustedSigner(event, authors) {
+  return (
+    authors.length === 0 ||
+    (typeof event?.pubkey === 'string' && authors.includes(event.pubkey.toLowerCase()))
+  );
+}
+
+/**
+ * Whether a newly-arrived kind:39000 should replace what is already held
+ * for its `d` id — checked BEFORE the write, not after.
+ *
+ * A read-time filter cannot undo a clobbered write: if an untrusted event is
+ * allowed to overwrite a trusted one first, the trusted one is simply gone,
+ * and no later check can distinguish "the id was never real" from "the real
+ * one got destroyed" (measured: a forged kind:39000 evicting a genuine
+ * channel from a relay's own directory listing). So the same trust check
+ * `relayChannelIds`'s `trusted()` applies at read time has to run here too,
+ * ahead of the write.
+ *
+ * Kind 39000 is also addressable: the newest event for a `d` is the current
+ * one, not whichever happened to arrive last. Without comparing `created_at`
+ * a relay replaying a stale event, or two relays at different sync states,
+ * can silently supersede current metadata with nobody forging anything.
+ * @param {{pubkey?: string, created_at?: number} | null | undefined} existing
+ * @param {{pubkey?: string, created_at?: number}} event
+ * @param {string[]} authors
+ * @returns {boolean}
+ */
+export function acceptsMetadata(existing, event, authors) {
+  if (!isTrustedSigner(event, authors)) return false;
+  if (
+    existing &&
+    typeof existing.created_at === 'number' &&
+    typeof event.created_at === 'number' &&
+    existing.created_at >= event.created_at
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * The channel ids this relay holds for this user, in display order.
  *
  * Order is by source, not by name: the relay's own listing first (that is the
  * host's order, and the one another client shows), then what only the user's
  * own records know about. Sorting by name happens later, in buildChannelRows.
+ *
+ * `memberships` ids are deliberately NOT trust-filtered here — this function
+ * also answers "what should I fetch metadata for", and a kind:9000 roster is
+ * exactly the set of ids that have not been confirmed yet. The caller that
+ * builds the RENDERED channel list (relay-directory.svelte.js) additionally
+ * requires a membership id to have trusted kind:39000 metadata before it
+ * counts as a channel — see the comment there. Mapping the roster straight
+ * through here and gating it downstream, rather than gating it here, is what
+ * keeps the two questions ("what to ask for" vs "what to show") answerable
+ * independently.
  *
  * Inputs are untrusted network events, so the shapes stay loose on purpose —
  * every field this function reads is re-checked below.
@@ -70,11 +129,8 @@ export function relayChannelIds({
   // A second gate on the same rule the `authors` filter states: a merged set
   // is assembled from several requests, and one of them not carrying the
   // filter must not be a way in for someone else's metadata.
-  const trusted = (/** @type {{pubkey?: string}} */ event) =>
-    authors.length === 0 || (event?.pubkey && authors.includes(event.pubkey.toLowerCase()));
-
   const fromListed = listed
-    .filter((event) => trusted(event))
+    .filter((event) => isTrustedSigner(event, authors))
     .map((event) => tagValue(event, 'd'))
     .filter((id) => typeof id === 'string' && id.length > 0);
 

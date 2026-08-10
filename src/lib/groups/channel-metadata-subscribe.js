@@ -9,7 +9,7 @@ import { channelKey } from './community-pointer.js';
 
 /**
  * @param {{
- *   requests: Array<{relay: string, filter: any}>,
+ *   requests: Array<{relay: string, filter: any, authors?: string[]}>,
  *   subscribe: (relay: string, filter: any) => {subscribe: (handlers: any) => {unsubscribe: () => void}},
  *   onMetadata: (key: string, event: any) => void,
  *   onError?: (relay: string, error: any) => void
@@ -24,6 +24,18 @@ export function subscribeChannelMetadata({ requests, subscribe, onMetadata, onEr
     const sub = subscribe(request.relay, request.filter).subscribe({
       next: (/** @type {any} */ event) => {
         if (!event || event.kind !== GROUP_METADATA_KIND || !Array.isArray(event.tags)) return;
+        // Second gate on the same rule the filter states: a relay that does
+        // not strictly enforce its own `authors` filter (or mirrors another
+        // relay's events) must not get a forged kind:39000 believed just
+        // because it slipped past the REQ. Same pattern as
+        // relay-directory.js's `trusted()`.
+        const authors = request.authors ?? [];
+        if (
+          authors.length > 0 &&
+          !(event.pubkey && authors.includes(String(event.pubkey).toLowerCase()))
+        ) {
+          return;
+        }
         const id = event.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
         if (!id) return; // nothing to key it by
         // Key by the relay the event ARRIVED FROM, never by the id alone: two

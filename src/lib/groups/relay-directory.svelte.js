@@ -32,7 +32,12 @@
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 import { useRelayInformation } from './relay-information.svelte.js';
-import { relayChannelIds, relayMetadataAuthors } from './relay-directory.js';
+import {
+  relayChannelIds,
+  relayMetadataAuthors,
+  acceptsMetadata,
+  isTrustedSigner
+} from './relay-directory.js';
 import { authenticateOnce, isAuthRequiredError } from './relay-auth.js';
 
 const GROUP_METADATA = 39000;
@@ -94,9 +99,17 @@ export function useRelayDirectory(getRelay, getRemembered) {
         complete: () => (loading = false)
       });
 
-  const takeMetadata = (/** @type {any} */ event) => {
+  /**
+   * @param {any} event
+   * @param {string[]} authors the relay's own key(s) — passed through to
+   *   `acceptsMetadata` so an untrusted or stale event is rejected BEFORE
+   *   it can overwrite a trusted one. See that function's doc comment for
+   *   why a read-time filter cannot do this job.
+   */
+  const takeMetadata = (/** @type {any} */ event, /** @type {string[]} */ authors) => {
     const id = metadataId(event);
     if (!id) return;
+    if (!acceptsMetadata(collected[id], event, authors)) return;
     collected[id] = event;
     byId = { ...collected };
     loading = false;
@@ -165,13 +178,17 @@ export function useRelayDirectory(getRelay, getRemembered) {
     /** @type {any[]} */
     const subs = [];
 
-    subs.push(
-      ask(
-        relay,
-        authors.length ? { kinds: [GROUP_METADATA], authors } : { kinds: [GROUP_METADATA] },
-        takeMetadata
-      )
-    );
+    // Only ask for the open listing when the relay's own key is known — an
+    // unscoped `{kinds:[GROUP_METADATA]}` read on a keyless relay is exactly
+    // how a forged channel that never existed gets believed as this host's
+    // own (measured: LANE-02's `GESCHMUGGELT`). Effect B below still finds
+    // every id the user's own records or memberships name, scoped by `#d`
+    // either way — that tier is unaffected by whether a key exists.
+    if (authors.length) {
+      subs.push(
+        ask(relay, { kinds: [GROUP_METADATA], authors }, (event) => takeMetadata(event, authors))
+      );
+    }
 
     if (me) {
       subs.push(
@@ -201,19 +218,48 @@ export function useRelayDirectory(getRelay, getRemembered) {
       authors.length
         ? { kinds: [GROUP_METADATA], '#d': indirect, authors }
         : { kinds: [GROUP_METADATA], '#d': indirect },
-      takeMetadata
+      (event) => takeMetadata(event, authors)
     );
     return () => sub.unsubscribe();
   });
 
   return () => {
     const authors = relayMetadataAuthors(getInformation());
-    const { ids, bySource } = relayChannelIds({
+    const raw = relayChannelIds({
       listed: Object.values(byId),
       remembered: getRemembered() ?? [],
       memberships,
       authors
     });
+
+    // A kind:9000 roster names an id; that is a REQUEST for a channel, not
+    // one. Effect B already asks for kind:39000 metadata on every membership
+    // id (pinned, when a key is known). An id only counts as a channel once
+    // its own metadata has actually arrived AND passed the same trust check
+    // `listed` gets — mapping the roster straight into the rail (what
+    // relayChannelIds does, on purpose, so Effect B still knows what to
+    // fetch) would let an arbitrary signer inject an id into a user's own
+    // rail by forging a put-user event naming them. No relay
+    // misconfiguration required, unlike the `listed` fail-open case: the
+    // roster REQ itself is never pinnable (see the note above Effect A).
+    const trustedMembership = (/** @type {string} */ id) => {
+      const event = byId[id];
+      return Boolean(event) && isTrustedSigner(event, authors);
+    };
+    // Plain array, not Set, on purpose — same reason as the accumulators in
+    // channel-metadata.svelte.js: this is a hook-local scratch value, not
+    // reactive state.
+    const droppedMemberships = raw.bySource.memberships.filter((id) => !trustedMembership(id));
+    const ids = droppedMemberships.length
+      ? raw.ids.filter((id) => !droppedMemberships.includes(id))
+      : raw.ids;
+    const bySource = droppedMemberships.length
+      ? {
+          ...raw.bySource,
+          memberships: raw.bySource.memberships.filter((id) => !droppedMemberships.includes(id))
+        }
+      : raw.bySource;
+
     return {
       // Only ids we actually hold metadata for can be rendered: a card with no
       // name says less than no card at all.

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   relayChannelIds,
   relayMetadataAuthors,
+  isTrustedSigner,
+  acceptsMetadata,
   groupsByRelay,
   relayLabel,
   relayHref,
@@ -122,6 +124,92 @@ describe('relayChannelIds', () => {
   it('returns empty for empty input rather than throwing', () => {
     expect(relayChannelIds().ids).toEqual([]);
     expect(relayChannelIds({}).ids).toEqual([]);
+  });
+
+  // 1c (LANE-1): a kind:9000 roster id is not gated HERE — this function
+  // also answers "what to fetch metadata for", and gating would make an
+  // unconfirmed id unfetchable. The gate is downstream, in
+  // relay-directory.svelte.js, using isTrustedSigner against the metadata
+  // that Effect B requests for exactly this id. See the tests below.
+  it('still surfaces a membership id with no metadata backing it — the caller gates that', () => {
+    const { ids, bySource } = relayChannelIds({
+      memberships: [putUser('unconfirmed')],
+      authors: [RELAY_KEY]
+    });
+    expect(ids).toEqual(['unconfirmed']);
+    expect(bySource.memberships).toEqual(['unconfirmed']);
+  });
+});
+
+describe('isTrustedSigner', () => {
+  it('trusts nothing signed by an untrusted key when a key is pinned', () => {
+    expect(isTrustedSigner({ pubkey: OTHER_KEY }, [RELAY_KEY])).toBe(false);
+  });
+
+  it('trusts the pinned key', () => {
+    expect(isTrustedSigner({ pubkey: RELAY_KEY }, [RELAY_KEY])).toBe(true);
+  });
+
+  it('is case-insensitive on the pubkey', () => {
+    expect(isTrustedSigner({ pubkey: RELAY_KEY.toUpperCase() }, [RELAY_KEY])).toBe(true);
+  });
+
+  it('trusts anything when no key is pinned, INCLUDING an event with no pubkey at all', () => {
+    expect(isTrustedSigner({ pubkey: OTHER_KEY }, [])).toBe(true);
+    expect(isTrustedSigner(null, [])).toBe(true);
+    expect(isTrustedSigner(undefined, [])).toBe(true);
+  });
+
+  it('rejects a missing/non-string pubkey once a key IS pinned', () => {
+    expect(isTrustedSigner(null, [RELAY_KEY])).toBe(false);
+    expect(isTrustedSigner({}, [RELAY_KEY])).toBe(false);
+    expect(isTrustedSigner({ pubkey: 123 }, [RELAY_KEY])).toBe(false);
+  });
+});
+
+// 1d (LANE-1): the collect-time gate for relay-directory.svelte.js's
+// takeMetadata — checked BEFORE a write, so an untrusted or stale event
+// can never clobber a trusted/current one in the first place.
+describe('acceptsMetadata', () => {
+  it('accepts the first event for an id', () => {
+    expect(acceptsMetadata(undefined, { pubkey: RELAY_KEY, created_at: 100 }, [RELAY_KEY])).toBe(
+      true
+    );
+  });
+
+  it('rejects an event from an untrusted signer, even with nothing held yet', () => {
+    expect(acceptsMetadata(undefined, { pubkey: OTHER_KEY, created_at: 100 }, [RELAY_KEY])).toBe(
+      false
+    );
+  });
+
+  it('rejects a forged event that would otherwise CLOBBER a trusted one — the write never happens', () => {
+    const genuine = { pubkey: RELAY_KEY, created_at: 100 };
+    const forged = { pubkey: OTHER_KEY, created_at: 200 }; // newer, but untrusted
+    expect(acceptsMetadata(genuine, forged, [RELAY_KEY])).toBe(false);
+  });
+
+  it('takes the newest event for an addressable id, not the one that arrived last', () => {
+    const older = { pubkey: RELAY_KEY, created_at: 100 };
+    const newer = { pubkey: RELAY_KEY, created_at: 200 };
+    expect(acceptsMetadata(newer, older, [RELAY_KEY])).toBe(false); // stale arriving after
+    expect(acceptsMetadata(older, newer, [RELAY_KEY])).toBe(true); // newer arriving after
+  });
+
+  it('rejects an exact created_at tie rather than re-accepting the same event pointlessly', () => {
+    const event = { pubkey: RELAY_KEY, created_at: 100 };
+    expect(acceptsMetadata({ ...event }, { ...event }, [RELAY_KEY])).toBe(false);
+  });
+
+  it('on a keyless relay, still takes the newest — no forgery needed for a stale replay to lose', () => {
+    const older = { pubkey: OTHER_KEY, created_at: 100 };
+    const newer = { pubkey: OTHER_KEY, created_at: 200 };
+    expect(acceptsMetadata(newer, older, [])).toBe(false);
+    expect(acceptsMetadata(older, newer, [])).toBe(true);
+  });
+
+  it('accepts when created_at is missing on either side rather than throwing', () => {
+    expect(acceptsMetadata({ pubkey: RELAY_KEY }, { pubkey: RELAY_KEY }, [RELAY_KEY])).toBe(true);
   });
 });
 

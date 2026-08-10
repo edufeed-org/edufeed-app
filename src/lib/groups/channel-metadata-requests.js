@@ -14,16 +14,22 @@ import { channelKey } from './community-pointer.js';
 /**
  * @typedef {{
  *   relay: string,
- *   filter: {kinds: number[], '#d': string[]},
- *   keys: string[]
+ *   filter: {kinds: number[], '#d': string[], authors?: string[]},
+ *   keys: string[],
+ *   authors: string[]
  * }} MetadataRequest
  */
 
 /**
  * @param {Array<{id: string, relay: string}> | null | undefined} pointers
+ * @param {(relay: string) => string[] | undefined} [getAuthorsForRelay] the
+ *   relay's own NIP-11 key(s), so kind:39000 is pinned to the relay that
+ *   would legitimately sign it — same rule relay-directory.js already
+ *   applies to the directory read. Omitted/empty means the relay's key is
+ *   not known (yet), and the request goes out unpinned.
  * @returns {MetadataRequest[]}
  */
-export function metadataRequestsByRelay(pointers) {
+export function metadataRequestsByRelay(pointers, getAuthorsForRelay) {
   if (!Array.isArray(pointers)) return [];
 
   /** @type {Map<string, {ids: string[], keys: string[], seen: Set<string>}>} */
@@ -46,9 +52,15 @@ export function metadataRequestsByRelay(pointers) {
     entry.keys.push(key);
   }
 
-  return [...byRelay.entries()].map(([relay, { ids, keys }]) => ({
-    relay,
-    filter: { kinds: [GROUP_METADATA_KIND], '#d': ids },
-    keys
-  }));
+  return [...byRelay.entries()].map(([relay, { ids, keys }]) => {
+    const authors = getAuthorsForRelay?.(relay) ?? [];
+    return {
+      relay,
+      filter: authors.length
+        ? { kinds: [GROUP_METADATA_KIND], '#d': ids, authors }
+        : { kinds: [GROUP_METADATA_KIND], '#d': ids },
+      keys,
+      authors
+    };
+  });
 }
