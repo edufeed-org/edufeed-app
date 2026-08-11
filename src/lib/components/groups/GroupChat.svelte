@@ -36,6 +36,11 @@
   import { unique } from '$lib/helpers/unique.js';
   import { setContext } from 'svelte';
   import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
+  import {
+    saveScrollPosition,
+    recallScrollPosition,
+    isNearBottom
+  } from '$lib/helpers/scroll-memory.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import { authenticateOnce } from '$lib/groups/relay-auth.js';
@@ -201,6 +206,37 @@
   // rather than disappearing.
   const threads = $derived(buildThreadIndex(displayed));
   const grouped = $derived(groupMessagesByDate(threads.timeline));
+
+  // Scroll: first render lands on the saved spot (or the newest message when
+  // there is none / the reader left at the bottom); afterwards new arrivals
+  // keep the view pinned only while the reader is already near the bottom.
+  // Position is saved on unmount so switching channels and coming back
+  // restores where you were (laoc, 2026-08-11).
+  /** @type {HTMLDivElement | undefined} */
+  let scrollContainer;
+  const scrollKey = $derived(channelKey({ id: pointer.id, relay: pointer.relay }));
+  let initialScrollDone = false;
+  $effect(() => {
+    const count = threads.timeline.length; // dep first — see effect gotcha
+    if (!scrollContainer || count === 0) return;
+    if (!initialScrollDone) {
+      initialScrollDone = true;
+      const saved = recallScrollPosition(scrollKey);
+      if (saved && !saved.atBottom) scrollContainer.scrollTop = saved.top;
+      else scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      return;
+    }
+    if (isNearBottom(scrollContainer)) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  });
+  $effect(() => {
+    return () => {
+      if (!scrollContainer || !initialScrollDone) return;
+      saveScrollPosition(scrollKey, {
+        top: scrollContainer.scrollTop,
+        atBottom: isNearBottom(scrollContainer)
+      });
+    };
+  });
   const getProfiles = useProfileMap(() => displayed.map((event) => event.pubkey));
 
   // Profiles for authors + roster, from the GROUP relay itself: members of a
@@ -586,7 +622,10 @@
     <!-- On a narrow viewport the panel takes the whole width; the timeline
          steps aside rather than being squeezed into a column of its own. -->
     <div class="flex min-h-0 flex-1 flex-col {openThreadRoot ? 'hidden md:flex' : ''}">
-      <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+      <div
+        bind:this={scrollContainer}
+        class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+      >
         {#if isLoading && displayed.length === 0}
           <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
         {/if}

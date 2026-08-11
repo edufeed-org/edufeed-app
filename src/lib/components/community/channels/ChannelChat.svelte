@@ -8,6 +8,11 @@
   // this buys defense-in-depth + consistency with the rest of channels/, not
   // a load-bearing SSR requirement for this component specifically.
   import { useObservable } from '$lib/concord/bridge.svelte.js';
+  import {
+    saveScrollPosition,
+    recallScrollPosition,
+    isNearBottom
+  } from '$lib/helpers/scroll-memory.js';
   import { sendChannelMessage } from '$lib/concord/send-message.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -291,12 +296,35 @@
     showKeyBar = false;
   }
 
+  // First render lands on the saved spot (or the newest message); afterwards
+  // new arrivals keep the view pinned only while the reader is already near
+  // the bottom — jumping a reader who scrolled up was the old behaviour and
+  // laoc's 2026-08-11 feedback retires it.
+  const scrollKey = $derived(channel?.channel_id ? `concord:${channel.channel_id}` : null);
+  let initialScrollDone = false;
   $effect(() => {
     // Read the reactive dep BEFORE any early return (project gotcha: an
     // effect that returns before reading state captures no dependency and
     // never re-runs).
     const count = messages.length;
-    if (count > 0 && scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    if (count === 0 || !scrollContainer) return;
+    if (!initialScrollDone) {
+      initialScrollDone = true;
+      const saved = recallScrollPosition(scrollKey);
+      if (saved && !saved.atBottom) scrollContainer.scrollTop = saved.top;
+      else scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      return;
+    }
+    if (isNearBottom(scrollContainer)) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  });
+  $effect(() => {
+    return () => {
+      if (!scrollContainer || !initialScrollDone) return;
+      saveScrollPosition(scrollKey, {
+        top: scrollContainer.scrollTop,
+        atBottom: isNearBottom(scrollContainer)
+      });
+    };
   });
 
   async function send() {
