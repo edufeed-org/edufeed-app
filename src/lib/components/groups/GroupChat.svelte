@@ -12,8 +12,9 @@
   banner v1 (join first, then reload).
 -->
 <script>
+  import { goto } from '$app/navigation';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useActiveUser, manager } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { storeEvents } from 'applesauce-relay/operators';
   import { TimelineModel } from 'applesauce-core/models';
@@ -36,7 +37,11 @@
   import { authenticateOnce } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
+  import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
+  import { detachGroupChannel } from '$lib/groups/community-attach.js';
+  import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
+  import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
   import {
@@ -58,6 +63,9 @@
   let { pointer } = $props();
 
   const getActiveUser = useActiveUser();
+  // At component init, not inside a handler — hooks cannot be called from
+  // async handlers (CLAUDE.md). Feeds the post-delete detach cascade below.
+  const getJoinedCommunities = useJoinedCommunikeyEvents();
 
   /** @type {any} */ let metadata = $state(null);
   // The RAW kind:39000 as well as the parsed metadata: the access badges read
@@ -359,6 +367,27 @@
       showToast(m.groups_join_failed(), 'error');
     }
   }
+
+  /**
+   * Post-delete cascade: drop the group from the user's own 10009 list, then
+   * best-effort unlist it from any joined community we can sign for. Detach
+   * failures are logged, never surfaced — the group itself is already gone,
+   * so there is nothing left for the user to retry.
+   */
+  async function handleGroupDeleted() {
+    await updateGroupsList({ remove: pointer });
+    for (const ck of getJoinedCommunities()) {
+      const listed = parseGroupPointers(ck).some((p) => channelKey(p) === channelKey(pointer));
+      const communitySigner = manager.getAccountForPubkey(ck.pubkey)?.signer;
+      if (!listed || !communitySigner) continue;
+      try {
+        await detachGroupChannel({ communikeyEvent: ck, pointer, communitySigner });
+      } catch (err) {
+        console.error('groups: post-delete detach failed', err);
+      }
+    }
+    goto('/');
+  }
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -438,7 +467,13 @@
     />
   {/if}
   {#if settingsOpen}
-    <!-- GroupSettingsSheet mounts here (Task 8); closes via settingsOpen, uses updateGroupsList for post-delete 10009 removal. -->
+    <GroupSettingsSheet
+      {pointer}
+      {metadata}
+      {metadataEvent}
+      onClose={() => (settingsOpen = false)}
+      onDeleted={handleGroupDeleted}
+    />
   {/if}
 
   {#if authRequired}

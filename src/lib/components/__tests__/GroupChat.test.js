@@ -176,7 +176,16 @@ const signEvent = vi.fn(async (/** @type {any} */ template) => {
   return finalizeEvent({ ...rest }, MY_SK);
 });
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: ME, signer: { signEvent } })
+  useActiveUser: () => () => ({ pubkey: ME, signer: { signEvent } }),
+  // Only reached by useJoinedCommunikeyEvents' underlying
+  // useJoinedCommunitiesList hook (mounted at GroupChat init for the
+  // post-delete cascade). No community is joined in this fixture, so
+  // getAccountForPubkey is never actually called.
+  manager: {
+    active: null,
+    active$: { subscribe: () => ({ unsubscribe: () => {} }) },
+    getAccountForPubkey: () => undefined
+  }
 }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
