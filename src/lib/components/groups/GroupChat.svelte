@@ -35,6 +35,7 @@
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import { authenticateOnce } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
+  import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
@@ -196,8 +197,7 @@
   // settings sheet (Task 8) mount here once they exist.
   let membersOpen = $state(false);
   let settingsOpen = $state(false);
-  // Wired to GroupMembersModal's onchange prop in Task 7.
-  // eslint-disable-next-line no-unused-vars -- consumed once Task 7 lands
+  // Wired to GroupMembersModal's onRosterChanged prop below.
   const onRosterChanged = () => {
     rosterSeq++;
   };
@@ -426,7 +426,16 @@
   </header>
 
   {#if membersOpen}
-    <!-- GroupMembersModal mounts here (Task 7); closes via membersOpen, refreshes roster via onRosterChanged. -->
+    <GroupMembersModal
+      {pointer}
+      {metadata}
+      {admins}
+      {members}
+      {myPubkey}
+      {isAdmin}
+      {onRosterChanged}
+      onClose={() => (membersOpen = false)}
+    />
   {/if}
   {#if settingsOpen}
     <!-- GroupSettingsSheet mounts here (Task 8); closes via settingsOpen, uses updateGroupsList for post-delete 10009 removal. -->

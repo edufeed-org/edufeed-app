@@ -1,0 +1,245 @@
+/** @vitest-environment jsdom */
+/**
+ * GroupMembersModal — Task 7. Lists the 39001 admins (with their protocol
+ * role tags) then the 39002 members (minus admin pubkeys), and lets an admin
+ * put-user (promote/demote/add) or remove-user via the group relay. No local
+ * roster mutation: every action calls onRosterChanged so GroupChat re-requests
+ * 39001/39002 from the relay.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+
+// vi.mock factories are hoisted above these consts, so everything the mock
+// factories close over must be built via vi.hoisted() to avoid a "Cannot
+// access before initialization" TDZ error at hoist time.
+const {
+  ADMIN_SELF,
+  ADMIN_OTHER,
+  MEMBER_A,
+  MEMBER_B,
+  relaySentinel,
+  activeUser,
+  buildPutUserTemplate,
+  buildRemoveUserTemplate,
+  publishToGroupRelay,
+  showToast
+} = vi.hoisted(() => {
+  const ADMIN_SELF = 'a'.repeat(64);
+  const ADMIN_OTHER = 'b'.repeat(64);
+  const MEMBER_A = 'c'.repeat(64);
+  const MEMBER_B = 'd'.repeat(64);
+  return {
+    ADMIN_SELF,
+    ADMIN_OTHER,
+    MEMBER_A,
+    MEMBER_B,
+    relaySentinel: { __sentinel: 'relay-conn' },
+    activeUser: { pubkey: ADMIN_SELF, signer: {} },
+    buildPutUserTemplate: vi.fn((groupId, pubkey, roles) => ({
+      __sentinel: 'put',
+      groupId,
+      pubkey,
+      roles
+    })),
+    buildRemoveUserTemplate: vi.fn((groupId, pubkey) => ({
+      __sentinel: 'remove',
+      groupId,
+      pubkey
+    })),
+    publishToGroupRelay: vi.fn(() => Promise.resolve({ id: 'signed' })),
+    showToast: vi.fn()
+  };
+});
+
+vi.mock('$lib/groups/group-management.js', () => ({
+  buildPutUserTemplate,
+  buildRemoveUserTemplate,
+  publishToGroupRelay
+}));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  pool: { relay: vi.fn(() => relaySentinel) }
+}));
+vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => activeUser }));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
+vi.mock('$lib/helpers/toast', () => ({ showToast }));
+vi.mock(
+  '$lib/components/shared/ContactSearchInput.svelte',
+  () => import('./fixtures/ContactSearchInputStub.svelte')
+);
+function Stub() {}
+vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
+vi.mock('$lib/paraglide/messages', () => ({
+  groups_members_title: () => 'Members',
+  groups_members_admins_heading: () => 'Admins',
+  groups_members_members_heading: () => 'Members',
+  groups_members_add_placeholder: () => 'Add member by name or npub',
+  groups_members_promote: () => 'Make admin',
+  groups_members_demote: () => 'Remove admin',
+  groups_members_remove: () => 'Remove',
+  groups_members_action_failed: () => 'The relay refused the change'
+}));
+
+const { default: GroupMembersModal } = await import(
+  '$lib/components/groups/GroupMembersModal.svelte'
+);
+
+const pointer = { id: 'grp1', relay: 'wss://relay.example/' };
+const metadata = { name: 'Bee Chat' };
+
+/** @param {Record<string, any>} overrides */
+function renderModal(overrides = {}) {
+  const onRosterChanged = vi.fn();
+  const onClose = vi.fn();
+  const props = {
+    pointer,
+    metadata,
+    admins: [
+      { pubkey: ADMIN_SELF, roles: [] },
+      { pubkey: ADMIN_OTHER, roles: ['admin', 'custom-role'] }
+    ],
+    members: new Set([ADMIN_SELF, ADMIN_OTHER, MEMBER_A, MEMBER_B]),
+    myPubkey: ADMIN_SELF,
+    isAdmin: true,
+    onRosterChanged,
+    onClose,
+    ...overrides
+  };
+  const result = render(GroupMembersModal, { props });
+  return { ...result, onRosterChanged, onClose };
+}
+
+beforeEach(() => {
+  buildPutUserTemplate.mockClear();
+  buildRemoveUserTemplate.mockClear();
+  publishToGroupRelay.mockClear();
+  publishToGroupRelay.mockResolvedValue({ id: 'signed' });
+  showToast.mockClear();
+});
+
+describe('GroupMembersModal rendering', () => {
+  it('renders admins with role chips and members without admin duplicates', () => {
+    const { container } = renderModal();
+
+    const adminRows = screen.getAllByTestId('admin-row');
+    expect(adminRows).toHaveLength(2);
+    const memberRows = screen.getAllByTestId('member-row');
+    expect(memberRows).toHaveLength(2);
+    expect(memberRows.map((row) => row.dataset.pubkey)).toEqual([MEMBER_A, MEMBER_B]);
+
+    // Fallback chip when roles is empty.
+    const selfRow = container.querySelector(
+      `[data-testid="admin-row"][data-pubkey="${ADMIN_SELF}"]`
+    );
+    expect(selfRow?.textContent).toContain('admin');
+
+    // Role chips rendered as-is (arbitrary protocol strings, not translated).
+    const otherRow = container.querySelector(
+      `[data-testid="admin-row"][data-pubkey="${ADMIN_OTHER}"]`
+    );
+    expect(otherRow?.textContent).toContain('admin');
+    expect(otherRow?.textContent).toContain('custom-role');
+  });
+
+  it('non-admin: no action buttons and no add-member input', () => {
+    renderModal({ isAdmin: false, myPubkey: MEMBER_A });
+
+    expect(screen.queryAllByTestId('member-promote')).toHaveLength(0);
+    expect(screen.queryAllByTestId('member-remove')).toHaveLength(0);
+    expect(screen.queryAllByTestId('member-demote')).toHaveLength(0);
+    expect(screen.queryByTestId('stub-select-a')).toBeNull();
+  });
+});
+
+describe('GroupMembersModal admin actions', () => {
+  it('promote publishes put-user with [admin] and refreshes the roster', async () => {
+    const { container, onRosterChanged } = renderModal();
+
+    const promoteBtn = container.querySelector(
+      `[data-testid="member-promote"][data-pubkey="${MEMBER_A}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (promoteBtn));
+
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', MEMBER_A, ['admin'])
+    );
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({
+          __sentinel: 'put',
+          groupId: 'grp1',
+          pubkey: MEMBER_A,
+          roles: ['admin']
+        }),
+        activeUser
+      )
+    );
+    await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
+  });
+
+  it('demote publishes put-user with [] and refreshes the roster; own admin row has no demote button', async () => {
+    const { container, onRosterChanged } = renderModal();
+
+    // Own row never offers demote.
+    expect(
+      container.querySelector(`[data-testid="member-demote"][data-pubkey="${ADMIN_SELF}"]`)
+    ).toBeNull();
+
+    const demoteBtn = container.querySelector(
+      `[data-testid="member-demote"][data-pubkey="${ADMIN_OTHER}"]`
+    );
+    expect(demoteBtn).not.toBeNull();
+    await fireEvent.click(/** @type {Element} */ (demoteBtn));
+
+    await waitFor(() => expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', ADMIN_OTHER, []));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({
+          __sentinel: 'put',
+          groupId: 'grp1',
+          pubkey: ADMIN_OTHER,
+          roles: []
+        }),
+        activeUser
+      )
+    );
+    await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
+  });
+
+  it('remove publishes remove-user and refreshes the roster', async () => {
+    const { container, onRosterChanged } = renderModal();
+
+    const removeBtn = container.querySelector(
+      `[data-testid="member-remove"][data-pubkey="${MEMBER_B}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (removeBtn));
+
+    await waitFor(() => expect(buildRemoveUserTemplate).toHaveBeenCalledWith('grp1', MEMBER_B));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({ __sentinel: 'remove', groupId: 'grp1', pubkey: MEMBER_B }),
+        activeUser
+      )
+    );
+    await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
+  });
+});
+
+describe('GroupMembersModal error handling', () => {
+  it('a rejected publish shows an error toast and does not refresh the roster', async () => {
+    publishToGroupRelay.mockRejectedValueOnce(new Error('relay says no'));
+    const { container, onRosterChanged } = renderModal();
+
+    const removeBtn = container.querySelector(
+      `[data-testid="member-remove"][data-pubkey="${MEMBER_A}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (removeBtn));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('The relay refused the change', 'error')
+    );
+    expect(onRosterChanged).not.toHaveBeenCalled();
+  });
+});
