@@ -370,12 +370,19 @@
 
   /**
    * Post-delete cascade: drop the group from the user's own 10009 list, then
-   * best-effort unlist it from any joined community we can sign for. Detach
-   * failures are logged, never surfaced — the group itself is already gone,
-   * so there is nothing left for the user to retry.
+   * best-effort unlist it from any joined community we can sign for, then
+   * navigate home. EVERY step here is best-effort: the group is already
+   * deleted on the relay by the time this runs, so a failure partway through
+   * (a transient relay hiccup on the 10009 update, a signer that can't be
+   * reached for one community) must not block the steps after it — logged,
+   * never surfaced, never fatal to the cascade.
    */
   async function handleGroupDeleted() {
-    await updateGroupsList({ remove: pointer });
+    try {
+      await updateGroupsList({ remove: pointer });
+    } catch (err) {
+      console.error('groups: post-delete 10009 removal failed', err);
+    }
     for (const ck of getJoinedCommunities()) {
       const listed = parseGroupPointers(ck).some((p) => channelKey(p) === channelKey(pointer));
       const communitySigner = manager.getAccountForPubkey(ck.pubkey)?.signer;

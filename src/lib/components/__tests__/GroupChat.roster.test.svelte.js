@@ -9,8 +9,10 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
+
+const gotoMock = vi.hoisted(() => vi.fn());
 
 const ADMIN_SK = generateSecretKey();
 const NON_ADMIN_SK = generateSecretKey();
@@ -103,7 +105,14 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));
+vi.mock('$app/navigation', () => ({ goto: gotoMock }));
 vi.mock('$lib/services/publish-service.js', () => ({ publishEventOptimistic: vi.fn() }));
+// The sheet's own form/publish behavior is covered by GroupSettingsSheet.test.js;
+// here we only need to drive its onClose/onDeleted callbacks directly.
+vi.mock(
+  '$lib/components/groups/GroupSettingsSheet.svelte',
+  () => import('./fixtures/GroupSettingsSheetStub.svelte')
+);
 vi.mock('$lib/helpers/message-utils.js', async () => {
   const actual = /** @type {any} */ (await vi.importActual('$lib/helpers/message-utils.js'));
   return { ...actual, formatMessageTimestamp: () => '12:00' };
@@ -150,6 +159,7 @@ const pointer = { relay: GROUP_RELAY, id: 'beechat' };
 describe('GroupChat admin roster + management entry points', () => {
   beforeEach(() => {
     currentUser = null;
+    gotoMock.mockClear();
   });
 
   it('exposes a members-open button showing the member count', async () => {
@@ -183,5 +193,31 @@ describe('GroupChat admin roster + management entry points', () => {
 
     await screen.findByTestId('group-members-open');
     expect(screen.queryByTestId('group-settings-open')).toBeNull();
+  });
+
+  // Regression for the reviewer finding on Task 8: a rejecting kind-10009
+  // mirror must not swallow the rest of the post-delete cascade — the group
+  // is already gone on the relay by the time onDeleted fires, so every step
+  // after it (detach loop, navigation) is best-effort and must still run.
+  it('continues the post-delete cascade past a rejecting 10009 removal', async () => {
+    // No signEvent on this signer: updateGroupsList's `await
+    // user.signer.signEvent(...)` throws, exercising the catch path.
+    currentUser = { pubkey: ADMIN_PUBKEY, signer: {} };
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(GroupChat, { props: { pointer } });
+
+    await fireEvent.click(await screen.findByTestId('group-settings-open'));
+    await fireEvent.click(await screen.findByTestId('stub-settings-trigger-deleted'));
+
+    await waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        'groups: post-delete 10009 removal failed',
+        expect.anything()
+      )
+    );
+    // The cascade must reach navigation despite the 10009 failure above.
+    await waitFor(() => expect(gotoMock).toHaveBeenCalledWith('/'));
+
+    errorSpy.mockRestore();
   });
 });
