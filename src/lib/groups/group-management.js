@@ -8,8 +8,12 @@ import {
   REMOVE_USER_KIND,
   EDIT_METADATA_KIND,
   CREATE_GROUP_KIND,
-  DELETE_GROUP_KIND
+  DELETE_GROUP_KIND,
+  GROUP_METADATA_KIND
 } from 'applesauce-common/helpers/groups';
+import { firstValueFrom } from 'rxjs';
+import { defaultIfEmpty } from 'rxjs/operators';
+import { authenticateOnce } from './relay-auth.js';
 
 const now = () => Math.floor(Date.now() / 1000);
 /** @param {number} kind @param {string[][]} tags */
@@ -59,4 +63,50 @@ export function buildDeleteGroupTemplate(groupId) {
 export function generateGroupId() {
   const bytes = crypto.getRandomValues(new Uint8Array(8));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Sign as `user` and publish to the group relay ONLY. One NIP-42 retry when
+ * the relay answers auth-required; every other rejection throws with the
+ * relay's reason so the UI can show it.
+ * @param {any} relayConn a pool.relay(url) connection
+ * @param {any} template
+ * @param {{pubkey: string, signer: any}} user
+ */
+export async function publishToGroupRelay(relayConn, template, user) {
+  const signed = await user.signer.signEvent({ ...template, pubkey: user.pubkey });
+  let response = await relayConn.publish(signed);
+  if (response?.ok === false && String(response.message ?? '').startsWith('auth-required')) {
+    const auth = await authenticateOnce(relayConn, user.signer);
+    if (auth.ok) response = await relayConn.publish(signed);
+  }
+  if (response && response.ok === false) {
+    throw new Error(response.message || 'relay rejected the event');
+  }
+  return signed;
+}
+
+/** First kind-39000 for this id from the relay, or null. @param {any} relayConn @param {string} groupId */
+export function confirmGroupMetadata(relayConn, groupId) {
+  return firstValueFrom(
+    relayConn
+      .request({ kinds: [GROUP_METADATA_KIND], '#d': [groupId] }, { timeout: 10000 })
+      .pipe(defaultIfEmpty(null))
+  );
+}
+
+/**
+ * 9007 create → 9002 metadata → confirm the relay's 39000. Metadata rides the
+ * 9002 (relays are not required to honour it on the 9007 itself). A group
+ * created but not confirmed is recoverable via attach-existing.
+ * @param {{relayConn: any, id: string, metadata: any, user: {pubkey: string, signer: any}}} args
+ */
+export async function createGroupOnRelay({ relayConn, id, metadata, user }) {
+  await publishToGroupRelay(relayConn, buildCreateGroupTemplate(id), user);
+  await publishToGroupRelay(relayConn, buildEditGroupMetadataTemplate(id, metadata), user);
+  // Give the relay a beat to materialise its addressables before we ask.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const confirmed = await confirmGroupMetadata(relayConn, id);
+  if (!confirmed) throw new Error('group not confirmed by relay');
+  return confirmed;
 }
