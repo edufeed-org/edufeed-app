@@ -119,6 +119,22 @@ describe('AreaAttachModal — creating a new NIP-29 group', () => {
     expect(confirm.disabled).toBe(false);
   });
 
+  // I3: a scheme-valid-but-wrong-protocol URL (https instead of ws/wss) must
+  // not pass — it would create the group on the relay, then fail to connect.
+  it('rejects an https:// relay URL: submit stays disabled and the field styles as invalid', async () => {
+    await openCreateMode();
+    await fireEvent.input(screen.getByTestId('group-create-name'), {
+      target: { value: 'Mathe' }
+    });
+    const relayInput = screen.getByTestId('group-create-relay');
+    await fireEvent.input(relayInput, { target: { value: 'https://groups.example/' } });
+
+    expect(
+      /** @type {HTMLButtonElement} */ (screen.getByTestId('group-create-confirm')).disabled
+    ).toBe(true);
+    expect(relayInput.className).toContain('input-error');
+  });
+
   it('creates on the chosen relay then attaches with the community signer', async () => {
     const onAttached = vi.fn();
     const onClose = vi.fn();

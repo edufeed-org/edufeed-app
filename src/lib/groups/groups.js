@@ -70,6 +70,27 @@ export function isValidRelayUrl(relay) {
 }
 
 /**
+ * A relay URL is a `ws:`/`wss:` URL with a DNS-shaped host — the scheme NIP-29
+ * groups actually connect over. {@link isValidRelayUrl} deliberately skips the
+ * scheme check (its caller reaches it through `decodeGroupPointer`, which has
+ * already forced a scheme); this is for callers validating a raw, untrusted
+ * value — e.g. a user-typed relay URL in a "create group" form, which would
+ * otherwise happily accept `https://` and only fail once the group already
+ * exists on the relay.
+ * @param {string} relay
+ */
+export function isValidRelayWebsocketUrl(relay) {
+  /** @type {string} */
+  let protocol;
+  try {
+    protocol = new URL(relay).protocol;
+  } catch {
+    return false;
+  }
+  return (protocol === 'ws:' || protocol === 'wss:') && isValidRelayUrl(relay);
+}
+
+/**
  * The pointer as a string, in the shortest form that still addresses the SAME
  * relay.
  *

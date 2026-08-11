@@ -15,7 +15,7 @@
 // normalisation-aware identity so the same channel written twice stays one row.
 import { getGroupPointerFromGroupTag } from 'applesauce-common/helpers/groups';
 import { normalizeURL } from 'applesauce-core/helpers/url';
-import { isValidRelayUrl } from './groups.js';
+import { isValidRelayWebsocketUrl } from './groups.js';
 
 /**
  * @typedef {{id: string, relay: string, name?: string, access?: 'members'|'invited'}} CommunityGroupPointer
@@ -35,25 +35,8 @@ const ACCESS_MARKERS = ['members', 'invited'];
  */
 export function channelKey(pointer) {
   if (!pointer || typeof pointer.id !== 'string' || !pointer.id.trim()) return null;
-  if (typeof pointer.relay !== 'string' || !isRelayUrl(pointer.relay)) return null;
+  if (typeof pointer.relay !== 'string' || !isValidRelayWebsocketUrl(pointer.relay)) return null;
   return `${pointer.id}@${normalizeURL(pointer.relay)}`;
-}
-
-/**
- * A relay URL is a `ws:`/`wss:` URL with a DNS-shaped host. The host rule
- * lives in {@link isValidRelayUrl}; only the scheme is added here, because
- * that helper's own caller reaches it through `decodeGroupPointer`, which has
- * already forced a scheme — a raw tag value has not.
- * @param {string} relay
- */
-function isRelayUrl(relay) {
-  let protocol;
-  try {
-    protocol = new URL(relay).protocol;
-  } catch {
-    return false;
-  }
-  return (protocol === 'ws:' || protocol === 'wss:') && isValidRelayUrl(relay);
 }
 
 /**
@@ -104,7 +87,7 @@ export function sharedRelayOf(pointers) {
   /** @type {string | null} */
   let shared = null;
   for (const pointer of pointers) {
-    if (typeof pointer?.relay !== 'string' || !isRelayUrl(pointer.relay)) return null;
+    if (typeof pointer?.relay !== 'string' || !isValidRelayWebsocketUrl(pointer.relay)) return null;
     const normalised = normalizeURL(pointer.relay);
     if (shared === null) shared = normalised;
     else if (shared !== normalised) return null;

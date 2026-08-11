@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseGroupInput,
   isValidRelayUrl,
+  isValidRelayWebsocketUrl,
   buildGroupMessageTemplate,
   buildJoinRequestTemplate,
   buildLeaveRequestTemplate,
@@ -66,6 +67,26 @@ describe('isValidRelayUrl', () => {
     expect(isValidRelayUrl('wss://-leading.example.com/')).toBe(false);
     expect(isValidRelayUrl('not-a-url')).toBe(false);
     expect(isValidRelayUrl('')).toBe(false);
+  });
+});
+
+describe('isValidRelayWebsocketUrl', () => {
+  it('accepts ws:// and wss:// relay shapes', () => {
+    expect(isValidRelayWebsocketUrl('wss://groups.example.com/')).toBe(true);
+    expect(isValidRelayWebsocketUrl('ws://localhost:10547')).toBe(true);
+  });
+
+  it('rejects a scheme other than ws/wss even when the host is valid (I3)', () => {
+    // The create-group relay field must not accept https:// — the group
+    // would already exist on the relay by the time a ws connection fails.
+    expect(isValidRelayWebsocketUrl('https://groups.example/')).toBe(false);
+    expect(isValidRelayWebsocketUrl('http://groups.example/')).toBe(false);
+  });
+
+  it('still rejects everything isValidRelayUrl rejects', () => {
+    expect(isValidRelayWebsocketUrl('wss://not%20a%20pointer/')).toBe(false);
+    expect(isValidRelayWebsocketUrl('not-a-url')).toBe(false);
+    expect(isValidRelayWebsocketUrl('')).toBe(false);
   });
 });
 

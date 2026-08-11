@@ -11,7 +11,7 @@
   import { attachConcordArea } from '$lib/concord/attach.js';
   import { useAttachableConcordAreas } from '$lib/concord/unlinked-areas.svelte.js';
   import { attachableAreaModes, attachGroupChannel } from '$lib/groups/community-attach.js';
-  import { parseGroupInput, isValidRelayUrl } from '$lib/groups/groups.js';
+  import { parseGroupInput, isValidRelayWebsocketUrl } from '$lib/groups/groups.js';
   import { createGroupOnRelay, generateGroupId } from '$lib/groups/group-management.js';
   import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -69,7 +69,7 @@
   let createOpen = $state(false);
   const createDisabled = $derived(
     !createName.trim() ||
-      !isValidRelayUrl(createRelay) ||
+      !isValidRelayWebsocketUrl(createRelay) ||
       !communitySigner ||
       !manager.active?.signer ||
       busy
@@ -296,7 +296,7 @@
         <input
           id="group-create-relay"
           class="input-bordered input input-sm w-full {createRelay.trim() &&
-          !isValidRelayUrl(createRelay)
+          !isValidRelayWebsocketUrl(createRelay)
             ? 'input-error'
             : ''}"
           data-testid="group-create-relay"
