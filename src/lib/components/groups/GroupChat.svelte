@@ -22,6 +22,7 @@
     GROUP_ADMINS_KIND,
     GROUP_MEMBERS_KIND,
     getGroupMetadata,
+    getGroupAdmins,
     getGroupMembers
   } from 'applesauce-common/helpers/groups';
   import {
@@ -70,14 +71,22 @@
   const hostBadges = $derived(relayBadges(getRelayInfo()));
   const accessBadges = $derived(channelBadges(metadataEvent));
   /** @type {Set<string>} */ let members = $state(new Set());
+  /** @type {import('applesauce-common/helpers/groups').GroupAdmin[]} */
+  let admins = $state.raw([]);
   let authRequired = $state(false);
   let isLoading = $state(true);
   /** @type {any[]} */ let messages = $state([]);
   /** @type {any[]} */ let reactionEvents = $state([]);
 
+  // Bump to re-run the roster request below (e.g. after an admin action
+  // changes the 39001/39002 events) without touching the chat subscription.
+  let rosterSeq = $state(0);
+
   // Group metadata/roster: relay-authored addressables with d = group id,
   // requested from the group's own relay only.
   $effect(() => {
+    rosterSeq; // read first: an effect that early-returns before reading
+    // reactive state captures no deps and never re-runs on a bump.
     const sub = pool
       .relay(pointer.relay)
       .request(
@@ -89,6 +98,9 @@
           if (event.kind === GROUP_METADATA_KIND) {
             metadata = getGroupMetadata(event);
             metadataEvent = event;
+          }
+          if (event.kind === GROUP_ADMINS_KIND) {
+            admins = getGroupAdmins(event) ?? [];
           }
           if (event.kind === GROUP_MEMBERS_KIND) {
             members = new Set(getGroupMembers(event) ?? []);
@@ -178,6 +190,17 @@
   );
   const myPubkey = $derived(getActiveUser()?.pubkey);
   const isMember = $derived(!!myPubkey && members.has(myPubkey));
+  const isAdmin = $derived(!!myPubkey && admins.some((a) => a.pubkey === myPubkey));
+
+  // Management entry points: the members modal (Task 7) and the admin-only
+  // settings sheet (Task 8) mount here once they exist.
+  let membersOpen = $state(false);
+  let settingsOpen = $state(false);
+  // Wired to GroupMembersModal's onchange prop in Task 7.
+  // eslint-disable-next-line no-unused-vars -- consumed once Task 7 lands
+  const onRosterChanged = () => {
+    rosterSeq++;
+  };
 
   let text = $state('');
   let sending = $state(false);
@@ -355,11 +378,30 @@
              is another relay. -->
         <a href={relayHref(pointer.relay)} data-testid="group-host-link" class="link link-hover"
           >{relayLabel(pointer.relay)}</a
-        >{members.size ? ` · ${members.size}` : ''}
+        >{#if members.size}
+          <button
+            type="button"
+            class="link link-hover"
+            data-testid="group-members-open"
+            onclick={() => (membersOpen = true)}
+          >
+            {` · ${members.size}`}
+          </button>
+        {/if}
         {#if metadata?.about}&nbsp;— {metadata.about}{/if}
       </p>
       <GroupBadges access={accessBadges} host={hostBadges} class="mt-1" />
     </div>
+    {#if isAdmin}
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        data-testid="group-settings-open"
+        onclick={() => (settingsOpen = true)}
+      >
+        ⚙
+      </button>
+    {/if}
     {#if myPubkey}
       {#if isMember}
         <button
@@ -382,6 +424,13 @@
       {/if}
     {/if}
   </header>
+
+  {#if membersOpen}
+    <!-- GroupMembersModal mounts here (Task 7); closes via membersOpen, refreshes roster via onRosterChanged. -->
+  {/if}
+  {#if settingsOpen}
+    <!-- GroupSettingsSheet mounts here (Task 8); closes via settingsOpen, uses updateGroupsList for post-delete 10009 removal. -->
+  {/if}
 
   {#if authRequired}
     <div class="bg-warning/20 px-4 py-2 text-xs" data-testid="group-auth-banner">
