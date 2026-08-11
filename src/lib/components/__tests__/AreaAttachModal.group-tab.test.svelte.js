@@ -138,4 +138,19 @@ describe('AreaAttachModal — attaching a NIP-29 group', () => {
     expect(screen.queryByTestId('attach-tab-group')).toBeNull();
     expect(screen.queryByTestId('group-attach-input')).toBeNull();
   });
+
+  // Each protocol behaves differently enough (who can read, how you join)
+  // that picking one deserves a one-line reminder — but only while there's
+  // still a pick to make.
+  it('shows a per-protocol notice only while both tabs are on offer', async () => {
+    open();
+    expect(screen.getByTestId('protocol-notice')).toBeTruthy();
+    await fireEvent.click(screen.getByTestId('attach-tab-group'));
+    expect(screen.getByTestId('protocol-notice').textContent).toContain('NIP-29');
+  });
+
+  it('hides the notice when only one mode is left', () => {
+    open({ communikeyEvent: community([['group', 'allgemein', RELAY]]) });
+    expect(screen.queryByTestId('protocol-notice')).toBeNull();
+  });
 });

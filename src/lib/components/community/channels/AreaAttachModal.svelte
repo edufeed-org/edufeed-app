@@ -125,6 +125,15 @@
       </div>
     {/if}
 
+    {#if modes.concord && modes.group}
+      <p
+        class="mb-2 rounded-lg bg-base-200 p-2.5 text-xs text-base-content/70"
+        data-testid="protocol-notice"
+      >
+        {activeTab === 'group' ? m.groups_protocol_notice() : m.concord_protocol_notice()}
+      </p>
+    {/if}
+
     {#if activeTab === 'group'}
       <p class="mb-4 text-sm text-base-content/60">{m.groups_attach_lead()}</p>
 
