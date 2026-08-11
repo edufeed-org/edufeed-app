@@ -11,7 +11,10 @@
   import { attachConcordArea } from '$lib/concord/attach.js';
   import { useAttachableConcordAreas } from '$lib/concord/unlinked-areas.svelte.js';
   import { attachableAreaModes, attachGroupChannel } from '$lib/groups/community-attach.js';
-  import { parseGroupInput } from '$lib/groups/groups.js';
+  import { parseGroupInput, isValidRelayUrl } from '$lib/groups/groups.js';
+  import { createGroupOnRelay, generateGroupId } from '$lib/groups/group-management.js';
+  import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
+  import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
   import { showToast } from '$lib/helpers/toast';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
@@ -44,6 +47,73 @@
   // Only complain about something that was actually typed.
   const groupAddressInvalid = $derived(groupAddress.trim().length > 0 && !groupPointer);
 
+  // Same signer-resolution pattern as ChannelCreateWizard/EditCommunityModal:
+  // whichever account in the manager holds this community's keypair.
+  const communitySigner = $derived.by(() => {
+    const pk = communikeyEvent?.pubkey;
+    if (!pk) return null;
+    return manager.getAccountForPubkey(pk)?.signer ?? null;
+  });
+
+  // Create-a-new-group sub-mode (Stufe A3): mint the 39000 metadata on a
+  // relay, then attach it like any existing group. `attach` stays the
+  // default — creating is the less common path.
+  /** @type {'attach' | 'create'} */
+  let groupMode = $state('attach');
+  let createName = $state('');
+  let createAbout = $state('');
+  let createPicture = $state('');
+  // Initialised ONCE from the deployment default; the user can still edit it.
+  let createRelay = $state(getGroupsRelays()[0] ?? '');
+  let createPublic = $state(false);
+  let createOpen = $state(false);
+  const createDisabled = $derived(
+    !createName.trim() ||
+      !isValidRelayUrl(createRelay) ||
+      !communitySigner ||
+      !manager.active?.signer ||
+      busy
+  );
+
+  async function createGroup() {
+    const user = manager.active;
+    if (createDisabled || !user?.signer) return;
+    busy = true;
+    try {
+      const id = generateGroupId();
+      await createGroupOnRelay({
+        relayConn: pool.relay(createRelay),
+        id,
+        metadata: {
+          name: createName.trim(),
+          about: createAbout,
+          picture: createPicture,
+          isPublic: createPublic,
+          isOpen: createOpen
+        },
+        user
+      });
+      await attachGroupChannel({
+        communikeyEvent,
+        pointer: {
+          id,
+          relay: createRelay,
+          name: createName.trim(),
+          access: createOpen ? 'members' : 'invited'
+        },
+        communitySigner
+      });
+      showToast(m.groups_create_success(), 'success');
+      onAttached?.();
+      onClose();
+    } catch (error) {
+      console.error('groups: create channel failed', error);
+      showToast(m.groups_create_failed(), 'error');
+    } finally {
+      busy = false;
+    }
+  }
+
   async function attachGroup() {
     if (!groupPointer || busy) return;
     busy = true;
@@ -65,14 +135,6 @@
       busy = false;
     }
   }
-
-  // Same signer-resolution pattern as ChannelCreateWizard/EditCommunityModal:
-  // whichever account in the manager holds this community's keypair.
-  const communitySigner = $derived.by(() => {
-    const pk = communikeyEvent?.pubkey;
-    if (!pk) return null;
-    return manager.getAccountForPubkey(pk)?.signer ?? null;
-  });
 
   async function attach() {
     const area = areas.find((a) => a.communityId === selected);
@@ -137,50 +199,142 @@
     {#if activeTab === 'group'}
       <p class="mb-4 text-sm text-base-content/60">{m.groups_attach_lead()}</p>
 
-      <label class="mb-1 block text-xs text-base-content/60" for="group-attach-address">
-        {m.groups_attach_address_label()}
-      </label>
-      <input
-        id="group-attach-address"
-        class="input-bordered input input-sm w-full {groupAddressInvalid ? 'input-error' : ''}"
-        data-testid="group-attach-input"
-        placeholder={m.groups_join_placeholder()}
-        bind:value={groupAddress}
-      />
-      {#if groupAddressInvalid}
-        <p class="mt-1 text-xs text-error" data-testid="group-attach-error">
-          {m.groups_invalid_pointer()}
-        </p>
-      {/if}
-
-      <label class="mt-3 mb-1 block text-xs text-base-content/60" for="group-attach-access">
-        {m.groups_attach_access_label()}
-      </label>
-      <select
-        id="group-attach-access"
-        class="select-bordered select w-full select-sm"
-        data-testid="group-attach-access"
-        bind:value={groupAccess}
-      >
-        <option value="invited">{m.groups_attach_access_invited()}</option>
-        <option value="members">{m.groups_attach_access_members()}</option>
-      </select>
-      <p class="mt-3 rounded-lg bg-base-200 p-2.5 text-xs text-base-content/60">
-        ⓘ {m.groups_attach_access_hint()}
-      </p>
-
-      <div class="modal-action">
-        <button class="btn btn-ghost" onclick={onClose}>{m.concord_cancel()}</button>
+      <div role="tablist" class="tabs-box mb-3 tabs tabs-sm">
         <button
-          class="btn btn-neutral"
-          data-testid="group-attach-confirm"
-          disabled={!groupPointer || busy || !communitySigner}
-          onclick={attachGroup}
+          role="tab"
+          class="tab {groupMode === 'attach' ? 'tab-active' : ''}"
+          data-testid="group-mode-attach"
+          onclick={() => (groupMode = 'attach')}>{m.groups_mode_attach()}</button
         >
-          {#if busy}<span class="loading loading-xs loading-spinner"></span>{/if}
-          {m.groups_attach_action()}
-        </button>
+        <button
+          role="tab"
+          class="tab {groupMode === 'create' ? 'tab-active' : ''}"
+          data-testid="group-mode-create"
+          onclick={() => (groupMode = 'create')}>{m.groups_mode_create()}</button
+        >
       </div>
+
+      {#if groupMode === 'attach'}
+        <label class="mb-1 block text-xs text-base-content/60" for="group-attach-address">
+          {m.groups_attach_address_label()}
+        </label>
+        <input
+          id="group-attach-address"
+          class="input-bordered input input-sm w-full {groupAddressInvalid ? 'input-error' : ''}"
+          data-testid="group-attach-input"
+          placeholder={m.groups_join_placeholder()}
+          bind:value={groupAddress}
+        />
+        {#if groupAddressInvalid}
+          <p class="mt-1 text-xs text-error" data-testid="group-attach-error">
+            {m.groups_invalid_pointer()}
+          </p>
+        {/if}
+
+        <label class="mt-3 mb-1 block text-xs text-base-content/60" for="group-attach-access">
+          {m.groups_attach_access_label()}
+        </label>
+        <select
+          id="group-attach-access"
+          class="select-bordered select w-full select-sm"
+          data-testid="group-attach-access"
+          bind:value={groupAccess}
+        >
+          <option value="invited">{m.groups_attach_access_invited()}</option>
+          <option value="members">{m.groups_attach_access_members()}</option>
+        </select>
+        <p class="mt-3 rounded-lg bg-base-200 p-2.5 text-xs text-base-content/60">
+          ⓘ {m.groups_attach_access_hint()}
+        </p>
+
+        <div class="modal-action">
+          <button class="btn btn-ghost" onclick={onClose}>{m.concord_cancel()}</button>
+          <button
+            class="btn btn-neutral"
+            data-testid="group-attach-confirm"
+            disabled={!groupPointer || busy || !communitySigner}
+            onclick={attachGroup}
+          >
+            {#if busy}<span class="loading loading-xs loading-spinner"></span>{/if}
+            {m.groups_attach_action()}
+          </button>
+        </div>
+      {:else}
+        <label class="mb-1 block text-xs text-base-content/60" for="group-create-name">
+          {m.groups_create_name_label()}
+        </label>
+        <input
+          id="group-create-name"
+          class="input-bordered input input-sm w-full"
+          data-testid="group-create-name"
+          bind:value={createName}
+        />
+
+        <label class="mt-3 mb-1 block text-xs text-base-content/60" for="group-create-about">
+          {m.groups_create_about_label()}
+        </label>
+        <input
+          id="group-create-about"
+          class="input-bordered input input-sm w-full"
+          data-testid="group-create-about"
+          bind:value={createAbout}
+        />
+
+        <label class="mt-3 mb-1 block text-xs text-base-content/60" for="group-create-picture">
+          {m.groups_create_picture_label()}
+        </label>
+        <input
+          id="group-create-picture"
+          class="input-bordered input input-sm w-full"
+          data-testid="group-create-picture"
+          bind:value={createPicture}
+        />
+
+        <label class="mt-3 mb-1 block text-xs text-base-content/60" for="group-create-relay">
+          {m.groups_create_relay_label()}
+        </label>
+        <input
+          id="group-create-relay"
+          class="input-bordered input input-sm w-full {createRelay.trim() &&
+          !isValidRelayUrl(createRelay)
+            ? 'input-error'
+            : ''}"
+          data-testid="group-create-relay"
+          bind:value={createRelay}
+        />
+
+        <label class="mt-3 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            data-testid="group-create-public"
+            bind:checked={createPublic}
+          />
+          {m.groups_create_public_toggle()}
+        </label>
+        <label class="mt-1 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            data-testid="group-create-open"
+            bind:checked={createOpen}
+          />
+          {m.groups_create_open_toggle()}
+        </label>
+
+        <div class="modal-action">
+          <button class="btn btn-ghost" onclick={onClose}>{m.concord_cancel()}</button>
+          <button
+            class="btn btn-neutral"
+            data-testid="group-create-confirm"
+            disabled={createDisabled}
+            onclick={createGroup}
+          >
+            {#if busy}<span class="loading loading-xs loading-spinner"></span>{/if}
+            {m.groups_create_action()}
+          </button>
+        </div>
+      {/if}
     {:else}
       <p class="mb-4 text-sm text-base-content/60">{m.concord_attach_lead()}</p>
 
