@@ -1,4 +1,9 @@
 <script>
+  // The ONE channel wizard. Which backend it talks to is decided by the
+  // community itself: a 10222 already carrying `group` pointers means every
+  // future channel of this community is a NIP-29 group too (Stufe B) — else
+  // it's the existing Concord flow (founding included), unchanged.
+  //
   // Imports founding.js DIRECTLY (never the barrel) — the convention every
   // Concord component follows (see CLAUDE.md's Concord section and index.js's
   // header comment): the barrel is reserved for non-component/dynamic-import
@@ -10,6 +15,19 @@
   import { showToast } from '$lib/helpers/toast';
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { stufe2Pointers, areaMemberRows } from '$lib/groups/area-members.js';
+  import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
+  import { accessChoiceToNip29 } from '$lib/groups/access-choice.js';
+  import {
+    createGroupOnRelay,
+    generateGroupId,
+    publishToGroupRelay,
+    buildPutUserTemplate
+  } from '$lib/groups/group-management.js';
+  import { attachGroupChannel } from '$lib/groups/community-attach.js';
+  import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { unique } from '$lib/helpers/unique.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import { getContext } from 'svelte';
@@ -25,13 +43,42 @@
 
   let step = $state(0);
   let name = $state('');
-  let isPrivate = $state(true);
+  // The access question (design B2, buzz thread round 4): who can read/write
+  // here. 'invited' is the default — same starting point the old isPrivate
+  // default gave Concord channels, so switching this wizard on changes
+  // nothing for a community that never grows group pointers.
+  /** @type {'members' | 'invited'} */
+  let tier = $state('invited');
+  // "Weltoffen" sub-toggle: readable from outside the community. Only makes
+  // sense (and only renders) in NIP-29 mode while tier is 'members' — joining
+  // stays an admin action either way (accessChoiceToNip29 always isOpen:false).
+  let worldReadable = $state(false);
   // NOTE: no description field — CORD ChannelMetadata has no description and
   // createChannel only takes {private, voice}; don't collect what we can't store.
   /** @type {string[]} */
   let selected = $state.raw([]);
   let acknowledged = $state(false);
   let busy = $state(false);
+
+  // Area detection: once the community's 10222 lists any group pointer,
+  // every channel it grows from here is a NIP-29 group too (Stufe B) — else
+  // this is the existing Concord flow, byte-for-byte.
+  const groupPointers = $derived(parseGroupPointers(communikeyEvent));
+  const isGroupMode = $derived(groupPointers.length > 0);
+  // Shared glyph/derived-private for both modes: 'invited' always means
+  // private/locked, regardless of backend.
+  const isPrivate = $derived(tier === 'invited');
+
+  const topSubtitle = $derived.by(() => {
+    if (!isGroupMode) {
+      // Concord: existing behavior, byte-for-byte.
+      return isPrivate ? m.concord_wizard_subtitle() : m.concord_channel_visibility_public_hint();
+    }
+    if (tier === 'invited') return m.wizard_access_invited_hint();
+    return worldReadable
+      ? m.wizard_access_worldreadable_hint()
+      : m.wizard_access_members_hint_closed();
+  });
 
   // Invitable people: community members (kind-30000 profile lists + owner),
   // minus self. Reuses the SAME profileAccess instance MembersView/HomeView/
@@ -47,6 +94,11 @@
     return allMembers.filter((p) => p !== self);
   });
   const getProfiles = useProfileMap(() => invitable);
+
+  // Rosters of the community's existing Stufe-2 ("members"-tier) group
+  // channels — the fan-out union a fresh members-tier channel must also
+  // reach (Task 2/3). Called at component INIT, per the project's hooks rule.
+  const getRosters = useChannelRosters(() => stufe2Pointers(communikeyEvent));
 
   // Resolve the signer that can edit this community's 10222 (same pattern as
   // EditCommunityModal.svelte:404-412): current-keypair → own signer;
@@ -64,9 +116,16 @@
       : [...selected, pubkey];
   }
 
-  async function create() {
-    if (busy) return;
-    busy = true;
+  /** @param {number} failed @param {number} total */
+  function toastCreateResult(failed, total) {
+    if (failed > 0) {
+      showToast(m.concord_channel_created_partial({ name: name.trim(), failed, total }), 'warning');
+    } else {
+      showToast(m.concord_channel_created({ name: name.trim(), count: total }), 'success');
+    }
+  }
+
+  async function createConcordChannel() {
     try {
       let target = community;
       if (!target) {
@@ -104,25 +163,79 @@
           failed++;
         }
       }
-      if (failed > 0) {
-        showToast(
-          m.concord_channel_created_partial({
-            name: name.trim(),
-            failed,
-            total: selected.length
-          }),
-          'warning'
-        );
-      } else {
-        showToast(
-          m.concord_channel_created({ name: name.trim(), count: selected.length }),
-          'success'
-        );
-      }
+      toastCreateResult(failed, selected.length);
       onCreated(channelId);
     } catch (error) {
       console.error('concord: channel creation failed', error);
       showToast(m.concord_channel_create_failed(), 'error');
+    }
+  }
+
+  async function createGroupChannel() {
+    // Mixed-relay pointer lists are unaddressable — there is no single relay
+    // to create the new channel on. Abort before touching the network.
+    const relay = sharedRelayOf(groupPointers);
+    if (!relay) {
+      showToast(m.wizard_no_shared_relay(), 'error');
+      return;
+    }
+    try {
+      // Narrowed to a local so TS carries the non-null check through the
+      // whole flow — `manager.active` is a getter, so re-reading it inline
+      // stays `IAccount | undefined` at every call site below.
+      const user = manager.active;
+      if (!user) throw new Error('not signed in');
+      const id = generateGroupId();
+      const { isPublic, isOpen, access } = accessChoiceToNip29({ tier, worldReadable });
+      const relayConn = pool.relay(relay);
+      await createGroupOnRelay({
+        relayConn,
+        id,
+        metadata: { name: name.trim(), isPublic, isOpen },
+        user
+      });
+      await attachGroupChannel({
+        communikeyEvent,
+        pointer: { id, relay, name: name.trim(), access },
+        communitySigner
+      });
+      // Fan out put-user to every explicitly selected invitee, plus — for a
+      // members-tier channel only — the area's current member union (Stufe
+      // 2's promise: every existing members-tier channel's roster). Self
+      // never needs a grant.
+      const memberUnion =
+        tier === 'members'
+          ? areaMemberRows({
+              pointers: stufe2Pointers(communikeyEvent),
+              membersByKey: getRosters().membersByKey
+            }).map((row) => row.pubkey)
+          : [];
+      const targets = unique([...selected, ...memberUnion]).filter(
+        (pubkey) => pubkey !== user.pubkey
+      );
+      let failed = 0;
+      for (const pubkey of targets) {
+        try {
+          await publishToGroupRelay(relayConn, buildPutUserTemplate(id, pubkey), user);
+        } catch (error) {
+          console.error('groups: put-user failed for', pubkey, error);
+          failed++;
+        }
+      }
+      toastCreateResult(failed, targets.length);
+      onCreated(id);
+    } catch (error) {
+      console.error('groups: channel creation failed', error);
+      showToast(m.concord_channel_create_failed(), 'error');
+    }
+  }
+
+  async function create() {
+    if (busy) return;
+    busy = true;
+    try {
+      if (isGroupMode) await createGroupChannel();
+      else await createConcordChannel();
     } finally {
       busy = false;
     }
@@ -139,9 +252,7 @@
       {m.concord_new_channel()}
       <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
     </h3>
-    <p class="mb-4 text-sm text-base-content/60">
-      {isPrivate ? m.concord_wizard_subtitle() : m.concord_channel_visibility_public_hint()}
-    </p>
+    <p class="mb-4 text-sm text-base-content/60">{topSubtitle}</p>
 
     <ul class="steps steps-horizontal mb-4 w-full text-xs">
       <li class="step {step >= 0 ? 'step-neutral' : ''}">{m.concord_wizard_step1()}</li>
@@ -165,32 +276,49 @@
           <input
             type="radio"
             class="radio mt-0.5 radio-sm"
-            name="concord-channel-visibility"
-            data-testid="concord-visibility-private"
-            checked={isPrivate}
-            onchange={() => (isPrivate = true)}
+            name="wizard-access"
+            data-testid="wizard-access-members"
+            checked={tier === 'members'}
+            onchange={() => (tier = 'members')}
           />
           <span
-            >🔒 <b>{m.concord_channel_visibility_private()}</b> — {m.concord_channel_visibility_private_hint()}</span
+            ># <b>{m.wizard_access_members()}</b> — {isGroupMode
+              ? m.wizard_access_members_hint_closed()
+              : m.wizard_access_members_hint_encrypted()}</span
           >
         </label>
+        {#if isGroupMode && tier === 'members'}
+          <label class="ml-6 flex cursor-pointer items-start gap-2 py-1 text-xs">
+            <input
+              type="checkbox"
+              class="checkbox mt-0.5 checkbox-xs"
+              data-testid="wizard-access-worldreadable"
+              bind:checked={worldReadable}
+            />
+            <span
+              >🌐 <b>{m.wizard_access_worldreadable()}</b> — {m.wizard_access_worldreadable_hint()}</span
+            >
+          </label>
+        {/if}
         <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
           <input
             type="radio"
             class="radio mt-0.5 radio-sm"
-            name="concord-channel-visibility"
-            data-testid="concord-visibility-public"
-            checked={!isPrivate}
-            onchange={() => (isPrivate = false)}
+            name="wizard-access"
+            data-testid="wizard-access-invited"
+            checked={tier === 'invited'}
+            onchange={() => (tier = 'invited')}
           />
-          <span
-            ># <b>{m.concord_channel_visibility_public()}</b> — {m.concord_channel_visibility_public_hint()}</span
-          >
+          <span>🔒 <b>{m.wizard_access_invited()}</b> — {m.wizard_access_invited_hint()}</span>
         </label>
       </fieldset>
-      <div class="alert text-sm">{m.concord_wizard_invisible_hint()}</div>
+      {#if !isGroupMode}
+        <div class="alert text-sm">{m.concord_wizard_invisible_hint()}</div>
+      {/if}
     {:else if step === 1}
-      <p class="mb-3 text-sm text-base-content/70">{m.concord_wizard_invite_lead()}</p>
+      {#if !isGroupMode}
+        <p class="mb-3 text-sm text-base-content/70">{m.concord_wizard_invite_lead()}</p>
+      {/if}
       <ContactSearchInput
         acceptPubkeyInput
         placeholder={m.concord_invite_search_placeholder()}
@@ -212,8 +340,13 @@
           </button>
         {/each}
       </div>
-      <div class="mt-3 alert text-sm">{m.concord_wizard_link_hint()}</div>
-    {:else}
+      {#if !isGroupMode}
+        <div class="mt-3 alert text-sm">{m.concord_wizard_link_hint()}</div>
+      {/if}
+    {:else if !isGroupMode}
+      <!-- Concord's key-loss disclosure — meaningless for a NIP-29 group,
+        which holds no client-side secret to lose (access is server-enforced
+        via put-user/remove-user, not a channel key). -->
       <div class="mb-3 space-y-3 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm">
         <p><b>{m.concord_wizard_keyloss_title()}</b><br />{m.concord_wizard_keyloss_body()}</p>
         <p><b>{m.concord_wizard_backup_title()}</b><br />{m.concord_wizard_backup_body()}</p>
@@ -249,7 +382,7 @@
         <button
           class="btn btn-neutral"
           data-testid="concord-wizard-create"
-          disabled={!acknowledged || busy}
+          disabled={(!isGroupMode && !acknowledged) || busy}
           onclick={create}
         >
           {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}

@@ -369,7 +369,7 @@
           + {m.groups_attach_action()}
         </button>
       {/if}
-      {#if concord.community && concord.canManageChannels && !concord.dissolved}
+      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (extendedByGroups && canAttachGroup)}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
           data-testid="concord-new-channel"

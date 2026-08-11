@@ -41,6 +41,60 @@ vi.mock('$lib/concord/founding.js', () => ({
 const directInviteToArea = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock('$lib/concord/area-invite.js', () => ({ directInviteToArea }));
 
+// NIP-29 group-management spies — the deleted create-tab test's shape,
+// extended with the two the wizard's put-user fan-out also needs.
+const { createGroupOnRelay, generateGroupId, publishToGroupRelay, buildPutUserTemplate } =
+  vi.hoisted(() => ({
+    createGroupOnRelay: vi.fn(async (/** @type {any} */ _args) => ({ kind: 39000, tags: [] })),
+    generateGroupId: vi.fn(() => 'new-group-id'),
+    publishToGroupRelay: vi.fn(
+      async (
+        /** @type {any} */ _conn,
+        /** @type {any} */ _template,
+        /** @type {any} */ _user
+      ) => ({})
+    ),
+    buildPutUserTemplate: vi.fn((/** @type {string} */ groupId, /** @type {string} */ pubkey) => ({
+      kind: 9000,
+      tags: [
+        ['h', groupId],
+        ['p', pubkey]
+      ]
+    }))
+  }));
+vi.mock('$lib/groups/group-management.js', () => ({
+  createGroupOnRelay,
+  generateGroupId,
+  publishToGroupRelay,
+  buildPutUserTemplate
+}));
+
+const attachGroupChannel = vi.hoisted(() => vi.fn(async (/** @type {any} */ _args) => ({})));
+vi.mock('$lib/groups/community-attach.js', () => ({ attachGroupChannel }));
+
+const relayConnStub = { publish: vi.fn(), request: vi.fn() };
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  pool: { relay: vi.fn(() => relayConnStub) },
+  // ProfileAvatar imports eventStore statically — a bare partial mock (only
+  // `pool`) breaks it even though this suite never renders a profile.
+  eventStore: {
+    model: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) })),
+    profile: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
+  }
+}));
+
+// Controllable roster fixture for the (tier==='members') fan-out union —
+// real stufe2Pointers/areaMemberRows run on top of this, only the network
+// subscription itself is stubbed.
+const rosterState = vi.hoisted(() => ({ membersByKey: /** @type {any} */ ({}) }));
+vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
+  useChannelRosters: () => () => ({
+    membersByKey: rosterState.membersByKey,
+    adminsByKey: {},
+    refresh: () => {}
+  })
+}));
+
 vi.mock(
   '$lib/components/shared/ContactSearchInput.svelte',
   () => import('./fixtures/ContactSearchInputStub.svelte')
@@ -213,7 +267,7 @@ describe('ChannelCreateWizard visibility + picker', () => {
     });
     const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
     await fireEvent.input(nameInput, { target: { value: 'Staff room' } });
-    await fireEvent.click(screen.getByTestId('concord-visibility-public'));
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
     await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1
     await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
     await fireEvent.click(screen.getByTestId('concord-wizard-ack-checkbox'));
@@ -257,7 +311,7 @@ describe('ChannelCreateWizard visibility + picker', () => {
     });
     const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
     await fireEvent.input(nameInput, { target: { value: 'Open room' } });
-    await fireEvent.click(screen.getByTestId('concord-visibility-public'));
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
     await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1
     await fireEvent.click(await screen.findByTestId('stub-raw-a')); // pick a member
     await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
@@ -265,5 +319,123 @@ describe('ChannelCreateWizard visibility + picker', () => {
     await fireEvent.click(screen.getByTestId('concord-wizard-create'));
     await waitFor(() => expect(directInviteToArea).toHaveBeenCalledWith(community, PK_A));
     expect(community.grantChannelAccess).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChannelCreateWizard — NIP-29 groups', () => {
+  const GROUP_RELAY = 'wss://groups.example/';
+  const GROUP_RELAY_B = 'wss://groups-b.example/';
+
+  /** A 10222 already carrying group pointers → NIP-29 mode. */
+  const nip29Community = (extraTags = /** @type {string[][]} */ ([])) => ({
+    kind: 10222,
+    pubkey: PUBKEY,
+    tags: [
+      ['group', 'chan-a', GROUP_RELAY, 'General', 'members'],
+      ['group', 'chan-b', GROUP_RELAY, 'Staff', 'members'],
+      ...extraTags
+    ],
+    content: ''
+  });
+
+  /** No group pointers → Concord mode. */
+  const concordCommunity = () => ({ kind: 10222, pubkey: PUBKEY, tags: [], content: '' });
+
+  /** Fill the name and land on the access step for either fixture. */
+  async function toAccessStep(/** @type {any} */ communikeyEvent) {
+    render(ChannelCreateWizard, {
+      props: {
+        communikeyEvent,
+        onClose: () => {},
+        onCreated: () => {}
+      }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    rosterState.membersByKey = {};
+  });
+
+  it('NIP-29 mode: shows both access radios, weltoffen checkbox only while members is selected', async () => {
+    await toAccessStep(nip29Community());
+
+    expect(screen.getByTestId('wizard-access-members')).toBeTruthy();
+    expect(screen.getByTestId('wizard-access-invited')).toBeTruthy();
+    // Default tier is 'invited' (byte-for-byte with the old isPrivate default) — no checkbox yet.
+    expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
+
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
+
+    await fireEvent.click(screen.getByTestId('wizard-access-invited'));
+    expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
+  });
+
+  it('Concord mode: no weltoffen checkbox in either access state', async () => {
+    await toAccessStep(concordCommunity());
+
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
+
+    await fireEvent.click(screen.getByTestId('wizard-access-invited'));
+    expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
+  });
+
+  it('creates a NIP-29 group on the shared relay, attaches it, and fans out put-user', async () => {
+    const onCreated = vi.fn();
+    const communikeyEvent = nip29Community();
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent, onClose: () => {}, onCreated }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    await fireEvent.click(screen.getByTestId('wizard-access-worldreadable'));
+
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1 (invite)
+    await fireEvent.click(screen.getByRole('button', { name: new RegExp(MEMBER_B.slice(0, 12)) }));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
+
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    const createArgs = createGroupOnRelay.mock.calls[0][0];
+    expect(createArgs.relayConn).toBe(relayConnStub);
+    expect(createArgs.metadata).toEqual(expect.objectContaining({ isPublic: true, isOpen: false }));
+    expect(createArgs.user).toBe(mockManager.active);
+
+    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
+    expect(attachGroupChannel.mock.calls[0][0].pointer).toEqual(
+      expect.objectContaining({ access: 'members' })
+    );
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    // put-user built for the selected invitee.
+    expect(buildPutUserTemplate).toHaveBeenCalledWith('new-group-id', MEMBER_B);
+  });
+
+  it('mixed-relay pointers: aborts with the shared-relay error toast, never calls create', async () => {
+    const communikeyEvent = nip29Community([
+      ['group', 'chan-c', GROUP_RELAY_B, 'Other', 'members']
+    ]);
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(toastSpy).toHaveBeenCalled());
+    const [message, type] = toastSpy.mock.calls[0];
+    expect(type).toBe('error');
+    expect(typeof message).toBe('string');
+    expect(createGroupOnRelay).not.toHaveBeenCalled();
   });
 });

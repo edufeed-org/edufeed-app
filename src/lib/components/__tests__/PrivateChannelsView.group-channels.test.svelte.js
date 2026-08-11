@@ -187,10 +187,14 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     expect(screen.queryByTestId('group-attach-open')).toBeNull();
   });
 
-  // A community extended by NIP-29 has no Concord area and never will — the
-  // founding offer would be an invitation into the mixed state the design
-  // rules out.
-  it('does not offer to found a concord area for a community extended by groups', () => {
+  // Task 4 (Stufe B "one wizard"): the same "+ New channel" opener now
+  // covers the NIP-29 backend too — a community extended by groups offers it
+  // to its owner (same gate as "+ Attach group"), and the wizard mounted
+  // behind it picks the NIP-29 branch itself (parseGroupPointers.length > 0)
+  // rather than founding a Concord area — the mixed state the design rules
+  // out stays impossible, it just isn't enforced by hiding this button any
+  // more (ChannelCreateWizard's own suite covers the branch itself).
+  it('offers "+ New channel" (the shared wizard) to the owner of a community extended by groups', () => {
     holders.concord = { ...holders.concord, enabled: false };
     holders.events = {};
 
@@ -198,7 +202,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       props: { communikeyEvent: communityEvent([['group', 'allgemein', RELAY]]) }
     });
 
-    expect(screen.queryByTestId('concord-new-channel')).toBeNull();
+    expect(screen.queryByTestId('concord-new-channel')).not.toBeNull();
   });
 
   it('renders nothing for a community with neither concord nor group channels', () => {
