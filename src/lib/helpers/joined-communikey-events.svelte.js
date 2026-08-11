@@ -15,6 +15,7 @@ import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.sv
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { unique } from '$lib/helpers/unique.js';
 
 // Module-level (not per-hook-instance): every mounted instance shares one
 // fetch-once budget per pubkey per session, so re-mounting any chrome using
@@ -58,7 +59,7 @@ export function useJoinedCommunikeyEvents(isEnabled = () => true, getExtraPubkey
       return;
     }
 
-    const pubkeys = [...new Set([...getJoinedCommunities(), ...getExtraPubkeys()])];
+    const pubkeys = unique([...getJoinedCommunities(), ...getExtraPubkeys()]);
     if (pubkeys.length === 0) {
       communikeyEvents = [];
       return;

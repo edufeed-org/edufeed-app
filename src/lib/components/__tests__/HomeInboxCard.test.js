@@ -73,7 +73,6 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_filter_comments: () => 'Comments',
   inbox_filter_replies: () => 'Replies',
   inbox_filter_mentions: () => 'Mentions',
-  inbox_filter_replies: () => 'Replies',
   inbox_filter_rsvps: () => 'RSVPs',
   inbox_empty: () => 'Nothing here',
   home_inbox_empty_filtered: ({ filter }) => `Nothing for ${filter}`,
