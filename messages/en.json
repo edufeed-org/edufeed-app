@@ -3210,5 +3210,6 @@
   "groups_react_failed": "Reaction could not be sent",
   "chat_thread_expand": "Expand",
   "chat_thread_collapse": "Collapse",
-  "groups_join_required": "Join this group first"
+  "groups_join_required": "Join this group first",
+  "chat_jump_to_bottom": "Jump to latest"
 }

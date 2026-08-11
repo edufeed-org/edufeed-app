@@ -315,9 +315,21 @@
     }
   }
 
+  // Reactive mirror of pinnedToBottom, for the jump-to-bottom helper button
+  // (common chat UX — laoc, 2026-08-11).
+  let atBottom = $state(true);
+
   function handleScroll() {
     if (!scrollContainer) return;
     pinnedToBottom = isNearBottom(scrollContainer);
+    atBottom = pinnedToBottom;
+  }
+
+  function jumpToBottom() {
+    if (!scrollContainer) return;
+    pinnedToBottom = true;
+    atBottom = true;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
   }
 
   $effect(() => {
@@ -654,6 +666,20 @@
       </ChatMessageRow>
     {/snippet}
   </ChatMessageList>
+  {#if !atBottom}
+    <!-- sticky inside the scroller: floats at the bottom edge while reading
+         history, takes no layout height -->
+    <div class="sticky bottom-2 z-10 flex h-0 justify-end overflow-visible pr-2">
+      <button
+        type="button"
+        data-testid="chat-jump-to-bottom"
+        class="btn btn-circle -translate-y-full shadow-md btn-sm"
+        title={m.chat_jump_to_bottom()}
+        aria-label={m.chat_jump_to_bottom()}
+        onclick={jumpToBottom}>↓</button
+      >
+    </div>
+  {/if}
 </div>
 
 {#if dissolved}

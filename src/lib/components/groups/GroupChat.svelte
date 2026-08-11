@@ -230,11 +230,23 @@
     }
   }
 
+  // Reactive mirror of pinnedToBottom, for the jump-to-bottom helper button
+  // (common chat UX — laoc, 2026-08-11).
+  let atBottom = $state(true);
+
   function handleScroll() {
     if (!scrollContainer) return;
     // Self-correcting: a programmatic pin lands at the bottom and keeps the
     // flag; only a reader moving away clears it.
     pinnedToBottom = isNearBottom(scrollContainer);
+    atBottom = pinnedToBottom;
+  }
+
+  function jumpToBottom() {
+    if (!scrollContainer) return;
+    pinnedToBottom = true;
+    atBottom = true;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
   }
 
   $effect(() => {
@@ -463,6 +475,9 @@
     try {
       await signAndPublish(buildJoinRequestTemplate(pointer.id));
       await updateGroupsList({ add: pointer });
+      // The relay adds you to 39002 on an open group — refresh the roster so
+      // the button flips to Leave without a reload (laoc, 2026-08-11).
+      onRosterChanged();
       showToast(m.groups_join_sent(), 'success');
     } catch (err) {
       console.error('join request failed', err);
@@ -474,6 +489,7 @@
     try {
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
       await updateGroupsList({ remove: pointer });
+      onRosterChanged();
       showToast(m.groups_leave_sent(), 'success');
     } catch (err) {
       console.error('leave request failed', err);
@@ -650,12 +666,22 @@
     <!-- On a narrow viewport the panel takes the whole width; the timeline
          steps aside rather than being squeezed into a column of its own. -->
     <div
-      class="flex min-h-0 flex-1 flex-col {openThreadRoot
+      class="relative flex min-h-0 flex-1 flex-col {openThreadRoot
         ? threadExpanded
           ? 'hidden'
           : 'hidden md:flex'
         : ''}"
     >
+      {#if !atBottom}
+        <button
+          type="button"
+          data-testid="chat-jump-to-bottom"
+          class="btn absolute right-6 bottom-20 z-10 btn-circle shadow-md btn-sm"
+          title={m.chat_jump_to_bottom()}
+          aria-label={m.chat_jump_to_bottom()}
+          onclick={jumpToBottom}>↓</button
+        >
+      {/if}
       <div
         bind:this={scrollContainer}
         class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"

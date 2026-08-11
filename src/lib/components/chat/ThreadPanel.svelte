@@ -43,6 +43,21 @@
   } = $props();
 
   const panel = usePanelWidth('chat:thread-panel-width');
+
+  // The panel opens at the newest reply and stays pinned there while the
+  // reader is at the bottom — same model as the timeline (laoc, 2026-08-11).
+  /** @type {HTMLDivElement | undefined} */
+  let repliesEl;
+  let threadPinned = true;
+  $effect(() => {
+    void replies.length; // dep first — effect gotcha
+    if (!repliesEl) return;
+    if (threadPinned) repliesEl.scrollTop = repliesEl.scrollHeight;
+  });
+  function handleThreadScroll() {
+    if (!repliesEl) return;
+    threadPinned = repliesEl.scrollHeight - repliesEl.scrollTop - repliesEl.clientHeight < 120;
+  }
 </script>
 
 <aside
@@ -86,7 +101,13 @@
     </button>
   </header>
 
-  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+  <div
+    bind:this={repliesEl}
+    class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+    onscroll={handleThreadScroll}
+    onloadcapture={() =>
+      threadPinned && repliesEl && (repliesEl.scrollTop = repliesEl.scrollHeight)}
+  >
     {@render row(root)}
     {#if replies.length}
       <div class="divider my-0"></div>

@@ -35,6 +35,21 @@
   // Resizable + expandable, same key as the NIP-29 thread panel so the two
   // surfaces agree on the width (laoc, 2026-08-11).
   const panel = usePanelWidth('chat:thread-panel-width');
+
+  // Opens at the newest reply; stays pinned while the reader is at the
+  // bottom (laoc, 2026-08-11).
+  /** @type {HTMLDivElement | undefined} */
+  let repliesEl;
+  let threadPinned = true;
+  $effect(() => {
+    void replies.length; // dep first — effect gotcha
+    if (!repliesEl) return;
+    if (threadPinned) repliesEl.scrollTop = repliesEl.scrollHeight;
+  });
+  function handleThreadScroll() {
+    if (!repliesEl) return;
+    threadPinned = repliesEl.scrollHeight - repliesEl.scrollTop - repliesEl.clientHeight < 120;
+  }
   let expanded = $state(false);
 
   let text = $state('');
@@ -113,7 +128,13 @@
     </button>
   </header>
 
-  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+  <div
+    bind:this={repliesEl}
+    class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+    onscroll={handleThreadScroll}
+    onloadcapture={() =>
+      threadPinned && repliesEl && (repliesEl.scrollTop = repliesEl.scrollHeight)}
+  >
     {@render threadRow(root)}
     {#if replies.length > 0}
       <div class="divider my-0 text-xs text-base-content/50">
