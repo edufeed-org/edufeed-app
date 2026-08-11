@@ -695,6 +695,9 @@
       <button class="btn btn-circle btn-ghost btn-xs" onclick={() => (replyTo = null)}>✕</button>
     </div>
   {/if}
+  <p data-testid="disclosure-line" class="mx-4 px-1 text-xs text-base-content/60">
+    {m.disclosure_encrypted()}
+  </p>
   <div class="relative">
     <MentionAutocomplete
       candidates={mentionCandidates}

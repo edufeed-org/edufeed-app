@@ -60,6 +60,20 @@ const chatEvent = signWith(
   { kind: 9, content: 'hello from armada', tags: [['h', 'beechat']] },
   OTHER_SK
 );
+// A SECOND group, world-readable (no `private` tag), for the disclosure-line
+// test that needs a 39000 lacking it — the primary `beechat` fixture is
+// deliberately private (see below) and reused by most other tests here.
+const metadataEventOpen = signWith(
+  {
+    kind: 39000,
+    tags: [
+      ['d', 'openchat'],
+      ['name', 'Open Chat']
+    ]
+  },
+  RELAY_SK
+);
+const membersEventOpen = signWith({ kind: 39002, tags: [['d', 'openchat']] }, RELAY_SK);
 // The two live reply shapes, both hanging off `chatEvent`: the 872-event form
 // (a lone `reply` marker pointing at the root) and the 3-event form (the
 // conformant root+reply pair). The nested one answers `firstReply`, so a
@@ -149,6 +163,12 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
       return {
         request: (/** @type {any} */ filters) => {
           requestCalls.push(filters);
+          // The roster request keys on `#d`; route the second, world-readable
+          // group's fixtures to it and leave every other pointer (including
+          // the kind:0 profile requests, which carry no `#d`) on `beechat`.
+          if (filters?.['#d']?.[0] === 'openchat') {
+            return rxOf(metadataEventOpen, membersEventOpen);
+          }
           return rxOf(metadataEvent, membersEvent);
         },
         // keep the subscription open after replay so unsubscribe paths run
@@ -241,7 +261,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   chat_thread_close: () => 'Close thread',
   chat_thread_reply_one: () => '1 reply',
   chat_thread_reply_many: (/** @type {{ count: number }} */ { count }) => `${count} replies`,
-  chat_thread_reply_placeholder: () => 'Reply in thread'
+  chat_thread_reply_placeholder: () => 'Reply in thread',
+  disclosure_world: () => 'Anyone on the network can read along — even without an account.',
+  disclosure_members: (/** @type {{ count: number }} */ { count }) =>
+    `Readable by all ${count} members.`,
+  disclosure_invited: (/** @type {{ count: number }} */ { count }) =>
+    `Readable by ${count} selected members.`
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
@@ -377,6 +402,28 @@ describe('GroupChat', () => {
     expect(await screen.findByTestId('group-badge-members')).toBeTruthy();
     // `closed` is absent, and members-only already says what a reader needs.
     expect(screen.queryByTestId('group-badge-invite')).toBeNull();
+  });
+
+  // The disclosure line above the composer: who can read, in numbers.
+  it('shows the members count on the disclosure line for a standalone private group', async () => {
+    render(GroupChat, { props: { pointer } });
+    await screen.findByTestId('group-name');
+
+    // Standalone group -> no linked community -> the stricter 'invited'
+    // reading (see access-choice.js), but the count is the same roster
+    // either way: `membersEvent` carries exactly one member.
+    const line = await screen.findByTestId('disclosure-line');
+    expect(line.textContent).toBe('Readable by 1 selected members.');
+  });
+
+  it('shows the world-readable disclosure line for a group without `private`', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+    await screen.findByTestId('group-name');
+
+    const line = await screen.findByTestId('disclosure-line');
+    expect(line.textContent).toBe(
+      'Anyone on the network can read along — even without an account.'
+    );
   });
 
   // A channel opened from a host directory used to be a dead end: the chat

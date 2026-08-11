@@ -52,6 +52,7 @@
   import { detachGroupChannel } from '$lib/groups/community-attach.js';
   import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
   import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
+  import { disclosureKind } from '$lib/groups/access-choice.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
   import {
     formatMessageTimestamp,
@@ -93,6 +94,22 @@
   const getRelayInfo = useRelayInformation(() => pointer.relay);
   const hostBadges = $derived(relayBadges(getRelayInfo()));
   const accessBadges = $derived(channelBadges(metadataEvent));
+
+  // The disclosure line's access slot: when this group is linked into a
+  // community, use THAT community's intent for it (members vs invited — the
+  // relay's own kind:39000 cannot express the split, see access-choice.js);
+  // a standalone group has no such pointer and falls back to `undefined`,
+  // which disclosureKind reads as the stricter 'invited'.
+  const linkedAccess = $derived.by(() => {
+    const target = channelKey({ id: pointer.id, relay: pointer.relay });
+    if (!target) return undefined;
+    for (const communikeyEvent of getJoinedCommunities()) {
+      const match = parseGroupPointers(communikeyEvent).find((p) => channelKey(p) === target);
+      if (match) return match.access;
+    }
+    return undefined;
+  });
+  const disclosure = $derived(disclosureKind(metadataEvent, linkedAccess));
   /** @type {Set<string>} */ let members = $state(new Set());
   /** @type {import('applesauce-common/helpers/groups').GroupAdmin[]} */
   let admins = $state.raw([]);
@@ -698,6 +715,17 @@
         </ChatMessageList>
       </div>
 
+      {#if disclosure !== 'unknown'}
+        <p data-testid="disclosure-line" class="px-4 pb-1 text-xs opacity-60">
+          {#if disclosure === 'world'}
+            {m.disclosure_world()}
+          {:else if disclosure === 'members'}
+            {m.disclosure_members({ count: members.size })}
+          {:else}
+            {m.disclosure_invited({ count: members.size })}
+          {/if}
+        </p>
+      {/if}
       <ChatComposer
         bind:value={text}
         placeholder={m.groups_input_placeholder({ name: metadata?.name ?? pointer.id })}
