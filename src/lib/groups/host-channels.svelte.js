@@ -17,6 +17,7 @@ import { buildChannelRows } from './community-channel-rows.js';
 import { channelKey } from './community-pointer.js';
 import { useMyGroups } from './unlinked-groups.svelte.js';
 import { useRelayDirectory } from './relay-directory.svelte.js';
+import { relayRequiresAuth } from './relay-directory.js';
 import { useRelayInformation } from './relay-information.svelte.js';
 
 /**
@@ -44,9 +45,19 @@ export function useHostChannels(getRelay) {
   return () => {
     const relay = getRelay();
     const directory = getDirectory();
+    const information = getInformation();
     return {
-      rows: relay ? rowsFrom(directory.metadata, relay) : [],
-      information: getInformation(),
+      // Auth gating is read from BOTH mouths: the NIP-11 claim and the live
+      // REQ that was actually closed auth-required. Either alone suffices —
+      // a channel on such a host must not claim the globe.
+      rows: relay
+        ? rowsFrom(
+            directory.metadata,
+            relay,
+            directory.authRequired || relayRequiresAuth(information)
+          )
+        : [],
+      information,
       authRequired: directory.authRequired,
       authRefused: directory.authRefused,
       loading: directory.loading
@@ -59,8 +70,9 @@ export function useHostChannels(getRelay) {
  * wording and the "still loading" state are decided in exactly one place.
  * @param {any[]} metadata
  * @param {string} relay
+ * @param {boolean} [hostRequiresAuth]
  */
-function rowsFrom(metadata, relay) {
+function rowsFrom(metadata, relay, hostRequiresAuth = false) {
   /** @type {Record<string, any>} */
   const metadataByKey = {};
   /** @type {Array<{id: string, relay: string}>} */
@@ -74,5 +86,5 @@ function rowsFrom(metadata, relay) {
     metadataByKey[key] = event;
     pointers.push(pointer);
   }
-  return buildChannelRows({ groupPointers: pointers, metadataByKey });
+  return buildChannelRows({ groupPointers: pointers, metadataByKey, hostRequiresAuth });
 }

@@ -223,3 +223,13 @@ export function announcesNip29(info) {
   if (!Array.isArray(nips)) return null;
   return nips.includes(29);
 }
+
+/**
+ * Whether the relay's NIP-11 declares every read gated behind NIP-42.
+ * Untrusted input: only a literal `true` counts, anything else is "no claim".
+ * @param {any} info
+ * @returns {boolean}
+ */
+export function relayRequiresAuth(info) {
+  return info?.limitation?.auth_required === true;
+}

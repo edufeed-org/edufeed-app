@@ -84,3 +84,27 @@ describe('channelGlyph', () => {
     expect(channelGlyph('unknown').worldReadable).toBe(false);
   });
 });
+
+// A relay that requires NIP-42 AUTH gates every read: nothing on it is
+// world-readable, whatever the group's own tags omit. Live case: the buzz
+// community relays (auth_required: true) publish 39000s with no `private`
+// tag, and the globe overstated openness — the one direction the glyph must
+// never err in.
+describe('channelAccessLevel on an auth-required host', () => {
+  it('caps "world" down to "members" when the relay requires auth', () => {
+    expect(channelAccessLevel(meta(), ptr('members'), true)).toBe('members');
+  });
+
+  it('leaves private groups exactly as they were', () => {
+    expect(channelAccessLevel(meta([['private']]), ptr('members'), true)).toBe('members');
+    expect(channelAccessLevel(meta([['private']]), ptr('invited'), true)).toBe('invited');
+  });
+
+  it('leaves "unknown" untouched while metadata has not loaded', () => {
+    expect(channelAccessLevel(null, ptr('members'), true)).toBe('unknown');
+  });
+
+  it('changes nothing when the flag is absent (default open relay)', () => {
+    expect(channelAccessLevel(meta(), ptr('members'))).toBe('world');
+  });
+});

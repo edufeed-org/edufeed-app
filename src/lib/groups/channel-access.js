@@ -28,9 +28,13 @@ const LOCK = '\u{1F512}';
  *   the channel's kind:39000, or null while it has not loaded
  * @param {{ access?: string } | null | undefined} pointer
  *   the community's ["group", id, relay, name, access] pointer
+ * @param {boolean} [hostRequiresAuth] the HOST gates every read behind
+ *   NIP-42 (NIP-11 auth_required, or a REQ closed auth-required). A group
+ *   without `private` on such a relay is readable by whoever the relay
+ *   admits — not by the world, whatever its own tags omit.
  * @returns {ChannelAccessLevel}
  */
-export function channelAccessLevel(metadata, pointer) {
+export function channelAccessLevel(metadata, pointer, hostRequiresAuth = false) {
   if (!metadata || metadata.kind !== GROUP_METADATA_KIND || !Array.isArray(metadata.tags)) {
     return 'unknown';
   }
@@ -38,7 +42,7 @@ export function channelAccessLevel(metadata, pointer) {
   // isPublic/isOpen here: they come from the dropped inverse tags of an older
   // NIP-29 draft, so they are false on every spec-current relay.
   const isPrivate = metadata.tags.some((t) => t[0] === 'private');
-  if (!isPrivate) return 'world';
+  if (!isPrivate) return hostRequiresAuth ? 'members' : 'world';
   return pointer?.access === 'members' ? 'members' : 'invited';
 }
 

@@ -29,9 +29,9 @@
   import {
     buildGroupMessageTemplate,
     buildJoinRequestTemplate,
-    buildLeaveRequestTemplate,
-    buildGroupsListTemplate
+    buildLeaveRequestTemplate
   } from '$lib/groups/groups.js';
+  import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import { authenticateOnce } from '$lib/groups/relay-auth.js';
@@ -42,7 +42,6 @@
   import { detachGroupChannel } from '$lib/groups/community-attach.js';
   import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
   import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
-  import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
   import {
     formatMessageTimestamp,
@@ -351,13 +350,7 @@
    * @param {{add?: any, remove?: any}} change
    */
   async function updateGroupsList(change) {
-    const user = getActiveUser();
-    if (!user?.signer) return;
-    const existing = eventStore.getReplaceable(10009, user.pubkey) ?? null;
-    const template = buildGroupsListTemplate(existing, change);
-    const signed = await user.signer.signEvent({ ...template, pubkey: user.pubkey });
-    eventStore.add(signed);
-    publishEventOptimistic(signed);
+    await updatePersonalGroupsList(getActiveUser(), change);
   }
 
   async function join() {

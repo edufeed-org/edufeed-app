@@ -71,7 +71,13 @@
       class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
     >
   {/if}
-  {@render trailing?.()}
+  {#if trailing}
+    <!-- Fixed-width slot: a dot that arrives late must land in space the row
+         already reserved, not push the rail sideways. -->
+    <span data-testid="rail-trailing-slot" class="flex min-w-4 shrink-0 items-center justify-center"
+      >{@render trailing()}</span
+    >
+  {/if}
 {/snippet}
 
 {#if href}

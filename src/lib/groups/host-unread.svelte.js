@@ -37,6 +37,20 @@ import {
 
 const GROUP_MESSAGE = 9;
 
+// Hosts that answered EOSE at least once THIS SESSION, keyed `${me}|${relay}`.
+// Their messages are still in the EventStore, so a remount can draw its marks
+// from what the session already knows instead of holding everything back for
+// a fresh round-trip — that wait is what made the dots pop in seconds after
+// every host switch. This is stale-while-revalidate, not guessing: `known` is
+// still never assumed for a host that has not answered once.
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- session cache, not reactive state
+const eosedThisSession = new Set();
+
+/** Test seam: forget which hosts have answered. */
+export function __resetHostUnreadSession() {
+  eosedThisSession.clear();
+}
+
 /**
  * @param {string | null | undefined} relay
  * @param {string[]} ids
@@ -78,7 +92,7 @@ export function useHostUnread(getRelay, getChannelIds, getActiveChannelId) {
     // this line leaves every test green — it is here to stop the map growing
     // for the lifetime of the tab as you move between hosts.
     summaries = {};
-    loaded = false;
+    loaded = relay && me ? eosedThisSession.has(`${me}|${relay}`) : false;
     if (!relay || !me || ids.length === 0) return;
 
     const since = untrack(() =>
@@ -94,7 +108,10 @@ export function useHostUnread(getRelay, getChannelIds, getActiveChannelId) {
         next: (/** @type {any} */ value) => {
           // The relay has told us it has sent everything it stored. Only now
           // is an empty channel an empty channel.
-          if (value === 'EOSE') loaded = true;
+          if (value === 'EOSE') {
+            loaded = true;
+            eosedThisSession.add(`${me}|${relay}`);
+          }
         },
         // A refusal leaves `loaded` false on purpose: see the note above.
         error: () => {}

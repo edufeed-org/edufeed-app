@@ -130,7 +130,9 @@ const serve = async (/** @type {any[]} */ events) => {
   await waitFor(() => expect(screen.queryByTestId('host-sidebar-loading')).toBeNull());
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { __resetHostUnreadSession } = await import('$lib/groups/host-unread.svelte.js');
+  __resetHostUnreadSession();
   localStorage.clear();
   holders.directory = {
     metadata: [meta('allgemein'), meta('redesign')],
@@ -325,5 +327,43 @@ describe('HostChannelSidebar unread', () => {
       [KEY('allgemein')]: T1,
       [KEY('redesign')]: T2
     });
+  });
+});
+
+// The messages of a host you already visited are still in the EventStore, and
+// the fact that the host answered EOSE this session is knowledge, not a guess.
+// Waiting for a fresh EOSE on every remount is what made the dots pop in
+// seconds after every host switch, shifting the rail each time (laoc,
+// 2026-08-11 live test).
+describe('HostChannelSidebar unread across remounts', () => {
+  it('shows its marks immediately when the same host mounts again this session', async () => {
+    const first = render(HostChannelSidebar, { props: { relay: RELAY, activeChannelId: null } });
+    await serve([chat({ id: 'redesign', at: T1 })]);
+    await waitFor(() =>
+      expect(rowFor('redesign')?.querySelector('[data-testid="concord-unread-dot"]')).toBeTruthy()
+    );
+    first.unmount();
+
+    render(HostChannelSidebar, { props: { relay: RELAY, activeChannelId: null } });
+    // No EOSE this time — the dot must come from what the session already knows.
+    await waitFor(() =>
+      expect(rowFor('redesign')?.querySelector('[data-testid="concord-unread-dot"]')).toBeTruthy()
+    );
+  });
+
+  it('still holds marks back for a host never heard from this session', async () => {
+    render(HostChannelSidebar, { props: { relay: RELAY, activeChannelId: null } });
+    await send([chat({ id: 'redesign', at: T1 })]);
+    expect(rowFor('redesign')?.querySelector('[data-testid="concord-unread-dot"]')).toBeFalsy();
+  });
+});
+
+describe('rail row trailing slot', () => {
+  it('reserves the dot slot on a quiet row, so a late dot cannot shift the rail', async () => {
+    render(HostChannelSidebar, { props: { relay: RELAY, activeChannelId: null } });
+    await serve([]);
+    const row = rowFor('allgemein');
+    expect(row?.querySelector('[data-testid="rail-trailing-slot"]')).toBeTruthy();
+    expect(row?.querySelector('[data-testid="concord-unread-dot"]')).toBeFalsy();
   });
 });

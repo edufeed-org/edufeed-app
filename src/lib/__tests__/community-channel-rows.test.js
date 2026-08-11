@@ -235,3 +235,24 @@ describe('channel pictures', () => {
     expect('picture' in /** @type {any} */ (row)).toBe(false);
   });
 });
+
+describe('buildChannelRows on an auth-required host', () => {
+  it('never shows the globe when the host gates reads behind auth', () => {
+    const p = ptr('offen');
+    const rows = buildChannelRows({
+      groupPointers: [p],
+      metadataByKey: { [key(p)]: meta('offen') },
+      hostRequiresAuth: true
+    });
+    expect(rows[0]).toMatchObject({ worldReadable: false, level: 'members', symbol: '#' });
+  });
+
+  it('changes nothing on an open host', () => {
+    const p = ptr('offen');
+    const rows = buildChannelRows({
+      groupPointers: [p],
+      metadataByKey: { [key(p)]: meta('offen') }
+    });
+    expect(rows[0].worldReadable).toBe(true);
+  });
+});

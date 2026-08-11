@@ -42,11 +42,18 @@ import { safeImageUrl } from './relay-directory.js';
  * @param {{
  *   concordChannels?: Array<{channel_id: string, name?: string, private?: boolean, accessible?: boolean}>,
  *   groupPointers?: Array<{id: string, relay: string, name?: string, access?: string}>,
- *   metadataByKey?: Record<string, {kind?: number, tags?: string[][]}>
- * }} input
+ *   metadataByKey?: Record<string, {kind?: number, tags?: string[][]}>,
+ *   hostRequiresAuth?: boolean
+ * }} input `hostRequiresAuth`: the group relay gates every read behind
+ *   NIP-42, so no channel on it may claim the globe (see channel-access.js).
  * @returns {ChannelRow[]}
  */
-export function buildChannelRows({ concordChannels = [], groupPointers = [], metadataByKey = {} }) {
+export function buildChannelRows({
+  concordChannels = [],
+  groupPointers = [],
+  metadataByKey = {},
+  hostRequiresAuth = false
+}) {
   /** @type {ChannelRow[]} */
   const rows = [];
 
@@ -70,7 +77,7 @@ export function buildChannelRows({ concordChannels = [], groupPointers = [], met
     const key = channelKey(pointer);
     if (!key) continue; // unaddressable — better absent than a broken row
     const metadata = metadataByKey[key];
-    const level = channelAccessLevel(metadata, pointer);
+    const level = channelAccessLevel(metadata, pointer, hostRequiresAuth);
     const glyph = channelGlyph(level);
     rows.push({
       key: `group:${key}`,

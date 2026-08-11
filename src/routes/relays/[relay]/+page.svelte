@@ -21,9 +21,16 @@
   import { announcesNip29 } from '$lib/groups/relay-directory.js';
   import ChannelOverview from '$lib/components/community/channels/ChannelOverview.svelte';
   import HostChannelSidebar from '$lib/components/groups/HostChannelSidebar.svelte';
+  import GroupCreateModal from '$lib/components/groups/GroupCreateModal.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let { data } = $props();
+
+  // Whether THIS user may create here is the relay's decision (NIP-29 9007 is
+  // permission-gated server-side); the button only needs someone who can sign.
+  const getActiveUser = useActiveUser();
+  let createOpen = $state(false);
 
   const relay = $derived(isValidRelayUrl(data.rawRelay) ? data.rawRelay : null);
 
@@ -79,6 +86,18 @@
           {m.relay_directory_loading()}
         </p>
       {:else}
+        {#if getActiveUser()?.signer}
+          <div class="flex justify-end px-6 pt-4">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              data-testid="relay-create-channel"
+              onclick={() => (createOpen = true)}
+            >
+              + {m.groups_create_here_button()}
+            </button>
+          </div>
+        {/if}
         <ChannelOverview
           {rows}
           {hostBadges}
@@ -90,4 +109,7 @@
       {/if}
     </div>
   </div>
+  {#if createOpen && relay}
+    <GroupCreateModal {relay} onClose={() => (createOpen = false)} />
+  {/if}
 {/if}

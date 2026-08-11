@@ -30,6 +30,7 @@
   // is one list either way, so both sources are merged before rendering.
   import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
   import { relayBadges } from '$lib/groups/group-badges.js';
+  import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { attachableAreaModes } from '$lib/groups/community-attach.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
@@ -159,7 +160,8 @@
     buildChannelRows({
       concordChannels: channels,
       groupPointers,
-      metadataByKey: getChannelMeta().byKey
+      metadataByKey: getChannelMeta().byKey,
+      hostRequiresAuth: relayRequiresAuth(getOverviewRelayInfo())
     })
   );
 
