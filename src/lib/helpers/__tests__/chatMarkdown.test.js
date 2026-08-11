@@ -191,3 +191,25 @@ describe('parseChatMarkdown — lightbox offsets survive nesting', () => {
     expect(nodes.every((/** @type {any} */ n) => n.type === 'link')).toBe(true);
   });
 });
+
+// laoc, 2026-08-11 live feedback: pipe tables are pasted into channels as
+// design docs and must render — overriding the original "no tables in a
+// bubble" cut. GFM table → a table block with inline runs per cell.
+describe('tables', () => {
+  it('parses a GFM table into header and row cell runs', () => {
+    const md = parseChatMarkdown(ev('| a | b |\n|---|---:|\n| **x** | y |'));
+    const table = md.blocks.find((b) => b.type === 'table');
+    expect(table).toBeTruthy();
+    expect(table.header).toHaveLength(2);
+    expect(table.rows).toHaveLength(1);
+    expect(table.rows[0]).toHaveLength(2);
+    expect(table.align[1]).toBe('right');
+    // Inline markdown inside a cell stays markdown
+    expect(JSON.stringify(table.rows[0][0])).toContain('strong');
+  });
+
+  it('leaves non-table pipes as literal text', () => {
+    const md = parseChatMarkdown(ev('a | b | c'));
+    expect(md.blocks.some((b) => b.type === 'table')).toBe(false);
+  });
+});

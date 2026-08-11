@@ -255,3 +255,19 @@ describe('the lightbox index stays global across markdown blocks', () => {
     expect(lightbox.getAttribute('data-start-src')).toBe('https://example.com/b.png');
   });
 });
+
+describe('tables', () => {
+  it('renders a GFM table with its cells, inside a scroll container', async () => {
+    const { container } = render(NostrContentRenderer, {
+      props: { event: makeEvent('| Spec | Kinds |\n|---|---|\n| NIP-29 | **9** |'), markdown: true }
+    });
+    const table = container.querySelector('table');
+    expect(table).toBeTruthy();
+    expect(table?.closest('.overflow-x-auto')).toBeTruthy();
+    expect([...container.querySelectorAll('th')].map((el) => el.textContent?.trim())).toEqual([
+      'Spec',
+      'Kinds'
+    ]);
+    expect(container.querySelector('td strong')?.textContent).toBe('9');
+  });
+});

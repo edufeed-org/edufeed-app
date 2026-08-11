@@ -61,10 +61,14 @@ describe('ChatMessageRow markdown wiring', () => {
     expect(container.textContent).toContain('# shouting');
   });
 
-  it('does not render a markdown table', () => {
+  it('renders a markdown table in its own scroll container', () => {
+    // Flipped 2026-08-11 (laoc): pipe tables get pasted into channels as
+    // design docs and must render — the original "no tables" cut is retired.
     const { container } = renderRow('| a | b |\n| - | - |\n| 1 | 2 |');
 
-    expect(container.querySelector('table')).toBeNull();
+    const table = container.querySelector('table');
+    expect(table).toBeTruthy();
+    expect(table?.closest('.overflow-x-auto')).toBeTruthy();
   });
 
   it('keeps the reply preview as plain text, not markdown', () => {

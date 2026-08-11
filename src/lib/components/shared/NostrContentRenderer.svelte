@@ -246,6 +246,40 @@
       <blockquote class="my-1 border-l-2 border-current/30 pl-2 opacity-80">
         {@render blockList(block.children)}
       </blockquote>
+    {:else if block.type === 'table'}
+      <!-- Wide content scrolls its own container; the bubble never does. -->
+      <div class="my-1 overflow-x-auto">
+        <table class="table table-zebra table-xs">
+          <thead>
+            <tr>
+              {#each block.header as cell, j (j)}
+                <th
+                  class={block.align?.[j] === 'right'
+                    ? 'text-right'
+                    : block.align?.[j] === 'center'
+                      ? 'text-center'
+                      : ''}>{@render inlineList(cell)}</th
+                >
+              {/each}
+            </tr>
+          </thead>
+          <tbody>
+            {#each block.rows as row, j (j)}
+              <tr>
+                {#each row as cell, k (k)}
+                  <td
+                    class={block.align?.[k] === 'right'
+                      ? 'text-right'
+                      : block.align?.[k] === 'center'
+                        ? 'text-center'
+                        : ''}>{@render inlineList(cell)}</td
+                  >
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     {:else if block.type === 'list'}
       {#if block.ordered}
         <ol class="my-1 list-decimal pl-5" start={block.start ?? undefined}>

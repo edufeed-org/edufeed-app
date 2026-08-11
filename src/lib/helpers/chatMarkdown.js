@@ -1,7 +1,7 @@
 /**
  * Restricted markdown for chat bubbles.
  *
- * Chat is not a document surface: headings, tables and markdown images do not
+ * Chat is not a document surface: headings and markdown-image syntax do not
  * belong in a bubble, so this ships only bold / italic / strike / inline code /
  * fenced code / blockquote / lists / links and renders everything else as the
  * literal text the author typed.
@@ -159,6 +159,22 @@ function blockFrom(token, nostrRun) {
         }))
       };
 
+    case 'table':
+      // laoc, 2026-08-11: pipe tables get pasted into channels as design
+      // docs and must render — overriding the original "no tables in a
+      // bubble" cut. Cells hold inline runs, so nostr entities and inline
+      // markdown inside a cell keep working.
+      return {
+        type: 'table',
+        align: token.align ?? [],
+        header: (token.header ?? []).map((/** @type {any} */ cell) =>
+          inlinesFrom(cell.tokens ?? [], nostrRun, cell.text)
+        ),
+        rows: (token.rows ?? []).map((/** @type {any[]} */ row) =>
+          row.map((cell) => inlinesFrom(cell.tokens ?? [], nostrRun, cell.text))
+        )
+      };
+
     case 'paragraph':
     // A tight list item's content arrives as a bare `text` token holding
     // inline tokens; treat it as a paragraph so lists get marked up too.
@@ -166,7 +182,7 @@ function blockFrom(token, nostrRun) {
     case 'text':
       return { type: 'paragraph', children: inlinesFrom(token.tokens ?? [], nostrRun, token.raw) };
 
-    // Deliberately out of the chat subset — headings, tables, rules and raw
+    // Deliberately out of the chat subset — headings, rules and raw
     // HTML render as the characters the author typed.
     default:
       return { type: 'paragraph', children: [nostrRun(token.raw ?? '')] };
