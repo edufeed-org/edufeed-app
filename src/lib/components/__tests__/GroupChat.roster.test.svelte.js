@@ -150,6 +150,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_badge_invite_only: () => 'Invite only',
   groups_badge_auth_required: () => 'Sign-in required',
   groups_badge_nip29: () => 'NIP-29',
+  disclosure_world: () => 'Anyone on the network can read along — even without an account.',
+  disclosure_members: (/** @type {{ count: number }} */ { count }) =>
+    `Readable by all ${count} members.`,
   chat_thread_title: () => 'Thread',
   chat_thread_close: () => 'Close thread',
   chat_thread_reply_one: () => '1 reply',

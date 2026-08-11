@@ -117,7 +117,9 @@
         doing: null
       };
     }
-    return hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)];
+    return hintCopy[
+      /** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)
+    ];
   }
 
   const suggestions = $derived([
