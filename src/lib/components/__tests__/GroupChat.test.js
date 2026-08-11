@@ -21,6 +21,7 @@ const MY_SK = generateSecretKey();
 const OTHER_SK = generateSecretKey();
 const RELAY_SK = generateSecretKey();
 const ME = getPublicKey(MY_SK);
+const OTHER = getPublicKey(OTHER_SK);
 const GROUP_RELAY = 'wss://groups.example.com/';
 
 /** @param {any} template @param {Uint8Array} sk */
@@ -129,6 +130,7 @@ const nestedReply = signWith(
 );
 
 const publishMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
+const requestCalls = vi.hoisted(() => /** @type {any[]} */ ([]));
 const relayCalls = vi.hoisted(() => /** @type {string[]} */ ([]));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
@@ -145,7 +147,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
     relay: (/** @type {string} */ url) => {
       relayCalls.push(url);
       return {
-        request: () => rxOf(metadataEvent, membersEvent),
+        request: (/** @type {any} */ filters) => {
+          requestCalls.push(filters);
+          return rxOf(metadataEvent, membersEvent);
+        },
         // keep the subscription open after replay so unsubscribe paths run
         subscription: () =>
           rxMerge(
@@ -221,6 +226,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_leave_sent: () => 'Leave request sent',
   groups_join_failed: () => 'Request failed',
   groups_send_failed: () => 'Message could not be sent',
+  groups_react_failed: () => 'Reaction could not be sent',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
   groups_input_placeholder: (/** @type {{ name: string }} */ { name }) => `Message ${name}`,
@@ -245,6 +251,7 @@ describe('GroupChat', () => {
     publishOptimisticMock.mockClear();
     signEvent.mockClear();
     relayCalls.length = 0;
+    requestCalls.length = 0;
   });
 
   it('renders relay-served metadata and chat messages through the real event store', async () => {
@@ -279,6 +286,37 @@ describe('GroupChat', () => {
     expect(signed.content).toBe('hi group');
     expect(signed.tags[0]).toEqual(['h', 'beechat']);
     expect(signed.pubkey).toBe(ME);
+  });
+
+  it('a rejected reaction tells the user instead of failing silently', async () => {
+    // Measured on groups.hzrd149.com: OK false "blocked: unknown member".
+    const { showToast } = await import('$lib/helpers/toast');
+    publishMock.mockResolvedValueOnce({ ok: false, message: 'blocked: unknown member' });
+    const { container } = render(GroupChat, { props: { pointer } });
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="pick-stub"]')).toBeTruthy();
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="pick-stub"]'))
+    );
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('Reaction could not be sent', 'error')
+    );
+  });
+
+  it('asks the GROUP relay for the profiles of authors and roster', async () => {
+    // Members of a closed host often have no kind-0 on our lookup relays;
+    // the host itself has them (Armada asks the same source).
+    render(GroupChat, { props: { pointer } });
+    await waitFor(
+      () => {
+        const profileReqs = requestCalls.filter((f) => f?.kinds?.length === 1 && f.kinds[0] === 0);
+        expect(profileReqs.length).toBeGreaterThan(0);
+        // The newest request carries the full set once the timeline landed.
+        expect(profileReqs.at(-1).authors).toEqual(expect.arrayContaining([OTHER]));
+      },
+      { timeout: 2000 }
+    );
   });
 
   it('join publishes a 9021 to the group relay and mirrors the group into the 10009 list', async () => {

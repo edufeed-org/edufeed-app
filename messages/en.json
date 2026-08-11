@@ -3206,5 +3206,6 @@
   "groups_create_here_button": "New channel",
   "groups_create_here_title": "Create a channel on this relay",
   "groups_create_here_action": "Create",
-  "groups_create_here_success": "Channel created"
+  "groups_create_here_success": "Channel created",
+  "groups_react_failed": "Reaction could not be sent"
 }

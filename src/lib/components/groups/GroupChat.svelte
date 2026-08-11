@@ -32,6 +32,8 @@
     buildLeaveRequestTemplate
   } from '$lib/groups/groups.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
+  import { publishToGroupRelay } from '$lib/groups/group-management.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import { authenticateOnce } from '$lib/groups/relay-auth.js';
@@ -193,6 +195,37 @@
   const threads = $derived(buildThreadIndex(displayed));
   const grouped = $derived(groupMessagesByDate(threads.timeline));
   const getProfiles = useProfileMap(() => displayed.map((event) => event.pubkey));
+
+  // Profiles for authors + roster, from the GROUP relay itself: members of a
+  // closed host often have no kind-0 on our lookup relays, but the host has
+  // them (Armada asks the same source). Value-stable key + debounce so the
+  // streaming timeline cannot reopen the REQ per event (see host-unread).
+  const profileAuthorsKey = $derived.by(() =>
+    unique([
+      ...displayed.map((event) => event.pubkey),
+      ...admins.map((/** @type {any} */ admin) => admin.pubkey),
+      ...members
+    ])
+      .sort()
+      .join('\x1f')
+  );
+  $effect(() => {
+    const key = profileAuthorsKey;
+    if (!key) return;
+    const authors = key.split('\x1f');
+    /** @type {import('rxjs').Subscription | undefined} */ let sub;
+    const timer = setTimeout(() => {
+      sub = pool
+        .relay(pointer.relay)
+        .request({ kinds: [0], authors }, { timeout: 8000 })
+        .pipe(storeEvents(eventStore))
+        .subscribe({ error: () => {} });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      sub?.unsubscribe();
+    };
+  });
   const reactionsByTarget = $derived(
     aggregateChannelReactions(reactionEvents, getActiveUser()?.pubkey)
   );
@@ -263,16 +296,17 @@
     threadText = '';
   }
 
-  /** Sign a template and publish it to the group relay only. @param {any} template */
+  /**
+   * Sign a template and publish it to the group relay only, with the shared
+   * one-shot NIP-42 retry: relays like groups.hzrd149.com only recognise
+   * members on AUTHed connections, and a write before the handshake comes
+   * back "blocked: unknown member".
+   * @param {any} template
+   */
   async function signAndPublish(template) {
     const user = getActiveUser();
     if (!user) throw new Error('no active user');
-    const signed = await user.signer.signEvent({ ...template, pubkey: user.pubkey });
-    const response = await pool.relay(pointer.relay).publish(signed);
-    if (response && response.ok === false) {
-      throw new Error(response.message || 'relay rejected the event');
-    }
-    return signed;
+    return publishToGroupRelay(pool.relay(pointer.relay), template, user);
   }
 
   /**
@@ -341,6 +375,7 @@
       eventStore.add(signed);
     } catch (err) {
       console.error('group react failed', err);
+      showToast(m.groups_react_failed(), 'error');
     }
   }
 
