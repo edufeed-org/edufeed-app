@@ -23,6 +23,8 @@
   import HostChannelSidebar from '$lib/components/groups/HostChannelSidebar.svelte';
   import GroupCreateModal from '$lib/components/groups/GroupCreateModal.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { setContext } from 'svelte';
+  import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
   import * as m from '$lib/paraglide/messages';
 
   let { data } = $props();
@@ -31,6 +33,16 @@
   // permission-gated server-side); the button only needs someone who can sign.
   const getActiveUser = useActiveUser();
   let createOpen = $state(false);
+
+  // Channel pictures on a membership-gated host 401 anonymously — same
+  // context GroupChat sets, so the overview and sidebar fetch them signed.
+  // `relay` is $derived off route data; the getter keeps the context live.
+  setContext(GROUP_MEDIA_AUTH, {
+    get relay() {
+      return relay ?? '';
+    },
+    getUser: getActiveUser
+  });
 
   const relay = $derived(isValidRelayUrl(data.rawRelay) ? data.rawRelay : null);
 

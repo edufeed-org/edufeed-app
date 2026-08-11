@@ -34,6 +34,8 @@
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { publishToGroupRelay } from '$lib/groups/group-management.js';
   import { unique } from '$lib/helpers/unique.js';
+  import { setContext } from 'svelte';
+  import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import { authenticateOnce } from '$lib/groups/relay-auth.js';
@@ -67,6 +69,11 @@
   // At component init, not inside a handler — hooks cannot be called from
   // async handlers (CLAUDE.md). Feeds the post-delete detach cascade below.
   const getJoinedCommunities = useJoinedCommunikeyEvents();
+
+  // Media on this host is membership-gated (buzz answers 401 anonymously):
+  // every ImageWithFallback below fetches same-host URLs with a signed
+  // Blossom get auth instead of the anonymous proxy chain.
+  setContext(GROUP_MEDIA_AUTH, { relay: pointer.relay, getUser: getActiveUser });
 
   /** @type {any} */ let metadata = $state(null);
   // The RAW kind:39000 as well as the parsed metadata: the access badges read
