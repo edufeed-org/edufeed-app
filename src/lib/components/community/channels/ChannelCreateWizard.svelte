@@ -15,7 +15,7 @@
   import { showToast } from '$lib/helpers/toast';
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { parseGroupPointers, sharedRelayOf, channelKey } from '$lib/groups/community-pointer.js';
   import { stufe2Pointers, areaMemberRows } from '$lib/groups/area-members.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { accessChoiceToNip29 } from '$lib/groups/access-choice.js';
@@ -68,6 +68,10 @@
   // Shared glyph/derived-private for both modes: 'invited' always means
   // private/locked, regardless of backend.
   const isPrivate = $derived(tier === 'invited');
+  // Group mode collapses to 2 steps (no key-loss disclosure to acknowledge —
+  // a NIP-29 group holds no client-side secret) — the invite step doubles as
+  // the final step, Create button and all.
+  const lastStep = $derived(isGroupMode ? 1 : 2);
 
   const topSubtitle = $derived.by(() => {
     if (!isGroupMode) {
@@ -99,6 +103,33 @@
   // channels — the fan-out union a fresh members-tier channel must also
   // reach (Task 2/3). Called at component INIT, per the project's hooks rule.
   const getRosters = useChannelRosters(() => stufe2Pointers(communikeyEvent));
+
+  // useChannelRosters debounces (300ms) + round-trips relays before any
+  // roster answers; areaMemberRows excludes a channel's members until its
+  // roster is heard from at all ("we have not heard" vs "not a member" are
+  // different sentences). A user who hits Create before any existing
+  // Stufe-2 roster has loaded would otherwise ship a members-tier channel
+  // silently missing every implicit member — with a SUCCESS toast, since
+  // there's no failure to count. Gate Create on at least one Stufe-2
+  // channelKey being present in membersByKey; a community with no existing
+  // Stufe-2 channels has nothing to wait for.
+  const stufe2ChannelKeys = $derived(
+    stufe2Pointers(communikeyEvent)
+      .map((pointer) => channelKey(pointer))
+      .filter((key) => key !== null)
+  );
+  // $derived.by (a real function boundary), not a bare $derived(expr): TS's
+  // control-flow narrowing otherwise treats `tier` as permanently 'invited'
+  // at this point in the script (it only ever sees the reassignments that
+  // live inside template event handlers, a different closure) and flags
+  // `tier === 'members'` below as a comparison with no overlap.
+  const waitingForMemberRosters = $derived.by(
+    () =>
+      isGroupMode &&
+      tier === 'members' &&
+      stufe2ChannelKeys.length > 0 &&
+      !stufe2ChannelKeys.some((key) => getRosters().membersByKey[key] !== undefined)
+  );
 
   // Resolve the signer that can edit this community's 10222 (same pattern as
   // EditCommunityModal.svelte:404-412): current-keypair → own signer;
@@ -257,7 +288,9 @@
     <ul class="steps steps-horizontal mb-4 w-full text-xs">
       <li class="step {step >= 0 ? 'step-neutral' : ''}">{m.concord_wizard_step1()}</li>
       <li class="step {step >= 1 ? 'step-neutral' : ''}">{m.concord_wizard_step2()}</li>
-      <li class="step {step >= 2 ? 'step-neutral' : ''}">{m.concord_wizard_step3()}</li>
+      {#if !isGroupMode}
+        <li class="step {step >= 2 ? 'step-neutral' : ''}">{m.concord_wizard_step3()}</li>
+      {/if}
     </ul>
 
     {#if step === 0}
@@ -316,9 +349,9 @@
         <div class="alert text-sm">{m.concord_wizard_invisible_hint()}</div>
       {/if}
     {:else if step === 1}
-      {#if !isGroupMode}
-        <p class="mb-3 text-sm text-base-content/70">{m.concord_wizard_invite_lead()}</p>
-      {/if}
+      <p class="mb-3 text-sm text-base-content/70">
+        {isGroupMode ? m.wizard_invite_lead() : m.concord_wizard_invite_lead()}
+      </p>
       <ContactSearchInput
         acceptPubkeyInput
         placeholder={m.concord_invite_search_placeholder()}
@@ -371,7 +404,7 @@
       {:else}
         <span></span>
       {/if}
-      {#if step < 2}
+      {#if step < lastStep}
         <button
           class="btn btn-neutral"
           data-testid="concord-wizard-next"
@@ -379,16 +412,26 @@
           onclick={() => (step += 1)}>{m.concord_next()}</button
         >
       {:else}
-        <button
-          class="btn btn-neutral"
-          data-testid="concord-wizard-create"
-          disabled={(!isGroupMode && !acknowledged) || busy}
-          onclick={create}
-        >
-          {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}
-          {isPrivate ? '🔒' : '#'}
-          {m.concord_wizard_create()}
-        </button>
+        <div class="flex flex-col items-end gap-1">
+          {#if waitingForMemberRosters}
+            <p class="text-xs text-base-content/60" data-testid="wizard-rosters-loading">
+              {m.wizard_members_loading()}
+            </p>
+          {/if}
+          <button
+            class="btn btn-neutral"
+            data-testid="concord-wizard-create"
+            disabled={(!isGroupMode && !acknowledged) ||
+              (isGroupMode && !communitySigner) ||
+              waitingForMemberRosters ||
+              busy}
+            onclick={create}
+          >
+            {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}
+            {isPrivate ? '🔒' : '#'}
+            {m.concord_wizard_create()}
+          </button>
+        </div>
       {/if}
     </div>
   </div>

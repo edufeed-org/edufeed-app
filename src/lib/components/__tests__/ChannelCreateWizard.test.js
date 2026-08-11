@@ -108,6 +108,7 @@ vi.mock('$lib/helpers/contentTypes.js', () => ({
   })
 }));
 
+import { channelKey } from '$lib/groups/community-pointer.js';
 import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
 
 /** Fill the name, walk to step 3, acknowledge the disclosure. */
@@ -325,6 +326,10 @@ describe('ChannelCreateWizard visibility + picker', () => {
 describe('ChannelCreateWizard — NIP-29 groups', () => {
   const GROUP_RELAY = 'wss://groups.example/';
   const GROUP_RELAY_B = 'wss://groups-b.example/';
+  // channelKey() returns `string | null`; the `?? ''` keeps this a plain
+  // string for use as a computed object property key below — for these
+  // fixtures it is never actually null.
+  const CHAN_A_KEY = channelKey({ id: 'chan-a', relay: GROUP_RELAY }) ?? '';
 
   /** A 10222 already carrying group pointers → NIP-29 mode. */
   const nip29Community = (extraTags = /** @type {string[][]} */ ([])) => ({
@@ -387,6 +392,9 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
   it('creates a NIP-29 group on the shared relay, attaches it, and fans out put-user', async () => {
     const onCreated = vi.fn();
     const communikeyEvent = nip29Community();
+    // One Stufe-2 roster answered (empty) — clears the loading gate without
+    // adding anyone to the union, keeping this test's assertions narrow.
+    rosterState.membersByKey = { [CHAN_A_KEY]: new Set() };
     render(ChannelCreateWizard, {
       props: { communikeyEvent, onClose: () => {}, onCreated }
     });
@@ -396,9 +404,10 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     await fireEvent.click(screen.getByTestId('wizard-access-members'));
     await fireEvent.click(screen.getByTestId('wizard-access-worldreadable'));
 
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1 (invite)
+    // Group mode is 2 steps — this Next lands on step 1, which is the FINAL
+    // step (invite + Create, no separate "good to know" step).
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
     await fireEvent.click(screen.getByRole('button', { name: new RegExp(MEMBER_B.slice(0, 12)) }));
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
 
     await fireEvent.click(screen.getByTestId('concord-wizard-create'));
 
@@ -428,8 +437,9 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
     const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
     await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 2
+    // Default tier is 'invited' (no roster gating), and group mode is 2
+    // steps — one Next reaches the final (invite/Create) step.
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
     await fireEvent.click(screen.getByTestId('concord-wizard-create'));
 
     await waitFor(() => expect(toastSpy).toHaveBeenCalled());
@@ -437,5 +447,55 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     expect(type).toBe('error');
     expect(typeof message).toBe('string');
     expect(createGroupOnRelay).not.toHaveBeenCalled();
+  });
+
+  // Reviewer finding 1: useChannelRosters debounces + round-trips relays —
+  // a fast user must not be able to hit Create before any existing Stufe-2
+  // roster has answered, which would silently ship a members-tier channel
+  // missing every implicit member (with a SUCCESS toast, no failure count
+  // to warn them).
+  it('disables Create while an existing members-tier roster has not loaded yet', async () => {
+    const communikeyEvent = nip29Community(); // two Stufe-2 pointers, no roster answered yet
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
+
+    const create = /** @type {HTMLButtonElement} */ (screen.getByTestId('concord-wizard-create'));
+    expect(create.disabled).toBe(true);
+    expect(screen.getByTestId('wizard-rosters-loading')).toBeTruthy();
+  });
+
+  it('fans out put-user to the existing members-tier roster union, deduping the explicit invitee and excluding self', async () => {
+    const communikeyEvent = nip29Community();
+    // MEMBER_B is already in the Stufe-2 roster, and so — implausibly, but
+    // exercising the exclusion — is the acting user themselves.
+    rosterState.membersByKey = {
+      [CHAN_A_KEY]: new Set([MEMBER_B, mockManager.active.pubkey])
+    };
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
+    // Also explicitly select MEMBER_B — already in the roster union.
+    await fireEvent.click(screen.getByRole('button', { name: new RegExp(MEMBER_B.slice(0, 12)) }));
+
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
+    const putUserTargets = buildPutUserTemplate.mock.calls.map((args) => args[1]);
+    // MEMBER_B appears exactly once despite being both explicitly selected
+    // AND present in the roster union (dedup).
+    expect(putUserTargets.filter((pubkey) => pubkey === MEMBER_B)).toHaveLength(1);
+    // Self never gets a put-user, even though present in the roster union.
+    expect(putUserTargets).not.toContain(mockManager.active.pubkey);
   });
 });
