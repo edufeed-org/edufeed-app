@@ -204,11 +204,17 @@ for (const [k, want] of Object.entries(EXPECT)) {
 }
 
 const prodSockets = [...new Set(sockets)].filter((u) => !u.includes('127.0.0.1'));
-console.log(`\nproduction websockets: ${prodSockets.length ? JSON.stringify(prodSockets) : 'none'}`);
+console.log(
+  `\nproduction websockets: ${prodSockets.length ? JSON.stringify(prodSockets) : 'none'}`
+);
 // HTTP is its own leak class: a config value can carry a production host and
 // stay invisible to a WebSocket-only ledger (e.g. APP_LOGO -> blossom).
 console.log(`off-host HTTP: ${httpHosts.size ? JSON.stringify([...httpHosts]) : 'none'}`);
-console.log(failed === 0 ? `\nPASS ${Object.keys(EXPECT).length}/${Object.keys(EXPECT).length}` : `\nFAIL ${failed}`);
+console.log(
+  failed === 0
+    ? `\nPASS ${Object.keys(EXPECT).length}/${Object.keys(EXPECT).length}`
+    : `\nFAIL ${failed}`
+);
 
 await browser.close();
 process.exit(failed === 0 ? 0 : 1);

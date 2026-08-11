@@ -2,7 +2,10 @@
 // Mints a FRESH identity every run (it does not re-sign under the committed
 // key) and writes the new key to disk so anything published stays deletable.
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
-const bytesToHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
+const bytesToHex = (b) =>
+  Array.from(b)
+    .map((x) => x.toString(16).padStart(2, '0'))
+    .join('');
 import { writeFileSync } from 'fs';
 
 // Next to this file, not process.cwd() — every other piece of the harness is
@@ -20,7 +23,10 @@ const MESSAGES = [
   ['bold', 'very **bold** and _italic_ and ~~struck~~'],
   ['inlinecode', 'run `pnpm check` before pushing'],
   ['fence', '```js\nconst a = 1;\nif (a) {\n  console.log("indented");\n}\n```'],
-  ['fence-entity', '```\nnostr:npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma\n```'],
+  [
+    'fence-entity',
+    '```\nnostr:npub1r30l8j4vmppvq8w23umcyvd3vct4zmfpfkn4c7h2h057rmlfcrmq9xt9ma\n```'
+  ],
   ['quote', '> a quoted line\n> and its continuation'],
   ['list', '- first item\n- second item\n\n1. one\n2. two'],
   ['mdlink', 'see [the docs](https://example.com/docs) for more'],
@@ -34,14 +40,23 @@ const MESSAGES = [
 ];
 
 const events = [];
-events.push(finalizeEvent({
-  kind: 39000, created_at: now - 100,
-  tags: [['d', GROUP], ['name', 'chat markdown probe'], ['public'], ['open']],
-  content: ''
-}, sk));
+events.push(
+  finalizeEvent(
+    {
+      kind: 39000,
+      created_at: now - 100,
+      tags: [['d', GROUP], ['name', 'chat markdown probe'], ['public'], ['open']],
+      content: ''
+    },
+    sk
+  )
+);
 
 MESSAGES.forEach(([label, content], i) => {
-  const tags = [['h', GROUP], ['probe', label]];
+  const tags = [
+    ['h', GROUP],
+    ['probe', label]
+  ];
   if (label === 'emoji') tags.push(['emoji', 'sob', 'https://example.com/sob.png']);
   events.push(finalizeEvent({ kind: 9, created_at: now - 50 + i, tags, content }, sk));
 });
