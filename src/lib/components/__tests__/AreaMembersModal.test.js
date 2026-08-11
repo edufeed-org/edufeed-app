@@ -112,11 +112,20 @@ const { channelKey } = await import('$lib/groups/community-pointer.js');
 
 const KEY_A = /** @type {string} */ (channelKey({ id: 'chan-a', relay: RELAY }));
 const KEY_B = /** @type {string} */ (channelKey({ id: 'chan-b', relay: RELAY }));
+const KEY_C = /** @type {string} */ (channelKey({ id: 'chan-c', relay: RELAY }));
 
 const communikeyEvent = {
   tags: [
     ['group', 'chan-a', RELAY, 'General', 'members'],
     ['group', 'chan-b', RELAY, 'Announcements', 'members']
+  ]
+};
+
+const threeChannelEvent = {
+  tags: [
+    ['group', 'chan-a', RELAY, 'General', 'members'],
+    ['group', 'chan-b', RELAY, 'Announcements', 'members'],
+    ['group', 'chan-c', RELAY, 'Random', 'members']
   ]
 };
 
@@ -183,6 +192,7 @@ describe('AreaMembersModal rendering', () => {
     expect(screen.queryAllByTestId('area-member-repair')).toHaveLength(0);
     expect(screen.queryAllByTestId('area-member-remove')).toHaveLength(0);
     expect(screen.queryByTestId('stub-select-a')).toBeNull();
+    expect(screen.queryByTestId('area-members-sync')).toBeNull();
   });
 });
 
@@ -258,5 +268,54 @@ describe('AreaMembersModal add member', () => {
     } finally {
       process.off('unhandledRejection', unhandled);
     }
+  });
+});
+
+describe('AreaMembersModal bulk sync', () => {
+  it('area-members-sync repairs every deviation in one click: one aggregated toast, one refresh', async () => {
+    // MEMBER_A is missing from chan-b only; MEMBER_B is missing from chan-c
+    // only — two different rows, each with a different missing channel.
+    rosterState.membersByKey = {
+      [KEY_A]: new Set([ADMIN, MEMBER_A, MEMBER_B]),
+      [KEY_B]: new Set([ADMIN, MEMBER_B]),
+      [KEY_C]: new Set([ADMIN, MEMBER_A])
+    };
+    rosterState.adminsByKey = {
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_B]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_C]: [{ pubkey: ADMIN, roles: ['admin'] }]
+    };
+
+    renderModal({ communikeyEvent: threeChannelEvent });
+
+    const syncBtn = screen.getByTestId('area-members-sync');
+    await fireEvent.click(syncBtn);
+
+    await waitFor(() => expect(buildPutUserTemplate).toHaveBeenCalledWith('chan-b', MEMBER_A, []));
+    await waitFor(() => expect(buildPutUserTemplate).toHaveBeenCalledWith('chan-c', MEMBER_B, []));
+    // No spurious put-user into a channel a row is already in.
+    expect(buildPutUserTemplate).not.toHaveBeenCalledWith('chan-a', MEMBER_A, expect.anything());
+    expect(buildPutUserTemplate).not.toHaveBeenCalledWith('chan-a', MEMBER_B, expect.anything());
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(2);
+
+    // ONE combined toast (not one per row) and ONE refresh.
+    await waitFor(() => expect(showToast).toHaveBeenCalledTimes(1));
+    expect(showToast).toHaveBeenCalledWith('Added to 2 channels', 'success');
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides area-members-sync when nobody has a deviation', () => {
+    rosterState.membersByKey = {
+      [KEY_A]: new Set([ADMIN, MEMBER_A]),
+      [KEY_B]: new Set([ADMIN, MEMBER_A])
+    };
+    rosterState.adminsByKey = {
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_B]: [{ pubkey: ADMIN, roles: ['admin'] }]
+    };
+
+    renderModal();
+
+    expect(screen.queryByTestId('area-members-sync')).toBeNull();
   });
 });

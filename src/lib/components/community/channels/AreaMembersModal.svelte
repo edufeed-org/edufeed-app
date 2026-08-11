@@ -95,41 +95,58 @@
   }
 
   const isAdminSomewhere = $derived(canActOn(pointerKeys));
+  // Bulk "Check members" affordance: visible once at least one row has a
+  // deviation the acting user is admin enough to fix (union over every
+  // row's missingKeys, not just any one row).
+  const canSyncAny = $derived(
+    rows.some((row) => row.missingKeys.length > 0 && canActOn(row.missingKeys))
+  );
 
   let busy = $state(false);
 
   /**
-   * Try `action(pointer)` once, then once more on failure. Never throws — a
+   * Try `action(item)` once, then once more on failure. Never throws — a
    * NIP-29 relay refusing one channel (not admin there, offline, etc.) must
    * not blind the rest of the fan-out or leave an unhandled rejection behind.
-   * @param {{id: string, relay: string}} pointer
-   * @param {(pointer: {id: string, relay: string}) => Promise<any>} action
+   * @template T
+   * @param {T} item
+   * @param {string} label for the console diagnostics
+   * @param {(item: T) => Promise<any>} action
    */
-  async function tryOnce(pointer, action) {
+  async function tryOnce(item, label, action) {
     try {
-      await action(pointer);
+      await action(item);
       return true;
     } catch (err) {
-      console.warn('groups: area fan-out action failed, retrying once', channelKey(pointer), err);
+      console.warn('groups: area fan-out action failed, retrying once', label, err);
       try {
-        await action(pointer);
+        await action(item);
         return true;
       } catch (err2) {
-        console.error('groups: area fan-out retry failed', channelKey(pointer), err2);
+        console.error('groups: area fan-out retry failed', label, err2);
         return false;
       }
     }
   }
 
   /**
-   * @param {Array<{id: string, relay: string}>} targetPointers
-   * @param {(pointer: {id: string, relay: string}) => Promise<any>} action
+   * Generic sequential fan-out: one item at a time (never parallel — a burst
+   * of publishes at one relay is exactly what tryOnce's retry is meant to
+   * absorb gracefully, not race). `keyOf` doubles as both the retry log
+   * label and the aggregateFanOut result key, so every caller — single
+   * pointer (repair/remove/add) or {pointer, pubkey} pair (bulk sync) —
+   * shares this one loop.
+   * @template T
+   * @param {T[]} items
+   * @param {(item: T) => string} keyOf
+   * @param {(item: T) => Promise<any>} action
    */
-  async function fanOut(targetPointers, action) {
+  async function fanOut(items, keyOf, action) {
     const results = [];
-    for (const pointer of targetPointers) {
-      const ok = await tryOnce(pointer, action);
-      results.push({ key: channelKey(pointer) ?? pointer.id, ok });
+    for (const item of items) {
+      const key = keyOf(item);
+      const ok = await tryOnce(item, key, action);
+      results.push({ key, ok });
     }
     return aggregateFanOut(results);
   }
@@ -184,7 +201,11 @@
     if (targets.length === 0) return;
     busy = true;
     try {
-      const aggregate = await fanOut(targets, (pointer) => putUserOn(pointer, row.pubkey));
+      const aggregate = await fanOut(
+        targets,
+        (pointer) => channelKey(pointer) ?? pointer.id,
+        (pointer) => putUserOn(pointer, row.pubkey)
+      );
       reportFanOut(aggregate, (count) => m.area_members_fanout_ok({ count }));
     } finally {
       busy = false;
@@ -202,7 +223,11 @@
     if (targets.length === 0) return;
     busy = true;
     try {
-      const aggregate = await fanOut(targets, (pointer) => removeUserOn(pointer, row.pubkey));
+      const aggregate = await fanOut(
+        targets,
+        (pointer) => channelKey(pointer) ?? pointer.id,
+        (pointer) => removeUserOn(pointer, row.pubkey)
+      );
       reportFanOut(aggregate, (count) => m.area_members_removed({ count }));
     } finally {
       busy = false;
@@ -214,7 +239,45 @@
     if (busy || !getActiveUser() || pointers.length === 0) return;
     busy = true;
     try {
-      const aggregate = await fanOut(pointers, (pointer) => putUserOn(pointer, pubkey));
+      const aggregate = await fanOut(
+        pointers,
+        (pointer) => channelKey(pointer) ?? pointer.id,
+        (pointer) => putUserOn(pointer, pubkey)
+      );
+      reportFanOut(aggregate, (count) => m.area_members_fanout_ok({ count }));
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * Bulk "Check members" — repairs every row's deviations in one pass:
+   * gathers each row's fanOutPlan targets into a single flat list of
+   * {pointer, pubkey} pairs, runs them through ONE fanOut (still one relay
+   * publish at a time, still per-item retry), and reports ONE combined
+   * toast + refresh instead of one per row.
+   */
+  async function syncAll() {
+    if (busy || !getActiveUser()) return;
+    /** @type {Array<{pointer: {id: string, relay: string}, pubkey: string}>} */
+    const items = [];
+    for (const row of rows) {
+      if (row.missingKeys.length === 0) continue;
+      const targets = fanOutPlan({
+        pubkey: row.pubkey,
+        pointers,
+        membersByKey: getRosters().membersByKey
+      });
+      for (const pointer of targets) items.push({ pointer, pubkey: row.pubkey });
+    }
+    if (items.length === 0) return;
+    busy = true;
+    try {
+      const aggregate = await fanOut(
+        items,
+        (item) => `${channelKey(item.pointer) ?? item.pointer.id}:${item.pubkey}`,
+        (item) => putUserOn(item.pointer, item.pubkey)
+      );
       reportFanOut(aggregate, (count) => m.area_members_fanout_ok({ count }));
     } finally {
       busy = false;
@@ -229,6 +292,17 @@
     >
     <h3 class="text-lg font-extrabold">{m.area_members_title()}</h3>
     <p class="mb-1 text-xs text-base-content/60">{m.area_members_lead()}</p>
+
+    {#if canSyncAny}
+      <button
+        class="btn mb-1 btn-outline btn-sm"
+        data-testid="area-members-sync"
+        disabled={busy}
+        onclick={syncAll}
+      >
+        {m.area_members_sync()}
+      </button>
+    {/if}
 
     <div class="divide-y divide-base-300">
       {#each rows as row (row.pubkey)}
