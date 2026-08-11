@@ -227,6 +227,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_join_failed: () => 'Request failed',
   groups_send_failed: () => 'Message could not be sent',
   groups_react_failed: () => 'Reaction could not be sent',
+  groups_join_required: () => 'Join this group first',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
   groups_input_placeholder: (/** @type {{ name: string }} */ { name }) => `Message ${name}`,
@@ -291,9 +292,8 @@ describe('GroupChat', () => {
   });
 
   it('a rejected reaction tells the user instead of failing silently', async () => {
-    // Measured on groups.hzrd149.com: OK false "blocked: unknown member".
     const { showToast } = await import('$lib/helpers/toast');
-    publishMock.mockResolvedValueOnce({ ok: false, message: 'blocked: unknown member' });
+    publishMock.mockResolvedValueOnce({ ok: false, message: 'rate-limited: slow down' });
     const { container } = render(GroupChat, { props: { pointer } });
     await waitFor(() => {
       expect(container.querySelector('[data-testid="pick-stub"]')).toBeTruthy();
@@ -304,6 +304,20 @@ describe('GroupChat', () => {
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith('Reaction could not be sent', 'error')
     );
+  });
+
+  it('a membership refusal says JOIN FIRST, not a generic failure', async () => {
+    // Measured on the buzz relay: "blocked: unknown member".
+    const { showToast } = await import('$lib/helpers/toast');
+    publishMock.mockResolvedValueOnce({ ok: false, message: 'blocked: unknown member' });
+    const { container } = render(GroupChat, { props: { pointer } });
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="pick-stub"]')).toBeTruthy();
+    });
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (container.querySelector('[data-testid="pick-stub"]'))
+    );
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Join this group first', 'warning'));
   });
 
   it('asks the GROUP relay for the profiles of authors and roster', async () => {

@@ -200,3 +200,15 @@ export function buildGroupsListTemplate(existing, change) {
     tags: [...keepTags, ...groups.map((g) => ['group', g.id, g.relay])]
   };
 }
+
+/**
+ * Whether a relay refusal means "you are not a member here". Wordings
+ * measured live: buzz answers "blocked: unknown member", hzrd149's blossom
+ * endpoint "relay membership required", khatru variants "not a member".
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isMembershipRefusal(error) {
+  const message = String(/** @type {any} */ (error)?.message ?? '');
+  return /unknown member|not a member|membership required/i.test(message);
+}

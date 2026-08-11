@@ -3209,5 +3209,6 @@
   "groups_create_here_success": "Channel created",
   "groups_react_failed": "Reaction could not be sent",
   "chat_thread_expand": "Expand",
-  "chat_thread_collapse": "Collapse"
+  "chat_thread_collapse": "Collapse",
+  "groups_join_required": "Join this group first"
 }

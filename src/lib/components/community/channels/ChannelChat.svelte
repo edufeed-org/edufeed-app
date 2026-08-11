@@ -305,6 +305,16 @@
   let pinnedToBottom = true;
   let restored = false;
 
+  // Late-loading media (authed blobs on buzz resolve seconds after the last
+  // message lands) grows the content without a count change and would strand
+  // the view above the bottom. `load` doesn't bubble, but a capture-phase
+  // listener on the container sees every descendant image/video finish.
+  function handleContentLoad() {
+    if (pinnedToBottom && scrollContainer) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }
+
   function handleScroll() {
     if (!scrollContainer) return;
     pinnedToBottom = isNearBottom(scrollContainer);
@@ -549,6 +559,7 @@
   class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
   bind:this={scrollContainer}
   onscroll={handleScroll}
+  onloadcapture={handleContentLoad}
 >
   <div class="mx-auto max-w-md py-3 text-center text-sm text-base-content/60">
     <div class="text-lg">🔒</div>

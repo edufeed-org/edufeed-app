@@ -29,7 +29,8 @@
   import {
     buildGroupMessageTemplate,
     buildJoinRequestTemplate,
-    buildLeaveRequestTemplate
+    buildLeaveRequestTemplate,
+    isMembershipRefusal
   } from '$lib/groups/groups.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { publishToGroupRelay } from '$lib/groups/group-management.js';
@@ -219,6 +220,16 @@
   let pinnedToBottom = true;
   let restored = false;
 
+  // Late-loading media (authed blobs on buzz resolve seconds after the last
+  // message lands) grows the content without a count change and would strand
+  // the view above the bottom. `load` doesn't bubble, but a capture-phase
+  // listener on the container sees every descendant image/video finish.
+  function handleContentLoad() {
+    if (pinnedToBottom && scrollContainer) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }
+
   function handleScroll() {
     if (!scrollContainer) return;
     // Self-correcting: a programmatic pin lands at the bottom and keeps the
@@ -381,7 +392,8 @@
       return true;
     } catch (err) {
       console.error('group send failed', err);
-      showToast(m.groups_send_failed(), 'error');
+      if (isMembershipRefusal(err)) showToast(m.groups_join_required(), 'warning');
+      else showToast(m.groups_send_failed(), 'error');
       return false;
     }
   }
@@ -433,7 +445,8 @@
       eventStore.add(signed);
     } catch (err) {
       console.error('group react failed', err);
-      showToast(m.groups_react_failed(), 'error');
+      if (isMembershipRefusal(err)) showToast(m.groups_join_required(), 'warning');
+      else showToast(m.groups_react_failed(), 'error');
     }
   }
 
@@ -647,6 +660,7 @@
         bind:this={scrollContainer}
         class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
         onscroll={handleScroll}
+        onloadcapture={handleContentLoad}
       >
         {#if isLoading && displayed.length === 0}
           <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>

@@ -3209,5 +3209,6 @@
   "groups_create_here_success": "Kanal erstellt",
   "groups_react_failed": "Reaktion konnte nicht gesendet werden",
   "chat_thread_expand": "Ausklappen",
-  "chat_thread_collapse": "Einklappen"
+  "chat_thread_collapse": "Einklappen",
+  "groups_join_required": "Tritt der Gruppe zuerst bei"
 }
