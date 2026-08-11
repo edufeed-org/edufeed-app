@@ -19,9 +19,35 @@ const now = () => Math.floor(Date.now() / 1000);
 /** @param {number} kind @param {string[][]} tags */
 const template = (kind, tags) => ({ kind, content: '', created_at: now(), tags });
 
-/** @param {string} groupId */
-export function buildCreateGroupTemplate(groupId) {
-  return template(CREATE_GROUP_KIND, [['h', groupId]]);
+/**
+ * The metadata tag block shared by create (9007) and edit (9002): fields only
+ * when non-empty after trim, then BOTH marker sides so a flip always
+ * overwrites.
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean}} meta
+ * @returns {string[][]}
+ */
+function metadataTags(meta) {
+  /** @type {string[][]} */
+  const tags = [];
+  for (const key of /** @type {const} */ (['name', 'about', 'picture'])) {
+    const value = meta[key]?.trim();
+    if (value) tags.push([key, value]);
+  }
+  tags.push([meta.isPublic ? 'public' : 'private']);
+  tags.push([meta.isOpen ? 'open' : 'closed']);
+  return tags;
+}
+
+/**
+ * The 9007 carries the metadata inline: name-validating relays (buzz 0.2.0:
+ * "invalid: channel name is required") reject a bare ["h", id] create, and
+ * relays that read metadata only from 9002 ignore the extra tags (khatru,
+ * measured on groups.0xchat.com).
+ * @param {string} groupId
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean}} [meta]
+ */
+export function buildCreateGroupTemplate(groupId, meta) {
+  return template(CREATE_GROUP_KIND, [['h', groupId], ...(meta ? metadataTags(meta) : [])]);
 }
 
 /**
@@ -29,15 +55,7 @@ export function buildCreateGroupTemplate(groupId) {
  * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean}} meta
  */
 export function buildEditGroupMetadataTemplate(groupId, meta) {
-  /** @type {string[][]} */
-  const tags = [['h', groupId]];
-  for (const key of /** @type {const} */ (['name', 'about', 'picture'])) {
-    const value = meta[key]?.trim();
-    if (value) tags.push([key, value]);
-  }
-  tags.push([meta.isPublic ? 'public' : 'private']);
-  tags.push([meta.isOpen ? 'open' : 'closed']);
-  return template(EDIT_METADATA_KIND, tags);
+  return template(EDIT_METADATA_KIND, [['h', groupId], ...metadataTags(meta)]);
 }
 
 /** @param {string} groupId @param {string} pubkey @param {string[]} [roles] */
@@ -102,7 +120,7 @@ export function confirmGroupMetadata(relayConn, groupId) {
  * @param {{relayConn: any, id: string, metadata: any, user: {pubkey: string, signer: any}}} args
  */
 export async function createGroupOnRelay({ relayConn, id, metadata, user }) {
-  await publishToGroupRelay(relayConn, buildCreateGroupTemplate(id), user);
+  await publishToGroupRelay(relayConn, buildCreateGroupTemplate(id, metadata), user);
   await publishToGroupRelay(relayConn, buildEditGroupMetadataTemplate(id, metadata), user);
   // Give the relay a beat to materialise its addressables before we ask.
   await new Promise((resolve) => setTimeout(resolve, 500));

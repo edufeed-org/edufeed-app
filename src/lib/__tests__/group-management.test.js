@@ -21,12 +21,20 @@ const ID = 'abc123def456aa00';
 const PK = 'f'.repeat(64);
 
 describe('group management templates', () => {
-  it('create-group is a kind 9007 with only the h tag', () => {
-    const t = buildCreateGroupTemplate(ID);
+  it('create-group is a kind 9007 carrying the metadata inline', () => {
+    // The buzz relay (0.2.0) validates the 9007 itself: "invalid: channel
+    // name is required". A bare ["h", id] create is rejected there, so the
+    // create carries the same tags the 9002 does — harmless on relays that
+    // ignore them (khatru/0xchat, measured).
+    const t = buildCreateGroupTemplate(ID, { name: 'Study group', isPublic: false, isOpen: false });
     expect(t.kind).toBe(9007);
-    expect(t.tags).toEqual([['h', ID]]);
+    expect(t.tags).toEqual([['h', ID], ['name', 'Study group'], ['private'], ['closed']]);
     expect(t.content).toBe('');
     expect(t.created_at).toBeTypeOf('number');
+  });
+
+  it('create-group without metadata still has the h tag alone', () => {
+    expect(buildCreateGroupTemplate(ID).tags).toEqual([['h', ID]]);
   });
 
   it('edit-metadata carries fields and BOTH-side markers', () => {
@@ -133,6 +141,9 @@ describe('createGroupOnRelay', () => {
     });
     const kinds = relayConn.publish.mock.calls.map(([e]) => e.kind);
     expect(kinds).toEqual([9007, 9002]);
+    // The 9007 must carry the metadata too — name-validating relays (buzz)
+    // reject a bare create.
+    expect(relayConn.publish.mock.calls[0][0].tags).toContainEqual(['name', 'X']);
     expect(relayConn.request).toHaveBeenCalledWith(
       { kinds: [39000], '#d': [ID] },
       { timeout: 10000 }
