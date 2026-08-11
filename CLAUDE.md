@@ -659,6 +659,14 @@ Prefer developing in **git worktrees** instead of swapping branches in the main 
 
 See the `superpowers:using-git-worktrees` skill for the mechanics (creating, listing, removing worktrees, branch isolation).
 
+### Git Remotes (Nostr via ngit)
+
+`origin` is a `nostr://` remote using the `ngit` CLI/remote-helper — the canonical git host. `forgejo` and `github` remain as named remotes and are also configured as extra `--push` URLs on `origin` (`git remote set-url --add --push origin <url>`), so a plain `git push` / `git push origin <branch>` fans out to all three. Fetch/pull only reads from nostr.
+
+- Requires `ngit account login` (or `ngit account connect` for a NIP-46 bunker) before any push — once per machine. If a push hangs at `signing event (git state) with remote signer...`, it's waiting on bunker approval on your signer device, not a network failure.
+- The pre-push hook (`pnpm check`) runs once **per push destination** — pushing to all three via `origin` triggers svelte-check 3×. A real push can take 1-2+ minutes.
+- This repo has multiple nostr maintainers, each with their own storage bucket across `relay.ngit.dev` / `gitnostr.com` / `ngit.danconwaydev.com` — one `git push origin` can fan out to 6+ underlying targets. Run `ngit repo` to see current maintainers/servers.
+
 ### Commands
 
 ```bash
