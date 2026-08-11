@@ -3207,5 +3207,7 @@
   "groups_create_here_title": "Kanal auf diesem Relay erstellen",
   "groups_create_here_action": "Erstellen",
   "groups_create_here_success": "Kanal erstellt",
-  "groups_react_failed": "Reaktion konnte nicht gesendet werden"
+  "groups_react_failed": "Reaktion konnte nicht gesendet werden",
+  "chat_thread_expand": "Ausklappen",
+  "chat_thread_collapse": "Einklappen"
 }

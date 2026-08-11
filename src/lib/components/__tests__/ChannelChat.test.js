@@ -93,6 +93,8 @@ vi.mock(
 );
 
 vi.mock('$lib/paraglide/messages', () => ({
+  chat_thread_expand: () => 'Expand',
+  chat_thread_collapse: () => 'Collapse',
   concord_chat_subtitle: () => 'subtitle',
   concord_how_it_works: () => 'how it works',
   concord_menu_invite: () => 'Invite',

@@ -310,6 +310,8 @@
   // Thread panel: which root is open, plus its own draft and reply target.
   /** @type {string | null} */
   let openThreadId = $state(null);
+  // Sticky for the session: expanding one thread panel expands the next too.
+  let threadExpanded = $state(false);
   let threadText = $state('');
   /** @type {any} */
   let threadReplyTo = $state.raw(null);
@@ -621,7 +623,13 @@
   <div class="flex min-h-0 flex-1">
     <!-- On a narrow viewport the panel takes the whole width; the timeline
          steps aside rather than being squeezed into a column of its own. -->
-    <div class="flex min-h-0 flex-1 flex-col {openThreadRoot ? 'hidden md:flex' : ''}">
+    <div
+      class="flex min-h-0 flex-1 flex-col {openThreadRoot
+        ? threadExpanded
+          ? 'hidden'
+          : 'hidden md:flex'
+        : ''}"
+    >
       <div
         bind:this={scrollContainer}
         class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
@@ -655,6 +663,9 @@
         onClose={closeThread}
         title={m.chat_thread_title()}
         closeLabel={m.chat_thread_close()}
+        expandLabel={m.chat_thread_expand()}
+        collapseLabel={m.chat_thread_collapse()}
+        bind:expanded={threadExpanded}
       >
         {#snippet row(/** @type {any} */ message)}
           {@render messageRow(message, (msg) => (threadReplyTo = msg), false)}
