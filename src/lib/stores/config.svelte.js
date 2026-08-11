@@ -30,7 +30,8 @@ const defaultConfig = {
     communikey: [], // kinds 10222, 30222
     educational: [], // kind 30142
     longform: [], // kind 30023
-    kanban: [] // kinds 30301, 30302, 8571
+    kanban: [], // kinds 30301, 30302, 8571
+    groups: [] // NIP-29 group hosts (creation targets)
   },
   // Dashboard relay feed picker: deployment-curated relays + enabled sources
   // (tokens: config | custom | nip65 | community)
@@ -269,7 +270,8 @@ export function initializeConfig(runtimeConfig) {
       communikey: runtimeConfig.communikeyRelays || defaultConfig.appRelays.communikey,
       educational: runtimeConfig.ambRelays || defaultConfig.appRelays.educational,
       longform: runtimeConfig.longformContentRelays || defaultConfig.appRelays.longform,
-      kanban: runtimeConfig.kanbanRelays || defaultConfig.appRelays.kanban
+      kanban: runtimeConfig.kanbanRelays || defaultConfig.appRelays.kanban,
+      groups: runtimeConfig.groupsRelays || defaultConfig.appRelays.groups
     },
     feed: {
       relays: runtimeConfig.feed?.relays || defaultConfig.feed.relays,
