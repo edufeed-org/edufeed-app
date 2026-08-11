@@ -296,30 +296,40 @@
     showKeyBar = false;
   }
 
-  // First render lands on the saved spot (or the newest message); afterwards
-  // new arrivals keep the view pinned only while the reader is already near
-  // the bottom — jumping a reader who scrolled up was the old behaviour and
-  // laoc's 2026-08-11 feedback retires it.
+  // Scroll behaviour (laoc, 2026-08-11): pinned to the newest message until
+  // the reader scrolls away — the timeline can rebuild non-monotonically
+  // while messages stream in, so a one-shot "scroll when messages arrive"
+  // lands mid-stream. A saved position from this session is restored instead
+  // when they left mid-scroll.
   const scrollKey = $derived(channel?.channel_id ? `concord:${channel.channel_id}` : null);
-  let initialScrollDone = false;
+  let pinnedToBottom = true;
+  let restored = false;
+
+  function handleScroll() {
+    if (!scrollContainer) return;
+    pinnedToBottom = isNearBottom(scrollContainer);
+  }
+
   $effect(() => {
     // Read the reactive dep BEFORE any early return (project gotcha: an
     // effect that returns before reading state captures no dependency and
     // never re-runs).
     const count = messages.length;
     if (count === 0 || !scrollContainer) return;
-    if (!initialScrollDone) {
-      initialScrollDone = true;
+    if (!restored) {
+      restored = true;
       const saved = recallScrollPosition(scrollKey);
-      if (saved && !saved.atBottom) scrollContainer.scrollTop = saved.top;
-      else scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      return;
+      if (saved && !saved.atBottom) {
+        pinnedToBottom = false;
+        scrollContainer.scrollTop = saved.top;
+        return;
+      }
     }
-    if (isNearBottom(scrollContainer)) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    if (pinnedToBottom) scrollContainer.scrollTop = scrollContainer.scrollHeight;
   });
   $effect(() => {
     return () => {
-      if (!scrollContainer || !initialScrollDone) return;
+      if (!scrollContainer || !restored) return;
       saveScrollPosition(scrollKey, {
         top: scrollContainer.scrollTop,
         atBottom: isNearBottom(scrollContainer)
@@ -535,7 +545,11 @@
   readOnly={dissolved}
   onRsvp={sendRsvp}
 />
-<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" bind:this={scrollContainer}>
+<div
+  class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+  bind:this={scrollContainer}
+  onscroll={handleScroll}
+>
   <div class="mx-auto max-w-md py-3 text-center text-sm text-base-content/60">
     <div class="text-lg">🔒</div>
     <b>{m.concord_genesis_title({ name: channel.name })}</b>

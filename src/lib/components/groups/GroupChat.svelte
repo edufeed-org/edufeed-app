@@ -207,36 +207,49 @@
   const threads = $derived(buildThreadIndex(displayed));
   const grouped = $derived(groupMessagesByDate(threads.timeline));
 
-  // Scroll: first render lands on the saved spot (or the newest message when
-  // there is none / the reader left at the bottom); afterwards new arrivals
-  // keep the view pinned only while the reader is already near the bottom.
-  // Position is saved on unmount so switching channels and coming back
-  // restores where you were (laoc, 2026-08-11).
+  // Scroll behaviour (laoc, 2026-08-11): the view starts PINNED to the newest
+  // message and stays pinned through the streaming load — the timeline
+  // rebuilds non-monotonically while the relay replays (thread folding), so
+  // "scroll once when messages arrive" lands mid-stream and sticks at the
+  // top. Only the reader's own scrolling away from the bottom unpins; a saved
+  // position from this session is restored instead when they left mid-scroll.
   /** @type {HTMLDivElement | undefined} */
   let scrollContainer;
   const scrollKey = $derived(channelKey({ id: pointer.id, relay: pointer.relay }));
-  let initialScrollDone = false;
+  let pinnedToBottom = true;
+  let restored = false;
+
+  function handleScroll() {
+    if (!scrollContainer) return;
+    // Self-correcting: a programmatic pin lands at the bottom and keeps the
+    // flag; only a reader moving away clears it.
+    pinnedToBottom = isNearBottom(scrollContainer);
+  }
+
   $effect(() => {
     const count = threads.timeline.length; // dep first — see effect gotcha
     if (!scrollContainer || count === 0) return;
-    if (!initialScrollDone) {
-      initialScrollDone = true;
+    if (!restored) {
+      restored = true;
       const saved = recallScrollPosition(scrollKey);
-      if (saved && !saved.atBottom) scrollContainer.scrollTop = saved.top;
-      else scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      return;
+      if (saved && !saved.atBottom) {
+        pinnedToBottom = false;
+        scrollContainer.scrollTop = saved.top;
+        return;
+      }
     }
-    if (isNearBottom(scrollContainer)) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    if (pinnedToBottom) scrollContainer.scrollTop = scrollContainer.scrollHeight;
   });
   $effect(() => {
     return () => {
-      if (!scrollContainer || !initialScrollDone) return;
+      if (!scrollContainer || !restored) return;
       saveScrollPosition(scrollKey, {
         top: scrollContainer.scrollTop,
         atBottom: isNearBottom(scrollContainer)
       });
     };
   });
+
   const getProfiles = useProfileMap(() => displayed.map((event) => event.pubkey));
 
   // Profiles for authors + roster, from the GROUP relay itself: members of a
@@ -633,6 +646,7 @@
       <div
         bind:this={scrollContainer}
         class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+        onscroll={handleScroll}
       >
         {#if isLoading && displayed.length === 0}
           <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
