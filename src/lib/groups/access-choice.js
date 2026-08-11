@@ -14,21 +14,3 @@ export function accessChoiceToNip29({ tier, worldReadable = false }) {
     access: tier
   };
 }
-
-/**
- * What the disclosure line should say. World is the ABSENCE of `private` on
- * the raw 39000 (same rule as channel-access.js — applesauce's isPublic
- * reads a dead draft); members vs invited is the community's intent from the
- * pointer's access slot, defaulting to the stricter reading.
- * @param {{kind?: number, tags?: string[][]} | null | undefined} metadataEvent
- * @param {string | undefined} access
- * @returns {'world'|'members'|'invited'|'unknown'}
- */
-export function disclosureKind(metadataEvent, access) {
-  if (!metadataEvent || metadataEvent.kind !== 39000 || !Array.isArray(metadataEvent.tags)) {
-    return 'unknown';
-  }
-  const isPrivate = metadataEvent.tags.some((t) => t[0] === 'private');
-  if (!isPrivate) return 'world';
-  return access === 'members' ? 'members' : 'invited';
-}

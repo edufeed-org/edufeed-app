@@ -52,7 +52,8 @@
   import { detachGroupChannel } from '$lib/groups/community-attach.js';
   import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
   import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
-  import { disclosureKind } from '$lib/groups/access-choice.js';
+  import { channelAccessLevel } from '$lib/groups/channel-access.js';
+  import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
   import {
     formatMessageTimestamp,
@@ -99,7 +100,7 @@
   // community, use THAT community's intent for it (members vs invited — the
   // relay's own kind:39000 cannot express the split, see access-choice.js);
   // a standalone group has no such pointer and falls back to `undefined`,
-  // which disclosureKind reads as the stricter 'invited'.
+  // which channelAccessLevel reads as the stricter 'invited'.
   const linkedAccess = $derived.by(() => {
     const target = channelKey({ id: pointer.id, relay: pointer.relay });
     if (!target) return undefined;
@@ -109,8 +110,21 @@
     }
     return undefined;
   });
-  const disclosure = $derived(disclosureKind(metadataEvent, linkedAccess));
   /** @type {Set<string>} */ let members = $state(new Set());
+  // Same accounting as the rail's access glyph (channel-access.js): a group
+  // without `private` on a host that gates every read behind NIP-42 is
+  // readable by whoever the relay admits, not by the world — overstating
+  // openness is the harmful direction.
+  const disclosureLevel = $derived(
+    channelAccessLevel(metadataEvent, { access: linkedAccess }, relayRequiresAuth(getRelayInfo()))
+  );
+  // The numeric members/invited line reads "0" while the roster hasn't
+  // arrived yet (or is genuinely empty) — indistinguishable from "not
+  // answered", so hide it rather than print a wrong number. The 'world' line
+  // carries no count and is unaffected.
+  const disclosure = $derived(
+    disclosureLevel !== 'world' && members.size === 0 ? 'unknown' : disclosureLevel
+  );
   /** @type {import('applesauce-common/helpers/groups').GroupAdmin[]} */
   let admins = $state.raw([]);
   let authRequired = $state(false);

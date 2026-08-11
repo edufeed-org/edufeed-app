@@ -74,6 +74,41 @@ const metadataEventOpen = signWith(
   RELAY_SK
 );
 const membersEventOpen = signWith({ kind: 39002, tags: [['d', 'openchat']] }, RELAY_SK);
+// A THIRD group: no `private` tag (same shape as `openchat`), but reached
+// through a relay whose NIP-11 declares every read gated behind NIP-42 — the
+// live buzz-relay case (finding 2): the absence of `private` must NOT read as
+// "world" there, only as "members". Carries a real member so the disclosure
+// line's numeric-suppression rule (finding 5, size === 0 hides the line)
+// doesn't swallow this fixture's whole point.
+const metadataEventAuthNoPrivate = signWith(
+  {
+    kind: 39000,
+    tags: [
+      ['d', 'authchat'],
+      ['name', 'Auth Chat']
+    ]
+  },
+  RELAY_SK
+);
+const membersEventAuthNoPrivate = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'authchat'],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
+// A FOURTH group: private, but with an EMPTY roster (no `p` tags) — finding 5:
+// "readable by 0 members" is not a real disclosure, it's "we haven't heard
+// from the roster yet" indistinguishable from "genuinely nobody", so the line
+// must be suppressed entirely rather than print the number.
+const metadataEventEmptyRoster = signWith(
+  { kind: 39000, tags: [['d', 'emptychat'], ['name', 'Empty Chat'], ['private']] },
+  RELAY_SK
+);
+const membersEventEmptyRoster = signWith({ kind: 39002, tags: [['d', 'emptychat']] }, RELAY_SK);
 // The two live reply shapes, both hanging off `chatEvent`: the 872-event form
 // (a lone `reply` marker pointing at the root) and the 3-event form (the
 // conformant root+reply pair). The nested one answers `firstReply`, so a
@@ -146,6 +181,19 @@ const nestedReply = signWith(
 const publishMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
 const requestCalls = vi.hoisted(() => /** @type {any[]} */ ([]));
 const relayCalls = vi.hoisted(() => /** @type {string[]} */ ([]));
+// Mutable holder for the relay's NIP-11 document (finding 2's test needs to
+// flip auth_required per test) — same pattern as joinedCommunikeyEventsHolder
+// below. Defaults to auth-required, matching the badges test's expectation
+// ("Sign-in required") and every other test's assumption; reset in the outer
+// `beforeEach`.
+const relayInfoHolder = vi.hoisted(() => ({
+  info: /** @type {any} */ ({
+    limitation: { auth_required: true },
+    supported_nips: [1, 29, 42],
+    software: 'git+https://github.com/fiatjaf/pyramid',
+    version: '1.2'
+  })
+}));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   const { EventStore } = await import('applesauce-core');
@@ -163,12 +211,14 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
       return {
         request: (/** @type {any} */ filters) => {
           requestCalls.push(filters);
-          // The roster request keys on `#d`; route the second, world-readable
-          // group's fixtures to it and leave every other pointer (including
-          // the kind:0 profile requests, which carry no `#d`) on `beechat`.
-          if (filters?.['#d']?.[0] === 'openchat') {
-            return rxOf(metadataEventOpen, membersEventOpen);
-          }
+          // The roster request keys on `#d`; route each fixture group's `#d`
+          // to its own metadata/members pair and leave every other pointer
+          // (including the kind:0 profile requests, which carry no `#d`) on
+          // `beechat`.
+          const d = filters?.['#d']?.[0];
+          if (d === 'openchat') return rxOf(metadataEventOpen, membersEventOpen);
+          if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
+          if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
           return rxOf(metadataEvent, membersEvent);
         },
         // keep the subscription open after replay so unsubscribe paths run
@@ -179,15 +229,11 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           ),
         publish: publishMock,
         authenticate: vi.fn().mockResolvedValue({ ok: true }),
-        // The header's badges read the relay's NIP-11 document. A fake relay
-        // without it is not a relay: applesauce's Relay always exposes this,
-        // and leaving it out only hides the wiring from the test.
-        information$: rxOf({
-          limitation: { auth_required: true },
-          supported_nips: [1, 29, 42],
-          software: 'git+https://github.com/fiatjaf/pyramid',
-          version: '1.2'
-        })
+        // The header's badges (and the disclosure line's auth cap) read the
+        // relay's NIP-11 document. A fake relay without it is not a relay:
+        // applesauce's Relay always exposes this, and leaving it out only
+        // hides the wiring from the test.
+        information$: rxOf(relayInfoHolder.info)
       };
     },
     group: () => ({ request: () => rxOf() })
@@ -293,6 +339,12 @@ describe('GroupChat', () => {
     relayCalls.length = 0;
     requestCalls.length = 0;
     joinedCommunikeyEventsHolder.events = [];
+    relayInfoHolder.info = {
+      limitation: { auth_required: true },
+      supported_nips: [1, 29, 42],
+      software: 'git+https://github.com/fiatjaf/pyramid',
+      version: '1.2'
+    };
   });
 
   it('renders relay-served metadata and chat messages through the real event store', async () => {
@@ -430,6 +482,9 @@ describe('GroupChat', () => {
   });
 
   it('shows the world-readable disclosure line for a group without `private`', async () => {
+    // The genuinely-open combination: relay does NOT gate reads behind
+    // NIP-42, and the group carries no `private` tag either.
+    relayInfoHolder.info = { ...relayInfoHolder.info, limitation: { auth_required: false } };
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
     await screen.findByTestId('group-name');
 
@@ -437,6 +492,30 @@ describe('GroupChat', () => {
     expect(line.textContent).toBe(
       'Anyone on the network can read along — even without an account.'
     );
+  });
+
+  // Finding 2: overstating openness is the harmful direction. A host that
+  // gates every read behind NIP-42 (relayInfoHolder's default) means a 39000
+  // lacking `private` is still only readable by whoever the relay admits —
+  // the disclosure line must say MEMBERS, not world.
+  it('shows the members-wording disclosure line when the relay requires auth even though the channel has no `private` tag', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'authchat' } } });
+    await screen.findByTestId('group-name');
+
+    const line = await screen.findByTestId('disclosure-line');
+    expect(line.textContent).toBe('Readable by all 1 members.');
+  });
+
+  // Finding 5: a members/invited line with count 0 is not information, it's
+  // ambiguous between "empty roster" and "roster hasn't arrived" — hide it.
+  it('hides the disclosure line for a members/invited channel with an empty roster', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'emptychat' } } });
+    await screen.findByTestId('group-name');
+
+    // Give any (absent) disclosure line a chance to render before asserting
+    // its absence.
+    await waitFor(() => expect(screen.queryByTestId('group-badges')).toBeTruthy());
+    expect(screen.queryByTestId('disclosure-line')).toBeNull();
   });
 
   // Exercises the linkedAccess lookup itself (channelKey matching a real
