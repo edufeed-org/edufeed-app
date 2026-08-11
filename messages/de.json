@@ -2978,6 +2978,7 @@
   "wizard_access_worldreadable_hint": "Alle im Netz können mitlesen — schreiben können nur Mitglieder.",
   "wizard_no_shared_relay": "Die Kanäle dieser Community liegen auf verschiedenen Relays — Anlegen hier nicht möglich.",
   "wizard_members_loading": "Mitglieder werden geladen…",
+  "wizard_attach_failed": "Kanal erstellt, aber die Verknüpfung mit der Community schlug fehl — hänge ihn über ‚Bestehende verknüpfen' an, id {id}.",
   "wizard_invite_lead": "Füge Personen hinzu, die von Anfang an im Kanal sein sollen — Mitglieder lassen sich jederzeit später verwalten.",
   "concord_locked_title": "Kein Schlüssel für diesen Kanal",
   "concord_locked_body": "Du hast für diesen Kanal noch keinen Zugang erhalten. Bitte eine:n Admin um eine Einladung.",

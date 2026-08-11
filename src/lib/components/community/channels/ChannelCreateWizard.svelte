@@ -107,12 +107,13 @@
   // useChannelRosters debounces (300ms) + round-trips relays before any
   // roster answers; areaMemberRows excludes a channel's members until its
   // roster is heard from at all ("we have not heard" vs "not a member" are
-  // different sentences). A user who hits Create before any existing
+  // different sentences). A user who hits Create before EVERY existing
   // Stufe-2 roster has loaded would otherwise ship a members-tier channel
-  // silently missing every implicit member — with a SUCCESS toast, since
-  // there's no failure to count. Gate Create on at least one Stufe-2
-  // channelKey being present in membersByKey; a community with no existing
-  // Stufe-2 channels has nothing to wait for.
+  // silently missing implicit members from whichever channel hadn't answered
+  // yet — with a SUCCESS toast, since there's no failure to count. Gate
+  // Create on EVERY Stufe-2 channelKey being present in membersByKey (not
+  // just one — a partial answer is still a partial union); a community with
+  // no existing Stufe-2 channels has nothing to wait for.
   const stufe2ChannelKeys = $derived(
     stufe2Pointers(communikeyEvent)
       .map((pointer) => channelKey(pointer))
@@ -128,7 +129,7 @@
       isGroupMode &&
       tier === 'members' &&
       stufe2ChannelKeys.length > 0 &&
-      !stufe2ChannelKeys.some((key) => getRosters().membersByKey[key] !== undefined)
+      !stufe2ChannelKeys.every((key) => getRosters().membersByKey[key] !== undefined)
   );
 
   // Resolve the signer that can edit this community's 10222 (same pattern as
@@ -210,6 +211,22 @@
       showToast(m.wizard_no_shared_relay(), 'error');
       return;
     }
+    // Snapshot the Stufe-2 member union BEFORE any network call. attachGroupChannel
+    // below writes the community's 10222 optimistically to the EventStore,
+    // which flows straight back into the `communikeyEvent` prop; that changes
+    // stufe2Pointers(communikeyEvent) synchronously (the new pointer is now
+    // in the list) and therefore the roster hook's channelKeys — wiping
+    // membersByKey back to `{}` right as this function needs it. Reading it
+    // once, up front, keeps the fan-out honest even though the read happens
+    // to be against the OLD pointer set (the new channel isn't in it yet
+    // anyway, so nothing is lost by reading early).
+    const memberUnion =
+      tier === 'members'
+        ? areaMemberRows({
+            pointers: stufe2Pointers(communikeyEvent),
+            membersByKey: getRosters().membersByKey
+          }).map((row) => row.pubkey)
+        : [];
     try {
       // Narrowed to a local so TS carries the non-null check through the
       // whole flow — `manager.active` is a getter, so re-reading it inline
@@ -225,22 +242,27 @@
         metadata: { name: name.trim(), isPublic, isOpen },
         user
       });
-      await attachGroupChannel({
-        communikeyEvent,
-        pointer: { id, relay, name: name.trim(), access },
-        communitySigner
-      });
+      // Past this point the group EXISTS on the relay — a retry must never
+      // re-create it. Attach failure gets its OWN try/catch: it tells a
+      // different story from "nothing was created" (the group lives on,
+      // orphaned; a blind retry from the outer catch would mint a second
+      // one), so it gets a distinct warning toast, no fan-out, and the
+      // wizard stays open rather than closing via onCreated.
+      try {
+        await attachGroupChannel({
+          communikeyEvent,
+          pointer: { id, relay, name: name.trim(), access },
+          communitySigner
+        });
+      } catch (error) {
+        console.error('groups: attach failed after group creation', error);
+        showToast(m.wizard_attach_failed({ id }), 'warning');
+        return;
+      }
       // Fan out put-user to every explicitly selected invitee, plus — for a
-      // members-tier channel only — the area's current member union (Stufe
-      // 2's promise: every existing members-tier channel's roster). Self
+      // members-tier channel only — the area's current member union
+      // (snapshotted above, before the attach could invalidate it). Self
       // never needs a grant.
-      const memberUnion =
-        tier === 'members'
-          ? areaMemberRows({
-              pointers: stufe2Pointers(communikeyEvent),
-              membersByKey: getRosters().membersByKey
-            }).map((row) => row.pubkey)
-          : [];
       const targets = unique([...selected, ...memberUnion]).filter(
         (pubkey) => pubkey !== user.pubkey
       );
