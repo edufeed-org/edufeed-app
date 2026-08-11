@@ -122,7 +122,7 @@ describe('createGroupOnRelay', () => {
   it('sends 9007 then 9002 and resolves with the confirming 39000', async () => {
     const meta39000 = { kind: 39000, tags: [['d', ID]] };
     const relayConn = {
-      publish: vi.fn(async () => ({ ok: true })),
+      publish: vi.fn(async (/** @type {any} */ _event) => ({ ok: true })),
       request: vi.fn(() => of(meta39000))
     };
     const confirmed = await createGroupOnRelay({

@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+/** @type {{ runtimeConfig: { appRelays: any } }} */
 const mockConfig = {
   runtimeConfig: {
     appRelays: {
