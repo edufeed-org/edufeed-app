@@ -81,10 +81,21 @@ export function useHostUnread(getRelay, getChannelIds, getActiveChannelId) {
   let summaries = $state.raw({});
   let loaded = $state(false);
 
+  // A fresh ids ARRAY with the same content must not re-run the subscribe
+  // effect. host.rows recomputes on every streaming metadata event, and its
+  // flatMap mints a new array each time; keying the effect on that identity
+  // reopened the REQ per event — on a 1277-channel host that exhausted the
+  // relay's subscription cap and starved every later REQ on the connection.
+  // A string is compared by value, so the effect only sees real set changes.
+  const idsKey = $derived.by(() => {
+    const ids = getChannelIds() ?? [];
+    return [...ids].sort().join('');
+  });
+
   // One live REQ for the whole host.
   $effect(() => {
     const relay = getRelay();
-    const ids = getChannelIds() ?? [];
+    const key = idsKey;
     const me = getActiveUser()?.pubkey;
     // Hygiene, not correctness, and worth saying so: summaries are keyed by
     // `id@relay`, so another host's could never be READ under this one's name,
@@ -93,37 +104,45 @@ export function useHostUnread(getRelay, getChannelIds, getActiveChannelId) {
     // for the lifetime of the tab as you move between hosts.
     summaries = {};
     loaded = relay && me ? eosedThisSession.has(`${me}|${relay}`) : false;
-    if (!relay || !me || ids.length === 0) return;
+    if (!relay || !me || key === '') return;
+    const ids = key.split('');
 
-    const since = untrack(() =>
-      unreadWindowSince(readUnreadMarkers(me), keysFor(relay, ids), Math.floor(Date.now() / 1000))
-    );
-    const filter = { kinds: [GROUP_MESSAGE], '#h': [...ids], since };
+    /** @type {import('rxjs').Subscription | undefined} */ let streamSub;
+    /** @type {import('rxjs').Subscription | undefined} */ let modelSub;
+    // Debounce: while the directory is still streaming, the channel set grows
+    // many times in a burst; one REQ at the end covers them all.
+    const timer = setTimeout(() => {
+      const since = untrack(() =>
+        unreadWindowSince(readUnreadMarkers(me), keysFor(relay, ids), Math.floor(Date.now() / 1000))
+      );
+      const filter = { kinds: [GROUP_MESSAGE], '#h': [...ids], since };
 
-    const streamSub = pool
-      .relay(relay)
-      .subscription([filter])
-      .pipe(storeEvents(eventStore))
-      .subscribe({
-        next: (/** @type {any} */ value) => {
-          // The relay has told us it has sent everything it stored. Only now
-          // is an empty channel an empty channel.
-          if (value === 'EOSE') {
-            loaded = true;
-            eosedThisSession.add(`${me}|${relay}`);
-          }
-        },
-        // A refusal leaves `loaded` false on purpose: see the note above.
-        error: () => {}
+      streamSub = pool
+        .relay(relay)
+        .subscription([filter])
+        .pipe(storeEvents(eventStore))
+        .subscribe({
+          next: (/** @type {any} */ value) => {
+            // The relay has told us it has sent everything it stored. Only now
+            // is an empty channel an empty channel.
+            if (value === 'EOSE') {
+              loaded = true;
+              eosedThisSession.add(`${me}|${relay}`);
+            }
+          },
+          // A refusal leaves `loaded` false on purpose: see the note above.
+          error: () => {}
+        });
+
+      modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
+        summaries = foldHostSummaries(events, me, relay);
       });
-
-    const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
-      summaries = foldHostSummaries(events, me, relay);
-    });
+    }, 300);
 
     return () => {
-      streamSub.unsubscribe();
-      modelSub.unsubscribe();
+      clearTimeout(timer);
+      streamSub?.unsubscribe();
+      modelSub?.unsubscribe();
     };
   });
 

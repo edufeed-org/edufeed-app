@@ -117,6 +117,9 @@ const nameClassOf = (/** @type {string} */ name) =>
 
 /** Messages only — the host has NOT said it is done sending. */
 const send = async (/** @type {any[]} */ events) => {
+  // The subscription opens after a short debounce (host-unread.svelte.js) —
+  // wait for it so events are never dropped into a not-yet-open stream.
+  await waitFor(() => expect(holders.streams.length).toBeGreaterThan(0));
   const stream = holders.streams.at(-1);
   for (const event of events) stream?.next(event);
   await waitFor(() => expect(screen.getAllByTestId('host-channel-row').length).toBeGreaterThan(0));
