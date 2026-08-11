@@ -13,7 +13,7 @@
   import ChevronLeftIcon from './icons/ui/ChevronLeftIcon.svelte';
   import ChevronRightIcon from './icons/ui/ChevronRightIcon.svelte';
   import KeypairGenerator from './shared/KeypairGenerator.svelte';
-  import AvatarUploader from './shared/AvatarUploader.svelte';
+  import LicensedImageInput from './shared/LicensedImageInput.svelte';
   import BannerUploader from './shared/BannerUploader.svelte';
   import ProfileForm from './shared/ProfileForm.svelte';
   import EditableList from './shared/EditableList.svelte';
@@ -61,6 +61,11 @@
     if (currentStep === 0) return 0;
     return useCurrentKeypair ? currentStep : currentStep - 1; // New keypair starts from step 1 after profile
   });
+
+  // Licensed community picture: informational flags the licensed input binds
+  // (the license event is published by the input's own modal).
+  let communityImageUploaded = $state(false);
+  let communityImageLicense = $state(null);
 
   // User data state for new keypair creation
   let userData = $state({
@@ -859,10 +864,22 @@
             </p>
           </div>
 
-          <AvatarUploader bind:userData signer={communitySigner} bind:errors />
+          <!-- The community picture goes through the licensed image input
+               (upload + paste + license attestation), replacing the old raw
+               uploader/URL pair (laoc, 2026-08-11). -->
+          <div class="form-control flex flex-col">
+            <span class="label-text mb-1 w-full text-center">{m.profile_form_picture_label()}</span>
+            <LicensedImageInput
+              bind:imageUrl={userData.picture}
+              bind:imageWasUploaded={communityImageUploaded}
+              bind:licenseEvent={communityImageLicense}
+              {errors}
+              activeUserDisplayName={userData.name}
+            />
+          </div>
           <BannerUploader bind:userData signer={communitySigner} bind:errors />
 
-          <ProfileForm {userData} {errors} hideBanner={true} />
+          <ProfileForm {userData} {errors} hideBanner={true} hidePicture={true} />
         </div>
       {:else if currentStep === 2 && !useCurrentKeypair}
         <!-- Keys Generation for New Keypair -->
