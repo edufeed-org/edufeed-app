@@ -3211,5 +3211,6 @@
   "chat_thread_expand": "Expand",
   "chat_thread_collapse": "Collapse",
   "groups_join_required": "Join this group first",
-  "chat_jump_to_bottom": "Jump to latest"
+  "chat_jump_to_bottom": "Jump to latest",
+  "rail_add_community": "Create a community"
 }

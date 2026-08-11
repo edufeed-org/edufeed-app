@@ -46,6 +46,8 @@
   import RailFolderTile from './RailFolderTile.svelte';
   import { activeRailTarget, isEntryActive } from '$lib/rail/rail-active.js';
   import { showToast } from '$lib/helpers/toast.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { PlusIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -410,6 +412,19 @@
       {/if}
     {/each}
 
+    <!-- Add a container: create a community (Armada parity — the rail is
+      where you live, so the door is here too; laoc 2026-08-11). An action,
+      not an entry, so it stays out of the arrangeable list. -->
+    <div class="w-8 border-b border-base-300"></div>
+    <button
+      title={m.rail_add_community()}
+      data-testid="rail-add-community"
+      class="btn btn-circle h-12 w-12 shrink-0 p-0 btn-ghost transition-transform duration-200 hover:scale-110"
+      onclick={() => modalStore.openModal('createCommunity')}
+    >
+      <PlusIcon class_="h-6 w-6" />
+    </button>
+
     {#if showUnlockAffordance}
       <!-- The unlock TOOL keeps its divider: it is an action, not an entry,
         so it stays out of the arrangeable list entirely. -->
@@ -479,6 +494,16 @@
         <div class="border-b border-base-300"></div>
       {/if}
     {/each}
+
+    <div class="border-b border-base-300"></div>
+    <button
+      class="flex w-full items-center gap-3 rounded-lg p-3 transition-all duration-200 hover:bg-base-300"
+      data-testid="rail-add-community"
+      onclick={() => modalStore.openModal('createCommunity')}
+    >
+      <PlusIcon class_="h-5 w-5" />
+      <span class="flex-1 truncate text-left text-sm font-medium">{m.rail_add_community()}</span>
+    </button>
 
     {#if joinedCommunities.length === 0}
       <div class="py-8 text-center text-base-content/60">
