@@ -4,12 +4,12 @@
  *
  * @vitest-environment node
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockConfig = {
   runtimeConfig: {
     appRelays: {
-      groups: ['wss://groups.example/']
+      groups: []
     }
   }
 };
@@ -22,7 +22,12 @@ vi.mock('$lib/stores/app-settings.svelte.js', () => ({
 const { getGroupsRelays } = await import('$lib/helpers/relay-helper.js');
 
 describe('getGroupsRelays', () => {
+  beforeEach(() => {
+    mockConfig.runtimeConfig.appRelays = { groups: [] };
+  });
+
   it('returns the configured groups relays verbatim', () => {
+    mockConfig.runtimeConfig.appRelays.groups = ['wss://groups.example/'];
     expect(getGroupsRelays()).toEqual(['wss://groups.example/']);
   });
 
