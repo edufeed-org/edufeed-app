@@ -28,7 +28,13 @@ describe('group management templates', () => {
     // ignore them (khatru/0xchat, measured).
     const t = buildCreateGroupTemplate(ID, { name: 'Study group', isPublic: false, isOpen: false });
     expect(t.kind).toBe(9007);
-    expect(t.tags).toEqual([['h', ID], ['name', 'Study group'], ['private'], ['closed']]);
+    expect(t.tags).toEqual([
+      ['h', ID],
+      ['name', 'Study group'],
+      ['private'],
+      ['closed'],
+      ['restricted']
+    ]);
     expect(t.content).toBe('');
     expect(t.created_at).toBeTypeOf('number');
   });
@@ -37,7 +43,7 @@ describe('group management templates', () => {
     expect(buildCreateGroupTemplate(ID).tags).toEqual([['h', ID]]);
   });
 
-  it('edit-metadata carries fields and BOTH-side markers', () => {
+  it('edit-metadata carries fields, BOTH-side markers, and restricted', () => {
     const t = buildEditGroupMetadataTemplate(ID, {
       name: 'Study group',
       about: 'notes',
@@ -52,13 +58,16 @@ describe('group management templates', () => {
       ['about', 'notes'],
       ['picture', 'https://x/y.png'],
       ['private'],
-      ['closed']
+      ['closed'],
+      ['restricted']
     ]);
   });
 
-  it('edit-metadata skips empty fields and flips markers', () => {
+  it('restricted is set even on a world-open group — open means open to READ', () => {
+    // Design round 4 (buzz thread): "restricted bleibt in allen drei Stufen
+    // gesetzt, sonst schreibt das halbe Netz in euren Ankündigungskanal."
     const t = buildEditGroupMetadataTemplate(ID, { name: '  ', isPublic: true, isOpen: true });
-    expect(t.tags).toEqual([['h', ID], ['public'], ['open']]);
+    expect(t.tags).toEqual([['h', ID], ['public'], ['open'], ['restricted']]);
   });
 
   it('put-user matches applesauce shape with and without roles', () => {

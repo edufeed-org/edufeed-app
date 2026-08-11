@@ -35,6 +35,10 @@ function metadataTags(meta) {
   }
   tags.push([meta.isPublic ? 'public' : 'private']);
   tags.push([meta.isOpen ? 'open' : 'closed']);
+  // "Open" always means open to READ. Without `restricted`, NIP-29 lets the
+  // whole network WRITE into the group — design round 4 (buzz thread):
+  // "restricted bleibt in allen drei Stufen gesetzt".
+  tags.push(['restricted']);
   return tags;
 }
 
