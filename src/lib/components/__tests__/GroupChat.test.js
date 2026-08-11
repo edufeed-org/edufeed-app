@@ -215,6 +215,18 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
+// GroupChat calls useJoinedCommunikeyEvents() directly (not just through the
+// post-delete cascade's useJoinedCommunitiesList chain) to resolve the
+// disclosure line's linked-community access. Stubbed at this seam — the
+// exact hook GroupChat imports — rather than the manager/addressLoader chain
+// underneath it, so a test can hand it a kind:10222 fixture without wiring up
+// a whole fake follow-set/relay round trip. Holder object so individual
+// tests can override the (usually empty) list; reset in the outer
+// `beforeEach` below.
+const joinedCommunikeyEventsHolder = vi.hoisted(() => ({ events: /** @type {any[]} */ ([]) }));
+vi.mock('$lib/helpers/joined-communikey-events.svelte.js', () => ({
+  useJoinedCommunikeyEvents: () => () => joinedCommunikeyEventsHolder.events
+}));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));
 const publishOptimisticMock = vi.hoisted(() => vi.fn());
@@ -280,6 +292,7 @@ describe('GroupChat', () => {
     signEvent.mockClear();
     relayCalls.length = 0;
     requestCalls.length = 0;
+    joinedCommunikeyEventsHolder.events = [];
   });
 
   it('renders relay-served metadata and chat messages through the real event store', async () => {
@@ -424,6 +437,30 @@ describe('GroupChat', () => {
     expect(line.textContent).toBe(
       'Anyone on the network can read along — even without an account.'
     );
+  });
+
+  // Exercises the linkedAccess lookup itself (channelKey matching a real
+  // kind:10222's `group` pointer tag), not just the 'invited' fallback the
+  // two tests above take when no community is joined at all.
+  it('shows the members-wording disclosure line when a joined community lists this channel as `members`', async () => {
+    joinedCommunikeyEventsHolder.events = [
+      {
+        kind: 10222,
+        pubkey: 'f'.repeat(64),
+        tags: [
+          ['d', ''],
+          // Same id@relay as `pointer` below — this is the match channelKey
+          // must find. Name slot filled, access in the 5th slot (see
+          // buildGroupPointerTag/parseGroupPointers in community-pointer.js).
+          ['group', pointer.id, pointer.relay, 'Bee Chat', 'members']
+        ]
+      }
+    ];
+    render(GroupChat, { props: { pointer } });
+    await screen.findByTestId('group-name');
+
+    const line = await screen.findByTestId('disclosure-line');
+    expect(line.textContent).toBe('Readable by all 1 members.');
   });
 
   // A channel opened from a host directory used to be a dead end: the chat
