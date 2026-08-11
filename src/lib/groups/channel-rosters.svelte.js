@@ -14,52 +14,51 @@
 // and reopening every relay subscription on that churn is what starved a
 // 1277-channel host's connection (see host-unread.svelte.js's header comment).
 //
-// The stable key is `sorted channelKeys joined '\x1f'`. Deliberately NOT
-// re-reading getPointers() inside the effect body to rebuild the per-relay
-// request plan — that would call the getter a second time, undoing the
-// derived key's whole purpose (the effect would then depend on the pointers
-// array's IDENTITY again, not just its content). Instead the id/relay pairs
-// are recovered by parsing the key string itself, same trick host-unread
-// uses when it turns its key back into `ids` via `key.split('')`.
+// The stable key is `sorted channelKeys joined '\x1f'` and is the ONLY
+// TRACKED read the effect makes for the pointer set — it decides whether the
+// effect re-runs at all. The actual `{relay, ids}` request plan is rebuilt
+// from `getPointers()` on every run, but wrapped in `untrack()` so that read
+// itself creates no dependency: reading it plainly would reintroduce the
+// exact bug the key exists to prevent (a fresh array with the same content
+// reopening every subscription).
+//
+// Earlier versions of this file tried to avoid the untracked re-read by
+// parsing `{id, relay}` back out of the key string (`lastIndexOf('@')`).
+// That was unsound: channelKey's relay validation accepts '@' inside the
+// RELAY half (userinfo `wss://user:pass@host/`, or a path segment like
+// `wss://relay.example/room@42` — both pass `isValidRelayWebsocketUrl`), so
+// `lastIndexOf('@')` could split a well-formed key at the wrong character and
+// hand `pool.relay()` a garbage URL. Rebuilding from the pointers themselves
+// sidesteps that entirely — never re-derive addressing from a string that
+// was only ever meant to be compared, not decoded.
+import { untrack } from 'svelte';
 import {
   GROUP_ADMINS_KIND,
   GROUP_MEMBERS_KIND,
   getGroupAdmins,
   getGroupMembers
 } from 'applesauce-common/helpers/groups';
+import { normalizeURL } from 'applesauce-core/helpers/url';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { channelKey } from './community-pointer.js';
 
 /**
- * Recover `{id, relay}` from one `channelKey()` output. The relay half is
- * already normalised (channelKey did that), so this is pure string surgery,
- * not a second validation pass.
- * @param {string} key
- * @returns {{id: string, relay: string} | null}
+ * @param {Array<{id: string, relay: string}>} pointers
+ * @returns {Map<string, string[]>} relay (normalised) -> group ids to ask that relay for
  */
-function splitChannelKey(key) {
-  const at = key.lastIndexOf('@');
-  if (at <= 0 || at === key.length - 1) return null;
-  return { id: key.slice(0, at), relay: key.slice(at + 1) };
-}
-
-/**
- * @param {string} key non-empty `pointersKey` value
- * @returns {Map<string, string[]>} relay -> group ids to ask that relay for
- */
-function idsByRelay(key) {
+function groupPointersByRelay(pointers) {
   /** @type {Map<string, string[]>} */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain accumulator local to this call, never held in $state
   const map = new Map();
-  for (const entry of key.split('\x1f')) {
-    const parsed = splitChannelKey(entry);
-    if (!parsed) continue;
-    let ids = map.get(parsed.relay);
+  for (const pointer of pointers) {
+    if (!channelKey(pointer)) continue; // unaddressable — nothing to ask for
+    const relay = normalizeURL(pointer.relay);
+    let ids = map.get(relay);
     if (!ids) {
       ids = [];
-      map.set(parsed.relay, ids);
+      map.set(relay, ids);
     }
-    ids.push(parsed.id);
+    if (!ids.includes(pointer.id)) ids.push(pointer.id);
   }
   return map;
 }
@@ -102,53 +101,71 @@ export function useChannelRosters(getPointers) {
     const keyChanged = key !== previousKey;
     previousKey = key;
     // Only drop prior results when the pointer SET changed. A refresh() bump
-    // must not flash the UI back to empty while it re-fetches the same
-    // channels — stale-while-revalidate, same as GroupChat's roster effect.
+    // (same key, seq-only change) must not flash the UI back to empty while
+    // it re-fetches the same channels — stale-while-revalidate, same as
+    // GroupChat's roster effect.
     if (keyChanged) {
       membersByKey = {};
       adminsByKey = {};
     }
     if (key === '') return;
 
-    const requests = idsByRelay(key);
+    // untrack(): getPointers() is read here to build the per-relay request
+    // plan, NOT to decide whether to re-run — that job belongs to
+    // `pointersKey` alone. A plain (tracked) read here would put this effect
+    // right back into the bug pointersKey exists to avoid: a fresh pointers
+    // array with the same content reopening every subscription.
+    const requests = untrack(() => groupPointersByRelay(getPointers() ?? []));
     if (requests.size === 0) return;
 
     // Accumulate into plain locals and only ever WRITE the reactive state —
-    // reading membersByKey/adminsByKey here to spread them would make this
-    // effect depend on what it writes.
+    // reading membersByKey/adminsByKey here (untracked) seeds a refresh from
+    // what is already known; a plain (tracked) read would make this effect
+    // depend on state it itself writes a few lines down, inside the very
+    // same run.
     /** @type {Record<string, Set<string>>} */
-    const collectedMembers = {};
+    const collectedMembers = keyChanged ? {} : untrack(() => ({ ...membersByKey }));
     /** @type {Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>} */
-    const collectedAdmins = {};
+    const collectedAdmins = keyChanged ? {} : untrack(() => ({ ...adminsByKey }));
 
     /** @type {Array<{unsubscribe: () => void}>} */
     const open = [];
     const timer = setTimeout(() => {
       for (const [relay, ids] of requests) {
-        const sub = pool
-          .relay(relay)
-          .request({ kinds: [GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND], '#d': ids }, { timeout: 8000 })
-          .subscribe({
-            next: (/** @type {any} */ event) => {
-              if (!event || !Array.isArray(event.tags)) return;
-              const id = event.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
-              if (!id) return;
-              const rosterKey = channelKey({ id, relay });
-              if (!rosterKey) return;
-              if (event.kind === GROUP_MEMBERS_KIND) {
-                // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain data inside a $state.raw record, never mutated in place
-                collectedMembers[rosterKey] = new Set(getGroupMembers(event) ?? []);
-                membersByKey = { ...collectedMembers };
-              } else if (event.kind === GROUP_ADMINS_KIND) {
-                collectedAdmins[rosterKey] = getGroupAdmins(event) ?? [];
-                adminsByKey = { ...collectedAdmins };
-              }
-            },
-            // One unreachable or auth-walled relay must not blind the rest of
-            // the community's channels to their rosters.
-            error: () => {}
-          });
-        open.push(sub);
+        try {
+          const sub = pool
+            .relay(relay)
+            .request(
+              { kinds: [GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND], '#d': ids },
+              { timeout: 8000 }
+            )
+            .subscribe({
+              next: (/** @type {any} */ event) => {
+                if (!event || !Array.isArray(event.tags)) return;
+                const id = event.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
+                if (!id) return;
+                const rosterKey = channelKey({ id, relay });
+                if (!rosterKey) return;
+                if (event.kind === GROUP_MEMBERS_KIND) {
+                  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain data inside a $state.raw record, never mutated in place
+                  collectedMembers[rosterKey] = new Set(getGroupMembers(event) ?? []);
+                  membersByKey = { ...collectedMembers };
+                } else if (event.kind === GROUP_ADMINS_KIND) {
+                  collectedAdmins[rosterKey] = getGroupAdmins(event) ?? [];
+                  adminsByKey = { ...collectedAdmins };
+                }
+              },
+              // One unreachable or auth-walled relay must not blind the rest
+              // of the community's channels to their rosters.
+              error: () => {}
+            });
+          open.push(sub);
+        } catch (err) {
+          // A relay URL the pool refuses synchronously (malformed, etc.)
+          // must not stop siblings later in iteration order from being
+          // asked at all.
+          console.warn('[channel-rosters] failed to request roster from relay', relay, err);
+        }
       }
     }, 300);
 

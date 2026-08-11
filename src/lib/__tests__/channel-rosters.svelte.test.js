@@ -146,6 +146,35 @@ describe('useChannelRosters', () => {
     cleanup();
   });
 
+  it('refresh() does not clear a channel whose fresh event has not landed yet', async () => {
+    const pointerA = { id: 'general', relay: RELAY };
+    const pointerB = { id: 'random', relay: RELAY };
+    holders.fixturesByRelay[RELAY] = [membersEvent('general'), membersEvent('random')];
+
+    let pointers = $state.raw([pointerA, pointerB]);
+    const { getRosters, cleanup } = mountHook(() => pointers);
+    flushSync();
+    await settle();
+
+    const keyGeneral = channelKey(pointerA);
+    const keyRandom = channelKey(pointerB);
+    expect(getRosters().membersByKey[keyGeneral]).toEqual(new Set([MEMBER_1, MEMBER_2]));
+    expect(getRosters().membersByKey[keyRandom]).toEqual(new Set([MEMBER_1, MEMBER_2]));
+
+    // This refresh round only 'general' answers — 'random' must stay put
+    // (stale-while-revalidate), not vanish because the new round hasn't
+    // heard from it yet.
+    holders.fixturesByRelay[RELAY] = [membersEvent('general')];
+    getRosters().refresh();
+    flushSync();
+    await settle();
+
+    expect(getRosters().membersByKey[keyGeneral]).toEqual(new Set([MEMBER_1, MEMBER_2]));
+    expect(getRosters().membersByKey[keyRandom]).toEqual(new Set([MEMBER_1, MEMBER_2]));
+
+    cleanup();
+  });
+
   it('groups pointers on different relays into separate requests', async () => {
     const pointerA = { id: 'general', relay: RELAY };
     const pointerB = { id: 'other-channel', relay: OTHER_RELAY };
