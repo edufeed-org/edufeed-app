@@ -205,10 +205,24 @@
   // settings sheet (Task 8) mount here once they exist.
   let membersOpen = $state(false);
   let settingsOpen = $state(false);
-  // Wired to GroupMembersModal's onRosterChanged prop below.
+  // Wired to GroupMembersModal's onRosterChanged prop below. Bumps rosterSeq
+  // immediately for a snappy UI, then schedules one more bump ~800ms later:
+  // the relay's OK for a 9000/9001/9002 admin op doesn't guarantee the
+  // 39001/39002 addressables it materialises are already updated by the time
+  // the immediate re-request lands, so a stale roster from that first
+  // request would otherwise never self-heal.
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let rosterHealTimer;
   const onRosterChanged = () => {
     rosterSeq++;
+    clearTimeout(rosterHealTimer);
+    rosterHealTimer = setTimeout(() => {
+      rosterSeq++;
+    }, 800);
   };
+  $effect(() => {
+    return () => clearTimeout(rosterHealTimer);
+  });
 
   let text = $state('');
   let sending = $state(false);
@@ -414,14 +428,14 @@
              is another relay. -->
         <a href={relayHref(pointer.relay)} data-testid="group-host-link" class="link link-hover"
           >{relayLabel(pointer.relay)}</a
-        >{#if members.size}
+        >{#if members.size || isAdmin}
           <button
             type="button"
             class="link link-hover"
             data-testid="group-members-open"
             onclick={() => (membersOpen = true)}
           >
-            {` · ${members.size}`}
+            {#if members.size}{` · ${members.size}`}{/if}
           </button>
         {/if}
         {#if metadata?.about}&nbsp;— {metadata.about}{/if}

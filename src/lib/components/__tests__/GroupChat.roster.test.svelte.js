@@ -58,9 +58,14 @@ const membersEvent = signWith(
   },
   RELAY_SK
 );
+// Empty roster — reproduces I2: a relay that hasn't materialised 39002 yet
+// (or genuinely has zero members) must still let an admin open the modal.
+const emptyMembersEvent = signWith({ kind: 39002, tags: [['d', 'beechat']] }, RELAY_SK);
 
 /** @type {{pubkey: string, signer: any} | null} */
 let currentUser = null;
+// Overridable per test so the roster fixture can vary (I2 empty-39002 case).
+let currentMembersEvent = membersEvent;
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   const { EventStore } = await import('applesauce-core');
@@ -72,7 +77,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   eventStore.verifyEvent = () => true;
   const pool = {
     relay: () => ({
-      request: () => rxOf(metadataEvent, adminsEvent, membersEvent),
+      request: () => rxOf(metadataEvent, adminsEvent, currentMembersEvent),
       subscription: () => rxNever,
       publish: vi.fn().mockResolvedValue({ ok: true }),
       authenticate: vi.fn().mockResolvedValue({ ok: true }),
@@ -159,7 +164,18 @@ const pointer = { relay: GROUP_RELAY, id: 'beechat' };
 describe('GroupChat admin roster + management entry points', () => {
   beforeEach(() => {
     currentUser = null;
+    currentMembersEvent = membersEvent;
     gotoMock.mockClear();
+  });
+
+  it('renders the members-open button for an admin even with an empty 39002 roster', async () => {
+    currentMembersEvent = emptyMembersEvent;
+    currentUser = { pubkey: ADMIN_PUBKEY, signer: {} };
+    render(GroupChat, { props: { pointer } });
+
+    await screen.findByTestId('group-settings-open'); // waits for the roster effect to settle
+    const button = await screen.findByTestId('group-members-open');
+    expect(button.tagName).toBe('BUTTON');
   });
 
   it('exposes a members-open button showing the member count', async () => {

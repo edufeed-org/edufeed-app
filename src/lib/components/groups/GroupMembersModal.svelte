@@ -194,6 +194,7 @@
       <div class="mt-3">
         <ContactSearchInput
           acceptPubkeyInput
+          disabled={busy}
           placeholder={m.groups_members_add_placeholder()}
           exclude={[...members]}
           onselect={(/** @type {{ pubkey: string }} */ c) => addMember(c.pubkey)}
