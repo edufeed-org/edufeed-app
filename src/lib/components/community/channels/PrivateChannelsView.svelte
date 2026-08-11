@@ -45,6 +45,7 @@
   import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
   import AreaAttachModal from './AreaAttachModal.svelte';
+  import AreaMembersModal from './AreaMembersModal.svelte';
   import ChannelInviteSheet from './ChannelInviteSheet.svelte';
   import ChannelMembersModal from './ChannelMembersModal.svelte';
   import ChannelExplainer from './ChannelExplainer.svelte';
@@ -369,6 +370,15 @@
           + {m.groups_attach_action()}
         </button>
       {/if}
+      {#if groupPointers.length > 0}
+        <button
+          class="btn justify-start btn-outline btn-sm"
+          data-testid="area-members-open"
+          onclick={() => (overlay = 'area-members')}
+        >
+          {m.area_members_title()}
+        </button>
+      {/if}
       {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (extendedByGroups && canAttachGroup)}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
@@ -489,6 +499,8 @@
     />
   {:else if overlay === 'attach-area'}
     <AreaAttachModal {communikeyEvent} onClose={() => (overlay = null)} />
+  {:else if overlay === 'area-members'}
+    <AreaMembersModal {communikeyEvent} onClose={() => (overlay = null)} />
   {:else if overlay === 'invite' && concord.community && activeChannel}
     <ChannelInviteSheet
       {communikeyEvent}
