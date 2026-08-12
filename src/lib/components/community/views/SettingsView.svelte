@@ -18,6 +18,7 @@
   import AreaAttachModal from '$lib/components/community/channels/AreaAttachModal.svelte';
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
   import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
+  import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
   // Community-type flips (open <-> moderated; closed never transitions) — see
   // docs/nips/communikey-groups.md and src/lib/groups/community-flips.js.
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
@@ -41,6 +42,11 @@
   import * as m from '$lib/paraglide/messages';
 
   let { communityId, communikeyEvent, profileEvent } = $props();
+
+  // Roster role suggestions (Task 8): MembershipPane owns the ONE
+  // useRootRoster subscription and reports its role union upward so
+  // AccessTierEditor's roleSuggestions doesn't need a second one.
+  let roleSuggestions = $state(/** @type {string[]} */ ([]));
 
   // "Privater Bereich" card (design spec 2026-07-28): owner-only home for the
   // create/attach/detach flows. The Kanäle-tab founding pane stays as a
@@ -297,11 +303,24 @@
           </div>
         {/if}
 
-        <!-- Inhalte & Rechte (Task 7) — owner-only, moderated-only per-section
-             access tier editor. roleSuggestions={[]} for now: Task 8 wires the
-             real roster roles (admins' roles + 'admin', deduped). -->
+        <!-- Mitglieder & Rollen (Task 8) — owner-only, moderated-only root
+             group roster + application form management. Reports its role
+             union upward so the Inhalte & Rechte editor below can suggest
+             the community's actual admin roles. -->
         {#if isOwner && communityType === 'moderated'}
-          <AccessTierEditor {communikeyEvent} {communitySigner} roleSuggestions={[]} />
+          <MembershipPane
+            {communityId}
+            {communikeyEvent}
+            {profileEvent}
+            onRolesChanged={(roles) => (roleSuggestions = roles)}
+          />
+        {/if}
+
+        <!-- Inhalte & Rechte (Task 7) — owner-only, moderated-only per-section
+             access tier editor. roleSuggestions comes from MembershipPane's
+             roster above (admins' roles + 'admin', deduped). -->
+        {#if isOwner && communityType === 'moderated'}
+          <AccessTierEditor {communikeyEvent} {communitySigner} {roleSuggestions} />
         {/if}
 
         <!-- Private area (Concord) — owner-only create/attach/detach home -->

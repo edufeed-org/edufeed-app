@@ -32,12 +32,22 @@
    *   members: Set<string>,
    *   myPubkey: string | null | undefined,
    *   isAdmin: boolean,
+   *   roleOptions?: string[],
    *   onRosterChanged?: () => void,
    *   onClose: () => void
    * }}
    */
-  let { pointer, metadata, admins, members, myPubkey, isAdmin, onRosterChanged, onClose } =
-    $props();
+  let {
+    pointer,
+    metadata,
+    admins,
+    members,
+    myPubkey,
+    isAdmin,
+    roleOptions = [],
+    onRosterChanged,
+    onClose
+  } = $props();
 
   const getActiveUser = useActiveUser();
 
@@ -78,6 +88,27 @@
   /** @param {string} pubkey */
   const demote = (pubkey) => putUser(pubkey, []);
 
+  // Compact role-assign control (Task 8): one free-text-with-suggestions
+  // input per row, same select+free-text pattern AccessTierEditor already
+  // uses (a datalist-backed input serves as both at once) rather than a
+  // separate <select> plus a separate text field. Only rendered when the
+  // caller supplies roleOptions — existing promote/demote/add/remove
+  // behavior is untouched when it's the [] default.
+  /** @type {Record<string, string>} */
+  let roleDrafts = $state({});
+
+  /** @param {string} pubkey @param {string} value */
+  function setRoleDraft(pubkey, value) {
+    roleDrafts = { ...roleDrafts, [pubkey]: value };
+  }
+
+  /** @param {string} pubkey */
+  function assignRole(pubkey) {
+    const role = (roleDrafts[pubkey] ?? '').trim();
+    if (!role) return;
+    putUser(pubkey, [role]);
+  }
+
   /** @param {string} pubkey */
   async function removeMember(pubkey) {
     const user = getActiveUser();
@@ -109,6 +140,14 @@
       <p class="mb-1 text-xs text-base-content/60">{metadata.name}</p>
     {/if}
 
+    {#if isAdmin && roleOptions.length > 0}
+      <datalist id="group-members-role-options">
+        {#each roleOptions as option (option)}
+          <option value={option}></option>
+        {/each}
+      </datalist>
+    {/if}
+
     <h4 class="mt-3 text-xs font-bold text-base-content/50 uppercase">
       {m.groups_members_admins_heading()}
     </h4>
@@ -136,6 +175,28 @@
             {/each}
           {:else}
             <span class="badge badge-ghost badge-sm">admin</span>
+          {/if}
+          {#if isAdmin && roleOptions.length > 0}
+            <input
+              type="text"
+              class="input-bordered input input-xs w-24"
+              list="group-members-role-options"
+              placeholder={m.groups_members_role_placeholder()}
+              data-testid="member-role-input"
+              data-pubkey={admin.pubkey}
+              value={roleDrafts[admin.pubkey] ?? ''}
+              oninput={(e) =>
+                setRoleDraft(admin.pubkey, /** @type {HTMLInputElement} */ (e.target).value)}
+            />
+            <button
+              class="btn btn-ghost btn-xs"
+              data-testid="member-assign-role"
+              data-pubkey={admin.pubkey}
+              disabled={busy || !(roleDrafts[admin.pubkey] ?? '').trim()}
+              onclick={() => assignRole(admin.pubkey)}
+            >
+              {m.groups_members_assign_role()}
+            </button>
           {/if}
           {#if isAdmin && !self}
             <button
@@ -166,6 +227,28 @@
           <span class="flex-1 truncate text-sm font-semibold">
             {getUserDisplayName(pubkey, getProfiles().get(pubkey))}
           </span>
+          {#if isAdmin && roleOptions.length > 0}
+            <input
+              type="text"
+              class="input-bordered input input-xs w-24"
+              list="group-members-role-options"
+              placeholder={m.groups_members_role_placeholder()}
+              data-testid="member-role-input"
+              data-pubkey={pubkey}
+              value={roleDrafts[pubkey] ?? ''}
+              oninput={(e) =>
+                setRoleDraft(pubkey, /** @type {HTMLInputElement} */ (e.target).value)}
+            />
+            <button
+              class="btn btn-ghost btn-xs"
+              data-testid="member-assign-role"
+              data-pubkey={pubkey}
+              disabled={busy || !(roleDrafts[pubkey] ?? '').trim()}
+              onclick={() => assignRole(pubkey)}
+            >
+              {m.groups_members_assign_role()}
+            </button>
+          {/if}
           {#if isAdmin}
             <button
               class="btn btn-ghost btn-xs"

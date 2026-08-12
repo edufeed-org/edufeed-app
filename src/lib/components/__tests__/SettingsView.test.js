@@ -66,6 +66,21 @@ vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
+// MembershipPane (Task 8) mounts for owner + moderated scenarios. Stub its
+// roster hook so the effect never opens a real relay socket — its own
+// wiring is covered by MembershipPane.test.js.
+vi.mock('$lib/groups/root-roster.svelte.js', () => ({
+  useRootRoster: () => () => ({
+    pointer: null,
+    refresh: vi.fn(),
+    members: new Set(),
+    admins: [],
+    isLoading: false,
+    isMember: () => false,
+    rolesOf: () => []
+  })
+}));
+
 const { default: SettingsView } = await import(
   '$lib/components/community/views/SettingsView.svelte'
 );

@@ -3214,6 +3214,8 @@
   "groups_members_demote": "Admin entfernen",
   "groups_members_remove": "Entfernen",
   "groups_members_action_failed": "Das Relay hat die Änderung abgelehnt",
+  "groups_members_assign_role": "Rolle zuweisen",
+  "groups_members_role_placeholder": "Rolle",
   "area_members_title": "Mitglieder des Bereichs",
   "area_members_lead": "Alle hier sind in den gemeinsamen Kanälen der Community. Kanäle für ausgewählte Mitglieder verwalten ihre Listen selbst.",
   "area_members_missing": "fehlt in {count} Kanälen",
@@ -3262,5 +3264,16 @@
   "community_access_editor_role_required": "Rollenname erforderlich",
   "community_access_editor_save": "Speichern",
   "community_access_editor_saved": "Gespeichert.",
-  "community_access_editor_save_failed": "Speichern fehlgeschlagen: {reason}"
+  "community_access_editor_save_failed": "Speichern fehlgeschlagen: {reason}",
+  "community_membership_pane_title": "Mitglieder & Rollen",
+  "community_membership_pane_manage": "Mitglieder verwalten",
+  "community_membership_pane_member_count": "{count} Mitglieder",
+  "community_membership_pane_application_title": "Beitrittsformular",
+  "community_membership_pane_application_lead": "Wer beitreten möchte, füllt dieses Formular aus; Admins entscheiden über die Aufnahme.",
+  "community_membership_pane_application_none": "Kein Formular hinterlegt — Beitritt per Einladung.",
+  "community_membership_pane_application_save": "Übernehmen",
+  "community_membership_pane_application_remove": "Formular entfernen",
+  "community_membership_pane_application_create_default": "Standard-Formular erstellen",
+  "community_membership_pane_application_saved": "Gespeichert.",
+  "community_membership_pane_application_failed": "Speichern fehlgeschlagen: {reason}"
 }

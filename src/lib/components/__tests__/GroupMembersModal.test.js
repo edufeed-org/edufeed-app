@@ -76,7 +76,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_promote: () => 'Make admin',
   groups_members_demote: () => 'Remove admin',
   groups_members_remove: () => 'Remove',
-  groups_members_action_failed: () => 'The relay refused the change'
+  groups_members_action_failed: () => 'The relay refused the change',
+  groups_members_assign_role: () => 'Assign role',
+  groups_members_role_placeholder: () => 'Role'
 }));
 
 const { default: GroupMembersModal } = await import(
@@ -224,6 +226,76 @@ describe('GroupMembersModal admin actions', () => {
       )
     );
     await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
+  });
+});
+
+describe('GroupMembersModal role assignment (roleOptions)', () => {
+  it('roleOptions omitted: no assign-role control on any row (previous suite unaffected)', () => {
+    const { container } = renderModal();
+    expect(container.querySelector('[data-testid="member-role-input"]')).toBeNull();
+    expect(container.querySelector('[data-testid="member-assign-role"]')).toBeNull();
+  });
+
+  it('non-empty roleOptions: an admin sees the assign control on member and admin rows', () => {
+    const { container } = renderModal({ roleOptions: ['lehrkraft', 'admin'] });
+    expect(
+      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${MEMBER_A}"]`)
+    ).not.toBeNull();
+    expect(
+      container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`)
+    ).not.toBeNull();
+    expect(
+      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${ADMIN_OTHER}"]`)
+    ).not.toBeNull();
+  });
+
+  it('non-admin: assign-role control never renders even with roleOptions set', () => {
+    const { container } = renderModal({
+      roleOptions: ['lehrkraft'],
+      isAdmin: false,
+      myPubkey: MEMBER_A
+    });
+    expect(container.querySelector('[data-testid="member-role-input"]')).toBeNull();
+    expect(container.querySelector('[data-testid="member-assign-role"]')).toBeNull();
+  });
+
+  it('assigning a role publishes put-user with [role] and refreshes the roster', async () => {
+    const { container, onRosterChanged } = renderModal({ roleOptions: ['lehrkraft', 'admin'] });
+
+    const input = /** @type {HTMLInputElement} */ (
+      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${MEMBER_A}"]`)
+    );
+    await fireEvent.input(input, { target: { value: 'lehrkraft' } });
+
+    const assignBtn = container.querySelector(
+      `[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (assignBtn));
+
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', MEMBER_A, ['lehrkraft'])
+    );
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({
+          __sentinel: 'put',
+          groupId: 'grp1',
+          pubkey: MEMBER_A,
+          roles: ['lehrkraft']
+        }),
+        activeUser
+      )
+    );
+    await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
+  });
+
+  it('assign button is disabled while the role input is blank', () => {
+    const { container } = renderModal({ roleOptions: ['lehrkraft'] });
+    const assignBtn = /** @type {HTMLButtonElement} */ (
+      container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`)
+    );
+    expect(assignBtn.disabled).toBe(true);
   });
 });
 
