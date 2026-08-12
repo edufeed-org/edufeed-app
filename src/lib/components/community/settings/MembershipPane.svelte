@@ -106,6 +106,10 @@
 
   async function handleCopyInviteCode() {
     if (!generatedCode) return;
+    if (!navigator.clipboard) {
+      showToast(m.community_invite_failed({ reason: 'Clipboard not available' }), 'error');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(generatedCode);
       showToast(m.community_invite_copied(), 'success');

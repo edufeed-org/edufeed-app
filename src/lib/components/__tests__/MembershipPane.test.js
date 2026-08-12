@@ -183,6 +183,13 @@ beforeEach(() => {
   publishEvent.mockClear();
   eventStoreAdd.mockClear();
   showToast.mockClear();
+  publishToGroupRelay.mockClear();
+  // jsdom has no navigator.clipboard; stub it
+  Object.assign(navigator, {
+    clipboard: {
+      writeText: vi.fn().mockResolvedValue(undefined)
+    }
+  });
 });
 
 describe('MembershipPane — roster', () => {
@@ -361,6 +368,7 @@ describe('MembershipPane — invite-code minting', () => {
 
     // Verify the relay connection points to the roster relay
     expect(relayConn).toBeTruthy();
+    expect(poolMock.relay).toHaveBeenCalledWith(GROUPS_RELAY);
 
     // Verify the template is kind 9009 with h-tag and code tag
     expect(template.kind).toBe(9009);
@@ -368,7 +376,7 @@ describe('MembershipPane — invite-code minting', () => {
       ['h', 'root1'],
       [
         'code',
-        expect.stringMatching(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{12}$/)
+        expect.stringMatching(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{12}$/)
       ]
     ]);
 

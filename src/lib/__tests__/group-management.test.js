@@ -203,7 +203,7 @@ describe('invite-code generation', () => {
   it('generateInviteCode yields 12 alphanumeric chars from unambiguous alphabet', async () => {
     const { generateInviteCode } = await import('$lib/groups/group-management.js');
     const code = generateInviteCode();
-    expect(code).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{12}$/);
+    expect(code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{12}$/);
     // Verify uniqueness-ish
     expect(generateInviteCode()).not.toBe(code);
   });
