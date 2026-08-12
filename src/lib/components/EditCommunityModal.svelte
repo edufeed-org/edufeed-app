@@ -11,7 +11,8 @@
   import {
     buildCommunityDefinitionTags,
     createDefaultContentTypes,
-    preservePointerTags
+    preservePointerTags,
+    applyParsedAccessTiers
   } from '$lib/helpers/communityTagBuilder.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import {
@@ -20,6 +21,7 @@
     getCommunityGlobalRelays,
     hasStrictContentMarker
   } from '$lib/helpers/communityRelays.js';
+  import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { createDefaultMembershipForm } from '$lib/helpers/forms.js';
@@ -39,6 +41,11 @@
     livekitUrl: '',
     contentTypes: createDefaultContentTypes()
   });
+
+  // Moderated communities gate access via the group roster, not the legacy
+  // per-content-type form-gating profile list — hide that toggle so editing
+  // a moderated community can't write mixed legacy 30000 a-tags onto it.
+  let isModerated = $derived(deriveCommunityType(communityEvent) === 'moderated');
 
   // Toggle for access control configuration
   let showAccessConfig = $state(false);
@@ -171,13 +178,19 @@
       }
     }
 
+    // Copy parsed access tiers (moderated communities' per-section publish
+    // gating) onto the freshly-parsed content types — the loop above only
+    // reads content/k/a-badge tags, never `access` tags, so without this a
+    // save would silently strip every access tier (final-review finding).
+    const contentTypesWithAccess = applyParsedAccessTiers(contentTypes, communityEvent);
+
     communityData = {
       relays: relays.length > 0 ? relays : ['wss://relay.edufeed.org'],
       blossomServers,
       location,
       description,
       livekitUrl,
-      contentTypes
+      contentTypes: contentTypesWithAccess
     };
 
     isInitialized = true;
@@ -525,6 +538,7 @@
           bind:showAccessConfig
           bind:defaultFormRef
           onCreateDefaultForm={handleCreateDefaultForm}
+          hideAccessToggle={isModerated}
           {errors}
         />
 

@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { SimpleSigner } from 'applesauce-signers';
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
@@ -311,16 +312,23 @@
         return false;
       }
 
-      // Check if at least one content type is selected
-      const hasContentType = Object.values(communityData.contentTypes).some((ct) => ct.enabled);
-      if (!hasContentType) {
-        errors.contentTypes = m.create_community_modal_error_content_types_required();
-        return false;
-      }
+      // Closed communities publish no content sections at all — the
+      // ContentTypesAndACL picker is hidden for them (see template below),
+      // so neither the "at least one content type" nor the Meet/LiveKit
+      // check applies; validating against it would block a user who had
+      // disabled all content types before switching to Geschlossen.
+      if (communityType !== 'closed') {
+        // Check if at least one content type is selected
+        const hasContentType = Object.values(communityData.contentTypes).some((ct) => ct.enabled);
+        if (!hasContentType) {
+          errors.contentTypes = m.create_community_modal_error_content_types_required();
+          return false;
+        }
 
-      if (communityData.contentTypes.meet?.enabled && !communityData.livekitUrl?.trim()) {
-        errors.livekitUrl = m.meet_livekit_url_required();
-        return false;
+        if (communityData.contentTypes.meet?.enabled && !communityData.livekitUrl?.trim()) {
+          errors.livekitUrl = m.meet_livekit_url_required();
+          return false;
+        }
       }
     }
 
@@ -461,9 +469,18 @@
           throw new Error(m.create_community_modal_error_no_account());
         }
         try {
+          // Name fallback chain: userData.name (set only in the new-keypair
+          // flow — empty for "use current keypair") → the active account's
+          // cached kind 0 display name, itself falling back to a short npub
+          // (both handled by applesauce's getDisplayName; a synchronous
+          // EventStore read, no new subscription) → the literal 'Community'.
+          const cachedProfile = /** @type {any} */ (
+            eventStore.getReplaceable(0, activeAccount.pubkey)
+          );
+          const groupName = userData.name?.trim() || getDisplayName(cachedProfile) || 'Community';
           rootGroupPointer = await provisionRootGroup({
             relay: groupsRelay,
-            name: userData.name?.trim() || 'Community',
+            name: groupName,
             user: { pubkey: activeAccount.pubkey, signer: activeAccount.signer },
             existingId: readRootGroupMarker(communityPk)
           });
@@ -757,9 +774,11 @@
         <div class="space-y-4">
           <h3 class="text-lg font-semibold">{m.community_type_question()}</h3>
           <div
-            class="grid gap-3 sm:grid-cols-{1 +
-              (moderatedAvailable ? 1 : 0) +
-              (closedAvailable ? 1 : 0)}"
+            class="grid gap-3 {moderatedAvailable && closedAvailable
+              ? 'sm:grid-cols-3'
+              : moderatedAvailable || closedAvailable
+                ? 'sm:grid-cols-2'
+                : 'sm:grid-cols-1'}"
           >
             <button
               type="button"

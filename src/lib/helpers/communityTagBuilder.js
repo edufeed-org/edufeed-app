@@ -5,6 +5,8 @@
  * (profile list a-tags, enforced relays, languages).
  */
 
+import { parseCommunityContentTypes } from './communityRelays.js';
+
 /**
  * @typedef {Object} ContentTypeFormData
  * @property {string} name - Display name (e.g. 'Calendar', 'Chat')
@@ -204,6 +206,38 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
   }
 
   return tags;
+}
+
+/**
+ * Copy publish-tier access data — parsed from a kind 10222 event's `access`
+ * section tags — onto matching content-type form records, keyed by section
+ * name (same case-insensitive name match EditCommunityModal already uses
+ * for formRef round-tripping). Pure: returns a NEW record, never mutates
+ * `contentTypes`. Entries with no matching section (or when the event has
+ * none) keep their existing `access` untouched — typically the `{tier:
+ * 'all'}` default `createDefaultContentTypes` seeds.
+ *
+ * EditCommunityModal's load effect parses `content`/`k`/`a` (badge) tags but
+ * never `access` tags, so without this every access tier a moderated
+ * community had would silently revert to 'all' the moment the owner opened
+ * and saved the edit modal (final-review finding).
+ *
+ * @template {Record<string, ContentTypeFormData>} T
+ * @param {T} contentTypes
+ * @param {any} communityEvent - the kind 10222 event being edited
+ * @returns {T}
+ */
+export function applyParsedAccessTiers(contentTypes, communityEvent) {
+  const sections = parseCommunityContentTypes(communityEvent);
+  /** @type {Record<string, ContentTypeFormData>} */
+  const result = {};
+  for (const [key, ct] of Object.entries(contentTypes)) {
+    const section = sections.find(
+      (s) => typeof s.name === 'string' && s.name.toLowerCase() === ct.name?.toLowerCase()
+    );
+    result[key] = section ? { ...ct, access: section.access } : { ...ct };
+  }
+  return /** @type {T} */ (result);
 }
 
 /** Tag keys the community modals do not model — carried over verbatim on

@@ -113,7 +113,7 @@
   let cleanupMap = new Map();
 
   // Per-community ACL state: community event + ready access object for filtering
-  /** @type {Map<string, { communityEvent: any, access: { isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null } | null, aclLoading: boolean }>} */
+  /** @type {Map<string, { communityEvent: any, access: { isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null } | null }>} */
   let perCommunityAcl = new Map();
 
   $effect(() => {
@@ -179,8 +179,7 @@
         if (!communityEvent) {
           perCommunityAcl.set(pubkey, {
             communityEvent: null,
-            access: null,
-            aclLoading: false
+            access: null
           });
           mergeAndUpdate();
           return;
@@ -188,8 +187,7 @@
 
         perCommunityAcl.set(pubkey, {
           communityEvent,
-          access: null,
-          aclLoading: true
+          access: null
         });
 
         const { cleanup: accessCleanup, hasRestrictedSections } = subscribeToCommunityAccess(
@@ -197,17 +195,12 @@
           getCommunikeyRelays(),
           (access) => {
             const acl = perCommunityAcl.get(pubkey);
-            if (acl) {
-              acl.access = access;
-              acl.aclLoading = access.isLoading;
-            }
+            if (acl) acl.access = access;
             mergeAndUpdate();
           }
         );
 
         if (!hasRestrictedSections) {
-          const acl = perCommunityAcl.get(pubkey);
-          if (acl) acl.aclLoading = false;
           mergeAndUpdate();
         }
 

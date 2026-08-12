@@ -3,7 +3,8 @@ import { describe, test, expect } from 'vitest';
 import {
   buildCommunityDefinitionTags,
   createDefaultContentTypes,
-  preservePointerTags
+  preservePointerTags,
+  applyParsedAccessTiers
 } from '$lib/helpers/communityTagBuilder.js';
 
 describe('buildCommunityDefinitionTags', () => {
@@ -410,5 +411,103 @@ describe('preservePointerTags', () => {
       rebuilt
     );
     expect(out[0]).toEqual(['membership', 'x', RELAY]);
+  });
+});
+
+describe('applyParsedAccessTiers', () => {
+  const PK = 'b'.repeat(64);
+
+  test('round-trips access tiers through build → parse → copy, matched by section name', () => {
+    // Build a moderated community's tags with two gated sections.
+    /** @type {import('$lib/helpers/communityTagBuilder').CommunityFormData} */
+    const data = {
+      relays: ['wss://relay.example.com'],
+      blossomServers: [],
+      location: '',
+      description: '',
+      contentTypes: {
+        learning: {
+          name: 'Learning',
+          enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: '',
+          access: { tier: 'role', role: 'lehrkraft' }
+        },
+        chat: {
+          name: 'Chat',
+          enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: '',
+          access: { tier: 'members' }
+        },
+        articles: {
+          name: 'Articles',
+          enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: ''
+          // no access set → defaults to 'all' below via createDefaultContentTypes
+        }
+      }
+    };
+    const tags = buildCommunityDefinitionTags(data, {
+      communityPubkey: PK,
+      membership: { id: 'root1', relay: 'wss://groups.example.com' }
+    });
+    const communityEvent = { tags };
+
+    // Simulate the edit modal's load effect: it starts from fresh defaults
+    // (as its own parse loop does) and copies the parsed tiers on top.
+    const freshContentTypes = createDefaultContentTypes(['learning', 'chat', 'articles']);
+    const withAccess = applyParsedAccessTiers(freshContentTypes, communityEvent);
+
+    expect(withAccess.learning.access).toEqual({ tier: 'role', role: 'lehrkraft' });
+    expect(withAccess.chat.access).toEqual({ tier: 'members' });
+    expect(withAccess.articles.access).toEqual({ tier: 'all' });
+  });
+
+  test('ignores content-type keys whose display name has no matching section', () => {
+    const contentTypes = createDefaultContentTypes(['learning']);
+    contentTypes.learning.name = 'Renamed Section';
+    const communityEvent = {
+      tags: [
+        ['content', 'Learning'],
+        ['access', 'members'],
+        ['k', '30142']
+      ]
+    };
+
+    const out = applyParsedAccessTiers(contentTypes, communityEvent);
+    // Name mismatch ('Renamed Section' vs 'Learning') → untouched default.
+    expect(out.learning.access).toEqual({ tier: 'all' });
+  });
+
+  test('event with no access tags leaves every entry at the default "all" tier', () => {
+    const contentTypes = createDefaultContentTypes(['learning', 'chat']);
+    const communityEvent = {
+      tags: [
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    };
+
+    const out = applyParsedAccessTiers(contentTypes, communityEvent);
+    expect(out.learning.access).toEqual({ tier: 'all' });
+    expect(out.chat.access).toEqual({ tier: 'all' });
+  });
+
+  test('does not mutate the input contentTypes record', () => {
+    const contentTypes = createDefaultContentTypes(['learning']);
+    const communityEvent = {
+      tags: [
+        ['content', 'Learning'],
+        ['access', 'members']
+      ]
+    };
+
+    applyParsedAccessTiers(contentTypes, communityEvent);
+    expect(contentTypes.learning.access).toEqual({ tier: 'all' });
   });
 });
