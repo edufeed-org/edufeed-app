@@ -51,7 +51,7 @@ export function buildMembershipTag(pointer) {
  * @returns {string[][]}
  */
 export function withoutMembershipPointer(tags) {
-  return tags.filter((tag) => tag[0] !== MEMBERSHIP_TAG);
+  return tags.filter((tag) => !(Array.isArray(tag) && tag[0] === MEMBERSHIP_TAG));
 }
 
 /**
@@ -101,7 +101,7 @@ export function buildApplicationTag(ref) {
  * @returns {string[][]}
  */
 export function withoutApplicationRef(tags) {
-  return tags.filter((tag) => tag[0] !== APPLICATION_TAG);
+  return tags.filter((tag) => !(Array.isArray(tag) && tag[0] === APPLICATION_TAG));
 }
 
 /**

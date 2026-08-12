@@ -72,6 +72,20 @@ describe('membership tag writers', () => {
     ]);
     expect(out).toEqual([['group', 'chan', RELAY]]);
   });
+  it('withoutMembershipPointer never throws on malformed tags; passes through null entries', () => {
+    const out = withoutMembershipPointer(/** @type {any} */ ([null, ['membership', 'x', RELAY]]));
+    expect(out).toEqual([null]);
+  });
+  it('withMembershipPointer never throws on malformed tags; removes membership and preserves nulls', () => {
+    const out = withMembershipPointer(/** @type {any} */ ([null, ['membership', 'old', RELAY]]), {
+      id: 'new',
+      relay: RELAY
+    });
+    expect(out).toContainEqual(null);
+    expect(out.filter((t) => Array.isArray(t) && t[0] === 'membership')).toEqual([
+      ['membership', 'new', RELAY]
+    ]);
+  });
 });
 
 describe('application ref', () => {
@@ -98,6 +112,20 @@ describe('application ref', () => {
     const out = withApplicationRef([['application', `30168:${PK}:old`]], ref);
     expect(out.filter((t) => t[0] === 'application')).toEqual([['application', ADDR, RELAY]]);
     expect(withoutApplicationRef(out)).toEqual([]);
+  });
+  it('withoutApplicationRef never throws on malformed tags; passes through null entries', () => {
+    const out = withoutApplicationRef(/** @type {any} */ ([null, ['application', ADDR, RELAY]]));
+    expect(out).toEqual([null]);
+  });
+  it('withApplicationRef never throws on malformed tags; removes application and preserves nulls', () => {
+    const out = withApplicationRef(
+      /** @type {any} */ ([null, ['application', `30168:${PK}:old`]]),
+      { address: ADDR, relay: RELAY }
+    );
+    expect(out).toContainEqual(null);
+    expect(out.filter((t) => Array.isArray(t) && t[0] === 'application')).toEqual([
+      ['application', ADDR, RELAY]
+    ]);
   });
 });
 

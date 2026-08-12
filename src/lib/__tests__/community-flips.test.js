@@ -74,6 +74,12 @@ describe('buildFlipToModeratedTags', () => {
     expect(again.filter((t) => t[0] === 'membership')).toHaveLength(1);
     expect(parseMembershipPointer({ tags: again })).toEqual({ id: 'root2', relay: RELAY });
   });
+  it('never throws on malformed tags; preserves them', () => {
+    const tags = /** @type {any} */ ([null, ['content', 'Learning']]);
+    const out = buildFlipToModeratedTags(tags, { id: 'root1', relay: RELAY });
+    expect(out).toContainEqual(null);
+    expect(out.filter((t) => Array.isArray(t) && t[0] === 'membership')).toHaveLength(1);
+  });
 });
 
 describe('buildFlipToOpenTags', () => {
@@ -85,6 +91,36 @@ describe('buildFlipToOpenTags', () => {
     }
     expect(opened).toContainEqual(['content', 'Learning']);
     expect(opened).toContainEqual(['k', '30142']);
+  });
+  it('strips concord tags on flip-to-open', () => {
+    const tags = [
+      ['membership', 'root1', RELAY],
+      ['concord', PK, RELAY],
+      ['content', 'Learning']
+    ];
+    const out = buildFlipToOpenTags(tags);
+    expect(out.some((t) => t[0] === 'concord')).toBe(false);
+  });
+  it('XOR-violating input (membership + concord both present) flips to open correctly', () => {
+    const tags = [
+      ['membership', 'root1', RELAY],
+      ['concord', PK, RELAY],
+      ['content', 'Learning']
+    ];
+    const opened = buildFlipToOpenTags(tags);
+    expect(deriveCommunityType({ tags: opened })).toBe('open');
+    expect(opened.some((t) => t[0] === 'membership')).toBe(false);
+    expect(opened.some((t) => t[0] === 'concord')).toBe(false);
+  });
+  it('never throws on malformed tags; preserves valid tags', () => {
+    const tags = /** @type {any} */ ([
+      null,
+      ['membership', 'root1', RELAY],
+      ['content', 'Learning']
+    ]);
+    const out = buildFlipToOpenTags(tags);
+    expect(out).toContainEqual(null);
+    expect(out.filter((t) => Array.isArray(t))).toContainEqual(['content', 'Learning']);
   });
 });
 

@@ -47,7 +47,7 @@ export function buildFlipToModeratedTags(tags, rootPointer) {
  */
 export function buildFlipToOpenTags(tags) {
   return stripLegacySectionAcl(withoutApplicationRef(withoutMembershipPointer(tags))).filter(
-    (tag) => !(isTag(tag) && (tag[0] === 'access' || tag[0] === 'group'))
+    (tag) => !(isTag(tag) && (tag[0] === 'access' || tag[0] === 'group' || tag[0] === 'concord'))
   );
 }
 
