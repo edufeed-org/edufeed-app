@@ -17,6 +17,7 @@
   } from '$lib/helpers/forms.js';
   import {
     isCommunityApplication,
+    applicationSubmitGate,
     resolveReviewers,
     buildApplicationCopies
   } from '$lib/helpers/community-application.js';
@@ -43,10 +44,22 @@
   let decodedForm = $state(null);
   /** @type {import('nostr-tools').NostrEvent | null} */
   let communityEvent = $state(null);
+  // Flips true 10s after the community-event load effect (below) starts,
+  // if the 10222 still hasn't resolved by then. Distinct from `communityEvent
+  // === null` alone — see applicationSubmitGate's doc comment for why the
+  // two must never be conflated.
+  let communityEventTimedOut = $state(false);
 
   let returnTo = $derived($page.url.searchParams.get('returnTo'));
   let communityId = $derived($page.url.searchParams.get('communityId'));
   let parsedTemplate = $derived(formEvent ? parseFormTemplate(formEvent) : null);
+  // Whether it's safe to decide the submit branch yet. 'waiting'/'unresolved'
+  // block submission (see the template and handleSubmit's own guard below) —
+  // guessing here risks silently encrypting a moderated community's
+  // application to the wrong recipient.
+  let submitGate = $derived(
+    applicationSubmitGate({ communityId, communityEvent, timedOut: communityEventTimedOut })
+  );
 
   // Decode naddr and load form template
   $effect(() => {
@@ -86,21 +99,32 @@
   // pointer off this event). Every other path (legacy forms, the deployment
   // membership form) never sets communityId or never matches, so formEvent
   // stays the only dependency for those.
+  //
+  // Bounded wait: 10s from when this load starts. If the 10222 still hasn't
+  // resolved by then, applicationSubmitGate reports 'unresolved' instead of
+  // 'waiting', and handleSubmit surfaces form_respond_community_unresolved
+  // rather than hanging the submit button forever.
   $effect(() => {
     if (!communityId) {
       communityEvent = null;
+      communityEventTimedOut = false;
       return;
     }
+    communityEventTimedOut = false;
     const pointer = { kind: 10222, pubkey: communityId };
     const relays = getCommunikeyRelays();
     const loaderSub = addressLoader({ ...pointer, relays }).subscribe();
     const modelSub = eventStore.replaceable(pointer).subscribe((event) => {
       communityEvent = event || null;
     });
+    const timeoutId = setTimeout(() => {
+      communityEventTimedOut = true;
+    }, 10000);
 
     return () => {
       loaderSub.unsubscribe();
       modelSub.unsubscribe();
+      clearTimeout(timeoutId);
     };
   });
 
@@ -133,6 +157,26 @@
   async function handleSubmit(values) {
     if (!manager.active || !formEvent || !decodedForm) return;
 
+    // Gate first, before touching isSubmitting/error state: 'waiting' means
+    // the community's 10222 is still in flight and the template already
+    // blocks the submit button for this case (defensive no-op here in case
+    // it's reached anyway, e.g. a stale click queued just before the gate
+    // flipped). 'unresolved' means the bounded wait elapsed with no 10222 —
+    // surface a distinct error instead of guessing and silently falling
+    // through to the legacy single-copy path (which would encrypt a
+    // moderated community's application to the form author, not to any
+    // actual reviewer).
+    const gate = applicationSubmitGate({
+      communityId,
+      communityEvent,
+      timedOut: communityEventTimedOut
+    });
+    if (gate === 'waiting') return;
+    if (gate === 'unresolved') {
+      error = m.form_respond_community_unresolved();
+      return;
+    }
+
     isSubmitting = true;
     error = '';
     partialDelivery = null;
@@ -146,8 +190,10 @@
       // out to one NIP-44 copy per root-group reviewer (39001 admins)
       // instead of the single copy to the form author below. Every other
       // case (legacy public/private forms, the deployment-wide membership
-      // form, or a communityId that just hasn't loaded its 10222 yet) keeps
-      // the original single-copy path byte-identical.
+      // form, or a communityId whose 10222 turned out NOT to reference this
+      // form) keeps the original single-copy path byte-identical. Safe to
+      // trust communityEvent here — the gate above already confirmed it's
+      // either irrelevant (gate 'legacy') or resolved (gate 'ready').
       if (communityId && isCommunityApplication(formAddress, communityEvent)) {
         const reviewers = await resolveReviewers(communityEvent);
         const copies = await buildApplicationCopies({
@@ -264,7 +310,7 @@
       <button class="btn btn-primary" onclick={() => history.back()}>{m.forms_go_back()}</button>
     {/if}
   {:else if formEvent}
-    {#if isSubmitting}
+    {#if isSubmitting || submitGate === 'waiting'}
       <div class="flex justify-center p-8">
         <span class="loading loading-lg loading-spinner"></span>
       </div>

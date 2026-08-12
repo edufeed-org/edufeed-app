@@ -52,6 +52,40 @@ export function isCommunityApplication(formAddress, communityEvent) {
 }
 
 /**
+ * Whether a submit is safe to act on when it MIGHT be a community's own
+ * application. `communityEvent === null` is ambiguous — it could mean "no
+ * community involved" (communityId absent) or "the 10222 hasn't loaded yet"
+ * (communityId present, event still in flight), and those two cases must
+ * never be treated the same: guessing wrong on the second one means
+ * encrypting a moderated community's application to the form author instead
+ * of any of its actual reviewers, with the applicant never told. Pure —
+ * carries no timers itself, so the caller supplies `timedOut`.
+ *
+ * - `'legacy'` — no communityId at all; nothing to wait for, proceed with
+ *   the single-copy path unconditionally.
+ * - `'ready'` — communityId is present AND its 10222 has resolved; safe to
+ *   call isCommunityApplication and branch on its answer.
+ * - `'waiting'` — communityId is present, its 10222 hasn't resolved yet, and
+ *   the bounded wait hasn't elapsed. Submission must be blocked (disable/
+ *   spinner), not silently downgraded to the legacy path.
+ * - `'unresolved'` — the bounded wait elapsed with no 10222. Submission must
+ *   surface a distinct error (form_respond_community_unresolved) instead of
+ *   guessing.
+ *
+ * @param {{
+ *   communityId: string | null | undefined,
+ *   communityEvent: {tags?: string[][]} | null | undefined,
+ *   timedOut: boolean
+ * }} args
+ * @returns {'ready' | 'waiting' | 'unresolved' | 'legacy'}
+ */
+export function applicationSubmitGate({ communityId, communityEvent, timedOut }) {
+  if (!communityId) return 'legacy';
+  if (communityEvent) return 'ready';
+  return timedOut ? 'unresolved' : 'waiting';
+}
+
+/**
  * Resolve the reviewers for a moderated community's application: the root
  * group's admins (kind 39001), deduped. Always throws NoReviewersError
  * rather than propagating a raw relay/network error — the caller has exactly
@@ -84,10 +118,14 @@ export async function resolveReviewers(communityEvent) {
  * Build + sign one NIP-44 encrypted kind 1069 copy per reviewer. NIP-44 is
  * pairwise, so there is no single ciphertext or p-tag that serves every
  * reviewer — mirrors MembershipApplicationForm.svelte's per-admin loop.
- * Signing only; the caller publishes (route wiring uses the outbox model via
- * publishEvent, unlike the deployment membership flow's scoped publisher —
- * a community application belongs on the community's own relays, which
- * publishEvent already reaches via the h-tag/community-relay union).
+ * Signing only; the caller publishes. Route wiring calls
+ * `publishEvent(copy, [reviewerPubkey])` per copy — the plain outbox model,
+ * NOT the `communityEvent` opt (copies carry no `h` tag and are never handed
+ * a communityEvent, so no community-relay union applies). Actual reach is:
+ * the reviewer's NIP-65 read relays, the applicant's NIP-65 write relays,
+ * and the communikey app relays (kind 1069's app-relay category). Task 7's
+ * approvals queue MUST read from that same set — anything narrower would
+ * silently miss copies this code did deliver.
  *
  * @param {{
  *   formAddress: string,

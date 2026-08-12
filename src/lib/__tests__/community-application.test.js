@@ -29,8 +29,13 @@ vi.mock('$lib/helpers/forms.js', async (importOriginal) => {
   };
 });
 
-const { isCommunityApplication, resolveReviewers, buildApplicationCopies, NoReviewersError } =
-  await import('$lib/helpers/community-application.js');
+const {
+  isCommunityApplication,
+  applicationSubmitGate,
+  resolveReviewers,
+  buildApplicationCopies,
+  NoReviewersError
+} = await import('$lib/helpers/community-application.js');
 const { buildResponseTags } = await import('$lib/helpers/forms.js');
 
 const RELAY = 'wss://groups.example.com';
@@ -78,6 +83,55 @@ describe('isCommunityApplication', () => {
   it('is false for a null/undefined community event', () => {
     expect(isCommunityApplication(FORM_ADDRESS, null)).toBe(false);
     expect(isCommunityApplication(FORM_ADDRESS, undefined)).toBe(false);
+  });
+});
+
+describe('applicationSubmitGate', () => {
+  it('is "legacy" when there is no communityId, regardless of communityEvent/timedOut', () => {
+    expect(
+      applicationSubmitGate({ communityId: null, communityEvent: null, timedOut: false })
+    ).toBe('legacy');
+    expect(
+      applicationSubmitGate({ communityId: null, communityEvent: communityEvent(), timedOut: true })
+    ).toBe('legacy');
+  });
+
+  it('is "ready" when communityId is present and the 10222 has resolved', () => {
+    expect(
+      applicationSubmitGate({
+        communityId: 'community-pubkey',
+        communityEvent: communityEvent(),
+        timedOut: false
+      })
+    ).toBe('ready');
+    // Resolving before the timeout still wins even if timedOut flips later.
+    expect(
+      applicationSubmitGate({
+        communityId: 'community-pubkey',
+        communityEvent: communityEvent(),
+        timedOut: true
+      })
+    ).toBe('ready');
+  });
+
+  it('is "waiting" when communityId is present, the 10222 has not resolved, and the wait has not elapsed', () => {
+    expect(
+      applicationSubmitGate({
+        communityId: 'community-pubkey',
+        communityEvent: null,
+        timedOut: false
+      })
+    ).toBe('waiting');
+  });
+
+  it('is "unresolved" when communityId is present, the 10222 has not resolved, and the wait elapsed', () => {
+    expect(
+      applicationSubmitGate({
+        communityId: 'community-pubkey',
+        communityEvent: null,
+        timedOut: true
+      })
+    ).toBe('unresolved');
   });
 });
 

@@ -2228,6 +2228,7 @@
   "forms_submit_success": "Antwort erfolgreich gesendet!",
   "forms_submit_failed": "Antwort konnte nicht gesendet werden",
   "form_respond_no_reviewers": "Für diese Community sind keine Admins auffindbar — Bewerbung kann nicht zugestellt werden.",
+  "form_respond_community_unresolved": "Community-Daten konnten nicht geladen werden — bitte später erneut versuchen.",
   "community_layout_title": "Communities",
   "community_layout_close_sidebar": "Seitenleiste schließen",
   "discover_remove_author_filter": "Autorenfilter entfernen",
