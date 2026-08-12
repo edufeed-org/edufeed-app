@@ -18,7 +18,7 @@
     getSectionNameForContentType,
     VALID_CONTENT_VIEWS
   } from '$lib/helpers/contentTypes.js';
-  import { useProfileListAccess } from '$lib/stores/profile-list-access.svelte.js';
+  import { useCommunityAccess } from '$lib/stores/community-access.svelte.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
 
@@ -135,7 +135,7 @@
   let avatarUrl = $derived(getProfilePicture(communityProfile));
   let restrictedTabs = $derived(getRestrictedTabIds(communikeyEvent));
 
-  const profileAccess = useProfileListAccess(
+  const profileAccess = useCommunityAccess(
     () => communikeyEvent,
     () => getCommunikeyRelays()
   );
