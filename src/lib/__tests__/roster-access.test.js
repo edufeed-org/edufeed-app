@@ -7,7 +7,7 @@ import { channelKey } from '$lib/groups/community-pointer.js';
 
 const RELAY = 'wss://groups.example.com';
 const POINTER = { id: 'root1', relay: RELAY };
-const KEY = channelKey(POINTER);
+const KEY = /** @type {string} */ (channelKey(POINTER));
 const OWNER = 'f'.repeat(64);
 const TEACHER = 'a'.repeat(64);
 const MEMBER = 'b'.repeat(64);
@@ -19,6 +19,9 @@ const roster = rosterView(
   { [KEY]: [{ pubkey: TEACHER, roles: ['lehrkraft'] }] }
 );
 const loadingRoster = rosterView(POINTER, {}, {});
+/**
+ * @param {{tier: 'all'}|{tier: 'members'}|{tier: 'role', role: string}|undefined} access
+ */
 const section = (access) => ({ name: 'Learning', access, profileList: null });
 
 describe('sectionAllowedAuthors', () => {
@@ -43,6 +46,7 @@ describe('sectionAllowedAuthors', () => {
 });
 
 describe('canPublishSection', () => {
+  /** @param {string|undefined} pubkey */
   const args = (pubkey, r = roster) => ({ pubkey, ownerPubkey: OWNER, roster: r });
   it('owner always may publish; anonymous never', () => {
     expect(canPublishSection(section({ tier: 'role', role: 'x' }), args(OWNER))).toBe(true);

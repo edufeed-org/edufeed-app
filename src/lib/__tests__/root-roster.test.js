@@ -6,7 +6,7 @@ import { channelKey } from '$lib/groups/community-pointer.js';
 
 const RELAY = 'wss://groups.example.com';
 const POINTER = { id: 'root1', relay: RELAY };
-const KEY = channelKey(POINTER);
+const KEY = /** @type {string} */ (channelKey(POINTER));
 const ADMIN = 'a'.repeat(64);
 const MEMBER = 'b'.repeat(64);
 const STRANGER = 'c'.repeat(64);

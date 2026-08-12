@@ -15,6 +15,7 @@ import {
 
 const RELAY = 'wss://groups.example.com';
 const PK = 'a'.repeat(64);
+/** @param {string[][]} tags */
 const event = (tags) => ({ kind: 10222, pubkey: PK, tags });
 
 describe('parseMembershipPointer', () => {

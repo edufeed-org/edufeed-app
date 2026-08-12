@@ -49,7 +49,7 @@ export function hasStrictContentMarker(event) {
  * Whether a content section restricts who may publish — via a legacy
  * profile list OR a communikey-groups access tier. The one predicate every
  * gating consumer must use (tabs, filtering, member aggregation).
- * @param {Pick<ContentTypeConfig, 'profileList' | 'access'> | null | undefined} section
+ * @param {{profileList?: string|null, access?: {tier: 'all'}|{tier: 'members'}|{tier: 'role', role: string}} | null | undefined} section
  * @returns {boolean}
  */
 export function sectionIsGated(section) {

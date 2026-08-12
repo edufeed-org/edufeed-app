@@ -118,6 +118,7 @@ describe('hasStrictContentMarker', () => {
 });
 
 describe('access section tiers (communikey-groups NIP draft)', () => {
+  /** @param {string[][]} extra */
   const base = (extra) => ({
     kind: 10222,
     tags: [['content', 'Learning'], ['k', '30142'], ...extra, ['content', 'Chat'], ['k', '9']]

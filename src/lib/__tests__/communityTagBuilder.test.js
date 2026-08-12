@@ -247,6 +247,9 @@ describe('buildCommunityDefinitionTags', () => {
   });
 
   describe('access tier emission', () => {
+    /**
+     * @param {{tier: 'all'}|{tier: 'members'}|{tier: 'role', role: string}|undefined} access
+     */
     const data = (access) => ({
       relays: [],
       blossomServers: [],
@@ -294,9 +297,12 @@ describe('buildCommunityDefinitionTags', () => {
     });
 
     test('never emits access role tags with empty/missing role (fail open)', () => {
-      const missingRole = buildCommunityDefinitionTags(data({ tier: 'role' }), {
-        communityPubkey: PK
-      });
+      // Deliberately off-type: role missing on purpose to exercise fail-open
+      // behavior. Cast at the fixture rather than widening the production type.
+      const missingRole = buildCommunityDefinitionTags(
+        data(/** @type {any} */ ({ tier: 'role' })),
+        { communityPubkey: PK }
+      );
       expect(missingRole.some((t) => t[0] === 'access')).toBe(false);
 
       const emptyRole = buildCommunityDefinitionTags(data({ tier: 'role', role: '  ' }), {

@@ -9,6 +9,7 @@ const legacy = {
   getAllowedAuthors: vi.fn(() => ['legacy-author']),
   getFormRef: vi.fn(() => 'legacy-form')
 };
+/** @type {any} */
 let rosterState;
 
 vi.mock('$lib/stores/profile-list-access.svelte.js', () => ({
@@ -64,7 +65,9 @@ beforeEach(() => {
     members: new Set([ACTIVE, TEACHER]),
     admins: [{ pubkey: TEACHER, roles: ['lehrkraft'] }],
     isLoading: false,
+    /** @param {string} pk */
     isMember: (pk) => new Set([ACTIVE, TEACHER]).has(pk),
+    /** @param {string} pk */
     rolesOf: (pk) => (pk === TEACHER ? ['lehrkraft'] : [])
   };
   vi.clearAllMocks();

@@ -27,10 +27,16 @@ const moderatedEvent = {
   ]
 };
 
-/** Minimal ProfileListAccess stub */
+/**
+ * Minimal ProfileListAccess stub
+ * @param {string[]} canNames
+ * @param {Record<string, string[]>} membersByName
+ */
 const access = (canNames, membersByName = {}) => ({
   isLoading: false,
+  /** @param {string} name */
   canPublish: (name) => canNames.includes(name),
+  /** @param {string} name */
   getMembers: (name) => membersByName[name] ?? [],
   getAllowedAuthors: () => null,
   getFormRef: () => null
