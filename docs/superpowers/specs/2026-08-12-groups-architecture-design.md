@@ -172,31 +172,53 @@ as explicit tasks:
    `buildProfileAccess(acl.memberMap, …)`; moderated communities' tier-gated
    sections render unfiltered there. Route it through the roster-aware logic
    before `GROUPS_ENABLED` ships.
-2. **Moved to Plan 3.** **Open→Moderiert flip MUST strip legacy `30000:`
-   profile-list a-tags** from all sections (mixed legacy+roster state is
-   internally inconsistent: lock icon + full-roster getMembers but unfiltered
-   authors). Bundle with sunsetting `communityTagBuilder`'s legacy a-tag write
-   (`isNewSpec && formRef` branch — spec says MUST NOT write). This lives with
-   Plan 3's settings-pane "Typ flips incl. legacy-a-tag stripping" work.
+2. **DONE (81778d37/2b8cc4a7 + f263822b).** **Open→Moderiert flip MUST strip
+   legacy `30000:` profile-list a-tags** from all sections (mixed
+   legacy+roster state is internally inconsistent: lock icon + full-roster
+   getMembers but unfiltered authors). Flip builders now strip the a-tags on
+   moderated transition (81778d37/2b8cc4a7); the creation wizard sunsets
+   writing new profile-list gating altogether (f263822b) — see the Legacy
+   section of the NIP draft.
 3. **DONE (22285063).** Wizard emits top-level tags (`membership`,
    `application`, `concord`) **before** content sections (positional-parser
    interop).
 
 **Plan 3 (page IA, join flows):**
 
-4. `getCommunityWideFormRef` (`communityFormDefaults.js`) still filters by
-   `profileList` only — a fourth check Task 3's `sectionIsGated` sweep didn't
-   cover; wire it when building the join/AccessGateBanner flow.
-5. `getFormRef` shape divergence: legacy backend returns a form-tag URL,
-   moderated returns a `30168:` address — consumers must handle both.
+4. **DONE (e42c407f).** `getCommunityWideFormRef` (`communityFormDefaults.js`)
+   is now tier-aware instead of filtering by `profileList` only.
+5. **Resolved where it matters.** `getFormRef` shape divergence is moot for
+   the facade path: `getCommunityWideFormRef` now serves the `30168:`
+   application address directly for moderated communities, so plan-3 callers
+   consume one shape. The remaining legacy-form-tag-URL shape still exists for
+   old communities; wiring both shapes into AccessGateBanner/HomeView's
+   join-flow UI stays Plan 4 work (see new Plan 4 item below).
 6. Roster `isLoading` never terminates on a dead group relay (parity with the
-   legacy hook) — add a loading timeout once user-visible.
+   legacy hook) — add a loading timeout once user-visible. **Unchanged —
+   carried to Plan 4.**
 7. `getMembers` returns the full roster for role-tiered sections (not
    role-holders) — conscious UX decision needed for MembersView grouping.
-8. `opts.membership` + `preservePointerTags` double-tag hazard: when
-   settings/flip work passes `opts.membership` into the builder for an event
-   that already carries the tag, preservation must exclude keys supplied via
-   `opts` (see plan-2 Task 4 review).
+   **Unchanged — carried to Plan 4.**
+8. **DONE structurally.** `opts.membership` + `preservePointerTags`
+   double-tag hazard: Plan 3's settings mutations (Typ flips, access-tier
+   edits, membership/application wiring) go through `withSectionAccess` and
+   the dedicated flip builders as direct tag surgery on the current event —
+   none of them route through `opts.membership`/builder-opts merging, so the
+   hazard never triggers in practice. The underlying `preservePointerTags`
+   rule (exclude keys supplied via `opts`) remains unfixed in
+   `communityTagBuilder` itself and still applies to any future caller that
+   does pass `opts.membership` into the builder.
+
+**New Plan 4 items (surfaced during plan-3 review):**
+
+9. `HomeView`'s `canPublishAnywhere`/`accessDetail` still filter by
+   `profileList` — swap to `sectionIsGated` (surfaced in plan-3 task 5
+   review).
+10. `ChannelInviteSheet` exclude-community-pubkey gap + `FormResponses`
+    decrypts kind `1069` with `manager.active.signer` — separate-keypair
+    community owners can't decrypt applications; trace the encryption
+    recipient through the intake/approvals work (surfaced in plan-3 task 1
+    fix review).
 
 ## Process
 

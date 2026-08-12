@@ -144,6 +144,10 @@ Section-level profile-list references (`30000:...`) and badge requirements
 (`30009:...`) are read-only legacy; clients honoring this spec MUST NOT write
 them. Kind `30222` targeted publications remain read-only legacy.
 
+Clients SHOULD NOT offer creating new profile-list gating; they MAY preserve
+existing profile-list tags when editing a legacy community. Flipping a
+community to moderated MUST strip them.
+
 ## Future extensions (recorded, not specified)
 
 - **Discoverable closed communities:** Armada-style invite links (expiry, label)
