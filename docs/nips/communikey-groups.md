@@ -44,6 +44,9 @@ Channels are additional NIP-29 groups (see `group` below). Their rosters are
 mirrored from the root group by admin fan-out; that mirroring is an
 implementation detail, not semantics.
 
+The root group MAY be `closed`; joining then happens via invite or application
+approval (put-user).
+
 ### `access` (section-level, moderated only)
 
 Placed inside a `content` section (after the `content` tag, like `k` tags):

@@ -167,18 +167,20 @@ as explicit tasks:
 
 **Plan 2 (wizard, flips, settings):**
 
-1. **Dashboard ACL path bypasses the facade** —
+1. **DONE (24e40e79).** **Dashboard ACL path bypasses the facade** —
    `DashboardCommunityFeed.svelte` builds a legacy-only access object via
    `buildProfileAccess(acl.memberMap, …)`; moderated communities' tier-gated
    sections render unfiltered there. Route it through the roster-aware logic
    before `GROUPS_ENABLED` ships.
-2. **Open→Moderiert flip MUST strip legacy `30000:` profile-list a-tags** from
-   all sections (mixed legacy+roster state is internally inconsistent: lock
-   icon + full-roster getMembers but unfiltered authors). Bundle with
-   sunsetting `communityTagBuilder`'s legacy a-tag write
-   (`isNewSpec && formRef` branch — spec says MUST NOT write).
-3. Wizard emits top-level tags (`membership`, `application`, `concord`)
-   **before** content sections (positional-parser interop).
+2. **Moved to Plan 3.** **Open→Moderiert flip MUST strip legacy `30000:`
+   profile-list a-tags** from all sections (mixed legacy+roster state is
+   internally inconsistent: lock icon + full-roster getMembers but unfiltered
+   authors). Bundle with sunsetting `communityTagBuilder`'s legacy a-tag write
+   (`isNewSpec && formRef` branch — spec says MUST NOT write). This lives with
+   Plan 3's settings-pane "Typ flips incl. legacy-a-tag stripping" work.
+3. **DONE (22285063).** Wizard emits top-level tags (`membership`,
+   `application`, `concord`) **before** content sections (positional-parser
+   interop).
 
 **Plan 3 (page IA, join flows):**
 
@@ -191,6 +193,10 @@ as explicit tasks:
    legacy hook) — add a loading timeout once user-visible.
 7. `getMembers` returns the full roster for role-tiered sections (not
    role-holders) — conscious UX decision needed for MembersView grouping.
+8. `opts.membership` + `preservePointerTags` double-tag hazard: when
+   settings/flip work passes `opts.membership` into the builder for an event
+   that already carries the tag, preservation must exclude keys supplied via
+   `opts` (see plan-2 Task 4 review).
 
 ## Process
 
