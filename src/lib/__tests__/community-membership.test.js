@@ -128,7 +128,9 @@ describe('deriveCommunityType', () => {
     expect(deriveCommunityType(event([['membership', 'root1', 'garbage']]))).toBe('open');
   });
   it('never throws on malformed tag entries (untrusted network input)', () => {
-    expect(deriveCommunityType({ tags: [null] })).toBe('open');
-    expect(deriveCommunityType({ tags: [null, ['concord', CONCORD_ID, RELAY]] })).toBe('closed');
+    expect(deriveCommunityType({ tags: /** @type {any} */ ([null]) })).toBe('open');
+    expect(
+      deriveCommunityType({ tags: /** @type {any} */ ([null, ['concord', CONCORD_ID, RELAY]]) })
+    ).toBe('closed');
   });
 });

@@ -159,6 +159,39 @@ TDD, unit-first:
 - Relay-side write-policy enforcement package (ops project; strfry writePolicy
   on homelab must be awk/sh).
 
+## Binding follow-ups from plan 1's final review (fold into plans 2/3)
+
+Plan 1 (core model & roster gating) shipped 2026-08-12; its final whole-branch
+review found no merge blockers but named obligations the next plans MUST carry
+as explicit tasks:
+
+**Plan 2 (wizard, flips, settings):**
+
+1. **Dashboard ACL path bypasses the facade** —
+   `DashboardCommunityFeed.svelte` builds a legacy-only access object via
+   `buildProfileAccess(acl.memberMap, …)`; moderated communities' tier-gated
+   sections render unfiltered there. Route it through the roster-aware logic
+   before `GROUPS_ENABLED` ships.
+2. **Open→Moderiert flip MUST strip legacy `30000:` profile-list a-tags** from
+   all sections (mixed legacy+roster state is internally inconsistent: lock
+   icon + full-roster getMembers but unfiltered authors). Bundle with
+   sunsetting `communityTagBuilder`'s legacy a-tag write
+   (`isNewSpec && formRef` branch — spec says MUST NOT write).
+3. Wizard emits top-level tags (`membership`, `application`, `concord`)
+   **before** content sections (positional-parser interop).
+
+**Plan 3 (page IA, join flows):**
+
+4. `getCommunityWideFormRef` (`communityFormDefaults.js`) still filters by
+   `profileList` only — a fourth check Task 3's `sectionIsGated` sweep didn't
+   cover; wire it when building the join/AccessGateBanner flow.
+5. `getFormRef` shape divergence: legacy backend returns a form-tag URL,
+   moderated returns a `30168:` address — consumers must handle both.
+6. Roster `isLoading` never terminates on a dead group relay (parity with the
+   legacy hook) — add a loading timeout once user-visible.
+7. `getMembers` returns the full roster for role-tiered sections (not
+   role-holders) — conscious UX decision needed for MembersView grouping.
+
 ## Process
 
 - This design + NIP draft supersede-and-extend the buzz thread

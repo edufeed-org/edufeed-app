@@ -64,12 +64,18 @@ describe('parseConcordPointer', () => {
     expect(parseConcordPointer(undefined)).toBeUndefined();
   });
   it('never throws on malformed tag entries (untrusted network input)', () => {
-    expect(parseConcordPointer({ tags: [null] })).toBeUndefined();
-    expect(parseConcordPointer({ tags: [null, ['concord', CID, 'wss://c.example']] })).toEqual({
+    expect(parseConcordPointer({ tags: /** @type {any} */ ([null]) })).toBeUndefined();
+    expect(
+      parseConcordPointer({
+        tags: /** @type {any} */ ([null, ['concord', CID, 'wss://c.example']])
+      })
+    ).toEqual({
       communityId: CID,
       relay: 'wss://c.example'
     });
-    expect(parseConcordPointer({ tags: ['invalid', ['concord', CID]] })).toEqual({
+    expect(
+      parseConcordPointer({ tags: /** @type {any} */ (['invalid', ['concord', CID]]) })
+    ).toEqual({
       communityId: CID,
       relay: undefined
     });
@@ -95,7 +101,7 @@ describe('withConcordPointer', () => {
     expect(out).toEqual([['concord', CID]]);
   });
   it('handles malformed tag entries without throwing', () => {
-    const tagsWithNull = [null, ['d', ''], ['concord', 'b'.repeat(64)]];
+    const tagsWithNull = /** @type {any} */ ([null, ['d', ''], ['concord', 'b'.repeat(64)]]);
     const out = withConcordPointer(tagsWithNull, CID);
     expect(out).toContainEqual(['concord', CID]);
     expect(out).toContainEqual(['d', '']);
@@ -126,7 +132,7 @@ describe('withoutConcordPointer', () => {
     expect(out).not.toBe(tags);
   });
   it('handles malformed tag entries without throwing', () => {
-    const tagsWithNull = [null, ['d', ''], ['concord', CID], ['r', 'wss://x']];
+    const tagsWithNull = /** @type {any} */ ([null, ['d', ''], ['concord', CID], ['r', 'wss://x']]);
     const out = withoutConcordPointer(tagsWithNull);
     expect(out).toEqual([
       ['d', ''],
