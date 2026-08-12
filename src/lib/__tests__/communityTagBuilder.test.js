@@ -314,6 +314,62 @@ describe('buildCommunityDefinitionTags', () => {
   });
 });
 
+describe('membership/application emission', () => {
+  const PK = 'a'.repeat(64);
+  const RELAY = 'wss://groups.example.com';
+  /** @type {import('$lib/helpers/communityTagBuilder').CommunityFormData} */
+  const data = {
+    relays: ['wss://relay.example.com'],
+    blossomServers: [],
+    location: '',
+    description: '',
+    contentTypes: {
+      learning: {
+        name: 'Learning',
+        enabled: true,
+        badges: { read: null, write: null },
+        relays: [],
+        formRef: '',
+        access: { tier: 'members' }
+      }
+    }
+  };
+
+  test('emits both pointers before the strict marker and all content sections', () => {
+    const tags = buildCommunityDefinitionTags(data, {
+      communityPubkey: PK,
+      membership: { id: 'root1', relay: RELAY },
+      application: { address: `30168:${PK}:beitritt`, relay: RELAY }
+    });
+    const membershipIdx = tags.findIndex((t) => t[0] === 'membership');
+    const applicationIdx = tags.findIndex((t) => t[0] === 'application');
+    const strictIdx = tags.findIndex((t) => t[0] === 'strict');
+    const contentIdx = tags.findIndex((t) => t[0] === 'content');
+    expect(tags[membershipIdx]).toEqual(['membership', 'root1', RELAY]);
+    expect(tags[applicationIdx]).toEqual(['application', `30168:${PK}:beitritt`, RELAY]);
+    expect(membershipIdx).toBeLessThan(strictIdx);
+    expect(applicationIdx).toBeLessThan(strictIdx);
+    expect(strictIdx).toBeLessThan(contentIdx);
+  });
+
+  test('application relay hint is optional; omitted opts emit nothing', () => {
+    const withBare = buildCommunityDefinitionTags(data, {
+      communityPubkey: PK,
+      application: { address: `30168:${PK}:beitritt` }
+    });
+    expect(withBare).toContainEqual(['application', `30168:${PK}:beitritt`]);
+    const none = buildCommunityDefinitionTags(data, { communityPubkey: PK });
+    expect(none.some((t) => t[0] === 'membership' || t[0] === 'application')).toBe(false);
+  });
+
+  test('never emits pointers in old-spec mode', () => {
+    const tags = buildCommunityDefinitionTags(data, {
+      membership: { id: 'root1', relay: RELAY }
+    });
+    expect(tags.some((t) => t[0] === 'membership')).toBe(false);
+  });
+});
+
 describe('preservePointerTags', () => {
   const RELAY = 'wss://groups.example.com';
   const source = [
