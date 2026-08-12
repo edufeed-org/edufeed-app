@@ -3,6 +3,12 @@
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { joinCommunity } from '$lib/helpers/community';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
+  import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
+  import { joinCommunityGroup } from '$lib/groups/join-community-group.js';
+  import { isMembershipRefusal } from '$lib/groups/groups.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { showToast } from '$lib/helpers/toast';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
@@ -31,7 +37,21 @@
 
   const getJoined = useCommunityMembership(() => communityId);
 
+  // Moderated (NIP-29 root group) join lane — independent of the kind-30000
+  // follow-set join above, per the plan's "following stays independent".
+  const getActiveUser = useActiveUser();
+  const getRootRoster = useRootRoster(() => communikeyEvent);
+  const getRootMetadata = useChannelMetadata(() => {
+    const pointer = getRootRoster().pointer;
+    return pointer ? [pointer] : [];
+  });
+
   let isJoining = $state(false);
+  let requestSent = $state(false);
+  let isSendingJoin = $state(false);
+  let showInviteInput = $state(false);
+  let inviteCode = $state('');
+  let isSendingInvite = $state(false);
 
   /** Navigate to the form respond page for join request */
   function handleRequestJoin() {
@@ -69,6 +89,49 @@
     }
   }
 
+  /** Report a joinCommunityGroup rejection with the friendliest toast we can. */
+  function reportJoinError(/** @type {unknown} */ error) {
+    if (isMembershipRefusal(error)) {
+      showToast(m.community_join_refused(), 'error');
+    } else {
+      const reason = /** @type {any} */ (error)?.message ?? String(error);
+      showToast(m.community_join_failed({ reason }), 'error');
+    }
+  }
+
+  /** Bare 9021 join request against the community's root group. */
+  async function handleJoinGroup() {
+    if (isSendingJoin || !activeUser || !rootPointer) return;
+    isSendingJoin = true;
+    try {
+      await joinCommunityGroup({ pointer: rootPointer, user: activeUser });
+      requestSent = true;
+      getRootRoster().refresh();
+    } catch (error) {
+      reportJoinError(error);
+    } finally {
+      isSendingJoin = false;
+    }
+  }
+
+  /** 9021 join request carrying an invite code. */
+  async function handleJoinWithCode() {
+    const code = inviteCode.trim();
+    if (isSendingInvite || !activeUser || !rootPointer || !code) return;
+    isSendingInvite = true;
+    try {
+      await joinCommunityGroup({ pointer: rootPointer, code, user: activeUser });
+      requestSent = true;
+      showInviteInput = false;
+      inviteCode = '';
+      getRootRoster().refresh();
+    } catch (error) {
+      reportJoinError(error);
+    } finally {
+      isSendingInvite = false;
+    }
+  }
+
   let displayName = $derived(getDisplayName(profileEvent) || 'Community');
   let avatarUrl = $derived(getProfilePicture(profileEvent));
   let bannerUrl = $derived(profileEvent?.banner || null);
@@ -78,6 +141,22 @@
   // the button block is skipped for them entirely.
   let communityType = $derived(deriveCommunityType(communikeyEvent));
   let isClosed = $derived(communityType === 'closed');
+  let isModerated = $derived(communityType === 'moderated');
+
+  let activeUser = $derived(getActiveUser());
+  let rootPointer = $derived(getRootRoster().pointer);
+  let isRosterMember = $derived(!!activeUser && getRootRoster().isMember(activeUser.pubkey));
+  // The root group's own kind:39000 "closed" marker (group-management.js's
+  // metadataTags) — distinct from the read-access `private` tag
+  // channel-access.js reads. "Closed" here means bare 9021s are ignored;
+  // an invite code is still honoured, so that affordance is never gated on it.
+  let rootMetadataKey = $derived(rootPointer ? channelKey(rootPointer) : null);
+  let rootMetadataEvent = $derived(
+    rootMetadataKey ? getRootMetadata().byKey[rootMetadataKey] : null
+  );
+  let isRootClosed = $derived(
+    !!rootMetadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed')
+  );
 </script>
 
 <!-- Banner — only when the community actually set one (design: the
@@ -144,6 +223,11 @@
             {m.communikey_header_joined_badge()}
           </div>
         {/if}
+        {#if isModerated && activeUser && isRosterMember}
+          <div class="badge gap-1 badge-sm badge-success">
+            {m.community_join_member()}
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -167,6 +251,54 @@
               {m.communikey_header_join_button()}
             {/if}
           </button>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Moderated (NIP-29) root-group join lane — independent of the
+         kind-30000 follow above. Only for non-roster-members without a
+         structured application form (that path keeps its own button above). -->
+    {#if isModerated && activeUser && !isRosterMember && !getCommunityWideFormRef?.()}
+      <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
+        {#if requestSent}
+          <span class="text-sm text-base-content/60">{m.community_join_pending()}</span>
+        {:else}
+          <div class="flex flex-col items-end gap-1">
+            {#if !isRootClosed}
+              <button
+                onclick={handleJoinGroup}
+                disabled={isSendingJoin}
+                class="btn btn-sm btn-primary"
+              >
+                {#if isSendingJoin}
+                  <span class="loading loading-xs loading-spinner"></span>
+                {:else}
+                  {m.community_join_group()}
+                {/if}
+              </button>
+            {/if}
+            {#if !showInviteInput}
+              <button onclick={() => (showInviteInput = true)} class="btn btn-ghost btn-xs">
+                {m.community_join_invite_toggle()}
+              </button>
+            {:else}
+              <div class="flex items-center gap-1">
+                <input
+                  type="text"
+                  bind:value={inviteCode}
+                  placeholder={m.community_join_invite_placeholder()}
+                  class="input-bordered input input-xs w-20"
+                />
+                <button
+                  onclick={handleJoinWithCode}
+                  disabled={isSendingInvite || !inviteCode.trim()}
+                  class="btn btn-xs btn-primary"
+                >
+                  {m.community_join_invite_submit()}
+                </button>
+              </div>
+            {/if}
+          </div>
         {/if}
       </div>
     {/if}

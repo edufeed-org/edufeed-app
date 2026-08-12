@@ -1,15 +1,23 @@
 /**
- * CommunityProfileHero — closed-community handling (Plan 4 / Task 2).
+ * CommunityProfileHero — closed-community handling (Plan 4 / Task 2) and the
+ * moderated-community join lane (Plan 4 / Task 4).
  *
  * A closed community (concord pointer tag, no membership pointer) shows the
  * "Closed" badge + an invitation-only hint and MUST NOT render the
  * join/leave button — the kind-30000 follow join is meaningless there.
  * Open communities (no pointers) keep today's Join button behavior.
  *
+ * A moderated community (membership pointer) runs an INDEPENDENT roster-based
+ * join lane beside the kind-30000 follow button: a "Mitglied" badge for
+ * roster members, and — for non-members — either the existing
+ * application-form button (unchanged) or a bare-9021 join button plus an
+ * always-available invite-code redeem affordance.
+ *
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { channelKey } from '$lib/groups/community-pointer.js';
 
 vi.mock('$lib/paraglide/messages', () => ({
   communikey_header_join_button: () => 'Follow Community',
@@ -18,23 +26,70 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_members_count: (/** @type {{count: number}} */ { count }) => `${count} members`,
   community_profile_hero_more: () => 'more',
   community_type_closed_title: () => 'Closed',
-  community_hero_closed_hint: () => 'Invitation only'
+  community_hero_closed_hint: () => 'Invitation only',
+  community_join_group: () => 'Join',
+  community_join_pending: () => 'Request sent — waiting for approval.',
+  community_join_member: () => 'Member',
+  community_join_invite_toggle: () => 'Redeem invite code',
+  community_join_invite_placeholder: () => 'Code',
+  community_join_invite_submit: () => 'Redeem',
+  community_join_refused: () => 'The relay declined this join request.',
+  community_join_failed: (/** @type {{reason: string}} */ { reason }) => `Join failed: ${reason}`
 }));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/stores', () => ({ page: { subscribe: () => () => {} } }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 
-const holders = vi.hoisted(() => ({ joined: false }));
+const holders = vi.hoisted(() => ({
+  joined: false,
+  activeUser: /** @type {any} */ (null),
+  rosterPointer: /** @type {any} */ (null),
+  isMember: false,
+  refresh: vi.fn(),
+  metadataByKey: /** @type {Record<string, any>} */ ({})
+}));
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
   useCommunityMembership: () => () => holders.joined
 }));
 vi.mock('$lib/helpers/community', () => ({ joinCommunity: vi.fn() }));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  useActiveUser: () => () => holders.activeUser
+}));
+vi.mock('$lib/groups/root-roster.svelte.js', () => ({
+  useRootRoster: () => () => ({
+    pointer: holders.rosterPointer,
+    refresh: holders.refresh,
+    members: new Set(),
+    admins: [],
+    isLoading: false,
+    isMember: () => holders.isMember,
+    rolesOf: () => []
+  })
+}));
+vi.mock('$lib/groups/channel-metadata.svelte.js', () => ({
+  useChannelMetadata: () => () => ({ byKey: holders.metadataByKey, failedRelays: [] })
+}));
+vi.mock('$lib/groups/join-community-group.js', () => ({
+  joinCommunityGroup: vi.fn()
+}));
+
+const formRefHolder = vi.hoisted(() => ({ value: /** @type {string | null} */ (null) }));
+vi.mock('svelte', async (importOriginal) => {
+  const actual = /** @type {Record<string, any>} */ (await importOriginal());
+  return {
+    ...actual,
+    getContext: (/** @type {string} */ key) =>
+      key === 'communityWideFormRef' ? () => formRefHolder.value : undefined
+  };
+});
 
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: function Stub() {} }));
 vi.mock('../../shared/ImageWithFallback.svelte', () => ({ default: function Stub() {} }));
 
 import CommunityProfileHero from '$lib/components/community/views/CommunityProfileHero.svelte';
+import { joinCommunityGroup } from '$lib/groups/join-community-group.js';
+import { showToast } from '$lib/helpers/toast';
 
 const OPEN_EVENT = { kind: 10222, tags: [] };
 const CLOSED_EVENT = {
@@ -42,12 +97,39 @@ const CLOSED_EVENT = {
   tags: [['concord', 'a'.repeat(64), 'wss://concord.example.org']]
 };
 
+const ROOT_ID = 'root123abcdef456';
+const ROOT_RELAY = 'wss://groups.example';
+const MODERATED_EVENT = {
+  kind: 10222,
+  tags: [['membership', ROOT_ID, ROOT_RELAY]]
+};
+const ROOT_POINTER = { id: ROOT_ID, relay: ROOT_RELAY };
+
 const PROFILE_EVENT = { content: JSON.stringify({ name: 'Test Community' }) };
+const USER = { pubkey: 'b'.repeat(64), signer: {} };
+
+function renderModerated(/** @type {any} */ extraProps = {}) {
+  return render(CommunityProfileHero, {
+    props: {
+      communityId: 'x'.repeat(64),
+      communikeyEvent: MODERATED_EVENT,
+      profileEvent: PROFILE_EVENT,
+      onNavigateToAbout: vi.fn(),
+      onMembersClick: vi.fn(),
+      ...extraProps
+    }
+  });
+}
 
 describe('CommunityProfileHero — community type', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     holders.joined = false;
+    holders.activeUser = null;
+    holders.rosterPointer = null;
+    holders.isMember = false;
+    holders.metadataByKey = {};
+    formRefHolder.value = null;
   });
 
   it('closed: renders the Closed badge and hint, no Join button', () => {
@@ -81,5 +163,122 @@ describe('CommunityProfileHero — community type', () => {
     expect(screen.getAllByText('Follow Community').length).toBeGreaterThan(0);
     expect(screen.queryByText('Closed')).toBeNull();
     expect(screen.queryByText('Invitation only')).toBeNull();
+  });
+});
+
+describe('CommunityProfileHero — moderated join lane', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    holders.joined = false;
+    holders.activeUser = USER;
+    holders.rosterPointer = ROOT_POINTER;
+    holders.isMember = false;
+    holders.metadataByKey = {};
+    formRefHolder.value = null;
+  });
+
+  it('roster member: shows the Member badge, no join affordances', () => {
+    holders.isMember = true;
+    renderModerated();
+
+    expect(screen.getAllByText('Member').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Join')).toBeNull();
+    expect(screen.queryByText('Redeem invite code')).toBeNull();
+  });
+
+  it('non-member with an application form ref: keeps the existing Apply to Join button', () => {
+    formRefHolder.value = '30168:' + 'c'.repeat(64) + ':membership';
+    renderModerated();
+
+    expect(screen.getAllByText('Apply to Join').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Join')).toBeNull();
+    expect(screen.queryByText('Redeem invite code')).toBeNull();
+  });
+
+  it('non-member, no application ref, root group not closed: shows the group Join button', () => {
+    renderModerated();
+
+    expect(screen.getAllByText('Join').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
+  });
+
+  it('non-member, root group closed: hides the bare Join button but keeps the invite-code affordance', () => {
+    const key = /** @type {string} */ (channelKey(ROOT_POINTER));
+    holders.metadataByKey = { [key]: { kind: 39000, tags: [['d', ROOT_ID], ['closed']] } };
+    renderModerated();
+
+    expect(screen.queryByText('Join')).toBeNull();
+    expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
+  });
+
+  it('anonymous: no moderated join affordances at all', () => {
+    holders.activeUser = null;
+    renderModerated();
+
+    expect(screen.queryByText('Join')).toBeNull();
+    expect(screen.queryByText('Redeem invite code')).toBeNull();
+    expect(screen.queryByText('Member')).toBeNull();
+  });
+
+  it('invite-code input submits with the typed code', async () => {
+    const service = /** @type {import('vitest').Mock} */ (joinCommunityGroup);
+    service.mockResolvedValueOnce(undefined);
+    renderModerated();
+
+    await fireEvent.click(screen.getByText('Redeem invite code'));
+    const input = screen.getByPlaceholderText('Code');
+    await fireEvent.input(input, { target: { value: 'sekrit' } });
+    await fireEvent.click(screen.getByText('Redeem'));
+
+    await waitFor(() =>
+      expect(service).toHaveBeenCalledWith({
+        pointer: ROOT_POINTER,
+        code: 'sekrit',
+        user: USER
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText('Request sent — waiting for approval.').length).toBeGreaterThan(0)
+    );
+    expect(holders.refresh).toHaveBeenCalled();
+  });
+
+  it('bare join button sends a plain request and flips to the pending state', async () => {
+    const service = /** @type {import('vitest').Mock} */ (joinCommunityGroup);
+    service.mockResolvedValueOnce(undefined);
+    renderModerated();
+
+    await fireEvent.click(screen.getByText('Join'));
+
+    await waitFor(() =>
+      expect(service).toHaveBeenCalledWith({ pointer: ROOT_POINTER, user: USER })
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText('Request sent — waiting for approval.').length).toBeGreaterThan(0)
+    );
+  });
+
+  it('a membership-refusal error gets the friendlier toast', async () => {
+    const service = /** @type {import('vitest').Mock} */ (joinCommunityGroup);
+    service.mockRejectedValueOnce(new Error('not a member'));
+    renderModerated();
+
+    await fireEvent.click(screen.getByText('Join'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('The relay declined this join request.', 'error')
+    );
+  });
+
+  it('any other relay rejection toasts the raw reason', async () => {
+    const service = /** @type {import('vitest').Mock} */ (joinCommunityGroup);
+    service.mockRejectedValueOnce(new Error('rate limited'));
+    renderModerated();
+
+    await fireEvent.click(screen.getByText('Join'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('Join failed: rate limited', 'error')
+    );
   });
 });
