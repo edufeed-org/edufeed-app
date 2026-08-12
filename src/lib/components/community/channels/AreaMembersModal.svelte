@@ -16,20 +16,10 @@
   same "relay is the only source of truth" rule as GroupMembersModal.
 -->
 <script>
-  import {
-    stufe2Pointers,
-    areaMemberRows,
-    fanOutPlan,
-    aggregateFanOut
-  } from '$lib/groups/area-members.js';
+  import { stufe2Pointers, areaMemberRows, fanOutPlan } from '$lib/groups/area-members.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
-  import {
-    buildPutUserTemplate,
-    buildRemoveUserTemplate,
-    publishToGroupRelay
-  } from '$lib/groups/group-management.js';
+  import { putUserOn, removeUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
-  import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -105,53 +95,6 @@
   let busy = $state(false);
 
   /**
-   * Try `action(item)` once, then once more on failure. Never throws — a
-   * NIP-29 relay refusing one channel (not admin there, offline, etc.) must
-   * not blind the rest of the fan-out or leave an unhandled rejection behind.
-   * @template T
-   * @param {T} item
-   * @param {string} label for the console diagnostics
-   * @param {(item: T) => Promise<any>} action
-   */
-  async function tryOnce(item, label, action) {
-    try {
-      await action(item);
-      return true;
-    } catch (err) {
-      console.warn('groups: area fan-out action failed, retrying once', label, err);
-      try {
-        await action(item);
-        return true;
-      } catch (err2) {
-        console.error('groups: area fan-out retry failed', label, err2);
-        return false;
-      }
-    }
-  }
-
-  /**
-   * Generic sequential fan-out: one item at a time (never parallel — a burst
-   * of publishes at one relay is exactly what tryOnce's retry is meant to
-   * absorb gracefully, not race). `keyOf` doubles as both the retry log
-   * label and the aggregateFanOut result key, so every caller — single
-   * pointer (repair/remove/add) or {pointer, pubkey} pair (bulk sync) —
-   * shares this one loop.
-   * @template T
-   * @param {T[]} items
-   * @param {(item: T) => string} keyOf
-   * @param {(item: T) => Promise<any>} action
-   */
-  async function fanOut(items, keyOf, action) {
-    const results = [];
-    for (const item of items) {
-      const key = keyOf(item);
-      const ok = await tryOnce(item, key, action);
-      results.push({ key, ok });
-    }
-    return aggregateFanOut(results);
-  }
-
-  /**
    * @param {{ok: string[], failed: string[]}} aggregate
    * @param {(count: number) => string} successMessage
    */
@@ -168,28 +111,6 @@
     getRosters().refresh();
   }
 
-  /** @param {{id: string, relay: string}} pointer @param {string} pubkey @param {string[]} [roles] */
-  function putUserOn(pointer, pubkey, roles = []) {
-    const user = getActiveUser();
-    if (!user) return Promise.reject(new Error('no active user'));
-    return publishToGroupRelay(
-      pool.relay(pointer.relay),
-      buildPutUserTemplate(pointer.id, pubkey, roles),
-      user
-    );
-  }
-
-  /** @param {{id: string, relay: string}} pointer @param {string} pubkey */
-  function removeUserOn(pointer, pubkey) {
-    const user = getActiveUser();
-    if (!user) return Promise.reject(new Error('no active user'));
-    return publishToGroupRelay(
-      pool.relay(pointer.relay),
-      buildRemoveUserTemplate(pointer.id, pubkey),
-      user
-    );
-  }
-
   /** @param {{pubkey: string, inKeys: string[], missingKeys: string[]}} row */
   async function repair(row) {
     if (busy || !getActiveUser()) return;
@@ -204,7 +125,7 @@
       const aggregate = await fanOut(
         targets,
         (pointer) => channelKey(pointer) ?? pointer.id,
-        (pointer) => putUserOn(pointer, row.pubkey)
+        (pointer) => putUserOn(pointer, row.pubkey, [], /** @type {any} */ (getActiveUser()))
       );
       reportFanOut(aggregate, (count) => m.area_members_fanout_ok({ count }));
     } finally {
@@ -226,7 +147,7 @@
       const aggregate = await fanOut(
         targets,
         (pointer) => channelKey(pointer) ?? pointer.id,
-        (pointer) => removeUserOn(pointer, row.pubkey)
+        (pointer) => removeUserOn(pointer, row.pubkey, /** @type {any} */ (getActiveUser()))
       );
       reportFanOut(aggregate, (count) => m.area_members_removed({ count }));
     } finally {
@@ -242,7 +163,7 @@
       const aggregate = await fanOut(
         pointers,
         (pointer) => channelKey(pointer) ?? pointer.id,
-        (pointer) => putUserOn(pointer, pubkey)
+        (pointer) => putUserOn(pointer, pubkey, [], /** @type {any} */ (getActiveUser()))
       );
       reportFanOut(aggregate, (count) => m.area_members_fanout_ok({ count }));
     } finally {
@@ -276,7 +197,7 @@
       const aggregate = await fanOut(
         items,
         (item) => `${channelKey(item.pointer) ?? item.pointer.id}:${item.pubkey}`,
-        (item) => putUserOn(item.pointer, item.pubkey)
+        (item) => putUserOn(item.pointer, item.pubkey, [], /** @type {any} */ (getActiveUser()))
       );
       reportFanOut(aggregate, (count) => m.area_members_fanout_ok({ count }));
     } finally {
