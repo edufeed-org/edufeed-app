@@ -2,7 +2,11 @@
  * Content type configuration for community features
  * Maps event kinds to UI metadata and implementation status
  */
-import { parseCommunityContentTypes, hasStrictContentMarker } from './communityRelays.js';
+import {
+  parseCommunityContentTypes,
+  hasStrictContentMarker,
+  sectionIsGated
+} from './communityRelays.js';
 
 /**
  * Every valid `?view=` content-view id for a community page. The page load
@@ -416,7 +420,7 @@ export function getRestrictedTabIds(communikeyEvent) {
   const sections = parseCommunityContentTypes(communikeyEvent);
   const restricted = new Set();
   for (const section of sections) {
-    if (!section.profileList) continue;
+    if (!sectionIsGated(section)) continue;
     for (const kind of section.kinds) {
       const tabId = kindToContentType(kind);
       if (tabId) restricted.add(tabId);
@@ -436,7 +440,7 @@ export function getAccessibleTabIds(communikeyEvent, profileAccess) {
   const sections = parseCommunityContentTypes(communikeyEvent);
   const accessible = new Set();
   for (const section of sections) {
-    if (!section.profileList) continue;
+    if (!sectionIsGated(section)) continue;
     if (!profileAccess.canPublish(section.name)) continue;
     for (const kind of section.kinds) {
       const tabId = kindToContentType(kind);
@@ -515,7 +519,7 @@ export function getVerifiedMembers(profileAccess, communityEvent) {
   allSet.add(communityEvent.pubkey);
 
   for (const section of sections) {
-    if (!section.profileList) continue;
+    if (!sectionIsGated(section)) continue;
     const members = profileAccess.getMembers(section.name);
     if (members && members.length > 0) {
       perSection.set(section.name, members);
