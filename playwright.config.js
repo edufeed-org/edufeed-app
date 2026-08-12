@@ -48,7 +48,8 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         launchOptions: {
-          executablePath: process.env.CHROMIUM_BIN || 'chromium'
+          executablePath: process.env.CHROMIUM_BIN || 'chromium',
+          args: ['--disable-features=LocalNetworkAccessChecks']
         }
       }
     }

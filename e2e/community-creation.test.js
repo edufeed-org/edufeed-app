@@ -3,9 +3,116 @@
  *
  * Tests the CreateCommunityModal flow including keypair selection,
  * community settings, and successful creation.
+ *
+ * Hermeticity (group-features-off): `playwright.config.js`'s shared webServer
+ * hardcodes `CONCORD_ENABLED: 'true'` unconditionally — required for real
+ * Concord flows in concord-channels.test.js / concord-notifications.test.js,
+ * which run against the same server process, so it cannot simply be turned
+ * off in the webServer env for everyone. That flag alone is enough to light
+ * up CreateCommunityModal's flag-gated type step
+ * (`typeStepVisible = moderatedAvailable || !!runtimeConfig.concord?.enabled`,
+ * see wizard-logic.js `communityWizardSteps`), which would break every
+ * step-count assumption below. (`GROUPS_ENABLED` is unset in both the
+ * webServer env and this worktree's `.env`, so `moderatedAvailable` is false
+ * either way and needs no override — but see the note below on why relying
+ * on that is fragile.)
+ *
+ * Fix: force `runtimeConfig.concord.enabled = false` for every page this
+ * file touches, following the `enableNpubLogin` technique in
+ * npub-login.test.js — rewrite the JSON-escaped `/api/config` payload
+ * SvelteKit inlines into the SSR'd document (the root layout's
+ * `initializeConfig()` guards against re-initializing later, so intercepting
+ * only the client-side `/api/config` fetch on `/discover` is too late once a
+ * prior `/` navigation — e.g. inside the `authenticatedPage` fixture — has
+ * already baked `concord.enabled: true` into the store), plus intercept the
+ * `/api/config` route directly for any later client-side fetches.
+ *
+ * This is wired in via a local override of the `page` fixture (not a
+ * `test.beforeEach`) so it also covers `authenticatedPage`, which depends on
+ * `page` and performs its own `goto('/')` internally before any test body
+ * runs — a `beforeEach` reliably running before a *fixture's* setup isn't
+ * guaranteed the way overriding the fixture itself is.
+ *
+ * `/`'s SSR'd document ships an ~18KB `Link` header (one `modulepreload`
+ * entry per JS chunk the root layout pulls in — this app's dependency graph
+ * is large). That overflows the 16KB header cap baked into BOTH Playwright's
+ * `route.fetch()` and Node's global `fetch()` (undici) — confirmed against
+ * this preview build. `node:http`'s `maxHeaderSize` option has no such
+ * ceiling, so document fetches go through a small manual client instead; the
+ * oversized `link` header is dropped when refulfilling (it's a pure preload
+ * hint — dropping it changes nothing observable, the browser still loads the
+ * same scripts via normal `<script>` tags).
  */
-import { test, expect } from './fixtures.js';
+import http from 'node:http';
+import https from 'node:https';
+import { test as base, expect } from './fixtures.js';
 import { setupErrorCapture } from './test-utils.js';
+
+/**
+ * Fetch a URL via Node's raw http(s) client with a bumped max header size.
+ * See the file header comment for why this exists instead of `route.fetch()`
+ * or the global `fetch()`.
+ * @param {string} url
+ * @returns {Promise<{status: number, contentType: string, body: string}>}
+ */
+function fetchDocument(url) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https:') ? https : http;
+    const req = mod.request(url, { maxHeaderSize: 1_048_576 }, (res) => {
+      /** @type {Buffer[]} */
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () =>
+        resolve({
+          status: res.statusCode ?? 200,
+          contentType: /** @type {string} */ (res.headers['content-type']) || 'text/html',
+          body: Buffer.concat(chunks).toString('utf-8')
+        })
+      );
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+/**
+ * Force `concord.enabled: false` in the runtime config for a page, no matter
+ * whether it was first populated via an SSR'd document or a client-side
+ * `/api/config` fetch. See the file header comment for why both are needed.
+ * @param {import('@playwright/test').Page} page
+ */
+async function disableGroupFeatures(page) {
+  const patch = (text) =>
+    text
+      .replaceAll('\\"concord\\":{\\"enabled\\":true', '\\"concord\\":{\\"enabled\\":false')
+      .replaceAll('"concord":{"enabled":true', '"concord":{"enabled":false');
+
+  await page.route('**/api/config', async (route) => {
+    const response = await route.fetch();
+    const json = await response.json();
+    if (json.concord) json.concord = { ...json.concord, enabled: false };
+    await route.fulfill({ response, json });
+  });
+
+  // Registered last → matched first (Playwright routes are LIFO); non-document
+  // requests fall through to the /api/config route above or the network.
+  await page.route('**/*', async (route) => {
+    if (route.request().resourceType() !== 'document') return route.fallback();
+    const { status, contentType, body } = await fetchDocument(route.request().url());
+    await route.fulfill({ status, contentType, body: patch(body) });
+  });
+}
+
+/**
+ * Local test object: every `page` (and anything built on it, e.g.
+ * `authenticatedPage`) gets group features forced off before any navigation.
+ */
+const test = base.extend({
+  page: async ({ page }, use) => {
+    await disableGroupFeatures(page);
+    await use(page);
+  }
+});
 
 /**
  * Navigate to the Communities tab on the discover page.
@@ -29,6 +136,22 @@ async function openCreateCommunityModal(page) {
   await expect(createButton).toBeVisible({ timeout: 10000 });
   await createButton.click();
   await page.waitForTimeout(500);
+}
+
+/**
+ * Expand the "Advanced Settings" collapse on the Community Settings step
+ * (step 1) — Relays and Blossom servers live inside it (pre-existing UI
+ * change on dev, unrelated to this plan; see CreateCommunityModal.svelte's
+ * `collapse-arrow collapse` wrapper). daisyUI's checkbox-driven collapse
+ * stacks an `<input type="checkbox">` on top of the `.collapse-title` text —
+ * clicking the title div itself gets swallowed by that overlay, so check the
+ * input directly.
+ * @param {import('@playwright/test').Page} page
+ */
+async function expandAdvancedSettings(page) {
+  const collapse = page.locator('.collapse', { hasText: 'Advanced Settings' });
+  await collapse.locator('input[type="checkbox"]').check({ force: true });
+  await page.waitForTimeout(300);
 }
 
 // ============================================================================
@@ -64,6 +187,15 @@ test.describe('Community Creation - Modal Access', () => {
     const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
     await expect(useCurrentButton).toBeVisible({ timeout: 5000 });
   });
+
+  test('type step is absent when no group features are enabled', async ({
+    authenticatedPage: page
+  }) => {
+    await navigateToCommunitiesTab(page);
+    await openCreateCommunityModal(page);
+    await page.locator('.modal-box button', { hasText: 'Use Current Keypair' }).click();
+    await expect(page.locator('[data-testid="community-type-open"]')).toHaveCount(0);
+  });
 });
 
 // ============================================================================
@@ -95,10 +227,13 @@ test.describe('Community Creation - Keypair Selection', () => {
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
-    // Should now show community settings (step 1)
-    // The relays section should be visible
-    const relaysLabel = page.locator('text=Relays');
-    await expect(relaysLabel).toBeVisible({ timeout: 5000 });
+    // Should now show community settings (step 1). Content Types is the
+    // reliable landmark: Relays now lives inside the collapsed "Advanced
+    // Settings" accordion (pre-existing UI change, unrelated to this plan —
+    // see 'step 1 shows settings form fields' below), so it isn't visible
+    // without expanding that section first.
+    const contentTypesLabel = page.getByText('Content Types', { exact: true });
+    await expect(contentTypesLabel).toBeVisible({ timeout: 5000 });
   });
 });
 
@@ -150,8 +285,11 @@ test.describe('Community Creation - New Keypair Flow', () => {
   test('profile step shows picture URL input', async ({ authenticatedPage: page }) => {
     await selectCreateNewKeypair(page);
 
-    // Picture input should be visible
-    const pictureInput = page.locator('#profile-picture');
+    // The plain `#profile-picture` input was replaced by LicensedImageInput
+    // (pre-existing UI change on dev, unrelated to this plan — see
+    // CreateCommunityModal.svelte's "community picture goes through the
+    // licensed image input"); its URL field carries this testid instead.
+    const pictureInput = page.getByTestId('licensed-image-url-input');
     await expect(pictureInput).toBeVisible({ timeout: 5000 });
   });
 
@@ -315,7 +453,10 @@ test.describe('Community Creation - Community Settings', () => {
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
-    // Should show relays section (label says "Community Relays")
+    // Relays now live inside the collapsed "Advanced Settings" accordion
+    // (pre-existing UI change on dev, unrelated to this plan) — expand it
+    // before asserting the label is visible.
+    await expandAdvancedSettings(page);
     const relaysLabel = page.locator('text=Community Relays');
     await expect(relaysLabel).toBeVisible({ timeout: 5000 });
 
@@ -333,24 +474,23 @@ test.describe('Community Creation - Community Settings', () => {
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
-    // Content types are displayed as buttons with checkboxes inside
-    // Find the Calendar button and click it to toggle
-    const calendarButton = page.locator('button', { hasText: 'Calendar' }).filter({
-      has: page.locator('input[type="checkbox"]')
-    });
+    // Content types are pill buttons (no checkbox inside — pre-existing UI
+    // change on dev, unrelated to this plan); enabled state is the
+    // `btn-primary` class plus a checkmark icon. Find the Calendar pill.
+    const calendarButton = page.locator('button', { hasText: 'Calendar' });
     await expect(calendarButton).toBeVisible({ timeout: 5000 });
 
-    // Get the checkbox inside the button
-    const calendarCheckbox = calendarButton.locator('input[type="checkbox"]');
-    const isChecked = await calendarCheckbox.isChecked();
+    const wasEnabled = await calendarButton.evaluate((el) => el.classList.contains('btn-primary'));
 
     // Click the button to toggle
     await calendarButton.click();
     await page.waitForTimeout(300);
 
     // Verify it changed
-    const newState = await calendarCheckbox.isChecked();
-    expect(newState).toBe(!isChecked);
+    const isEnabledNow = await calendarButton.evaluate((el) =>
+      el.classList.contains('btn-primary')
+    );
+    expect(isEnabledNow).toBe(!wasEnabled);
   });
 
   test('default relay is pre-populated', async ({ authenticatedPage: page }) => {
@@ -362,7 +502,9 @@ test.describe('Community Creation - Community Settings', () => {
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
-    // Default relay (wss://relay.edufeed.org) should be listed
+    // Default relay (wss://relay.edufeed.org) is listed inside the collapsed
+    // "Advanced Settings" accordion — expand it first (see above).
+    await expandAdvancedSettings(page);
     const defaultRelay = page.locator('text=wss://relay.edufeed.org');
     await expect(defaultRelay).toBeVisible({ timeout: 5000 });
   });
@@ -439,8 +581,11 @@ test.describe('Community Creation - Full Flow', () => {
     // Wait for navigation to community page
     await page.waitForURL(/\/c\//, { timeout: 15000 });
 
-    // Should show "Joined" badge (user auto-joins their created community)
-    const joinedBadge = page.locator('.badge-success', { hasText: 'Joined' }).first();
+    // Should show the membership badge (user auto-joins their created
+    // community). The badge class is unchanged but its copy was renamed
+    // "Joined" -> "Following" on dev, unrelated to this plan — see
+    // communikey_header_joined_badge / community_layout_compact_header_joined_badge.
+    const joinedBadge = page.locator('.badge-success', { hasText: 'Following' }).first();
     await expect(joinedBadge).toBeVisible({ timeout: 10000 });
   });
 });

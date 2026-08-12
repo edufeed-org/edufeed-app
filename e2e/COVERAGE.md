@@ -2,8 +2,8 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-08-07
-**Total tests:** 317
+**Last updated:** 2026-08-12
+**Total tests:** 318
 
 ## Quick Summary
 
@@ -29,7 +29,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `community.test.js`                  | 5                     | No   | Community Learning/Chat tabs                                                                                                                                                                                                                                                                                                           |
 | `community-access-filtering.test.js` | 3                     | No   | Profile-list gated forum filtering, open chat                                                                                                                                                                                                                                                                                          |
 | `community-membership.test.js`       | 12                    | Both | Join/leave flows, persistence, error handling                                                                                                                                                                                                                                                                                          |
-| `community-creation.test.js`         | 23                    | Yes  | Both keypair flows, all steps, settings                                                                                                                                                                                                                                                                                                |
+| `community-creation.test.js`         | 24                    | Yes  | Both keypair flows, all steps, settings, group-type step absent with flags off                                                                                                                                                                                                                                                         |
 | `discover.test.js`                   | 11                    | No   | Discovery tabs, infinite scroll, profiles                                                                                                                                                                                                                                                                                              |
 | `discover-events-filter.test.js`     | 9                     | No   | Events tab date range filter, URL persistence                                                                                                                                                                                                                                                                                          |
 | `learning-search.test.js`            | 14                    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                                                                                                                                                                                                     |
@@ -839,18 +839,26 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 
 ---
 
-### community-creation.test.js (23 tests)
+### community-creation.test.js (24 tests)
 
 **Route:** `/discover` (Communities tab), `/c/[pubkey]`
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
 
-#### Modal Access (3 tests)
+Runs with `concord.enabled` forced `false` for every page in this file (see
+the file header comment) so it stays hermetic against the shared webServer's
+`CONCORD_ENABLED=true` (needed by concord-channels.test.js /
+concord-notifications.test.js on the same server process) — without the
+override, CreateCommunityModal's flag-gated type step would insert itself
+into every wizard flow below and break the step-count assumptions.
 
-| Test                                                   | What it verifies                     |
-| ------------------------------------------------------ | ------------------------------------ |
-| Create Community button not visible when not logged in | Button hidden for unauthenticated    |
-| Create Community button visible when logged in         | Button shown for authenticated users |
-| clicking Create Community button opens modal           | Modal opens with keypair options     |
+#### Modal Access (4 tests)
+
+| Test                                                   | What it verifies                                      |
+| ------------------------------------------------------ | ----------------------------------------------------- |
+| Create Community button not visible when not logged in | Button hidden for unauthenticated                     |
+| Create Community button visible when logged in         | Button shown for authenticated users                  |
+| clicking Create Community button opens modal           | Modal opens with keypair options                      |
+| type step is absent when no group features are enabled | `[data-testid="community-type-open"]` renders 0 times |
 
 #### Step 0 - Keypair Selection (2 tests)
 
@@ -1355,20 +1363,20 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 
 ### Partially Covered
 
-| Feature              | What's Covered                                                                  | What's Missing                                     |
-| -------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
-| Account management   | NSEC login, logout, persistence, switching                                      | NIP-07 extension, NIP-49 encrypted keys            |
-| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides     | -                                                  |
-| Calendar events      | View, create, delete, edit (full CRUD)                                          | -                                                  |
-| AMB resources        | Full creation flow (page route), file upload, relay publish                     | Edit mode via naddr URL param                      |
-| Profile page         | View profile, notes, edit modal, save flow                                      | Avatar upload (Blossom integration)                |
-| Comments             | Post, reply, delete                                                             | Edit comment                                       |
-| Reactions            | Add, remove                                                                     | Custom emoji support                               |
-| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                    | Full search flow (depends on relay NIP-50 support) |
-| Community membership | Join/leave, chat message posting                                                | -                                                  |
-| Community creation   | Both keypair flows, all steps, settings, publish                                | Badge access control                               |
-| Signup (normie path) | 2-step flow happy path, login modal CTA structure, Termi backup hint appearance | Full backup/follow hint flows (covered by Vitest)  |
-| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                              | -                                                  |
+| Feature              | What's Covered                                                                    | What's Missing                                                                                                                                                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account management   | NSEC login, logout, persistence, switching                                        | NIP-07 extension, NIP-49 encrypted keys                                                                                                                                                                                                             |
+| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides       | -                                                                                                                                                                                                                                                   |
+| Calendar events      | View, create, delete, edit (full CRUD)                                            | -                                                                                                                                                                                                                                                   |
+| AMB resources        | Full creation flow (page route), file upload, relay publish                       | Edit mode via naddr URL param                                                                                                                                                                                                                       |
+| Profile page         | View profile, notes, edit modal, save flow                                        | Avatar upload (Blossom integration)                                                                                                                                                                                                                 |
+| Comments             | Post, reply, delete                                                               | Edit comment                                                                                                                                                                                                                                        |
+| Reactions            | Add, remove                                                                       | Custom emoji support                                                                                                                                                                                                                                |
+| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                      | Full search flow (depends on relay NIP-50 support)                                                                                                                                                                                                  |
+| Community membership | Join/leave, chat message posting                                                  | -                                                                                                                                                                                                                                                   |
+| Community creation   | Both keypair flows, all steps, settings, publish, type step absent with flags off | Badge access control; type-step selection (Offen/Moderiert/Geschlossen) + moderated root-group provisioning are covered by unit tests (`community-wizard-logic.test.js`, provisioning tests) but not live E2E — deferred to Plan 4's live-relay E2E |
+| Signup (normie path) | 2-step flow happy path, login modal CTA structure, Termi backup hint appearance   | Full backup/follow hint flows (covered by Vitest)                                                                                                                                                                                                   |
+| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                                | -                                                                                                                                                                                                                                                   |
 
 ---
 
