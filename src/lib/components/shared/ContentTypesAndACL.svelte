@@ -29,7 +29,8 @@
    *   showAccessConfig: boolean,
    *   defaultFormRef: string,
    *   onCreateDefaultForm?: () => Promise<string>,
-   *   errors?: Record<string, string>
+   *   errors?: Record<string, string>,
+   *   hideAccessToggle?: boolean
    * }}
    */
   let {
@@ -38,7 +39,8 @@
     showAccessConfig = $bindable(),
     defaultFormRef = $bindable(),
     onCreateDefaultForm,
-    errors = {}
+    errors = {},
+    hideAccessToggle = false
   } = $props();
 
   let isCreatingDefault = $state(false);
@@ -124,16 +126,18 @@
 </div>
 
 <!-- Access Control Toggle -->
-<div class="form-control mt-4">
-  <label class="label cursor-pointer justify-start gap-3">
-    <input type="checkbox" class="toggle toggle-primary" bind:checked={showAccessConfig} />
-    <span class="label-text">{m.form_config_toggle?.() || 'Configure access control'}</span>
-  </label>
-  <p class="ml-12 text-xs opacity-70">
-    {m.form_config_toggle_help?.() ||
-      'Require a form submission for publishing to specific content types'}
-  </p>
-</div>
+{#if !hideAccessToggle}
+  <div class="form-control mt-4">
+    <label class="label cursor-pointer justify-start gap-3">
+      <input type="checkbox" class="toggle toggle-primary" bind:checked={showAccessConfig} />
+      <span class="label-text">{m.form_config_toggle?.() || 'Configure access control'}</span>
+    </label>
+    <p class="ml-12 text-xs opacity-70">
+      {m.form_config_toggle_help?.() ||
+        'Require a form submission for publishing to specific content types'}
+    </p>
+  </div>
+{/if}
 
 <!-- Access Control Section -->
 {#if showAccessConfig}
