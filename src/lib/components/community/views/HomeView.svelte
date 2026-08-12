@@ -13,6 +13,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
   import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
   import {
@@ -69,7 +70,7 @@
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
-  let isAdmin = $derived(activeUser?.pubkey === communityId);
+  let isAdmin = $derived(isCommunityOwner(communityId));
 
   // Activity feed state — use $state.raw for event arrays (Symbol-based relay provenance)
   /** @type {any[]} */

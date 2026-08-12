@@ -12,6 +12,7 @@
   import { foundConcordArea } from '$lib/concord/founding.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { showToast } from '$lib/helpers/toast';
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -135,12 +136,7 @@
   // Resolve the signer that can edit this community's 10222 (same pattern as
   // EditCommunityModal.svelte:404-412): current-keypair → own signer;
   // new-keypair → the community account's signer registered in the manager.
-  const communitySigner = $derived.by(() => {
-    const pk = communikeyEvent?.pubkey;
-    if (!pk) return null;
-    const account = manager.getAccountForPubkey(pk);
-    return account?.signer ?? null;
-  });
+  const communitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
 
   function toggle(/** @type {string} */ pubkey) {
     selected = selected.includes(pubkey)

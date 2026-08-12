@@ -20,7 +20,7 @@
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
-  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -38,7 +38,6 @@
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
 
   const getConcord = useConcordCommunity(() => communityEvent);
-  const getActiveUser = useActiveUser();
   const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
 
   let communityDisplayName = $derived(
@@ -87,7 +86,7 @@
       icon: iconMap[id] ?? ChatIcon
     }));
     const concord = getConcord();
-    const isOwner = !!communityEvent?.pubkey && communityEvent.pubkey === getActiveUser()?.pubkey;
+    const isOwner = isCommunityOwner(communityEvent?.pubkey);
     if (
       shouldShowChannelsTab({
         enabled: concord.enabled,

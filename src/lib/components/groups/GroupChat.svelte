@@ -14,7 +14,8 @@
 <script>
   import { goto } from '$app/navigation';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { useActiveUser, manager } from '$lib/stores/accounts.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { storeEvents } from 'applesauce-relay/operators';
   import { TimelineModel } from 'applesauce-core/models';
@@ -545,7 +546,7 @@
     }
     for (const ck of getJoinedCommunities()) {
       const listed = parseGroupPointers(ck).some((p) => channelKey(p) === channelKey(pointer));
-      const communitySigner = manager.getAccountForPubkey(ck.pubkey)?.signer;
+      const communitySigner = getCommunitySigner(ck.pubkey);
       if (!listed || !communitySigner) continue;
       try {
         await detachGroupChannel({ communikeyEvent: ck, pointer, communitySigner });

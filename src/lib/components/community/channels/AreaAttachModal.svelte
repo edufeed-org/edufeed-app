@@ -20,6 +20,7 @@
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { showToast } from '$lib/helpers/toast';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -141,11 +142,7 @@
 
   // --- dispatch ------------------------------------------------------------
   let busy = $state(false);
-  const communitySigner = $derived.by(() => {
-    const pk = communikeyEvent?.pubkey;
-    if (!pk) return null;
-    return manager.getAccountForPubkey(pk)?.signer ?? null;
-  });
+  const communitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
 
   async function attach() {
     if (!target || busy) return;

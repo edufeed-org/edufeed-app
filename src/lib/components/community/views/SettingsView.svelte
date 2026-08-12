@@ -13,7 +13,7 @@
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { concordAreaDisplayName } from '$lib/concord/unlinked-areas.js';
   import { detachConcordArea } from '$lib/concord/attach.js';
-  import { manager } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner, isCommunityOwner } from '$lib/helpers/community-signer.js';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import AreaAttachModal from '$lib/components/community/channels/AreaAttachModal.svelte';
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
@@ -36,11 +36,7 @@
   });
 
   // Same signer-resolution pattern as ChannelCreateWizard/EditCommunityModal.
-  const concordCommunitySigner = $derived.by(() => {
-    const pk = communikeyEvent?.pubkey;
-    if (!pk) return null;
-    return manager.getAccountForPubkey(pk)?.signer ?? null;
-  });
+  const concordCommunitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
 
   async function handleDetach() {
     if (detaching) return;
@@ -65,9 +61,7 @@
   const activeUser = $derived(getActiveUser());
 
   // Check if current user is the community owner
-  let isOwner = $derived(
-    communikeyEvent?.pubkey && activeUser?.pubkey && communikeyEvent.pubkey === activeUser.pubkey
-  );
+  let isOwner = $derived(isCommunityOwner(communikeyEvent?.pubkey));
 
   function handleEditCommunity() {
     modalStore.openModal('editCommunity', { communityEvent: communikeyEvent });

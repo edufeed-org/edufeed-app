@@ -31,7 +31,10 @@ vi.mock('$lib/concord/notifications.svelte.js', () => ({
   areaUnreadState: () => ({ unread: false, mentioned: false })
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: 'b'.repeat(64) }) // a stranger, not the owner
+  useActiveUser: () => () => ({ pubkey: 'b'.repeat(64) }), // a stranger, not the owner
+  // The stranger's manager holds no signer for the community's own key
+  // either — isCommunityOwner (key-holding) must resolve false here.
+  manager: { getAccountForPubkey: () => undefined }
 }));
 
 import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';

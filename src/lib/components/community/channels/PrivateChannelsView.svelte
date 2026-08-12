@@ -13,6 +13,7 @@
   import { useConcordArea } from '$lib/concord/community.svelte.js';
   import { parseConcordPointer } from '$lib/concord/pointer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import {
     channelUnreadState,
     markChannelRead,
@@ -124,9 +125,9 @@
   // founding pane — correct, you can't found an unlinked area from here),
   // while isConcordOwner still resolves correctly from `material.owner` so
   // the real owner keeps their moderation/dissolve/new-channel controls.
-  const isCommunikeyOwner = $derived(
-    !!communikeyEvent?.pubkey && communikeyEvent.pubkey === getActiveUser()?.pubkey
-  );
+  // isCommunikeyOwner is now key-holding-based (getCommunitySigner /
+  // isCommunityOwner) rather than active-account equality — see handoff #12.
+  const isCommunikeyOwner = $derived(isCommunityOwner(communikeyEvent?.pubkey));
   const isConcordOwner = $derived(
     !!concord.community && concord.community.material?.owner === getActiveUser()?.pubkey
   );

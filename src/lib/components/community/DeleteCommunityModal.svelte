@@ -1,6 +1,6 @@
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { manager } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { showToast } from '$lib/helpers/toast';
   import { goto } from '$app/navigation';
@@ -33,11 +33,7 @@
   });
 
   // The signer able to act for this community (current- or new-keypair community).
-  let communitySigner = $derived.by(() => {
-    if (!communityPubkey) return null;
-    const account = manager.getAccountForPubkey(communityPubkey);
-    return account?.signer ?? null;
-  });
+  let communitySigner = $derived.by(() => getCommunitySigner(communityPubkey));
   let isOwner = $derived(!!communitySigner);
 
   /** @type {'community' | 'all'} */

@@ -20,7 +20,7 @@
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
-  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -33,7 +33,6 @@
   } = $props();
 
   const getConcord = useConcordCommunity(() => communityEvent);
-  const getActiveUser = useActiveUser();
   // getConcord() isn't reachable in template scope here (the tab loop is a
   // plain {#each}, not inside the $derived.by above), so compute the rollup
   // flags at script level and read them from the template instead.
@@ -86,7 +85,7 @@
       icon: iconMap[id] ?? ChatIcon
     }));
     const concord = getConcord();
-    const isOwner = !!communityEvent?.pubkey && communityEvent.pubkey === getActiveUser()?.pubkey;
+    const isOwner = isCommunityOwner(communityEvent?.pubkey);
     if (
       shouldShowChannelsTab({
         enabled: concord.enabled,

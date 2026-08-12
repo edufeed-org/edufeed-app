@@ -1,6 +1,7 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -419,12 +420,7 @@
   // The signer that can edit this community's profile metadata. Either the
   // active user's own signer (current-keypair community) or the new-keypair
   // community's signer registered with the account manager.
-  let communitySigner = $derived.by(() => {
-    const pk = communityEvent?.pubkey;
-    if (!pk) return null;
-    const account = manager.getAccountForPubkey(pk);
-    return account?.signer ?? null;
-  });
+  let communitySigner = $derived.by(() => getCommunitySigner(communityEvent?.pubkey));
 
   // Check if current user is the owner (holds the community's signer).
   let isOwner = $derived(!!communitySigner);

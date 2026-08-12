@@ -15,7 +15,13 @@ const OWNER = 'a'.repeat(64);
 const RELAY = 'wss://groups.example';
 const RELAY_N = 'wss://groups.example/';
 
-const mockManager = vi.hoisted(() => ({ active: { pubkey: 'a'.repeat(64), signer: {} } }));
+const mockManager = vi.hoisted(() => ({
+  active: { pubkey: 'a'.repeat(64), signer: {} },
+  // Single-account default: the active account is registered under its own
+  // pubkey, so it holds its own signer (getCommunitySigner/isCommunityOwner).
+  getAccountForPubkey: (/** @type {string} */ pk) =>
+    pk === 'a'.repeat(64) ? { pubkey: 'a'.repeat(64), signer: {} } : undefined
+}));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: mockManager,
   useActiveUser: () => () => mockManager.active
