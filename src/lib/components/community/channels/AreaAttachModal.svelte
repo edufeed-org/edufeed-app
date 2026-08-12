@@ -93,7 +93,10 @@
     const pointer = pastePointer;
     preview = null;
     previewMissing = false;
-    if (!pointer || !modes.group) return;
+    if (!pointer || !modes.group) {
+      previewBusy = false;
+      return;
+    }
     previewBusy = true;
     fetchGroupPreview(pool.relay(pointer.relay), pointer).then((result) => {
       if (pastePointer !== pointer) return;
@@ -256,7 +259,7 @@
           </p>
         {/if}
         {#if previewBusy}
-          <p class="mt-2 text-xs text-base-content/60">
+          <p class="mt-2 text-xs text-base-content/60" data-testid="attach-preview-busy">
             <span class="loading loading-xs loading-spinner"></span>
           </p>
         {/if}

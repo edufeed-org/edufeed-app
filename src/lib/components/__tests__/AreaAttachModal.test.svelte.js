@@ -175,6 +175,20 @@ describe('AreaAttachModal — unified picker', () => {
     );
   });
 
+  it('paste path: clearing the input mid-fetch clears the busy spinner, not just on resolve', async () => {
+    // Never resolves — this test is only about the effect's early-return
+    // path (clearing input), not about a settled fetch.
+    fetchGroupPreview.mockImplementation(() => new Promise(() => {}));
+    render(AreaAttachModal, { props: PROPS });
+    await fireEvent.click(screen.getByTestId('attach-paste-toggle'));
+    await fireEvent.input(screen.getByTestId('attach-paste-input'), {
+      target: { value: "https://g.example'book" }
+    });
+    await waitFor(() => expect(screen.getByTestId('attach-preview-busy')).toBeTruthy());
+    await fireEvent.input(screen.getByTestId('attach-paste-input'), { target: { value: '' } });
+    await waitFor(() => expect(screen.queryByTestId('attach-preview-busy')).toBeNull());
+  });
+
   it('a community that already has group channels offers no concord rows', () => {
     concordAreas.value = [
       { communityId: 'area-1', name: 'Team intern', relay: 'wss://c', linkedToJoined: false }
