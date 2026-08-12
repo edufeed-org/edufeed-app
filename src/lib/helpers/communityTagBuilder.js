@@ -158,9 +158,15 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
 
     // Publish tier per communikey-groups NIP draft (new-spec only)
     if (isNewSpec && ct.access && ct.access.tier !== 'all') {
-      tags.push(
-        ct.access.tier === 'members' ? ['access', 'members'] : ['access', 'role', ct.access.role]
-      );
+      if (ct.access.tier === 'members') {
+        tags.push(['access', 'members']);
+      } else if (
+        ct.access.tier === 'role' &&
+        typeof ct.access.role === 'string' &&
+        ct.access.role.trim()
+      ) {
+        tags.push(['access', 'role', ct.access.role.trim()]);
+      }
     }
 
     if (isNewSpec && ct.formRef) {

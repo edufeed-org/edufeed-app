@@ -292,5 +292,17 @@ describe('buildCommunityDefinitionTags', () => {
       const cts = createDefaultContentTypes(['learning']);
       expect(cts.learning.access).toEqual({ tier: 'all' });
     });
+
+    test('never emits access role tags with empty/missing role (fail open)', () => {
+      const missingRole = buildCommunityDefinitionTags(data({ tier: 'role' }), {
+        communityPubkey: PK
+      });
+      expect(missingRole.some((t) => t[0] === 'access')).toBe(false);
+
+      const emptyRole = buildCommunityDefinitionTags(data({ tier: 'role', role: '  ' }), {
+        communityPubkey: PK
+      });
+      expect(emptyRole.some((t) => t[0] === 'access')).toBe(false);
+    });
   });
 });
