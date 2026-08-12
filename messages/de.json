@@ -2227,6 +2227,7 @@
   "forms_already_responded": "Du hast bereits eine Antwort auf dieses Formular abgeschickt.",
   "forms_submit_success": "Antwort erfolgreich gesendet!",
   "forms_submit_failed": "Antwort konnte nicht gesendet werden",
+  "form_respond_no_reviewers": "Für diese Community sind keine Admins auffindbar — Bewerbung kann nicht zugestellt werden.",
   "community_layout_title": "Communities",
   "community_layout_close_sidebar": "Seitenleiste schließen",
   "discover_remove_author_filter": "Autorenfilter entfernen",

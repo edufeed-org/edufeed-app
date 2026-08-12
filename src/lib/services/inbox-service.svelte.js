@@ -191,7 +191,21 @@ let rawMainNotifications = $state.raw([]);
 /** @type {import('nostr-tools').NostrEvent[]} */
 let mainNotifications = $derived.by(() => {
   const membershipFormAddress = runtimeConfig.membership?.formAddress;
-  return rawMainNotifications.filter((e) => !isMembershipApplication(e, membershipFormAddress));
+  const adminPubkeys = runtimeConfig.membership?.adminPubkeys || [];
+  return rawMainNotifications.filter((e) => {
+    if (!isMembershipApplication(e, membershipFormAddress)) return true;
+    // Collision guard: a community's own application form (Task 6,
+    // community-application.js) can share this exact 30168 address with the
+    // deployment's membership form when a community reuses that template —
+    // isMembershipApplication only matches on the `a` tag, so it can't tell
+    // the two apart. A REAL membership application is always p-tagged to a
+    // configured deployment admin (see MembershipApplicationForm.svelte); a
+    // community application copy is p-tagged to a root-group reviewer who
+    // usually isn't one. Only hide it here (in favor of the admin panel)
+    // when it's actually addressed to a deployment admin — otherwise it must
+    // stay visible, since there's no separate group-application inbox yet.
+    return !e.tags.some((t) => t[0] === 'p' && adminPubkeys.includes(t[1]));
+  });
 });
 
 /** @type {import('nostr-tools').NostrEvent[]} */

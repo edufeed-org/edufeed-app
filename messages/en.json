@@ -2227,6 +2227,7 @@
   "forms_already_responded": "You've already submitted a response to this form.",
   "forms_submit_success": "Response submitted successfully!",
   "forms_submit_failed": "Failed to submit response",
+  "form_respond_no_reviewers": "No admins could be found for this community — the application cannot be delivered.",
   "community_layout_title": "Communities",
   "community_layout_close_sidebar": "close sidebar",
   "discover_remove_author_filter": "Remove author filter",
