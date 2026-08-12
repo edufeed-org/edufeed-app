@@ -33,6 +33,8 @@ const defaultConfig = {
     kanban: [], // kinds 30301, 30302, 8571
     groups: [] // NIP-29 group hosts (creation targets)
   },
+  // Enable NIP-29 moderated communities (requires groupsRelays)
+  groupsEnabled: false,
   // Dashboard relay feed picker: deployment-curated relays + enabled sources
   // (tokens: config | custom | nip65 | community)
   feed: {
@@ -273,6 +275,7 @@ export function initializeConfig(runtimeConfig) {
       kanban: runtimeConfig.kanbanRelays || defaultConfig.appRelays.kanban,
       groups: runtimeConfig.groupsRelays || defaultConfig.appRelays.groups
     },
+    groupsEnabled: runtimeConfig.groupsEnabled ?? defaultConfig.groupsEnabled,
     feed: {
       relays: runtimeConfig.feed?.relays || defaultConfig.feed.relays,
       relaySources: runtimeConfig.feed?.relaySources || defaultConfig.feed.relaySources
@@ -493,6 +496,9 @@ export const runtimeConfig = {
   },
   get concord() {
     return config.concord;
+  },
+  get groupsEnabled() {
+    return config.groupsEnabled;
   },
   get npubLogin() {
     return config.npubLogin;

@@ -171,6 +171,7 @@ export function GET() {
     longformContentRelays: parseArray(env.LONGFORM_CONTENT_RELAY),
     kanbanRelays: parseArray(env.KANBAN_RELAYS),
     groupsRelays: parseArray(env.GROUPS_RELAYS),
+    groupsEnabled: parseBool(env.GROUPS_ENABLED, false),
 
     // Dashboard relay feed picker (see relay-feed-options.svelte.js).
     // relaySources tokens: config | custom | nip65 | community
