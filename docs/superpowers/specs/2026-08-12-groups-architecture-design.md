@@ -183,6 +183,15 @@ as explicit tasks:
    `application`, `concord`) **before** content sections (positional-parser
    interop).
 
+**Plan 2 deferred minors:**
+
+- **DONE (fbe65182, plan-3 task 4).** Founding-marker admin check —
+  moderated edit guards now verify admin status against the group's founding
+  marker.
+- **DONE (f263822b, plan-3 task 9).** Orphaned `concord_create_with_area_*`
+  keys resolved — the key-ownership hint now surfaces on the Geschlossen
+  card, and the unused title/body keys were deleted.
+
 **Plan 3 (page IA, join flows):**
 
 4. **DONE (e42c407f).** `getCommunityWideFormRef` (`communityFormDefaults.js`)
