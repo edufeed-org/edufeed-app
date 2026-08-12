@@ -1150,7 +1150,6 @@
   "form_config_view_form": "Formular in neuem Tab anzeigen",
   "form_config_customize_per_type": "Pro Inhaltstyp anpassen",
   "form_config_same_as_default": "wie Standard",
-  "form_config_gated_summary": "Erfordert Formular: {formName}",
   "form_config_create_default": "Standard-Mitgliedsformular erstellen",
   "form_config_creating_default": "Formular wird erstellt…",
   "form_responses_grant_all": "Alle Bereiche freigeben",

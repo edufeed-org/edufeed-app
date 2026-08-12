@@ -92,10 +92,17 @@
       };
       const priorDraft = previousDrafts[section.name];
       const priorBaseline = baselines[section.name];
+      // Compare role trimmed: saveSection() trims before publishing, so the
+      // baseline's role is always trimmed, but the draft can carry
+      // whitespace the user hasn't cleaned up yet (mid-typing, or leftover
+      // after a save round-trip). Comparing untrimmed would flag a row
+      // dirty forever on a save that changed nothing but surrounding
+      // whitespace — the draft never converges back to `fresh`.
       const isDirty =
         priorDraft &&
         priorBaseline &&
-        (priorDraft.tier !== priorBaseline.tier || priorDraft.role !== priorBaseline.role);
+        (priorDraft.tier !== priorBaseline.tier ||
+          priorDraft.role.trim() !== priorBaseline.role.trim());
       nextDrafts[section.name] = isDirty ? /** @type {Draft} */ (priorDraft) : fresh;
       nextBaselines[section.name] = fresh;
     }

@@ -150,10 +150,24 @@
   const profileAccess = getContext('profileAccess');
   const invitable = $derived.by(() => {
     const self = manager.active?.pubkey;
+    // Also exclude the community's own pubkey — a separate-keypair owner
+    // (active account distinct from the community) must not be offered the
+    // community itself as an invitable "member" (handoff #12; mirrors
+    // ChannelCreateWizard's identical exclusion).
+    const community = communikeyEvent?.pubkey;
     const { allMembers } = getVerifiedMembers(profileAccess, communikeyEvent);
-    return allMembers.filter((p) => p !== self);
+    return allMembers.filter((p) => p !== self && p !== community);
   });
   const getProfiles = useProfileMap(() => invitable);
+
+  // Same exclusion set for the free-text/follow search below the quick-pick
+  // list — a pasted npub or search hit for the community's own pubkey must
+  // not be offered as a direct-invite target either.
+  const excludeFromSearch = $derived.by(() => {
+    const self = manager.active?.pubkey;
+    const community = communikeyEvent?.pubkey;
+    return [...sent, ...(self ? [self] : []), ...(community ? [community] : [])];
+  });
 </script>
 
 <div class="modal-open modal" role="dialog">
@@ -214,7 +228,7 @@
       <ContactSearchInput
         acceptPubkeyInput
         placeholder={m.concord_invite_search_placeholder()}
-        exclude={manager.active?.pubkey ? [...sent, manager.active.pubkey] : sent}
+        exclude={excludeFromSearch}
         onselect={(/** @type {{ pubkey: string }} */ c) => directInvite(c.pubkey)}
         onrawpubkey={(/** @type {string} */ hex) => directInvite(hex)}
       />

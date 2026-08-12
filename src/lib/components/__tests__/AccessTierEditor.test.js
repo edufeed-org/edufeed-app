@@ -239,6 +239,38 @@ describe('AccessTierEditor', () => {
     ).toBe('all');
   });
 
+  it('whitespace-only role edits do not leave the row permanently dirty after a save round-trip', async () => {
+    const { rerender } = render(AccessTierEditor, {
+      props: { communikeyEvent, communitySigner, roleSuggestions: [] }
+    });
+
+    const learningRow = await screen.findByTestId('access-tier-row-Learning');
+    const roleInput = /** @type {HTMLInputElement} */ (
+      learningRow.querySelector('input[type="text"]')
+    );
+    // Same value as the baseline ('lehrkraft'), just padded — a whitespace-only
+    // diff, not a real edit.
+    await fireEvent.input(roleInput, { target: { value: '  lehrkraft  ' } });
+    expect(roleInput.value).toBe('  lehrkraft  ');
+
+    // Simulate the round-trip after a save (own or another row's) publishes
+    // and the communikeyEvent prop refreshes with the same (trimmed) role.
+    const sameRoleEvent = {
+      ...communikeyEvent,
+      created_at: communikeyEvent.created_at + 1,
+      tags: communikeyEvent.tags.map((t) => [...t])
+    };
+    await rerender({ communikeyEvent: sameRoleEvent, communitySigner, roleSuggestions: [] });
+    await tick();
+
+    // Not dirty → the draft resets to `fresh` (trimmed 'lehrkraft'), proving
+    // the whitespace-padded edit didn't get stuck as a permanent diff.
+    const roleInputAfter = /** @type {HTMLInputElement} */ (
+      screen.getByTestId('access-tier-row-Learning').querySelector('input[type="text"]')
+    );
+    expect(roleInputAfter.value).toBe('lehrkraft');
+  });
+
   it('dedupes a duplicated section name so it renders one row instead of crashing (each_key_duplicate)', async () => {
     const duplicatedEvent = {
       kind: 10222,

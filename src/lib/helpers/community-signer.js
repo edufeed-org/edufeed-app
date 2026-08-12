@@ -4,7 +4,13 @@
 // the community's key. Communities run from a separate keypair (owner logged
 // in with their personal account, community key also imported) count as
 // owned — the old `activeUser.pubkey === communityPubkey` checks did not
-// (handoff issue #12). Call inside $derived.by so manager reactivity applies.
+// (handoff issue #12). Call inside $derived.by for whatever reactivity that
+// buys you — but NOT as a guarantee that a mid-session account change (e.g.
+// switching the active account, or importing/removing one) re-triggers
+// callers: AccountManager.active is a getter over the manager's own
+// internal state, not a plain property, so $state()'s proxy on `manager`
+// can't observe writes reaching it that way. Treat any live-update behavior
+// here as incidental, not relied-upon.
 import { manager } from '$lib/stores/accounts.svelte';
 
 /**

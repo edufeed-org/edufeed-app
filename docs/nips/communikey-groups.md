@@ -146,7 +146,10 @@ them. Kind `30222` targeted publications remain read-only legacy.
 
 Clients SHOULD NOT offer creating new profile-list gating; they MAY preserve
 existing profile-list tags when editing a legacy community. Flipping a
-community to moderated MUST strip them.
+community to moderated MUST strip them. As a deliberate transitional
+exception, a client editing an existing legacy-gated **open** community MAY
+continue to surface that community's form-gating UI rather than tearing it
+out mid-edit.
 
 ## Future extensions (recorded, not specified)
 

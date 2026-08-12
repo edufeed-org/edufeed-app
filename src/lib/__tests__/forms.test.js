@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { nip19 } from 'nostr-tools';
 import {
@@ -17,7 +17,8 @@ import {
   getFormRequestFormAddress,
   parseFormRequestMessage,
   getDefaultMembershipForm,
-  createDefaultMembershipForm
+  createDefaultMembershipForm,
+  resolveFormResponseDecryptSigners
 } from '../helpers/forms.js';
 
 describe('forms — tag building', () => {
@@ -437,5 +438,60 @@ describe('forms — parseFormRequestMessage', () => {
 
   it('returns empty string when message key is missing', () => {
     expect(parseFormRequestMessage(JSON.stringify({ foo: 'bar' }))).toBe('');
+  });
+});
+
+describe('resolveFormResponseDecryptSigners', () => {
+  const FORM_AUTHOR = 'f'.repeat(64);
+
+  it('tries only the active signer when it exists and there is no community signer', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const getCommunitySigner = vi.fn(() => null);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active
+    ]);
+    expect(getCommunitySigner).toHaveBeenCalledWith(FORM_AUTHOR);
+  });
+
+  it('appends the community signer as a fallback when it supports NIP-44 decrypt', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const community = { nip44Decrypt: vi.fn() };
+    const getCommunitySigner = vi.fn(() => community);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active,
+      community
+    ]);
+  });
+
+  it('does not append a community signer that lacks NIP-44 decrypt', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const community = { signEvent: vi.fn() }; // no nip44 surface at all
+    const getCommunitySigner = vi.fn(() => community);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active
+    ]);
+  });
+
+  it('does not duplicate the signer when the active account already IS the community', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const getCommunitySigner = vi.fn(() => active);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active
+    ]);
+  });
+
+  it('returns just the community signer when there is no active signer', () => {
+    const community = { nip44: { decrypt: vi.fn() } };
+    const getCommunitySigner = vi.fn(() => community);
+    expect(resolveFormResponseDecryptSigners(undefined, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      community
+    ]);
+  });
+
+  it('returns an empty list when neither signer is available', () => {
+    const getCommunitySigner = vi.fn(() => null);
+    expect(resolveFormResponseDecryptSigners(undefined, FORM_AUTHOR, getCommunitySigner)).toEqual(
+      []
+    );
   });
 });

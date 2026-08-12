@@ -1151,7 +1151,6 @@
   "form_config_view_form": "View form in new tab",
   "form_config_customize_per_type": "Customize per content type",
   "form_config_same_as_default": "same as default",
-  "form_config_gated_summary": "Requires form: {formName}",
   "form_config_create_default": "Create default membership form",
   "form_config_creating_default": "Creating form…",
   "form_config_no_forms_hint": "No form templates available. Create a default membership form or build a custom one in the Form Builder.",

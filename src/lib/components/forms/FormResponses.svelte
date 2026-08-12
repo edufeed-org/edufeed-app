@@ -6,7 +6,13 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-  import { parseResponseTags, parseFormTemplate, nip44DecryptWith } from '$lib/helpers/forms.js';
+  import {
+    parseResponseTags,
+    parseFormTemplate,
+    nip44DecryptWith,
+    resolveFormResponseDecryptSigners
+  } from '$lib/helpers/forms.js';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
@@ -266,17 +272,33 @@
       return;
     }
 
-    try {
-      const plaintext = await nip44DecryptWith(
-        manager.active.signer,
-        response.pubkey,
-        response.content
-      );
-      const tags = JSON.parse(plaintext);
-      const values = parseResponseTags(tags);
-      decryptedMap = new Map([...decryptedMap, [response.id, values]]);
-    } catch (_err) {
-      decryptErrors = new Map([...decryptErrors, [response.id, m.form_responses_decrypt_failed()]]);
+    // Legacy responses are NIP-44 encrypted to the form author = the
+    // community's own pubkey. The active account can decrypt directly when
+    // it IS the community; a separate-keypair owner (personal account
+    // logged in, community key merely held) cannot, so retry with whichever
+    // signer the manager holds for the community's pubkey — see
+    // resolveFormResponseDecryptSigners for the exact fallback condition.
+    const signers = resolveFormResponseDecryptSigners(
+      manager.active.signer,
+      formEvent.pubkey,
+      getCommunitySigner
+    );
+
+    for (let i = 0; i < signers.length; i++) {
+      try {
+        const plaintext = await nip44DecryptWith(signers[i], response.pubkey, response.content);
+        const tags = JSON.parse(plaintext);
+        const values = parseResponseTags(tags);
+        decryptedMap = new Map([...decryptedMap, [response.id, values]]);
+        return;
+      } catch (_err) {
+        if (i === signers.length - 1) {
+          decryptErrors = new Map([
+            ...decryptErrors,
+            [response.id, m.form_responses_decrypt_failed()]
+          ]);
+        }
+      }
     }
   }
 
