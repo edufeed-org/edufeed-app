@@ -7,6 +7,7 @@ import {
   hasStrictContentMarker,
   sectionIsGated
 } from './communityRelays.js';
+import { deriveCommunityType } from '$lib/groups/community-membership.js';
 
 /**
  * Every valid `?view=` content-view id for a community page. The page load
@@ -479,10 +480,17 @@ export function getDefaultCommunityTabs() {
  * were written by UIs that showed all tabs regardless, so their declarations
  * are advisory only. Mirrors the FAB's filterActionsForCommunity semantics.
  * Home and settings are always included; chat only when kind 9 is declared.
+ *
+ * Closed communities (concord pointer, no membership pointer — see
+ * `deriveCommunityType`) are the one case that does NOT fail open: they have
+ * no readable content tabs for a non-member at all, so home+settings is the
+ * whole nav regardless of what the event otherwise declares.
  * @param {any} communityEvent - kind 10222 event (or null)
  * @returns {string[]} Tab IDs in default display order
  */
 export function getCommunityTabs(communityEvent) {
+  if (deriveCommunityType(communityEvent) === 'closed') return ['home', 'settings'];
+
   const all = getDefaultCommunityTabs();
   if (!communityEvent || !hasStrictContentMarker(communityEvent)) return all;
 

@@ -13,11 +13,13 @@
   import MeetView from '$lib/components/meet/MeetView.svelte';
   import MembersView from '../views/MembersView.svelte';
   import HomeView from '../views/HomeView.svelte';
+  import ClosedCommunityShell from '../views/ClosedCommunityShell.svelte';
   import PrivateChannelsView from '../channels/PrivateChannelsView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
   import { getSectionNameForContentType } from '$lib/helpers/contentTypes.js';
+  import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import * as m from '$lib/paraglide/messages';
 
   let { selectedCommunityId, selectedContentType, onKindNavigation } = $props();
@@ -32,6 +34,11 @@
   let communikeyEvent = $derived(getCommunikeyEvent());
   let communityProfile = $derived(getCommunityProfile());
   let isLoading = $derived(!getCommunikeyLoaded());
+  // Closed communities (concord pointer, no membership pointer) have no
+  // readable content for a non-member — their "home" is the invite-only
+  // shell, not the activity feed. Settings stays reachable (owner-only in
+  // practice, enforced by SettingsView itself).
+  let isClosedCommunity = $derived(deriveCommunityType(communikeyEvent) === 'closed');
 </script>
 
 <!-- Main Content Area -->
@@ -65,7 +72,9 @@
         <AccessGateBanner {formRef} {sectionName} {userPubkey} />
       {/if}
 
-      {#if selectedContentType === 'home'}
+      {#if selectedContentType === 'home' && isClosedCommunity}
+        <ClosedCommunityShell {communikeyEvent} {communityProfile} />
+      {:else if selectedContentType === 'home'}
         <HomeView
           {communikeyEvent}
           profileEvent={communityProfile}

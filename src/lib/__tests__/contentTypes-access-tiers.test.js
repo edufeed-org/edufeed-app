@@ -4,11 +4,13 @@ import { describe, it, expect } from 'vitest';
 import {
   getRestrictedTabIds,
   getAccessibleTabIds,
-  getVerifiedMembers
+  getVerifiedMembers,
+  getCommunityTabs
 } from '$lib/helpers/contentTypes.js';
 
 const OWNER = 'a'.repeat(64);
 const MEMBER = 'b'.repeat(64);
+const RELAY = 'wss://groups.example.com';
 const moderatedEvent = {
   kind: 10222,
   pubkey: OWNER,
@@ -64,5 +66,60 @@ describe('access tiers gate tabs and members', () => {
     expect(allMembers).toContain(OWNER);
     expect(allMembers).toContain(MEMBER);
     expect(perSection.get('Calendar')).toEqual([MEMBER]);
+  });
+});
+
+describe('getCommunityTabs', () => {
+  const closedEvent = {
+    kind: 10222,
+    pubkey: OWNER,
+    tags: [['concord', 'c'.repeat(64), RELAY]]
+  };
+  const openEvent = { kind: 10222, pubkey: OWNER, tags: [] };
+  // Legacy definition: declares content sections but lacks the
+  // ["strict", "content"] marker — advisory only, fails open per the
+  // fail-open rule (pre-existing behavior, unaffected by the closed check).
+  const legacyEvent = {
+    kind: 10222,
+    pubkey: OWNER,
+    tags: [
+      ['content', 'Forum'],
+      ['k', '11']
+    ]
+  };
+
+  it('returns only home+settings for a closed community (concord pointer, no membership pointer)', () => {
+    expect(getCommunityTabs(closedEvent)).toEqual(['home', 'settings']);
+  });
+
+  it('returns the full default tab set for an open community (no pointers)', () => {
+    const tabs = getCommunityTabs(openEvent);
+    expect(tabs).toContain('chat');
+    expect(tabs).toContain('learning');
+    expect(tabs[0]).toBe('home');
+    expect(tabs[tabs.length - 1]).toBe('settings');
+  });
+
+  it('returns the full default tab set for null/undefined (fail open)', () => {
+    const tabs = getCommunityTabs(null);
+    expect(tabs).toContain('chat');
+    expect(tabs[0]).toBe('home');
+  });
+
+  it('filters to declared sections for a moderated community with the strict marker', () => {
+    expect(getCommunityTabs(moderatedEvent)).toEqual([
+      'home',
+      'forum',
+      'learning',
+      'calendar',
+      'settings'
+    ]);
+  });
+
+  it('fails open for a legacy definition without the strict marker', () => {
+    const tabs = getCommunityTabs(legacyEvent);
+    expect(tabs).toContain('chat');
+    expect(tabs).toContain('boards');
+    expect(tabs[0]).toBe('home');
   });
 });
