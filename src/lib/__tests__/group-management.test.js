@@ -8,8 +8,10 @@ import {
   buildDeleteGroupTemplate,
   generateGroupId,
   publishToGroupRelay,
-  createGroupOnRelay
+  createGroupOnRelay,
+  confirmGroupAdmins
 } from '$lib/groups/group-management.js';
+import { getGroupAdmins } from 'applesauce-common/helpers/groups';
 import { of, EMPTY } from 'rxjs';
 
 vi.mock('$lib/groups/relay-auth.js', () => ({
@@ -165,5 +167,34 @@ describe('createGroupOnRelay', () => {
     await expect(
       createGroupOnRelay({ relayConn, id: ID, user, metadata: { isPublic: false, isOpen: false } })
     ).rejects.toThrow('group not confirmed by relay');
+  });
+});
+
+describe('confirmGroupAdmins', () => {
+  it('resolves the kind 39001 admins event for the group id', async () => {
+    const adminsEvent = { kind: 39001, tags: [['p', PK, 'admin']] };
+    const relayConn = { request: vi.fn(() => of(adminsEvent)) };
+    const result = await confirmGroupAdmins(relayConn, ID);
+    expect(relayConn.request).toHaveBeenCalledWith(
+      { kinds: [39001], '#d': [ID] },
+      { timeout: 8000 }
+    );
+    expect(result).toBe(adminsEvent);
+  });
+
+  it('resolves null when the relay has no 39001 for this id', async () => {
+    const relayConn = { request: vi.fn(() => EMPTY) };
+    const result = await confirmGroupAdmins(relayConn, ID);
+    expect(result).toBeNull();
+  });
+
+  it('integration: the resolved event parses via getGroupAdmins to list the admin pubkey', async () => {
+    // Real confirmGroupAdmins + real getGroupAdmins together — the shape a
+    // bug in the request wiring (wrong filter key, wrong operator) would
+    // otherwise slip past a fully-mocked provisionRootGroup test suite.
+    const adminsEvent = { kind: 39001, tags: [['p', PK, 'admin']] };
+    const relayConn = { request: vi.fn(() => of(adminsEvent)) };
+    const result = await confirmGroupAdmins(relayConn, ID);
+    expect(getGroupAdmins(/** @type {any} */ (result))).toEqual([{ pubkey: PK, roles: ['admin'] }]);
   });
 });
