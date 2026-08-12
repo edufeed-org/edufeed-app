@@ -127,4 +127,8 @@ describe('deriveCommunityType', () => {
   it('an invalid membership tag does not make the community moderated', () => {
     expect(deriveCommunityType(event([['membership', 'root1', 'garbage']]))).toBe('open');
   });
+  it('never throws on malformed tag entries (untrusted network input)', () => {
+    expect(deriveCommunityType({ tags: [null] })).toBe('open');
+    expect(deriveCommunityType({ tags: [null, ['concord', CONCORD_ID, RELAY]] })).toBe('closed');
+  });
 });

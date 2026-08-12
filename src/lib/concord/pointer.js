@@ -33,7 +33,7 @@ export function buildConcordPointerTag(communityId, relay) {
  */
 export function parseConcordPointer(event) {
   if (!event || !Array.isArray(event.tags)) return undefined;
-  const tag = event.tags.find((t) => t[0] === 'concord');
+  const tag = event.tags.find((t) => Array.isArray(t) && t[0] === 'concord');
   if (!tag || !isConcordCommunityId(tag[1])) return undefined;
   return { communityId: tag[1], relay: tag[2] || undefined };
 }
@@ -46,7 +46,7 @@ export function parseConcordPointer(event) {
  * @returns {string[][]}
  */
 export function withConcordPointer(tags, communityId, relay) {
-  const rest = tags.filter((t) => t[0] !== 'concord');
+  const rest = tags.filter((t) => Array.isArray(t) && t[0] !== 'concord');
   return [...rest, buildConcordPointerTag(communityId, relay)];
 }
 
@@ -56,5 +56,5 @@ export function withConcordPointer(tags, communityId, relay) {
  * @returns {string[][]}
  */
 export function withoutConcordPointer(tags) {
-  return tags.filter((t) => t[0] !== 'concord');
+  return tags.filter((t) => Array.isArray(t) && t[0] !== 'concord');
 }
