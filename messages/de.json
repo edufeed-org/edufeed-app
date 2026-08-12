@@ -3259,6 +3259,7 @@
   "community_access_editor_title": "Inhalte & Rechte",
   "community_access_editor_lead": "Wer darf welche Inhaltstypen veröffentlichen?",
   "community_access_editor_role_placeholder": "Rollenname",
+  "community_access_editor_role_required": "Rollenname erforderlich",
   "community_access_editor_save": "Speichern",
   "community_access_editor_saved": "Gespeichert.",
   "community_access_editor_save_failed": "Speichern fehlgeschlagen: {reason}"

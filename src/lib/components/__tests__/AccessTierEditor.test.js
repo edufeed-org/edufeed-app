@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
 
 const OWNER = 'a'.repeat(64);
@@ -37,6 +38,26 @@ const communikeyEvent = {
     ['content', 'Calendar'],
     ['k', '31923'],
     ['access', 'members'],
+    ['content', 'Forum'],
+    ['k', '11']
+  ]
+};
+
+/** Same as communikeyEvent but Calendar's `access members` tag is gone (tier
+ * now 'all') — simulates a different row's own save (or any external
+ * update) round-tripping through EventStore into a fresh prop. */
+const updatedEvent = {
+  kind: 10222,
+  pubkey: OWNER,
+  created_at: 1001,
+  content: 'desc',
+  tags: [
+    ['membership', 'rootgroup1', GROUPS_RELAY],
+    ['content', 'Learning'],
+    ['k', '30142'],
+    ['access', 'role', 'lehrkraft'],
+    ['content', 'Calendar'],
+    ['k', '31923'],
     ['content', 'Forum'],
     ['k', '11']
   ]
@@ -164,5 +185,57 @@ describe('AccessTierEditor', () => {
       expect(toastSpy).toHaveBeenCalledWith(expect.stringContaining('relay down'), 'error')
     );
     expect(saveButton.disabled).toBe(false);
+  });
+
+  it('role tier with an empty role disables save, shows the required hint, and never publishes', async () => {
+    render(AccessTierEditor, {
+      props: { communikeyEvent, communitySigner, roleSuggestions: [] }
+    });
+
+    const calendarRow = await screen.findByTestId('access-tier-row-Calendar');
+    await fireEvent.change(within(calendarRow).getByRole('combobox', { name: 'Calendar' }), {
+      target: { value: 'role' }
+    });
+
+    const saveButton = /** @type {HTMLButtonElement} */ (
+      within(calendarRow).getByTestId('access-tier-save-Calendar')
+    );
+    expect(saveButton.disabled).toBe(true);
+    expect(within(calendarRow).getByTestId('access-tier-role-required-Calendar')).toBeTruthy();
+
+    await fireEvent.click(saveButton);
+    expect(publishCommunityUpdate).not.toHaveBeenCalled();
+  });
+
+  it('preserves a dirty draft in one row when the communikeyEvent prop updates from another row saving', async () => {
+    const { rerender } = render(AccessTierEditor, {
+      props: { communikeyEvent, communitySigner, roleSuggestions: [] }
+    });
+
+    const learningRow = await screen.findByTestId('access-tier-row-Learning');
+    const roleInput = /** @type {HTMLInputElement} */ (
+      learningRow.querySelector('input[type="text"]')
+    );
+    await fireEvent.input(roleInput, { target: { value: 'schulleitung' } });
+    expect(roleInput.value).toBe('schulleitung');
+
+    // Simulate Calendar's own save round-tripping through EventStore: the
+    // prop changes, Calendar's tier flips to 'all' in the new event, but
+    // Learning's unsaved edit above must survive the refresh.
+    await rerender({ communikeyEvent: updatedEvent, communitySigner, roleSuggestions: [] });
+    await tick();
+
+    const learningRowAfter = screen.getByTestId('access-tier-row-Learning');
+    const roleInputAfter = /** @type {HTMLInputElement} */ (
+      learningRowAfter.querySelector('input[type="text"]')
+    );
+    expect(roleInputAfter.value).toBe('schulleitung');
+
+    const calendarRow = screen.getByTestId('access-tier-row-Calendar');
+    expect(
+      /** @type {HTMLSelectElement} */ (
+        within(calendarRow).getByRole('combobox', { name: 'Calendar' })
+      ).value
+    ).toBe('all');
   });
 });

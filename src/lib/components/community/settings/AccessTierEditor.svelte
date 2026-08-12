@@ -18,6 +18,7 @@
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { showToast } from '$lib/helpers/toast';
   import { unique } from '$lib/helpers/unique.js';
+  import { untrack } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -52,21 +53,50 @@
   /** Per-section editable state, keyed by section name (not the slug). @type {Record<string, Draft>} */
   let drafts = $state({});
 
-  // Reset drafts whenever the underlying sections change (new community
-  // event, or a save round-trips through EventStore and the prop updates).
-  // Only `sections` is read here — `drafts` is written, never read, so this
-  // can't re-trigger itself (see CLAUDE.md's $state-inside-$effect gotcha).
+  // Last-synced value per section — NOT the same as "the freshly parsed
+  // section", which would make dirtiness undecidable: a row the user never
+  // touched must still pick up an external/other-row update, while a row
+  // the user DID edit must survive one. So dirty = draft diverged from what
+  // WE last saw published, not from whatever the event says right now.
+  // Plain (non-$state) internal ref, mutated only inside the effect below —
+  // never read by the template (see CLAUDE.md's plain-let-for-internal-refs
+  // rule).
+  /** @type {Record<string, Draft>} */
+  let baselines = {};
+
+  // Refresh drafts whenever the underlying sections change (new community
+  // event, or ANY save — including a different row's own save, since
+  // publishCommunityUpdate does eventStore.add synchronously and re-derives
+  // this prop) — but only for rows the user hasn't touched since the last
+  // sync. A row that WAS dirty naturally becomes clean again once its own
+  // save round-trips (its draft then equals the new baseline). `drafts` is
+  // read via untrack() so this effect only depends on `sections`, never on
+  // the state it writes (see CLAUDE.md's $state-inside-$effect gotcha —
+  // reading+writing the same $state here would re-trigger itself).
   $effect(() => {
+    const currentSections = sections;
+    const previousDrafts = untrack(() => drafts);
     /** @type {Record<string, Draft>} */
-    const next = {};
-    for (const section of sections) {
+    const nextDrafts = {};
+    /** @type {Record<string, Draft>} */
+    const nextBaselines = {};
+    for (const section of currentSections) {
       const access = section.access ?? { tier: 'all' };
-      next[section.name] = {
+      const fresh = {
         tier: access.tier,
         role: access.tier === 'role' ? (access.role ?? '') : ''
       };
+      const priorDraft = previousDrafts[section.name];
+      const priorBaseline = baselines[section.name];
+      const isDirty =
+        priorDraft &&
+        priorBaseline &&
+        (priorDraft.tier !== priorBaseline.tier || priorDraft.role !== priorBaseline.role);
+      nextDrafts[section.name] = isDirty ? /** @type {Draft} */ (priorDraft) : fresh;
+      nextBaselines[section.name] = fresh;
     }
-    drafts = next;
+    baselines = nextBaselines;
+    drafts = nextDrafts;
   });
 
   /** Section names currently publishing, so only that row's button disables. @type {Record<string, boolean>} */
@@ -89,11 +119,22 @@
     drafts = { ...drafts, [sectionName]: { ...draft, role } };
   }
 
+  /**
+   * A 'role' tier with a blank role would make withSectionAccess emit no
+   * access tag at all — i.e. silently downgrade the section to publicly
+   * open. Never let that reach saveSection/publish; the save button is
+   * disabled on this too (see template) so this is defense-in-depth.
+   * @param {Draft | undefined} draft
+   */
+  function isRoleMissing(draft) {
+    return !!draft && draft.tier === 'role' && !draft.role.trim();
+  }
+
   /** @param {import('$lib/helpers/communityRelays.js').ContentTypeConfig} section */
   async function saveSection(section) {
     if (!communitySigner || !communikeyEvent || savingSection[section.name]) return;
     const draft = drafts[section.name];
-    if (!draft) return;
+    if (!draft || isRoleMissing(draft)) return;
 
     /** @type {import('$lib/groups/section-access.js').AccessTier} */
     const access =
@@ -129,6 +170,7 @@
     <div class="divide-y divide-base-300">
       {#each sections as section (section.name)}
         {@const draft = drafts[section.name]}
+        {@const roleMissing = isRoleMissing(draft)}
         <div
           class="flex flex-wrap items-center gap-3 py-3"
           data-testid="access-tier-row-{slug(section.name)}"
@@ -168,7 +210,7 @@
             <button
               class="btn btn-sm btn-primary"
               data-testid="access-tier-save-{slug(section.name)}"
-              disabled={!!savingSection[section.name]}
+              disabled={!!savingSection[section.name] || roleMissing}
               onclick={() => saveSection(section)}
             >
               {#if savingSection[section.name]}
@@ -176,6 +218,15 @@
               {/if}
               {m.community_access_editor_save()}
             </button>
+
+            {#if roleMissing}
+              <p
+                class="w-full text-xs text-error"
+                data-testid="access-tier-role-required-{slug(section.name)}"
+              >
+                {m.community_access_editor_role_required()}
+              </p>
+            {/if}
           {/if}
         </div>
       {/each}
