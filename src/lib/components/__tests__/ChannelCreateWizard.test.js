@@ -100,12 +100,19 @@ vi.mock(
   () => import('./fixtures/ContactSearchInputStub.svelte')
 );
 
-// Two invitable members (self is filtered out by the component).
-vi.mock('$lib/helpers/contentTypes.js', () => ({
-  getVerifiedMembers: () => ({
+// Two invitable members (self is filtered out by the component). A vi.fn
+// (not a bare arrow) so individual tests can override allMembers via
+// mockReturnValueOnce — needed by the "excludes the community pubkey too"
+// case below. vi.clearAllMocks() in beforeEach clears calls, not this
+// default implementation.
+const getVerifiedMembersMock = vi.hoisted(() =>
+  vi.fn((/** @type {any[]} */ ..._args) => ({
     allMembers: ['a'.repeat(64), 'b'.repeat(64), 'e'.repeat(64)],
     perSection: new Map()
-  })
+  }))
+);
+vi.mock('$lib/helpers/contentTypes.js', () => ({
+  getVerifiedMembers: (/** @type {any[]} */ ...args) => getVerifiedMembersMock(...args)
 }));
 
 import { channelKey } from '$lib/groups/community-pointer.js';
@@ -153,6 +160,32 @@ describe('ChannelCreateWizard', () => {
     const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
     await fireEvent.input(nameInput, { target: { value: 'Staff room' } });
     expect(next.disabled).toBe(false);
+  });
+
+  it('excludes the community pubkey from the invite list too, not just the active account (separate-keypair owner, handoff #12)', async () => {
+    // The active account is a personal keypair distinct from the community
+    // being managed — but the community's own pubkey can still show up in
+    // allMembers (e.g. counted as a verified "member"/owner) and must not
+    // be offered as someone to invite to their own channel.
+    const COMMUNITY_PK = 'c'.repeat(64);
+    getVerifiedMembersMock.mockReturnValueOnce({
+      allMembers: [COMMUNITY_PK, MEMBER_B, mockManager.active.pubkey],
+      perSection: new Map()
+    });
+    render(ChannelCreateWizard, {
+      props: {
+        ...baseProps,
+        communikeyEvent: { kind: 10222, pubkey: COMMUNITY_PK, tags: [], content: '' }
+      }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Staff room' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → step 1 (invite)
+
+    expect(
+      screen.queryByRole('button', { name: new RegExp(COMMUNITY_PK.slice(0, 12)) })
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: new RegExp(MEMBER_B.slice(0, 12)) })).toBeTruthy();
   });
 
   it('disables Create until the key-loss disclosure is acknowledged', async () => {

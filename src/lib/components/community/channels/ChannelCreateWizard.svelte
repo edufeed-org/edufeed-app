@@ -95,8 +95,12 @@
   const profileAccess = getContext('profileAccess');
   const invitable = $derived.by(() => {
     const self = manager.active?.pubkey;
+    // Also exclude the community's own pubkey — a separate-keypair owner
+    // (active account distinct from the community) must not be offered the
+    // community itself as an invitable "member" (handoff #12).
+    const community = communikeyEvent?.pubkey;
     const { allMembers } = getVerifiedMembers(profileAccess, communikeyEvent);
-    return allMembers.filter((p) => p !== self);
+    return allMembers.filter((p) => p !== self && p !== community);
   });
   const getProfiles = useProfileMap(() => invitable);
 

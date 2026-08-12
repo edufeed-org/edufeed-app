@@ -4,7 +4,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { formTemplateLoader } from '$lib/loaders/community.js';
-  import { manager } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { showToast } from '$lib/helpers/toast';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -109,8 +109,10 @@
    * @param {string | null} formAddress
    */
   async function saveFormLink(section, formAddress) {
-    const account = manager.active;
-    if (!account?.signer) return;
+    // Sign with the community's own signer, not the active account — the
+    // two differ for a community run from a separate keypair (handoff #12).
+    const signer = getCommunitySigner(communityPubkey);
+    if (!signer) return;
     if (!section.profileList) return;
 
     saving = true;
@@ -150,10 +152,10 @@
         created_at: Math.floor(Date.now() / 1000),
         tags: newTags,
         content: /** @type {any} */ (currentEvent).content || '',
-        pubkey: account.pubkey
+        pubkey: communityPubkey
       };
 
-      const signed = await account.signer.signEvent(newEvent);
+      const signed = await signer.signEvent(newEvent);
       const result = await publishEvent(signed);
 
       if (result.success) {

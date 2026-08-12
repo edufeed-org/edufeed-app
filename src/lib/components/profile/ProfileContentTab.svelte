@@ -61,9 +61,9 @@
     pinBusy = event.id;
     try {
       if (isEntryPinned({ data: event }, pinnedPointers)) {
-        await unpinEvent(event);
+        await unpinEvent(event, pubkey);
       } else {
-        await pinEvent(event);
+        await pinEvent(event, pubkey);
       }
     } catch (err) {
       console.error('ProfileContentTab: pin toggle failed:', err);

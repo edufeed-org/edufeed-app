@@ -309,7 +309,15 @@
   }
 
   async function handleCreateDefaultForm() {
-    const signed = await createDefaultMembershipForm(/** @type {any} */ (manager.active).signer);
+    // Sign with the community's own signer (same as saveCommunity below), not
+    // the active account — so the template is authored by the community and
+    // shows up in FormLinkManager's authors filter (handoff #12).
+    if (!communitySigner) {
+      throw new Error(
+        m.edit_community_modal_error_not_owner?.() || 'Only the community owner can edit settings'
+      );
+    }
+    const signed = await createDefaultMembershipForm(communitySigner);
     await publishEvent(signed);
     eventStore.add(signed);
     return `${signed.kind}:${signed.pubkey}:membership`;
