@@ -249,6 +249,25 @@ describe('GroupMembersModal role assignment (roleOptions)', () => {
     ).not.toBeNull();
   });
 
+  it('own admin row has no assign control (self-lockout guard); another admin row still does', () => {
+    const { container } = renderModal({ roleOptions: ['lehrkraft', 'admin'] });
+    // NIP-29 put-user REPLACES roles — a self-assign here would drop the
+    // active user's own admin capability irrecoverably if they picked a
+    // non-admin role while being the sole admin. Mirror the demote guard.
+    expect(
+      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${ADMIN_SELF}"]`)
+    ).toBeNull();
+    expect(
+      container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${ADMIN_SELF}"]`)
+    ).toBeNull();
+    expect(
+      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${ADMIN_OTHER}"]`)
+    ).not.toBeNull();
+    expect(
+      container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${ADMIN_OTHER}"]`)
+    ).not.toBeNull();
+  });
+
   it('non-admin: assign-role control never renders even with roleOptions set', () => {
     const { container } = renderModal({
       roleOptions: ['lehrkraft'],

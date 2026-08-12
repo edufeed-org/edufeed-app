@@ -80,6 +80,17 @@ describe('buildFlipToModeratedTags', () => {
     expect(out).toContainEqual(null);
     expect(out.filter((t) => Array.isArray(t) && t[0] === 'membership')).toHaveLength(1);
   });
+  it('XOR-violating input (membership + concord both present, derives open) flips to moderated correctly', () => {
+    const tags = [
+      ['membership', 'root1', RELAY],
+      ['concord', PK, RELAY],
+      ['content', 'Learning']
+    ];
+    expect(deriveCommunityType({ tags })).toBe('open'); // sanity: fixture starts XOR-violating
+    const out = buildFlipToModeratedTags(tags, { id: 'root2', relay: RELAY });
+    expect(deriveCommunityType({ tags: out })).toBe('moderated');
+    expect(out.some((t) => t[0] === 'concord')).toBe(false);
+  });
 });
 
 describe('buildFlipToOpenTags', () => {

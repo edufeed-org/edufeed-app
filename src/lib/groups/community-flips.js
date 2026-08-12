@@ -32,7 +32,9 @@ export function stripLegacySectionAcl(tags) {
  * @returns {string[][]}
  */
 export function buildFlipToModeratedTags(tags, rootPointer) {
-  const cleaned = withoutMembershipPointer(stripLegacySectionAcl(tags));
+  const cleaned = withoutMembershipPointer(stripLegacySectionAcl(tags)).filter(
+    (tag) => !(isTag(tag) && tag[0] === 'concord')
+  );
   const membershipTag = buildMembershipTag(rootPointer);
   const anchor = cleaned.findIndex(
     (tag) => isTag(tag) && (tag[0] === 'content' || tag[0] === 'strict')

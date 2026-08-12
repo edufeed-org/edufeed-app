@@ -176,7 +176,7 @@
           {:else}
             <span class="badge badge-ghost badge-sm">admin</span>
           {/if}
-          {#if isAdmin && roleOptions.length > 0}
+          {#if isAdmin && roleOptions.length > 0 && !self}
             <input
               type="text"
               class="input-bordered input input-xs w-24"

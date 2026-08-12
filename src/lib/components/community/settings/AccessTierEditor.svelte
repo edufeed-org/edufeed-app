@@ -17,7 +17,7 @@
   import { communityUpdateTemplate } from '$lib/groups/community-flips.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { showToast } from '$lib/helpers/toast';
-  import { unique } from '$lib/helpers/unique.js';
+  import { unique, uniqueBy } from '$lib/helpers/unique.js';
   import { untrack } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -30,7 +30,11 @@
    */
   let { communikeyEvent, communitySigner, roleSuggestions = [] } = $props();
 
-  const sections = $derived(parseCommunityContentTypes(communikeyEvent));
+  // A malformed 10222 can repeat a `content` tag name — parseCommunityContentTypes
+  // yields one ContentTypeConfig per tag, so dedupe by name before it feeds the
+  // keyed {#each} below (see CLAUDE.md's "Keyed {#each} over Tag-Derived Data
+  // Must Be Deduped"): a duplicate key otherwise crashes the whole settings page.
+  const sections = $derived(uniqueBy(parseCommunityContentTypes(communikeyEvent), (s) => s.name));
 
   // roleSuggestions is caller-supplied (Task 8: union of roster roles) —
   // dedupe defensively before it feeds the keyed datalist {#each} below (see

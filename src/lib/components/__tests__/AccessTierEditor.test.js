@@ -238,4 +238,29 @@ describe('AccessTierEditor', () => {
       ).value
     ).toBe('all');
   });
+
+  it('dedupes a duplicated section name so it renders one row instead of crashing (each_key_duplicate)', async () => {
+    const duplicatedEvent = {
+      kind: 10222,
+      pubkey: OWNER,
+      created_at: 1000,
+      content: 'desc',
+      tags: [
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['access', 'role', 'lehrkraft'],
+        ['content', 'Learning'],
+        ['k', '31923']
+      ]
+    };
+
+    expect(() =>
+      render(AccessTierEditor, {
+        props: { communikeyEvent: duplicatedEvent, communitySigner, roleSuggestions: [] }
+      })
+    ).not.toThrow();
+
+    const rows = await screen.findAllByTestId('access-tier-row-Learning');
+    expect(rows).toHaveLength(1);
+  });
 });
