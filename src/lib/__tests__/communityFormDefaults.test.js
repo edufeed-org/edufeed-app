@@ -145,7 +145,7 @@ function makeProfileAccess(formRefs) {
 
 /**
  * Helper to build a kind 10222 event with content sections
- * @param {Array<{ name: string, profileList?: string }>} sections
+ * @param {Array<{ name: string, profileList?: string, access?: {tier: 'all'}|{tier: 'members'}|{tier: 'role', role: string} }>} sections
  */
 function makeCommunityEvent(sections) {
   /** @type {string[][]} */
@@ -155,6 +155,13 @@ function makeCommunityEvent(sections) {
     tags.push(['k', '31922']);
     if (s.profileList) {
       tags.push(['a', s.profileList]);
+    }
+    if (s.access && s.access.tier !== 'all') {
+      if (s.access.tier === 'members') {
+        tags.push(['access', 'members']);
+      } else if (s.access.tier === 'role') {
+        tags.push(['access', 'role', s.access.role]);
+      }
     }
   }
   return { kind: 10222, tags, pubkey: 'abc', content: '', created_at: 0, id: 'x', sig: 'x' };
@@ -217,5 +224,64 @@ describe('getCommunityWideFormRef', () => {
   it('returns null for null/undefined inputs', () => {
     expect(getCommunityWideFormRef(null, null)).toBeNull();
     expect(getCommunityWideFormRef(makeProfileAccess({}), null)).toBeNull();
+  });
+
+  // --- Access-tier gating tests (moderated communities) ---
+  it('recognizes access-tier gated sections (members tier)', () => {
+    const access = makeProfileAccess({
+      chat: '30168:pub:formA'
+    });
+    const event = makeCommunityEvent([{ name: 'chat', access: { tier: 'members' } }]);
+    expect(getCommunityWideFormRef(access, event)).toBe('30168:pub:formA');
+  });
+
+  it('recognizes access-tier gated sections (role tier)', () => {
+    const access = makeProfileAccess({
+      chat: '30168:pub:formA'
+    });
+    const event = makeCommunityEvent([
+      { name: 'chat', access: { tier: 'role', role: 'moderator' } }
+    ]);
+    expect(getCommunityWideFormRef(access, event)).toBe('30168:pub:formA');
+  });
+
+  it('ignores open sections (tier all) and returns null when no gated sections', () => {
+    const access = makeProfileAccess({
+      chat: '30168:pub:formA'
+    });
+    const event = makeCommunityEvent([{ name: 'chat', access: { tier: 'all' } }]);
+    expect(getCommunityWideFormRef(access, event)).toBeNull();
+  });
+
+  it('handles mixed legacy profileList and access-tier sections', () => {
+    const access = makeProfileAccess({
+      calendar: '30168:pub:formA',
+      chat: '30168:pub:formA'
+    });
+    const event = makeCommunityEvent([
+      { name: 'calendar', profileList: '30000:pub:cal-list' },
+      { name: 'chat', access: { tier: 'members' } }
+    ]);
+    expect(getCommunityWideFormRef(access, event)).toBe('30168:pub:formA');
+  });
+
+  it('returns null when mixed gating sources have different forms', () => {
+    const access = makeProfileAccess({
+      calendar: '30168:pub:formA',
+      chat: '30168:pub:formB'
+    });
+    const event = makeCommunityEvent([
+      { name: 'calendar', profileList: '30000:pub:cal-list' },
+      { name: 'chat', access: { tier: 'members' } }
+    ]);
+    expect(getCommunityWideFormRef(access, event)).toBeNull();
+  });
+
+  it('returns null for access-tier section with no form', () => {
+    const access = makeProfileAccess({
+      chat: null
+    });
+    const event = makeCommunityEvent([{ name: 'chat', access: { tier: 'members' } }]);
+    expect(getCommunityWideFormRef(access, event)).toBeNull();
   });
 });

@@ -5,7 +5,7 @@
  * `defaultFormRef` is a UI convenience — the most common formRef among enabled gated types.
  */
 
-import { parseCommunityContentTypes } from './communityRelays.js';
+import { parseCommunityContentTypes, sectionIsGated } from './communityRelays.js';
 
 /**
  * @typedef {Object} ContentTypeConfig
@@ -78,7 +78,7 @@ export function getCommunityWideFormRef(profileAccess, communityEvent) {
   if (!profileAccess || !communityEvent) return null;
 
   const sections = parseCommunityContentTypes(communityEvent);
-  const gatedSections = sections.filter((s) => s.profileList);
+  const gatedSections = sections.filter((s) => sectionIsGated(s));
   if (gatedSections.length === 0) return null;
 
   /** @type {string | null} */
