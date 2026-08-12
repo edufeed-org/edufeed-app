@@ -3254,5 +3254,12 @@
   "chat_thread_collapse": "Einklappen",
   "groups_join_required": "Tritt der Gruppe zuerst bei",
   "chat_jump_to_bottom": "Zum Ende springen",
-  "rail_add_community": "Community erstellen"
+  "rail_add_community": "Community erstellen",
+  "community_access_role": "Rolle",
+  "community_access_editor_title": "Inhalte & Rechte",
+  "community_access_editor_lead": "Wer darf welche Inhaltstypen veröffentlichen?",
+  "community_access_editor_role_placeholder": "Rollenname",
+  "community_access_editor_save": "Speichern",
+  "community_access_editor_saved": "Gespeichert.",
+  "community_access_editor_save_failed": "Speichern fehlgeschlagen: {reason}"
 }

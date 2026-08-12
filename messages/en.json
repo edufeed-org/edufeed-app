@@ -3254,5 +3254,12 @@
   "chat_thread_collapse": "Collapse",
   "groups_join_required": "Join this group first",
   "chat_jump_to_bottom": "Jump to latest",
-  "rail_add_community": "Create a community"
+  "rail_add_community": "Create a community",
+  "community_access_role": "Role",
+  "community_access_editor_title": "Content & Permissions",
+  "community_access_editor_lead": "Who can publish which content types?",
+  "community_access_editor_role_placeholder": "Role name",
+  "community_access_editor_save": "Save",
+  "community_access_editor_saved": "Saved.",
+  "community_access_editor_save_failed": "Save failed: {reason}"
 }

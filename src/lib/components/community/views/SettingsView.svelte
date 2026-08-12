@@ -17,6 +17,7 @@
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import AreaAttachModal from '$lib/components/community/channels/AreaAttachModal.svelte';
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
+  import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
   // Community-type flips (open <-> moderated; closed never transitions) — see
   // docs/nips/communikey-groups.md and src/lib/groups/community-flips.js.
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
@@ -294,6 +295,13 @@
               {/if}
             </div>
           </div>
+        {/if}
+
+        <!-- Inhalte & Rechte (Task 7) — owner-only, moderated-only per-section
+             access tier editor. roleSuggestions={[]} for now: Task 8 wires the
+             real roster roles (admins' roles + 'admin', deduped). -->
+        {#if isOwner && communityType === 'moderated'}
+          <AccessTierEditor {communikeyEvent} {communitySigner} roleSuggestions={[]} />
         {/if}
 
         <!-- Private area (Concord) — owner-only create/attach/detach home -->
