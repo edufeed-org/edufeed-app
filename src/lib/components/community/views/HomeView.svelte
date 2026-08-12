@@ -8,7 +8,7 @@
   import { filterEventsByAccess, getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { getContext } from 'svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
-  import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
+  import { parseCommunityContentTypes, sectionIsGated } from '$lib/helpers/communityRelays.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -46,7 +46,7 @@
   let canPublishAnywhere = $derived.by(() => {
     if (!communikeyEvent || profileAccess.isLoading) return true;
     const sections = parseCommunityContentTypes(communikeyEvent);
-    const gated = sections.filter((s) => s.profileList);
+    const gated = sections.filter(sectionIsGated);
     if (gated.length === 0) return true;
     return gated.every((s) => profileAccess.canPublish(s.name));
   });
@@ -54,7 +54,7 @@
   let accessDetail = $derived.by(() => {
     if (!communikeyEvent || profileAccess.isLoading) return null;
     const sections = parseCommunityContentTypes(communikeyEvent);
-    const gated = sections.filter((s) => s.profileList);
+    const gated = sections.filter(sectionIsGated);
     if (gated.length === 0) return null;
     const granted = gated.filter((s) => profileAccess.canPublish(s.name)).map((s) => s.name);
     const pending = gated.filter((s) => !profileAccess.canPublish(s.name)).map((s) => s.name);

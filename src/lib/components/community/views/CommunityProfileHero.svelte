@@ -2,6 +2,7 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { joinCommunity } from '$lib/helpers/community';
+  import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { showToast } from '$lib/helpers/toast';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
@@ -72,6 +73,11 @@
   let avatarUrl = $derived(getProfilePicture(profileEvent));
   let bannerUrl = $derived(profileEvent?.banner || null);
   let description = $derived(communikeyEvent?.content || '');
+  // Community type is derived from the event's pointer tags (never
+  // declared) — closed communities have no kind-30000 follow-set join, so
+  // the button block is skipped for them entirely.
+  let communityType = $derived(deriveCommunityType(communikeyEvent));
+  let isClosed = $derived(communityType === 'closed');
 </script>
 
 <!-- Banner — only when the community actually set one (design: the
@@ -121,6 +127,11 @@
         <h2 class="truncate text-2xl font-extrabold tracking-tight text-base-content">
           {displayName}
         </h2>
+        {#if isClosed}
+          <div class="badge gap-1 badge-sm badge-neutral">
+            {m.community_type_closed_title()}
+          </div>
+        {/if}
         {#if getJoined()}
           <div class="badge gap-1 badge-sm badge-success">
             <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -136,8 +147,13 @@
       </div>
     </div>
 
-    <!-- Join Button (non-members) -->
-    {#if !getJoined()}
+    <!-- Closed communities: no kind-30000 follow join, just the hint -->
+    {#if isClosed}
+      <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
+        <span class="text-sm text-base-content/60">{m.community_hero_closed_hint()}</span>
+      </div>
+    {:else if !getJoined()}
+      <!-- Join Button (non-members) -->
       <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
         {#if getCommunityWideFormRef?.()}
           <button onclick={handleRequestJoin} class="btn btn-sm btn-primary">

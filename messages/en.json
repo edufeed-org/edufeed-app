@@ -798,6 +798,7 @@
   "community_views_chat_load_more": "Load older messages",
   "community_views_chat_login_prompt": "Sign in to participate in the chat",
   "community_profile_hero_more": "more",
+  "community_hero_closed_hint": "Invitation only",
   "community_upcoming_events_title": "Upcoming Events",
   "community_shared_label": "{name} shared",
   "community_shared_multiple_suffix": "shared",
