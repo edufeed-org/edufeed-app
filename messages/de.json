@@ -2955,8 +2955,6 @@
   "concord_settings_detach_action": "Aufheben",
   "concord_settings_detached_toast": "Verknüpfung aufgehoben — der Bereich bleibt in deiner Seitenleiste",
   "concord_settings_detach_failed": "Aufheben fehlgeschlagen. Bitte versuche es erneut.",
-  "concord_create_with_area_title": "Mit privatem Bereich",
-  "concord_create_with_area_body": "Erstellt zusätzlich einen Ende-zu-Ende-verschlüsselten Bereich mit privaten Kanälen. Geht auch später — in den Community-Einstellungen.",
   "concord_create_with_area_key_hint": "Der Schlüssel des Bereichs liegt nur auf deinen Geräten. Sichere ihn nach dem Erstellen — ohne ihn gibt es keinen Weg zurück.",
   "concord_not_ready": "Private Bereiche starten noch — bitte versuche es gleich noch einmal.",
   "concord_sidebar_area_tooltip": "Privater Bereich",

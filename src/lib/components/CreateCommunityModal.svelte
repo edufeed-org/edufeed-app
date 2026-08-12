@@ -25,8 +25,6 @@
     createDefaultContentTypes
   } from '$lib/helpers/communityTagBuilder.js';
   import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
-  import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
-  import { parseFormTemplate, createDefaultMembershipForm } from '$lib/helpers/forms.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   // Concord submodules imported DIRECTLY (never the barrel) — the convention
   // every Concord call site follows (see CLAUDE.md's Concord section).
@@ -193,36 +191,6 @@
     return communityData.contentTypes;
   });
 
-  // Toggle for access control configuration
-  let showAccessConfig = $state(false);
-  let defaultFormRef = $state('');
-  // Form templates for access gating (community pubkey + logged-in user)
-  const getFormTemplates = useFormTemplates(() => {
-    const communityPk = useCurrentKeypair ? manager.active?.pubkey : userData.publicKey;
-    const userPk = manager.active?.pubkey;
-    /** @type {string[]} */
-    const authors = communityPk ? [communityPk] : [];
-    if (userPk && userPk !== communityPk) authors.push(userPk);
-    return authors;
-  });
-
-  /**
-   * Resolve a formRef ("kind:pubkey:dTag") to its display name.
-   * @param {string} ref
-   * @returns {string}
-   */
-  function getFormName(ref) {
-    if (!ref) return '';
-    const [kind, pubkey, dTag] = ref.split(':');
-    const template = getFormTemplates().find((t) => {
-      const parsed = parseFormTemplate(t);
-      return String(t.kind) === kind && t.pubkey === pubkey && parsed.dTag === dTag;
-    });
-    if (!template) return dTag || ref;
-    const parsed = parseFormTemplate(template);
-    return parsed.name || parsed.dTag || ref;
-  }
-
   // UI state
   let isPublishing = $state(false);
   let errors = $state(/** @type {Record<string, string>} */ ({}));
@@ -271,8 +239,6 @@
           livekitUrl: '',
           contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
         };
-        showAccessConfig = false;
-        defaultFormRef = '';
         communityType = 'open';
         defaultAccessTier = 'members';
         errors = {};
@@ -388,17 +354,11 @@
   }
 
   /**
-   * Pick the community type on the 'type' step. Belt-and-suspenders on top
-   * of `effectiveContentTypes` stripping formRef for moderated/closed: also
-   * collapse the legacy form-gating ACL section so its UI doesn't imply
-   * settings that won't be published (code review finding, 2026-08-12).
+   * Pick the community type on the 'type' step.
    * @param {'open' | 'moderated' | 'closed'} type
    */
   function selectCommunityType(type) {
     communityType = type;
-    if (type !== 'open') {
-      showAccessConfig = false;
-    }
   }
 
   function selectCurrentKeypair() {
@@ -409,21 +369,6 @@
   function selectNewKeypair() {
     useCurrentKeypair = false;
     nextStep();
-  }
-
-  async function handleCreateDefaultForm() {
-    /** @type {import('applesauce-signers').ISigner} */
-    let signer;
-    if (useCurrentKeypair) {
-      signer = /** @type {any} */ (manager.active).signer;
-    } else {
-      if (!userData.privateKey) throw new Error('Private key not generated yet');
-      signer = new SimpleSigner(userData.privateKey);
-    }
-    const signed = await createDefaultMembershipForm(signer);
-    await publishEvent(signed);
-    eventStore.add(signed);
-    return `${signed.kind}:${signed.pubkey}:membership`;
   }
 
   async function createCommunity() {
@@ -543,13 +488,6 @@
         throw new Error(m.create_community_modal_error_relay_required());
       }
 
-      // Clear formRefs if access control is disabled
-      if (!showAccessConfig) {
-        for (const ct of Object.values(communityData.contentTypes)) {
-          ct.formRef = '';
-        }
-      }
-
       // New communities always use new-spec tags (profile list a-tags).
       // effectiveContentTypes ($derived above) is the single source of truth
       // for what gets published per community type — the confirm-step
@@ -588,32 +526,6 @@
         eventStore.add(signedCommunityEvent);
         if (concordAreaId) clearFoundingMarker(account.pubkey);
         if (rootGroupPointer) clearRootGroupMarker(account.pubkey);
-      }
-
-      // Create kind 30000 profile list events for gated sections. Moderated
-      // communities gate access via the group roster instead — this legacy
-      // per-content-type form-gating path only applies to open communities.
-      if (communityType === 'open') {
-        for (const [, ct] of Object.entries(effectiveContentTypes)) {
-          if (!ct.enabled || !ct.formRef) continue;
-
-          const profileListEvent = {
-            kind: 30000,
-            created_at: Math.floor(Date.now() / 1000),
-            tags: [
-              ['d', ct.name],
-              ['form', ct.formRef]
-            ],
-            content: '',
-            pubkey: account.pubkey
-          };
-
-          const signedProfileList = await signer.signEvent(profileListEvent);
-          const plResult = await publishEvent(signedProfileList);
-          if (plResult.success) {
-            eventStore.add(signedProfileList);
-          }
-        }
       }
 
       // Join the community using follow set (kind 30000)
@@ -672,8 +584,6 @@
       livekitUrl: '',
       contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
     };
-    showAccessConfig = false;
-    defaultFormRef = '';
     communityType = 'open';
     defaultAccessTier = 'members';
     errors = {};
@@ -825,6 +735,9 @@
                 <strong>{m.community_type_closed_title()}</strong>
                 <p class="text-sm">{m.community_type_closed_body()}</p>
                 <p class="text-xs text-base-content/60">{m.community_type_closed_hint()}</p>
+                <p class="mt-1 text-xs text-base-content/60">
+                  {m.concord_create_with_area_key_hint()}
+                </p>
               </button>
             {/if}
           </div>
@@ -865,16 +778,25 @@
             ></textarea>
           </div>
 
-          <!-- Content Types & Access Control (closed communities publish no
-               sections — Concord channels replace them) -->
+          <!-- Content Types (closed communities publish no sections — Concord
+               channels replace them). The legacy form-gating ACL is retired
+               from the CREATE wizard for every type (design 2026-08-12):
+               open communities gate access via Task 8's settings pane after
+               creation, moderated communities via the group roster —
+               hideAccessToggle hides ContentTypesAndACL's ACL affordance
+               entirely rather than dropping the shared component (it still
+               needs to render the content-type chips), and the required-but-
+               now-inert formTemplates/showAccessConfig/defaultFormRef props
+               get inert values since the ACL section they gate can never
+               show. EditCommunityModal keeps the full ACL wiring for
+               existing gated communities. -->
           {#if communityType !== 'closed'}
             <ContentTypesAndACL
               bind:contentTypes={communityData.contentTypes}
-              formTemplates={getFormTemplates()}
-              bind:showAccessConfig
-              bind:defaultFormRef
-              onCreateDefaultForm={handleCreateDefaultForm}
-              hideAccessToggle={communityType === 'moderated'}
+              formTemplates={[]}
+              showAccessConfig={false}
+              defaultFormRef=""
+              hideAccessToggle={true}
               {errors}
             />
           {/if}
@@ -1047,20 +969,6 @@
                       {#if ct.enabled}
                         <div class="badge gap-1 badge-primary">
                           {ct.name}
-                          {#if ct.formRef}
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              class="h-3 w-3"
-                            >
-                              <path
-                                fill-rule="evenodd"
-                                d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                                clip-rule="evenodd"
-                              />
-                            </svg>
-                          {/if}
                         </div>
                       {/if}
                     {/each}
@@ -1072,19 +980,6 @@
                         ? m.community_access_members()
                         : m.community_access_all()}
                     </p>
-                  {/if}
-                  {#if Object.values(effectiveContentTypes).some((ct) => ct.enabled && ct.formRef)}
-                    <div class="mt-2 space-y-1 text-sm text-base-content/70">
-                      {#each Object.entries(effectiveContentTypes) as [_key, ct] (_key)}
-                        {#if ct.enabled && ct.formRef}
-                          <p>
-                            {ct.name}: {m.form_config_gated_summary({
-                              formName: getFormName(ct.formRef)
-                            })}
-                          </p>
-                        {/if}
-                      {/each}
-                    </div>
                   {/if}
                 {/if}
               </div>

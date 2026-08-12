@@ -851,6 +851,25 @@ concord-notifications.test.js on the same server process) — without the
 override, CreateCommunityModal's flag-gated type step would insert itself
 into every wizard flow below and break the step-count assumptions.
 
+The create-modal's legacy form-gating ACL step was retired in the plan-3
+settings/membership work (2026-08-12): open communities gate access via the
+community settings pane (Task 8's `MembershipPane`), moderated communities
+via the group roster, and creation no longer writes kind-30000 profile-list
+events at all. No test here asserted the removed ACL toggle/UI (verified by
+grep for `form_config`/"Configure access"/`showAccessConfig` before the
+change), so no test bodies changed for that removal.
+
+**Known pre-existing flake (unrelated to the above):** "created community
+shows user as joined" fails consistently, in isolation and in the full run,
+on both this branch and the pre-change baseline (`git stash` verified
+2026-08-12) — the confirm→create→navigate path works (URL lands on `/c/…`
+and the sibling "can complete community creation" test passes), but the
+`.badge-success` "Following" text never renders within the 10s timeout. Not
+caused by the ACL/kind-30000-loop removal; the join flow
+(`joinCommunity()`/kind 30000 follow set) and the badge component are
+untouched by that change. Root cause not investigated further here — flag
+for follow-up.
+
 #### Modal Access (4 tests)
 
 | Test                                                   | What it verifies                                      |

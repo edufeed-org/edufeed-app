@@ -2955,8 +2955,6 @@
   "concord_settings_detach_action": "Remove",
   "concord_settings_detached_toast": "Link removed — the area stays in your sidebar",
   "concord_settings_detach_failed": "Removing the link failed. Please try again.",
-  "concord_create_with_area_title": "With private area",
-  "concord_create_with_area_body": "Also creates an end-to-end encrypted area with private channels. You can also do this later in the community settings.",
   "concord_create_with_area_key_hint": "The area's key lives only on your devices. Back it up after creating — without it there is no way back.",
   "concord_not_ready": "Private areas are still starting up — please try again in a moment.",
   "concord_sidebar_area_tooltip": "Private area",
