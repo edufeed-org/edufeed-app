@@ -120,3 +120,25 @@ export function isEntryActive(entry, target) {
     return !!entry.relay && sameRelay(entry.relay, target.relay);
   return false;
 }
+
+/**
+ * Whether the rail should bring the active row into view right now.
+ *
+ * The scroll-into-view effect re-runs on every layout rebuild, and streaming
+ * data (metadata, unread, avatars) rebuilds the layout constantly. Scrolling
+ * belongs only to two moments — the anchor CHANGED (navigation) or its row
+ * newly APPEARED (entries arrived, folder opened). Re-scrolling the same
+ * anchor on an unrelated rebuild yanks the rail out of the reader's hands
+ * mid-scroll.
+ *
+ * @param {{anchor: string | null, rowPresent: boolean, lastAnchor: string | null}} state
+ * @returns {{scroll: boolean, nextLast: string | null}} `nextLast` is what the
+ *   caller stores as its new lastAnchor bookkeeping
+ */
+export function shouldBringActiveIntoView({ anchor, rowPresent, lastAnchor }) {
+  // No row to scroll to: forget the anchor, so its next appearance counts as
+  // "newly appeared" and gets brought into view once more.
+  if (!anchor || !rowPresent) return { scroll: false, nextLast: null };
+  if (anchor === lastAnchor) return { scroll: false, nextLast: lastAnchor };
+  return { scroll: true, nextLast: anchor };
+}

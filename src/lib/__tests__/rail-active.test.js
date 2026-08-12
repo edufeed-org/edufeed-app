@@ -11,7 +11,12 @@
  * comparison that decides whether an entry IS that container.
  */
 import { describe, it, expect } from 'vitest';
-import { activeRailTarget, hostRouteOf, isEntryActive } from '$lib/rail/rail-active.js';
+import {
+  activeRailTarget,
+  hostRouteOf,
+  isEntryActive,
+  shouldBringActiveIntoView
+} from '$lib/rail/rail-active.js';
 
 const COMMUNITY = 'a'.repeat(64);
 
@@ -163,5 +168,44 @@ describe('hostRouteOf', () => {
         relay: /** @type {any} */ (hostRouteOf(path)).relay
       });
     }
+  });
+});
+
+describe('shouldBringActiveIntoView', () => {
+  it('scrolls when the anchor is new, and remembers it', () => {
+    expect(
+      shouldBringActiveIntoView({ anchor: 'community:a', rowPresent: true, lastAnchor: null })
+    ).toEqual({ scroll: true, nextLast: 'community:a' });
+    expect(
+      shouldBringActiveIntoView({ anchor: 'relay:x', rowPresent: true, lastAnchor: 'community:a' })
+    ).toEqual({ scroll: true, nextLast: 'relay:x' });
+  });
+
+  it('never re-scrolls the same anchor — streaming rebuilds must not yank the rail', () => {
+    // Metadata/unread events rebuild the layout constantly; with the active
+    // row scrolled off screen, a re-scroll here is the "jumps back while I
+    // scroll" bug.
+    expect(
+      shouldBringActiveIntoView({
+        anchor: 'community:a',
+        rowPresent: true,
+        lastAnchor: 'community:a'
+      })
+    ).toEqual({ scroll: false, nextLast: 'community:a' });
+  });
+
+  it('forgets the anchor while its row is absent, so reappearing scrolls again', () => {
+    // Folded away or entries not yet arrived: the next appearance should
+    // bring the row into view once more.
+    expect(
+      shouldBringActiveIntoView({
+        anchor: 'community:a',
+        rowPresent: false,
+        lastAnchor: 'community:a'
+      })
+    ).toEqual({ scroll: false, nextLast: null });
+    expect(
+      shouldBringActiveIntoView({ anchor: null, rowPresent: false, lastAnchor: 'community:a' })
+    ).toEqual({ scroll: false, nextLast: null });
   });
 });

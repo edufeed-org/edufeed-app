@@ -44,7 +44,11 @@
   } from '$lib/rail/rail-layout-store.svelte.js';
   import RailEntryIcon from './RailEntryIcon.svelte';
   import RailFolderTile from './RailFolderTile.svelte';
-  import { activeRailTarget, isEntryActive } from '$lib/rail/rail-active.js';
+  import {
+    activeRailTarget,
+    isEntryActive,
+    shouldBringActiveIntoView
+  } from '$lib/rail/rail-active.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { PlusIcon } from '$lib/components/icons';
@@ -271,19 +275,33 @@
   // a ring on a row below the fold says nothing. This is the answer to "hosts
   // first, or keep the order?": neither reorders anything — the row you are in
   // is brought to you, and the order you arranged stays yours.
+  /** Bookkeeping for shouldBringActiveIntoView, not UI state. */
+  let lastAnchorScrolledTo = /** @type {string | null} */ (null);
   $effect(() => {
     // Read the layout so this re-runs when the row appears (entries arrive
-    // after the first paint) and when a folder opens or closes.
+    // after the first paint) and when a folder opens or closes. Those two
+    // moments are the ONLY ones allowed to move the rail — the effect also
+    // fires on every streaming rebuild, and shouldBringActiveIntoView is
+    // what keeps those re-runs from yanking the rail mid-scroll.
     void layout.length;
     void openFolders.length;
     const anchor = activeAnchor;
     const el = railEl;
-    if (!anchor || !el) return;
-    const row = [...el.querySelectorAll('[data-rail-anchor]')].find(
-      (node) => node.getAttribute('data-rail-anchor') === anchor
-    );
+    if (!el) return;
+    const row = anchor
+      ? [...el.querySelectorAll('[data-rail-anchor]')].find(
+          (node) => node.getAttribute('data-rail-anchor') === anchor
+        )
+      : undefined;
     // jsdom has no scrollIntoView at all, and a folded-away row has no node.
-    if (row && typeof (/** @type {any} */ (row).scrollIntoView) === 'function') {
+    const rowPresent = !!row && typeof (/** @type {any} */ (row).scrollIntoView) === 'function';
+    const { scroll, nextLast } = shouldBringActiveIntoView({
+      anchor,
+      rowPresent,
+      lastAnchor: lastAnchorScrolledTo
+    });
+    lastAnchorScrolledTo = nextLast;
+    if (scroll && row) {
       // Already on screen: leave the rail exactly where the reader put it.
       // Off screen: 'center' rather than 'nearest', which parks the row on the
       // very edge — half of a 48px icon at the fold reads as clipped, not as

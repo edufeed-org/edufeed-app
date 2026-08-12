@@ -127,7 +127,7 @@ describe('CommunitySidebar — the arrangeable rail', () => {
       `community:${COMMUNITY_A}`,
       `community:${COMMUNITY_B}`,
       'area:area-1',
-      'relay:wss://r'
+      'relay:wss://r/'
     ]);
   });
 
@@ -146,7 +146,7 @@ describe('CommunitySidebar — the arrangeable rail', () => {
     ];
     render(CommunitySidebar, { props: PROPS });
     expect(anchors().filter((/** @type {string} */ a) => a.startsWith('relay:'))).toEqual([
-      'relay:wss://r'
+      'relay:wss://r/'
     ]);
   });
 
@@ -299,7 +299,7 @@ describe('CommunitySidebar — which container you are in', () => {
         currentPath: `/relays/${encodeURIComponent('wss://relay.example.com')}`
       }
     });
-    expect(activeAnchors()).toEqual(['relay:wss://relay.example.com']);
+    expect(activeAnchors()).toEqual(['relay:wss://relay.example.com/']);
     // The slot's attribute is what these tests read, but the ICON is what a
     // reader sees — asserting only the attribute would pass on a rail that
     // marks the right row invisibly.
@@ -318,7 +318,7 @@ describe('CommunitySidebar — which container you are in', () => {
         currentPath: `/groups/${encodeURIComponent("wss://relay.example.com'a")}`
       }
     });
-    expect(activeAnchors()).toEqual(['relay:wss://relay.example.com']);
+    expect(activeAnchors()).toEqual(['relay:wss://relay.example.com/']);
   });
 
   it('marks the Concord area whose page is open', () => {
@@ -420,7 +420,7 @@ describe('CommunitySidebar — which container you are in', () => {
   // The rail is taller than the screen for anyone with a dozen containers, so
   // the mark is worth nothing if the marked row is below the fold.
   it('scrolls the container you are in into view when it is below the fold', () => {
-    expect(renderWithGeometry({ rowTop: 400 })).toContain('relay:wss://relay.example.com');
+    expect(renderWithGeometry({ rowTop: 400 })).toContain('relay:wss://relay.example.com/');
   });
 
   // …and only then: scrolling a rail that already shows the row would move it
