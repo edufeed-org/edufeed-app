@@ -21,10 +21,7 @@
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { filterUpcomingEvents, mergeCommunityActivity } from '$lib/helpers/dashboardFilters.js';
   import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
-  import {
-    subscribeToProfileListMembers,
-    buildProfileAccess
-  } from '$lib/helpers/profile-list-members.js';
+  import { subscribeToCommunityAccess } from '$lib/groups/community-access-subscription.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
@@ -115,8 +112,8 @@
   /** @type {Map<string, () => void>} */
   let cleanupMap = new Map();
 
-  // Per-community ACL state: community event + member map for filtering
-  /** @type {Map<string, { communityEvent: any, memberMap: Map<string, Set<string>>, aclLoading: boolean }>} */
+  // Per-community ACL state: community event + ready access object for filtering
+  /** @type {Map<string, { communityEvent: any, access: { isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null } | null, aclLoading: boolean }>} */
   let perCommunityAcl = new Map();
 
   $effect(() => {
@@ -161,11 +158,10 @@
           return true;
         });
 
-        // Apply ACL filtering if community event and member data are available
+        // Apply ACL filtering if community event and access data are available
         const acl = perCommunityAcl.get(pubkey);
-        if (acl?.communityEvent) {
-          const access = buildProfileAccess(acl.memberMap, acl.aclLoading);
-          merged = filterEventsByAccess(merged, acl.communityEvent, access);
+        if (acl?.communityEvent && acl.access) {
+          merged = filterEventsByAccess(merged, acl.communityEvent, acl.access);
         }
 
         perCommunityItems.set(pubkey, merged);
@@ -183,7 +179,7 @@
         if (!communityEvent) {
           perCommunityAcl.set(pubkey, {
             communityEvent: null,
-            memberMap: new Map(),
+            access: null,
             aclLoading: false
           });
           mergeAndUpdate();
@@ -192,18 +188,18 @@
 
         perCommunityAcl.set(pubkey, {
           communityEvent,
-          memberMap: new Map(),
+          access: null,
           aclLoading: true
         });
 
-        const { cleanup: memberCleanup, hasRestrictedSections } = subscribeToProfileListMembers(
+        const { cleanup: accessCleanup, hasRestrictedSections } = subscribeToCommunityAccess(
           communityEvent,
           getCommunikeyRelays(),
-          (memberMap) => {
+          (access) => {
             const acl = perCommunityAcl.get(pubkey);
             if (acl) {
-              acl.memberMap = memberMap;
-              acl.aclLoading = false;
+              acl.access = access;
+              acl.aclLoading = access.isLoading;
             }
             mergeAndUpdate();
           }
@@ -215,7 +211,7 @@
           mergeAndUpdate();
         }
 
-        aclCleanup = memberCleanup;
+        aclCleanup = accessCleanup;
       });
 
       const activitySub = eventStore.model(CommunityActivityModel, pubkey).subscribe({

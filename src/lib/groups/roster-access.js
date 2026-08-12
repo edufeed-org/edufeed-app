@@ -5,6 +5,7 @@
 // roster (moderation is retroactive by design — removing a member removes
 // their content from the community view). The owner is always allowed:
 // the community keypair moderates its own surface.
+import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
 
 /**
  * @typedef {import('./root-roster.js').RosterView} RosterView
@@ -30,6 +31,27 @@ export function sectionAllowedAuthors(section, roster, ownerPubkey) {
     }
   }
   return [...allowed];
+}
+
+/**
+ * Callback-friendly access view over a community's sections + one roster —
+ * the non-reactive counterpart of useCommunityAccess for dynamic lists
+ * (dashboard) where rune hooks cannot be instantiated per community.
+ * @param {any} communityEvent
+ * @param {import('./root-roster.js').RosterView} roster
+ * @returns {{isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null}}
+ */
+export function buildRosterAccess(communityEvent, roster) {
+  const sections = parseCommunityContentTypes(communityEvent);
+  return {
+    isLoading: roster.isLoading,
+    getAllowedAuthors: (name) =>
+      sectionAllowedAuthors(
+        sections.find((section) => section.name === name) ?? null,
+        roster,
+        communityEvent?.pubkey
+      )
+  };
 }
 
 /**
