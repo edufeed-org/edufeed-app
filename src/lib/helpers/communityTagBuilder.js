@@ -193,3 +193,23 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
 
   return tags;
 }
+
+/** Tag keys the community modals do not model — carried over verbatim on
+ * every rebuild so an edit cannot silently drop a community's group,
+ * membership engine, application form, or private-area pointer. */
+const POINTER_TAG_KEYS = ['membership', 'application', 'concord', 'group'];
+
+/**
+ * Prepend the source event's pointer tags to a rebuilt tag array.
+ * Prepended (not appended) so top-level pointers stay ahead of content
+ * sections, which absorb same-key tags positionally.
+ * @param {string[][]} sourceTags - tags of the event being edited
+ * @param {string[][]} rebuiltTags - fresh output of buildCommunityDefinitionTags
+ * @returns {string[][]}
+ */
+export function preservePointerTags(sourceTags, rebuiltTags) {
+  const preserved = (Array.isArray(sourceTags) ? sourceTags : []).filter(
+    (tag) => Array.isArray(tag) && POINTER_TAG_KEYS.includes(tag[0])
+  );
+  return [...preserved, ...rebuiltTags];
+}

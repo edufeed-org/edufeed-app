@@ -2,7 +2,8 @@
 import { describe, test, expect } from 'vitest';
 import {
   buildCommunityDefinitionTags,
-  createDefaultContentTypes
+  createDefaultContentTypes,
+  preservePointerTags
 } from '$lib/helpers/communityTagBuilder.js';
 
 describe('buildCommunityDefinitionTags', () => {
@@ -310,5 +311,48 @@ describe('buildCommunityDefinitionTags', () => {
       });
       expect(emptyRole.some((t) => t[0] === 'access')).toBe(false);
     });
+  });
+});
+
+describe('preservePointerTags', () => {
+  const RELAY = 'wss://groups.example.com';
+  const source = [
+    ['r', 'wss://relay.example.com'],
+    ['membership', 'root1', RELAY],
+    ['application', '30168:aa:beitritt', RELAY],
+    ['concord', 'c'.repeat(64), RELAY],
+    ['group', 'chan1', RELAY, 'Kanal', 'members'],
+    ['content', 'Learning'],
+    ['k', '30142']
+  ];
+  const rebuilt = [
+    ['r', 'wss://relay.example.com'],
+    ['strict', 'content'],
+    ['content', 'Learning'],
+    ['k', '30142']
+  ];
+
+  test('prepends every pointer tag from the source, before all rebuilt tags', () => {
+    const out = preservePointerTags(source, rebuilt);
+    expect(out.slice(0, 4)).toEqual([
+      ['membership', 'root1', RELAY],
+      ['application', '30168:aa:beitritt', RELAY],
+      ['concord', 'c'.repeat(64), RELAY],
+      ['group', 'chan1', RELAY, 'Kanal', 'members']
+    ]);
+    expect(out.slice(4)).toEqual(rebuilt);
+    expect(rebuilt).toHaveLength(4); // inputs untouched
+  });
+
+  test('is a no-op prepend when the source has no pointer tags', () => {
+    expect(preservePointerTags([['r', 'wss://x.example.com']], rebuilt)).toEqual(rebuilt);
+  });
+
+  test('tolerates malformed source entries without throwing', () => {
+    const out = preservePointerTags(
+      /** @type {any} */ ([null, ['membership', 'x', RELAY]]),
+      rebuilt
+    );
+    expect(out[0]).toEqual(['membership', 'x', RELAY]);
   });
 });

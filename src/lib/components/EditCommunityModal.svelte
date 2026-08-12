@@ -10,7 +10,8 @@
   import { deriveDefaultFormRef } from '$lib/helpers/communityFormDefaults.js';
   import {
     buildCommunityDefinitionTags,
-    createDefaultContentTypes
+    createDefaultContentTypes,
+    preservePointerTags
   } from '$lib/helpers/communityTagBuilder.js';
   import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import {
@@ -349,10 +350,11 @@
       const hasBadges = Object.values(communityData.contentTypes).some(
         (ct) => ct.badges.read || ct.badges.write
       );
-      const communityTags = buildCommunityDefinitionTags(
+      const rebuiltTags = buildCommunityDefinitionTags(
         communityData,
         hasBadges ? {} : { communityPubkey: communityEvent.pubkey }
       );
+      const communityTags = preservePointerTags(communityEvent.tags, rebuiltTags);
 
       /** @type {import('nostr-tools').EventTemplate} */
       const communityUpdateEvent = {
