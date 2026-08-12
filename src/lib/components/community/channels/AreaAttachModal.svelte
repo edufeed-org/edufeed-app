@@ -98,7 +98,7 @@
       return;
     }
     previewBusy = true;
-    fetchGroupPreview(pool.relay(pointer.relay), pointer).then((result) => {
+    fetchGroupPreview(pool.relay(pointer.relay), pointer, manager.active?.signer).then((result) => {
       if (pastePointer !== pointer) return;
       preview = result;
       previewMissing = result === null;
@@ -131,6 +131,13 @@
   );
   /** @type {'members' | 'invited'} */
   let access = $state('invited');
+  // Reset to the safe default whenever the target changes — a wider tier
+  // picked for one group must never carry over to the next selection.
+  $effect(() => {
+    selectedKey;
+    pastePointer;
+    access = 'invited';
+  });
 
   // --- dispatch ------------------------------------------------------------
   let busy = $state(false);
@@ -188,9 +195,9 @@
     </h3>
     <p class="mt-1 mb-4 text-sm text-base-content/60">{m.attach_modal_lead()}</p>
 
-    {#if candidates.length === 0 && !showPaste}
+    {#if candidates.length === 0}
       <p class="rounded-lg bg-base-200 p-3 text-sm text-base-content/70">{m.attach_empty()}</p>
-    {:else if !showPaste}
+    {:else}
       <div class="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
         {#each candidates as candidate (candidate.key)}
           <button
@@ -202,7 +209,12 @@
               : 'hover:bg-base-200'}"
             data-testid="attach-candidate"
             disabled={candidate.disabled}
-            onclick={() => (selectedKey = selectedKey === candidate.key ? null : candidate.key)}
+            onclick={() => {
+              selectedKey = selectedKey === candidate.key ? null : candidate.key;
+              // A row pick is an explicit choice — it must not be shadowed by
+              // a leftover pasted preview (or vice versa, see below).
+              pasteInput = '';
+            }}
           >
             {#if candidate.kind === 'concord'}
               <ConcordAreaBadge
@@ -231,18 +243,19 @@
     {/if}
 
     {#if modes.group}
-      {#if !showPaste}
-        <button
-          class="btn mt-3 self-start px-0 text-base-content/60 btn-link btn-sm"
-          data-testid="attach-paste-toggle"
-          onclick={() => {
-            showPaste = true;
-            selectedKey = null;
-          }}
-        >
-          {m.attach_paste_toggle()} →
-        </button>
-      {:else}
+      <button
+        class="btn mt-3 self-start px-0 text-base-content/60 btn-link btn-sm"
+        data-testid="attach-paste-toggle"
+        onclick={() => {
+          showPaste = !showPaste;
+          // Hiding the field clears its state too — reopening starts fresh
+          // rather than showing a stale preview from a previous paste.
+          if (!showPaste) pasteInput = '';
+        }}
+      >
+        {m.attach_paste_toggle()} →
+      </button>
+      {#if showPaste}
         <input
           class="input-bordered input input-sm w-full {pasteInvalid ? 'input-error' : ''}"
           data-testid="attach-paste-input"

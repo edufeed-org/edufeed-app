@@ -70,6 +70,11 @@ beforeEach(() => {
   myGroups.value = [];
   channelMeta.value = { byKey: {} };
   previewResult.value = null;
+  // clearAllMocks() wipes calls/results but not an implementation swapped in
+  // by mockImplementation() (only mockReset()/restoreAllMocks() do that) — a
+  // never-resolving fetchGroupPreview from one test would otherwise leak
+  // into every test after it.
+  fetchGroupPreview.mockImplementation(async () => previewResult.value);
 });
 
 describe('AreaAttachModal — unified picker', () => {
@@ -187,6 +192,93 @@ describe('AreaAttachModal — unified picker', () => {
     await waitFor(() => expect(screen.getByTestId('attach-preview-busy')).toBeTruthy());
     await fireEvent.input(screen.getByTestId('attach-paste-input'), { target: { value: '' } });
     await waitFor(() => expect(screen.queryByTestId('attach-preview-busy')).toBeNull());
+  });
+
+  it('paste path: opening it keeps the candidate list visible, toggling again hides + resets it', async () => {
+    myGroups.value = [{ id: 'book', relay: 'wss://g.example/' }];
+    channelMeta.value = { byKey: { 'book@wss://g.example/': meta39000([['private']]) } };
+    previewResult.value = { name: 'Pasted', picture: null, worldReadable: true };
+    render(AreaAttachModal, { props: PROPS });
+    expect(screen.getAllByTestId('attach-candidate')).toHaveLength(1);
+
+    await fireEvent.click(screen.getByTestId('attach-paste-toggle'));
+    // The list (and its rows) stay on screen next to the paste field — this
+    // is the fix: opening paste used to replace the list entirely.
+    expect(screen.getAllByTestId('attach-candidate')).toHaveLength(1);
+    await fireEvent.input(screen.getByTestId('attach-paste-input'), {
+      target: { value: "https://g.example'other" }
+    });
+    await waitFor(() => expect(screen.getByTestId('attach-preview')).toBeTruthy());
+
+    // The toggle is a real toggle: clicking again hides the field and
+    // resets its state, not a one-way door into paste mode.
+    await fireEvent.click(screen.getByTestId('attach-paste-toggle'));
+    expect(screen.queryByTestId('attach-paste-input')).toBeNull();
+    expect(screen.queryByTestId('attach-preview')).toBeNull();
+
+    // Reopening starts fresh, not with the previous paste still loaded.
+    await fireEvent.click(screen.getByTestId('attach-paste-toggle'));
+    expect(/** @type {HTMLInputElement} */ (screen.getByTestId('attach-paste-input')).value).toBe(
+      ''
+    );
+    expect(screen.queryByTestId('attach-preview')).toBeNull();
+  });
+
+  it('paste path: picking a candidate row clears a pasted preview so the target stays unambiguous', async () => {
+    myGroups.value = [{ id: 'book', relay: 'wss://g.example/' }];
+    channelMeta.value = { byKey: { 'book@wss://g.example/': meta39000([['private']]) } };
+    previewResult.value = { name: 'Pasted', picture: null, worldReadable: true };
+    render(AreaAttachModal, { props: PROPS });
+
+    await fireEvent.click(screen.getByTestId('attach-paste-toggle'));
+    await fireEvent.input(screen.getByTestId('attach-paste-input'), {
+      target: { value: "https://g.example'other" }
+    });
+    await waitFor(() => expect(screen.getByTestId('attach-preview')).toBeTruthy());
+
+    await fireEvent.click(screen.getByTestId('attach-candidate'));
+    expect(screen.queryByTestId('attach-preview')).toBeNull();
+    expect(/** @type {HTMLInputElement} */ (screen.getByTestId('attach-paste-input')).value).toBe(
+      ''
+    );
+
+    // Confirming now attaches the picked row, not the (now-cleared) paste.
+    await fireEvent.click(screen.getByTestId('attach-confirm'));
+    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledOnce());
+    const callArgs = /** @type {any[]} */ (attachGroupChannel.mock.calls[0]);
+    expect(callArgs[0].pointer.id).toBe('book');
+  });
+
+  it('resets the access choice to invited whenever the selected target changes', async () => {
+    myGroups.value = [
+      { id: 'book', relay: 'wss://g.example/' },
+      { id: 'other', relay: 'wss://g.example/' }
+    ];
+    channelMeta.value = {
+      byKey: {
+        'book@wss://g.example/': meta39000([['private']]),
+        'other@wss://g.example/': {
+          kind: 39000,
+          tags: [['d', 'other'], ['name', 'Andere'], ['private']]
+        }
+      }
+    };
+    render(AreaAttachModal, { props: PROPS });
+    const rows = screen.getAllByTestId('attach-candidate');
+    await fireEvent.click(
+      /** @type {Element} */ (rows.find((r) => r.textContent?.includes('Lesekreis')))
+    );
+    await fireEvent.click(screen.getByTestId('attach-access-members'));
+    expect(
+      /** @type {HTMLInputElement} */ (screen.getByTestId('attach-access-members')).checked
+    ).toBe(true);
+
+    await fireEvent.click(
+      /** @type {Element} */ (rows.find((r) => r.textContent?.includes('Andere')))
+    );
+    expect(
+      /** @type {HTMLInputElement} */ (screen.getByTestId('attach-access-invited')).checked
+    ).toBe(true);
   });
 
   it('a community that already has group channels offers no concord rows', () => {

@@ -58,12 +58,15 @@ describe('groupAttachCandidates', () => {
 });
 
 describe('parseGroupAddress', () => {
-  it("accepts host'id, wss://host'id, and http(s) mapped to wss", () => {
+  it("accepts host'id, wss://host'id, and http(s)/ws mapped to wss", () => {
     for (const input of [
       "groups.example'book",
       "wss://groups.example'book",
       "https://groups.example'book",
-      "  http://groups.example'book  "
+      "  http://groups.example'book  ",
+      // ws:// is on the scheme whitelist but must not survive into the
+      // written pointer — everything ends up wss:// (see fix-wave report).
+      "ws://groups.example'book"
     ]) {
       expect(parseGroupAddress(input)).toEqual({ relay: 'wss://groups.example/', id: 'book' });
     }

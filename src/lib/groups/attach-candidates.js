@@ -63,7 +63,7 @@ export function parseGroupAddress(input) {
     }
   }
 
-  const mapped = trimmed.replace(/^https?:\/\//i, 'wss://');
+  const mapped = trimmed.replace(/^(https?|ws):\/\//i, 'wss://');
   return parseGroupInput(mapped);
 }
 
