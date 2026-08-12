@@ -42,6 +42,15 @@
  * oversized `link` header is dropped when refulfilling (it's a pure preload
  * hint — dropping it changes nothing observable, the browser still loads the
  * same scripts via normal `<script>` tags).
+ *
+ * Host workaround pair (only needed where the nix-provided `chromium` binary
+ * itself fails to launch): set both `CHROMIUM_BIN=<path to a working
+ * google-chrome>` AND `E2E_DISABLE_LNA_CHECKS=1` together — the latter is
+ * required because a real google-chrome build enforces Chrome's Local
+ * Network Access policy, which blocks the mock relays' localhost WebSockets
+ * and silently hangs relay-publish tests otherwise (see
+ * `playwright.config.js`'s `launchOptions.args`). Neither var does anything
+ * on a working nix chromium.
  */
 import http from 'node:http';
 import https from 'node:https';

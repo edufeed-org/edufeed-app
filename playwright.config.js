@@ -49,7 +49,14 @@ export default defineConfig({
         browserName: 'chromium',
         launchOptions: {
           executablePath: process.env.CHROMIUM_BIN || 'chromium',
-          args: ['--disable-features=LocalNetworkAccessChecks']
+          // Opt-in only: some hosts substitute a PNA-enforcing google-chrome
+          // build for CHROMIUM_BIN (broken nix chromium), which blocks the
+          // e2e mock relays' localhost WebSockets under Chrome's Local
+          // Network Access policy and silently hangs relay-publish specs.
+          // Set E2E_DISABLE_LNA_CHECKS=1 on those hosts only.
+          args: process.env.E2E_DISABLE_LNA_CHECKS
+            ? ['--disable-features=LocalNetworkAccessChecks']
+            : []
         }
       }
     }
