@@ -30,7 +30,8 @@ const {
   publishCommunityUpdate,
   publishEvent,
   eventStoreAdd,
-  showToast
+  showToast,
+  publishToGroupRelay
 } = vi.hoisted(() => {
   const OWNER = 'a'.repeat(64);
   const ADMIN2 = 'b'.repeat(64);
@@ -66,7 +67,18 @@ const {
     publishCommunityUpdate: vi.fn(async (template) => template),
     publishEvent: vi.fn(async () => {}),
     eventStoreAdd: vi.fn(),
-    showToast: vi.fn()
+    showToast: vi.fn(),
+    publishToGroupRelay: vi.fn(async () => ({}))
+  };
+});
+
+const { poolMock } = vi.hoisted(() => {
+  return {
+    poolMock: {
+      relay: vi.fn((_url) => ({
+        publish: vi.fn(async () => ({ ok: true }))
+      }))
+    }
   };
 });
 
@@ -76,15 +88,16 @@ vi.mock('$lib/groups/root-roster.svelte.js', () => ({
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => activeUserFixture.value
 }));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: { add: eventStoreAdd },
+  pool: poolMock
+}));
 vi.mock('$lib/helpers/community-signer.js', () => ({ getCommunitySigner, isCommunityOwner }));
 vi.mock('$lib/stores/form-templates.svelte.js', () => ({
   useFormTemplates: () => () => [formTemplateFixture]
 }));
 vi.mock('$lib/helpers/publishCommunityUpdate.js', () => ({ publishCommunityUpdate }));
 vi.mock('$lib/services/publish-service.js', () => ({ publishEvent }));
-vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: eventStoreAdd }
-}));
 // Inlined literal (not the outer const): vi.mock factories are hoisted
 // above regular top-level declarations, so only vi.hoisted() bindings or
 // literals are safe to reference here (see the TDZ note above).
@@ -92,6 +105,13 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://communikey.example/']
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast }));
+vi.mock('$lib/groups/group-management.js', async () => {
+  const actual = await vi.importActual('$lib/groups/group-management.js');
+  return {
+    ...actual,
+    publishToGroupRelay
+  };
+});
 vi.mock(
   '$lib/components/groups/GroupMembersModal.svelte',
   () => import('./fixtures/GroupMembersModalStub.svelte')
@@ -110,6 +130,14 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_membership_pane_application_saved: () => 'Gespeichert.',
   community_membership_pane_application_failed: (/** @type {{reason: string}} */ p) =>
     `Speichern fehlgeschlagen: ${p.reason}`,
+  community_invite_title: () => 'Einladungscode',
+  community_invite_create: () => 'Code erstellen',
+  community_invite_hint: () =>
+    'Der Code kann auf der Community-Seite unter „Einladungscode einlösen" verwendet werden.',
+  community_invite_copy: () => 'Kopieren',
+  community_invite_copied: () => 'Kopiert.',
+  community_invite_failed: (/** @type {{reason: string}} */ p) =>
+    `Code konnte nicht erstellt werden: ${p.reason}`,
   // Pulled in transitively by createDefaultMembershipForm -> getDefaultMembershipForm.
   default_form_name: () => 'Standard-Formular',
   default_form_field_name: () => 'Name',
@@ -308,6 +336,93 @@ describe('MembershipPane — application form', () => {
 
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith(expect.stringContaining('relay down'), 'error')
+    );
+  });
+});
+
+describe('MembershipPane — invite-code minting', () => {
+  it('renders the invite-code block for admins', () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    expect(screen.getByTestId('membership-invite-create')).toBeTruthy();
+  });
+
+  it('clicking create generates a code, publishes 9009 to the roster relay, and displays the code', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledOnce());
+    const [relayConn, template, user] = /** @type {any[]} */ (publishToGroupRelay.mock.calls[0]);
+
+    // Verify the relay connection points to the roster relay
+    expect(relayConn).toBeTruthy();
+
+    // Verify the template is kind 9009 with h-tag and code tag
+    expect(template.kind).toBe(9009);
+    expect(template.tags).toEqual([
+      ['h', 'root1'],
+      [
+        'code',
+        expect.stringMatching(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{12}$/)
+      ]
+    ]);
+
+    // Verify user is the active user
+    expect(user.pubkey).toBe(OWNER);
+
+    // Verify the code is displayed
+    const codeElement = await screen.findByTestId('membership-invite-code');
+    expect(codeElement).toBeTruthy();
+  });
+
+  it('displays a copy button for the generated code', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() => {
+      const copyButton = screen.getByTestId('membership-invite-copy');
+      expect(copyButton).toBeTruthy();
+    });
+  });
+
+  it('copy button shows success toast', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() => {
+      const copyButton = screen.getByTestId('membership-invite-copy');
+      expect(copyButton).toBeTruthy();
+    });
+
+    const copyButton = screen.getByTestId('membership-invite-copy');
+    await fireEvent.click(copyButton);
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Kopiert'), 'success')
+    );
+  });
+
+  it('shows an error toast when publishing fails', async () => {
+    publishToGroupRelay.mockRejectedValueOnce(new Error('relay rejected'));
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('relay rejected'), 'error')
     );
   });
 });

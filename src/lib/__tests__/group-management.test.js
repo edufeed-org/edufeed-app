@@ -198,3 +198,26 @@ describe('confirmGroupAdmins', () => {
     expect(getGroupAdmins(/** @type {any} */ (result))).toEqual([{ pubkey: PK, roles: ['admin'] }]);
   });
 });
+
+describe('invite-code generation', () => {
+  it('generateInviteCode yields 12 alphanumeric chars from unambiguous alphabet', async () => {
+    const { generateInviteCode } = await import('$lib/groups/group-management.js');
+    const code = generateInviteCode();
+    expect(code).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{12}$/);
+    // Verify uniqueness-ish
+    expect(generateInviteCode()).not.toBe(code);
+  });
+
+  it('buildCreateInviteTemplate is kind 9009 with code tag', async () => {
+    const { buildCreateInviteTemplate } = await import('$lib/groups/group-management.js');
+    const code = 'ABC12345DEF6';
+    const t = buildCreateInviteTemplate(ID, code);
+    expect(t.kind).toBe(9009);
+    expect(t.content).toBe('');
+    expect(t.created_at).toBeTypeOf('number');
+    expect(t.tags).toEqual([
+      ['h', ID],
+      ['code', code]
+    ]);
+  });
+});

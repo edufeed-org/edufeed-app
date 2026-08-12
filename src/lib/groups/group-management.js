@@ -89,6 +89,25 @@ export function generateGroupId() {
 }
 
 /**
+ * 12 chars from unambiguous alphabet (no 0/O/1/l/I) for invite codes.
+ * @returns {string}
+ */
+export function generateInviteCode() {
+  // Unambiguous alphabet: excludes 0/O/1/l/I
+  const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+}
+
+/** @param {string} groupId @param {string} code */
+export function buildCreateInviteTemplate(groupId, code) {
+  return template(9009, [
+    ['h', groupId],
+    ['code', code]
+  ]);
+}
+
+/**
  * Sign as `user` and publish to the group relay ONLY. One NIP-42 retry when
  * the relay answers auth-required; every other rejection throws with the
  * relay's reason so the UI can show it.

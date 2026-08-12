@@ -30,12 +30,17 @@
   import { communityUpdateTemplate } from '$lib/groups/community-flips.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { publishEvent } from '$lib/services/publish-service.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { getSeenRelays, getDisplayName } from 'applesauce-core/helpers';
   import { unique, uniqueBy } from '$lib/helpers/unique.js';
   import { showToast } from '$lib/helpers/toast';
   import { untrack } from 'svelte';
+  import {
+    buildCreateInviteTemplate,
+    generateInviteCode,
+    publishToGroupRelay
+  } from '$lib/groups/group-management.js';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -71,6 +76,49 @@
   });
 
   let showMembersModal = $state(false);
+
+  // --- Invite code minting -------------------------------------------------
+
+  let generatedCode = $state('');
+  let creatingCode = $state(false);
+
+  async function handleCreateInviteCode() {
+    if (!activeUser || !roster.pointer || creatingCode) return;
+    creatingCode = true;
+    try {
+      const code = generateInviteCode();
+      const template = buildCreateInviteTemplate(roster.pointer.id, code);
+      const relayConn = pool.relay(roster.pointer.relay);
+      await publishToGroupRelay(relayConn, template, activeUser);
+      generatedCode = code;
+    } catch (error) {
+      console.error('invite code creation failed', error);
+      showToast(
+        m.community_invite_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'error'
+      );
+    } finally {
+      creatingCode = false;
+    }
+  }
+
+  async function handleCopyInviteCode() {
+    if (!generatedCode) return;
+    try {
+      await navigator.clipboard.writeText(generatedCode);
+      showToast(m.community_invite_copied(), 'success');
+    } catch (error) {
+      console.error('clipboard copy failed', error);
+      showToast(
+        m.community_invite_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'error'
+      );
+    }
+  }
 
   // --- Application form management ---------------------------------------
 
@@ -220,6 +268,42 @@
     </div>
 
     <div class="divider"></div>
+
+    {#if isAdmin}
+      <h3 class="text-sm font-bold">{m.community_invite_title()}</h3>
+      <p class="text-sm text-base-content/70">{m.community_invite_hint()}</p>
+
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          class="btn btn-sm btn-primary"
+          data-testid="membership-invite-create"
+          disabled={!roster.pointer || creatingCode}
+          onclick={handleCreateInviteCode}
+        >
+          {m.community_invite_create()}
+        </button>
+
+        {#if generatedCode}
+          <div class="flex items-center gap-2">
+            <code
+              class="rounded bg-base-300 px-2 py-1 font-mono text-sm"
+              data-testid="membership-invite-code"
+            >
+              {generatedCode}
+            </code>
+            <button
+              class="btn btn-ghost btn-sm"
+              data-testid="membership-invite-copy"
+              onclick={handleCopyInviteCode}
+            >
+              {m.community_invite_copy()}
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <div class="divider"></div>
+    {/if}
 
     <h3 class="text-sm font-bold">{m.community_membership_pane_application_title()}</h3>
     <p class="text-sm text-base-content/70">{m.community_membership_pane_application_lead()}</p>
