@@ -116,6 +116,10 @@ vi.mock(
   '$lib/components/groups/GroupMembersModal.svelte',
   () => import('./fixtures/GroupMembersModalStub.svelte')
 );
+vi.mock(
+  '$lib/components/community/settings/ApplicationApprovals.svelte',
+  () => import('./fixtures/ApplicationApprovalsStub.svelte')
+);
 vi.mock('$lib/paraglide/messages', () => ({
   community_membership_pane_title: () => 'Mitglieder & Rollen',
   community_membership_pane_manage: () => 'Mitglieder verwalten',
@@ -149,7 +153,16 @@ const { default: MembershipPane } = await import(
   '$lib/components/community/settings/MembershipPane.svelte'
 );
 
-const profileEvent = { kind: 0, pubkey: OWNER, tags: [], content: JSON.stringify({ name: 'X' }) };
+// id/sig present so applesauce's getDisplayName treats this as a real event
+// (it gates event-vs-plain-metadata detection on those two fields).
+const profileEvent = {
+  kind: 0,
+  pubkey: OWNER,
+  tags: [],
+  content: JSON.stringify({ name: 'X' }),
+  id: 'profile-id',
+  sig: 'profile-sig'
+};
 
 /** @param {string[][]} tags */
 function communikeyEvent(tags) {
@@ -327,6 +340,43 @@ describe('MembershipPane — application form', () => {
       screen.getByTestId('membership-application-select')
     );
     await waitFor(() => expect(select.value).toBe(`30168:${OWNER}:membership`));
+  });
+
+  it('renders the approvals queue (with roster + community props) when an application ref exists', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+    const stub = await screen.findByTestId('stub-application-approvals');
+    expect(stub.dataset.communityid).toBe(OWNER);
+    expect(stub.dataset.communityname).toBe('X');
+    expect(JSON.parse(/** @type {string} */ (stub.dataset.application))).toEqual([
+      'application',
+      `30168:${OWNER}:membership`,
+      COMMUNIKEY_RELAY
+    ]);
+    expect(JSON.parse(/** @type {string} */ (stub.dataset.rosterpointer))).toEqual({
+      id: 'root1',
+      relay: GROUPS_RELAY
+    });
+  });
+
+  it('does not render the approvals queue when no application ref is set', () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
+  });
+
+  it('does not render the approvals queue for a non-admin', () => {
+    isCommunityOwner.mockReturnValue(false);
+    rosterFixture.value = {
+      ...rosterFixture.value,
+      admins: [{ pubkey: ADMIN2, roles: ['admin'] }]
+    };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
   });
 
   it('a rejected save shows an error toast with the reason', async () => {

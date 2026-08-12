@@ -3293,5 +3293,15 @@
   "community_membership_pane_application_remove": "Remove form",
   "community_membership_pane_application_create_default": "Create default form",
   "community_membership_pane_application_saved": "Saved.",
-  "community_membership_pane_application_failed": "Save failed: {reason}"
+  "community_membership_pane_application_failed": "Save failed: {reason}",
+  "community_applications_title": "Membership applications",
+  "community_applications_empty": "No open applications.",
+  "community_applications_approve": "Accept",
+  "community_applications_decline": "Decline",
+  "community_applications_undo": "Undo",
+  "community_applications_approved_badge": "Accepted",
+  "community_applications_decrypt_failed": "Could not decrypt this response.",
+  "community_application_approved_dm": "Your application to join {community} was accepted — welcome!",
+  "community_application_declined_dm": "Your application to join {community} was unfortunately declined.",
+  "community_application_approve_failed": "Acceptance failed: {reason}"
 }

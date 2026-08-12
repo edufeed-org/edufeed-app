@@ -42,6 +42,7 @@
     publishToGroupRelay
   } from '$lib/groups/group-management.js';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
+  import ApplicationApprovals from '$lib/components/community/settings/ApplicationApprovals.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -356,6 +357,15 @@
     </div>
   </div>
 </div>
+
+{#if applicationRef && isAdmin}
+  <ApplicationApprovals
+    {communikeyEvent}
+    {communityId}
+    communityName={getDisplayName(profileEvent) || communityId}
+    {roster}
+  />
+{/if}
 
 {#if showMembersModal && roster.pointer}
   <GroupMembersModal

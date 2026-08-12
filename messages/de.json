@@ -3293,5 +3293,15 @@
   "community_membership_pane_application_remove": "Formular entfernen",
   "community_membership_pane_application_create_default": "Standard-Formular erstellen",
   "community_membership_pane_application_saved": "Gespeichert.",
-  "community_membership_pane_application_failed": "Speichern fehlgeschlagen: {reason}"
+  "community_membership_pane_application_failed": "Speichern fehlgeschlagen: {reason}",
+  "community_applications_title": "Beitrittsanfragen",
+  "community_applications_empty": "Keine offenen Anfragen.",
+  "community_applications_approve": "Aufnehmen",
+  "community_applications_decline": "Ablehnen",
+  "community_applications_undo": "Rückgängig",
+  "community_applications_approved_badge": "Aufgenommen",
+  "community_applications_decrypt_failed": "Antwort konnte nicht entschlüsselt werden.",
+  "community_application_approved_dm": "Deine Beitrittsanfrage für {community} wurde angenommen — willkommen!",
+  "community_application_declined_dm": "Deine Beitrittsanfrage für {community} wurde leider abgelehnt.",
+  "community_application_approve_failed": "Aufnahme fehlgeschlagen: {reason}"
 }
