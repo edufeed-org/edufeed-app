@@ -223,6 +223,26 @@ describe('buildGroupsListTemplate', () => {
     expect(removed.tags).toEqual([['group', 'other', 'wss://other.example/']]);
   });
 
+  it('dedupes across trailing-slash spellings and serializes normalized relays', () => {
+    // A list written by another client can carry "wss://host" while our join
+    // flow uses "wss://host/". Adding must replace, not append a twin — and
+    // rewriting the list is the moment to heal the spelling.
+    const existing = {
+      kind: 10009,
+      pubkey: ME,
+      content: '',
+      created_at: 1,
+      tags: [['group', 'beechat', 'wss://groups.example.com']]
+    };
+    const readd = buildGroupsListTemplate(existing, { add: pointer });
+    expect(readd.tags).toEqual([['group', 'beechat', 'wss://groups.example.com/']]);
+
+    const removed = buildGroupsListTemplate(existing, {
+      remove: { id: 'beechat', relay: 'wss://groups.example.com/' }
+    });
+    expect(removed.tags).toEqual([]);
+  });
+
   it('preserves non-group tags (e.g. hidden-list content stays untouched)', () => {
     const existing = {
       kind: 10009,

@@ -151,6 +151,25 @@ describe('groupsByRelay', () => {
     expect(groupsByRelay()).toEqual([]);
     expect(groupsByRelay([])).toEqual([]);
   });
+
+  it('merges trailing-slash spellings of the same host into ONE entry', () => {
+    // Real 10009 lists mix spellings across clients — buzz desktop writes
+    // "wss://host/", 0xchat writes "wss://host". Two rail tiles for one host
+    // is the bug this guards against.
+    const grouped = groupsByRelay([
+      row('a', 'wss://edufeed.communities.buzz.xyz'),
+      row('b', 'wss://edufeed.communities.buzz.xyz/')
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0].relay).toBe('wss://edufeed.communities.buzz.xyz/');
+    expect(grouped[0].rows.map((r) => r.key)).toEqual(['a', 'b']);
+  });
+
+  it('keeps an unparseable relay string as its own raw bucket instead of dropping it', () => {
+    const grouped = groupsByRelay([row('a', 'not a url')]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0].relay).toBe('not a url');
+  });
 });
 
 describe('relayLabel', () => {

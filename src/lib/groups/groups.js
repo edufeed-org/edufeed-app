@@ -180,15 +180,27 @@ export function buildLeaveRequestTemplate(groupId) {
  */
 export function buildGroupsListTemplate(existing, change) {
   const keepTags = (existing?.tags ?? []).filter((t) => t[0] !== 'group');
+  // Compare and serialize relays in normalized form: other clients write
+  // "wss://host" where we write "wss://host/", and a raw-string dedupe lets
+  // one group pile up twin entries — two rail tiles for one host. Rewriting
+  // the list is also the moment existing spellings get healed.
+  const normal = (/** @type {string} */ relay) => {
+    try {
+      return normalizeURL(relay);
+    } catch {
+      return relay;
+    }
+  };
   /** @type {GroupPointer[]} */
   let groups = existing ? (getPublicGroups(/** @type {any} */ (existing)) ?? []) : [];
+  groups = groups.map((g) => ({ ...g, relay: normal(g.relay) }));
 
   if (change.remove) {
-    const target = change.remove;
+    const target = { id: change.remove.id, relay: normal(change.remove.relay) };
     groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
   }
   if (change.add) {
-    const target = change.add;
+    const target = { id: change.add.id, relay: normal(change.add.relay) };
     groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
     groups.push(target);
   }

@@ -19,6 +19,7 @@
 //               `remembered` to recover the channel by.
 //
 // Pure. The fetching lives in relay-directory.svelte.js.
+import { normalizeURL } from 'applesauce-core/helpers/url';
 
 /** @param {{tags?: string[][]} | null | undefined} event @param {string} name */
 function tagValue(event, name) {
@@ -129,8 +130,17 @@ export function groupsByRelay(rows = []) {
     // rail already drops it, and inventing a bucket for it would print a host
     // named "undefined".
     if (!relay) continue;
-    if (!byRelay.has(relay)) byRelay.set(relay, []);
-    /** @type {any[]} */ (byRelay.get(relay)).push(row);
+    // Bucket by the normalized URL: kind-10009 lists mix "wss://host" and
+    // "wss://host/" across clients, and a raw-string key turns one host into
+    // two rail tiles.
+    let key = relay;
+    try {
+      key = normalizeURL(relay);
+    } catch {
+      // Unparseable stays its own raw bucket rather than vanishing.
+    }
+    if (!byRelay.has(key)) byRelay.set(key, []);
+    /** @type {any[]} */ (byRelay.get(key)).push(row);
   }
   return [...byRelay.entries()].map(([relay, grouped]) => ({ relay, rows: grouped }));
 }
