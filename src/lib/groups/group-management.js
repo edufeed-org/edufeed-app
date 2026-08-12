@@ -9,7 +9,8 @@ import {
   EDIT_METADATA_KIND,
   CREATE_GROUP_KIND,
   DELETE_GROUP_KIND,
-  GROUP_METADATA_KIND
+  GROUP_METADATA_KIND,
+  GROUP_ADMINS_KIND
 } from 'applesauce-common/helpers/groups';
 import { firstValueFrom } from 'rxjs';
 import { defaultIfEmpty } from 'rxjs/operators';
@@ -113,6 +114,15 @@ export function confirmGroupMetadata(relayConn, groupId) {
   return firstValueFrom(
     relayConn
       .request({ kinds: [GROUP_METADATA_KIND], '#d': [groupId] }, { timeout: 10000 })
+      .pipe(defaultIfEmpty(null))
+  );
+}
+
+/** First kind-39001 (admins) for this id from the relay, or null. @param {any} relayConn @param {string} groupId */
+export function confirmGroupAdmins(relayConn, groupId) {
+  return firstValueFrom(
+    relayConn
+      .request({ kinds: [GROUP_ADMINS_KIND], '#d': [groupId] }, { timeout: 8000 })
       .pipe(defaultIfEmpty(null))
   );
 }

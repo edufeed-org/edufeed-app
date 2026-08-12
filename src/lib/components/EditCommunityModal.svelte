@@ -196,8 +196,14 @@
 
     isInitialized = true;
 
-    // Load existing form refs from profile list events
-    loadFormRefs(communityEvent);
+    // Moderated communities gate access via the group roster, not the legacy
+    // per-content-type form-gating profile list. Skip loading stale form refs
+    // for them entirely — formRef stays '' — so a legacy profile-list pointer
+    // left over on a flipped-to-moderated event (or one predating the flip
+    // strip logic) can't be re-read here and round-tripped back onto the
+    // event's own tags via buildCommunityDefinitionTags' `isNewSpec &&
+    // ct.formRef` branch on save.
+    if (!isModerated) loadFormRefs(communityEvent);
   });
 
   /**
@@ -391,23 +397,29 @@
         additionalRelays: getCommunityGlobalRelays(signedEvent)
       });
 
-      // Create/update kind 30000 profile list events for gated sections
-      for (const [, ct] of Object.entries(communityData.contentTypes)) {
-        if (!ct.enabled || !ct.formRef) continue;
+      // Create/update kind 30000 profile list events for gated sections —
+      // moderated communities gate via the group roster instead, so never
+      // publish legacy per-section profile lists for them (formRef only
+      // ever gets populated via loadFormRefs, which the load effect already
+      // skips for moderated communities; this is a second line of defense).
+      if (!isModerated) {
+        for (const [, ct] of Object.entries(communityData.contentTypes)) {
+          if (!ct.enabled || !ct.formRef) continue;
 
-        /** @type {import('nostr-tools').EventTemplate} */
-        const profileListEvent = {
-          kind: 30000,
-          created_at: Math.floor(Date.now() / 1000),
-          tags: [
-            ['d', ct.name],
-            ['form', ct.formRef]
-          ],
-          content: ''
-        };
+          /** @type {import('nostr-tools').EventTemplate} */
+          const profileListEvent = {
+            kind: 30000,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ['d', ct.name],
+              ['form', ct.formRef]
+            ],
+            content: ''
+          };
 
-        const signedProfileList = await signer.signEvent(profileListEvent);
-        publishEventOptimistic(signedProfileList);
+          const signedProfileList = await signer.signEvent(profileListEvent);
+          publishEventOptimistic(signedProfileList);
+        }
       }
 
       closeModal();

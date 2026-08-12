@@ -4,13 +4,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const createGroupOnRelay = vi.fn();
 const confirmGroupMetadata = vi.fn();
+const confirmGroupAdmins = vi.fn();
 vi.mock('$lib/groups/group-management.js', async (importOriginal) => {
   const actual = /** @type {any} */ (await importOriginal());
   return {
     ...actual,
     generateGroupId: () => 'fresh-id-16chars',
     createGroupOnRelay: (/** @type {any} */ args) => createGroupOnRelay(args),
-    confirmGroupMetadata: (/** @type {any} */ ...args) => confirmGroupMetadata(...args)
+    confirmGroupMetadata: (/** @type {any} */ ...args) => confirmGroupMetadata(...args),
+    confirmGroupAdmins: (/** @type {any} */ ...args) => confirmGroupAdmins(...args)
   };
 });
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -23,9 +25,13 @@ const { provisionRootGroup, readRootGroupMarker, writeRootGroupMarker, clearRoot
 const RELAY = 'wss://groups.example.com';
 const USER = { pubkey: 'a'.repeat(64), signer: {} };
 
+/** A kind-39001 admins event listing the given pubkey as an admin. */
+const adminsEvent = (/** @type {string} */ pubkey) => ({ kind: 39001, tags: [['p', pubkey]] });
+
 beforeEach(() => {
   createGroupOnRelay.mockReset().mockResolvedValue({ kind: 39000 });
   confirmGroupMetadata.mockReset();
+  confirmGroupAdmins.mockReset();
 });
 
 describe('provisionRootGroup', () => {
@@ -41,8 +47,9 @@ describe('provisionRootGroup', () => {
     );
   });
 
-  it('reuses a confirmed existing id without creating (idempotent re-run)', async () => {
+  it('reuses a confirmed existing id when the user is a listed admin (idempotent re-run)', async () => {
     confirmGroupMetadata.mockResolvedValue({ kind: 39000 });
+    confirmGroupAdmins.mockResolvedValue(adminsEvent(USER.pubkey));
     const result = await provisionRootGroup({
       relay: RELAY,
       name: 'x',
@@ -60,6 +67,45 @@ describe('provisionRootGroup', () => {
       name: 'x',
       user: USER,
       existingId: 'gone-id'
+    });
+    expect(result.id).toBe('fresh-id-16chars');
+    expect(createGroupOnRelay).toHaveBeenCalledOnce();
+  });
+
+  it('creates fresh when the marker is confirmed but the user is NOT a listed admin (poisoned/stale marker)', async () => {
+    confirmGroupMetadata.mockResolvedValue({ kind: 39000 });
+    confirmGroupAdmins.mockResolvedValue(adminsEvent('b'.repeat(64)));
+    const result = await provisionRootGroup({
+      relay: RELAY,
+      name: 'x',
+      user: USER,
+      existingId: 'foreign-id'
+    });
+    expect(result.id).toBe('fresh-id-16chars');
+    expect(createGroupOnRelay).toHaveBeenCalledOnce();
+  });
+
+  it('creates fresh when the 39001 admin fetch is empty (fail safe)', async () => {
+    confirmGroupMetadata.mockResolvedValue({ kind: 39000 });
+    confirmGroupAdmins.mockResolvedValue(null);
+    const result = await provisionRootGroup({
+      relay: RELAY,
+      name: 'x',
+      user: USER,
+      existingId: 'no-admins-id'
+    });
+    expect(result.id).toBe('fresh-id-16chars');
+    expect(createGroupOnRelay).toHaveBeenCalledOnce();
+  });
+
+  it('creates fresh when the 39001 admin fetch throws/times out (fail safe, never throws itself)', async () => {
+    confirmGroupMetadata.mockResolvedValue({ kind: 39000 });
+    confirmGroupAdmins.mockRejectedValue(new Error('relay timeout'));
+    const result = await provisionRootGroup({
+      relay: RELAY,
+      name: 'x',
+      user: USER,
+      existingId: 'timeout-id'
     });
     expect(result.id).toBe('fresh-id-16chars');
     expect(createGroupOnRelay).toHaveBeenCalledOnce();
