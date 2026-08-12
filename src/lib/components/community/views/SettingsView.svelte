@@ -17,6 +17,26 @@
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import AreaAttachModal from '$lib/components/community/channels/AreaAttachModal.svelte';
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
+  // Community-type flips (open <-> moderated; closed never transitions) — see
+  // docs/nips/communikey-groups.md and src/lib/groups/community-flips.js.
+  import { deriveCommunityType } from '$lib/groups/community-membership.js';
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import {
+    buildFlipToModeratedTags,
+    buildFlipToOpenTags,
+    communityUpdateTemplate
+  } from '$lib/groups/community-flips.js';
+  import {
+    provisionRootGroup,
+    readRootGroupMarker,
+    writeRootGroupMarker,
+    clearRootGroupMarker
+  } from '$lib/groups/provision-root-group.js';
+  import { moderatedCreationAvailable } from '$lib/groups/feature.js';
+  import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
+  import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { unique } from '$lib/helpers/unique.js';
   import * as m from '$lib/paraglide/messages';
 
   let { communityId, communikeyEvent, profileEvent } = $props();
@@ -36,13 +56,15 @@
   });
 
   // Same signer-resolution pattern as ChannelCreateWizard/EditCommunityModal.
-  const concordCommunitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
+  // Shared by the Concord detach flow and the Typ-pane flips below — both
+  // sign a rewritten 10222 with the community's own key.
+  const communitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
 
   async function handleDetach() {
     if (detaching) return;
     detaching = true;
     try {
-      await detachConcordArea({ communikeyEvent, communitySigner: concordCommunitySigner });
+      await detachConcordArea({ communikeyEvent, communitySigner });
       showToast(m.concord_settings_detached_toast(), 'success');
       concordOverlay = null;
     } catch (error) {
@@ -50,6 +72,93 @@
       showToast(m.concord_settings_detach_failed(), 'error');
     } finally {
       detaching = false;
+    }
+  }
+
+  // "Community-Typ" card (design spec Task 6): owner-only open<->moderated
+  // flips. Community type is DERIVED from the 10222's pointer tags, never
+  // declared — see deriveCommunityType. Closed communities never transition.
+  const communityType = $derived(deriveCommunityType(communikeyEvent));
+  const channelNames = $derived.by(() =>
+    unique(parseGroupPointers(communikeyEvent).map((pointer) => pointer.name || pointer.id))
+  );
+
+  /** @type {'flip-to-moderated' | 'flip-to-open' | null} */
+  let typeOverlay = $state(null);
+  let flipping = $state(false);
+
+  function openFlipToModerated() {
+    typeOverlay = 'flip-to-moderated';
+  }
+
+  function openFlipToOpen() {
+    typeOverlay = 'flip-to-open';
+  }
+
+  function closeTypeOverlay() {
+    if (flipping) return;
+    typeOverlay = null;
+  }
+
+  async function handleFlipToModerated() {
+    if (flipping || !communitySigner || !activeUser) return;
+    flipping = true;
+    try {
+      // Root group provisioning runs with the HUMAN's own signer (same
+      // reasoning as CreateCommunityModal's moderated branch), not the
+      // community signer — it may be a separate keypair.
+      const pointer = await provisionRootGroup({
+        relay: getGroupsRelays()[0],
+        name: getDisplayName(profileEvent) || 'Community',
+        user: { pubkey: activeUser.pubkey, signer: activeUser.signer },
+        existingId: readRootGroupMarker(communityId)
+      });
+      writeRootGroupMarker(communityId, pointer.id);
+
+      const template = communityUpdateTemplate(
+        communikeyEvent,
+        buildFlipToModeratedTags(communikeyEvent.tags, pointer)
+      );
+      await publishCommunityUpdate(template, communitySigner);
+      // Marker only cleared once the 10222 actually points at the group —
+      // if the publish above fails, re-running the flip must reuse it.
+      clearRootGroupMarker(communityId);
+      showToast(m.community_views_settings_flip_done(), 'success');
+      typeOverlay = null;
+    } catch (error) {
+      console.error('settings: flip to moderated failed', error);
+      showToast(
+        m.community_views_settings_flip_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'error'
+      );
+    } finally {
+      flipping = false;
+    }
+  }
+
+  async function handleFlipToOpen() {
+    if (flipping || !communitySigner) return;
+    flipping = true;
+    try {
+      const template = communityUpdateTemplate(
+        communikeyEvent,
+        buildFlipToOpenTags(communikeyEvent.tags)
+      );
+      await publishCommunityUpdate(template, communitySigner);
+      showToast(m.community_views_settings_flip_done(), 'success');
+      typeOverlay = null;
+    } catch (error) {
+      console.error('settings: flip to open failed', error);
+      showToast(
+        m.community_views_settings_flip_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'error'
+      );
+    } finally {
+      flipping = false;
     }
   }
 
@@ -111,13 +220,78 @@
         <h1 class="text-2xl font-bold">{m.community_views_settings_title()}</h1>
       </div>
 
-      {#if profileEvent && communikeyEvent}
+      {#if communikeyEvent}
         <!-- Community Description -->
         {#if communikeyEvent?.content}
           <div class="card mb-6 bg-base-100 shadow-xl">
             <div class="card-body">
               <h2 class="mb-2 card-title">{m.community_views_settings_info_title()}</h2>
               <p class="text-base-content/80">{communikeyEvent.content}</p>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Community-Typ (open <-> moderated flips) — owner-only, shown
+             independently of Concord's feature flag; closed communities get
+             a static hint instead of actions. -->
+        {#if isOwner}
+          <div class="card mb-6 bg-base-100 shadow-xl" data-testid="settings-type-card">
+            <div class="card-body">
+              <h2 class="card-title">{m.community_views_settings_type_title()}</h2>
+              <p class="text-xs text-base-content/60">
+                {m.community_views_settings_type_current()}
+              </p>
+              <p class="font-semibold">
+                {#if communityType === 'open'}
+                  {m.community_type_open_title()}
+                {:else if communityType === 'moderated'}
+                  {m.community_type_moderated_title()}
+                {:else}
+                  {m.community_type_closed_title()}
+                {/if}
+              </p>
+              <p class="text-sm text-base-content/70">
+                {#if communityType === 'open'}
+                  {m.community_type_open_body()}
+                {:else if communityType === 'moderated'}
+                  {m.community_type_moderated_body()}
+                {:else}
+                  {m.community_type_closed_body()}
+                {/if}
+              </p>
+
+              {#if communityType === 'open'}
+                {#if moderatedCreationAvailable()}
+                  <div class="mt-3">
+                    <button
+                      class="btn btn-neutral"
+                      data-testid="settings-flip-to-moderated"
+                      disabled={!activeUser || flipping}
+                      onclick={openFlipToModerated}
+                    >
+                      {m.community_views_settings_flip_to_moderated()}
+                    </button>
+                    {#if !activeUser}
+                      <p class="mt-1 text-xs text-warning">
+                        {m.community_views_settings_flip_needs_account()}
+                      </p>
+                    {/if}
+                  </div>
+                {/if}
+              {:else if communityType === 'moderated'}
+                <div class="mt-3">
+                  <button
+                    class="btn btn-outline"
+                    data-testid="settings-flip-to-open"
+                    disabled={flipping}
+                    onclick={openFlipToOpen}
+                  >
+                    {m.community_views_settings_flip_to_open()}
+                  </button>
+                </div>
+              {:else}
+                <p class="mt-3 text-xs text-base-content/60">{m.community_type_closed_hint()}</p>
+              {/if}
             </div>
           </div>
         {/if}
@@ -293,6 +467,55 @@
           disabled={detaching}
           onclick={handleDetach}>{m.concord_settings_detach_action()}</button
         >
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if typeOverlay === 'flip-to-moderated'}
+  <!-- Same confirm skeleton as the Concord detach dialog above. -->
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm text-center">
+      <h3 class="text-lg font-extrabold">{m.community_views_settings_flip_to_moderated()}</h3>
+      <p class="my-3 text-sm text-base-content/70">
+        {m.community_views_settings_flip_to_moderated_confirm()}
+      </p>
+      <div class="modal-action justify-center">
+        <button class="btn btn-ghost" disabled={flipping} onclick={closeTypeOverlay}
+          >{m.concord_cancel()}</button
+        >
+        <button
+          class="btn btn-primary"
+          data-testid="settings-flip-confirm"
+          disabled={flipping}
+          onclick={handleFlipToModerated}
+        >
+          {#if flipping}<span class="loading loading-xs loading-spinner"></span>{/if}
+          {m.community_views_settings_flip_to_moderated()}
+        </button>
+      </div>
+    </div>
+  </div>
+{:else if typeOverlay === 'flip-to-open'}
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm text-center">
+      <h3 class="text-lg font-extrabold">{m.community_views_settings_flip_to_open()}</h3>
+      <p class="my-3 text-sm text-base-content/70">
+        {m.community_views_settings_flip_to_open_confirm({ channels: channelNames.join(', ') })}
+      </p>
+      <div class="modal-action justify-center">
+        <button class="btn btn-ghost" disabled={flipping} onclick={closeTypeOverlay}
+          >{m.concord_cancel()}</button
+        >
+        <button
+          class="btn btn-error"
+          data-testid="settings-flip-confirm"
+          disabled={flipping}
+          onclick={handleFlipToOpen}
+        >
+          {#if flipping}<span class="loading loading-xs loading-spinner"></span>{/if}
+          {m.community_views_settings_flip_to_open()}
+        </button>
       </div>
     </div>
   </div>
