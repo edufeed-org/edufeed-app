@@ -165,6 +165,33 @@
     contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
   });
 
+  // Content types as they'll actually be published, given the chosen
+  // community type — single source of truth for BOTH the confirm-step
+  // summary and createCommunity(), so they can never disagree (code review
+  // finding, 2026-08-12):
+  //   open      → unchanged
+  //   moderated → default access tier applied to every entry, and formRef
+  //               forced empty (moderated access comes from the group
+  //               roster, never the legacy per-type form-gating profile
+  //               list — a stale formRef here would otherwise still make
+  //               buildCommunityDefinitionTags emit a dangling
+  //               ['a', '30000:...'] pointer to a profile list the
+  //               kind-30000 loop below never creates for moderated types)
+  //   closed    → every entry disabled (closed communities publish no
+  //               sections at all)
+  const effectiveContentTypes = $derived.by(() => {
+    if (communityType === 'moderated') {
+      const withAccess = applyDefaultAccess(communityData.contentTypes, defaultAccessTier);
+      return Object.fromEntries(
+        Object.entries(withAccess).map(([key, ct]) => [key, { ...ct, formRef: '' }])
+      );
+    }
+    if (communityType === 'closed') {
+      return disableAllContentTypes(communityData.contentTypes);
+    }
+    return communityData.contentTypes;
+  });
+
   // Toggle for access control configuration
   let showAccessConfig = $state(false);
   let defaultFormRef = $state('');
@@ -352,6 +379,20 @@
     }
   }
 
+  /**
+   * Pick the community type on the 'type' step. Belt-and-suspenders on top
+   * of `effectiveContentTypes` stripping formRef for moderated/closed: also
+   * collapse the legacy form-gating ACL section so its UI doesn't imply
+   * settings that won't be published (code review finding, 2026-08-12).
+   * @param {'open' | 'moderated' | 'closed'} type
+   */
+  function selectCommunityType(type) {
+    communityType = type;
+    if (type !== 'open') {
+      showAccessConfig = false;
+    }
+  }
+
   function selectCurrentKeypair() {
     useCurrentKeypair = true;
     nextStep();
@@ -492,18 +533,10 @@
         }
       }
 
-      // Content types carry the chosen default access per community type:
-      // moderated communities gate every enabled section behind the group
-      // roster tier the creator picked; closed communities publish no
-      // sections at all (Concord channels replace them).
-      let effectiveContentTypes = communityData.contentTypes;
-      if (communityType === 'moderated') {
-        effectiveContentTypes = applyDefaultAccess(communityData.contentTypes, defaultAccessTier);
-      } else if (communityType === 'closed') {
-        effectiveContentTypes = disableAllContentTypes(communityData.contentTypes);
-      }
-
-      // New communities always use new-spec tags (profile list a-tags)
+      // New communities always use new-spec tags (profile list a-tags).
+      // effectiveContentTypes ($derived above) is the single source of truth
+      // for what gets published per community type — the confirm-step
+      // summary renders from the same value.
       let communityTags = buildCommunityDefinitionTags(
         { ...communityData, contentTypes: effectiveContentTypes },
         {
@@ -544,7 +577,7 @@
       // communities gate access via the group roster instead — this legacy
       // per-content-type form-gating path only applies to open communities.
       if (communityType === 'open') {
-        for (const [, ct] of Object.entries(communityData.contentTypes)) {
+        for (const [, ct] of Object.entries(effectiveContentTypes)) {
           if (!ct.enabled || !ct.formRef) continue;
 
           const profileListEvent = {
@@ -734,7 +767,7 @@
                 ? 'border-primary bg-primary/5'
                 : 'border-base-300'}"
               data-testid="community-type-open"
-              onclick={() => (communityType = 'open')}
+              onclick={() => selectCommunityType('open')}
             >
               <span class="text-2xl">🌍</span>
               <strong>{m.community_type_open_title()}</strong>
@@ -748,7 +781,7 @@
                   ? 'border-primary bg-primary/5'
                   : 'border-base-300'}"
                 data-testid="community-type-moderated"
-                onclick={() => (communityType = 'moderated')}
+                onclick={() => selectCommunityType('moderated')}
               >
                 <span class="text-2xl">🛡️</span>
                 <strong
@@ -767,7 +800,7 @@
                   ? 'border-primary bg-primary/5'
                   : 'border-base-300'}"
                 data-testid="community-type-closed"
-                onclick={() => (communityType = 'closed')}
+                onclick={() => selectCommunityType('closed')}
               >
                 <span class="text-2xl">🔒</span>
                 <strong>{m.community_type_closed_title()}</strong>
@@ -977,47 +1010,63 @@
               </div>
             </div>
 
-            <!-- Content Types -->
+            <!-- Content Types (rendered from effectiveContentTypes, the same
+                 value createCommunity() publishes from — see its $derived
+                 above; closed communities publish no sections at all) -->
             <div class="card bg-base-200">
               <div class="card-body">
                 <h3 class="card-title">
                   {m.create_community_modal_confirm_content_types_section()}
                 </h3>
-                <div class="flex flex-wrap gap-2">
-                  {#each Object.entries(communityData.contentTypes) as [key, ct] (key)}
-                    {#if ct.enabled}
-                      <div class="badge gap-1 badge-primary">
-                        {ct.name}
-                        {#if ct.formRef}
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                            class="h-3 w-3"
-                          >
-                            <path
-                              fill-rule="evenodd"
-                              d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
-                              clip-rule="evenodd"
-                            />
-                          </svg>
-                        {/if}
-                      </div>
-                    {/if}
-                  {/each}
-                </div>
-                {#if Object.values(communityData.contentTypes).some((ct) => ct.enabled && ct.formRef)}
-                  <div class="mt-2 space-y-1 text-sm text-base-content/70">
-                    {#each Object.entries(communityData.contentTypes) as [_key, ct] (_key)}
-                      {#if ct.enabled && ct.formRef}
-                        <p>
-                          {ct.name}: {m.form_config_gated_summary({
-                            formName: getFormName(ct.formRef)
-                          })}
-                        </p>
+                {#if communityType === 'closed'}
+                  <p class="text-sm text-base-content/70">
+                    {m.community_type_closed_confirm_note()}
+                  </p>
+                {:else}
+                  <div class="flex flex-wrap gap-2">
+                    {#each Object.entries(effectiveContentTypes) as [key, ct] (key)}
+                      {#if ct.enabled}
+                        <div class="badge gap-1 badge-primary">
+                          {ct.name}
+                          {#if ct.formRef}
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                              class="h-3 w-3"
+                            >
+                              <path
+                                fill-rule="evenodd"
+                                d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                                clip-rule="evenodd"
+                              />
+                            </svg>
+                          {/if}
+                        </div>
                       {/if}
                     {/each}
                   </div>
+                  {#if communityType === 'moderated'}
+                    <p class="mt-2 text-sm">
+                      <strong>{m.community_access_question()}</strong>
+                      {defaultAccessTier === 'members'
+                        ? m.community_access_members()
+                        : m.community_access_all()}
+                    </p>
+                  {/if}
+                  {#if Object.values(effectiveContentTypes).some((ct) => ct.enabled && ct.formRef)}
+                    <div class="mt-2 space-y-1 text-sm text-base-content/70">
+                      {#each Object.entries(effectiveContentTypes) as [_key, ct] (_key)}
+                        {#if ct.enabled && ct.formRef}
+                          <p>
+                            {ct.name}: {m.form_config_gated_summary({
+                              formName: getFormName(ct.formRef)
+                            })}
+                          </p>
+                        {/if}
+                      {/each}
+                    </div>
+                  {/if}
                 {/if}
               </div>
             </div>
