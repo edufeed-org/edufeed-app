@@ -145,6 +145,7 @@
 
   let activeUser = $derived(getActiveUser());
   let rootPointer = $derived(getRootRoster().pointer);
+  let isRosterLoading = $derived(getRootRoster().isLoading);
   let isRosterMember = $derived(!!activeUser && getRootRoster().isMember(activeUser.pubkey));
   // The root group's own kind:39000 "closed" marker (group-management.js's
   // metadataTags) — distinct from the read-access `private` tag
@@ -154,8 +155,14 @@
   let rootMetadataEvent = $derived(
     rootMetadataKey ? getRootMetadata().byKey[rootMetadataKey] : null
   );
+  // Same lock-direction default as channel-access.js: missing/unloaded
+  // metadata counts as CLOSED, never as open — a 39000 that hasn't arrived
+  // yet (or an unreachable relay) must not offer a bare join button whose
+  // 9021 the relay would silently ignore. The invite-code affordance is
+  // unaffected — it is always legitimate once the roster itself has loaded.
   let isRootClosed = $derived(
-    !!rootMetadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed')
+    !rootMetadataEvent ||
+      !!rootMetadataEvent.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed')
   );
 </script>
 
@@ -257,10 +264,15 @@
 
     <!-- Moderated (NIP-29) root-group join lane — independent of the
          kind-30000 follow above. Only for non-roster-members without a
-         structured application form (that path keeps its own button above). -->
+         structured application form (that path keeps its own button above).
+         Held back entirely while the roster is still loading: isMember()
+         defaults false until the first roster event arrives, so rendering
+         join affordances before then would flash them at an actual member. -->
     {#if isModerated && activeUser && !isRosterMember && !getCommunityWideFormRef?.()}
       <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
-        {#if requestSent}
+        {#if isRosterLoading}
+          <span class="loading loading-xs loading-spinner text-base-content/40"></span>
+        {:else if requestSent}
           <span class="text-sm text-base-content/60">{m.community_join_pending()}</span>
         {:else}
           <div class="flex flex-col items-end gap-1">
@@ -287,6 +299,7 @@
                   type="text"
                   bind:value={inviteCode}
                   placeholder={m.community_join_invite_placeholder()}
+                  aria-label={m.community_join_invite_placeholder()}
                   class="input-bordered input input-xs w-20"
                 />
                 <button

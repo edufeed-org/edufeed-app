@@ -46,6 +46,7 @@ const holders = vi.hoisted(() => ({
   activeUser: /** @type {any} */ (null),
   rosterPointer: /** @type {any} */ (null),
   isMember: false,
+  isRosterLoading: false,
   refresh: vi.fn(),
   metadataByKey: /** @type {Record<string, any>} */ ({})
 }));
@@ -62,7 +63,7 @@ vi.mock('$lib/groups/root-roster.svelte.js', () => ({
     refresh: holders.refresh,
     members: new Set(),
     admins: [],
-    isLoading: false,
+    isLoading: holders.isRosterLoading,
     isMember: () => holders.isMember,
     rolesOf: () => []
   })
@@ -166,6 +167,9 @@ describe('CommunityProfileHero — community type', () => {
   });
 });
 
+const ROOT_KEY = /** @type {string} */ (channelKey(ROOT_POINTER));
+const OPEN_ROOT_METADATA = { kind: 39000, tags: [['d', ROOT_ID]] };
+
 describe('CommunityProfileHero — moderated join lane', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -173,7 +177,11 @@ describe('CommunityProfileHero — moderated join lane', () => {
     holders.activeUser = USER;
     holders.rosterPointer = ROOT_POINTER;
     holders.isMember = false;
-    holders.metadataByKey = {};
+    holders.isRosterLoading = false;
+    // Default: root 39000 has already arrived and is NOT closed — most tests
+    // below exercise the non-loading, non-closed steady state. Tests for the
+    // loading/unloaded/closed edges override this explicitly.
+    holders.metadataByKey = { [ROOT_KEY]: OPEN_ROOT_METADATA };
     formRefHolder.value = null;
   });
 
@@ -203,12 +211,30 @@ describe('CommunityProfileHero — moderated join lane', () => {
   });
 
   it('non-member, root group closed: hides the bare Join button but keeps the invite-code affordance', () => {
-    const key = /** @type {string} */ (channelKey(ROOT_POINTER));
-    holders.metadataByKey = { [key]: { kind: 39000, tags: [['d', ROOT_ID], ['closed']] } };
+    holders.metadataByKey = {
+      [ROOT_KEY]: { kind: 39000, tags: [['d', ROOT_ID], ['closed']] }
+    };
     renderModerated();
 
     expect(screen.queryByText('Join')).toBeNull();
     expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
+  });
+
+  it('root 39000 not yet loaded (empty byKey): counts as closed — invite-code only, no bare Join', () => {
+    holders.metadataByKey = {};
+    renderModerated();
+
+    expect(screen.queryByText('Join')).toBeNull();
+    expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
+  });
+
+  it('roster still loading: renders no join affordances at all (not even invite-code)', () => {
+    holders.isRosterLoading = true;
+    renderModerated();
+
+    expect(screen.queryByText('Join')).toBeNull();
+    expect(screen.queryByText('Redeem invite code')).toBeNull();
+    expect(screen.queryByText('Member')).toBeNull();
   });
 
   it('anonymous: no moderated join affordances at all', () => {
@@ -226,7 +252,7 @@ describe('CommunityProfileHero — moderated join lane', () => {
     renderModerated();
 
     await fireEvent.click(screen.getByText('Redeem invite code'));
-    const input = screen.getByPlaceholderText('Code');
+    const input = screen.getByLabelText('Code');
     await fireEvent.input(input, { target: { value: 'sekrit' } });
     await fireEvent.click(screen.getByText('Redeem'));
 
