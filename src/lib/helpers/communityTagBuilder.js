@@ -13,6 +13,7 @@
  * @property {string[]} relays - Per-section relays (old-spec only)
  * @property {string} [formRef] - Form template coordinate (new-spec: gates section when set)
  * @property {string} [formRefRelay] - Relay hint for the preferred-form a-tag
+ * @property {{tier: 'all'}|{tier: 'members'}|{tier: 'role', role: string}} [access] - Publish tier (new-spec; omitted or 'all' → open)
  */
 
 /**
@@ -70,7 +71,8 @@ export function createDefaultContentTypes(enabledKeys = []) {
       enabled: enabledKeys.includes(key),
       badges: { read: null, write: null },
       relays: [],
-      formRef: ''
+      formRef: '',
+      access: { tier: 'all' }
     };
   }
   return result;
@@ -152,6 +154,13 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
       for (const k of kinds) {
         tags.push(['k', k]);
       }
+    }
+
+    // Publish tier per communikey-groups NIP draft (new-spec only)
+    if (isNewSpec && ct.access && ct.access.tier !== 'all') {
+      tags.push(
+        ct.access.tier === 'members' ? ['access', 'members'] : ['access', 'role', ct.access.role]
+      );
     }
 
     if (isNewSpec && ct.formRef) {

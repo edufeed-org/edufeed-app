@@ -1,6 +1,9 @@
 /** @vitest-environment node */
 import { describe, test, expect } from 'vitest';
-import { buildCommunityDefinitionTags } from '$lib/helpers/communityTagBuilder.js';
+import {
+  buildCommunityDefinitionTags,
+  createDefaultContentTypes
+} from '$lib/helpers/communityTagBuilder.js';
 
 describe('buildCommunityDefinitionTags', () => {
   const baseCommunityData = {
@@ -240,6 +243,54 @@ describe('buildCommunityDefinitionTags', () => {
       const rTags = tags.filter((t) => t[0] === 'r' && t[2] === 'content');
       expect(rTags).toHaveLength(1);
       expect(rTags[0][1]).toBe('wss://content-relay.example.com');
+    });
+  });
+
+  describe('access tier emission', () => {
+    const data = (access) => ({
+      relays: [],
+      blossomServers: [],
+      location: '',
+      description: '',
+      contentTypes: {
+        learning: {
+          name: 'Learning',
+          enabled: true,
+          badges: { read: null, write: null },
+          relays: [],
+          formRef: '',
+          access
+        }
+      }
+    });
+    const PK = 'a'.repeat(64);
+
+    test('emits ["access","members"] inside the section (new-spec only)', () => {
+      const tags = buildCommunityDefinitionTags(data({ tier: 'members' }), { communityPubkey: PK });
+      const ci = tags.findIndex((t) => t[0] === 'content' && t[1] === 'Learning');
+      const section = tags.slice(ci + 1);
+      expect(section).toContainEqual(['access', 'members']);
+    });
+
+    test('emits ["access","role",<name>]', () => {
+      const tags = buildCommunityDefinitionTags(data({ tier: 'role', role: 'lehrkraft' }), {
+        communityPubkey: PK
+      });
+      expect(tags).toContainEqual(['access', 'role', 'lehrkraft']);
+    });
+
+    test('emits nothing for tier "all", missing access, or old-spec mode', () => {
+      const all = buildCommunityDefinitionTags(data({ tier: 'all' }), { communityPubkey: PK });
+      expect(all.some((t) => t[0] === 'access')).toBe(false);
+      const missing = buildCommunityDefinitionTags(data(undefined), { communityPubkey: PK });
+      expect(missing.some((t) => t[0] === 'access')).toBe(false);
+      const oldSpec = buildCommunityDefinitionTags(data({ tier: 'members' }), {});
+      expect(oldSpec.some((t) => t[0] === 'access')).toBe(false);
+    });
+
+    test('createDefaultContentTypes seeds access tier "all"', () => {
+      const cts = createDefaultContentTypes(['learning']);
+      expect(cts.learning.access).toEqual({ tier: 'all' });
     });
   });
 });

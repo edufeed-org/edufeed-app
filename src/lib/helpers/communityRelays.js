@@ -16,6 +16,7 @@
  * @property {string|null} profileListRelay - Relay hint for the profile list (new spec)
  * @property {string|null} formRef - Preferred form address: "30168:pubkey:d-tag" (form-driven authoring)
  * @property {string|null} formRefRelay - Relay hint for the preferred form
+ * @property {{tier: 'all'}|{tier: 'members'}|{tier: 'role', role: string}} access - Publish tier (communikey-groups NIP draft); 'all' when absent
  */
 
 /**
@@ -42,6 +43,19 @@ export function hasStrictContentMarker(event) {
   return !!event?.tags?.some(
     (/** @type {string[]} */ t) => t[0] === 'strict' && t[1] === 'content'
   );
+}
+
+/**
+ * Whether a content section restricts who may publish — via a legacy
+ * profile list OR a communikey-groups access tier. The one predicate every
+ * gating consumer must use (tabs, filtering, member aggregation).
+ * @param {Pick<ContentTypeConfig, 'profileList' | 'access'> | null | undefined} section
+ * @returns {boolean}
+ */
+export function sectionIsGated(section) {
+  if (!section) return false;
+  if (section.profileList) return true;
+  return !!section.access && section.access.tier !== 'all';
 }
 
 /**
@@ -75,7 +89,8 @@ export function parseCommunityContentTypes(event) {
         profileList: null,
         profileListRelay: null,
         formRef: null,
-        formRefRelay: null
+        formRefRelay: null,
+        access: { tier: 'all' }
       };
     } else if (key === 'k' && currentContentType) {
       const kind = parseInt(tag[1], 10);
@@ -86,6 +101,15 @@ export function parseCommunityContentTypes(event) {
       currentContentType.exclusive = tag[1] === 'true';
     } else if (key === 'role' && currentContentType) {
       currentContentType.roles = tag.slice(1);
+    } else if (key === 'access' && currentContentType) {
+      // First valid access tag per section wins; malformed → stays 'all' (fail open).
+      if (currentContentType.access.tier === 'all') {
+        if (tag[1] === 'members') {
+          currentContentType.access = { tier: 'members' };
+        } else if (tag[1] === 'role' && typeof tag[2] === 'string' && tag[2].trim()) {
+          currentContentType.access = { tier: 'role', role: tag[2].trim() };
+        }
+      }
     } else if (key === 'a' && currentContentType && tag[1]?.startsWith('30009:')) {
       const qualifier = tag[2] || 'write';
       if (qualifier === 'read') {
