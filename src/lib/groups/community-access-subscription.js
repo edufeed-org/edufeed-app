@@ -45,6 +45,20 @@ export function subscribeToCommunityAccess(communityEvent, relays, onUpdate) {
   const emit = () =>
     onUpdate(buildRosterAccess(communityEvent, rosterView(pointer, membersByKey, adminsByKey)));
 
+  // A relay that has finished speaking — EOSE with no roster for this
+  // pointer, or the pool's own request timeout — must resolve the pointer
+  // to non-member rather than leave buildRosterAccess().isLoading (and thus
+  // the publish gate) stuck true forever. Only fills the key if still
+  // undefined: must not clobber a roster `next` already delivered this
+  // round. Wired to BOTH `complete` and `error` — see
+  // channel-rosters.svelte.js's resolveEmpty comment for why applesauce's
+  // pool.relay().request() can end either way.
+  const resolveEmpty = () => {
+    if (!key) return;
+    membersByKey = { ...membersByKey, [key]: membersByKey[key] ?? new Set() };
+    emit();
+  };
+
   let sub = { unsubscribe: () => {} };
   try {
     sub = pool
@@ -65,9 +79,12 @@ export function subscribeToCommunityAccess(communityEvent, relays, onUpdate) {
           }
           emit();
         },
+        complete: resolveEmpty,
         // A dead group relay must not break the whole dashboard feed —
-        // parity with the legacy path, which also never errors the caller.
-        error: () => {}
+        // parity with the legacy path, which also never errors the caller —
+        // but it must also not leave the gate loading forever; see
+        // resolveEmpty above.
+        error: resolveEmpty
       });
   } catch {
     // malformed relay URL — leave access in its loading state

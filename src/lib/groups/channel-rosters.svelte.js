@@ -133,6 +133,30 @@ export function useChannelRosters(getPointers) {
     const timer = setTimeout(() => {
       for (const [relay, ids] of requests) {
         try {
+          // A relay that has finished speaking — EOSE with no roster for
+          // some requested id, or the pool's own request timeout — must
+          // resolve that id to non-member rather than leave rosterView()
+          // reporting isLoading forever. Only fill keys still undefined:
+          // this must never clobber a roster a previous round (or this
+          // same round's `next`) already delivered.
+          //
+          // Wired to BOTH `complete` and `error`: applesauce's
+          // pool.relay().request() completes on EOSE (including an EOSE
+          // with zero matching events), but a truly silent/unresponsive
+          // relay instead ERRORS — its internal `timeout({first: ms})` has
+          // no `with:` fallback, so rxjs's default timeout behavior
+          // (throw) applies when nothing arrives within the window at all
+          // (see applesauce-relay's relay.js `request()`). Both endings
+          // must resolve-empty the same requested ids.
+          const resolveEmpty = () => {
+            for (const id of ids) {
+              const rosterKey = channelKey({ id, relay });
+              if (!rosterKey) continue;
+              // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain data inside a $state.raw record, never mutated in place
+              collectedMembers[rosterKey] = collectedMembers[rosterKey] ?? new Set();
+            }
+            membersByKey = { ...collectedMembers };
+          };
           const sub = pool
             .relay(relay)
             .request(
@@ -155,9 +179,11 @@ export function useChannelRosters(getPointers) {
                   adminsByKey = { ...collectedAdmins };
                 }
               },
+              complete: resolveEmpty,
               // One unreachable or auth-walled relay must not blind the rest
-              // of the community's channels to their rosters.
-              error: () => {}
+              // of the community's channels to their rosters — but it must
+              // also not leave them spinning forever; see resolveEmpty above.
+              error: resolveEmpty
             });
           open.push(sub);
         } catch (err) {
