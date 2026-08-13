@@ -292,8 +292,17 @@ surfaced by Plan 4's own review and Task 9's verification pass:
 - **Handoff UX debt, ride-along items not yet touched:** #5 attach-modal
   desync, #6 label unification, #7 parser unification, #8 DRY dedupe, #10
   navigate into a freshly-created channel, #11 area-members polish.
-- **`manager` reactivity signal** — outstanding from the handoff, not
-  resolved by Plan 4.
+- **`manager` reactivity signal** — **RESOLVED (Plan 5 Task 11).**
+  `AccountManager` does expose cheap observables (`accounts$`/`active$`,
+  real `BehaviorSubject`s already subscribed elsewhere in
+  `accounts.svelte.js`); bridged into `manager.accountsVersion` — a plain
+  counter property on the already-`$state` `manager` object, so writes to
+  it ARE observed — subscribed once at module init. `community-signer.js`'s
+  `getCommunitySigner`/`isCommunityOwner` do a no-op read of it, so
+  `$derived.by` callers now recompute on a mid-session account switch/
+  import/remove — previously only incidental. See
+  `accounts-version-bridge.test.js` and
+  `community-signer-reactivity.test.svelte.js`.
 - **Plan 4 final review (binding for Plan 5):**
   - **Personen-step PREREQUISITE:** non-owner 39001 reviewers can never reach
     the approvals queue — `SettingsView` gates `MembershipPane` on

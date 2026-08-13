@@ -2,6 +2,8 @@
   import { getContext } from 'svelte';
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { deriveCommunityType } from '$lib/groups/community-membership.js';
+  import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -14,6 +16,23 @@
 
   const getProfiles = useProfileMap(() => memberData.allMembers);
   let profiles = $derived(getProfiles());
+
+  // Moderated communities show role chips sourced from the root-group NIP-29
+  // roster (kind 39001 admins). Rosters are public, so this is visible to
+  // visitors too, same as the rest of the member list — display only, no
+  // management (that lives in GroupMembersModal inside channel views).
+  // useRootRoster wraps a $effect-based hook, so it's called unconditionally
+  // here at component init; open/closed communities just never read it.
+  let isModerated = $derived(deriveCommunityType(communikeyEvent) === 'moderated');
+  const getRootRoster = useRootRoster(() => communikeyEvent);
+
+  /** Role chips for a pubkey in a moderated community (bare admins show 'admin'). */
+  function getRoleChips(/** @type {string} */ pubkey) {
+    if (!isModerated) return [];
+    const admin = getRootRoster().admins.find((a) => a.pubkey === pubkey);
+    if (!admin) return [];
+    return admin.roles.length > 0 ? admin.roles : ['admin'];
+  }
 
   /** Get section names a pubkey belongs to */
   function getSectionsForPubkey(/** @type {string} */ pubkey) {
@@ -56,9 +75,15 @@
               showNpub={false}
               showIcon={false}
             />
-            <span class="absolute -top-2 -right-2 badge badge-sm badge-primary">
-              {m.community_members_owner_badge()}
-            </span>
+            <div class="absolute -top-2 -right-2 flex flex-wrap justify-end gap-1">
+              <span class="badge badge-sm badge-primary">
+                {m.community_members_owner_badge()}
+              </span>
+              {#each getRoleChips(communikeyEvent.pubkey) as role (role)}
+                <span class="badge badge-ghost badge-xs" data-testid="member-role-chip">{role}</span
+                >
+              {/each}
+            </div>
           </div>
         </div>
       </div>
@@ -71,7 +96,7 @@
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each memberData.allMembers as pubkey (pubkey)}
         {@const sections = getSectionsForPubkey(pubkey)}
-        <div class="relative">
+        <div class="relative" data-testid="member-row" data-pubkey={pubkey}>
           <ProfileCard
             {pubkey}
             profile={profiles.get(pubkey)}
@@ -79,12 +104,15 @@
             showNpub={false}
             showIcon={false}
           />
-          <div class="absolute -top-2 -right-2 flex gap-1">
+          <div class="absolute -top-2 -right-2 flex flex-wrap justify-end gap-1">
             {#if isOwner(pubkey)}
               <span class="badge badge-xs badge-primary">{m.community_members_owner_badge()}</span>
             {/if}
             {#each sections as section (section)}
               <span class="badge badge-outline badge-xs">{section}</span>
+            {/each}
+            {#each getRoleChips(pubkey) as role (role)}
+              <span class="badge badge-ghost badge-xs" data-testid="member-role-chip">{role}</span>
             {/each}
           </div>
         </div>

@@ -8,9 +8,37 @@ import * as m from '$lib/paraglide/messages';
  * @typedef {{ name?: string }} AccountMetadata
  */
 
-/* Shared manager (keeps same instance across component mounts) */
-export const manager = $state(new AccountManager());
+/* Shared manager (keeps same instance across component mounts).
+ * Typed with the `accountsVersion` bridge property below folded in, so
+ * assigning/reading it doesn't need an `any` cast at every call site. */
+export const manager = $state(
+  /** @type {AccountManager<any> & { accountsVersion: number }} */ (new AccountManager())
+);
 registerCommonAccountTypes(manager);
+
+/**
+ * Version counter bridged from AccountManager's own `accounts$`/`active$`
+ * (real RxJS `BehaviorSubject`s — cheap, not polling) so code OUTSIDE a
+ * component's `$effect` can still register a reactive dependency on
+ * account-state changes. `manager` is a `$state` object, but `active` is a
+ * getter over the manager's internal fields, not a plain reactive property —
+ * Svelte's proxy on `manager` can't observe writes reaching it that way, so
+ * reading `manager.active`/`manager.getAccountForPubkey(...)` inside a
+ * `$derived` never re-runs on its own (see community-signer.js). Bumping
+ * this counter on every emission gives such callers something they CAN read
+ * to register the dependency, via a no-op `void manager.accountsVersion` read.
+ *
+ * Attached directly to `manager` (rather than a separate module export) so
+ * it rides the SAME `$state` proxy `manager` already is — a plain property
+ * set through that proxy IS observed (unlike AccountManager's own internal
+ * writes to `active`), and every existing call site that already imports
+ * `manager` gets the counter for free, no new import needed. Subscribed
+ * once, here, at module init — `manager` and this counter share the
+ * module's lifetime, so there is nothing to unsubscribe.
+ */
+manager.accountsVersion = 0;
+manager.accounts$.subscribe(() => manager.accountsVersion++);
+manager.active$.subscribe(() => manager.accountsVersion++);
 
 /**
  * How long to wait for a NIP-07 extension to respond before treating the request
