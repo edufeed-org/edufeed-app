@@ -12,9 +12,15 @@
   SettingsView can feed it to AccessTierEditor's roleSuggestions without a
   duplicate roster subscription living there too.
 
-  Rendered by SettingsView only for moderated + owner (see there); this
-  component itself does not re-check ownership beyond isAdmin gating on the
-  roster/action controls.
+  Rendered by SettingsView for any signed-in user on a moderated community
+  (no ownership check there — see there) — this component decides visibility
+  from its own roster: isAdmin (active user in roster.admins ∪ the
+  key-holding owner via isCommunityOwner) gates roster management + the
+  approvals queue, since a 39001 admin's put-user/approve ops are personal-
+  key NIP-29 ops that need no community key. Renders nothing for a signed-in
+  user who is neither. The application-form card is narrower still — isOwner
+  (key-holding owner) alone — because saving/removing an application ref is
+  a 10222 write.
 -->
 <script>
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
@@ -63,9 +69,13 @@
 
   const communitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
 
+  // Key-holding owner: separate from isAdmin below because the
+  // application-form card (10222 writes) is owner-only, while roster
+  // management + approvals are open to any 39001 admin (personal-key
+  // NIP-29 ops, no community key needed).
+  const isOwner = $derived(isCommunityOwner(communityId));
   const isAdmin = $derived(
-    (!!activeUser && roster.admins.some((admin) => admin.pubkey === activeUser.pubkey)) ||
-      isCommunityOwner(communityId)
+    (!!activeUser && roster.admins.some((admin) => admin.pubkey === activeUser.pubkey)) || isOwner
   );
 
   // Union of every admin's roles + the bare 'admin' role, deduped — reported
@@ -257,27 +267,27 @@
   }
 </script>
 
-<div class="card mb-6 bg-base-100 shadow-xl" data-testid="membership-pane">
-  <div class="card-body">
-    <h2 class="card-title">{m.community_membership_pane_title()}</h2>
+{#if isAdmin}
+  <div class="card mb-6 bg-base-100 shadow-xl" data-testid="membership-pane">
+    <div class="card-body">
+      <h2 class="card-title">{m.community_membership_pane_title()}</h2>
 
-    <div class="flex items-center justify-between gap-3">
-      <p class="text-sm text-base-content/70">
-        {m.community_membership_pane_member_count({ count: roster.members.size })}
-      </p>
-      <button
-        class="btn btn-outline btn-sm"
-        data-testid="membership-manage-members"
-        disabled={!roster.pointer}
-        onclick={() => (showMembersModal = true)}
-      >
-        {m.community_membership_pane_manage()}
-      </button>
-    </div>
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-sm text-base-content/70">
+          {m.community_membership_pane_member_count({ count: roster.members.size })}
+        </p>
+        <button
+          class="btn btn-outline btn-sm"
+          data-testid="membership-manage-members"
+          disabled={!roster.pointer}
+          onclick={() => (showMembersModal = true)}
+        >
+          {m.community_membership_pane_manage()}
+        </button>
+      </div>
 
-    <div class="divider"></div>
+      <div class="divider"></div>
 
-    {#if isAdmin}
       <h3 class="text-sm font-bold">{m.community_invite_title()}</h3>
       <p class="text-sm text-base-content/70">{m.community_invite_hint()}</p>
 
@@ -310,76 +320,85 @@
         {/if}
       </div>
 
-      <div class="divider"></div>
-    {/if}
+      <!-- Application-form card (10222 writes) — key-holding owner only,
+           unlike everything else in this pane which is open to any
+           39001 admin (see the isOwner/isAdmin split above). -->
+      {#if isOwner}
+        <div class="divider"></div>
 
-    <h3 class="text-sm font-bold">{m.community_membership_pane_application_title()}</h3>
-    <p class="text-sm text-base-content/70">{m.community_membership_pane_application_lead()}</p>
-    {#if !applicationRef}
-      <p class="text-xs text-base-content/60">{m.community_membership_pane_application_none()}</p>
-    {/if}
+        <h3 class="text-sm font-bold">{m.community_membership_pane_application_title()}</h3>
+        <p class="text-sm text-base-content/70">
+          {m.community_membership_pane_application_lead()}
+        </p>
+        {#if !applicationRef}
+          <p class="text-xs text-base-content/60">
+            {m.community_membership_pane_application_none()}
+          </p>
+        {/if}
 
-    <div class="mt-2 flex flex-wrap items-center gap-2">
-      <select
-        class="select-bordered select select-sm"
-        data-testid="membership-application-select"
-        value={selectedAddress}
-        onchange={(e) => (selectedAddress = /** @type {HTMLSelectElement} */ (e.target).value)}
-      >
-        <option value="">—</option>
-        {#each formOptions as option (option.address)}
-          <option value={option.address}>{option.name}</option>
-        {/each}
-      </select>
-      <button
-        class="btn btn-sm btn-primary"
-        data-testid="membership-application-save"
-        disabled={!selectedAddress || saving}
-        onclick={handleSaveApplication}
-      >
-        {m.community_membership_pane_application_save()}
-      </button>
-      {#if applicationRef}
-        <button
-          class="btn text-error btn-ghost btn-sm"
-          data-testid="membership-application-remove"
-          disabled={saving}
-          onclick={handleRemoveApplication}
-        >
-          {m.community_membership_pane_application_remove()}
-        </button>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            class="select-bordered select select-sm"
+            data-testid="membership-application-select"
+            value={selectedAddress}
+            onchange={(e) => (selectedAddress = /** @type {HTMLSelectElement} */ (e.target).value)}
+          >
+            <option value="">—</option>
+            {#each formOptions as option (option.address)}
+              <option value={option.address}>{option.name}</option>
+            {/each}
+          </select>
+          <button
+            class="btn btn-sm btn-primary"
+            data-testid="membership-application-save"
+            disabled={!selectedAddress || saving}
+            onclick={handleSaveApplication}
+          >
+            {m.community_membership_pane_application_save()}
+          </button>
+          {#if applicationRef}
+            <button
+              class="btn text-error btn-ghost btn-sm"
+              data-testid="membership-application-remove"
+              disabled={saving}
+              onclick={handleRemoveApplication}
+            >
+              {m.community_membership_pane_application_remove()}
+            </button>
+          {/if}
+          <button
+            class="btn btn-outline btn-sm"
+            data-testid="membership-application-create-default"
+            disabled={!communitySigner || saving}
+            onclick={handleCreateDefault}
+          >
+            {m.community_membership_pane_application_create_default()}
+          </button>
+        </div>
       {/if}
-      <button
-        class="btn btn-outline btn-sm"
-        data-testid="membership-application-create-default"
-        disabled={!communitySigner || saving}
-        onclick={handleCreateDefault}
-      >
-        {m.community_membership_pane_application_create_default()}
-      </button>
     </div>
   </div>
-</div>
 
-{#if applicationRef && isAdmin}
-  <ApplicationApprovals
-    {communikeyEvent}
-    {communityId}
-    communityName={getDisplayName(profileEvent) || communityId}
-    {roster}
-  />
-{/if}
+  {#if applicationRef}
+    <ApplicationApprovals
+      {communikeyEvent}
+      {communityId}
+      communityName={getDisplayName(profileEvent) || communityId}
+      {roster}
+    />
+  {/if}
 
-{#if showMembersModal && roster.pointer}
-  <GroupMembersModal
-    pointer={roster.pointer}
-    metadata={{ name: getDisplayName(profileEvent) }}
-    admins={roster.admins}
-    members={roster.members}
-    myPubkey={activeUser?.pubkey}
-    {isAdmin}
-    {roleOptions}
-    onRosterChanged={roster.refresh}
-    onClose={() => (showMembersModal = false)}
-  />
+  {#if showMembersModal && roster.pointer}
+    <GroupMembersModal
+      pointer={roster.pointer}
+      metadata={{ name: getDisplayName(profileEvent) }}
+      admins={roster.admins}
+      members={roster.members}
+      myPubkey={activeUser?.pubkey}
+      {isAdmin}
+      {roleOptions}
+      onRosterChanged={roster.refresh}
+      onClose={() => (showMembersModal = false)}
+    />
+  {/if}
 {/if}

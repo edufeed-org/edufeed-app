@@ -303,11 +303,14 @@
           </div>
         {/if}
 
-        <!-- Mitglieder & Rollen (Task 8) — owner-only, moderated-only root
-             group roster + application form management. Reports its role
-             union upward so the Inhalte & Rechte editor below can suggest
-             the community's actual admin roles. -->
-        {#if isOwner && communityType === 'moderated'}
+        <!-- Mitglieder & Rollen (Task 8) — moderated-only, mounted for any
+             signed-in user (not owner-gated): 39001 admins reach roster
+             management + the approvals queue via personal-key NIP-29 ops
+             with no community key needed, and the pane itself decides what
+             (if anything) to render from its own roster — see there. Reports
+             its role union upward so the Inhalte & Rechte editor below can
+             suggest the community's actual admin roles. -->
+        {#if communityType === 'moderated' && activeUser}
           <MembershipPane
             {communityId}
             {communikeyEvent}

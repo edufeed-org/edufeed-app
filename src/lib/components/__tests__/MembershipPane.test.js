@@ -264,6 +264,53 @@ describe('MembershipPane — roster', () => {
   });
 });
 
+// Task 3 (approvals reachability): the pane's own isAdmin gate — roster
+// admins ∪ the key-holding owner — no longer relies on SettingsView passing
+// an owner-only mount condition. These lock in the three tiers: stranger
+// (nothing), non-owner 39001 admin (roster management + approvals, but not
+// the owner-only application-form card), and the key-holding owner
+// (everything).
+describe('MembershipPane — access gating', () => {
+  it('renders nothing for a signed-in user who is neither a roster admin nor the owner', () => {
+    isCommunityOwner.mockReturnValue(false);
+    activeUserFixture.value = { pubkey: MEMBER, signer: {} };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-pane')).toBeNull();
+    expect(screen.queryByTestId('membership-manage-members')).toBeNull();
+    expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
+  });
+
+  it('shows roster management + approvals for a non-owner 39001 admin, but not the application-form card', async () => {
+    isCommunityOwner.mockReturnValue(false);
+    activeUserFixture.value = { pubkey: ADMIN2, signer: {} };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+
+    expect(screen.getByTestId('membership-pane')).toBeTruthy();
+    expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
+    expect(await screen.findByTestId('stub-application-approvals')).toBeTruthy();
+
+    expect(screen.queryByTestId('membership-application-select')).toBeNull();
+    expect(screen.queryByTestId('membership-application-save')).toBeNull();
+    expect(screen.queryByTestId('membership-application-create-default')).toBeNull();
+  });
+
+  it('shows roster management, invite code, and the application-form card for the key-holding owner', () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    expect(screen.getByTestId('membership-pane')).toBeTruthy();
+    expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
+    expect(screen.getByTestId('membership-invite-create')).toBeTruthy();
+    expect(screen.getByTestId('membership-application-select')).toBeTruthy();
+    expect(screen.getByTestId('membership-application-create-default')).toBeTruthy();
+  });
+});
+
 describe('MembershipPane — application form', () => {
   it('shows the "no form" hint when no application ref is set', () => {
     render(MembershipPane, {

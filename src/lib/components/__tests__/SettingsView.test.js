@@ -66,19 +66,29 @@ vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
-// MembershipPane (Task 8) mounts for owner + moderated scenarios. Stub its
-// roster hook so the effect never opens a real relay socket — its own
-// wiring is covered by MembershipPane.test.js.
+// MembershipPane (Task 8) mounts for any signed-in user on a moderated
+// community (Task 3: no owner gate at this level any more — see there).
+// Stub its roster hook so the effect never opens a real relay socket; its
+// own wiring (including the isAdmin gate) is covered by
+// MembershipPane.test.js. Mutable via rosterFixture so a test can seat the
+// active user as a roster admin and prove MembershipPane actually renders
+// for a non-owner.
+const rosterFixture = vi.hoisted(
+  () =>
+    /** @type {{ value: any }} */ ({
+      value: {
+        pointer: null,
+        refresh: vi.fn(),
+        members: new Set(),
+        admins: [],
+        isLoading: false,
+        isMember: () => false,
+        rolesOf: () => []
+      }
+    })
+);
 vi.mock('$lib/groups/root-roster.svelte.js', () => ({
-  useRootRoster: () => () => ({
-    pointer: null,
-    refresh: vi.fn(),
-    members: new Set(),
-    admins: [],
-    isLoading: false,
-    isMember: () => false,
-    rolesOf: () => []
-  })
+  useRootRoster: () => () => rosterFixture.value
 }));
 
 const { default: SettingsView } = await import(
@@ -103,6 +113,17 @@ const moderatedEvent = communikeyEvent([
   ['group', 'ch2', GROUPS_RELAY, 'Random']
 ]);
 
+// Same moderated community, but owned by someone other than the signed-in
+// user — proves the MembershipPane mount condition no longer requires
+// isOwner (Task 3: approvals reachability).
+const moderatedStrangerEvent = communikeyEvent(
+  [
+    ['membership', 'rootgroup1', GROUPS_RELAY],
+    ['group', 'ch1', GROUPS_RELAY, 'General']
+  ],
+  STRANGER
+);
+
 const openEvent = communikeyEvent([]);
 
 beforeEach(() => {
@@ -113,6 +134,15 @@ beforeEach(() => {
   clearRootGroupMarker.mockClear();
   moderatedAvailable.value = true;
   concordFixture.value = { enabled: false, pointer: null, community: null };
+  rosterFixture.value = {
+    pointer: null,
+    refresh: vi.fn(),
+    members: new Set(),
+    admins: [],
+    isLoading: false,
+    isMember: () => false,
+    rolesOf: () => []
+  };
 });
 
 describe('SettingsView — Community-Typ pane', () => {
@@ -217,5 +247,41 @@ describe('SettingsView — Community-Typ pane', () => {
     await fireEvent.click(screen.getByText('Cancel'));
     expect(screen.queryByTestId('settings-flip-confirm')).toBeNull();
     expect(publishCommunityUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('SettingsView — MembershipPane mount gate (Task 3: approvals reachability)', () => {
+  it('mounts MembershipPane for a signed-in non-owner 39001 admin on a moderated community', async () => {
+    // activeUser (OWNER) holds no key for this community (owned by
+    // STRANGER) but is seated as a root-group admin — the old
+    // `isOwner && moderated` gate would have hidden the pane entirely.
+    rosterFixture.value = {
+      ...rosterFixture.value,
+      admins: [{ pubkey: OWNER, roles: ['admin'] }]
+    };
+    render(SettingsView, {
+      props: { communityId: STRANGER, communikeyEvent: moderatedStrangerEvent, profileEvent }
+    });
+    expect(await screen.findByTestId('membership-pane')).toBeTruthy();
+    expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
+    // Owner-only cards (community key required) stay hidden.
+    expect(screen.queryByTestId('settings-type-card')).toBeNull();
+    expect(screen.queryByTestId('access-tier-editor')).toBeNull();
+  });
+
+  it('renders no MembershipPane content for a signed-in stranger (not a roster admin, not the owner)', async () => {
+    render(SettingsView, {
+      props: { communityId: STRANGER, communikeyEvent: moderatedStrangerEvent, profileEvent }
+    });
+    await screen.findByText('Community Settings'); // page rendered past the spinner
+    expect(screen.queryByTestId('membership-pane')).toBeNull();
+  });
+
+  it('mounts MembershipPane with application-form access for the key-holding owner', async () => {
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
+    });
+    expect(await screen.findByTestId('membership-pane')).toBeTruthy();
+    expect(screen.getByTestId('membership-application-select')).toBeTruthy();
   });
 });
