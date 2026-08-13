@@ -35,6 +35,54 @@ describe('communityWizardSteps', () => {
       'confirm'
     ]);
   });
+
+  // 'people' collapse guarantee — only present for moderated communities,
+  // and only when the type step itself is visible (a stray communityType:
+  // 'moderated' left over from a previous flags-on session must not leak a
+  // 'people' step in once flags go off and the type step disappears).
+  it('never inserts the people step when the type step is hidden, regardless of communityType', () => {
+    expect(
+      communityWizardSteps({
+        useCurrentKeypair: true,
+        typeStepVisible: false,
+        communityType: 'moderated'
+      })
+    ).toEqual(['settings', 'confirm']);
+  });
+
+  it('omits the people step for open and closed communities', () => {
+    expect(
+      communityWizardSteps({
+        useCurrentKeypair: true,
+        typeStepVisible: true,
+        communityType: 'open'
+      })
+    ).toEqual(['type', 'settings', 'confirm']);
+    expect(
+      communityWizardSteps({
+        useCurrentKeypair: true,
+        typeStepVisible: true,
+        communityType: 'closed'
+      })
+    ).toEqual(['type', 'settings', 'confirm']);
+  });
+
+  it('inserts the people step after settings, before confirm, for moderated communities', () => {
+    expect(
+      communityWizardSteps({
+        useCurrentKeypair: true,
+        typeStepVisible: true,
+        communityType: 'moderated'
+      })
+    ).toEqual(['type', 'settings', 'people', 'confirm']);
+    expect(
+      communityWizardSteps({
+        useCurrentKeypair: false,
+        typeStepVisible: true,
+        communityType: 'moderated'
+      })
+    ).toEqual(['profile', 'keys', 'type', 'settings', 'people', 'confirm']);
+  });
 });
 
 describe('applyDefaultAccess / disableAllContentTypes', () => {

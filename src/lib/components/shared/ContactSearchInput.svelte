@@ -24,6 +24,7 @@
    *   onblur?: () => void,
    *   inputClass?: string,
    *   id?: string,
+   *   testid?: string,
    *   exclude?: string[],
    *   showExcluded?: boolean,
    *   acceptPubkeyInput?: boolean,
@@ -40,6 +41,7 @@
     onblur,
     inputClass = '',
     id = undefined,
+    testid = undefined,
     exclude = [],
     showExcluded = false,
     acceptPubkeyInput = false,
@@ -153,6 +155,7 @@
 <div class="relative">
   <input
     {id}
+    data-testid={testid}
     type="text"
     class="input-bordered input w-full {inputClass}"
     {placeholder}

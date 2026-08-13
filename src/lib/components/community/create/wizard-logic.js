@@ -4,13 +4,18 @@
 
 /**
  * Ordered step ids after the keypair-choice screen (screen 0 of the modal).
- * @param {{useCurrentKeypair: boolean, typeStepVisible: boolean}} args
+ * The 'people' step (invite list) only ever appears for moderated
+ * communities, and only when the type step itself is visible — a stray
+ * communityType left over from a previous choice must not leak a 'people'
+ * step in once the type step collapses away (flags off).
+ * @param {{useCurrentKeypair: boolean, typeStepVisible: boolean, communityType?: 'open' | 'moderated' | 'closed'}} args
  * @returns {string[]}
  */
-export function communityWizardSteps({ useCurrentKeypair, typeStepVisible }) {
+export function communityWizardSteps({ useCurrentKeypair, typeStepVisible, communityType }) {
   const identity = useCurrentKeypair ? [] : ['profile', 'keys'];
   const type = typeStepVisible ? ['type'] : [];
-  return [...identity, ...type, 'settings', 'confirm'];
+  const people = typeStepVisible && communityType === 'moderated' ? ['people'] : [];
+  return [...identity, ...type, 'settings', ...people, 'confirm'];
 }
 
 /**

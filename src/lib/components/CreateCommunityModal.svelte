@@ -47,7 +47,10 @@
     writeRootGroupMarker,
     clearRootGroupMarker
   } from '$lib/groups/provision-root-group.js';
+  import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
+  import ContactSearchInput from './shared/ContactSearchInput.svelte';
+  import { showToast } from '$lib/helpers/toast';
 
   let { modalId } = $props();
 
@@ -64,10 +67,18 @@
   let communityType = $state('open');
   /** @type {'all' | 'members'} */
   let defaultAccessTier = $state('members');
+  // Invite list for the wizard's 'people' step (moderated only) — fanned out
+  // to the root group's roster (putUserOn) after the 10222 publishes.
+  // Reassigned immutably on every mutation, per Svelte 5 $state() convention.
+  /** @type {{pubkey: string, role: string}[]} */
+  let invitees = $state([]);
+  const PEOPLE_ROLE_OPTIONS = ['admin'];
   const moderatedAvailable = $derived(moderatedCreationAvailable());
   const closedAvailable = $derived(!!runtimeConfig.concord?.enabled);
   const typeStepVisible = $derived(moderatedAvailable || closedAvailable);
-  const wizardSteps = $derived(communityWizardSteps({ useCurrentKeypair, typeStepVisible }));
+  const wizardSteps = $derived(
+    communityWizardSteps({ useCurrentKeypair, typeStepVisible, communityType })
+  );
   /** @returns {string | null} id of the current step, null on the keypair screen */
   const currentStepId = $derived(currentStep > 0 ? (wizardSteps[currentStep - 1] ?? null) : null);
 
@@ -241,6 +252,7 @@
         };
         communityType = 'open';
         defaultAccessTier = 'members';
+        invitees = [];
         errors = {};
       }
     };
@@ -314,6 +326,8 @@
           return m.create_community_modal_step_type();
         case 'settings':
           return m.create_community_modal_step_community_settings();
+        case 'people':
+          return m.create_community_modal_step_people();
         case 'confirm':
           return m.create_community_modal_step_confirm();
         default:
@@ -361,6 +375,22 @@
     communityType = type;
   }
 
+  /** @param {string} pubkey */
+  function addInvitee(pubkey) {
+    if (invitees.some((i) => i.pubkey === pubkey)) return;
+    invitees = [...invitees, { pubkey, role: '' }];
+  }
+
+  /** @param {string} pubkey */
+  function removeInvitee(pubkey) {
+    invitees = invitees.filter((i) => i.pubkey !== pubkey);
+  }
+
+  /** @param {string} pubkey @param {string} role */
+  function setInviteeRole(pubkey, role) {
+    invitees = invitees.map((i) => (i.pubkey === pubkey ? { ...i, role } : i));
+  }
+
   function selectCurrentKeypair() {
     useCurrentKeypair = true;
     nextStep();
@@ -406,6 +436,11 @@
       // Marker idempotency mirrors the Concord founding marker.
       /** @type {{id: string, relay: string} | null} */
       let rootGroupPointer = null;
+      // Captured here (BEFORE the account switch below, same constraint as
+      // provisioning) so the post-publish invite fan-out signs as the human
+      // who founded the group, not the community keypair.
+      /** @type {{pubkey: string, signer: any} | null} */
+      let humanUser = null;
       if (communityType === 'moderated') {
         const groupsRelay = getGroupsRelays()[0];
         const communityPk = useCurrentKeypair ? manager.active?.pubkey : userData.publicKey;
@@ -413,6 +448,7 @@
         if (!activeAccount || !communityPk) {
           throw new Error(m.create_community_modal_error_no_account());
         }
+        humanUser = { pubkey: activeAccount.pubkey, signer: activeAccount.signer };
         try {
           // Name fallback chain: userData.name (set only in the new-keypair
           // flow — empty for "use current keypair") → the active account's
@@ -526,6 +562,25 @@
         eventStore.add(signedCommunityEvent);
         if (concordAreaId) clearFoundingMarker(account.pubkey);
         if (rootGroupPointer) clearRootGroupMarker(account.pubkey);
+
+        // Invite fan-out (moderated only): put every invitee on the root
+        // group's roster. Sequential, tolerant of per-invitee failure — a
+        // relay hiccup on one invite must never undo the community that was
+        // just successfully created. humanUser was captured BEFORE the
+        // account switch above, so this signs as the human who founded the
+        // group, not the (possibly brand-new) community keypair.
+        if (rootGroupPointer && humanUser && invitees.length > 0) {
+          const pointer = rootGroupPointer;
+          const { failed } = await fanOut(
+            invitees,
+            (i) => i.pubkey,
+            (i) =>
+              putUserOn(pointer, i.pubkey, i.role ? [i.role] : [], /** @type {any} */ (humanUser))
+          );
+          if (failed.length > 0) {
+            showToast(m.community_people_invite_failed({ count: failed.length }), 'warning');
+          }
+        }
       }
 
       // Join the community using follow set (kind 30000)
@@ -586,6 +641,7 @@
     };
     communityType = 'open';
     defaultAccessTier = 'members';
+    invitees = [];
     errors = {};
   }
 </script>
@@ -882,6 +938,58 @@
             </div>
           </div>
         </div>
+      {:else if currentStepId === 'people'}
+        <!-- Invite list (moderated only) — skippable: the root group is
+             fully usable with zero invitees, people can be invited later
+             from Einstellungen. -->
+        <div class="space-y-4" data-testid="wizard-people-step">
+          <h2 class="mb-2 text-xl font-semibold">{m.create_community_modal_step_people()}</h2>
+          <p class="text-sm text-base-content/70">{m.community_people_lead()}</p>
+
+          <ContactSearchInput
+            acceptPubkeyInput
+            placeholder={m.community_people_add_placeholder()}
+            exclude={invitees.map((i) => i.pubkey)}
+            testid="wizard-people-input"
+            onselect={(/** @type {{ pubkey: string }} */ c) => addInvitee(c.pubkey)}
+            onrawpubkey={(/** @type {string} */ hex) => addInvitee(hex)}
+          />
+
+          {#if invitees.length > 0}
+            <div class="divide-y divide-base-300">
+              {#each invitees as invitee (invitee.pubkey)}
+                <div class="flex flex-wrap items-center gap-2 py-2" data-pubkey={invitee.pubkey}>
+                  <code class="flex-1 truncate text-xs">{hexToNpub(invitee.pubkey)}</code>
+                  <select
+                    class="select-bordered select select-xs"
+                    data-testid="wizard-people-role-{invitee.pubkey}"
+                    value={invitee.role}
+                    onchange={(e) =>
+                      setInviteeRole(
+                        invitee.pubkey,
+                        /** @type {HTMLSelectElement} */ (e.target).value
+                      )}
+                  >
+                    <option value="">{m.community_people_role_placeholder()}</option>
+                    {#each PEOPLE_ROLE_OPTIONS as option (option)}
+                      <option value={option}>{option}</option>
+                    {/each}
+                  </select>
+                  <button
+                    type="button"
+                    class="btn text-error btn-ghost btn-xs"
+                    data-testid="wizard-people-remove-{invitee.pubkey}"
+                    onclick={() => removeInvitee(invitee.pubkey)}
+                  >
+                    {m.groups_members_remove()}
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <p class="text-xs text-base-content/60">{m.community_people_skip_hint()}</p>
+        </div>
       {:else if currentStepId === 'confirm'}
         <!-- Confirmation -->
         <div class="space-y-6">
@@ -984,6 +1092,32 @@
                 {/if}
               </div>
             </div>
+
+            <!-- Invite list summary (moderated only) — reads the same
+                 invitees array createCommunity()'s post-publish fan-out
+                 sends, so it can never disagree with what actually gets
+                 invited. -->
+            {#if communityType === 'moderated'}
+              <div class="card bg-base-200" data-testid="confirm-people-summary">
+                <div class="card-body">
+                  <h3 class="card-title">{m.create_community_modal_step_people()}</h3>
+                  {#if invitees.length === 0}
+                    <p class="text-sm text-base-content/70">{m.community_people_skip_hint()}</p>
+                  {:else}
+                    <ul class="space-y-1 text-sm">
+                      {#each invitees as invitee (invitee.pubkey)}
+                        <li>
+                          <code class="text-xs">{hexToNpub(invitee.pubkey)}</code>
+                          {#if invitee.role}
+                            <span class="badge badge-ghost badge-sm">{invitee.role}</span>
+                          {/if}
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
       {:else}
