@@ -2,8 +2,22 @@
 
 `draft` `optional`
 
-**Status: working draft.** This document is edited alongside the implementation in
-edufeed-app and becomes the published spec once the implementation stabilizes.
+**Status:** implemented end-to-end by edufeed-app across five implementation
+plans (plans 1–5, 2026-08-12/2026-08-13, branch `feat/community-group-pointer`),
+covered by unit and component test suites plus a moderated-lifecycle browser
+E2E run against an in-process NIP-29 mock relay. Ready for external review
+and publication. This document was edited alongside the implementation and
+now describes the shipped data model; drift found during the final
+read-through is called out inline below where it applies.
+
+Note on the E2E fixture: the in-process mock relay used for the
+moderated-lifecycle test clears a channel's kind `39001` admin list on
+`remove-user` (kind `9001`) rather than leaving a stale admin-only entry
+behind. That clearing behavior is the mock's own policy, not part of this
+spec — conforming relays may retain or clear the entry at their discretion,
+and clients MUST NOT assume either behavior when computing the current
+roster/roles.
+
 It extends the Communikey community specification (kind `10222`).
 
 ## Abstract
@@ -72,9 +86,12 @@ Points at a form template (kind `30168`). When present, clients present the form
 as the join flow; the encrypted response (kind `1069`) is addressed (p-tags) to
 the **reviewers**: admins in `39001` whose role carries the `put-user`
 capability, falling back to all admins when roles carry no capability info.
-Approval is executed as a NIP-29 `put-user` (kind `9000`), optionally with a
-role. Without an `application` tag, joining is a bare NIP-29 join request
-(kind `9021`) or an invite code.
+Capability-based reviewer selection is a future refinement — NIP-29 roles as
+implemented today carry no machine-readable capability metadata, so
+edufeed-app's current implementation resolves reviewers as **all** `39001`
+admins, unconditionally. Approval is executed as a NIP-29 `put-user`
+(kind `9000`), optionally with a role. Without an `application` tag, joining
+is a bare NIP-29 join request (kind `9021`) or an invite code.
 
 ### `group` (top-level, channels; moderated only)
 

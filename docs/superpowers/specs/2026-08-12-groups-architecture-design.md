@@ -5,6 +5,97 @@
 **Normative data model:** `docs/nips/communikey-groups.md` (working NIP draft — edited
 during implementation, published as spec once stable; tag tables live THERE, not here)
 
+## Status: COMPLETE (2026-08-13)
+
+All five implementation plans shipped on `feat/community-group-pointer`. The
+three community types (Offen/Moderiert/Geschlossen), roster-based gating, the
+creation wizard's Typ + Personen steps, settings panes (Typ/Inhalte &
+Rechte/Mitglieder & Rollen/Kanäle), join/application flows, and the two-zone
+community sidebar are all built, unit/component-tested, and — for the
+moderated lifecycle — covered by a browser E2E against an in-process NIP-29
+mock relay (`e2e/moderated-community.test.js`). `docs/nips/communikey-groups.md`
+has been promoted from working draft to ready-for-review.
+
+**Commit ranges per plan** (each range is exclusive of its start commit,
+inclusive of its end commit — the end commit is that plan's `docs: implementation
+plan N/…` sync commit):
+
+| Plan | Scope | Range |
+| --- | --- | --- |
+| 1 | Core model & roster gating | `b8c757e5..539ec703` |
+| 2 | Community types at creation | `539ec703..b15495eb` |
+| 3 | Settings, type flips & membership management | `b15495eb..5184b626` |
+| 4 | Joining & visibility | `5184b626..80a737fd` |
+| 5 | Two-zone sidebar, E2E & closing | `80a737fd..cd036e47` |
+
+**Handoff issue map — all 14 resolved or explicitly deferred:**
+
+- **#1 (CONCORD_ENABLED gating NIP-29 too), #2 (Concord v2/Cordn relationship),
+  #3 (no flip-tier UI), #4 (readability-rule disagreement)** — resolved by
+  design decisions carried into plans 2-3: `GROUPS_ENABLED` decouples NIP-29
+  from the Concord beta flag (plan 2, `e179eb3c`); the `concord` pointer tag
+  is engine-agnostic by construction (Cordn-vs-Concord stays a separate,
+  decoupled decision — see memory `cordn-vs-concord-evaluation`); the Typ
+  settings pane ships open↔moderated flips (plan 3, `a6762d2a` +
+  `2b8cc4a7`/`81778d37`); world-readability is ONE rule everywhere (39000
+  `private` absence, capped by NIP-11 `auth_required`), implemented
+  throughout plans 2-5.
+- **#5 attach-modal row/paste desync, #6 label unification, #7 parser
+  unification, #8 attach-candidate DRY dedupe, #10 navigate into a freshly
+  created channel, #11 area-members polish** — resolved in Plan 5 Task 8,
+  `fix(community): handoff UX-debt sweep (#5-#8, #10, #11)`
+  (`09f68f9b..c783946b`).
+- **#9 settings spinner forever without kind-0** — resolved in Plan 3,
+  `feat(community): settings Typ pane with open↔moderated flips (+ kind-0
+  spinner fix)` (`a6762d2a`).
+- **#12 owner-gating misses separate-keypair communities** — resolved in
+  Plan 3, `fix(community): unify owner gating on key-holding
+  (getCommunitySigner)` (`1cd7b095`).
+- **#13 (stored 10009 slash-variant twins heal only on next list rewrite)** —
+  explicitly deferred housekeeping: harmless (the rail already dedupes),
+  self-heals lazily, no plan touched it.
+- **#14 (enforced-relay read-side filtering, kind-30222 read removal)** —
+  explicitly deferred pre-existing protocol work, unchanged by this series
+  (see "Legacy" in the NIP draft and the Communikey Protocol section of
+  `CLAUDE.md`).
+
+**Deliberately deferred (recorded, no further plan):**
+
+- NIP-29 unread wiring in the sidebar/community rows (Plan 5's own scope
+  decision — channel unread dots for Concord rows shipped, NIP-29 rows did
+  not).
+- `PrivateChannelsView`'s channel-row-builder instance staying separate from
+  the sidebar's (Plan 5 Task 7 instantiates its own `buildChannelRows` in the
+  layout rather than sharing PrivateChannelsView's — noted as "known
+  duplication for a future pass" in the task's own scope).
+- Enforced-relay read-side content filtering (client trusting enforced relays
+  instead of author-filtering client-side) — pre-existing deferred item,
+  handoff #14.
+- Kind-30222 read removal — pre-existing deferred item, handoff #14.
+- Kind-9009 (`create-invite`) support on production `GROUPS_RELAYS` — a
+  deployment/operational concern, not a code gap: Plan 4 Task 9 measured
+  `wss://groups.0xchat.com` rejecting 9009 outright
+  (`blocked: received event kind 9009 not allowed`); the in-app invite-code
+  UI and join-with-code path are built and pass against Plan 5's own mock
+  relay, but deployments needing working invite-code joins must verify 9009
+  support on their own `GROUPS_RELAYS` (documented in the Plan 4 shipping
+  notes below).
+- Armada-style discoverable invite links for Geschlossen communities (expiry,
+  label, "share to discovery" toggle) — recorded future feature, out of
+  scope for this series (see "Future features" below and the NIP draft's
+  matching section).
+- The Plan 5 mock relay's 39001-clearing-on-remove-user fidelity — the mock
+  clears a channel's admin list on `remove-user` (9001); real relays may or
+  may not. Documented as relay policy, not spec, in
+  `docs/nips/communikey-groups.md`'s Status note (Plan 5 Task 9 minor,
+  closed by documentation rather than code).
+- `MembersView`'s full-roster merge for role-tiered sections — Plan 5 Task 11
+  added role chips to member rows (moderated communities show each member's
+  roles), but `getMembers` still returns the FULL roster rather than just
+  role-holders for role-gated sections; the conscious UX decision on whether
+  role-tiered sections should list only role-holders remains open (carried
+  from Plan 3 item 7, not resolved by Plan 5).
+
 ## Problem
 
 The app carries three community/group standards — open Communikey communities
@@ -267,32 +358,41 @@ support on their own `GROUPS_RELAYS` before relying on this path.
 Carried from the handoff issue map (unresolved through Plan 4) plus items
 surfaced by Plan 4's own review and Task 9's verification pass:
 
-- **Two-zone sidebar IA** — Inhalte zone + Kanäle zone on the community page
-  (design's "one sidebar, two zones" section, not yet built).
-- **Community-card type badges** — needs a kind-10222 loader wired into the
-  card components (discover/directory listings still show no Offen/
-  Moderiert/Geschlossen indicator).
-- **NIP-29 e2e relay decision** — no browser E2E covers the moderated
-  lifecycle; needs either a NIP-29 relay added to the Playwright
-  docker-compose stack or a mock-relay extension that speaks NIP-29
-  moderation kinds. Task 9's scripted live-relay probe covers the protocol
-  path in the interim (see e2e/COVERAGE.md known-gap entry).
-- **Roster live-updates / `isLoading` timeout** — carried from Plan 3 item 6:
-  roster `isLoading` never terminates against a dead/unreachable group relay
-  (no parity with the legacy hook's timeout). Still unfixed after Plan 4.
-- **MembersView role-tiered grouping** — carried from Plan 3 item 7:
-  `getMembers` returns the full roster for role-tiered sections, not just
-  role-holders; needs a conscious UX decision.
-- **MembershipPane isAdmin vs 39001 refinement** — intersects the wizard
-  Personen step (below); admin-check surface needs unification once that
-  step exists.
-- **Wizard Personen step** — the creation wizard's fourth step (invite
-  npubs + role picker + invite code for Moderiert; Concord invites for
-  Geschlossen) per the design's UX section; not yet built.
-- **Handoff UX debt, ride-along items not yet touched:** #5 attach-modal
-  desync, #6 label unification, #7 parser unification, #8 DRY dedupe, #10
-  navigate into a freshly-created channel, #11 area-members polish.
-- **`manager` reactivity signal** — **RESOLVED (Plan 5 Task 11).**
+- **Two-zone sidebar IA** — **DONE (Plan 5 Tasks 6-7,
+  `1b5524f6..09f68f9b`).** Inhalte zone + Kanäle zone on the community page,
+  pure zone-builder + shared tab helper (Task 6) then the desktop UI itself
+  (Task 7).
+- **Community-card type badges** — **DONE (Plan 5 Task 5, `61c72099..1b5524f6`).**
+  `useCommunityType` hook (kind-10222 loader) + `CommunikeyCard` badge.
+- **NIP-29 e2e relay decision** — **DONE (Plan 5 Tasks 9-10,
+  `c783946b..16884f4b`).** In-process mock relay extension
+  (`e2e/nip29-relay.js`, Task 9) speaking NIP-29 moderation kinds, then the
+  moderated-lifecycle + type-flip browser specs (Task 10,
+  `e2e/moderated-community.test.js`).
+- **Roster live-updates / `isLoading` timeout** — **DONE (Plan 5 Task 2,
+  `2d2d754e..677021f3`).** `channel-rosters.svelte.js` now marks a requested
+  key resolved-empty when a relay completes without delivering 39001/39002,
+  terminating `isLoading` against dead/unreachable relays.
+- **MembersView role-tiered grouping** — **PARTIALLY DONE (Plan 5 Task 11,
+  `16884f4b..cd036e47`).** Member rows now show role chips for moderated
+  communities. The underlying UX decision — whether `getMembers` should
+  return only role-holders instead of the full roster for role-gated
+  sections — remains open; see "Deliberately deferred" above
+  ("MembersView full-roster merge").
+- **MembershipPane isAdmin vs 39001 refinement** — **DONE (Plan 5 Task 3,
+  `677021f3..ddbfb73c`).** 39001 admins now reach roster management and
+  approvals without holding the community key; the pane's `isAdmin`
+  derivation unifies roster admins ∪ key-holding owner.
+- **Wizard Personen step** — **DONE (Plan 5 Task 4, `ddbfb73c..61c72099`).**
+  Invite list + role picker for Moderiert, sequential root-group put-user
+  fan-out after the 10222 publish.
+- **Handoff UX debt, ride-along items not yet touched:** **DONE (Plan 5
+  Task 8, `09f68f9b..c783946b`).** #5 attach-modal desync, #6 label
+  unification, #7 parser unification, #8 DRY dedupe, #10 navigate into a
+  freshly-created channel, #11 area-members polish — all six shipped in one
+  commit.
+- **`manager` reactivity signal** — **RESOLVED (Plan 5 Task 11,
+  `16884f4b..cd036e47`).**
   `AccountManager` does expose cheap observables (`accounts$`/`active$`,
   real `BehaviorSubject`s already subscribed elsewhere in
   `accounts.svelte.js`), so a bridge was implemented — but the first cut
@@ -316,7 +416,8 @@ surfaced by Plan 4's own review and Task 9's verification pass:
   reactivity.test.svelte.js` calls the real, public `manager.addAccount(...)`
   and asserts a `$derived.by(() => isCommunityOwner(pk))` flips from
   `false` to `true`.
-- **Plan 4 final review (binding for Plan 5):**
+- **Plan 4 final review (binding for Plan 5):** **all four items DONE
+  (Plan 5 Tasks 1 and 3, `e3f8f42e..2d2d754e` and `677021f3..ddbfb73c`).**
   - **Personen-step PREREQUISITE:** non-owner 39001 reviewers can never reach
     the approvals queue — `SettingsView` gates `MembershipPane` on
     `isOwner` (key-holding), so a second admin's per-reviewer application
@@ -337,6 +438,7 @@ surfaced by Plan 4's own review and Task 9's verification pass:
     dead-end alert, destroying typed input — render them above the form
     instead.
 - **Task 9 ledger (found during this plan's final verification pass):**
+  **all six items DONE (Plan 5 Task 1, `e3f8f42e..2d2d754e`).**
   - `root-roster.svelte.js`'s loading state is the same dead-relay-`isLoading`
     gap as the item above, restated because Task 9 re-confirmed it live.
   - `ApplicationApprovals.svelte`'s `loadedExtraRelays` `SvelteSet` is

@@ -3,7 +3,11 @@
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
 **Last updated:** 2026-08-13
-**Total tests:** 320
+**Total tests:** 323 (43 spec files — via `pnpm exec playwright test --list`,
+which is the authoritative count Playwright itself uses; the per-file counts
+in the Quick Summary table below are maintained by hand and may drift from
+this total by a file or two between updates — `rail-layout-sync.test.js`
+(1 test) is not yet listed as its own row)
 
 ## Quick Summary
 
