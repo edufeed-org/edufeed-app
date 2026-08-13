@@ -3,7 +3,7 @@
 // A community is EXTENDED by one protected area, and each of its channels is a
 // standalone NIP-29 group. The community event carries only the GROUPING — one
 // pointer per channel; the access rules stay on the relay, in each group's own
-// kind:39000. See PLANS/EDUFEED_APP_GRUPPEN_MERGE.md, Entwurf (c).
+// kind:39000. See docs/superpowers/specs/2026-08-12-groups-architecture-design.md, Entwurf (c).
 //
 // Deliberately plural, unlike the concord pointer (src/lib/concord/pointer.js),
 // which is singular by design: a community has ONE private area but MANY

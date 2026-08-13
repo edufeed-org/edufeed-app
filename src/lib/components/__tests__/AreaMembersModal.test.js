@@ -101,6 +101,9 @@ vi.mock('$lib/paraglide/messages', () => ({
     `Added to ${count} channels`,
   area_members_fanout_partial: (/** @type {{failed: number, total: number}} */ { failed, total }) =>
     `${failed} of ${total} channels refused — see the badges`,
+  area_members_fanout_partial_removed: (
+    /** @type {{failed: number, total: number, names: string}} */ { failed, total, names }
+  ) => `${failed} of ${total} channels refused to remove — ${names}`,
   area_members_removed: (/** @type {{count: number}} */ { count }) =>
     `Removed from ${count} channels`
 }));
@@ -268,6 +271,76 @@ describe('AreaMembersModal add member', () => {
     } finally {
       process.off('unhandledRejection', unhandled);
     }
+  });
+});
+
+describe('AreaMembersModal remove (handoff #11a/#11b)', () => {
+  it('removing a row hides its repair prompt even though the deviation data is unchanged (no contradictory repair)', async () => {
+    // MEMBER_B is present in chan-a (removeRow's only target) and already
+    // missing from chan-b — a pre-existing deviation that would show the
+    // repair button under the old rule. This test never mutates rosterState
+    // after the click (the mock has no real relay round-trip), so the
+    // ONLY thing that can hide the button is the removal itself being
+    // remembered — not a refreshed roster.
+    rosterState.membersByKey = {
+      [KEY_A]: new Set([ADMIN, MEMBER_B]),
+      [KEY_B]: new Set([ADMIN])
+    };
+    rosterState.adminsByKey = {
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_B]: [{ pubkey: ADMIN, roles: ['admin'] }]
+    };
+    const { container } = renderModal();
+
+    // Before removing: the pre-existing deviation offers the (soon to be
+    // contradictory) repair prompt.
+    expect(
+      container.querySelector(`[data-testid="area-member-repair"][data-pubkey="${MEMBER_B}"]`)
+    ).not.toBeNull();
+
+    const removeBtn = container.querySelector(
+      `[data-testid="area-member-remove"][data-pubkey="${MEMBER_B}"]`
+    );
+    expect(removeBtn).not.toBeNull();
+    await fireEvent.click(/** @type {Element} */ (removeBtn));
+    await waitFor(() => expect(buildRemoveUserTemplate).toHaveBeenCalledWith('chan-a', MEMBER_B));
+
+    await waitFor(() =>
+      expect(
+        container.querySelector(`[data-testid="area-member-repair"][data-pubkey="${MEMBER_B}"]`)
+      ).toBeNull()
+    );
+  });
+
+  it('a rejected removal names the refusing channels in the toast (parity with add, which points at badges instead)', async () => {
+    rosterState.membersByKey = {
+      [KEY_A]: new Set([ADMIN, MEMBER_A]),
+      [KEY_B]: new Set([ADMIN, MEMBER_A])
+    };
+    rosterState.adminsByKey = {
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_B]: [{ pubkey: ADMIN, roles: ['admin'] }]
+    };
+    // chan-b always refuses the removal (initial attempt AND the retry).
+    publishToGroupRelay.mockImplementation((_relayConn, template) => {
+      if (template.__sentinel === 'remove' && template.groupId === 'chan-b') {
+        return Promise.reject(new Error('relay refused'));
+      }
+      return Promise.resolve({ id: 'signed' });
+    });
+    const { container } = renderModal();
+
+    const removeBtn = container.querySelector(
+      `[data-testid="area-member-remove"][data-pubkey="${MEMBER_A}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (removeBtn));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        '1 of 2 channels refused to remove — Announcements',
+        'warning'
+      )
+    );
   });
 });
 

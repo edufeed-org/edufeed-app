@@ -249,6 +249,33 @@ describe('AreaAttachModal — unified picker', () => {
     expect(callArgs[0].pointer.id).toBe('book');
   });
 
+  it('paste path: a preview arriving clears a picked row so the target stays unambiguous (vice versa of the row-click clear)', async () => {
+    myGroups.value = [{ id: 'book', relay: 'wss://g.example/' }];
+    channelMeta.value = { byKey: { 'book@wss://g.example/': meta39000([['private']]) } };
+    previewResult.value = { name: 'Pasted', picture: null, worldReadable: true };
+    render(AreaAttachModal, { props: PROPS });
+
+    // Pick the row first — it shows selected (checkmark visible).
+    const row = screen.getByTestId('attach-candidate');
+    await fireEvent.click(row);
+    expect(row.textContent).toContain('✓');
+
+    // Now paste an address that resolves to a preview — the row selection
+    // must clear, exactly like picking a row clears a pasted preview.
+    await fireEvent.click(screen.getByTestId('attach-paste-toggle'));
+    await fireEvent.input(screen.getByTestId('attach-paste-input'), {
+      target: { value: "https://g.example'other" }
+    });
+    await waitFor(() => expect(screen.getByTestId('attach-preview')).toBeTruthy());
+    expect(row.textContent).not.toContain('✓');
+
+    // Confirming now attaches the pasted target, not the previously-picked row.
+    await fireEvent.click(screen.getByTestId('attach-confirm'));
+    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledOnce());
+    const callArgs = /** @type {any[]} */ (attachGroupChannel.mock.calls[0]);
+    expect(callArgs[0].pointer.id).toBe('other');
+  });
+
   it('resets the access choice to invited whenever the selected target changes', async () => {
     myGroups.value = [
       { id: 'book', relay: 'wss://g.example/' },

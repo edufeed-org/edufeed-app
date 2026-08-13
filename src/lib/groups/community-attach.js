@@ -24,7 +24,7 @@ import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
  *
  * A community is extended by EXACTLY ONE protected area — a Concord area or a
  * set of NIP-29 channels, never both (laoc 2026-08-05; see
- * PLANS/EDUFEED_APP_GRUPPEN_MERGE.md §1). Both glyphs mean the same thing in
+ * docs/superpowers/specs/2026-08-12-groups-architecture-design.md §1). Both glyphs mean the same thing in
  * either world only because the line above the channel list says who
  * "everyone" is — and a community carrying both would have no such line.
  *

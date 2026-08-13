@@ -12,8 +12,9 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
+import { groupHref } from '$lib/groups/groups.js';
 
 // Real signature: the page pipes the relay response through the REAL
 // applesauce EventStore, which drops unverifiable events — a fake would
@@ -71,6 +72,7 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 import Page from '../+page.svelte';
+import { goto } from '$app/navigation';
 
 describe('/groups page', () => {
   it('renders the public groups of my kind-10009 list', async () => {
@@ -84,5 +86,22 @@ describe('/groups page', () => {
     expect(screen.getByText('groups.hzrd149.com')).toBeTruthy();
     // the fetch went to the configured fallback relays
     expect(groupCalls).toContainEqual(['wss://fallback.example.com']);
+  });
+
+  // Handoff #7: the join field used to require strict `host'id` (parseGroupInput)
+  // while the attach modal already accepted `https://host'id` via the forgiving
+  // parseGroupAddress — unify on the forgiving parser here too.
+  it('accepts a pasted https:// group URL in the join field, same as the attach modal', async () => {
+    render(Page);
+    await waitFor(() => expect(screen.getByText('beechat')).toBeTruthy());
+
+    await fireEvent.input(screen.getByTestId('group-join-input'), {
+      target: { value: "https://groups.example.com'newroom" }
+    });
+    await fireEvent.click(screen.getByText('Open'));
+
+    expect(goto).toHaveBeenCalledWith(
+      groupHref({ id: 'newroom', relay: 'wss://groups.example.com/' })
+    );
   });
 });

@@ -40,6 +40,62 @@ export function linkedChannelKeys(communikeyEvents) {
 }
 
 /**
+ * A single-value `name` tag off an untrusted kind:39000 metadata event.
+ * Whitespace-only counts as absent — a group that writes `["name", "  "]`
+ * has said nothing, and a row must fall back to the id rather than draw
+ * blank. Shared by unlinkedGroups here and groupAttachCandidates
+ * (attach-candidates.js) — was two near-identical private copies.
+ * @param {{tags?: string[][]} | null | undefined} metadata
+ * @returns {string | undefined}
+ */
+export function metadataName(metadata) {
+  return (metadata?.tags ?? []).find((t) => t[0] === 'name' && t[1]?.trim())?.[1]?.trim();
+}
+
+/**
+ * @typedef {{
+ *   key: string,
+ *   name: string,
+ *   level: import('./channel-access.js').ChannelAccessLevel,
+ *   pointer: {id: string, relay: string}
+ * }} GroupCandidateEntry
+ */
+
+/**
+ * The shared shaping behind both unlinkedGroups (sidebar) and
+ * groupAttachCandidates (attach-candidates.js): dedupe by channelKey, drop
+ * excluded and unaddressable pointers, resolve a display name + access level
+ * off `metadataByKey`, sort by the name a reader actually sees. Was two
+ * near-identical loops — this is the part that was identical; each caller
+ * still decides how `level` becomes ITS OWN presentation fields (glyph vs.
+ * category label), which is where the two callers genuinely differ.
+ * @param {{
+ *   groups?: Array<{id: string, relay: string}> | null,
+ *   excludeKeys?: Set<string> | null,
+ *   metadataByKey?: Record<string, {kind?: number, tags?: string[][]}>
+ * }} input
+ * @returns {GroupCandidateEntry[]} sorted by the name a reader actually sees
+ */
+export function groupCandidateEntries({ groups, excludeKeys, metadataByKey = {} }) {
+  /** @type {Map<string, GroupCandidateEntry>} */
+  const byKey = new Map();
+  for (const group of groups ?? []) {
+    const key = channelKey(group);
+    // Unaddressable entries are dropped rather than drawn: a row that cannot
+    // link anywhere is worse than an absent one.
+    if (!key || excludeKeys?.has(key) || byKey.has(key)) continue;
+    const metadata = metadataByKey[key];
+    byKey.set(key, {
+      key,
+      name: metadataName(metadata) || group.id,
+      level: channelAccessLevel(metadata, undefined),
+      pointer: { id: group.id, relay: group.relay }
+    });
+  }
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+}
+
+/**
  * The user's groups that no followed community shows as a channel.
  *
  * `metadataByKey` is the same map the community rail builds
@@ -55,31 +111,17 @@ export function linkedChannelKeys(communikeyEvents) {
  * @returns {UnlinkedGroup[]} sorted by the name a reader actually sees
  */
 export function unlinkedGroups({ groups, linkedKeys, metadataByKey = {} }) {
-  /** @type {Map<string, UnlinkedGroup>} */
-  const byKey = new Map();
-  for (const group of groups ?? []) {
-    const key = channelKey(group);
-    // Unaddressable entries are dropped rather than drawn: a row that cannot
-    // link anywhere is worse than an absent one.
-    if (!key || linkedKeys?.has(key) || byKey.has(key)) continue;
-    const metadata = metadataByKey[key];
-    // Same rule and same glyph as the community rail. No community claims
-    // this group, so there is no access marker to read: the relay's `private`
-    // is the only signal, and its absence is what makes a row world-readable.
-    const glyph = channelGlyph(channelAccessLevel(metadata, undefined));
-    byKey.set(key, {
-      key,
-      name: metadataName(metadata) || group.id,
+  // Same rule and same glyph as the community rail. No community claims
+  // this group, so there is no access marker to read: the relay's `private`
+  // is the only signal, and its absence is what makes a row world-readable.
+  return groupCandidateEntries({ groups, excludeKeys: linkedKeys, metadataByKey }).map((entry) => {
+    const glyph = channelGlyph(entry.level);
+    return {
+      key: entry.key,
+      name: entry.name,
       symbol: glyph.symbol,
       worldReadable: glyph.worldReadable,
-      pointer: { id: group.id, relay: group.relay }
-    });
-  }
-  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
-}
-
-/** @param {{tags?: string[][]} | null | undefined} metadata */
-function metadataName(metadata) {
-  if (!metadata || !Array.isArray(metadata.tags)) return undefined;
-  return metadata.tags.find((t) => t[0] === 'name')?.[1] || undefined;
+      pointer: entry.pointer
+    };
+  });
 }

@@ -104,6 +104,10 @@
       preview = result;
       previewMissing = result === null;
       previewBusy = false;
+      // A resolved preview is an explicit target too — it must not be
+      // shadowed by a leftover row pick (the vice-versa of the row onclick's
+      // `pasteInput = ''` above).
+      if (result) selectedKey = null;
     });
   });
 

@@ -1,15 +1,8 @@
 // Which existing groups can become a channel of THIS community, and what the
 // attach flow needs to know about each. Pure — the reactive plumbing stays in
 // AreaAttachModal.svelte.
-import { linkedChannelKeys } from './unlinked-groups.js';
-import { channelKey } from './community-pointer.js';
-import { channelAccessLevel } from './channel-access.js';
+import { linkedChannelKeys, groupCandidateEntries } from './unlinked-groups.js';
 import { parseGroupInput } from './groups.js';
-
-/** @param {{tags?: string[][]} | undefined} metadata */
-function metadataName(metadata) {
-  return (metadata?.tags ?? []).find((t) => t[0] === 'name' && t[1]?.trim())?.[1]?.trim() ?? '';
-}
 
 /**
  * The user's NIP-29 groups that are not yet a channel of THIS community.
@@ -25,22 +18,16 @@ function metadataName(metadata) {
  */
 export function groupAttachCandidates({ groups, communikeyEvent, metadataByKey = {} }) {
   const linked = linkedChannelKeys(communikeyEvent ? [communikeyEvent] : []);
-  /** @type {Map<string, any>} */
-  const byKey = new Map();
-  for (const group of groups ?? []) {
-    const key = channelKey(group);
-    if (!key || linked.has(key) || byKey.has(key)) continue;
-    const metadata = metadataByKey[key];
-    const world = channelAccessLevel(metadata, undefined) === 'world';
-    byKey.set(key, {
-      key,
-      name: metadataName(metadata) || group.id,
-      category: world ? 'world' : 'closed',
+  return groupCandidateEntries({ groups, excludeKeys: linked, metadataByKey }).map((entry) => {
+    const world = entry.level === 'world';
+    return {
+      key: entry.key,
+      name: entry.name,
+      category: /** @type {'closed'|'world'} */ (world ? 'world' : 'closed'),
       worldReadable: world,
-      pointer: { id: group.id, relay: group.relay }
-    });
-  }
-  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+      pointer: entry.pointer
+    };
+  });
 }
 
 /**

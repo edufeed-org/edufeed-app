@@ -45,7 +45,16 @@
 
   const getRosters = useChannelRosters(() => pointers);
 
-  const rows = $derived(areaMemberRows({ pointers, membersByKey: getRosters().membersByKey }));
+  // adminsByKey folded in (handoff #11d): an admin implicitly belongs to
+  // their own channel even without an explicit 39002 entry, so they must
+  // not read as a deviation, and a sync/repair fan-out must not "fix" them.
+  const rows = $derived(
+    areaMemberRows({
+      pointers,
+      membersByKey: getRosters().membersByKey,
+      adminsByKey: getRosters().adminsByKey
+    })
+  );
 
   const getProfiles = useProfileMap(() => rows.map((row) => row.pubkey));
 
@@ -85,11 +94,32 @@
   }
 
   const isAdminSomewhere = $derived(canActOn(pointerKeys));
+
+  // Pubkeys an explicit "Remove" was fired for, this modal session (handoff
+  // #11a). A partial removal leaves the row LOOKING like an ordinary
+  // deviation once the roster refreshes (present in the channels the
+  // removal failed on, absent from the ones it succeeded on) — but offering
+  // "Repair" (individually or via bulk sync) there would fan out put-user
+  // right back into the channels the admin just removed them from, undoing
+  // the very action they took. This set is the only thing standing between
+  // that data shape and the contradictory prompt, since the roster itself
+  // carries no memory of "removed on purpose". $state.raw + full
+  // reassignment (Set, per the project's $state.raw rule for Set/Map — see
+  // CLAUDE.md).
+  /** @type {Set<string>} */
+  let recentlyRemoved = $state.raw(new Set());
+
+  /** @param {{pubkey: string, missingKeys: string[]}} row */
+  function rowOffersRepair(row) {
+    return row.missingKeys.length > 0 && !recentlyRemoved.has(row.pubkey);
+  }
+
   // Bulk "Check members" affordance: visible once at least one row has a
   // deviation the acting user is admin enough to fix (union over every
-  // row's missingKeys, not just any one row).
+  // row's missingKeys, not just any one row) — excluding rows an explicit
+  // remove was just fired for, same reasoning as rowOffersRepair.
   const canSyncAny = $derived(
-    rows.some((row) => row.missingKeys.length > 0 && canActOn(row.missingKeys))
+    rows.some((row) => rowOffersRepair(row) && canActOn(row.missingKeys))
   );
 
   let busy = $state(false);
@@ -97,16 +127,19 @@
   /**
    * @param {{ok: string[], failed: string[]}} aggregate
    * @param {(count: number) => string} successMessage
+   * @param {(aggregate: {ok: string[], failed: string[]}, total: number) => string} [partialMessage]
    */
-  function reportFanOut(aggregate, successMessage) {
+  function reportFanOut(
+    aggregate,
+    successMessage,
+    partialMessage = (agg, total) =>
+      m.area_members_fanout_partial({ failed: agg.failed.length, total })
+  ) {
     if (aggregate.failed.length === 0) {
       showToast(successMessage(aggregate.ok.length), 'success');
     } else {
       const total = aggregate.ok.length + aggregate.failed.length;
-      showToast(
-        m.area_members_fanout_partial({ failed: aggregate.failed.length, total }),
-        'warning'
-      );
+      showToast(partialMessage(aggregate, total), 'warning');
     }
     getRosters().refresh();
   }
@@ -117,7 +150,8 @@
     const targets = fanOutPlan({
       pubkey: row.pubkey,
       pointers,
-      membersByKey: getRosters().membersByKey
+      membersByKey: getRosters().membersByKey,
+      adminsByKey: getRosters().adminsByKey
     });
     if (targets.length === 0) return;
     busy = true;
@@ -143,13 +177,31 @@
     });
     if (targets.length === 0) return;
     busy = true;
+    // Mark BEFORE the fan-out settles: removal was the explicit intent for
+    // every target regardless of outcome, so the repair prompt must not
+    // flash on for the successes while the failures are still in flight.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + full reassignment, per CLAUDE.md's Set/Map rule
+    recentlyRemoved = new Set(recentlyRemoved).add(row.pubkey);
     try {
       const aggregate = await fanOut(
         targets,
         (pointer) => channelKey(pointer) ?? pointer.id,
         (pointer) => removeUserOn(pointer, row.pubkey, /** @type {any} */ (getActiveUser()))
       );
-      reportFanOut(aggregate, (count) => m.area_members_removed({ count }));
+      // A refused removal can't point at the badges the way add/repair do
+      // (handoff #11a hides the deviation badge's repair action for exactly
+      // these rows) — name the refusing channels in the toast text instead
+      // (handoff #11b, parity with add's informational value).
+      reportFanOut(
+        aggregate,
+        (count) => m.area_members_removed({ count }),
+        (agg, total) =>
+          m.area_members_fanout_partial_removed({
+            failed: agg.failed.length,
+            total,
+            names: channelNames(agg.failed)
+          })
+      );
     } finally {
       busy = false;
     }
@@ -159,6 +211,15 @@
   async function addMember(pubkey) {
     if (busy || !getActiveUser() || pointers.length === 0) return;
     busy = true;
+    // An explicit add is the opposite intent of an earlier remove — a
+    // pubkey re-added here should be eligible for "Repair" again if a
+    // future deviation shows up.
+    if (recentlyRemoved.has(pubkey)) {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + full reassignment, per CLAUDE.md's Set/Map rule
+      const next = new Set(recentlyRemoved);
+      next.delete(pubkey);
+      recentlyRemoved = next;
+    }
     try {
       const aggregate = await fanOut(
         pointers,
@@ -183,11 +244,12 @@
     /** @type {Array<{pointer: {id: string, relay: string}, pubkey: string}>} */
     const items = [];
     for (const row of rows) {
-      if (row.missingKeys.length === 0) continue;
+      if (!rowOffersRepair(row)) continue;
       const targets = fanOutPlan({
         pubkey: row.pubkey,
         pointers,
-        membersByKey: getRosters().membersByKey
+        membersByKey: getRosters().membersByKey,
+        adminsByKey: getRosters().adminsByKey
       });
       for (const pointer of targets) items.push({ pointer, pubkey: row.pubkey });
     }
@@ -245,7 +307,7 @@
               {m.area_members_missing({ count: row.missingKeys.length })}
             </span>
           {/if}
-          {#if row.missingKeys.length > 0 && canActOn(row.missingKeys)}
+          {#if rowOffersRepair(row) && canActOn(row.missingKeys)}
             <button
               class="btn btn-ghost btn-xs"
               data-testid="area-member-repair"

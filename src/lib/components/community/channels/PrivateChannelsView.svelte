@@ -37,8 +37,11 @@
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { groupHref } from '$lib/groups/groups.js';
+  import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
   import ChannelRailRow from './ChannelRailRow.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
@@ -152,6 +155,23 @@
   // owner into precisely the mixed state the design rules out.
   const extendedByGroups = $derived(groupPointers.length > 0);
   const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
+  // Member/owner gate for the area-members-open entry (handoff #11c): a
+  // visitor who merely follows the community (kind-30000, a social bookmark
+  // — deliberately NOT used here, see resolveZoneMembership's own comment)
+  // must not see the area's member-management door. Same three-signal rule
+  // ContentNavSidebar's Kanäle zone already uses (owner OR the moderated
+  // community's root-group roster OR Concord area membership) — reused
+  // here rather than threaded through as a prop; +layout.svelte's own
+  // comment already notes this duplication as a known, accepted trade-off
+  // for this plan.
+  const getRootRoster = useRootRoster(() => communikeyEvent);
+  const isAreaMember = $derived(
+    resolveZoneMembership({
+      isOwner: isCommunikeyOwner,
+      rosterIsMember: !!getActiveUser() && getRootRoster().isMember(getActiveUser().pubkey),
+      concordIsMember: concord.membership === 'member'
+    })
+  );
   const getChannelMeta = useChannelMetadata(() => groupPointers);
   // Relay badges on the overview describe ONE host, so they are only fetched
   // and shown when every channel of this community lives on the same relay —
@@ -371,7 +391,7 @@
           + {m.groups_attach_action()}
         </button>
       {/if}
-      {#if groupPointers.length > 0}
+      {#if groupPointers.length > 0 && isAreaMember}
         <button
           class="btn justify-start btn-outline btn-sm"
           data-testid="area-members-open"
@@ -494,7 +514,17 @@
       onClose={() => (overlay = null)}
       onCreated={(/** @type {string} */ channelId) => {
         overlay = null;
-        if (concord.communityId) selectConcordChannel(concord.communityId, channelId);
+        // Which backend just created the channel is the same call the
+        // wizard itself made (isGroupMode = groupPointers.length > 0, off
+        // the same communikeyEvent) — a NIP-29 channel has its own route
+        // (the rail already links group rows there), while a Concord
+        // channel lives inside this pane, selected via the shared store.
+        if (extendedByGroups) {
+          const relay = sharedRelayOf(groupPointers);
+          if (relay) goto(groupHref({ id: channelId, relay }));
+        } else if (concord.communityId) {
+          selectConcordChannel(concord.communityId, channelId);
+        }
         mobileChat = true;
       }}
     />

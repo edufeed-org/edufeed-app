@@ -1,6 +1,6 @@
 // Which access level a community channel has, and how the rail draws it.
 //
-// Three levels, two glyphs (see PLANS/EDUFEED_APP_GRUPPEN_MERGE.md §1):
+// Three levels, two glyphs (see docs/superpowers/specs/2026-08-12-groups-architecture-design.md §1):
 //   world    #  + globe  — anyone on the network can read
 //   members  #           — everyone inside this community can read
 //   invited  🔒          — only the people put in this channel

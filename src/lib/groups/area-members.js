@@ -11,24 +11,51 @@ export function stufe2Pointers(communikeyEvent) {
 }
 
 /**
- * @param {{pointers: any[], membersByKey: Record<string, Set<string>>}} args
+ * Whether a pubkey is present in a channel — explicitly (39002 membersByKey)
+ * or implicitly (39001 adminsByKey: NIP-29 counts privileged roles as
+ * members, the same rule root-roster.js already applies to the ROOT group;
+ * handoff #11d). An admin who never got an explicit 39002 entry in their own
+ * channel is not a deviation, just an implicit member.
+ * @param {string} key
+ * @param {string} pubkey
+ * @param {Record<string, Set<string>>} membersByKey
+ * @param {Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>} adminsByKey
+ */
+function isPresentIn(key, pubkey, membersByKey, adminsByKey) {
+  if (membersByKey[key]?.has(pubkey)) return true;
+  return (adminsByKey[key] ?? []).some((admin) => admin.pubkey === pubkey);
+}
+
+/**
+ * @param {{
+ *   pointers: any[],
+ *   membersByKey: Record<string, Set<string>>,
+ *   adminsByKey?: Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>
+ * }} args
  * @returns {Array<{pubkey: string, inKeys: string[], missingKeys: string[]}>}
  */
-export function areaMemberRows({ pointers, membersByKey }) {
+export function areaMemberRows({ pointers, membersByKey, adminsByKey = {} }) {
   const loadedKeys = pointers
     .map((p) => channelKey(p))
     .filter((key) => key !== null && membersByKey[key] !== undefined);
   /** @type {Map<string, {inKeys: string[], missingKeys: string[]}>} */
   const rows = new Map();
   for (const key of loadedKeys) {
-    for (const pubkey of membersByKey[/** @type {string} */ (key)]) {
+    const k = /** @type {string} */ (key);
+    for (const pubkey of membersByKey[k]) {
       if (!rows.has(pubkey)) rows.set(pubkey, { inKeys: [], missingKeys: [] });
+    }
+    // An admin-only presence (39001 with no matching 39002 entry) must still
+    // surface as a row — otherwise an implicit member is invisible to the
+    // area view entirely, not just excluded from "missing".
+    for (const admin of adminsByKey[k] ?? []) {
+      if (!rows.has(admin.pubkey)) rows.set(admin.pubkey, { inKeys: [], missingKeys: [] });
     }
   }
   for (const [pubkey, row] of rows) {
     for (const key of loadedKeys) {
       const k = /** @type {string} */ (key);
-      if (membersByKey[k].has(pubkey)) row.inKeys.push(k);
+      if (isPresentIn(k, pubkey, membersByKey, adminsByKey)) row.inKeys.push(k);
       else row.missingKeys.push(k);
     }
   }
@@ -38,14 +65,19 @@ export function areaMemberRows({ pointers, membersByKey }) {
 }
 
 /**
- * @param {{pubkey: string, pointers: any[], membersByKey: Record<string, Set<string>>}} args
+ * @param {{
+ *   pubkey: string,
+ *   pointers: any[],
+ *   membersByKey: Record<string, Set<string>>,
+ *   adminsByKey?: Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>
+ * }} args
  */
-export function fanOutPlan({ pubkey, pointers, membersByKey }) {
+export function fanOutPlan({ pubkey, pointers, membersByKey, adminsByKey = {} }) {
   return pointers.filter((p) => {
     const key = channelKey(p);
     if (key === null) return false;
-    const roster = membersByKey[key];
-    return roster !== undefined && !roster.has(pubkey);
+    if (membersByKey[key] === undefined) return false;
+    return !isPresentIn(key, pubkey, membersByKey, adminsByKey);
   });
 }
 
