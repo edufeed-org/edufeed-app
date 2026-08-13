@@ -5,6 +5,7 @@ const RELAY_URLS = {
   amb: 'ws://localhost:17001',
   calendar: 'ws://localhost:17002',
   strfry: 'ws://localhost:17003',
+  groups: 'ws://localhost:17004', // In-process NIP-29 mock relay (moderated-lifecycle specs)
   hanging: 'ws://localhost:19738' // Mock relay for timedPool timeout tests
 };
 
@@ -85,6 +86,8 @@ export default defineConfig({
       BLOSSOM_SERVER_URL: BLOSSOM_SERVER_URL,
       CONCORD_ENABLED: 'true',
       CONCORD_RELAYS: RELAY_URLS.strfry,
+      GROUPS_ENABLED: 'true',
+      GROUPS_RELAYS: RELAY_URLS.groups,
       GATED_MODE_DEFAULT: 'true',
       GATED_MODE_FORCE: 'true',
       ORIGIN: `http://localhost:${WEB_SERVER_PORT}`,
