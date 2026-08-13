@@ -27,6 +27,10 @@
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
+  import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -179,6 +183,29 @@
     })
   );
 
+  // Zone-membership signal for the sidebar's Kanäle zone (review of
+  // 187b4c0b, critical 2) — deliberately NOT `getIsMember()` (kind-30000
+  // follow set, a social bookmark unrelated to roster/Concord access; that
+  // flag stays wired to its other consumer below, `isCommunityMember`
+  // context). "Roster = truth": owner OR the moderated community's
+  // root-group roster OR Concord area membership. concordIsMember reuses
+  // `getConcordForNav` above — no second Concord subscription needed, it
+  // already exposes `membership: 'none'|'member'` for exactly this. Roster
+  // membership needs its own subscription (none existed in this file);
+  // `useRootRoster` no-ops harmlessly for an open community (no membership
+  // pointer → null pointer → isMember() always false).
+  const getRootRosterForNav = useRootRoster(() => communikeyEvent);
+  const getActiveUserForNav = useActiveUser();
+  const zoneMember = $derived.by(() => {
+    const activeUser = getActiveUserForNav();
+    const rosterIsMember = !!activeUser && getRootRosterForNav().isMember(activeUser.pubkey);
+    return resolveZoneMembership({
+      isOwner: isCommunityOwner(data.pubkey),
+      rosterIsMember,
+      concordIsMember: getConcordForNav().membership === 'member'
+    });
+  });
+
   setContext('communikeyEvent', () => communikeyEvent);
   setContext('communityWideFormRef', () => communityWideFormRef);
   setContext('communityProfile', () => communityProfile);
@@ -202,7 +229,7 @@
     accessibleTabs,
     communityEvent: communikeyEvent,
     channelRows,
-    isMember: getIsMember()
+    isMember: zoneMember
   }));
   $effect(() => () => setContentNavData?.(undefined));
 

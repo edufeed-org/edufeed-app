@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   communityNavTabIds,
-  buildSidebarZones
+  buildSidebarZones,
+  resolveZoneMembership
 } from '$lib/components/community/layout/community-nav.js';
 
 const OWNER = 'a'.repeat(64);
@@ -180,5 +181,46 @@ describe('buildSidebarZones', () => {
     const zones = buildSidebarZones({ tabs, channelRows: [], isMember: false, isOwner: false });
     expect(zones.kanaele).toEqual([]);
     expect(zones.showLockHint).toBe(false);
+  });
+});
+
+describe('resolveZoneMembership', () => {
+  // Review of 187b4c0b, critical 2: the zone-membership signal must be
+  // roster/Concord/owner, NOT the kind-30000 follow-set flag — a roster
+  // member who never follow-set-joined must still see the full Kanäle zone.
+  it('a roster member who is NOT follow-set-joined counts as a zone member', () => {
+    const zoneMember = resolveZoneMembership({
+      isOwner: false,
+      rosterIsMember: true,
+      concordIsMember: false
+    });
+    expect(zoneMember).toBe(true);
+  });
+
+  it('a Concord member who is NOT follow-set-joined counts as a zone member', () => {
+    const zoneMember = resolveZoneMembership({
+      isOwner: false,
+      rosterIsMember: false,
+      concordIsMember: true
+    });
+    expect(zoneMember).toBe(true);
+  });
+
+  it('the owner counts as a zone member with no roster or Concord membership', () => {
+    const zoneMember = resolveZoneMembership({
+      isOwner: true,
+      rosterIsMember: false,
+      concordIsMember: false
+    });
+    expect(zoneMember).toBe(true);
+  });
+
+  it('a stranger with none of the three signals is not a zone member', () => {
+    const zoneMember = resolveZoneMembership({
+      isOwner: false,
+      rosterIsMember: false,
+      concordIsMember: false
+    });
+    expect(zoneMember).toBe(false);
   });
 });

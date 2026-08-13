@@ -20,7 +20,10 @@
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { communityNavTabIds, buildSidebarZones } from './community-nav.js';
   import { areaUnreadState, channelUnreadState } from '$lib/concord/notifications.svelte.js';
-  import { getSelectedConcordChannel } from '$lib/concord/active-channel.svelte.js';
+  import {
+    getSelectedConcordChannel,
+    selectConcordChannel
+  } from '$lib/concord/active-channel.svelte.js';
   import { groupHref } from '$lib/groups/groups.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
@@ -130,6 +133,22 @@
   }
 
   /**
+   * A Concord row click. The `?channel=` param on the resulting navigation
+   * only seeds PrivateChannelsView's deep-link effect, which is guarded by
+   * `!getSelectedConcordChannel(cid)` — after ANY channel has ever been
+   * selected in this community this session, that guard is permanently
+   * closed and later clicks would silently stop switching channels (bug:
+   * review of 187b4c0b, critical 1). Set the shared selection directly at
+   * the click source instead, so the row always drives the channel that
+   * ends up rendered, independent of the deep-link effect's one-shot guard.
+   * @param {string} channelId
+   */
+  function selectConcordRow(channelId) {
+    if (concordCommunityId) selectConcordChannel(concordCommunityId, channelId);
+    handleContentTypeClick('channels', channelId);
+  }
+
+  /**
    * A channel row's key is untrusted network-derived data (pointer id/relay,
    * or a Concord channel_id) and may contain characters a data-testid must
    * not — collapse anything that isn't alphanumeric to a dash.
@@ -235,7 +254,7 @@
                 getSelectedConcordChannel(concordCommunityId) === row.channel_id}
               dimmed={!row.accessible}
               bold={flags.unread}
-              onclick={() => handleContentTypeClick('channels', row.channel_id)}
+              onclick={() => selectConcordRow(row.channel_id)}
             >
               {#snippet trailing()}
                 <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />

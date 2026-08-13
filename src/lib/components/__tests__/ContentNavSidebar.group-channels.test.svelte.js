@@ -61,8 +61,11 @@ vi.mock('$lib/concord/notifications.svelte.js', () => ({
 }));
 
 const selectedChannelFixture = vi.hoisted(() => /** @type {{ value: string }} */ ({ value: '' }));
+const selectConcordChannelSpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/concord/active-channel.svelte.js', () => ({
-  getSelectedConcordChannel: () => selectedChannelFixture.value
+  getSelectedConcordChannel: () => selectedChannelFixture.value,
+  selectConcordChannel: (/** @type {string} */ cid, /** @type {string} */ channelId) =>
+    selectConcordChannelSpy(cid, channelId)
 }));
 
 import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
@@ -136,6 +139,8 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
       membership: 'none',
       community: undefined
     };
+    selectedChannelFixture.value = '';
+    selectConcordChannelSpy.mockReset();
   });
 
   it('a member sees both zones and the footer', () => {
@@ -206,6 +211,43 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     });
     await fireEvent.click(getByTestId(`nav-channel-row-${sanitize(row.key)}`));
     expect(onContentTypeSelect).toHaveBeenCalledWith('channels', 'general');
+    expect(selectConcordChannelSpy).toHaveBeenCalledWith('area-1', 'general');
+  });
+
+  // Bug (review of 187b4c0b, critical 1): PrivateChannelsView only seeds its
+  // channel from the `?channel=` URL param when NO selection exists yet for
+  // this community (`!getSelectedConcordChannel(cid)`) — after the first
+  // pick that guard is closed for the rest of the session, so later clicks
+  // silently stopped switching channels. The row's click handler must set
+  // the shared selection directly, not rely on the URL param alone.
+  it('re-clicking a different row while a selection already exists calls selectConcordChannel with the new id', async () => {
+    const onContentTypeSelect = vi.fn();
+    concordFixture.value = {
+      enabled: true,
+      pointer: { communityId: 'area-1' },
+      membership: 'member',
+      community: {}
+    };
+    // A selection already exists for this community — the exact state that
+    // permanently closes PrivateChannelsView's deep-link guard.
+    selectedChannelFixture.value = 'general';
+    const rows = buildChannelRows({
+      concordChannels: [
+        { channel_id: 'general', name: 'General', accessible: true, private: false },
+        { channel_id: 'random', name: 'Random', accessible: true, private: false }
+      ]
+    });
+    const randomRow = /** @type {any} */ (
+      rows.find((r) => /** @type {any} */ (r).channel_id === 'random')
+    );
+    const { getByTestId } = renderNav({
+      channelRows: rows,
+      isMember: true,
+      onContentTypeSelect
+    });
+    await fireEvent.click(getByTestId(`nav-channel-row-${sanitize(randomRow.key)}`));
+    expect(selectConcordChannelSpy).toHaveBeenCalledWith('area-1', 'random');
+    expect(onContentTypeSelect).toHaveBeenCalledWith('channels', 'random');
   });
 
   it('a NIP-29 row links out to the group route', () => {

@@ -88,3 +88,25 @@ export function buildSidebarZones({ tabs, channelRows, isMember, isOwner }) {
     showLockHint
   };
 }
+
+/**
+ * Zone-membership signal for `buildSidebarZones`' visitor filter (review of
+ * 187b4c0b, critical 2). Deliberately NOT the kind-30000 follow-set flag —
+ * that list is a social "I follow this community" bookmark a user can carry
+ * into communities they've never been granted roster access to, and using
+ * it here let a non-member see gated channel rows while some genuine roster
+ * members (never having follow-set-joined) saw a locked-down zone. "Roster =
+ * truth": the owner (key-holding), OR the moderated community's root-group
+ * roster, OR Concord area membership — the same three signals
+ * `shouldShowChannelsTab` already uses for the legacy 'channels' tab's own
+ * visibility. An open community has neither a roster pointer nor a Concord
+ * pointer, so `rosterIsMember`/`concordIsMember` both stay false harmlessly
+ * and only `isOwner` can flip this true for it — same as before this fix,
+ * since `buildSidebarZones` also ORs its own `isOwner` in independently.
+ *
+ * @param {{isOwner: boolean, rosterIsMember: boolean, concordIsMember: boolean}} args
+ * @returns {boolean}
+ */
+export function resolveZoneMembership({ isOwner, rosterIsMember, concordIsMember }) {
+  return isOwner || rosterIsMember || concordIsMember;
+}
