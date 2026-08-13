@@ -21,6 +21,12 @@
   import { useCommunityAccess } from '$lib/stores/community-access.svelte.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
+  import { useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
+  import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
+  import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
+  import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -154,6 +160,25 @@
   const getIsMember = useCommunityMembership(() => data.pubkey);
   setContext('isCommunityMember', getIsMember);
 
+  // Channel-row DATA for the sidebar's Kanäle zone (Task 7) — the SAME inputs
+  // PrivateChannelsView uses (buildChannelRows + useConcordCommunity's
+  // channels + parseGroupPointers + useChannelMetadata), but instantiated
+  // ONCE here and threaded through ContentNavData so the sidebar doesn't
+  // double-subscribe. PrivateChannelsView keeps its own instances this plan
+  // (known duplication — a future pass should unify them).
+  const getConcordForNav = useConcordCommunity(() => communikeyEvent);
+  const groupPointersForNav = $derived(parseGroupPointers(communikeyEvent));
+  const getChannelMetaForNav = useChannelMetadata(() => groupPointersForNav);
+  const getNavRelayInfo = useRelayInformation(() => sharedRelayOf(groupPointersForNav));
+  const channelRows = $derived(
+    buildChannelRows({
+      concordChannels: getConcordForNav().channels,
+      groupPointers: groupPointersForNav,
+      metadataByKey: getChannelMetaForNav().byKey,
+      hostRequiresAuth: relayRequiresAuth(getNavRelayInfo())
+    })
+  );
+
   setContext('communikeyEvent', () => communikeyEvent);
   setContext('communityWideFormRef', () => communityWideFormRef);
   setContext('communityProfile', () => communityProfile);
@@ -175,7 +200,9 @@
     communityPubkey: data.pubkey,
     restrictedTabs,
     accessibleTabs,
-    communityEvent: communikeyEvent
+    communityEvent: communikeyEvent,
+    channelRows,
+    isMember: getIsMember()
   }));
   $effect(() => () => setContentNavData?.(undefined));
 
@@ -191,13 +218,19 @@
   });
 
   /**
-   * Handle content type selection — navigates to community home with ?view= param
+   * Handle content type selection — navigates to community home with ?view=
+   * param. An optional channelId seeds the Kanäle zone's deep link (`?channel=`)
+   * so a Concord row click lands directly on that channel — PrivateChannelsView
+   * picks the param up on mount (see its deep-link `$effect`).
    * @param {string} type
+   * @param {string} [channelId]
    */
-  function handleContentTypeSelect(type) {
+  function handleContentTypeSelect(type, channelId) {
     const base = resolve(`/c/${data.npub}`);
     if (type === 'home') {
       goto(base);
+    } else if (channelId) {
+      goto(`${base}?view=${type}&channel=${channelId}`);
     } else {
       goto(`${base}?view=${type}`);
     }

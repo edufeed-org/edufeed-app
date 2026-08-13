@@ -13,13 +13,17 @@
     MeetIcon,
     PollIcon,
     LockIcon,
-    LockOpenIcon
+    LockOpenIcon,
+    PeopleIcon
   } from '$lib/components/icons';
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
-  import { communityNavTabIds } from './community-nav.js';
-  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
+  import { communityNavTabIds, buildSidebarZones } from './community-nav.js';
+  import { areaUnreadState, channelUnreadState } from '$lib/concord/notifications.svelte.js';
+  import { getSelectedConcordChannel } from '$lib/concord/active-channel.svelte.js';
+  import { groupHref } from '$lib/groups/groups.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
+  import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -31,14 +35,18 @@
     communityPubkey: _communityPubkey = /** @type {string | null} */ (null),
     restrictedTabs = /** @type {Set<string>} */ (new Set()),
     accessibleTabs = /** @type {Set<string>} */ (new Set()),
-    communityEvent = /** @type {any} */ (null)
+    communityEvent = /** @type {any} */ (null),
+    channelRows = /** @type {import('$lib/groups/community-channel-rows.js').ChannelRow[]} */ ([]),
+    isMember = false
   } = $props();
 
   import { getProfilePicture } from 'applesauce-core/helpers';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
 
   const getConcord = useConcordCommunity(() => communityEvent);
-  const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
+  const concordCommunityId = $derived(getConcord().pointer?.communityId);
+  const concordAreaFlags = $derived(areaUnreadState(concordCommunityId));
+  const isOwner = $derived(isCommunityOwner(communityEvent?.pubkey));
 
   let communityDisplayName = $derived(
     communityProfile?.name || communityProfile?.display_name || 'Community'
@@ -59,6 +67,7 @@
     meet: MeetIcon,
     polls: PollIcon,
     settings: SettingsIcon,
+    members: PeopleIcon,
     channels: LockIcon
   };
 
@@ -76,38 +85,91 @@
     meet: () => m.community_layout_bottom_tab_bar_meet(),
     polls: () => m.community_layout_bottom_tab_bar_polls(),
     settings: () => m.community_layout_bottom_tab_bar_settings(),
+    members: () => m.community_members_title(),
     channels: () => m.concord_tab_label()
   };
 
-  let contentTypes = $derived.by(() => {
+  // Tab ids (same rule BottomTabBar uses — see communityNavTabIds' doc
+  // comment) feed buildSidebarZones, which splits them into the sidebar's
+  // two zones + footer and filters/dedupes channelRows for the current
+  // viewer. The 'channels' tab id itself is dropped by buildSidebarZones —
+  // on desktop the Kanäle zone replaces it; BottomTabBar keeps it via its
+  // own call to communityNavTabIds.
+  let zones = $derived.by(() => {
     const concord = getConcord();
-    const ids = communityNavTabIds({
+    const tabIds = communityNavTabIds({
       communityEvent,
       concordEnabled: concord.enabled,
       pointer: concord.pointer,
-      isOwner: isCommunityOwner(communityEvent?.pubkey),
+      isOwner,
       isMember: concord.membership === 'member',
       // Second source for the same tab, and not Concord: a community
       // extended by NIP-29 groups has none of the Concord inputs above.
       hasGroupChannels: parseGroupPointers(communityEvent).length > 0
     });
-    return ids.map((id) => ({
-      id,
-      label: labelMap[id]?.() ?? id,
-      icon: iconMap[id] ?? ChatIcon
-    }));
+    return buildSidebarZones({ tabs: tabIds, channelRows, isMember, isOwner });
   });
+
+  /**
+   * @param {string} id
+   * @returns {{id: string, label: string, icon: any}}
+   */
+  function tabRow(id) {
+    return { id, label: labelMap[id]?.() ?? id, icon: iconMap[id] ?? ChatIcon };
+  }
 
   /**
    * Handle content type selection
    * @param {string} type
+   * @param {string} [channelId]
    */
-  function handleContentTypeClick(type) {
+  function handleContentTypeClick(type, channelId) {
     if (onContentTypeSelect) {
-      onContentTypeSelect(type);
+      onContentTypeSelect(type, channelId);
     }
   }
+
+  /**
+   * A channel row's key is untrusted network-derived data (pointer id/relay,
+   * or a Concord channel_id) and may contain characters a data-testid must
+   * not — collapse anything that isn't alphanumeric to a dash.
+   * @param {string} key
+   */
+  function rowTestId(key) {
+    return `nav-channel-row-${key.replace(/[^a-zA-Z0-9]/g, '-')}`;
+  }
 </script>
+
+{#snippet tabButton(/** @type {{id: string, label: string, icon: any}} */ type)}
+  {@const isActive = selectedContentType === type.id}
+  {@const Icon = type.icon}
+  <button
+    data-testid="content-nav-{type.id}"
+    onclick={() => handleContentTypeClick(type.id)}
+    class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
+      ? 'bg-primary text-primary-content'
+      : 'hover:bg-base-300/60'}"
+  >
+    <Icon class_="w-5 h-5" />
+    <span class="relative">
+      <span class="text-sm font-medium">{type.label}</span>
+      {#if restrictedTabs.has(type.id)}
+        {#if accessibleTabs.has(type.id)}
+          <span class="absolute -top-1.5 -right-3" title={m.community_content_tab_access_granted()}>
+            <LockOpenIcon class_="w-2.5 h-2.5 text-success" />
+          </span>
+        {:else}
+          <span
+            class="absolute -top-1.5 -right-3 opacity-60"
+            title={m.community_content_tab_restricted()}
+          >
+            <LockIcon class_="w-2.5 h-2.5" />
+          </span>
+        {/if}
+      {/if}
+    </span>
+  </button>
+{/snippet}
 
 <!-- Desktop: Flex sibling in chrome row -->
 <div
@@ -137,46 +199,81 @@
         <h2 class="truncate text-sm font-semibold text-base-content">{communityDisplayName}</h2>
       </div>
     {/if}
-    <nav class="menu space-y-1 p-4">
-      {#each contentTypes as type (type.id)}
+
+    <nav class="menu space-y-1 p-4 pb-0">
+      <div
+        data-testid="nav-zone-inhalte"
+        class="px-4 pb-1 text-xs font-semibold text-base-content/50 uppercase"
+      >
+        {m.community_nav_inhalte()}
+      </div>
+      {#each zones.inhalte as id (id)}
+        {@render tabButton(tabRow(id))}
+      {/each}
+    </nav>
+
+    {#if zones.kanaele.length > 0 || zones.showLockHint}
+      <nav class="menu space-y-1 p-4 pt-2">
+        <div
+          data-testid="nav-zone-kanaele"
+          class="flex items-center gap-1.5 px-4 pb-1 text-xs font-semibold text-base-content/50 uppercase"
+        >
+          <span>{m.community_nav_kanaele()}</span>
+          <ConcordUnreadDot
+            unread={concordAreaFlags.unread}
+            mentioned={concordAreaFlags.mentioned}
+          />
+        </div>
+        {#each zones.kanaele as row (row.key)}
+          {#if row.source === 'concord'}
+            {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}
+            <ChannelRailRow
+              symbol={row.symbol}
+              name={row.name}
+              testid={rowTestId(row.key)}
+              active={selectedContentType === 'channels' &&
+                getSelectedConcordChannel(concordCommunityId) === row.channel_id}
+              dimmed={!row.accessible}
+              bold={flags.unread}
+              onclick={() => handleContentTypeClick('channels', row.channel_id)}
+            >
+              {#snippet trailing()}
+                <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+              {/snippet}
+            </ChannelRailRow>
+          {:else}
+            <ChannelRailRow
+              href={groupHref(row.pointer)}
+              testid={rowTestId(row.key)}
+              symbol={row.symbol}
+              name={row.name}
+              dimmed={row.pending}
+              worldReadable={row.worldReadable}
+            />
+          {/if}
+        {/each}
+        {#if zones.showLockHint}
+          <p data-testid="nav-lock-hint" class="px-2 py-1 text-xs text-base-content/50">
+            {m.community_nav_lock_hint()}
+          </p>
+        {/if}
+      </nav>
+    {/if}
+
+    <nav class="menu mt-auto space-y-1 p-4">
+      {#each zones.footer as id (id)}
+        {@const type = tabRow(id)}
         {@const isActive = selectedContentType === type.id}
         {@const Icon = type.icon}
         <button
-          data-testid="content-nav-{type.id}"
+          data-testid="nav-footer-{type.id}"
           onclick={() => handleContentTypeClick(type.id)}
           class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
             ? 'bg-primary text-primary-content'
             : 'hover:bg-base-300/60'}"
         >
           <Icon class_="w-5 h-5" />
-          <span class="relative">
-            <span class="text-sm font-medium">{type.label}</span>
-            {#if restrictedTabs.has(type.id)}
-              {#if accessibleTabs.has(type.id)}
-                <span
-                  class="absolute -top-1.5 -right-3"
-                  title={m.community_content_tab_access_granted()}
-                >
-                  <LockOpenIcon class_="w-2.5 h-2.5 text-success" />
-                </span>
-              {:else}
-                <span
-                  class="absolute -top-1.5 -right-3 opacity-60"
-                  title={m.community_content_tab_restricted()}
-                >
-                  <LockIcon class_="w-2.5 h-2.5" />
-                </span>
-              {/if}
-            {/if}
-            {#if type.id === 'channels'}
-              <span class="absolute -top-1.5 -right-4">
-                <ConcordUnreadDot
-                  unread={concordAreaFlags.unread}
-                  mentioned={concordAreaFlags.mentioned}
-                />
-              </span>
-            {/if}
-          </span>
+          <span class="text-sm font-medium">{type.label}</span>
         </button>
       {/each}
     </nav>
