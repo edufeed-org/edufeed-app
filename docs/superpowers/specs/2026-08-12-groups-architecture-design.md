@@ -220,14 +220,105 @@ as explicit tasks:
 
 **New Plan 4 items (surfaced during plan-3 review):**
 
-9. `HomeView`'s `canPublishAnywhere`/`accessDetail` still filter by
-   `profileList` — swap to `sectionIsGated` (surfaced in plan-3 task 5
-   review).
-10. `ChannelInviteSheet` exclude-community-pubkey gap + `FormResponses`
-    decrypts kind `1069` with `manager.active.signer` — separate-keypair
-    community owners can't decrypt applications; trace the encryption
-    recipient through the intake/approvals work (surfaced in plan-3 task 1
-    fix review).
+9. **DONE (7514ac34).** `HomeView`'s `canPublishAnywhere`/`accessDetail`
+   still filter by `profileList` — swap to `sectionIsGated` (surfaced in
+   plan-3 task 5 review).
+10. **DONE (29671293).** `ChannelInviteSheet` exclude-community-pubkey gap
+    + `FormResponses` decrypts kind `1069` with `manager.active.signer` —
+    separate-keypair community owners can't decrypt applications; trace the
+    encryption recipient through the intake/approvals work (surfaced in
+    plan-3 task 1 fix review). `ChannelInviteSheet` now excludes the
+    community's own pubkey from both the quick-pick list and free-text
+    search (mirroring `ChannelCreateWizard`); `FormResponses` falls back to
+    `getCommunitySigner` (guarded by `signerHasNip44`) when the active
+    signer can't decrypt a legacy 1069, via the extracted, unit-tested
+    `resolveFormResponseDecryptSigners` helper (`src/lib/helpers/forms.js`).
+
+## Plan 4 shipping state (2026-08-12, commits 80a737fd..29671293)
+
+Roster fan-out service extracted from `AreaMembersModal`; tier-aware `HomeView`
+gating + closed-community hero; closed-community shell page + type-aware
+tabs; moderated join button (9021, with invite-code path, load-gated —
+absent `39000` counts as closed, matching the design's "capped by NIP-11
+`auth_required`" readability rule); 9009 invite-code minting in
+`MembershipPane`; per-reviewer application intake (39001-admin-encrypted,
+all-admins fallback) with a submit gate; approvals queue (`put-user` →
+roster fan-out → refresh → DM) with persistent decline; a binding-fixes
+sweep (Task 8) covering the two items above plus hygiene.
+
+**Live-relay caveat (Task 9 probe, `wss://groups.0xchat.com` —
+this deployment's configured `GROUPS_RELAYS`):** kind `9009` (`create-invite`)
+is rejected outright — `blocked: received event kind 9009 not allowed` —
+confirmed deterministic across two independent create+invite attempts. The
+invite-code UI (`MembershipPane`'s "create invite" button) and the
+join-with-code path it feeds cannot be exercised end-to-end against this
+relay; `9007`/`9002`/`9000`/`9021`/`9008` all work as spec'd. Separately, a
+bare `9021` join request on a `closed` group returns `OK true` with no
+membership granted (not an `OK false` rejection) — the relay silently
+accepts-but-ignores rather than erroring, which the moderated join button's
+refusal copy must account for (an `OK:true` is not proof of membership;
+only a resulting `9000`/roster listing is). Full transcript:
+`.superpowers/sdd/2026-08-12-groups-plan4-joining-visibility/task-9-report.md`.
+Deployments that need working invite-code joins should verify `9009`
+support on their own `GROUPS_RELAYS` before relying on this path.
+
+## Plan 5 (next)
+
+Carried from the handoff issue map (unresolved through Plan 4) plus items
+surfaced by Plan 4's own review and Task 9's verification pass:
+
+- **Two-zone sidebar IA** — Inhalte zone + Kanäle zone on the community page
+  (design's "one sidebar, two zones" section, not yet built).
+- **Community-card type badges** — needs a kind-10222 loader wired into the
+  card components (discover/directory listings still show no Offen/
+  Moderiert/Geschlossen indicator).
+- **NIP-29 e2e relay decision** — no browser E2E covers the moderated
+  lifecycle; needs either a NIP-29 relay added to the Playwright
+  docker-compose stack or a mock-relay extension that speaks NIP-29
+  moderation kinds. Task 9's scripted live-relay probe covers the protocol
+  path in the interim (see e2e/COVERAGE.md known-gap entry).
+- **Roster live-updates / `isLoading` timeout** — carried from Plan 3 item 6:
+  roster `isLoading` never terminates against a dead/unreachable group relay
+  (no parity with the legacy hook's timeout). Still unfixed after Plan 4.
+- **MembersView role-tiered grouping** — carried from Plan 3 item 7:
+  `getMembers` returns the full roster for role-tiered sections, not just
+  role-holders; needs a conscious UX decision.
+- **MembershipPane isAdmin vs 39001 refinement** — intersects the wizard
+  Personen step (below); admin-check surface needs unification once that
+  step exists.
+- **Wizard Personen step** — the creation wizard's fourth step (invite
+  npubs + role picker + invite code for Moderiert; Concord invites for
+  Geschlossen) per the design's UX section; not yet built.
+- **Handoff UX debt, ride-along items not yet touched:** #5 attach-modal
+  desync, #6 label unification, #7 parser unification, #8 DRY dedupe, #10
+  navigate into a freshly-created channel, #11 area-members polish.
+- **`manager` reactivity signal** — outstanding from the handoff, not
+  resolved by Plan 4.
+- **Task 9 ledger (found during this plan's final verification pass):**
+  - `root-roster.svelte.js`'s loading state is the same dead-relay-`isLoading`
+    gap as the item above, restated because Task 9 re-confirmed it live.
+  - `ApplicationApprovals.svelte`'s `loadedExtraRelays` `SvelteSet` is
+    created once at component init and never reset when `applicationRef`
+    changes (community switch within a mounted instance) — stale entries
+    from a previous community can suppress supplemental relay loading for
+    the new one.
+  - `FormResponses.svelte`'s decrypt loop silently no-ops when
+    `resolveFormResponseDecryptSigners` returns an empty array (no active
+    signer and no usable community-signer fallback): the `for` loop body
+    never runs, so `decryptErrors` is never set and the row just never
+    shows a decrypted value or an error — needs an explicit empty-signers
+    branch.
+  - `MembershipPane.svelte`'s `handleCopyInviteCode` passes a hardcoded
+    English string (`'Clipboard not available'`) into
+    `m.community_invite_failed({ reason })` instead of a translated message.
+  - `group-management.js`'s `generateInviteCode` comment says "52-char
+    alphabet" but the actual alphabet (`23456789ABCDEFGHJKMNPQRSTUVWXYZ
+    abcdefghjkmnpqrstuvwxyz`) is 54 characters — stale comment, no
+    functional bug.
+  - `/forms/respond`'s `{:else if error}` branch is a dead end: unlike the
+    `alreadyResponded` branch (which offers a "back to community"/"go back"
+    button), the generic error alert renders with no retry or navigation
+    affordance.
 
 ## Process
 
