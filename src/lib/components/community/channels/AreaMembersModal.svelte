@@ -95,31 +95,46 @@
 
   const isAdminSomewhere = $derived(canActOn(pointerKeys));
 
-  // Pubkeys an explicit "Remove" was fired for, this modal session (handoff
-  // #11a). A partial removal leaves the row LOOKING like an ordinary
-  // deviation once the roster refreshes (present in the channels the
-  // removal failed on, absent from the ones it succeeded on) — but offering
-  // "Repair" (individually or via bulk sync) there would fan out put-user
-  // right back into the channels the admin just removed them from, undoing
-  // the very action they took. This set is the only thing standing between
-  // that data shape and the contradictory prompt, since the roster itself
-  // carries no memory of "removed on purpose". $state.raw + full
-  // reassignment (Set, per the project's $state.raw rule for Set/Map — see
-  // CLAUDE.md).
+  // (pubkey, channelKey) pairs an explicit "Remove" was fired for, this
+  // modal session (handoff #11a — scoped to the exact channel per review
+  // follow-up, NOT the bare pubkey: a removal from channel X must not
+  // suppress an unrelated, later deviation on channel Z for the same
+  // person). A partial removal leaves the row LOOKING like an ordinary
+  // deviation on X once the roster refreshes (present in the channels the
+  // removal failed on, absent from X) — but offering "Repair" for X there
+  // would fan out put-user right back into the channel the admin just
+  // removed them from, undoing the very action they took. This set is the
+  // only thing standing between that data shape and the contradictory
+  // prompt, since the roster itself carries no memory of "removed on
+  // purpose". $state.raw + full reassignment (Set, per the project's
+  // $state.raw rule for Set/Map — see CLAUDE.md).
   /** @type {Set<string>} */
   let recentlyRemoved = $state.raw(new Set());
 
+  /** @param {string} pubkey @param {string} key */
+  function removalKey(pubkey, key) {
+    return `${pubkey}\x1f${key}`;
+  }
+
+  /** The row's missing channels minus the ones just removed from — those
+   * stay reparable (handoff #11a's suppression is per-channel, not per-row).
+   * @param {{pubkey: string, missingKeys: string[]}} row */
+  function reparableMissingKeys(row) {
+    return row.missingKeys.filter((key) => !recentlyRemoved.has(removalKey(row.pubkey, key)));
+  }
+
   /** @param {{pubkey: string, missingKeys: string[]}} row */
   function rowOffersRepair(row) {
-    return row.missingKeys.length > 0 && !recentlyRemoved.has(row.pubkey);
+    return reparableMissingKeys(row).length > 0;
   }
 
   // Bulk "Check members" affordance: visible once at least one row has a
-  // deviation the acting user is admin enough to fix (union over every
-  // row's missingKeys, not just any one row) — excluding rows an explicit
-  // remove was just fired for, same reasoning as rowOffersRepair.
+  // reparable deviation the acting user is admin enough to fix (union over
+  // every row's reparable missingKeys, not just any one row) — excluding
+  // channels an explicit remove was just fired for, same reasoning as
+  // rowOffersRepair.
   const canSyncAny = $derived(
-    rows.some((row) => rowOffersRepair(row) && canActOn(row.missingKeys))
+    rows.some((row) => rowOffersRepair(row) && canActOn(reparableMissingKeys(row)))
   );
 
   let busy = $state(false);
@@ -147,12 +162,13 @@
   /** @param {{pubkey: string, inKeys: string[], missingKeys: string[]}} row */
   async function repair(row) {
     if (busy || !getActiveUser()) return;
+    const reparable = new Set(reparableMissingKeys(row));
     const targets = fanOutPlan({
       pubkey: row.pubkey,
       pointers,
       membersByKey: getRosters().membersByKey,
       adminsByKey: getRosters().adminsByKey
-    });
+    }).filter((pointer) => reparable.has(channelKey(pointer) ?? ''));
     if (targets.length === 0) return;
     busy = true;
     try {
@@ -167,21 +183,46 @@
     }
   }
 
-  /** @param {{pubkey: string, inKeys: string[], missingKeys: string[]}} row */
+  /**
+   * @param {{pubkey: string, inKeys: string[], memberKeys: string[], adminOnlyKeys: string[], missingKeys: string[]}} row
+   */
   async function removeRow(row) {
     if (busy || !getActiveUser()) return;
-    const inKeys = new Set(row.inKeys);
+    // Target ONLY memberKeys: kind-9001 remove-user is a no-op for a pubkey
+    // with no 39002 entry — the relay OKs it, the roster stays unchanged,
+    // and admin rights on adminOnlyKeys survive untouched. Fanning that out
+    // over the union (inKeys) would silently do nothing there while a
+    // generic success toast implied the removal was complete (review
+    // finding — the default state of every members-tier channel's founder,
+    // since the create wizard filters self out of its own put-user
+    // fan-out).
+    const memberSet = new Set(row.memberKeys);
     const targets = pointers.filter((pointer) => {
       const key = channelKey(pointer);
-      return key !== null && inKeys.has(key);
+      return key !== null && memberSet.has(key);
     });
-    if (targets.length === 0) return;
+    const adminOnlyNote =
+      row.adminOnlyKeys.length > 0
+        ? m.area_members_admin_only_note({ channels: channelNames(row.adminOnlyKeys) })
+        : null;
+    if (targets.length === 0) {
+      // Nothing to remove via membership — still tell the admin about the
+      // admin-only channels instead of a silent no-op.
+      if (adminOnlyNote) showToast(adminOnlyNote, 'warning');
+      return;
+    }
     busy = true;
     // Mark BEFORE the fan-out settles: removal was the explicit intent for
     // every target regardless of outcome, so the repair prompt must not
     // flash on for the successes while the failures are still in flight.
+    // Keyed per (pubkey, channel) — see recentlyRemoved's own comment.
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + full reassignment, per CLAUDE.md's Set/Map rule
-    recentlyRemoved = new Set(recentlyRemoved).add(row.pubkey);
+    const nextRemoved = new Set(recentlyRemoved);
+    for (const pointer of targets) {
+      const key = channelKey(pointer);
+      if (key) nextRemoved.add(removalKey(row.pubkey, key));
+    }
+    recentlyRemoved = nextRemoved;
     try {
       const aggregate = await fanOut(
         targets,
@@ -202,6 +243,10 @@
             names: channelNames(agg.failed)
           })
       );
+      // Surfaced AFTER the removal toast, not instead of it — the two say
+      // different things (what happened to the memberships vs. what could
+      // not be touched at all) and both matter.
+      if (adminOnlyNote) showToast(adminOnlyNote, 'warning');
     } finally {
       busy = false;
     }
@@ -212,13 +257,12 @@
     if (busy || !getActiveUser() || pointers.length === 0) return;
     busy = true;
     // An explicit add is the opposite intent of an earlier remove — a
-    // pubkey re-added here should be eligible for "Repair" again if a
-    // future deviation shows up.
-    if (recentlyRemoved.has(pubkey)) {
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + full reassignment, per CLAUDE.md's Set/Map rule
-      const next = new Set(recentlyRemoved);
-      next.delete(pubkey);
-      recentlyRemoved = next;
+    // pubkey re-added here should be eligible for "Repair" again on every
+    // channel if a future deviation shows up (composite keys, so this
+    // clears all of THIS pubkey's suppressed channels, not other pubkeys').
+    const prefix = `${pubkey}\x1f`;
+    if ([...recentlyRemoved].some((entry) => entry.startsWith(prefix))) {
+      recentlyRemoved = new Set([...recentlyRemoved].filter((entry) => !entry.startsWith(prefix)));
     }
     try {
       const aggregate = await fanOut(
@@ -244,13 +288,14 @@
     /** @type {Array<{pointer: {id: string, relay: string}, pubkey: string}>} */
     const items = [];
     for (const row of rows) {
-      if (!rowOffersRepair(row)) continue;
+      const reparable = new Set(reparableMissingKeys(row));
+      if (reparable.size === 0) continue;
       const targets = fanOutPlan({
         pubkey: row.pubkey,
         pointers,
         membersByKey: getRosters().membersByKey,
         adminsByKey: getRosters().adminsByKey
-      });
+      }).filter((pointer) => reparable.has(channelKey(pointer) ?? ''));
       for (const pointer of targets) items.push({ pointer, pubkey: row.pubkey });
     }
     if (items.length === 0) return;
@@ -307,7 +352,7 @@
               {m.area_members_missing({ count: row.missingKeys.length })}
             </span>
           {/if}
-          {#if rowOffersRepair(row) && canActOn(row.missingKeys)}
+          {#if rowOffersRepair(row) && canActOn(reparableMissingKeys(row))}
             <button
               class="btn btn-ghost btn-xs"
               data-testid="area-member-repair"

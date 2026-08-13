@@ -32,31 +32,53 @@ function isPresentIn(key, pubkey, membersByKey, adminsByKey) {
  *   membersByKey: Record<string, Set<string>>,
  *   adminsByKey?: Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>
  * }} args
- * @returns {Array<{pubkey: string, inKeys: string[], missingKeys: string[]}>}
+ * @returns {Array<{
+ *   pubkey: string,
+ *   inKeys: string[],
+ *   memberKeys: string[],
+ *   adminOnlyKeys: string[],
+ *   missingKeys: string[]
+ * }>} `inKeys` is `memberKeys ∪ adminOnlyKeys`, in loadedKeys order — kept for
+ *   display/gating callers that don't care about the distinction. A REMOVAL
+ *   fan-out must use `memberKeys` alone: `kind-9001 remove-user` is a no-op
+ *   for a pubkey with no 39002 entry (the relay OKs it, the roster is
+ *   unchanged, admin rights on `adminOnlyKeys` survive untouched) — folding
+ *   admin-only presence into a single `inKeys` for that purpose would make
+ *   "Remove" silently do nothing while implying success (review finding,
+ *   handoff #11d follow-up).
  */
 export function areaMemberRows({ pointers, membersByKey, adminsByKey = {} }) {
   const loadedKeys = pointers
     .map((p) => channelKey(p))
     .filter((key) => key !== null && membersByKey[key] !== undefined);
-  /** @type {Map<string, {inKeys: string[], missingKeys: string[]}>} */
+  /** @type {Map<string, {inKeys: string[], memberKeys: string[], adminOnlyKeys: string[], missingKeys: string[]}>} */
   const rows = new Map();
   for (const key of loadedKeys) {
     const k = /** @type {string} */ (key);
     for (const pubkey of membersByKey[k]) {
-      if (!rows.has(pubkey)) rows.set(pubkey, { inKeys: [], missingKeys: [] });
+      if (!rows.has(pubkey))
+        rows.set(pubkey, { inKeys: [], memberKeys: [], adminOnlyKeys: [], missingKeys: [] });
     }
     // An admin-only presence (39001 with no matching 39002 entry) must still
     // surface as a row — otherwise an implicit member is invisible to the
     // area view entirely, not just excluded from "missing".
     for (const admin of adminsByKey[k] ?? []) {
-      if (!rows.has(admin.pubkey)) rows.set(admin.pubkey, { inKeys: [], missingKeys: [] });
+      if (!rows.has(admin.pubkey))
+        rows.set(admin.pubkey, { inKeys: [], memberKeys: [], adminOnlyKeys: [], missingKeys: [] });
     }
   }
   for (const [pubkey, row] of rows) {
     for (const key of loadedKeys) {
       const k = /** @type {string} */ (key);
-      if (isPresentIn(k, pubkey, membersByKey, adminsByKey)) row.inKeys.push(k);
-      else row.missingKeys.push(k);
+      if (membersByKey[k]?.has(pubkey)) {
+        row.memberKeys.push(k);
+        row.inKeys.push(k);
+      } else if ((adminsByKey[k] ?? []).some((admin) => admin.pubkey === pubkey)) {
+        row.adminOnlyKeys.push(k);
+        row.inKeys.push(k);
+      } else {
+        row.missingKeys.push(k);
+      }
     }
   }
   return [...rows.entries()]

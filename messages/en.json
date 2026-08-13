@@ -3247,6 +3247,7 @@
   "area_members_fanout_partial": "{failed} of {total} channels refused — see the badges",
   "area_members_fanout_partial_removed": "{failed} of {total} channels refused to remove — {names}",
   "area_members_removed": "Removed from {count} channels",
+  "area_members_admin_only_note": "Admin rights in {channels} cannot be revoked here.",
   "groups_settings_title": "Group settings",
   "groups_settings_save": "Save changes",
   "groups_settings_saved": "Group updated",

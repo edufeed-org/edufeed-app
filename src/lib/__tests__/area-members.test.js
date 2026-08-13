@@ -36,8 +36,8 @@ describe('areaMemberRows', () => {
       membersByKey: { [k1]: new Set([A, B]), [k2]: new Set([A]) }
     });
     expect(rows).toEqual([
-      { pubkey: A, inKeys: [k1, k2], missingKeys: [] },
-      { pubkey: B, inKeys: [k1], missingKeys: [k2] }
+      { pubkey: A, inKeys: [k1, k2], memberKeys: [k1, k2], adminOnlyKeys: [], missingKeys: [] },
+      { pubkey: B, inKeys: [k1], memberKeys: [k1], adminOnlyKeys: [], missingKeys: [k2] }
     ]);
   });
   it('treats an unloaded roster as unknown, not missing', () => {
@@ -45,7 +45,9 @@ describe('areaMemberRows', () => {
       pointers: [p1, p2],
       membersByKey: { [k1]: new Set([A]) }
     });
-    expect(rows).toEqual([{ pubkey: A, inKeys: [k1], missingKeys: [] }]);
+    expect(rows).toEqual([
+      { pubkey: A, inKeys: [k1], memberKeys: [k1], adminOnlyKeys: [], missingKeys: [] }
+    ]);
   });
 
   // Handoff #11d: NIP-29 counts privileged roles as members (root-roster.js
@@ -53,30 +55,33 @@ describe('areaMemberRows', () => {
   // explicit 39002 entry in one of their own channels is not "missing"
   // there, just implicit. Passing adminsByKey lets area-members read that
   // the same way, so neither the badge nor a sync/repair fan-out treats
-  // them as a deviation.
-  it('an admin without an explicit 39002 entry counts as present, not missing (implicit membership)', () => {
+  // them as a deviation. `inKeys` (display/gating) still unions the two,
+  // but `memberKeys`/`adminOnlyKeys` keep the distinction a REMOVAL fan-out
+  // needs (review follow-up): kind-9001 remove-user is a no-op for a
+  // pubkey with no 39002 entry.
+  it('an admin without an explicit 39002 entry counts as present via adminOnlyKeys, not missing', () => {
     const rows = areaMemberRows({
       pointers: [p1, p2],
       membersByKey: { [k1]: new Set([A, B]), [k2]: new Set([A]) },
       adminsByKey: { [k2]: [{ pubkey: B, roles: ['admin'] }] }
     });
     expect(rows).toEqual([
-      { pubkey: A, inKeys: [k1, k2], missingKeys: [] },
-      { pubkey: B, inKeys: [k1, k2], missingKeys: [] }
+      { pubkey: A, inKeys: [k1, k2], memberKeys: [k1, k2], adminOnlyKeys: [], missingKeys: [] },
+      { pubkey: B, inKeys: [k1, k2], memberKeys: [k1], adminOnlyKeys: [k2], missingKeys: [] }
     ]);
   });
 
   // Symmetric case: an admin-only presence (no 39002 entry ANYWHERE) still
   // surfaces as a row rather than being invisible to the area view.
-  it('an admin with no 39002 entry anywhere still becomes a row, fully present via role', () => {
+  it('an admin with no 39002 entry anywhere still becomes a row, fully present via adminOnlyKeys', () => {
     const rows = areaMemberRows({
       pointers: [p1, p2],
       membersByKey: { [k1]: new Set([A]), [k2]: new Set([A]) },
       adminsByKey: { [k1]: [{ pubkey: B, roles: ['admin'] }] }
     });
     expect(rows).toEqual([
-      { pubkey: A, inKeys: [k1, k2], missingKeys: [] },
-      { pubkey: B, inKeys: [k1], missingKeys: [k2] }
+      { pubkey: A, inKeys: [k1, k2], memberKeys: [k1, k2], adminOnlyKeys: [], missingKeys: [] },
+      { pubkey: B, inKeys: [k1], memberKeys: [], adminOnlyKeys: [k1], missingKeys: [k2] }
     ]);
   });
 });

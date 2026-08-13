@@ -105,7 +105,9 @@ vi.mock('$lib/paraglide/messages', () => ({
     /** @type {{failed: number, total: number, names: string}} */ { failed, total, names }
   ) => `${failed} of ${total} channels refused to remove — ${names}`,
   area_members_removed: (/** @type {{count: number}} */ { count }) =>
-    `Removed from ${count} channels`
+    `Removed from ${count} channels`,
+  area_members_admin_only_note: (/** @type {{channels: string}} */ { channels }) =>
+    `Admin rights in ${channels} cannot be revoked here.`
 }));
 
 const { default: AreaMembersModal } = await import(
@@ -275,28 +277,24 @@ describe('AreaMembersModal add member', () => {
 });
 
 describe('AreaMembersModal remove (handoff #11a/#11b)', () => {
-  it('removing a row hides its repair prompt even though the deviation data is unchanged (no contradictory repair)', async () => {
-    // MEMBER_B is present in chan-a (removeRow's only target) and already
-    // missing from chan-b — a pre-existing deviation that would show the
-    // repair button under the old rule. This test never mutates rosterState
-    // after the click (the mock has no real relay round-trip), so the
-    // ONLY thing that can hide the button is the removal itself being
-    // remembered — not a refreshed roster.
+  it('removing a row hides the repair prompt on the roster refresh that follows, for the channel actually removed from (no contradictory repair)', async () => {
+    // MEMBER_B starts a member of BOTH channels — removeRow's fan-out
+    // targets both. This test forces a re-render with mutated rosterState
+    // (via `rerender`, a new communikeyEvent reference to invalidate the
+    // pointers → rows dependency chain) to stand in for the roster refresh
+    // that `getRosters().refresh()` triggers for real: chan-a's removal
+    // "succeeded" (MEMBER_B no longer in its Set, so it now reads as
+    // missing) — offering repair there would fan out put-user right back
+    // into the channel the admin just removed them from.
     rosterState.membersByKey = {
       [KEY_A]: new Set([ADMIN, MEMBER_B]),
-      [KEY_B]: new Set([ADMIN])
+      [KEY_B]: new Set([ADMIN, MEMBER_B])
     };
     rosterState.adminsByKey = {
       [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
       [KEY_B]: [{ pubkey: ADMIN, roles: ['admin'] }]
     };
-    const { container } = renderModal();
-
-    // Before removing: the pre-existing deviation offers the (soon to be
-    // contradictory) repair prompt.
-    expect(
-      container.querySelector(`[data-testid="area-member-repair"][data-pubkey="${MEMBER_B}"]`)
-    ).not.toBeNull();
+    const { container, rerender } = renderModal();
 
     const removeBtn = container.querySelector(
       `[data-testid="area-member-remove"][data-pubkey="${MEMBER_B}"]`
@@ -304,6 +302,14 @@ describe('AreaMembersModal remove (handoff #11a/#11b)', () => {
     expect(removeBtn).not.toBeNull();
     await fireEvent.click(/** @type {Element} */ (removeBtn));
     await waitFor(() => expect(buildRemoveUserTemplate).toHaveBeenCalledWith('chan-a', MEMBER_B));
+    await waitFor(() => expect(buildRemoveUserTemplate).toHaveBeenCalledWith('chan-b', MEMBER_B));
+
+    // Simulate the post-refresh roster: chan-a's removal went through.
+    rosterState.membersByKey = {
+      [KEY_A]: new Set([ADMIN]),
+      [KEY_B]: new Set([ADMIN, MEMBER_B])
+    };
+    await rerender({ communikeyEvent: { ...communikeyEvent }, onClose: vi.fn() });
 
     await waitFor(() =>
       expect(
@@ -341,6 +347,88 @@ describe('AreaMembersModal remove (handoff #11a/#11b)', () => {
         'warning'
       )
     );
+  });
+
+  // Review finding (critical): kind-9001 remove-user is a no-op for a
+  // pubkey with no 39002 entry — the relay OKs it, the roster is
+  // unchanged, and the pubkey keeps full channel-admin access. Folding
+  // admin-only presence into a single removal target (the old row.inKeys)
+  // made "Remove" silently do nothing on those channels while implying full
+  // success — the default state of every members-tier channel's founder.
+  it('removes only the real (39002) membership; an admin-only channel is left alone and named in a note', async () => {
+    rosterState.membersByKey = {
+      // MEMBER_A is an explicit 39002 member of chan-a (General) only —
+      // NOT listed in chan-b's (Announcements) member set at all.
+      [KEY_A]: new Set([ADMIN, MEMBER_A]),
+      [KEY_B]: new Set([ADMIN])
+    };
+    rosterState.adminsByKey = {
+      // MEMBER_A is chan-b's admin (39001) with no matching 39002 entry —
+      // present there only implicitly (handoff #11d).
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_B]: [
+        { pubkey: ADMIN, roles: ['admin'] },
+        { pubkey: MEMBER_A, roles: ['admin'] }
+      ]
+    };
+    const { container } = renderModal();
+
+    const removeBtn = container.querySelector(
+      `[data-testid="area-member-remove"][data-pubkey="${MEMBER_A}"]`
+    );
+    expect(removeBtn).not.toBeNull();
+    await fireEvent.click(/** @type {Element} */ (removeBtn));
+
+    // Only chan-a (the real membership) is fanned out to — chan-b (admin-only)
+    // never sees a remove-user call.
+    await waitFor(() => expect(buildRemoveUserTemplate).toHaveBeenCalledWith('chan-a', MEMBER_A));
+    expect(buildRemoveUserTemplate).not.toHaveBeenCalledWith('chan-b', MEMBER_A);
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(1);
+
+    // The admin-only channel is named in its own note rather than being
+    // silently skipped under a generic success toast.
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        'Admin rights in Announcements cannot be revoked here.',
+        'warning'
+      )
+    );
+    expect(showToast).toHaveBeenCalledWith('Removed from 1 channels', 'success');
+  });
+
+  // Review finding (important): recentlyRemoved must be scoped per
+  // (pubkey, channel), not per bare pubkey — a removal from one channel
+  // must not blind an unrelated deviation on a different channel.
+  it('suppresses the repair prompt only for the channel removed from — an unrelated deviation on another channel still offers repair', async () => {
+    rosterState.membersByKey = {
+      // MEMBER_B is a member of chan-a (the removal target) and ALREADY
+      // missing from chan-b — a deviation that exists independently of
+      // anything the remove click does.
+      [KEY_A]: new Set([ADMIN, MEMBER_B]),
+      [KEY_B]: new Set([ADMIN])
+    };
+    rosterState.adminsByKey = {
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_B]: [{ pubkey: ADMIN, roles: ['admin'] }]
+    };
+    const { container } = renderModal();
+
+    const removeBtn = container.querySelector(
+      `[data-testid="area-member-remove"][data-pubkey="${MEMBER_B}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (removeBtn));
+    await waitFor(() => expect(buildRemoveUserTemplate).toHaveBeenCalledWith('chan-a', MEMBER_B));
+
+    // chan-a was the removal target, but chan-b's PRE-EXISTING deviation
+    // (unrelated to the removal) must still offer repair — the suppression
+    // must not blanket-cover every channel this pubkey happens to be
+    // missing from.
+    const repairBtn = container.querySelector(
+      `[data-testid="area-member-repair"][data-pubkey="${MEMBER_B}"]`
+    );
+    expect(repairBtn).not.toBeNull();
+    await fireEvent.click(/** @type {Element} */ (repairBtn));
+    await waitFor(() => expect(buildPutUserTemplate).toHaveBeenCalledWith('chan-b', MEMBER_B, []));
   });
 });
 
