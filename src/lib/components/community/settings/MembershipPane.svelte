@@ -108,7 +108,10 @@
   async function handleCopyInviteCode() {
     if (!generatedCode) return;
     if (!navigator.clipboard) {
-      showToast(m.community_invite_failed({ reason: 'Clipboard not available' }), 'error');
+      showToast(
+        m.community_invite_failed({ reason: m.community_invite_clipboard_unavailable() }),
+        'error'
+      );
       return;
     }
     try {

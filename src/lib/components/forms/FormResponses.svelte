@@ -284,6 +284,15 @@
       getCommunitySigner
     );
 
+    // No candidate signer at all (no active signer, and no usable community
+    // signer) — without this branch the loop below never runs and the
+    // response is left forever neither decrypted nor errored, showing an
+    // infinite spinner instead of the decrypt-failed message.
+    if (signers.length === 0) {
+      decryptErrors = new Map([...decryptErrors, [response.id, m.form_responses_decrypt_failed()]]);
+      return;
+    }
+
     for (let i = 0; i < signers.length; i++) {
       try {
         const plaintext = await nip44DecryptWith(signers[i], response.pubkey, response.content);

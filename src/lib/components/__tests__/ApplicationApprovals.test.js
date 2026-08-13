@@ -149,8 +149,8 @@ function renderPanel(overrides = {}) {
   });
 }
 
-function localStorageKey(/** @type {string} */ pubkey) {
-  return `communityApplication:declined:${ADMIN}:${pubkey}`;
+function localStorageKey(/** @type {string} */ responseId) {
+  return `communityApplication:declined:${ADMIN}:${responseId}`;
 }
 
 beforeEach(() => {
@@ -281,14 +281,15 @@ describe('ApplicationApprovals', () => {
     expect(screen.getByTestId(`application-approve-${APPLICANT_MINE}`)).toBeTruthy();
   });
 
-  it('decline: persists a localStorage dismissal, hides the row, and best-effort DMs', async () => {
+  it('decline: persists a localStorage dismissal keyed by response id, hides the row, and best-effort DMs', async () => {
     timelineFixture.value = [makeResponse('mine', APPLICANT_MINE, { full_name: 'Maria' })];
     renderPanel();
 
     const btn = await screen.findByTestId(`application-decline-${APPLICANT_MINE}`);
     await fireEvent.click(btn);
 
-    expect(window.localStorage.getItem(localStorageKey(APPLICANT_MINE))).toBeTruthy();
+    // Keyed by response id ('mine'), NOT applicant pubkey.
+    expect(window.localStorage.getItem(localStorageKey('mine'))).toBeTruthy();
     expect(screen.queryByTestId(`application-approve-${APPLICANT_MINE}`)).toBeNull();
     await waitFor(() =>
       expect(sendWrappedDmMock).toHaveBeenCalledWith(
@@ -299,7 +300,7 @@ describe('ApplicationApprovals', () => {
   });
 
   it('decline persists across a re-render (localStorage-backed, not session-only)', async () => {
-    window.localStorage.setItem(localStorageKey(APPLICANT_MINE), '1');
+    window.localStorage.setItem(localStorageKey('mine'), '1');
     timelineFixture.value = [makeResponse('mine', APPLICANT_MINE, { full_name: 'Maria' })];
     renderPanel();
 
@@ -313,13 +314,35 @@ describe('ApplicationApprovals', () => {
     renderPanel();
 
     await fireEvent.click(await screen.findByTestId(`application-decline-${APPLICANT_MINE}`));
-    expect(window.localStorage.getItem(localStorageKey(APPLICANT_MINE))).toBeTruthy();
+    expect(window.localStorage.getItem(localStorageKey('mine'))).toBeTruthy();
 
     await fireEvent.click(await screen.findByText('Rückgängig'));
 
-    expect(window.localStorage.getItem(localStorageKey(APPLICANT_MINE))).toBeNull();
+    expect(window.localStorage.getItem(localStorageKey('mine'))).toBeNull();
     await waitFor(() =>
       expect(screen.getByTestId(`application-approve-${APPLICANT_MINE}`)).toBeTruthy()
     );
+  });
+
+  it("a declined applicant's newer re-submission resurfaces (decline is keyed by response id, not pubkey)", async () => {
+    // The OLD submission was declined and that dismissal persists.
+    window.localStorage.setItem(localStorageKey('old'), '1');
+    // A NEWER submission from the same applicant has a different response
+    // id — selectAdminApplications reduces the timeline to only the newest
+    // per applicant, and that newest id was never declined.
+    timelineFixture.value = [
+      { ...makeResponse('old', APPLICANT_MINE, { full_name: 'Maria' }), created_at: 1_700_000_000 },
+      {
+        ...makeResponse('new', APPLICANT_MINE, { full_name: 'Maria v2' }),
+        created_at: 1_700_000_100
+      }
+    ];
+    renderPanel();
+
+    await waitFor(() =>
+      expect(screen.getByTestId(`application-approve-${APPLICANT_MINE}`)).toBeTruthy()
+    );
+    expect(screen.queryByText('Maria')).toBeNull();
+    await waitFor(() => expect(screen.getByText('Maria v2')).toBeTruthy());
   });
 });

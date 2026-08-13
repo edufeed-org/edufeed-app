@@ -142,6 +142,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_invite_copied: () => 'Kopiert.',
   community_invite_failed: (/** @type {{reason: string}} */ p) =>
     `Code konnte nicht erstellt werden: ${p.reason}`,
+  community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar',
   // Pulled in transitively by createDefaultMembershipForm -> getDefaultMembershipForm.
   default_form_name: () => 'Standard-Formular',
   default_form_field_name: () => 'Name',
@@ -468,6 +469,26 @@ describe('MembershipPane — invite-code minting', () => {
 
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Kopiert'), 'success')
+    );
+  });
+
+  it('copy button shows an i18n clipboard-unavailable reason, not a hardcoded string', async () => {
+    // @ts-expect-error - simulating a browser with no Clipboard API
+    delete navigator.clipboard;
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+    await waitFor(() => expect(screen.getByTestId('membership-invite-copy')).toBeTruthy());
+
+    await fireEvent.click(screen.getByTestId('membership-invite-copy'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('Zwischenablage nicht verfügbar'),
+        'error'
+      )
     );
   });
 

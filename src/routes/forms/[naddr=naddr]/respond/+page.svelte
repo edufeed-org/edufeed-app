@@ -34,6 +34,15 @@
   let isSubmitting = $state(false);
   let submitted = $state(false);
   let alreadyResponded = $state(false);
+  // Distinct from `error`: `error` drives the top-level {:else if error}
+  // ladder branch, which replaces the ENTIRE page (including the form) with
+  // a bare alert — correct for pre-submit load failures (bad naddr, no
+  // template found), where there is no form to preserve. A submit-time
+  // failure (no-reviewers, unresolved community, publish failure) happens
+  // AFTER the applicant has typed into the form, so it must render above the
+  // still-mounted FormRenderer instead of tearing the whole page down and
+  // losing their input.
+  let submitError = $state('');
   // Set when a community application copy reached some root-group reviewers
   // but not all. Not an error — any one reviewer can act on it, mirroring
   // MembershipApplicationForm's partialDelivery — but the applicant should
@@ -155,7 +164,13 @@
 
   /** @param {Record<string, string>} values */
   async function handleSubmit(values) {
-    if (!manager.active || !formEvent || !decodedForm) return;
+    // FormRenderer now stays mounted (and its Submit button clickable)
+    // through an in-flight submission — see the template: only
+    // submitGate === 'waiting' unmounts it, isSubmitting no longer does, so
+    // typed input survives a submit-time error. That trades away the old
+    // "submit button disappears while sending" affordance for a double-click
+    // guard here instead.
+    if (isSubmitting || !manager.active || !formEvent || !decodedForm) return;
 
     // Gate first, before touching isSubmitting/error state: 'waiting' means
     // the community's 10222 is still in flight and the template already
@@ -173,12 +188,12 @@
     });
     if (gate === 'waiting') return;
     if (gate === 'unresolved') {
-      error = m.form_respond_community_unresolved();
+      submitError = m.form_respond_community_unresolved();
       return;
     }
 
     isSubmitting = true;
-    error = '';
+    submitError = '';
     partialDelivery = null;
 
     try {
@@ -262,9 +277,9 @@
       // resolveReviewers' typed error gets a dedicated message; everything
       // else falls back to the error's own message or the generic one.
       if (/** @type {any} */ (err)?.code === 'no-reviewers') {
-        error = m.form_respond_no_reviewers();
+        submitError = m.form_respond_no_reviewers();
       } else {
-        error = err instanceof Error ? err.message : m.forms_submit_failed();
+        submitError = err instanceof Error ? err.message : m.forms_submit_failed();
       }
     } finally {
       isSubmitting = false;
@@ -310,12 +325,25 @@
       <button class="btn btn-primary" onclick={() => history.back()}>{m.forms_go_back()}</button>
     {/if}
   {:else if formEvent}
-    {#if isSubmitting || submitGate === 'waiting'}
+    {#if submitError}
+      <div class="mb-4 alert alert-error" data-testid="form-respond-submit-error">
+        {submitError}
+      </div>
+    {/if}
+    {#if submitGate === 'waiting'}
       <div class="flex justify-center p-8">
         <span class="loading loading-lg loading-spinner"></span>
       </div>
     {:else}
+      <!-- Stays mounted through an in-flight submit (isSubmitting no longer
+           swaps this out for a spinner) so typed input survives a
+           submit-time error instead of being wiped by an unmount/remount. -->
       <FormRenderer {formEvent} onsubmit={handleSubmit} />
+      {#if isSubmitting}
+        <div class="mt-2 flex justify-center">
+          <span class="loading loading-sm loading-spinner"></span>
+        </div>
+      {/if}
     {/if}
   {/if}
 </div>

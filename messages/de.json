@@ -3285,6 +3285,7 @@
   "community_invite_copy": "Kopieren",
   "community_invite_copied": "Kopiert.",
   "community_invite_failed": "Code konnte nicht erstellt werden: {reason}",
+  "community_invite_clipboard_unavailable": "Zwischenablage nicht verfügbar",
   "community_membership_pane_application_title": "Beitrittsformular",
   "community_membership_pane_application_lead": "Wer beitreten möchte, füllt dieses Formular aus; Admins entscheiden über die Aufnahme.",
   "community_membership_pane_application_none": "Kein Formular hinterlegt — Beitritt per Einladung.",

@@ -94,7 +94,7 @@ export function generateGroupId() {
  */
 export function generateInviteCode() {
   // Unambiguous alphabet: excludes 0/O/1/l/i/I/L/o (commonly confused).
-  // Modulo bias is accepted at 12 chars / 52-char alphabet.
+  // Modulo bias is accepted at 12 chars / 54-char alphabet.
   const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
   const bytes = crypto.getRandomValues(new Uint8Array(12));
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');

@@ -3285,6 +3285,7 @@
   "community_invite_copy": "Copy",
   "community_invite_copied": "Copied.",
   "community_invite_failed": "Code creation failed: {reason}",
+  "community_invite_clipboard_unavailable": "Clipboard not available",
   "community_membership_pane_application_title": "Application form",
   "community_membership_pane_application_lead": "Anyone who wants to join fills out this form; admins decide on membership.",
   "community_membership_pane_application_none": "No form set — joining is by invitation.",

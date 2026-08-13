@@ -550,7 +550,15 @@ export async function markAsRead(type) {
 export function cleanup() {
   for (const sub of subscriptions) sub.unsubscribe();
   subscriptions = [];
-  mainNotifications = [];
+  // `mainNotifications` is $derived FROM rawMainNotifications (see its
+  // declaration above) — it must never be assigned directly. Svelte 5 lets a
+  // $derived be reassigned as a one-off "override", but doing so permanently
+  // severs it from its source expression: it becomes a plain frozen value
+  // and stops recomputing when rawMainNotifications changes, FOREVER (this
+  // silently killed the entire membership-application collision guard from
+  // the very first initializeInbox() call, since cleanup() runs unconditionally
+  // at its top). Reset the raw state instead and let the derived follow it.
+  rawMainNotifications = [];
   rsvpNotifications = [];
   pollResponseNotifications = [];
   readMarkers = null;

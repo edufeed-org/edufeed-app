@@ -6,9 +6,12 @@
   header note in loaders/community.js), decrypts and renders them, and lets
   the admin Approve (root put-user, then fan-out over the community's
   Stufe-2 channels, then a roster refresh, then a best-effort NIP-17 DM) or
-  Decline (persistent localStorage dismissal, keyed by community + applicant
-  — not by admin, so any admin's decline sticks in THIS browser — plus a
-  best-effort DM and an in-session Undo).
+  Decline (persistent localStorage dismissal, keyed by community + RESPONSE ID
+  — not by admin, so any admin's decline sticks in THIS browser, and not by
+  applicant pubkey, so a newer re-submission from a declined applicant
+  resurfaces as a fresh pending item rather than staying hidden forever —
+  precedent: MembershipApprovalsPanel.svelte's rejectedIds by r.id) plus a
+  best-effort DM and an in-session Undo.
 
   Parallels MembershipApprovalsPanel.svelte (the deployment's NIP-05 handle
   queue) but provisions via the roster fan-out service (Task 1) instead of
@@ -94,9 +97,20 @@
   // of the same relay list doesn't requery.
   /** @type {SvelteSet<string>} */
   let loadedExtraRelays = new SvelteSet();
+  // Tracks the address loadedExtraRelays was last accumulated against. Plain
+  // `let`, read/written only inside the effect (channel-rosters.svelte.js
+  // pointersKey lesson) — scope the dedupe set to the identity it was
+  // computed against, so switching to a different community's application
+  // (a new `address`) doesn't inherit a stale set and skip loaders for
+  // relays it never actually loaded for THIS address.
+  let loadedExtraRelaysAddress = '';
   $effect(() => {
     const address = applicationRef?.address;
     const myPubkey = activeUser?.pubkey;
+    if (address !== loadedExtraRelaysAddress) {
+      loadedExtraRelays = new SvelteSet();
+      loadedExtraRelaysAddress = address ?? '';
+    }
     if (!address || !myPubkey) return;
 
     // Cast sidesteps the applesauce model-constructor type mismatch (same
@@ -164,23 +178,29 @@
     }
   }
 
-  // --- Decline (persistent, per community + applicant) ---------------------
+  // --- Decline (persistent, per community + RESPONSE ID) --------------------
+  // Keyed by response.id (not applicant pubkey): declining a specific
+  // submission never suppresses a LATER re-submission from the same
+  // applicant, since selectAdminApplications already reduces `responses` to
+  // one (newest) event per pubkey — a re-submission has a fresh id that
+  // simply isn't in this set. Old pubkey-keyed localStorage entries from
+  // before this change are inert and never migrated.
 
-  /** @param {string} pubkey */
-  function declinedKey(pubkey) {
-    return `communityApplication:declined:${communityId}:${pubkey}`;
+  /** @param {string} responseId */
+  function declinedKey(responseId) {
+    return `communityApplication:declined:${communityId}:${responseId}`;
   }
 
-  /** @type {Set<string>} pubkeys declined; loaded lazily from localStorage as responses arrive */
-  let declinedPubkeys = $state.raw(new Set());
+  /** @type {Set<string>} response ids declined; loaded lazily from localStorage as responses arrive */
+  let declinedResponseIds = $state.raw(new Set());
 
   $effect(() => {
     if (typeof window === 'undefined') return;
     for (const response of responses) {
-      if (declinedPubkeys.has(response.pubkey)) continue;
+      if (declinedResponseIds.has(response.id)) continue;
       try {
-        if (window.localStorage.getItem(declinedKey(response.pubkey))) {
-          declinedPubkeys = new Set([...declinedPubkeys, response.pubkey]);
+        if (window.localStorage.getItem(declinedKey(response.id))) {
+          declinedResponseIds = new Set([...declinedResponseIds, response.id]);
         }
       } catch {
         // localStorage may be disabled — nothing to load, no crash.
@@ -190,28 +210,27 @@
 
   /** @param {import('nostr-tools').NostrEvent} response */
   function decline(response) {
-    const pubkey = response.pubkey;
     try {
-      window.localStorage.setItem(declinedKey(pubkey), '1');
+      window.localStorage.setItem(declinedKey(response.id), '1');
     } catch {
       // localStorage may be disabled — still hides for this session below.
     }
-    declinedPubkeys = new Set([...declinedPubkeys, pubkey]);
+    declinedResponseIds = new Set([...declinedResponseIds, response.id]);
     // Best-effort — the decline already took effect locally either way.
     sendWrappedDm(
-      pubkey,
+      response.pubkey,
       m.community_application_declined_dm({ community: communityName || communityId })
     ).catch((err) => console.warn('community: application declined-DM failed', err));
   }
 
-  /** @param {string} pubkey */
-  function undoDecline(pubkey) {
+  /** @param {string} responseId */
+  function undoDecline(responseId) {
     try {
-      window.localStorage.removeItem(declinedKey(pubkey));
+      window.localStorage.removeItem(declinedKey(responseId));
     } catch {
       // ignore
     }
-    declinedPubkeys = new Set([...declinedPubkeys].filter((pk) => pk !== pubkey));
+    declinedResponseIds = new Set([...declinedResponseIds].filter((id) => id !== responseId));
   }
 
   // --- Approve (root put-user, then fan-out, then refresh, then DM) --------
@@ -273,14 +292,14 @@
 
   // --- Derived lists ---------------------------------------------------------
 
-  const visibleResponses = $derived(responses.filter((r) => !declinedPubkeys.has(r.pubkey)));
+  const visibleResponses = $derived(responses.filter((r) => !declinedResponseIds.has(r.id)));
   const pendingResponses = $derived(
     visibleResponses.filter((r) => !roster?.members?.has(r.pubkey))
   );
   const approvedResponses = $derived(
     visibleResponses.filter((r) => roster?.members?.has(r.pubkey))
   );
-  const declinedResponses = $derived(responses.filter((r) => declinedPubkeys.has(r.pubkey)));
+  const declinedResponses = $derived(responses.filter((r) => declinedResponseIds.has(r.id)));
 
   /** @param {string} hex */
   function shortPubkey(hex) {
@@ -380,7 +399,7 @@
         {#each declinedResponses as response (response.id)}
           <li class="flex items-center gap-2 text-xs text-base-content/50">
             <span>{shortPubkey(response.pubkey)}</span>
-            <button class="btn btn-ghost btn-xs" onclick={() => undoDecline(response.pubkey)}>
+            <button class="btn btn-ghost btn-xs" onclick={() => undoDecline(response.id)}>
               {m.community_applications_undo()}
             </button>
           </li>

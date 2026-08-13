@@ -272,11 +272,14 @@
       <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
         {#if isRosterLoading}
           <span class="loading loading-xs loading-spinner text-base-content/40"></span>
-        {:else if requestSent}
-          <span class="text-sm text-base-content/60">{m.community_join_pending()}</span>
         {:else}
           <div class="flex flex-col items-end gap-1">
-            {#if !isRootClosed}
+            {#if requestSent}
+              <!-- Pending message stays alongside the invite-code affordance,
+                   not instead of it: redeeming a code is always legitimate
+                   even after a bare 9021 is already outstanding. -->
+              <span class="text-sm text-base-content/60">{m.community_join_pending()}</span>
+            {:else if !isRootClosed}
               <button
                 onclick={handleJoinGroup}
                 disabled={isSendingJoin}

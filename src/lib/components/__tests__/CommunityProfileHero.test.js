@@ -284,6 +284,26 @@ describe('CommunityProfileHero — moderated join lane', () => {
     );
   });
 
+  it('pending state (requestSent): keeps the invite-code affordance alongside the pending message', async () => {
+    // Redeeming a code is always legitimate, even with a bare 9021 already
+    // outstanding — the pending message must not replace the toggle/input.
+    const service = /** @type {import('vitest').Mock} */ (joinCommunityGroup);
+    service.mockResolvedValueOnce(undefined);
+    renderModerated();
+
+    await fireEvent.click(screen.getByText('Join'));
+    await waitFor(() =>
+      expect(screen.getAllByText('Request sent — waiting for approval.').length).toBeGreaterThan(0)
+    );
+
+    // Invite toggle is still rendered in the pending state.
+    expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
+
+    // And the input still works from the pending state.
+    await fireEvent.click(screen.getByText('Redeem invite code'));
+    expect(screen.getByPlaceholderText('Code')).toBeTruthy();
+  });
+
   it('a membership-refusal error gets the friendlier toast', async () => {
     const service = /** @type {import('vitest').Mock} */ (joinCommunityGroup);
     service.mockRejectedValueOnce(new Error('not a member'));
