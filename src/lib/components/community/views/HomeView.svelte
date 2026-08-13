@@ -179,9 +179,16 @@
   });
 </script>
 
-{#if profileEvent && communikeyEvent}
+{#if communikeyEvent}
   <div>
-    <!-- Community Profile Hero -->
+    <!-- Community Profile Hero. profileEvent (the community's own kind-0) is
+         optional here on purpose — CommunityProfileHero already falls back
+         to a generic display name/avatar when it's absent (getDisplayName/
+         getProfilePicture). Gating the whole home view on it too meant a
+         community founded via "Use Current Keypair" by an account that
+         hasn't published a profile yet (a fresh nsec, no kind:0 anywhere)
+         rendered a permanently blank home view for every visitor — the
+         kind:0 fetch has nothing to ever resolve. -->
     <CommunityProfileHero
       {communityId}
       {communikeyEvent}

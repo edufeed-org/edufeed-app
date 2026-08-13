@@ -3,7 +3,7 @@
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
 **Last updated:** 2026-08-13
-**Total tests:** 318
+**Total tests:** 320
 
 ## Quick Summary
 
@@ -50,6 +50,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `cordn-groups.test.js`               | 1                     | Yes  | Cordn groups (/c/groups, per-user opt-in seeded via localStorage): two-account MLS create → invite → welcome accept → bidirectional messages. Real-network (homelab coordinator via relay.contextvm.org); skips unless `CORDN_GROUPS_ENABLED=true`                                                                                     |
 | `concord-channels.test.js`           | 1                     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                                                                                                                                                                                                                     |
 | `concord-notifications.test.js`      | 1                     | Yes  | Concord unread/mention badges: tab rollup dot + channel-row dot (2 channels), clears on row open, survives reload (IDB markers), reply lights mention pill                                                                                                                                                                             |
+| `moderated-community.test.js`        | 2                     | Yes  | Moderated community (NIP-29) lifecycle: wizard-driven create → mint invite code → second-context guest redeems via the hero → owner's MembershipPane shows the new member; open↔moderated type-flip round trip via Settings                                                                                                           |
 
 ## Detailed Coverage
 
@@ -1380,38 +1381,22 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 | **Accessibility (a11y)** | Low      | Keyboard navigation, screen reader                                                                                                                                                                                                                                                                                                                                        |
 | **Error Recovery**       | Low      | Offline handling, relay failures                                                                                                                                                                                                                                                                                                                                          |
 
-**Known gap: moderated group lifecycle (NIP-29).** The full Moderiert flow —
-create + gate a type → moderated join (bare 9021 vs invite-code 9021) →
-member publish renders / non-member filtered → put-user role change — has no
-browser E2E yet. The mock-relay fixtures the existing suite runs against
-don't speak NIP-29 moderation kinds (9000-9021, 39000-39003); closing this
-gap needs either a real NIP-29 relay added to the Playwright docker-compose
-stack or a mock-relay extension that implements the protocol. In the
-interim, `.superpowers/sdd/2026-08-12-groups-plan4-joining-visibility/`
-Task 9's scripted Node+nostr-tools probe against a live relay
-(`wss://groups.0xchat.com`) exercises the protocol path directly — create,
-invite-mint, bare-join, coded-join, put-user, roster reads, cleanup — and is
-the closest thing to live-relay verification this plan has. It found that
-relay does not support kind 9009 (`create-invite`), so even the scripted
-probe couldn't verify code redemption end-to-end there; see the design
-doc's Plan 4 shipping-state note for the full finding.
-
 ### Partially Covered
 
-| Feature              | What's Covered                                                                    | What's Missing                                                                                                                                                                                                                                                   |
-| -------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Account management   | NSEC login, logout, persistence, switching                                        | NIP-07 extension, NIP-49 encrypted keys                                                                                                                                                                                                                          |
-| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides       | -                                                                                                                                                                                                                                                                |
-| Calendar events      | View, create, delete, edit (full CRUD)                                            | -                                                                                                                                                                                                                                                                |
-| AMB resources        | Full creation flow (page route), file upload, relay publish                       | Edit mode via naddr URL param                                                                                                                                                                                                                                    |
-| Profile page         | View profile, notes, edit modal, save flow                                        | Avatar upload (Blossom integration)                                                                                                                                                                                                                              |
-| Comments             | Post, reply, delete                                                               | Edit comment                                                                                                                                                                                                                                                     |
-| Reactions            | Add, remove                                                                       | Custom emoji support                                                                                                                                                                                                                                             |
-| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                      | Full search flow (depends on relay NIP-50 support)                                                                                                                                                                                                               |
-| Community membership | Join/leave, chat message posting                                                  | -                                                                                                                                                                                                                                                                |
-| Community creation   | Both keypair flows, all steps, settings, publish, type step absent with flags off | Badge access control; type-step selection (Offen/Moderiert/Geschlossen) + moderated root-group provisioning are covered by unit tests (`community-wizard-logic.test.js`, provisioning tests) but not live E2E — see "Known gap: moderated group lifecycle" below |
-| Signup (normie path) | 2-step flow happy path, login modal CTA structure, Termi backup hint appearance   | Full backup/follow hint flows (covered by Vitest)                                                                                                                                                                                                                |
-| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                                | -                                                                                                                                                                                                                                                                |
+| Feature              | What's Covered                                                                                                                                                             | What's Missing                                     |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Account management   | NSEC login, logout, persistence, switching                                                                                                                                 | NIP-07 extension, NIP-49 encrypted keys            |
+| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides                                                                                                | -                                                  |
+| Calendar events      | View, create, delete, edit (full CRUD)                                                                                                                                     | -                                                  |
+| AMB resources        | Full creation flow (page route), file upload, relay publish                                                                                                                | Edit mode via naddr URL param                      |
+| Profile page         | View profile, notes, edit modal, save flow                                                                                                                                 | Avatar upload (Blossom integration)                |
+| Comments             | Post, reply, delete                                                                                                                                                        | Edit comment                                       |
+| Reactions            | Add, remove                                                                                                                                                                | Custom emoji support                               |
+| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                                                                                                               | Full search flow (depends on relay NIP-50 support) |
+| Community membership | Join/leave, chat message posting                                                                                                                                           | -                                                  |
+| Community creation   | Both keypair flows, all steps, settings, publish, type step absent with flags off; moderated create + invite/redeem + type flips (see `moderated-community.test.js` below) | Badge access control                               |
+| Signup (normie path) | 2-step flow happy path, login modal CTA structure, Termi backup hint appearance                                                                                            | Full backup/follow hint flows (covered by Vitest)  |
+| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                                                                                                                         | -                                                  |
 
 ---
 
@@ -1713,6 +1698,66 @@ Chromium's `Notification` support is unreliable in CI. The toast gate logic
 badges + `markChannelRead` on mount), ContentNavSidebar (Channels tab
 rollup), ChannelChat (reply UI, mention p-tag on send), the Concord
 notifications service (`src/lib/concord/notifications.svelte.js`).
+
+---
+
+### moderated-community.test.js (2 tests)
+
+**Routes:** `/discover`, `/c/[pubkey]`, `/c/[pubkey]?view=settings`
+**Auth required:** Yes (fresh nsec accounts per run; owner/guest spec uses
+two isolated browser contexts)
+
+Closes the moderated-community-lifecycle gap left open by
+`community-creation.test.js` (which forces `GROUPS_ENABLED`/`concord.enabled`
+off for its own step-count hermeticity — see that file's header comment).
+This file runs against the shared webServer's real `GROUPS_ENABLED=true` +
+`GROUPS_RELAYS=ws://localhost:17004` (the in-process NIP-29 mock relay from
+Task 9, `e2e/nip29-relay.js`), so the wizard's `type` step and the Settings
+type-flip UI are genuinely live here. Copies `concord-channels.test.js`'s
+scaffolding: `vis()` for the triple-mounted `/c/[pubkey]` tree,
+`bootstrapLogin`, and a `createCommunityWithCurrentKeypair`-shaped helper
+(`createCommunityViaWizard`, parameterized by community type since this file
+needs both 'open' and 'moderated' creates).
+
+1. **Moderated lifecycle** — owner drives the wizard through the `type` step
+   (moderated), the `people` step (skipped — invitees are added post-creation
+   via invite codes, not here), and creation; asserts the Settings
+   `[data-testid="settings-type-card"]` shows "Moderated"; mints an invite
+   code from `MembershipPane` (`membership-invite-create` /
+   `membership-invite-code`); a second browser context logs in with a fresh
+   key, visits the bare community page, confirms no "Member" badge and the
+   hero's "Redeem invite code" affordance; redeems the code
+   (`community_join_invite_toggle` → code input → submit); asserts the
+   "Member" badge appears (mock-relay roster fan-out, NIP-29 kind 9021 with
+   `code` tag → 39002 regenerate) and that the owner's `MembershipPane`
+   reflects the new member (both the "N members" count and a
+   `[data-testid="member-row"]` matching the guest's pubkey inside
+   `GroupMembersModal`).
+2. **Type flip lifecycle** — owner creates an OPEN community, flips it to
+   moderated via Settings (`settings-flip-to-moderated` → confirm — this
+   provisions a NIP-29 root group, same as the create-time path), asserts
+   the type card updates to "Moderated", then flips back
+   (`settings-flip-to-open` → confirm) and asserts it's "Open" again.
+
+**Bug found and fixed while writing this spec:** `HomeView.svelte` gated its
+entire body (including `CommunityProfileHero`, which owns the invite-redeem
+UI) behind `{#if profileEvent && communikeyEvent}`. A community founded via
+"Use Current Keypair" by an account with no published kind:0 (e.g. a fresh
+e2e nsec, or in practice any real user who hasn't set a profile yet before
+founding a community) has no `profileEvent` to ever resolve — the whole home
+view rendered permanently blank for every visitor, including the "Redeem
+invite code" affordance this spec needs. Fixed by dropping `profileEvent`
+from the gate (`{#if communikeyEvent}`); `CommunityProfileHero` already
+falls back to a generic display name/avatar (`getDisplayName(profileEvent)
+|| 'Community'`) when `profileEvent` is absent, so nothing downstream needed
+to change.
+
+**Components exercised:** `CreateCommunityModal` (type step, people step),
+`SettingsView` (type card, flip buttons + confirm dialogs), `MembershipPane`
+(invite mint, member count, manage-members entry point),
+`CommunityProfileHero` (member badge, invite-redeem affordance),
+`GroupMembersModal` (member row), `HomeView` (post-fix rendering with no
+community profile).
 
 ## Google login (Pomegranate) — manual checklist (no E2E: external OAuth)
 

@@ -5,27 +5,29 @@
  * community settings, and successful creation.
  *
  * Hermeticity (group-features-off): `playwright.config.js`'s shared webServer
- * hardcodes `CONCORD_ENABLED: 'true'` unconditionally — required for real
- * Concord flows in concord-channels.test.js / concord-notifications.test.js,
- * which run against the same server process, so it cannot simply be turned
- * off in the webServer env for everyone. That flag alone is enough to light
- * up CreateCommunityModal's flag-gated type step
- * (`typeStepVisible = moderatedAvailable || !!runtimeConfig.concord?.enabled`,
- * see wizard-logic.js `communityWizardSteps`), which would break every
- * step-count assumption below. (`GROUPS_ENABLED` is unset in both the
- * webServer env and this worktree's `.env`, so `moderatedAvailable` is false
- * either way and needs no override — but see the note below on why relying
- * on that is fragile.)
+ * hardcodes `CONCORD_ENABLED: 'true'` AND (since Task 9/10's moderated-
+ * lifecycle E2E infra) `GROUPS_ENABLED: 'true'` unconditionally — both are
+ * required elsewhere against the same server process (concord-channels.test.js
+ * / concord-notifications.test.js for Concord; moderated-community.test.js for
+ * groups), so neither can simply be turned off in the webServer env for
+ * everyone. EITHER flag alone is enough to light up CreateCommunityModal's
+ * flag-gated type step (`typeStepVisible = moderatedAvailable ||
+ * !!runtimeConfig.concord?.enabled`, see wizard-logic.js
+ * `communityWizardSteps`), which would break every step-count assumption
+ * below — so both must be forced off together; forcing only `concord.enabled`
+ * (the original fix, before GROUPS_ENABLED went live server-wide) left
+ * `moderatedAvailable` true and the type step reappeared.
  *
- * Fix: force `runtimeConfig.concord.enabled = false` for every page this
- * file touches, following the `enableNpubLogin` technique in
- * npub-login.test.js — rewrite the JSON-escaped `/api/config` payload
- * SvelteKit inlines into the SSR'd document (the root layout's
- * `initializeConfig()` guards against re-initializing later, so intercepting
- * only the client-side `/api/config` fetch on `/discover` is too late once a
- * prior `/` navigation — e.g. inside the `authenticatedPage` fixture — has
- * already baked `concord.enabled: true` into the store), plus intercept the
- * `/api/config` route directly for any later client-side fetches.
+ * Fix: force `runtimeConfig.concord.enabled = false` AND
+ * `runtimeConfig.groupsEnabled = false` for every page this file touches,
+ * following the `enableNpubLogin` technique in npub-login.test.js — rewrite
+ * the JSON-escaped `/api/config` payload SvelteKit inlines into the SSR'd
+ * document (the root layout's `initializeConfig()` guards against
+ * re-initializing later, so intercepting only the client-side `/api/config`
+ * fetch on `/discover` is too late once a prior `/` navigation — e.g. inside
+ * the `authenticatedPage` fixture — has already baked `concord.enabled: true`
+ * / `groupsEnabled: true` into the store), plus intercept the `/api/config`
+ * route directly for any later client-side fetches.
  *
  * This is wired in via a local override of the `page` fixture (not a
  * `test.beforeEach`) so it also covers `authenticatedPage`, which depends on
@@ -85,21 +87,25 @@ function fetchDocument(url) {
 }
 
 /**
- * Force `concord.enabled: false` in the runtime config for a page, no matter
- * whether it was first populated via an SSR'd document or a client-side
- * `/api/config` fetch. See the file header comment for why both are needed.
+ * Force `concord.enabled: false` AND `groupsEnabled: false` in the runtime
+ * config for a page, no matter whether it was first populated via an SSR'd
+ * document or a client-side `/api/config` fetch. See the file header comment
+ * for why both flags need forcing off together.
  * @param {import('@playwright/test').Page} page
  */
 async function disableGroupFeatures(page) {
   const patch = (text) =>
     text
       .replaceAll('\\"concord\\":{\\"enabled\\":true', '\\"concord\\":{\\"enabled\\":false')
-      .replaceAll('"concord":{"enabled":true', '"concord":{"enabled":false');
+      .replaceAll('"concord":{"enabled":true', '"concord":{"enabled":false')
+      .replaceAll('\\"groupsEnabled\\":true', '\\"groupsEnabled\\":false')
+      .replaceAll('"groupsEnabled":true', '"groupsEnabled":false');
 
   await page.route('**/api/config', async (route) => {
     const response = await route.fetch();
     const json = await response.json();
     if (json.concord) json.concord = { ...json.concord, enabled: false };
+    if (json.groupsEnabled) json.groupsEnabled = false;
     await route.fulfill({ response, json });
   });
 
