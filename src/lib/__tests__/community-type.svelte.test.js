@@ -1,15 +1,17 @@
+// @ts-nocheck
+/* eslint-disable no-undef -- $effect is a Svelte rune, available in .svelte.js context */
 /** @vitest-environment jsdom */
-// src/lib/__tests__/community-type.svelte.test.js
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Subject } from 'rxjs';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { BehaviorSubject } from 'rxjs';
+import { flushSync } from 'svelte';
 
 const COMMUNITY_PUBKEY = 'a'.repeat(64);
 const RELAY = 'wss://test.example.com';
 
-/** @type {Subject<any>} */
+/** @type {BehaviorSubject<any>} */
 let replaceableSubject;
 
-/** @type {Subject<any>} */
+/** @type {BehaviorSubject<any>} */
 let loaderSubject;
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -42,115 +44,148 @@ vi.mock('$lib/groups/community-membership.js', () => ({
   })
 }));
 
-const { useCommunityType } = await import('$lib/stores/community-type.svelte.js');
-const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
-const { addressLoader } = await import('$lib/loaders/base.js');
-
-beforeEach(() => {
-  replaceableSubject = new Subject();
-  loaderSubject = new Subject();
-  vi.clearAllMocks();
-});
-
 describe('useCommunityType', () => {
+  /** @type {typeof import('$lib/stores/community-type.svelte.js').useCommunityType} */
+  let useCommunityType;
+
+  /** @type {(() => void) | undefined} */
+  let cleanup;
+
+  beforeEach(async () => {
+    replaceableSubject = new BehaviorSubject(undefined);
+    loaderSubject = new BehaviorSubject(undefined);
+    const mod = await import('$lib/stores/community-type.svelte.js');
+    useCommunityType = mod.useCommunityType;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup?.();
+  });
+
   it('returns a getter function', () => {
-    const getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    let getter;
+    cleanup = $effect.root(() => {
+      getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+    flushSync();
+
     expect(typeof getter).toBe('function');
   });
 
   it('returns null initially while unknown', () => {
-    const getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    let getter;
+    cleanup = $effect.root(() => {
+      getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+    flushSync();
+
     expect(getter()).toBe(null);
   });
 
-  it('loads community type using addressLoader with relays', () => {
-    const getPubkey = vi.fn(() => COMMUNITY_PUBKEY);
-    useCommunityType(getPubkey);
+  it('loads community type using addressLoader with correct pointer shape including relays', async () => {
+    const { addressLoader: addressLoaderMock } = await import('$lib/loaders/base.js');
+    cleanup = $effect.root(() => {
+      useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+    flushSync();
 
-    expect(addressLoader).toHaveBeenCalledWith({
+    expect(vi.mocked(addressLoaderMock)).toHaveBeenCalledWith({
       kind: 10222,
       pubkey: COMMUNITY_PUBKEY,
       relays: [RELAY]
     });
   });
 
-  it('subscribes to eventStore.replaceable(10222, pubkey)', () => {
-    useCommunityType(() => COMMUNITY_PUBKEY);
-    expect(eventStore.replaceable).toHaveBeenCalledWith(10222, COMMUNITY_PUBKEY);
+  it('subscribes to eventStore.replaceable(10222, pubkey)', async () => {
+    const { eventStore: eventStoreMock } = await import('$lib/stores/nostr-infrastructure.svelte');
+    cleanup = $effect.root(() => {
+      useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+    flushSync();
+
+    expect(vi.mocked(eventStoreMock.replaceable)).toHaveBeenCalledWith(10222, COMMUNITY_PUBKEY);
   });
 
-  it('derives open community type', () => {
-    const getter = useCommunityType(() => COMMUNITY_PUBKEY);
+  it('derives open community type from empty tags', () => {
+    let getter;
+    cleanup = $effect.root(() => {
+      getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+
     const event = {
       kind: 10222,
       pubkey: COMMUNITY_PUBKEY,
       tags: []
     };
     replaceableSubject.next(event);
+    flushSync();
 
     expect(getter()).toBe('open');
   });
 
-  it('derives moderated community type', () => {
-    const getter = useCommunityType(() => COMMUNITY_PUBKEY);
+  it('derives moderated community type from membership pointer', () => {
+    let getter;
+    cleanup = $effect.root(() => {
+      getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+
     const event = {
       kind: 10222,
       pubkey: COMMUNITY_PUBKEY,
       tags: /** @type {string[][]} */ ([['membership', 'root1', RELAY]])
     };
     replaceableSubject.next(event);
+    flushSync();
 
     expect(getter()).toBe('moderated');
   });
 
-  it('derives closed community type', () => {
-    const getter = useCommunityType(() => COMMUNITY_PUBKEY);
+  it('derives closed community type from concord pointer', () => {
+    let getter;
+    cleanup = $effect.root(() => {
+      getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+
     const event = {
       kind: 10222,
       pubkey: COMMUNITY_PUBKEY,
       tags: /** @type {string[][]} */ ([['concord', 'area1', RELAY]])
     };
     replaceableSubject.next(event);
+    flushSync();
 
     expect(getter()).toBe('closed');
   });
 
-  it('returns null when event is undefined', () => {
-    const getter = useCommunityType(() => COMMUNITY_PUBKEY);
+  it('returns null when replaceable emits undefined', () => {
+    let getter;
+    cleanup = $effect.root(() => {
+      getter = useCommunityType(() => COMMUNITY_PUBKEY);
+    });
+
     replaceableSubject.next(undefined);
+    flushSync();
 
     expect(getter()).toBe(null);
   });
 
-  it('has cleanup that unsubscribes from both loader and replaceable', () => {
-    // The hook creates subscriptions in an $effect
-    // Cleanup is returned from $effect and will unsubscribe both loaderSubject and replaceableSubject
-    useCommunityType(() => COMMUNITY_PUBKEY);
+  it('unsubscribes subscriptions on cleanup', () => {
+    const loaderSub = { unsubscribe: vi.fn() };
+    const replaceableSub = { unsubscribe: vi.fn() };
 
-    // Verify that both subscriptions are created
-    expect(addressLoader).toHaveBeenCalled();
-    expect(eventStore.replaceable).toHaveBeenCalled();
-  });
+    // Replace the loaderSubject mock with one that tracks the subscription
+    loaderSubject.subscribe = vi.fn(() => loaderSub);
+    replaceableSubject.subscribe = vi.fn(() => replaceableSub);
 
-  it('reacts to pubkey changes', () => {
-    const pubkeySource = vi.fn(() => COMMUNITY_PUBKEY);
-    useCommunityType(pubkeySource);
-
-    expect(addressLoader).toHaveBeenCalledWith({
-      kind: 10222,
-      pubkey: COMMUNITY_PUBKEY,
-      relays: [RELAY]
+    cleanup = $effect.root(() => {
+      useCommunityType(() => COMMUNITY_PUBKEY);
     });
+    flushSync();
 
-    // Change pubkey
-    const newPubkey = 'b'.repeat(64);
-    pubkeySource.mockReturnValue(newPubkey);
+    cleanup();
 
-    // After pubkey changes (in a new effect cycle)
-    expect(addressLoader).toHaveBeenLastCalledWith({
-      kind: 10222,
-      pubkey: COMMUNITY_PUBKEY,
-      relays: [RELAY]
-    });
+    expect(loaderSub.unsubscribe).toHaveBeenCalled();
+    expect(replaceableSub.unsubscribe).toHaveBeenCalled();
   });
 });
