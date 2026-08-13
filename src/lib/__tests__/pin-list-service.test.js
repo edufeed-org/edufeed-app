@@ -56,7 +56,8 @@ const mockManager = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: mockManager
+  manager: mockManager,
+  accountsMeta: { version: 0 }
 }));
 
 vi.mock('$lib/services/publish-service.js', () => ({

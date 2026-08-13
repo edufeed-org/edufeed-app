@@ -20,8 +20,14 @@ const mockManager = vi.hoisted(() => ({
   active: { pubkey: 'a'.repeat(64), signer: {} },
   getAccountForPubkey: vi.fn(() => ({ signer: {} }))
 }));
-vi.mock('$lib/stores/accounts.svelte', () => ({ manager: mockManager }));
-vi.mock('$lib/stores/accounts.svelte.js', () => ({ manager: mockManager }));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  manager: mockManager,
+  accountsMeta: { version: 0 }
+}));
+vi.mock('$lib/stores/accounts.svelte.js', () => ({
+  manager: mockManager,
+  accountsMeta: { version: 0 }
+}));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: { concord: { enabled: true, relays: ['wss://concord.example'] } }

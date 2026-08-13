@@ -1,58 +1,66 @@
 /**
- * Manager-reactivity bridge (Plan 5 Task 11) — the consumer side.
+ * Manager-reactivity bridge (Plan 5 Task 11) — the consumer side, against
+ * the REAL accounts.svelte.js module (no vi.mock of it at all — a mocked
+ * `manager`/`accountsMeta` stand-in would only prove the mock reacts, not
+ * that the real bridge does; see accounts-version-bridge.test.js's comment
+ * on why the earlier `manager.accountsVersion` design was a placebo).
  *
- * accounts-version-bridge.test.js proves the bump; this proves the payoff:
- * a $derived.by wrapping getCommunitySigner() recomputes when
- * manager.accountsVersion bumps, simulating what accounts.svelte.js's real
- * accounts$/active$ subscription does on a mid-session manager emission
- * (switching accounts, importing/removing one).
+ * Runs under jsdom. `$derived.by`/`flushSync()` alone are environment-
+ * agnostic (per accounts-version-bridge.test.js), but a plain `$effect`
+ * body inside `$effect.root` was empirically observed to never fire when
+ * this file's vitest-environment pragma resolved to Node instead — jsdom
+ * is required for $effect to actually flush here, matching the existing
+ * jsdom precedent in image-license-hook.test.svelte.js. (NOTE for anyone
+ * editing this comment: keep exactly one "vitest dash environment" pragma
+ * line in this file, at the very end of this block — a second one earlier
+ * in the prose gets picked up INSTEAD of the real one below and silently
+ * changes which environment the file runs under.)
+ *
+ * Running under jsdom means `initializeAccountPersistence()` (module init,
+ * gated on `typeof window`) runs its window branch too — localStorage
+ * read/writes and a cascade of dynamic imports (nostr-infrastructure,
+ * relay services, etc.) fire in the background. `manager.addAccount(...)`
+ * only pushes to `accounts$` (not `active$`), so none of that cascade
+ * depends on our fixture; the one touch point (`manager.toJSON()` in the
+ * accounts$ persistence subscription calling `.toJSON()` on our plain
+ * fixture object) is caught and console.error'd internally by
+ * accounts.svelte.js, not thrown — harmless noise, not a test failure.
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { flushSync } from 'svelte';
-import { SvelteMap } from 'svelte/reactivity';
+import { manager } from '$lib/stores/accounts.svelte.js';
+import { isCommunityOwner } from '$lib/helpers/community-signer.js';
 
-/** @type {Map<string, any>} */
-let accounts = new SvelteMap();
-let version = $state(0);
-
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: {
-    getAccountForPubkey: (/** @type {string} */ pk) => accounts.get(pk) ?? undefined,
-    get accountsVersion() {
-      return version;
-    }
-  }
-}));
-
-describe('getCommunitySigner reactivity', () => {
-  it('a $derived.by consumer recomputes when manager.accountsVersion bumps', async () => {
-    const { getCommunitySigner } = await import('$lib/helpers/community-signer.js');
+describe('isCommunityOwner reactivity (real accounts.svelte.js + real AccountManager)', () => {
+  it('a $derived.by consumer recomputes when the manager gains the community key mid-session', () => {
     const PK = 'a'.repeat(64);
     const SIGNER = { signEvent: () => {} };
 
-    /** @type {any} */
+    /** @type {boolean | undefined} */
     let observed;
     const cleanup = $effect.root(() => {
-      const signer = $derived.by(() => getCommunitySigner(PK));
+      const owner = $derived.by(() => isCommunityOwner(PK));
       $effect(() => {
-        observed = signer;
+        observed = owner;
       });
     });
 
     flushSync();
-    expect(observed).toBeNull();
+    expect(observed).toBe(false);
 
     // Simulate the manager gaining the community key mid-session (e.g. the
-    // user importing the community account) — the real bridge would bump
-    // manager.accountsVersion via manager.accounts$'s subscription in
-    // accounts.svelte.js.
-    accounts.set(PK, { signer: SIGNER });
-    version++;
+    // user importing the community account) via the real, public
+    // AccountManager API — not a mock, not a raw BehaviorSubject poke.
+    // Minimal fixture, not a full IAccount — addAccount/getAccountForPubkey
+    // only touch `id`/`pubkey`/`signer` (see applesauce-accounts/dist/manager.js).
+    manager.addAccount(
+      /** @type {any} */ ({ id: 'reactivity-test-account', pubkey: PK, signer: SIGNER })
+    );
     flushSync();
 
-    expect(observed).toBe(SIGNER);
+    expect(observed).toBe(true);
     cleanup();
   });
 });

@@ -123,4 +123,17 @@ describe('MembersView — moderated community', () => {
     );
     expect(within(regularRow).queryByTestId('member-role-chip')).toBeNull();
   });
+
+  it('a malformed roster with a duplicated role renders one chip, not a crash', () => {
+    // Roles come straight off a kind 39001 event's tags — untrusted network
+    // input a relay can repeat. A duplicate key in this keyed {#each} would
+    // otherwise crash the whole page (each_key_duplicate).
+    holders.admins = [{ pubkey: OWNER, roles: ['admin', 'admin', 'reviewer'] }];
+
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+
+    const chips = screen.getAllByTestId('member-role-chip').map((el) => el.textContent?.trim());
+    expect(chips.filter((text) => text === 'admin')).toHaveLength(1);
+    expect(chips).toContain('reviewer');
+  });
 });

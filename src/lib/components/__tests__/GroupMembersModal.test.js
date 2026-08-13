@@ -142,6 +142,27 @@ describe('GroupMembersModal rendering', () => {
     expect(otherRow?.textContent).toContain('custom-role');
   });
 
+  it('a malformed 39001 with a duplicated role renders one chip, not a crash', () => {
+    // Role strings come straight off the group relay's tags — untrusted
+    // network input. A relay repeating a role tag must not crash the whole
+    // page via each_key_duplicate.
+    const { container } = renderModal({
+      admins: [
+        { pubkey: ADMIN_SELF, roles: [] },
+        { pubkey: ADMIN_OTHER, roles: ['admin', 'admin', 'custom-role'] }
+      ]
+    });
+
+    const otherRow = /** @type {HTMLElement} */ (
+      container.querySelector(`[data-testid="admin-row"][data-pubkey="${ADMIN_OTHER}"]`)
+    );
+    const chips = Array.from(otherRow.querySelectorAll('.badge')).map((el) =>
+      el.textContent?.trim()
+    );
+    expect(chips.filter((text) => text === 'admin')).toHaveLength(1);
+    expect(chips).toContain('custom-role');
+  });
+
   it('non-admin: no action buttons and no add-member input', () => {
     renderModal({ isAdmin: false, myPubkey: MEMBER_A });
 

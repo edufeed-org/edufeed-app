@@ -16,7 +16,10 @@ const mockManager = vi.hoisted(() => ({
   active: { pubkey: 'a'.repeat(64) },
   getAccountForPubkey: vi.fn(() => ({ signer: { sign: () => {} } }))
 }));
-vi.mock('$lib/stores/accounts.svelte', () => ({ manager: mockManager }));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  manager: mockManager,
+  accountsMeta: { version: 0 }
+}));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 
 const attachConcordArea = vi.hoisted(() => vi.fn(async () => ({})));

@@ -31,7 +31,8 @@ const mockManager = vi.hoisted(() => ({
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: STRANGER }),
-  manager: mockManager
+  manager: mockManager,
+  accountsMeta: { version: 0 }
 }));
 
 const concordFixture = vi.hoisted(

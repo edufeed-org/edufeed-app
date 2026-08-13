@@ -295,14 +295,27 @@ surfaced by Plan 4's own review and Task 9's verification pass:
 - **`manager` reactivity signal** — **RESOLVED (Plan 5 Task 11).**
   `AccountManager` does expose cheap observables (`accounts$`/`active$`,
   real `BehaviorSubject`s already subscribed elsewhere in
-  `accounts.svelte.js`); bridged into `manager.accountsVersion` — a plain
-  counter property on the already-`$state` `manager` object, so writes to
-  it ARE observed — subscribed once at module init. `community-signer.js`'s
-  `getCommunitySigner`/`isCommunityOwner` do a no-op read of it, so
-  `$derived.by` callers now recompute on a mid-session account switch/
-  import/remove — previously only incidental. See
-  `accounts-version-bridge.test.js` and
-  `community-signer-reactivity.test.svelte.js`.
+  `accounts.svelte.js`), so a bridge was implemented — but the first cut
+  was a placebo: `manager` (`$state(new AccountManager())`) is NOT a
+  reactive proxy at all. Svelte's `proxy()` only wraps values whose
+  prototype is exactly `Object.prototype`/`Array.prototype`; a class
+  instance's own prototype fails that check, so `$state()` returns the
+  bare `AccountManager` unchanged and any property later set on it
+  (`manager.accountsVersion = 0; manager.accountsVersion++`) is an
+  ordinary, untracked JS mutation — confirmed by writing a test against
+  the REAL module that failed silently under that design. The fix hosts
+  the counter on `accountsMeta` — a **plain object-literal** `$state`
+  export (`$state({ version: 0 })`), which Svelte DOES proxy — bumped from
+  the same `accounts$`/`active$` subscriptions. `community-signer.js`'s
+  `getCommunitySigner`/`isCommunityOwner` do a no-op read of
+  `accountsMeta.version`, so `$derived.by` callers now genuinely recompute
+  on a mid-session account switch/import/remove. Proven against the real,
+  unmocked `accounts.svelte.js` module and a real `AccountManager` (no
+  stand-in `manager`): `accounts-version-bridge.test.js` drives the real
+  `accounts$`/`active$` `BehaviorSubject`s directly; `community-signer-
+  reactivity.test.svelte.js` calls the real, public `manager.addAccount(...)`
+  and asserts a `$derived.by(() => isCommunityOwner(pk))` flips from
+  `false` to `true`.
 - **Plan 4 final review (binding for Plan 5):**
   - **Personen-step PREREQUISITE:** non-owner 39001 reviewers can never reach
     the approvals queue — `SettingsView` gates `MembershipPane` on

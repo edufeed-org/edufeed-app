@@ -8,37 +8,41 @@ import * as m from '$lib/paraglide/messages';
  * @typedef {{ name?: string }} AccountMetadata
  */
 
-/* Shared manager (keeps same instance across component mounts).
- * Typed with the `accountsVersion` bridge property below folded in, so
- * assigning/reading it doesn't need an `any` cast at every call site. */
-export const manager = $state(
-  /** @type {AccountManager<any> & { accountsVersion: number }} */ (new AccountManager())
-);
+/* Shared manager (keeps same instance across component mounts) */
+export const manager = $state(new AccountManager());
 registerCommonAccountTypes(manager);
 
 /**
  * Version counter bridged from AccountManager's own `accounts$`/`active$`
  * (real RxJS `BehaviorSubject`s — cheap, not polling) so code OUTSIDE a
  * component's `$effect` can still register a reactive dependency on
- * account-state changes. `manager` is a `$state` object, but `active` is a
- * getter over the manager's internal fields, not a plain reactive property —
- * Svelte's proxy on `manager` can't observe writes reaching it that way, so
- * reading `manager.active`/`manager.getAccountForPubkey(...)` inside a
- * `$derived` never re-runs on its own (see community-signer.js). Bumping
- * this counter on every emission gives such callers something they CAN read
- * to register the dependency, via a no-op `void manager.accountsVersion` read.
+ * account-state changes (e.g. community-signer.js's $derived.by callers).
  *
- * Attached directly to `manager` (rather than a separate module export) so
- * it rides the SAME `$state` proxy `manager` already is — a plain property
- * set through that proxy IS observed (unlike AccountManager's own internal
- * writes to `active`), and every existing call site that already imports
- * `manager` gets the counter for free, no new import needed. Subscribed
- * once, here, at module init — `manager` and this counter share the
- * module's lifetime, so there is nothing to unsubscribe.
+ * NOT attached to `manager` itself: `$state(new AccountManager())` does
+ * NOT make `manager` a deeply-reactive proxy. Svelte's proxy() (see
+ * svelte/src/internal/client/proxy.js) only wraps values whose prototype
+ * is exactly Object.prototype or Array.prototype; a class instance like
+ * `AccountManager` has `AccountManager.prototype`, so proxy() bails and
+ * returns it unchanged. `manager` is therefore a PLAIN, non-reactive
+ * object — property writes on it (e.g. a would-be `manager.accountsVersion
+ * = 0; manager.accountsVersion++`) are ordinary JS mutations invisible to
+ * $derived/$effect. (An earlier revision of this bridge made exactly that
+ * mistake — a placebo that never re-ran any dependent.)
+ *
+ * `accountsMeta` is a plain object LITERAL, so $state() DOES proxy it —
+ * mutating `accountsMeta.version` through this binding is a real, tracked
+ * write. Subscribed once, here, at module init — `manager` and this
+ * counter share the module's lifetime, so there is nothing to unsubscribe.
+ * See accounts-version-bridge.test.js for a test that fails on the old
+ * (unproxied) design and passes on this one.
  */
-manager.accountsVersion = 0;
-manager.accounts$.subscribe(() => manager.accountsVersion++);
-manager.active$.subscribe(() => manager.accountsVersion++);
+export const accountsMeta = $state({ version: 0 });
+manager.accounts$.subscribe(() => {
+  accountsMeta.version++;
+});
+manager.active$.subscribe(() => {
+  accountsMeta.version++;
+});
 
 /**
  * How long to wait for a NIP-07 extension to respond before treating the request

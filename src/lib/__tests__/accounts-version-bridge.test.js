@@ -1,8 +1,10 @@
 /**
  * Manager-reactivity bridge (Plan 5 Task 11): AccountManager exposes cheap
  * `accounts$`/`active$` BehaviorSubjects; accounts.svelte.js subscribes to
- * both once at module init and bumps `manager.accountsVersion` — a plain
- * property on the already-`$state` `manager` object — on every emission, so
+ * both once at module init and bumps `accountsMeta.version` — a plain
+ * object-literal `$state` export, genuinely proxied by Svelte (unlike
+ * `manager`, a class instance, which $state() does NOT proxy — see the
+ * comment on `accountsMeta` in accounts.svelte.js) — on every emission, so
  * code that can't sit inside a component's `$effect` (e.g.
  * community-signer.js's $derived.by callers) has something to read for a
  * dependency. This uses the REAL module (not mocked) — importing it in the
@@ -14,18 +16,18 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { manager } from '$lib/stores/accounts.svelte.js';
+import { manager, accountsMeta } from '$lib/stores/accounts.svelte.js';
 
-describe('manager.accountsVersion bridge', () => {
+describe('accountsMeta.version bridge', () => {
   it('bumps when manager.accounts$ emits', () => {
-    const before = manager.accountsVersion;
+    const before = accountsMeta.version;
     manager.accounts$.next([...manager.accounts$.value]);
-    expect(manager.accountsVersion).toBeGreaterThan(before);
+    expect(accountsMeta.version).toBeGreaterThan(before);
   });
 
   it('bumps when manager.active$ emits', () => {
-    const before = manager.accountsVersion;
+    const before = accountsMeta.version;
     manager.active$.next(manager.active$.value);
-    expect(manager.accountsVersion).toBeGreaterThan(before);
+    expect(accountsMeta.version).toBeGreaterThan(before);
   });
 });

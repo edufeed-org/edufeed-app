@@ -4,6 +4,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { unique } from '$lib/helpers/unique.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -26,12 +27,19 @@
   let isModerated = $derived(deriveCommunityType(communikeyEvent) === 'moderated');
   const getRootRoster = useRootRoster(() => communikeyEvent);
 
-  /** Role chips for a pubkey in a moderated community (bare admins show 'admin'). */
+  /**
+   * Role chips for a pubkey in a moderated community (bare admins show
+   * 'admin'). `admin.roles` comes straight off a kind 39001 event's tags —
+   * untrusted network input a malformed event can repeat — so it's run
+   * through `unique()` before it feeds the keyed {#each} below; a
+   * duplicated role string would otherwise crash the whole page
+   * (each_key_duplicate).
+   */
   function getRoleChips(/** @type {string} */ pubkey) {
     if (!isModerated) return [];
     const admin = getRootRoster().admins.find((a) => a.pubkey === pubkey);
     if (!admin) return [];
-    return admin.roles.length > 0 ? admin.roles : ['admin'];
+    return unique(admin.roles.length > 0 ? admin.roles : ['admin']);
   }
 
   /** Get section names a pubkey belongs to */

@@ -45,7 +45,8 @@ const CH2 = 'e'.repeat(64);
 const mockManager = vi.hoisted(() => ({ active: { pubkey: 'a'.repeat(64), signer: {} } }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: mockManager,
-  useActiveUser: () => () => mockManager.active
+  useActiveUser: () => () => mockManager.active,
+  accountsMeta: { version: 0 }
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({

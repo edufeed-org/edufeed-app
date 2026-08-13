@@ -19,6 +19,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
+  import { unique } from '$lib/helpers/unique.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -168,7 +169,7 @@
             {getUserDisplayName(admin.pubkey, getProfiles().get(admin.pubkey))}
           </span>
           {#if admin.roles.length > 0}
-            {#each admin.roles as role (role)}
+            {#each unique(admin.roles) as role (role)}
               <span class="badge max-w-[7rem] truncate badge-ghost badge-sm" title={role}
                 >{role}</span
               >

@@ -22,7 +22,8 @@ const mockManager = vi.hoisted(() => ({
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: mockManager,
-  useActiveUser: () => () => mockManager.active
+  useActiveUser: () => () => mockManager.active,
+  accountsMeta: { version: 0 }
 }));
 
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({

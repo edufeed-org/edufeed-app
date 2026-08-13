@@ -7,7 +7,8 @@ let accounts;
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: {
     getAccountForPubkey: (/** @type {string} */ pk) => accounts.get(pk) ?? undefined
-  }
+  },
+  accountsMeta: { version: 0 }
 }));
 
 const { getCommunitySigner, isCommunityOwner } = await import('$lib/helpers/community-signer.js');
