@@ -294,6 +294,26 @@ surfaced by Plan 4's own review and Task 9's verification pass:
   navigate into a freshly-created channel, #11 area-members polish.
 - **`manager` reactivity signal** — outstanding from the handoff, not
   resolved by Plan 4.
+- **Plan 4 final review (binding for Plan 5):**
+  - **Personen-step PREREQUISITE:** non-owner 39001 reviewers can never reach
+    the approvals queue — `SettingsView` gates `MembershipPane` on
+    `isOwner` (key-holding), so a second admin's per-reviewer application
+    copies are undeliverable in the UI (and pairwise-encrypted, so the owner
+    cannot decrypt them either). Neutral today (single-admin reality), but
+    MUST be fixed before or with the wizard Personen step.
+  - **Decline key ruling:** re-key the approvals decline dismissal by
+    `response.id` (per the `MembershipApprovalsPanel` precedent), not by
+    applicant pubkey — the plan-4-prescribed pubkey key silently swallows
+    re-applications. Controller-approved plan-text change.
+  - **Pending-state invite affordance (early ride-along, ~5 lines):** the
+    coded-join pending state hides the invite-code input permanently; keep
+    it rendered alongside the pending message (code redemption is always
+    legitimate — same rationale as the closed-39000 case). Matters doubly
+    while relays answer `OK:true` for unregistered codes.
+  - **`/forms/respond` error UX priority bump:** submit-time errors
+    (`no-reviewers`, `unresolved`) currently replace the filled form with a
+    dead-end alert, destroying typed input — render them above the form
+    instead.
 - **Task 9 ledger (found during this plan's final verification pass):**
   - `root-roster.svelte.js`'s loading state is the same dead-relay-`isLoading`
     gap as the item above, restated because Task 9 re-confirmed it live.
