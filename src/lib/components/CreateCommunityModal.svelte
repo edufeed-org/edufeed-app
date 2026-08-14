@@ -636,6 +636,18 @@
           console.error('Failed to convert pubkey to npub');
           closeModal();
         }
+
+        // The new-keypair flow silently switched the ACTIVE account to the
+        // community — the single most disorienting moment of every tested
+        // creation journey ("where did my account go?", first messages
+        // authored as the community). Say it out loud.
+        if (!useCurrentKeypair) {
+          showToast(
+            m.create_community_modal_account_switched({ name: userData.name }),
+            'info',
+            8000
+          );
+        }
       } else {
         throw new Error(m.create_community_modal_error_publish_failed());
       }
@@ -745,7 +757,9 @@
         <div class="space-y-6">
           <div class="prose max-w-none">
             <h2 class="mb-4 text-xl font-semibold">
-              {m.create_community_modal_profile_title({ name: userData.name || 'Your Community' })}
+              {m.create_community_modal_profile_title({
+                name: userData.name || m.create_community_modal_profile_title_fallback()
+              })}
             </h2>
             <p class="mb-4">
               {m.create_community_modal_profile_description()}
@@ -1070,6 +1084,18 @@
               <div class="card-body">
                 <h3 class="card-title">{m.create_community_modal_confirm_settings_section()}</h3>
                 <div class="space-y-2 text-sm">
+                  {#if typeStepVisible}
+                    <!-- The one setting with the biggest consequences was
+                      missing from the summary (journey-test finding). -->
+                    <p data-testid="confirm-community-type">
+                      <strong>{m.create_community_modal_confirm_type()}</strong>
+                      {communityType === 'moderated'
+                        ? m.community_type_moderated_title()
+                        : communityType === 'closed'
+                          ? m.community_type_closed_title()
+                          : m.community_type_open_title()}
+                    </p>
+                  {/if}
                   <p>
                     <strong>{m.create_community_modal_confirm_relays()}</strong>
                     {communityData.relays.join(', ')}

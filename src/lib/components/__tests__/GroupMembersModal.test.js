@@ -78,7 +78,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_remove: () => 'Remove',
   groups_members_action_failed: () => 'The relay refused the change',
   groups_members_assign_role: () => 'Assign role',
-  groups_members_role_placeholder: () => 'Role'
+  groups_members_role_placeholder: () => 'Role',
+  groups_role_admin: () => 'Admin',
+  groups_role_king: () => 'Founder'
 }));
 
 const { default: GroupMembersModal } = await import(
@@ -132,13 +134,14 @@ describe('GroupMembersModal rendering', () => {
     const selfRow = container.querySelector(
       `[data-testid="admin-row"][data-pubkey="${ADMIN_SELF}"]`
     );
-    expect(selfRow?.textContent).toContain('admin');
+    expect(selfRow?.textContent).toContain('Admin');
 
-    // Role chips rendered as-is (arbitrary protocol strings, not translated).
+    // Well-known role tokens get a display label; custom roles pass through
+    // verbatim (role-labels.js).
     const otherRow = container.querySelector(
       `[data-testid="admin-row"][data-pubkey="${ADMIN_OTHER}"]`
     );
-    expect(otherRow?.textContent).toContain('admin');
+    expect(otherRow?.textContent).toContain('Admin');
     expect(otherRow?.textContent).toContain('custom-role');
   });
 
@@ -159,7 +162,7 @@ describe('GroupMembersModal rendering', () => {
     const chips = Array.from(otherRow.querySelectorAll('.badge')).map((el) =>
       el.textContent?.trim()
     );
-    expect(chips.filter((text) => text === 'admin')).toHaveLength(1);
+    expect(chips.filter((text) => text === 'Admin')).toHaveLength(1);
     expect(chips).toContain('custom-role');
   });
 

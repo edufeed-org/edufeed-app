@@ -19,7 +19,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_members_open_community: () => 'This is an open community.',
   community_members_owner_badge: () => 'Owner',
   community_members_count: (/** @type {{count: number}} */ { count }) => `${count} members`,
-  community_members_all_sections: () => 'All content sections'
+  community_members_all_sections: () => 'All content sections',
+  groups_role_admin: () => 'Admin',
+  groups_role_king: () => 'Founder'
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
@@ -100,7 +102,7 @@ describe('MembersView — moderated community', () => {
     render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
     const chips = screen.getAllByTestId('member-role-chip');
     expect(chips).toHaveLength(1);
-    expect(chips[0].textContent?.trim()).toBe('admin');
+    expect(chips[0].textContent?.trim()).toBe('Admin');
   });
 
   it('shows the roster role on the matching member row, and no chip for non-roster members', () => {
@@ -117,7 +119,7 @@ describe('MembersView — moderated community', () => {
     const adminRow = /** @type {HTMLElement} */ (
       container.querySelector(`[data-testid="member-row"][data-pubkey="${ADMIN}"]`)
     );
-    expect(within(adminRow).getByTestId('member-role-chip').textContent?.trim()).toBe('admin');
+    expect(within(adminRow).getByTestId('member-role-chip').textContent?.trim()).toBe('Admin');
 
     const regularRow = /** @type {HTMLElement} */ (
       container.querySelector(`[data-testid="member-row"][data-pubkey="${REGULAR}"]`)
@@ -187,7 +189,7 @@ describe('MembersView — moderated community', () => {
     render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
 
     const chips = screen.getAllByTestId('member-role-chip').map((el) => el.textContent?.trim());
-    expect(chips.filter((text) => text === 'admin')).toHaveLength(1);
+    expect(chips.filter((text) => text === 'Admin')).toHaveLength(1);
     expect(chips).toContain('reviewer');
   });
 });

@@ -274,7 +274,9 @@
 
       <div class="flex items-center justify-between gap-3">
         <p class="text-sm text-base-content/70">
-          {m.community_membership_pane_member_count({ count: roster.members.size })}
+          {roster.members.size === 1
+            ? m.community_membership_pane_member_count_one()
+            : m.community_membership_pane_member_count({ count: roster.members.size })}
         </p>
         <button
           class="btn btn-outline btn-sm"

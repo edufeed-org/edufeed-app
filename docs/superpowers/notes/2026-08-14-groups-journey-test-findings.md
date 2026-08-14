@@ -161,8 +161,30 @@ every community key. A real stranger's browser shows no admin UI (J6
 logged-out confirms). The genuinely wrong part was admin OPS failing when
 the active account isn't a 39001 admin — solved by the #2/#3 seat.
 
-Still open: #9 (follow button never flips in-session — reproduced after
-the toast fix with no console error; the publish seems to never resolve
-and `useCommunityMembership` shows no optimistic state), #11 member-count
-inconsistencies, #12 flip-tier reset, #14 raw "king" badge, and the
-account-auto-switch UX theme.
+Third pass (same day):
+
+- #9 ROOT-CAUSED + FIXED: joinCommunity bootstraps an empty follow set and
+  adds the follow within the same second; NIP-01 resolves equal-created_at
+  replaceables by LOWEST id — a coin flip that silently kept the empty set
+  half the time. The bootstrap is now back-dated by one second so any
+  update strictly wins. Verified live: "Folge ich" flips in-session.
+- #11: the count sources agree for new communities once the community key
+  sits on the roster (second-pass seat fix); the "1 Mitglieder" plural is
+  fixed via singular message variants on all three surfaces.
+- #12: closed as BY DESIGN — flip-to-moderated deliberately never
+  retroactively gates ("keeps sections ungated" is an explicit tested
+  invariant), and both flip dialogs disclose the consequences.
+- #14: known relay role tokens now display-mapped (king → "Gründer:in",
+  admin → "Admin"; custom roles pass through verbatim since role-gated
+  tiers match them literally) in MembersView + GroupMembersModal.
+- Account-switch theme: the new-keypair flow now announces the switch with
+  a toast ("Du bist jetzt als … aktiv"). Also fixed: "(Kanäle: )" empty
+  render in the flip dialog, "Your Community" untranslated fallback, and
+  the confirm step now names the chosen community type.
+
+Still open (UX backlog, no code yet): stale-type flash on reload,
+invite-step feedback/dedupe + raw-hex invite sender, member-add name
+search + clipped dropdown, Folgen-vs-Mitgliedschaft explainer, directory
+badge legend, onboarding "Fertig" mislabel + key-backup surfacing, empty
+states, English content-type labels/timestamps, Sie/Du register, nsec
+filename.

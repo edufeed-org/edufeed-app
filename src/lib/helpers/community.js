@@ -131,7 +131,13 @@ async function ensureFollowSetExistsInner(pubkey) {
   if (manager.active?.pubkey !== pubkey) return;
 
   const factory = createAppEventFactory({ signer: manager.active.signer });
-  const template = await factory.build({ kind: 30000, tags: [['d', COMMUNITIES_SET_ID]] });
+  const built = await factory.build({ kind: 30000, tags: [['d', COMMUNITIES_SET_ID]] });
+  // Back-dated by one second: joinCommunity's AddUserToFollowSet runs within
+  // the same second as this bootstrap, and NIP-01 resolves equal-created_at
+  // replaceables by LOWEST id — a coin flip that silently kept this empty
+  // list over the actual follow half the time (journey-test bug #9). One
+  // second earlier makes any subsequent update strictly newer.
+  const template = { ...built, created_at: Math.floor(Date.now() / 1000) - 1 };
   const signed = await factory.sign(template);
 
   // Insert locally first so AddUserToFollowSet can read it immediately.

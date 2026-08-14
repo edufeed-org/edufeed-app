@@ -5,6 +5,7 @@
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { unique } from '$lib/helpers/unique.js';
+  import { roleLabel } from '$lib/groups/role-labels.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -112,7 +113,8 @@
                 {m.community_members_owner_badge()}
               </span>
               {#each getRoleChips(communikeyEvent.pubkey) as role (role)}
-                <span class="badge badge-ghost badge-sm" data-testid="member-role-chip">{role}</span
+                <span class="badge badge-ghost badge-sm" data-testid="member-role-chip"
+                  >{roleLabel(role)}</span
                 >
               {/each}
             </div>
@@ -122,7 +124,9 @@
     {/if}
   {:else}
     <p class="mb-4 text-sm text-base-content/60">
-      {m.community_members_count({ count: memberData.allMembers.length })}
+      {memberData.allMembers.length === 1
+        ? m.community_members_count_one()
+        : m.community_members_count({ count: memberData.allMembers.length })}
     </p>
 
     <div class="flex max-w-2xl flex-col gap-2">
@@ -145,7 +149,8 @@
                 >
               {/if}
               {#each getRoleChips(pubkey) as role (role)}
-                <span class="badge badge-ghost badge-sm" data-testid="member-role-chip">{role}</span
+                <span class="badge badge-ghost badge-sm" data-testid="member-role-chip"
+                  >{roleLabel(role)}</span
                 >
               {/each}
             </div>

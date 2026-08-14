@@ -20,6 +20,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import { unique } from '$lib/helpers/unique.js';
+  import { roleLabel } from '$lib/groups/role-labels.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -171,11 +172,11 @@
           {#if admin.roles.length > 0}
             {#each unique(admin.roles) as role (role)}
               <span class="badge max-w-[7rem] truncate badge-ghost badge-sm" title={role}
-                >{role}</span
+                >{roleLabel(role)}</span
               >
             {/each}
           {:else}
-            <span class="badge badge-ghost badge-sm">admin</span>
+            <span class="badge badge-ghost badge-sm">{roleLabel('admin')}</span>
           {/if}
           {#if isAdmin && roleOptions.length > 0 && !self}
             <input

@@ -531,7 +531,9 @@
     <div class="modal-box max-w-sm text-center">
       <h3 class="text-lg font-extrabold">{m.community_views_settings_flip_to_open()}</h3>
       <p class="my-3 text-sm text-base-content/70">
-        {m.community_views_settings_flip_to_open_confirm({ channels: channelNames.join(', ') })}
+        {channelNames.length > 0
+          ? m.community_views_settings_flip_to_open_confirm({ channels: channelNames.join(', ') })
+          : m.community_views_settings_flip_to_open_confirm_no_channels()}
       </p>
       <div class="modal-action justify-center">
         <button class="btn btn-ghost" disabled={flipping} onclick={closeTypeOverlay}

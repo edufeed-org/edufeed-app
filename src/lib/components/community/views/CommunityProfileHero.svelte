@@ -332,7 +332,9 @@
         {/each}
       </div>
       <span class="text-base-content/60"
-        >{m.community_members_count({ count: memberPubkeys.length })}</span
+        >{memberPubkeys.length === 1
+          ? m.community_members_count_one()
+          : m.community_members_count({ count: memberPubkeys.length })}</span
       >
       <ChevronRightIcon class_="h-3.5 w-3.5 text-base-content/40" />
     </button>
