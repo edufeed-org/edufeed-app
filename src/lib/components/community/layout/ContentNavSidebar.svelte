@@ -203,7 +203,15 @@
     </div>
   {:else}
     {#if communityProfile}
-      <div class="flex items-center gap-3 p-4">
+      {@const isHomeActive = selectedContentType === 'home'}
+      <button
+        type="button"
+        data-testid="nav-header-home"
+        onclick={() => handleContentTypeClick('home')}
+        class="flex w-full items-center gap-3 p-4 text-left transition-all duration-200 {isHomeActive
+          ? 'bg-primary text-primary-content'
+          : 'hover:bg-base-300/60'}"
+      >
         <div class="avatar">
           <div class="w-9 rounded-full ring-1 ring-base-300">
             <ImageWithFallback
@@ -215,8 +223,8 @@
             />
           </div>
         </div>
-        <h2 class="truncate text-sm font-semibold text-base-content">{communityDisplayName}</h2>
-      </div>
+        <span class="truncate text-sm font-semibold">{communityDisplayName}</span>
+      </button>
     {/if}
 
     <nav class="menu space-y-1 p-4 pb-0">

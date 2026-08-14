@@ -3,6 +3,15 @@ import http from 'http';
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure';
 import { matchesFilter, queryEvents } from './mock-relay.js';
 
+// Fidelity gap: real NIP-29 relays seat the kind-9007 create-group event's
+// author as a 39001 admin at creation time. This mock leaves a group's
+// rosters empty until the first 9000 (put-user) or 9021 (join-request)
+// lands — applyModerationEvent's CREATE_GROUP_KIND branch only applies
+// metadata tags, it does not add the creator to `group.admins`. Recorded,
+// not fixed: a future application-flow E2E that asserts the creator shows
+// up as admin immediately after 9007 (before any 9000/9021) needs
+// creator-as-admin implemented here first.
+
 // NIP-29 event kinds (mirrors applesauce-common/helpers/groups constants —
 // duplicated here so this module has no app dependency beyond nostr-tools).
 const CREATE_GROUP_KIND = 9007;

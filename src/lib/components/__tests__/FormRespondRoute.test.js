@@ -233,4 +233,34 @@ describe('/forms/[naddr]/respond — submit-time errors render above the form', 
       'Petra'
     );
   });
+
+  // handleSubmit's very first check is `if (isSubmitting || ...) return;` —
+  // FormRenderer stays mounted through an in-flight submit (see the
+  // component's own comment), so its Submit button is still clickable while
+  // the first submission is in flight. A second click before the first
+  // await point resolves must be a no-op, not a second publish.
+  it('a second submit while isSubmitting is true does not publish twice', async () => {
+    let resolvePublish = /** @type {(v: any) => void} */ (() => {});
+    holders.publishEventImpl = () =>
+      new Promise((resolve) => {
+        resolvePublish = resolve;
+      });
+
+    render(FormRespondPage, { props: { data: { naddr: NADDR } } });
+
+    const input = await screen.findByLabelText('full_name');
+    await fireEvent.input(input, { target: { value: 'Doubled' } });
+
+    const submitButton = screen.getByText('Submit');
+    // Both clicks land before the in-flight publish resolves — the second
+    // call's synchronous isSubmitting guard must short-circuit it.
+    await fireEvent.click(submitButton);
+    await fireEvent.click(submitButton);
+
+    expect(publishEventMock).toHaveBeenCalledTimes(1);
+
+    resolvePublish({ success: true });
+    await waitFor(() => expect(screen.getByText('Response submitted successfully!')).toBeTruthy());
+    expect(publishEventMock).toHaveBeenCalledTimes(1);
+  });
 });

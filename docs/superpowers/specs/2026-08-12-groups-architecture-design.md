@@ -84,11 +84,12 @@ plan N/…` sync commit):
   label, "share to discovery" toggle) — recorded future feature, out of
   scope for this series (see "Future features" below and the NIP draft's
   matching section).
-- The Plan 5 mock relay's 39001-clearing-on-remove-user fidelity — the mock
-  clears a channel's admin list on `remove-user` (9001); real relays may or
-  may not. Documented as relay policy, not spec, in
-  `docs/nips/communikey-groups.md`'s Status note (Plan 5 Task 9 minor,
-  closed by documentation rather than code).
+- The Plan 5 mock relay's 39001-retention-on-remove-user fidelity — the mock
+  retains a stale admin-only entry on a channel's admin list after
+  `remove-user` (9001) rather than clearing it; real relays may or may not.
+  Documented as relay policy, not spec, in `docs/nips/communikey-groups.md`'s
+  Status note (Plan 5 Task 9 minor, closed by documentation rather than
+  code).
 - `MembersView`'s full-roster merge for role-tiered sections — Plan 5 Task 11
   added role chips to member rows (moderated communities show each member's
   roles), but `getMembers` still returns the FULL roster rather than just
@@ -156,9 +157,12 @@ the machinery.
   adds ONE default question — "Wer darf hier veröffentlichen?" (Alle / Nur
   Mitglieder) applied to all selected types; per-type/per-role tuning lives in
   settings only. Geschlossen replaces this step with "erste Kanäle".
-- **Personen:** Offen skippable · Moderiert: invite npubs with role picker +
-  invite code (9009) · Geschlossen: Concord invites (existing flow, including
-  sign-before-account-switch ordering).
+- **Personen:** Moderiert-only, as shipped — invite npubs with role picker +
+  invite code (9009). Offen and Geschlossen skip this wizard step entirely
+  (`communityWizardSteps` only inserts 'people' for `communityType ===
+  'moderated'`); Geschlossen's Concord invites happen after creation via the
+  existing area-invite flow, including sign-before-account-switch ordering,
+  not inside this wizard.
 - On finish (Moderiert): 10222 + root group (9007+9002, owner admin) +
   `membership` tag; channels only if created later.
 
@@ -238,9 +242,11 @@ TDD, unit-first:
   reviewer resolution, wizard/flip tag output (10222 before/after).
 - **Component:** two-zone sidebar with visitor filtering, type cards, access
   editor.
-- **E2E (two only, vs live buzz relay):** full Moderiert lifecycle (create →
-  gate a type → member publish renders, non-member filtered) and the
-  Offen ↔ Moderiert flip. Live-relay verification before claiming done.
+- **E2E (two, `e2e/moderated-community.test.js`):** runs against the
+  in-process NIP-29 mock relay (`e2e/nip29-relay.js`, Task 9), not a live
+  buzz relay — full Moderiert lifecycle (create → mint invite → guest
+  redeems → owner sees member) and the Offen ↔ Moderiert flip
+  (open → moderated → open).
 
 ## Future features (recorded, out of scope)
 

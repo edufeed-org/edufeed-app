@@ -265,6 +265,35 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     });
     expect(screen.queryByTestId('content-nav-channels')).toBeNull();
   });
+
+  // Important 1: buildSidebarZones deliberately drops 'home' from every zone
+  // (design: "home handled by the header row") — this pins that the header
+  // row is actually wired up to that job, not just decorative.
+  it('clicking the community header navigates to home', async () => {
+    const onContentTypeSelect = vi.fn();
+    const { getByTestId } = renderNav({
+      communityProfile: { name: 'Relilab' },
+      onContentTypeSelect
+    });
+    await fireEvent.click(getByTestId('nav-header-home'));
+    expect(onContentTypeSelect).toHaveBeenCalledWith('home', undefined);
+  });
+
+  it('the community header renders active styling when home is selected', () => {
+    const { getByTestId } = renderNav({
+      communityProfile: { name: 'Relilab' },
+      selectedContentType: 'home'
+    });
+    expect(getByTestId('nav-header-home').className).toContain('bg-primary');
+  });
+
+  it('the community header is not active styling when another tab is selected', () => {
+    const { getByTestId } = renderNav({
+      communityProfile: { name: 'Relilab' },
+      selectedContentType: 'chat'
+    });
+    expect(getByTestId('nav-header-home').className).not.toContain('bg-primary');
+  });
 });
 
 /** @param {string} key */

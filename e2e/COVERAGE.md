@@ -840,7 +840,7 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 | no critical JavaScript errors during join flow  | No JS errors joining |
 | no critical JavaScript errors during leave flow | No JS errors leaving |
 
-**Components exercised:** CommunikeyCard (join button), CommunikeyHeader (join button, badges), community.js helpers
+**Components exercised:** CommunikeyCard (join button, badges), community.js helpers
 
 ---
 

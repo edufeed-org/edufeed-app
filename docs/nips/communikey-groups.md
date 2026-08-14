@@ -11,12 +11,12 @@ now describes the shipped data model; drift found during the final
 read-through is called out inline below where it applies.
 
 Note on the E2E fixture: the in-process mock relay used for the
-moderated-lifecycle test clears a channel's kind `39001` admin list on
-`remove-user` (kind `9001`) rather than leaving a stale admin-only entry
-behind. That clearing behavior is the mock's own policy, not part of this
-spec — conforming relays may retain or clear the entry at their discretion,
-and clients MUST NOT assume either behavior when computing the current
-roster/roles.
+moderated-lifecycle test retains a stale admin-only kind `39001` entry on
+`remove-user` (kind `9001`) rather than clearing the departed member from
+the admin list. That retention behavior is the mock's own policy, not part
+of this spec — conforming relays may retain or clear the entry at their
+discretion, and clients MUST NOT assume either behavior when computing the
+current roster/roles.
 
 It extends the Communikey community specification (kind `10222`).
 
