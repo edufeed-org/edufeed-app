@@ -111,7 +111,7 @@
         <span
           data-testid="community-type-badge"
           class="text-lg"
-          title={m.community_type_moderated_title()}
+          title={`${m.community_type_moderated_title()} — ${m.community_type_moderated_body()}`}
         >
           🛡️
         </span>
@@ -119,7 +119,7 @@
         <span
           data-testid="community-type-badge"
           class="text-lg"
-          title={m.community_type_closed_title()}
+          title={`${m.community_type_closed_title()} — ${m.community_type_closed_body()}`}
         >
           🔒
         </span>

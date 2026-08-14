@@ -50,6 +50,7 @@
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { getGroupsRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { createDefaultMembershipForm } from '$lib/helpers/forms.js';
+  import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
   import ContactSearchInput from './shared/ContactSearchInput.svelte';
   import { showToast } from '$lib/helpers/toast';
 
@@ -1139,7 +1140,7 @@
                     {#each Object.entries(effectiveContentTypes) as [key, ct] (key)}
                       {#if ct.enabled}
                         <div class="badge gap-1 badge-primary">
-                          {ct.name}
+                          {contentSectionLabel(ct.name)}
                         </div>
                       {/if}
                     {/each}

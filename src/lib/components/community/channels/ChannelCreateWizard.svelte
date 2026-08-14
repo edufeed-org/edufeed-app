@@ -102,7 +102,12 @@
     const { allMembers } = getVerifiedMembers(profileAccess, communikeyEvent);
     return allMembers.filter((p) => p !== self && p !== community);
   });
-  const getProfiles = useProfileMap(() => invitable);
+  // Rows shown on the invite step: community members PLUS anyone selected by
+  // pasted npub who is not (yet) a member — a raw-pubkey selection previously
+  // landed in `selected` without any visible row, so the field just cleared
+  // and the user could not tell whether it worked (journey-test finding).
+  const inviteRows = $derived(unique([...invitable, ...selected]));
+  const getProfiles = useProfileMap(() => inviteRows);
 
   // Rosters of the community's existing Stufe-2 ("members"-tier) group
   // channels — the fan-out union a fresh members-tier channel must also
@@ -382,7 +387,7 @@
         onrawpubkey={(/** @type {string} */ hex) => toggle(hex)}
       />
       <div class="mt-2 flex max-h-52 flex-col gap-1 overflow-y-auto">
-        {#each invitable as pubkey (pubkey)}
+        {#each inviteRows as pubkey (pubkey)}
           <button
             class="btn justify-start gap-2 btn-ghost btn-sm {selected.includes(pubkey)
               ? 'btn-active'

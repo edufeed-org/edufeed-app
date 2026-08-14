@@ -13,6 +13,7 @@
 -->
 <script>
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
+  import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
   import { withSectionAccess } from '$lib/groups/section-access.js';
   import { communityUpdateTemplate } from '$lib/groups/community-flips.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
@@ -186,7 +187,9 @@
           class="flex flex-wrap items-center gap-3 py-3"
           data-testid="access-tier-row-{slug(section.name)}"
         >
-          <span class="flex-1 truncate text-sm font-semibold">{section.name}</span>
+          <span class="flex-1 truncate text-sm font-semibold"
+            >{contentSectionLabel(section.name)}</span
+          >
 
           {#if draft}
             <select

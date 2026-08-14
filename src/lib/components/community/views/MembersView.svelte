@@ -6,6 +6,7 @@
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { unique } from '$lib/helpers/unique.js';
   import { roleLabel } from '$lib/groups/role-labels.js';
+  import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -163,7 +164,7 @@
                 </span>
               {:else}
                 {#each sections as section (section)}
-                  <span class="badge badge-outline badge-xs">{section}</span>
+                  <span class="badge badge-outline badge-xs">{contentSectionLabel(section)}</span>
                 {/each}
               {/if}
             </div>

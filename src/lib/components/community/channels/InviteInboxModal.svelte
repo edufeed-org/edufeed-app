@@ -36,6 +36,8 @@
   import { getConcordClient } from '$lib/concord/client.svelte.js';
   import { useObservable } from '$lib/concord/bridge.svelte.js';
   import { resolveInviteWrap } from '$lib/concord/invite-helpers.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -45,6 +47,20 @@
 
   const getPending = useObservable(() => watcher?.pending$, /** @type {any[]} */ ([]));
   const getInvites = useObservable(() => watcher?.invites$, /** @type {any[]} */ ([]));
+
+  // "Direkte Einladung von fe4478fabd36" told the user nothing (journey-test
+  // finding) — resolve the inviter's kind-0 name, hex prefix only as fallback.
+  const getInviterProfiles = useProfileMap(() =>
+    getInvites()
+      .map((invite) => invite.inviter)
+      .filter(Boolean)
+  );
+
+  /** @param {string | undefined} pubkey */
+  function inviterLabel(pubkey) {
+    if (!pubkey) return '?';
+    return getDisplayName(getInviterProfiles().get(pubkey)) || pubkey.slice(0, 12);
+  }
   let unlocking = $state(false);
   /** @type {string | null} */
   let acceptingId = $state(null);
@@ -126,7 +142,7 @@
           >🔒 {invite.bundle?.label ?? invite.bundle?.name ?? m.concord_invite_generic()}</b
         >
         <p class="my-2 text-xs text-base-content/60">
-          {m.concord_invite_from({ inviter: invite.inviter?.slice(0, 12) ?? '?' })}
+          {m.concord_invite_from({ inviter: inviterLabel(invite.inviter) })}
         </p>
         <div class="flex justify-end gap-2">
           <button class="btn btn-ghost btn-sm" onclick={() => decline(invite)}

@@ -182,9 +182,25 @@ Third pass (same day):
   render in the flip dialog, "Your Community" untranslated fallback, and
   the confirm step now names the chosen community type.
 
-Still open (UX backlog, no code yet): stale-type flash on reload,
-invite-step feedback/dedupe + raw-hex invite sender, member-add name
-search + clipped dropdown, Folgen-vs-Mitgliedschaft explainer, directory
-badge legend, onboarding "Fertig" mislabel + key-backup surfacing, empty
-states, English content-type labels/timestamps, Sie/Du register, nsec
-filename.
+Fourth pass (UX/i18n batch):
+
+- Content-section names display-localized everywhere they rendered raw
+  (confirm step, Inhalte & Rechte rows, member chips) via
+  content-section-label.js; custom section names pass through.
+- Sie→Du sweep for the flows the journeys hit: signup wizard,
+  community-creation wizard, keypair generator (37 strings).
+- Chat/DM timestamps localized ("jetzt") and dates formatted in the
+  active European locale instead of the browser locale.
+- Channel-wizard invite step: a pasted npub of a non-member now renders
+  as a selectable row instead of silently landing in an invisible
+  selection; invite inbox resolves the inviter's profile name instead of
+  raw hex.
+- Onboarding step-4 button "Fertig" → "Weiter" (a 5th step follows).
+- Directory type-badge tooltips now carry the full type description.
+- False alarms on re-check: sidebar padlocks and chat empty state already
+  have tooltips/copy — testers hit timing/hover gaps, not missing UI.
+
+Still open (needs deeper work): stale-type flash on reload (data
+freshness), key-backup surfacing in onboarding (design decision),
+member-add name search + clipped dropdown, Concord invite dedupe, nsec
+filename, remaining app-wide Sie/Du outside the tested flows.
