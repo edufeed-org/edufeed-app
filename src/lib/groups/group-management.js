@@ -109,19 +109,44 @@ export function buildCreateInviteTemplate(groupId, code) {
 }
 
 /**
+ * Publish while answering any NIP-42 challenge the relay presents mid-flight.
+ * Some relays (groups.0xchat.com, measured 2026-08-14) challenge on connect
+ * and silently HOLD every OK until the client authenticates — no auth-required
+ * NAK ever arrives. Answering the challenge makes the relay release the held
+ * OK for the event we already sent, so the pending publish resolves by itself.
+ * @param {any} relayConn
+ * @param {any} signed
+ * @param {any} signer
+ */
+async function publishAnsweringChallenge(relayConn, signed, signer) {
+  const sub = relayConn.challenge$?.subscribe?.((/** @type {string | null} */ challenge) => {
+    if (challenge && !relayConn.authenticated) void authenticateOnce(relayConn, signer);
+  });
+  try {
+    return await relayConn.publish(signed);
+  } finally {
+    sub?.unsubscribe?.();
+  }
+}
+
+/**
  * Sign as `user` and publish to the group relay ONLY. One NIP-42 retry when
- * the relay answers auth-required; every other rejection throws with the
- * relay's reason so the UI can show it.
+ * the relay answers auth-required — or answers nothing at all (applesauce
+ * reports the withheld OK as a `Timeout` NAK after 10s); every other rejection
+ * throws with the relay's reason so the UI can show it.
  * @param {any} relayConn a pool.relay(url) connection
  * @param {any} template
  * @param {{pubkey: string, signer: any}} user
  */
 export async function publishToGroupRelay(relayConn, template, user) {
   const signed = await user.signer.signEvent({ ...template, pubkey: user.pubkey });
-  let response = await relayConn.publish(signed);
-  if (response?.ok === false && String(response.message ?? '').startsWith('auth-required')) {
-    const auth = await authenticateOnce(relayConn, user.signer);
-    if (auth.ok) response = await relayConn.publish(signed);
+  let response = await publishAnsweringChallenge(relayConn, signed, user.signer);
+  if (response?.ok === false) {
+    const reason = String(response.message ?? '');
+    if (reason.startsWith('auth-required') || reason === 'Timeout') {
+      const auth = await authenticateOnce(relayConn, user.signer);
+      if (auth.ok) response = await relayConn.publish(signed);
+    }
   }
   if (response && response.ok === false) {
     throw new Error(response.message || 'relay rejected the event');

@@ -137,6 +137,48 @@ describe('publishToGroupRelay', () => {
   });
 });
 
+describe('publishToGroupRelay against held-until-auth relays (groups.0xchat.com)', () => {
+  // Measured live 2026-08-14: 0xchat presents the NIP-42 challenge on connect
+  // and silently HOLDS every OK until the client authenticates — it never
+  // sends an auth-required NAK, so applesauce's publish resolves
+  // {ok:false, message:'Timeout'} after 10s instead.
+
+  it('answers a challenge that arrives while the publish is in flight', async () => {
+    vi.mocked(authenticateOnce).mockClear();
+    const { BehaviorSubject } = await import('rxjs');
+    const relayConn = {
+      challenge$: new BehaviorSubject('a-challenge'),
+      authenticated: false,
+      publish: vi.fn(async () => ({ ok: true }))
+    };
+    await publishToGroupRelay(relayConn, buildDeleteGroupTemplate(ID), user);
+    expect(authenticateOnce).toHaveBeenCalledWith(relayConn, user.signer);
+  });
+
+  it('retries exactly once after a Timeout NAK when auth succeeds', async () => {
+    vi.mocked(authenticateOnce).mockClear();
+    const relayConn = {
+      publish: vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, message: 'Timeout' })
+        .mockResolvedValueOnce({ ok: true })
+    };
+    await publishToGroupRelay(relayConn, buildDeleteGroupTemplate(ID), user);
+    expect(authenticateOnce).toHaveBeenCalledOnce();
+    expect(relayConn.publish).toHaveBeenCalledTimes(2);
+  });
+
+  it('still throws Timeout when authentication cannot help', async () => {
+    vi.mocked(authenticateOnce).mockClear();
+    vi.mocked(authenticateOnce).mockResolvedValueOnce({ ok: false, message: 'no challenge' });
+    const relayConn = { publish: vi.fn(async () => ({ ok: false, message: 'Timeout' })) };
+    await expect(
+      publishToGroupRelay(relayConn, buildDeleteGroupTemplate(ID), user)
+    ).rejects.toThrow('Timeout');
+    expect(relayConn.publish).toHaveBeenCalledOnce();
+  });
+});
+
 describe('createGroupOnRelay', () => {
   it('sends 9007 then 9002 and resolves with the confirming 39000', async () => {
     const meta39000 = { kind: 39000, tags: [['d', ID]] };
