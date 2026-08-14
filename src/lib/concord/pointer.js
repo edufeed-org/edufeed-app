@@ -39,14 +39,21 @@ export function parseConcordPointer(event) {
 }
 
 /**
- * Return a NEW tags array with the concord pointer set (replacing any existing one).
+ * Return a NEW tags array with the concord pointer set (replacing any existing
+ * one). Also strips `membership`/`application` pointers: the groups spec
+ * (docs/nips/communikey-groups.md) makes concord and membership mutually
+ * exclusive — writing both produces a 10222 that fail-opens to "Offen" while
+ * still carrying a dangling roster pointer, so the writer enforces the XOR
+ * (journey-test bug #7). Callers surface the demotion to the user BEFORE
+ * calling this (PrivateChannelsView's confirm step).
  * @param {string[][]} tags
  * @param {string} communityId
  * @param {string} [relay]
  * @returns {string[][]}
  */
 export function withConcordPointer(tags, communityId, relay) {
-  const rest = tags.filter((t) => Array.isArray(t) && t[0] !== 'concord');
+  const excluded = new Set(['concord', 'membership', 'application']);
+  const rest = tags.filter((t) => Array.isArray(t) && !excluded.has(t[0]));
   return [...rest, buildConcordPointerTag(communityId, relay)];
 }
 

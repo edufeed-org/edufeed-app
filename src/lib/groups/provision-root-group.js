@@ -10,7 +10,9 @@ import {
   generateGroupId,
   createGroupOnRelay,
   confirmGroupMetadata,
-  confirmGroupAdmins
+  confirmGroupAdmins,
+  buildPutUserTemplate,
+  publishToGroupRelay
 } from './group-management.js';
 import { getGroupAdmins } from 'applesauce-common/helpers/groups';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -74,10 +76,41 @@ async function isConfirmedGroupAdmin(relayConn, groupId, pubkey) {
 }
 
 /**
- * @param {{relay: string, name: string, user: {pubkey: string, signer: any}, existingId?: string | null}} args
+ * Seat the community pubkey itself as a 39001 admin (role 'admin', signed by
+ * the human creator — measured accepted on groups.0xchat.com 2026-08-14).
+ * Load-bearing, not cosmetic: application copies are encrypted per reviewer
+ * (= 39001 admins, community-application.js), and roster put/remove ops must
+ * be signable while the community account is the ACTIVE one — the state the
+ * creation wizard leaves the creator in. Without the seat, the community
+ * account can neither read join requests nor approve members (journey-test
+ * bugs #2/#3). A failed seat fails provisioning: a community that cannot
+ * manage itself must not be created (the founding marker makes re-runs
+ * recover and re-seat).
+ * @param {any} relayConn
+ * @param {string} groupId
+ * @param {{pubkey: string, signer: any}} user
+ * @param {string | undefined} communityPubkey
+ */
+async function seatCommunityAdmin(relayConn, groupId, user, communityPubkey) {
+  if (!communityPubkey || communityPubkey === user.pubkey) return;
+  await publishToGroupRelay(
+    relayConn,
+    buildPutUserTemplate(groupId, communityPubkey, ['admin']),
+    user
+  );
+}
+
+/**
+ * @param {{relay: string, name: string, user: {pubkey: string, signer: any}, existingId?: string | null, communityPubkey?: string}} args
  * @returns {Promise<{id: string, relay: string}>}
  */
-export async function provisionRootGroup({ relay, name, user, existingId = null }) {
+export async function provisionRootGroup({
+  relay,
+  name,
+  user,
+  existingId = null,
+  communityPubkey
+}) {
   const relayConn = pool.relay(relay);
   if (existingId) {
     const confirmed = await confirmGroupMetadata(relayConn, existingId);
@@ -85,6 +118,9 @@ export async function provisionRootGroup({ relay, name, user, existingId = null 
     // point at a group the current user isn't (or no longer is) an admin of.
     // Verify the roster before reuse.
     if (confirmed && (await isConfirmedGroupAdmin(relayConn, existingId, user.pubkey))) {
+      // Re-seat on reuse: the pending group may predate the community-admin
+      // seat (idempotent — 39001 is replaceable relay state).
+      await seatCommunityAdmin(relayConn, existingId, user, communityPubkey);
       return { id: existingId, relay };
     }
   }
@@ -99,5 +135,6 @@ export async function provisionRootGroup({ relay, name, user, existingId = null 
     metadata: { name, isPublic: true, isOpen: false },
     user
   });
+  await seatCommunityAdmin(relayConn, id, user, communityPubkey);
   return { id, relay };
 }

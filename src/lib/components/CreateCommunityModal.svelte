@@ -48,7 +48,8 @@
     clearRootGroupMarker
   } from '$lib/groups/provision-root-group.js';
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
-  import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
+  import { getGroupsRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { createDefaultMembershipForm } from '$lib/helpers/forms.js';
   import ContactSearchInput from './shared/ContactSearchInput.svelte';
   import { showToast } from '$lib/helpers/toast';
 
@@ -463,7 +464,11 @@
             relay: groupsRelay,
             name: groupName,
             user: { pubkey: activeAccount.pubkey, signer: activeAccount.signer },
-            existingId: readRootGroupMarker(communityPk)
+            existingId: readRootGroupMarker(communityPk),
+            // Seats the community key itself on the 39001 — required so the
+            // community account can read applications (reviewer = 39001
+            // admin) and sign roster ops (journey-test bugs #2/#3).
+            communityPubkey: communityPk
           });
           writeRootGroupMarker(communityPk, rootGroupPointer.id);
         } catch (err) {
@@ -524,6 +529,37 @@
         throw new Error(m.create_community_modal_error_relay_required());
       }
 
+      // Moderated communities ship WITH a join path: the type card promises
+      // "Beitrittsanfragen", so the wizard creates + attaches the default
+      // application form (kind 30168, signed by the community key) instead of
+      // leaving strangers with follow-only until the owner discovers
+      // "Standard-Formular erstellen" in settings (journey-test bug #1).
+      // Non-fatal on failure — the community is still created and the form
+      // can be attached later in Einstellungen.
+      /** @type {{address: string, relay?: string} | null} */
+      let applicationRef = null;
+      if (communityType === 'moderated') {
+        try {
+          const formEvent = await createDefaultMembershipForm(signer);
+          const formResult = await publishEvent(formEvent);
+          if (!formResult.success) throw new Error('form publish failed');
+          eventStore.add(formEvent);
+          const dTag = formEvent.tags.find((t) => t[0] === 'd')?.[1] ?? '';
+          applicationRef = {
+            address: `${formEvent.kind}:${formEvent.pubkey}:${dTag}`,
+            relay: getCommunikeyRelays()[0]
+          };
+        } catch (err) {
+          console.error('default application form creation failed', err);
+          showToast(
+            m.community_membership_pane_application_failed({
+              reason: err instanceof Error ? err.message : String(err)
+            }),
+            'warning'
+          );
+        }
+      }
+
       // New communities always use new-spec tags (profile list a-tags).
       // effectiveContentTypes ($derived above) is the single source of truth
       // for what gets published per community type — the confirm-step
@@ -532,7 +568,8 @@
         { ...communityData, contentTypes: effectiveContentTypes },
         {
           communityPubkey: account.pubkey,
-          membership: rootGroupPointer ?? undefined
+          membership: rootGroupPointer ?? undefined,
+          application: applicationRef ?? undefined
         }
       );
       if (concordAreaId) {

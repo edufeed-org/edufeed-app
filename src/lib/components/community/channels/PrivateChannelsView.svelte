@@ -30,6 +30,7 @@
   // protected area — a Concord area OR a set of NIP-29 groups — but the rail
   // is one list either way, so both sources are merged before rendering.
   import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { relayBadges } from '$lib/groups/group-badges.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
@@ -85,6 +86,28 @@
   let mobileChat = $state(false);
 
   const concord = $derived(getConcord());
+
+  // XOR guard (journey-test bug #7): founding/attaching a Concord area on a
+  // MODERIERT community replaces its NIP-29 membership — withConcordPointer
+  // strips the membership pointer, deriving the type as "Offen + privater
+  // Bereich". That trade must be explicit, so the create/attach overlays are
+  // gated behind a confirm step. Once an area is already linked the
+  // trade has happened; no re-confirm on later channel creation.
+  const isModeratedCommunity = $derived(
+    deriveCommunityType(communikeyEvent) === 'moderated' && !concord.community
+  );
+  /** @type {string|null} */
+  let pendingOverlay = null;
+
+  /** @param {'create' | 'attach-area'} which */
+  function openAreaOverlay(which) {
+    if (isModeratedCommunity) {
+      pendingOverlay = which;
+      overlay = 'confirm-demote';
+    } else {
+      overlay = which;
+    }
+  }
 
   // Shared per-community selection (final review, IMPORTANT — see
   // active-channel.svelte.js's doc comment). Component-local $state here
@@ -437,14 +460,14 @@
             <button
               class="btn btn-neutral"
               data-testid="concord-new-channel"
-              onclick={() => (overlay = 'create')}
+              onclick={() => openAreaOverlay('create')}
             >
               🔒 {m.concord_new_channel()}
             </button>
             <button
               class="btn btn-outline"
               data-testid="concord-attach-open"
-              onclick={() => (overlay = 'attach-area')}
+              onclick={() => openAreaOverlay('attach-area')}
             >
               🔗 {m.concord_attach_secondary()}
             </button>
@@ -528,6 +551,27 @@
         mobileChat = true;
       }}
     />
+  {:else if overlay === 'confirm-demote'}
+    <div class="modal-open modal" role="dialog">
+      <div class="modal-box max-w-sm text-center">
+        <h3 class="text-lg font-extrabold">{m.groups_demote_confirm_title()}</h3>
+        <p class="my-3 text-sm text-base-content/70">
+          {m.groups_demote_confirm_body()}
+        </p>
+        <div class="modal-action justify-center">
+          <button class="btn btn-ghost" onclick={() => (overlay = null)}
+            >{m.concord_cancel()}</button
+          >
+          <button
+            class="btn btn-warning"
+            data-testid="groups-demote-confirm"
+            onclick={() => (overlay = pendingOverlay)}
+          >
+            {m.groups_demote_confirm_action()}
+          </button>
+        </div>
+      </div>
+    </div>
   {:else if overlay === 'attach-area'}
     <AreaAttachModal {communikeyEvent} onClose={() => (overlay = null)} />
   {:else if overlay === 'area-members'}

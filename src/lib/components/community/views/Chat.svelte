@@ -389,7 +389,13 @@
   {:else}
     <div class="px-4 pt-2 pb-4">
       <div class="text-center text-base-content/70">
-        <p>{m.community_views_chat_login_prompt()}</p>
+        <!-- A signed-in non-member must not be told to sign in (journey-test
+          bug #10) — the gate is membership, not authentication. -->
+        {#if getActiveUser()}
+          <p>{m.community_views_chat_members_only()}</p>
+        {:else}
+          <p>{m.community_views_chat_login_prompt()}</p>
+        {/if}
       </div>
     </div>
   {/if}

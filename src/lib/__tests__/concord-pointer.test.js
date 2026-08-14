@@ -108,6 +108,21 @@ describe('withConcordPointer', () => {
     // null should be filtered out by the guard
     expect(out.filter((t) => t === null)).toHaveLength(0);
   });
+  it('strips membership + application pointers (spec XOR — a linked area replaces NIP-29 membership)', () => {
+    // Writing both a concord and a membership pointer produces a spec-illegal
+    // 10222 that fail-opens to "Offen" while carrying a dangling roster
+    // (journey-test bug #7). The writer enforces the XOR.
+    const tags = [
+      ['d', ''],
+      ['membership', 'root123', 'wss://groups.example'],
+      ['application', '30168:pk:membership', 'wss://relay.example']
+    ];
+    const out = withConcordPointer(tags, CID, 'wss://c.example');
+    expect(out).toEqual([
+      ['d', ''],
+      ['concord', CID, 'wss://c.example']
+    ]);
+  });
 });
 
 describe('withoutConcordPointer', () => {

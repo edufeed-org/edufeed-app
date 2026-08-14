@@ -17,7 +17,12 @@
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
-  let { communikeyEvent, communityProfile } = $props();
+  // isInsider: owner ∪ roster ∪ Concord member (layout's zoneMember signal).
+  // Insiders get a "you're in — go to the channels" home instead of the
+  // outsider lock copy: the owner of a freshly created closed community was
+  // greeted with "Diese Community ist geschlossen … Betreiber*in
+  // kontaktieren" on their own community (journey-test bug #5).
+  let { communikeyEvent, communityProfile, isInsider = false } = $props();
 
   let displayName = $derived(getDisplayName(communityProfile) || 'Community');
   let avatarUrl = $derived(getProfilePicture(communityProfile));
@@ -67,18 +72,27 @@
       <p class="mb-4 text-sm text-base-content/70">{description}</p>
     {/if}
 
-    <p class="mb-6 text-sm text-base-content/80">
-      {m.community_shell_lead()}
-    </p>
-
-    {#if ownerHref}
-      <a href={ownerHref} class="btn btn-sm btn-primary">
-        {m.community_shell_contact_owner()}
+    {#if isInsider}
+      <p class="mb-6 text-sm text-base-content/80" data-testid="closed-shell-member-lead">
+        {m.community_shell_member_lead()}
+      </p>
+      <a href="?view=channels" class="btn btn-sm btn-primary" data-testid="closed-shell-channels">
+        {m.community_shell_open_channels()}
       </a>
-    {/if}
+    {:else}
+      <p class="mb-6 text-sm text-base-content/80">
+        {m.community_shell_lead()}
+      </p>
 
-    <p class="mt-4 text-xs text-base-content/50">
-      {m.community_shell_invite_future()}
-    </p>
+      {#if ownerHref}
+        <a href={ownerHref} class="btn btn-sm btn-primary">
+          {m.community_shell_contact_owner()}
+        </a>
+      {/if}
+
+      <p class="mt-4 text-xs text-base-content/50">
+        {m.community_shell_invite_future()}
+      </p>
+    {/if}
   </div>
 </div>

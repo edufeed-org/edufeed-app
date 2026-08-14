@@ -128,3 +128,41 @@ communities: "Testerin Tina" (open, = Tina's key), "Journey Zwei"
 (`npub1fppch…`, demoted to Offen by bug #7), "Beitritts Test"
 (`npub1ysk0tk…`, moderated), "Geheimclub" (`npub1lez83…`, closed).
 Throwaway nsecs in `~/Downloads/nostr-private-key (6|7|8).txt`.
+
+## Fix status (second pass, same day — commits after 4f47273c)
+
+Fixed and verified live (fresh moderated community "Fix Check",
+`npub1lt3r2pcxp494gd5hrda3x7vzdhmsa76q0976xjyerdc8yzgh369s8gyret`):
+
+- #1 wizard now auto-creates + attaches the default application form
+  (10222 carries the `application` tag from creation — wire-verified).
+- #2/#3 provisioning seats the community pubkey as a 39001 admin (role
+  `admin`, wire-verified on 0xchat) → the community account is a reviewer
+  for applications and can sign roster ops; Beitrittsanfragen +
+  Beitrittsformular panes render for the community account.
+- #5 closed shell shows an insider variant (owner ∪ roster ∪ Concord
+  member): "Du bist Mitglied…" + "Zu den Kanälen" (verified as area member).
+- #6/silent toasts: showToast targeted CSS modals (clipped by their
+  transform/overflow) and reused stale containers via subtree
+  querySelector; now body/top-layer-dialog targeted with direct-child
+  containers (4 new unit tests).
+- #7 XOR: `withConcordPointer` strips membership/application (spec XOR),
+  and PrivateChannelsView gates Concord founding/attach on a moderated
+  community behind a "Mitgliederverwaltung ersetzen?" confirm (verified).
+- #8 closed community's members view no longer claims "offene Community".
+- #10 chat gate distinguishes signed-in non-members ("Nur Mitglieder
+  können hier schreiben.") from logged-out visitors.
+- #13 de.json double-escaped „ " fixed.
+
+Re-classified: #4 (strangers see admin settings) is largely a
+single-browser artifact — `isCommunityOwner` is key-holding ("any account
+in this manager holds the community key"), and the testers' browser held
+every community key. A real stranger's browser shows no admin UI (J6
+logged-out confirms). The genuinely wrong part was admin OPS failing when
+the active account isn't a 39001 admin — solved by the #2/#3 seat.
+
+Still open: #9 (follow button never flips in-session — reproduced after
+the toast fix with no console error; the publish seems to never resolve
+and `useCommunityMembership` shows no optimistic state), #11 member-count
+inconsistencies, #12 flip-tier reset, #14 raw "king" badge, and the
+account-auto-switch UX theme.

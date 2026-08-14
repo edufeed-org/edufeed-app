@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const createGroupOnRelay = vi.fn();
 const confirmGroupMetadata = vi.fn();
 const confirmGroupAdmins = vi.fn();
+const publishToGroupRelay = vi.fn();
 vi.mock('$lib/groups/group-management.js', async (importOriginal) => {
   const actual = /** @type {any} */ (await importOriginal());
   return {
@@ -12,7 +13,8 @@ vi.mock('$lib/groups/group-management.js', async (importOriginal) => {
     generateGroupId: () => 'fresh-id-16chars',
     createGroupOnRelay: (/** @type {any} */ args) => createGroupOnRelay(args),
     confirmGroupMetadata: (/** @type {any} */ ...args) => confirmGroupMetadata(...args),
-    confirmGroupAdmins: (/** @type {any} */ ...args) => confirmGroupAdmins(...args)
+    confirmGroupAdmins: (/** @type {any} */ ...args) => confirmGroupAdmins(...args),
+    publishToGroupRelay: (/** @type {any} */ ...args) => publishToGroupRelay(...args)
   };
 });
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -32,6 +34,68 @@ beforeEach(() => {
   createGroupOnRelay.mockReset().mockResolvedValue({ kind: 39000 });
   confirmGroupMetadata.mockReset();
   confirmGroupAdmins.mockReset();
+  publishToGroupRelay.mockReset().mockResolvedValue({ kind: 9000 });
+});
+
+// The community pubkey must sit on the root group's 39001 as an admin:
+// application copies are encrypted per reviewer (= 39001 admins), and roster
+// put-user/remove-user must be signable while the community account is
+// active. Without this seat the creator's own community can neither read
+// join requests nor approve anyone (journey-test bugs #2/#3, 2026-08-14).
+describe('provisionRootGroup — community admin seat', () => {
+  const COMMUNITY_PK = 'c'.repeat(64);
+
+  it('seats the community pubkey as a 39001 admin on fresh creation', async () => {
+    await provisionRootGroup({
+      relay: RELAY,
+      name: 'x',
+      user: USER,
+      communityPubkey: COMMUNITY_PK
+    });
+    expect(publishToGroupRelay).toHaveBeenCalledOnce();
+    const [, template, user] = publishToGroupRelay.mock.calls[0];
+    expect(template.kind).toBe(9000);
+    expect(template.tags).toEqual([
+      ['h', 'fresh-id-16chars'],
+      ['p', COMMUNITY_PK, 'admin']
+    ]);
+    expect(user).toBe(USER);
+  });
+
+  it('skips the seat when the community IS the creator (current-keypair flow)', async () => {
+    await provisionRootGroup({
+      relay: RELAY,
+      name: 'x',
+      user: USER,
+      communityPubkey: USER.pubkey
+    });
+    expect(publishToGroupRelay).not.toHaveBeenCalled();
+  });
+
+  it('re-seats on the marker-reuse path (group may predate the seat)', async () => {
+    confirmGroupMetadata.mockResolvedValue({ kind: 39000 });
+    confirmGroupAdmins.mockResolvedValue(adminsEvent(USER.pubkey));
+    await provisionRootGroup({
+      relay: RELAY,
+      name: 'x',
+      user: USER,
+      existingId: 'pending-id',
+      communityPubkey: COMMUNITY_PK
+    });
+    expect(publishToGroupRelay).toHaveBeenCalledOnce();
+    const [, template] = publishToGroupRelay.mock.calls[0];
+    expect(template.tags).toEqual([
+      ['h', 'pending-id'],
+      ['p', COMMUNITY_PK, 'admin']
+    ]);
+  });
+
+  it('propagates a failed seat (a community that cannot manage itself must not be created)', async () => {
+    publishToGroupRelay.mockRejectedValue(new Error('blocked: nope'));
+    await expect(
+      provisionRootGroup({ relay: RELAY, name: 'x', user: USER, communityPubkey: COMMUNITY_PK })
+    ).rejects.toThrow('blocked: nope');
+  });
 });
 
 describe('provisionRootGroup', () => {

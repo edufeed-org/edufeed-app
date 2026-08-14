@@ -24,7 +24,8 @@
   // management (that lives in GroupMembersModal inside channel views).
   // useRootRoster wraps a $effect-based hook, so it's called unconditionally
   // here at component init; open/closed communities just never read it.
-  let isModerated = $derived(deriveCommunityType(communikeyEvent) === 'moderated');
+  let communityType = $derived(deriveCommunityType(communikeyEvent));
+  let isModerated = $derived(communityType === 'moderated');
   const getRootRoster = useRootRoster(() => communikeyEvent);
 
   /**
@@ -75,10 +76,16 @@
       <p class="mt-4 text-sm text-base-content/60">{m.community_members_loading()}</p>
     </div>
   {:else if memberData.allMembers.length <= 1 && memberData.perSection.size === 0}
-    <!-- Only owner, no gated sections -->
+    <!-- Only owner, no gated sections. A CLOSED community also lands here
+      (its 10222 has no gated sections) — it must not claim to be open
+      (journey-test bug #8). -->
     <div class="card bg-base-100">
       <div class="card-body text-center">
-        <p class="text-base-content/60">{m.community_members_open_community()}</p>
+        <p class="text-base-content/60">
+          {communityType === 'closed'
+            ? m.community_members_closed_community()
+            : m.community_members_open_community()}
+        </p>
       </div>
     </div>
 

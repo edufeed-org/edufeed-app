@@ -30,6 +30,9 @@
   const getCommunikeyLoaded = getContext('communikeyLoaded');
   const profileAccess = getContext('profileAccess');
   const getIsMember = getContext('isCommunityMember');
+  // Insider signal (owner ∪ roster ∪ Concord member) for the closed shell —
+  // optional so standalone renders/tests without the layout still work.
+  const getZoneMember = getContext('zoneMember');
 
   let communikeyEvent = $derived(getCommunikeyEvent());
   let communityProfile = $derived(getCommunityProfile());
@@ -73,7 +76,11 @@
       {/if}
 
       {#if selectedContentType === 'home' && isClosedCommunity}
-        <ClosedCommunityShell {communikeyEvent} {communityProfile} />
+        <ClosedCommunityShell
+          {communikeyEvent}
+          {communityProfile}
+          isInsider={!!getZoneMember?.()}
+        />
       {:else if selectedContentType === 'home'}
         <HomeView
           {communikeyEvent}

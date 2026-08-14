@@ -207,6 +207,9 @@
   });
 
   setContext('communikeyEvent', () => communikeyEvent);
+  // Shared with MainContentArea so the closed-community shell can tell
+  // insiders (owner ∪ roster ∪ Concord member) from visitors.
+  setContext('zoneMember', () => zoneMember);
   setContext('communityWideFormRef', () => communityWideFormRef);
   setContext('communityProfile', () => communityProfile);
   setContext('communikeyLoaded', () => communikeyLoaded);
