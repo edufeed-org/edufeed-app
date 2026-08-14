@@ -805,33 +805,33 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 
 #### Unauthenticated (3 tests)
 
-| Test                                                         | What it verifies                  |
-| ------------------------------------------------------------ | --------------------------------- |
-| join button not visible on discover page when not logged in  | Button hidden for unauthenticated |
-| community header shows "Not Joined" badge when not logged in | Badge indicates non-member status |
-| join button in header is visible when not logged in          | Header shows join option          |
+| Test                                                           | What it verifies                                |
+| -------------------------------------------------------------- | ----------------------------------------------- |
+| join button not visible on discover page when not logged in    | Button hidden for unauthenticated               |
+| community header shows no "Following" badge when not logged in | No joined-member badge for a logged-out visitor |
+| join button in header is visible when not logged in            | Header shows "Follow Community" option          |
 
 #### Join Flow - Authenticated (4 tests)
 
-| Test                                                | What it verifies                      |
-| --------------------------------------------------- | ------------------------------------- |
-| join button visible on discover page when logged in | Button shown for authenticated user   |
-| can join community from discover page               | Button changes to "Leave" after join  |
-| can join community from community page header       | "Joined" badge appears                |
-| join shows loading state during publish             | Loading spinner visible during action |
+| Test                                                | What it verifies                        |
+| --------------------------------------------------- | --------------------------------------- |
+| join button visible on discover page when logged in | Button shown for authenticated user     |
+| can join community from discover page               | Button changes to "Unfollow" after join |
+| can join community from community page header       | "Following" badge appears               |
+| join shows loading state during publish             | Loading spinner visible during action   |
 
 #### Leave Flow - Authenticated (2 tests)
 
-| Test                                          | What it verifies              |
-| --------------------------------------------- | ----------------------------- |
-| can leave joined community from discover page | Button changes back to "Join" |
-| leave removes joined badge from card          | Card styling updates on leave |
+| Test                                          | What it verifies                |
+| --------------------------------------------- | ------------------------------- |
+| can leave joined community from discover page | Button changes back to "Follow" |
+| leave removes joined badge from card          | Card styling updates on leave   |
 
 #### Persistence (1 test)
 
-| Test                                             | What it verifies                     |
-| ------------------------------------------------ | ------------------------------------ |
-| membership state persists across page navigation | Leave button still visible after nav |
+| Test                                             | What it verifies                          |
+| ------------------------------------------------ | ----------------------------------------- |
+| membership state persists across page navigation | "Unfollow" button still visible after nav |
 
 #### Error Handling (2 tests)
 
