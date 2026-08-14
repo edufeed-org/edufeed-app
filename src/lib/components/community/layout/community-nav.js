@@ -64,13 +64,22 @@ export function communityNavTabIds({
  * when that filtering actually hid something — a visitor community with
  * nothing but world-readable channels gets no hint.
  *
+ * Owner create-entry: buildSidebarZones drops the 'channels' tab id and the
+ * component only renders the zone when it has content — so a community with
+ * ZERO channels had no desktop path to the channels view at all, and its
+ * owner no way to create the first channel (laoc, 2026-08-14). When the
+ * owner's tab list carried 'channels' but no rows survived, `showCreateEntry`
+ * asks the component to render a create row instead of hiding the zone. With
+ * rows present the entry stays off — any row already opens the view, whose
+ * own rail carries the create button.
+ *
  * @param {{
  *   tabs: string[],
  *   channelRows: Array<{key: string, worldReadable: boolean}>,
  *   isMember: boolean,
  *   isOwner: boolean
  * }} args
- * @returns {{inhalte: string[], kanaele: any[], footer: string[], showLockHint: boolean}}
+ * @returns {{inhalte: string[], kanaele: any[], footer: string[], showLockHint: boolean, showCreateEntry: boolean}}
  */
 export function buildSidebarZones({ tabs, channelRows, isMember, isOwner }) {
   const excluded = new Set(['home', 'channels', 'settings', 'members']);
@@ -80,12 +89,14 @@ export function buildSidebarZones({ tabs, channelRows, isMember, isOwner }) {
   const canSeeAll = isMember || isOwner;
   const kanaele = canSeeAll ? deduped : deduped.filter((row) => row.worldReadable);
   const showLockHint = !canSeeAll && kanaele.length < deduped.length;
+  const showCreateEntry = isOwner && (tabs ?? []).includes('channels') && kanaele.length === 0;
 
   return {
     inhalte,
     kanaele,
     footer: ['members', 'settings'],
-    showLockHint
+    showLockHint,
+    showCreateEntry
   };
 }
 

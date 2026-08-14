@@ -18,7 +18,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_members_loading: () => 'Loading members...',
   community_members_open_community: () => 'This is an open community.',
   community_members_owner_badge: () => 'Owner',
-  community_members_count: (/** @type {{count: number}} */ { count }) => `${count} members`
+  community_members_count: (/** @type {{count: number}} */ { count }) => `${count} members`,
+  community_members_all_sections: () => 'All content sections'
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
@@ -122,6 +123,59 @@ describe('MembersView — moderated community', () => {
       container.querySelector(`[data-testid="member-row"][data-pubkey="${REGULAR}"]`)
     );
     expect(within(regularRow).queryByTestId('member-role-chip')).toBeNull();
+  });
+
+  it('collapses section chips to one "all sections" chip when a member is in every gated section', () => {
+    // A roster member of a fully members-gated community is in EVERY section;
+    // eight identical chips per row sprawled across the layout (laoc
+    // 2026-08-14 screenshot). One collapsed chip carries the same information.
+    const EVENT = {
+      pubkey: OWNER,
+      kind: 10222,
+      tags: [
+        ['membership', 'root123', 'wss://groups.example'],
+        ['content', 'General'],
+        ['access', 'members'],
+        ['content', 'Wiki'],
+        ['access', 'members']
+      ]
+    };
+    holders.profileAccess = { isLoading: false, getMembers: () => [ADMIN] };
+
+    const { container } = render(MembersView, { props: { communikeyEvent: EVENT } });
+
+    const adminRow = /** @type {HTMLElement} */ (
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${ADMIN}"]`)
+    );
+    expect(within(adminRow).getByText('All content sections')).toBeTruthy();
+    expect(within(adminRow).queryByText('General')).toBeNull();
+    expect(within(adminRow).queryByText('Wiki')).toBeNull();
+  });
+
+  it('keeps the named section chip when a member is in only some sections', () => {
+    const EVENT = {
+      pubkey: OWNER,
+      kind: 10222,
+      tags: [
+        ['membership', 'root123', 'wss://groups.example'],
+        ['content', 'General'],
+        ['access', 'members'],
+        ['content', 'Wiki'],
+        ['access', 'members']
+      ]
+    };
+    holders.profileAccess = {
+      isLoading: false,
+      getMembers: (name) => (name === 'General' ? [ADMIN] : [OWNER])
+    };
+
+    const { container } = render(MembersView, { props: { communikeyEvent: EVENT } });
+
+    const adminRow = /** @type {HTMLElement} */ (
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${ADMIN}"]`)
+    );
+    expect(within(adminRow).getByText('General')).toBeTruthy();
+    expect(within(adminRow).queryByText('All content sections')).toBeNull();
   });
 
   it('a malformed roster with a duplicated role renders one chip, not a crash', () => {

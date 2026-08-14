@@ -182,6 +182,36 @@ describe('buildSidebarZones', () => {
     expect(zones.kanaele).toEqual([]);
     expect(zones.showLockHint).toBe(false);
   });
+
+  // Without this entry, a community with zero channels has NO desktop path to
+  // the channels view at all: buildSidebarZones drops the 'channels' tab id
+  // and the zone itself only renders when it has rows (bug: laoc 2026-08-14,
+  // "i dont know how to create a channel from here").
+  it('owner with a channels tab but zero rows gets a create entry', () => {
+    const zones = buildSidebarZones({ tabs, channelRows: [], isMember: false, isOwner: true });
+    expect(zones.showCreateEntry).toBe(true);
+  });
+
+  it('a non-owner member with zero rows gets no create entry', () => {
+    const zones = buildSidebarZones({ tabs, channelRows: [], isMember: true, isOwner: false });
+    expect(zones.showCreateEntry).toBe(false);
+  });
+
+  it('owner with rows present gets no create entry (the rows already open the view)', () => {
+    const rows = [row({ key: 'a', worldReadable: true })];
+    const zones = buildSidebarZones({ tabs, channelRows: rows, isMember: false, isOwner: true });
+    expect(zones.showCreateEntry).toBe(false);
+  });
+
+  it('owner without a channels tab gets no create entry', () => {
+    const zones = buildSidebarZones({
+      tabs: ['home', 'chat', 'settings'],
+      channelRows: [],
+      isMember: false,
+      isOwner: true
+    });
+    expect(zones.showCreateEntry).toBe(false);
+  });
 });
 
 describe('resolveZoneMembership', () => {

@@ -53,6 +53,17 @@
   }
 
   let isOwner = (/** @type {string} */ pubkey) => communikeyEvent?.pubkey === pubkey;
+
+  /**
+   * A roster member of a fully members-gated community is in EVERY section —
+   * one chip per section sprawled across the row (8 identical chips in the
+   * default community). Collapse to a single "all sections" chip when the
+   * member is in all of them and there is more than one.
+   * @param {string[]} sections
+   */
+  function isInAllSections(sections) {
+    return memberData.perSection.size > 1 && sections.length === memberData.perSection.size;
+  }
 </script>
 
 <div class="container mx-auto max-w-4xl px-4 py-8">
@@ -73,22 +84,28 @@
 
     <!-- Still show owner -->
     {#if communikeyEvent?.pubkey}
-      <div class="mt-6">
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div class="relative">
-            <ProfileCard
-              pubkey={communikeyEvent.pubkey}
-              profile={profiles.get(communikeyEvent.pubkey)}
-              size="sm"
-              showNpub={false}
-              showIcon={false}
-            />
-            <div class="absolute -top-2 -right-2 flex flex-wrap justify-end gap-1">
+      <div class="mt-6 flex max-w-2xl flex-col gap-2">
+        <div
+          class="rounded-lg bg-base-100 p-2"
+          data-testid="member-row"
+          data-pubkey={communikeyEvent.pubkey}
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="min-w-0 flex-1">
+              <ProfileCard
+                pubkey={communikeyEvent.pubkey}
+                profile={profiles.get(communikeyEvent.pubkey)}
+                size="sm"
+                showNpub={false}
+                showIcon={false}
+              />
+            </div>
+            <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
               <span class="badge badge-sm badge-primary">
                 {m.community_members_owner_badge()}
               </span>
               {#each getRoleChips(communikeyEvent.pubkey) as role (role)}
-                <span class="badge badge-ghost badge-xs" data-testid="member-role-chip">{role}</span
+                <span class="badge badge-ghost badge-sm" data-testid="member-role-chip">{role}</span
                 >
               {/each}
             </div>
@@ -101,28 +118,44 @@
       {m.community_members_count({ count: memberData.allMembers.length })}
     </p>
 
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="flex max-w-2xl flex-col gap-2">
       {#each memberData.allMembers as pubkey (pubkey)}
         {@const sections = getSectionsForPubkey(pubkey)}
-        <div class="relative" data-testid="member-row" data-pubkey={pubkey}>
-          <ProfileCard
-            {pubkey}
-            profile={profiles.get(pubkey)}
-            size="sm"
-            showNpub={false}
-            showIcon={false}
-          />
-          <div class="absolute -top-2 -right-2 flex flex-wrap justify-end gap-1">
-            {#if isOwner(pubkey)}
-              <span class="badge badge-xs badge-primary">{m.community_members_owner_badge()}</span>
-            {/if}
-            {#each sections as section (section)}
-              <span class="badge badge-outline badge-xs">{section}</span>
-            {/each}
-            {#each getRoleChips(pubkey) as role (role)}
-              <span class="badge badge-ghost badge-xs" data-testid="member-role-chip">{role}</span>
-            {/each}
+        <div class="rounded-lg bg-base-100 p-2" data-testid="member-row" data-pubkey={pubkey}>
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="min-w-0 flex-1">
+              <ProfileCard
+                {pubkey}
+                profile={profiles.get(pubkey)}
+                size="sm"
+                showNpub={false}
+                showIcon={false}
+              />
+            </div>
+            <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
+              {#if isOwner(pubkey)}
+                <span class="badge badge-sm badge-primary">{m.community_members_owner_badge()}</span
+                >
+              {/if}
+              {#each getRoleChips(pubkey) as role (role)}
+                <span class="badge badge-ghost badge-sm" data-testid="member-role-chip">{role}</span
+                >
+              {/each}
+            </div>
           </div>
+          {#if sections.length > 0}
+            <div class="mt-1.5 flex flex-wrap gap-1 px-2 pb-1">
+              {#if isInAllSections(sections)}
+                <span class="badge badge-outline badge-xs">
+                  {m.community_members_all_sections()}
+                </span>
+              {:else}
+                {#each sections as section (section)}
+                  <span class="badge badge-outline badge-xs">{section}</span>
+                {/each}
+              {/if}
+            </div>
+          {/if}
         </div>
       {/each}
     </div>

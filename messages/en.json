@@ -304,6 +304,7 @@
   "community_joined": "Following",
   "community_members": "Members",
   "community_members_count": "{count} members",
+  "community_members_all_sections": "All content sections",
   "community_members_title": "Members",
   "community_members_loading": "Loading members...",
   "community_members_open_community": "This is an open community — anyone can contribute.",

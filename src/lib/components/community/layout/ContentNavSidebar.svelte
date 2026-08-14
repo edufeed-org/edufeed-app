@@ -239,7 +239,7 @@
       {/each}
     </nav>
 
-    {#if zones.kanaele.length > 0 || zones.showLockHint}
+    {#if zones.kanaele.length > 0 || zones.showLockHint || zones.showCreateEntry}
       <nav class="menu space-y-1 p-4 pt-2">
         <div
           data-testid="nav-zone-kanaele"
@@ -279,6 +279,17 @@
             />
           {/if}
         {/each}
+        {#if zones.showCreateEntry}
+          <!-- Zero channels: this row is the owner's ONLY desktop path to the
+            channels view, where the create/attach flow lives. -->
+          <button
+            data-testid="nav-channels-create"
+            onclick={() => handleContentTypeClick('channels')}
+            class="flex items-center gap-2 rounded-lg border border-dashed border-base-content/25 px-4 py-2 text-sm text-base-content/70 transition-all duration-200 hover:bg-base-300/60"
+          >
+            + {m.concord_new_channel()}
+          </button>
+        {/if}
         {#if zones.showLockHint}
           <p data-testid="nav-lock-hint" class="px-2 py-1 text-xs text-base-content/50">
             {m.community_nav_lock_hint()}
