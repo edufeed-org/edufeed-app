@@ -145,44 +145,103 @@ export function publishersListAddress(communityPubkey) {
 }
 
 /**
- * Return NEW tags with the publishers-list gate on every content section
- * (inserted directly after each `content` tag, the position the section
- * parser associates a-tags by). Idempotent: sections already carrying THIS
- * community's publishers gate are left untouched; other 30000 a-tags are
- * preserved (legacy) and not duplicated against.
+ * The content types a window can expose. A deliberate subset of the
+ * community wizard's vocabulary: chat (kind 9) and meet rooms are live,
+ * interactive surfaces — a window shares CONTENT outward, it does not host
+ * conversation. Names/kinds mirror communityTagBuilder's registry so window
+ * sections parse identically to wizard-built ones.
+ * @type {Array<{key: string, name: string, kinds: string[]}>}
+ */
+export const WINDOW_CONTENT_TYPES = [
+  { key: 'learning', name: 'Learning', kinds: ['30142'] },
+  { key: 'articles', name: 'Articles', kinds: ['30023'] },
+  { key: 'calendar', name: 'Calendar', kinds: ['31922', '31923', '31924'] },
+  { key: 'posts', name: 'Forum', kinds: ['1', '11'] },
+  { key: 'wikis', name: 'Wikis', kinds: ['30818'] },
+  { key: 'polls', name: 'Polls', kinds: ['1068'] },
+  { key: 'bookmarks', name: 'Social Bookmarks', kinds: ['39701'] }
+];
+
+/**
+ * Split tags into the prelude (everything before the first `content` tag)
+ * and positional sections (a `content` tag plus its trailing tags).
+ * @param {string[][]} tags
+ * @returns {{prelude: string[][], sections: string[][][]}}
+ */
+function splitSections(tags) {
+  /** @type {string[][]} */
+  const prelude = [];
+  /** @type {string[][][]} */
+  const sections = [];
+  /** @type {string[][] | null} */
+  let current = null;
+  for (const tag of tags ?? []) {
+    if (Array.isArray(tag) && tag[0] === 'content') {
+      current = [tag];
+      sections.push(current);
+    } else if (current) {
+      current.push(tag);
+    } else {
+      prelude.push(tag);
+    }
+  }
+  return { prelude, sections };
+}
+
+/** @param {string[][]} section @param {string} address */
+const sectionHasGate = (section, address) =>
+  section.some((tag) => Array.isArray(tag) && tag[0] === 'a' && tag[1] === address);
+
+/**
+ * WINDOW_CONTENT_TYPES keys of the sections gated by THIS community's
+ * publishers list. Unknown section names gated by the list are ignored —
+ * the picker can only offer what it can rebuild.
  * @param {string[][]} tags
  * @param {string} communityPubkey
- * @param {string} [relay]
+ * @returns {string[]}
  */
-export function withPublisherSectionGates(tags, communityPubkey, relay) {
+export function windowSectionKeys(tags, communityPubkey) {
   const address = publishersListAddress(communityPubkey);
-  const gate = relay ? ['a', address, relay] : ['a', address];
-  /** @type {string[][]} */
-  const out = [];
-  for (let i = 0; i < (tags ?? []).length; i++) {
-    const tag = tags[i];
-    out.push(tag);
-    if (!Array.isArray(tag) || tag[0] !== 'content') continue;
-    // Look ahead over this section's trailing tags for an existing gate.
-    let hasGate = false;
-    for (let j = i + 1; j < tags.length; j++) {
-      const next = tags[j];
-      if (!Array.isArray(next) || next[0] === 'content' || next[0] === 'strict') break;
-      if (next[0] === 'a' && next[1] === address) hasGate = true;
-    }
-    if (!hasGate) out.push([...gate]);
-  }
-  return out;
+  const { sections } = splitSections(tags);
+  return sections
+    .filter((section) => sectionHasGate(section, address))
+    .map((section) => WINDOW_CONTENT_TYPES.find((t) => t.name === section[0][1])?.key)
+    .filter((key) => key !== undefined);
 }
 
 /**
- * Return NEW tags with this community's publishers gates removed.
+ * Whether any content section is NOT gated by this community's publishers
+ * list — the signal that separates a genuinely open community from one whose
+ * only public surface is the window (deriveCommunityType keeps the latter
+ * GESCHLOSSEN, displayed as "Privat mit Schaufenster").
  * @param {string[][]} tags
  * @param {string} communityPubkey
  */
-export function withoutPublisherSectionGates(tags, communityPubkey) {
+export function hasUngatedPublicSections(tags, communityPubkey) {
   const address = publishersListAddress(communityPubkey);
-  return (tags ?? []).filter(
-    (tag) => !(Array.isArray(tag) && tag[0] === 'a' && tag[1] === address)
-  );
+  return splitSections(tags).sections.some((section) => !sectionHasGate(section, address));
+}
+
+/**
+ * Return NEW tags where the window is exactly `selectedKeys`: previous
+ * publisher-gated sections are dropped, sections owned by no one else are
+ * kept verbatim, and a fresh gated section is appended per selected type
+ * (content + k tags + the publishers-list gate, the same grammar
+ * communityTagBuilder writes).
+ * @param {string[][]} tags
+ * @param {string} communityPubkey
+ * @param {string | undefined} relay hint for the gate a-tag
+ * @param {string[]} selectedKeys WINDOW_CONTENT_TYPES keys
+ */
+export function withWindowSections(tags, communityPubkey, relay, selectedKeys) {
+  const address = publishersListAddress(communityPubkey);
+  const { prelude, sections } = splitSections(tags);
+  const kept = sections.filter((section) => !sectionHasGate(section, address));
+  const gate = relay ? ['a', address, relay] : ['a', address];
+  const added = WINDOW_CONTENT_TYPES.filter((t) => selectedKeys.includes(t.key)).map((t) => [
+    ['content', t.name],
+    ...t.kinds.map((kind) => ['k', kind]),
+    [...gate]
+  ]);
+  return [...prelude, ...kept.flat(), ...added.flat()];
 }

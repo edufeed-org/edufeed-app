@@ -489,7 +489,21 @@ export function getDefaultCommunityTabs() {
  * @returns {string[]} Tab IDs in default display order
  */
 export function getCommunityTabs(communityEvent) {
-  if (deriveCommunityType(communityEvent) === 'closed') return ['home', 'settings'];
+  if (deriveCommunityType(communityEvent) === 'closed') {
+    // GESCHLOSSEN, but any content sections a closed community carries are
+    // its Schaufenster (publisher-gated by construction — ungated sections
+    // would have derived it 'open') and ARE the public surface, so they
+    // become tabs like anyone else's. The bare shell (zero sections) keeps
+    // collapsing to home + settings.
+    const declared = new Set(['home', 'settings']);
+    for (const section of parseCommunityContentTypes(communityEvent)) {
+      for (const kind of section.kinds) {
+        const tabId = kindToContentType(kind);
+        if (tabId) declared.add(tabId);
+      }
+    }
+    return getDefaultCommunityTabs().filter((id) => declared.has(id));
+  }
 
   const all = getDefaultCommunityTabs();
   if (!communityEvent || !hasStrictContentMarker(communityEvent)) return all;

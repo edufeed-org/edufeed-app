@@ -207,6 +207,20 @@ public NIP-29 roster and MUST NOT appear on concord-pointed communities.
 In-area sharing is unaffected: any member writes inside the area's channels
 (E2E); the publisher window governs only the community's public sections.
 
+**Window sections and type derivation.** A GESCHLOSSEN community opens its
+window by declaring content sections that carry the publishers-list gate —
+the owner picks which content types the window exposes, and each becomes a
+regular `content` section (`["content", <Name>]` + `k` tags) whose only gate
+is the publishers list. Type derivation treats these sections as part of the
+closed shape: a concord community counts as OPEN only while it has at least
+one content section **not** gated by its own publishers list. A community
+whose public surface is exclusively window sections therefore stays
+GESCHLOSSEN (clients may display it as "Privat mit Schaufenster"), and
+clients SHOULD surface the window sections to the public — hiding them
+defeats the window. Updating the publishers list MUST NOT itself add or
+remove section gates; the window's section set is the owner's separate,
+explicit choice.
+
 ## Future extensions (recorded, not specified)
 
 - **Discoverable closed communities:** Armada-style invite links (expiry, label)

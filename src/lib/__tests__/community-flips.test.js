@@ -147,3 +147,27 @@ describe('communityUpdateTemplate', () => {
     expect(template.created_at).toBe(future + 1);
   });
 });
+
+// Window-only sections (all gated by THIS community's publishers list) must
+// not flip a concord community to OPEN — "Offen" claims anyone can share,
+// and a Schaufenster says the opposite (spec: "Publisher window").
+describe('deriveCommunityType — Privat mit Schaufenster', () => {
+  const PK = 'f'.repeat(64);
+  const concord = ['concord', 'c'.repeat(64), 'wss://concord.example'];
+  const gate = ['a', `30000:${PK}:publishers`, 'wss://r.example'];
+
+  it('stays closed when every public section is publisher-gated', () => {
+    expect(
+      deriveCommunityType({ pubkey: PK, tags: [concord, ['content', 'Learning'], gate] })
+    ).toBe('closed');
+  });
+
+  it('stays open when any section is NOT publisher-gated', () => {
+    expect(
+      deriveCommunityType({
+        pubkey: PK,
+        tags: [concord, ['content', 'Chat'], ['content', 'Learning'], gate]
+      })
+    ).toBe('open');
+  });
+});

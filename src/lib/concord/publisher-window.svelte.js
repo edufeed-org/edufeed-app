@@ -17,7 +17,7 @@ import {
   resolvePublisherListing,
   parsePublishersList,
   buildPublishersListTemplate,
-  withPublisherSectionGates
+  withWindowSections
 } from './publisher-window.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
@@ -158,9 +158,12 @@ export async function revokePublisherRole(community, roles, grants, pubkey) {
 }
 
 /**
- * Owner action: publish the public list to match the consented set, and make
- * sure every public section carries the publishers gate. Community-signed —
- * caller passes the community signer (key-holding owner).
+ * Owner action: publish the public list to match the consented set.
+ * Community-signed — caller passes the community signer (key-holding owner).
+ * Deliberately does NOT touch the community's sections: which sections form
+ * the window is the owner's separate choice (saveWindowSections below) —
+ * auto-gating on sync would lock regular members out of an open community's
+ * sections the moment a publisher list exists.
  * @param {{
  *   communikeyEvent: any,
  *   communitySigner: any,
@@ -182,12 +185,18 @@ export async function syncPublishersList({
   const result = await publishEvent(signed, [], { additionalRelays: getCommunikeyRelays() });
   if (!result.success) throw new Error('Failed to publish publishers list to any relay');
   eventStore.add(signed);
+}
 
-  // Wire the section gates once (idempotent) so readers verify the window.
+/**
+ * Owner action: rewrite the community's window to exactly `selectedKeys`
+ * (WINDOW_CONTENT_TYPES keys) — publisher-gated public sections, replacing
+ * the previous window selection and leaving every other section alone.
+ * @param {{communikeyEvent: any, communitySigner: any, selectedKeys: string[]}} args
+ */
+export async function saveWindowSections({ communikeyEvent, communitySigner, selectedKeys }) {
+  const communityPubkey = communikeyEvent?.pubkey;
+  if (!communityPubkey || !communitySigner) throw new Error('community signer required');
   const relay = getCommunikeyRelays()[0];
-  const gated = withPublisherSectionGates(communikeyEvent.tags ?? [], communityPubkey, relay);
-  const changed = gated.length !== (communikeyEvent.tags ?? []).length;
-  if (changed) {
-    await publishCommunityUpdate(communityUpdateTemplate(communikeyEvent, gated), communitySigner);
-  }
+  const tags = withWindowSections(communikeyEvent.tags ?? [], communityPubkey, relay, selectedKeys);
+  await publishCommunityUpdate(communityUpdateTemplate(communikeyEvent, tags), communitySigner);
 }

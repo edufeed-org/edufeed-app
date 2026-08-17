@@ -13,8 +13,14 @@
     usePublisherWindow,
     offerPublisherRole,
     revokePublisherRole,
-    syncPublishersList
+    syncPublishersList,
+    saveWindowSections
   } from '$lib/concord/publisher-window.svelte.js';
+  import {
+    WINDOW_CONTENT_TYPES,
+    windowSectionKeys,
+    hasUngatedPublicSections
+  } from '$lib/concord/publisher-window.js';
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { useObservable } from '$lib/concord/bridge.svelte.js';
   import { getCommunitySigner } from '$lib/helpers/community-signer.js';
@@ -42,6 +48,60 @@
 
   let busyPubkey = $state(/** @type {string | null} */ (null));
   let syncing = $state(false);
+
+  // ── Window section picker (Privat mit Schaufenster) ──
+  // Only for communities whose ONLY public surface is the window: an open
+  // community's ungated sections are managed in Inhalte & Rechte, and mixing
+  // the two pickers would let this one silently drop those sections.
+  const windowPickerAvailable = $derived(
+    !hasUngatedPublicSections(communikeyEvent?.tags ?? [], communikeyEvent?.pubkey ?? '')
+  );
+  const savedWindowKeys = $derived(
+    windowSectionKeys(communikeyEvent?.tags ?? [], communikeyEvent?.pubkey ?? '')
+  );
+  // Owner's in-progress choice; null = untouched, mirror the saved state.
+  let draftWindowKeys = $state(/** @type {string[] | null} */ (null));
+  const windowKeys = $derived(draftWindowKeys ?? savedWindowKeys);
+  const windowDirty = $derived(
+    windowKeys.length !== savedWindowKeys.length ||
+      windowKeys.some((key) => !savedWindowKeys.includes(key))
+  );
+  let savingWindow = $state(false);
+
+  /** @param {string} key */
+  function toggleWindowKey(key) {
+    const current = windowKeys;
+    draftWindowKeys = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+  }
+
+  async function saveWindow() {
+    if (savingWindow || !communitySigner) return;
+    savingWindow = true;
+    try {
+      await saveWindowSections({ communikeyEvent, communitySigner, selectedKeys: windowKeys });
+      draftWindowKeys = null;
+      showToast(m.publisher_window_saved(), 'success');
+    } catch (error) {
+      console.error('publisher: window save failed', error);
+      showToast(m.publisher_action_failed(), 'error');
+    } finally {
+      savingWindow = false;
+    }
+  }
+
+  /** @param {string} key */
+  function windowTypeLabel(key) {
+    const labels = /** @type {Record<string, () => string>} */ ({
+      learning: m.publisher_window_type_learning,
+      articles: m.publisher_window_type_articles,
+      calendar: m.publisher_window_type_calendar,
+      posts: m.publisher_window_type_posts,
+      wikis: m.publisher_window_type_wikis,
+      polls: m.publisher_window_type_polls,
+      bookmarks: m.publisher_window_type_bookmarks
+    });
+    return labels[key]?.() ?? key;
+  }
 
   /** @param {string} pubkey @returns {'listed'|'accepted'|'declined'|'offered'|'none'} */
   function stateOf(pubkey) {
@@ -185,6 +245,39 @@
           {m.publisher_sync()}
         </button>
         <p class="mt-1 text-xs text-base-content/60">{m.publisher_sync_hint()}</p>
+      </div>
+    {/if}
+
+    {#if windowPickerAvailable}
+      <div class="mt-4 border-t border-base-300 pt-4" data-testid="publisher-window-picker">
+        <h3 class="text-sm font-bold">{m.publisher_window_sections_title()}</h3>
+        <p class="mt-1 text-xs text-base-content/60">{m.publisher_window_sections_lead()}</p>
+        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {#each WINDOW_CONTENT_TYPES as type (type.key)}
+            <label class="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                data-testid="publisher-window-type"
+                data-key={type.key}
+                checked={windowKeys.includes(type.key)}
+                onchange={() => toggleWindowKey(type.key)}
+              />
+              {windowTypeLabel(type.key)}
+            </label>
+          {/each}
+        </div>
+        {#if windowDirty}
+          <button
+            class="btn mt-3 btn-sm btn-neutral"
+            data-testid="publisher-window-save"
+            disabled={savingWindow || !communitySigner}
+            onclick={saveWindow}
+          >
+            {#if savingWindow}<span class="loading loading-xs loading-spinner"></span>{/if}
+            {m.publisher_window_save()}
+          </button>
+        {/if}
       </div>
     {/if}
   </div>

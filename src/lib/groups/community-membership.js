@@ -11,6 +11,7 @@
 // Community TYPE is derived, never declared: concord pointer → closed,
 // membership pointer → moderated, neither → open. XOR violation → open.
 import { parseConcordPointer } from '$lib/concord/pointer.js';
+import { hasUngatedPublicSections } from '$lib/concord/publisher-window.js';
 import { isValidRelayWebsocketUrl } from './groups.js';
 
 export const MEMBERSHIP_TAG = 'membership';
@@ -116,7 +117,7 @@ export function withApplicationRef(tags, ref) {
 /**
  * Community type, derived from the event's pointer tags — never declared.
  * XOR violation (both pointers) is invalid per the NIP draft: fail open.
- * @param {{tags?: string[][]} | null | undefined} event
+ * @param {{tags?: string[][], pubkey?: string} | null | undefined} event
  * @returns {CommunityType}
  */
 export function deriveCommunityType(event) {
@@ -125,15 +126,14 @@ export function deriveCommunityType(event) {
   const membership = parseMembershipPointer(event);
   if (concord && membership) return 'open';
   if (concord) {
-    // Concord alone is only GESCHLOSSEN for the wizard's shell shape (zero
-    // public sections). An ordinary community that links/founds a private
-    // area keeps its public content sections and stays open "mit privatem
-    // Bereich" — deriving those as closed would hide their public content
-    // behind the shell (laoc, 2026-08-17).
-    const hasPublicSections = (event.tags ?? []).some(
-      (tag) => Array.isArray(tag) && tag[0] === 'content'
-    );
-    return hasPublicSections ? 'open' : 'closed';
+    // Concord alone is GESCHLOSSEN for the wizard's shell shape (zero public
+    // sections) AND for the window shape (every section gated by the
+    // community's own publishers list — "Privat mit Schaufenster"): only
+    // consented publishers share there, so "Offen — alle können teilen"
+    // would be a lie. An ordinary community that links/founds a private
+    // area keeps its UNGATED public sections and stays open "mit privatem
+    // Bereich" (laoc, 2026-08-17).
+    return hasUngatedPublicSections(event.tags ?? [], event.pubkey ?? '') ? 'open' : 'closed';
   }
   if (membership) return 'moderated';
   return 'open';

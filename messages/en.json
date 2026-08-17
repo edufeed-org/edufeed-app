@@ -3370,5 +3370,18 @@
   "publisher_accept": "Accept",
   "publisher_decline": "Decline",
   "publisher_consent_accepted": "Consent sent – the community will list you on the next sync",
-  "publisher_consent_declined": "Declined – you will not be listed publicly"
+  "publisher_consent_declined": "Declined – you will not be listed publicly",
+  "community_type_closed_window_title": "Private with public window",
+  "community_type_closed_window_body": "Invite-only, everything end-to-end encrypted. Selected members (publishers) share content publicly in the window — with their own consent.",
+  "publisher_window_sections_title": "Public content sections",
+  "publisher_window_sections_lead": "These sections are publicly visible — only listed publishers can post there.",
+  "publisher_window_save": "Save window",
+  "publisher_window_saved": "Window updated",
+  "publisher_window_type_learning": "Learning",
+  "publisher_window_type_articles": "Articles",
+  "publisher_window_type_calendar": "Calendar",
+  "publisher_window_type_posts": "Forum",
+  "publisher_window_type_wikis": "Wikis",
+  "publisher_window_type_polls": "Polls",
+  "publisher_window_type_bookmarks": "Bookmarks"
 }

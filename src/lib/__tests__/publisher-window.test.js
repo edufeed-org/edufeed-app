@@ -17,8 +17,9 @@ import {
   parsePublishersList,
   buildPublishersListTemplate,
   publishersListAddress,
-  withPublisherSectionGates,
-  withoutPublisherSectionGates
+  windowSectionKeys,
+  withWindowSections,
+  hasUngatedPublicSections
 } from '$lib/concord/publisher-window.js';
 
 const A = 'a'.repeat(64);
@@ -163,29 +164,56 @@ describe('publishers list event helpers', () => {
   });
 });
 
-describe('section gate wiring', () => {
+describe('window sections (Privat mit Schaufenster)', () => {
   const PK = 'f'.repeat(64);
-  it('inserts the gate after every ungated content section, idempotently', () => {
+  const RELAY = 'wss://r.example';
+  const gate = ['a', publishersListAddress(PK), RELAY];
+
+  it('builds gated sections for the selected types, after the prelude', () => {
     const tags = [
       ['d', ''],
-      ['content', 'Chat'],
-      ['content', 'Articles'],
-      ['a', publishersListAddress(PK), 'wss://r.example'],
-      ['strict']
+      ['r', 'wss://relay.example'],
+      ['strict', 'content'],
+      ['concord', 'c'.repeat(64), 'wss://concord.example']
     ];
-    const out = withPublisherSectionGates(tags, PK, 'wss://r.example');
-    // Chat gains a gate; Articles keeps its existing one (no duplicate)
+    const out = withWindowSections(tags, PK, RELAY, ['learning', 'articles']);
+    // Prelude untouched, in order
+    expect(out.slice(0, 4)).toEqual(tags);
+    // Each selected type: content tag + k tags + the publishers gate
+    expect(out).toContainEqual(['content', 'Learning']);
+    expect(out).toContainEqual(['content', 'Articles']);
+    expect(out).toContainEqual(['k', '30142']);
+    expect(out).toContainEqual(['k', '30023']);
     expect(out.filter((t) => t[0] === 'a' && t[1] === publishersListAddress(PK))).toHaveLength(2);
-    expect(out[2]).toEqual(['a', publishersListAddress(PK), 'wss://r.example']);
-    // Idempotent on re-run
-    expect(withPublisherSectionGates(out, PK, 'wss://r.example')).toEqual(out);
+    // Round-trips through the reader
+    expect(windowSectionKeys(out, PK).sort()).toEqual(['articles', 'learning']);
   });
 
-  it('withoutPublisherSectionGates strips only this community gates', () => {
-    const foreign = ['a', `30000:${A}:publishers`, 'wss://r'];
-    const tags = [['content', 'Chat'], ['a', publishersListAddress(PK)], foreign];
-    const out = withoutPublisherSectionGates(tags, PK);
-    expect(out).toContainEqual(foreign);
-    expect(out.some((t) => t[1] === publishersListAddress(PK))).toBe(false);
+  it('replaces the previous window selection instead of stacking', () => {
+    const first = withWindowSections([['strict', 'content']], PK, RELAY, ['learning']);
+    const second = withWindowSections(first, PK, RELAY, ['wikis']);
+    expect(windowSectionKeys(second, PK)).toEqual(['wikis']);
+    expect(second.filter((t) => t[0] === 'content')).toHaveLength(1);
+    // Empty selection removes the window entirely
+    expect(withWindowSections(second, PK, RELAY, []).filter((t) => t[0] === 'content')).toEqual([]);
+  });
+
+  it('keeps sections it does not own (ungated, or gated by another list)', () => {
+    const foreignGate = ['a', `30000:${'b'.repeat(64)}:publishers`, RELAY];
+    const tags = [
+      ['strict', 'content'],
+      ['content', 'Chat'],
+      ['k', '9'],
+      ['content', 'Forum'],
+      foreignGate,
+      ['content', 'Learning'],
+      gate
+    ];
+    const out = withWindowSections(tags, PK, RELAY, []);
+    expect(out.filter((t) => t[0] === 'content').map((t) => t[1])).toEqual(['Chat', 'Forum']);
+    expect(out).toContainEqual(foreignGate);
+    expect(hasUngatedPublicSections(tags, PK)).toBe(true);
+    expect(hasUngatedPublicSections([['content', 'Learning'], gate], PK)).toBe(false);
+    expect(hasUngatedPublicSections([['strict', 'content']], PK)).toBe(false);
   });
 });

@@ -3370,5 +3370,18 @@
   "publisher_accept": "Annehmen",
   "publisher_decline": "Ablehnen",
   "publisher_consent_accepted": "Zustimmung gesendet – die Community trägt dich beim nächsten Abgleich ein",
-  "publisher_consent_declined": "Abgelehnt – du wirst nicht öffentlich gelistet"
+  "publisher_consent_declined": "Abgelehnt – du wirst nicht öffentlich gelistet",
+  "community_type_closed_window_title": "Privat mit Schaufenster",
+  "community_type_closed_window_body": "Nur auf Einladung, alles Ende-zu-Ende-verschlüsselt. Ausgewählte Mitglieder (Publisher) teilen mit eigener Zustimmung Inhalte öffentlich im Schaufenster.",
+  "publisher_window_sections_title": "Öffentliche Inhaltsbereiche",
+  "publisher_window_sections_lead": "Diese Bereiche sind öffentlich sichtbar — veröffentlichen können dort nur gelistete Publisher.",
+  "publisher_window_save": "Schaufenster speichern",
+  "publisher_window_saved": "Schaufenster aktualisiert",
+  "publisher_window_type_learning": "Lernen",
+  "publisher_window_type_articles": "Artikel",
+  "publisher_window_type_calendar": "Kalender",
+  "publisher_window_type_posts": "Forum",
+  "publisher_window_type_wikis": "Wikis",
+  "publisher_window_type_polls": "Umfragen",
+  "publisher_window_type_bookmarks": "Lesezeichen"
 }

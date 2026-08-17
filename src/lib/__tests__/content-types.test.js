@@ -422,6 +422,35 @@ describe('getCommunityTabs', () => {
     expect(getCommunityTabs(event)).toEqual(getDefaultCommunityTabs());
   });
 
+  it('closed shell (concord, no sections) collapses to home + settings', () => {
+    const event = {
+      pubkey: 'f'.repeat(64),
+      tags: [
+        ['strict', 'content'],
+        ['concord', 'c'.repeat(64), 'wss://concord.example']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'settings']);
+  });
+
+  it('Privat mit Schaufenster: window sections surface as tabs on a closed community', () => {
+    const PK = 'f'.repeat(64);
+    const event = {
+      pubkey: PK,
+      tags: [
+        ['strict', 'content'],
+        ['concord', 'c'.repeat(64), 'wss://concord.example'],
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['a', `30000:${PK}:publishers`, 'wss://r.example'],
+        ['content', 'Articles'],
+        ['k', '30023'],
+        ['a', `30000:${PK}:publishers`, 'wss://r.example']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'articles', 'learning', 'settings']);
+  });
+
   it('keeps only declared content tabs plus home and settings (strict)', () => {
     const event = {
       tags: [

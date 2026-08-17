@@ -20,6 +20,7 @@
   import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
   import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
   import PublisherWindowPane from '$lib/components/community/settings/PublisherWindowPane.svelte';
+  import { windowSectionKeys } from '$lib/concord/publisher-window.js';
   // Community-type flips (open <-> moderated; closed never transitions) — see
   // docs/nips/communikey-groups.md and src/lib/groups/community-flips.js.
   import { deriveCommunityType, parseMembershipPointer } from '$lib/groups/community-membership.js';
@@ -92,6 +93,12 @@
   // flips. Community type is DERIVED from the 10222's pointer tags, never
   // declared — see deriveCommunityType. Closed communities never transition.
   const communityType = $derived(deriveCommunityType(communikeyEvent));
+  // GESCHLOSSEN with publisher-gated public sections reads as "Privat mit
+  // Schaufenster" — same type, different story to tell.
+  const hasWindow = $derived(
+    communityType === 'closed' &&
+      windowSectionKeys(communikeyEvent?.tags ?? [], communikeyEvent?.pubkey ?? '').length > 0
+  );
   const channelNames = $derived.by(() =>
     unique(parseGroupPointers(communikeyEvent).map((pointer) => pointer.name || pointer.id))
   );
@@ -305,6 +312,8 @@
                   {m.community_type_open_title()}
                 {:else if communityType === 'moderated'}
                   {m.community_type_moderated_title()}
+                {:else if hasWindow}
+                  {m.community_type_closed_window_title()}
                 {:else}
                   {m.community_type_closed_title()}
                 {/if}
@@ -314,6 +323,8 @@
                   {m.community_type_open_body()}
                 {:else if communityType === 'moderated'}
                   {m.community_type_moderated_body()}
+                {:else if hasWindow}
+                  {m.community_type_closed_window_body()}
                 {:else}
                   {m.community_type_closed_body()}
                 {/if}
