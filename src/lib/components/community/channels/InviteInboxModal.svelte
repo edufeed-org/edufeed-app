@@ -36,12 +36,23 @@
   import { getConcordClient } from '$lib/concord/client.svelte.js';
   import { useObservable } from '$lib/concord/bridge.svelte.js';
   import { resolveInviteWrap } from '$lib/concord/invite-helpers.js';
+  import { selectConcordChannel } from '$lib/concord/active-channel.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { showToast } from '$lib/helpers/toast';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
 
-  let { onClose } = $props();
+  // linkedCommunityId/communikeyPubkey: the hosting community's Concord area
+  // id and Communikey pubkey, when the modal is opened FROM a community's
+  // channels view. Accept then keeps the user there (the community Kanäle
+  // view IS the destination); for any other invite the standalone
+  // /private/<id> route is the landing page. Both optional — the global
+  // 'concordInvites' modal has no community context.
+  let { onClose, linkedCommunityId = null, communikeyPubkey = null } = $props();
   const client = getConcordClient();
   const watcher = client?.directInviteWatcher;
 
@@ -105,6 +116,22 @@
       await dismissInvite(invite);
       showToast(m.concord_invite_accepted(), 'success');
       onClose();
+      // Guide the user INTO what they just accepted (journey-test
+      // 2026-08-17: "the group was not opened") — the community's Kanäle
+      // view when this modal belongs to that community, the standalone area
+      // route otherwise. Pre-select the first granted channel so the pane
+      // opens on something rather than the empty state.
+      const areaId = invite.bundle?.community_id ?? invite.communityId;
+      if (areaId) {
+        const firstChannel = invite.bundle?.channels?.[0]?.id;
+        if (firstChannel) selectConcordChannel(areaId, firstChannel);
+        if (linkedCommunityId && areaId === linkedCommunityId && communikeyPubkey) {
+          const npub = hexToNpub(communikeyPubkey);
+          if (npub) goto(resolve(`/c/${npub}?view=channels`));
+        } else {
+          goto(resolve(`/private/${areaId}`));
+        }
+      }
     } catch (error) {
       console.error('concord: accept failed', error);
       showToast(m.concord_invite_accept_failed(), 'error');
@@ -137,12 +164,29 @@
       <p class="text-sm text-base-content/60">{m.concord_no_invites()}</p>
     {/if}
     {#each getInvites() as invite (invite.rumor?.id ?? invite.communityId)}
+      {@const grantedChannels = (invite.bundle?.channels ?? [])
+        .map((/** @type {{name?: string}} */ ch) => ch.name)
+        .filter(Boolean)}
       <div class="mb-2 rounded-xl border border-base-300 p-4">
+        <!-- Sender first (trust decision), then area name, then what the
+          invite grants — journey-test 2026-08-17: a bare "🔒 Geheimclub /
+          von fe4478…" told the recipient neither who nor what for. -->
+        {#if invite.inviter}
+          <div class="mb-2 flex items-center gap-2 text-sm">
+            <ProfileAvatar pubkey={invite.inviter} size="sm" />
+            <span class="text-base-content/70"
+              >{m.concord_invite_from({ inviter: inviterLabel(invite.inviter) })}</span
+            >
+          </div>
+        {/if}
         <b class="flex items-center gap-2"
           >🔒 {invite.bundle?.label ?? invite.bundle?.name ?? m.concord_invite_generic()}</b
         >
         <p class="my-2 text-xs text-base-content/60">
-          {m.concord_invite_from({ inviter: inviterLabel(invite.inviter) })}
+          {m.concord_invite_access_area()}
+          {#if grantedChannels.length > 0}
+            · {m.concord_invite_access_channels({ names: grantedChannels.join(', ') })}
+          {/if}
         </p>
         <div class="flex justify-end gap-2">
           <button class="btn btn-ghost btn-sm" onclick={() => decline(invite)}

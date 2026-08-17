@@ -12,6 +12,8 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages.js';
+  import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
 
   const MAX_ITEMS = 6;
   const getActiveUser = useActiveUser();
@@ -92,6 +94,28 @@
       {m.inbox_mark_all_read()}
     </button>
   </div>
+
+  {#if getPendingInviteCount() > 0}
+    <!-- Pinned above the notification list: E2E invites arrive as encrypted
+      gift wraps (never DMs), so before the deliberate decrypt step the ONLY
+      honest information is the count — and this bell is the one global
+      surface a recipient who does not expect an invite will actually check
+      (UX consult 2026-08-17). -->
+    <button
+      class="flex w-full items-start gap-3 border-b border-base-300 bg-primary/5 px-4 py-3 text-left hover:bg-primary/10"
+      data-testid="inbox-invites-row"
+      onclick={() => modalStore.openModal('concordInvites')}
+    >
+      <span aria-hidden="true">🔒</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-medium"
+          >{m.inbox_invites_row_title({ count: getPendingInviteCount() })}</span
+        >
+        <span class="block text-xs text-base-content/60">{m.inbox_invites_row_body()}</span>
+      </span>
+      <span class="text-sm font-semibold text-primary">{m.inbox_invites_row_action()}</span>
+    </button>
+  {/if}
 
   <div class="max-h-80 overflow-y-auto">
     {#if mergedItems.length === 0}

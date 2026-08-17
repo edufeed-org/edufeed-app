@@ -3332,5 +3332,13 @@
   "community_applications_decrypt_failed": "Could not decrypt this response.",
   "community_application_approved_dm": "Your application to join {community} was accepted — welcome!",
   "community_application_declined_dm": "Your application to join {community} was unfortunately declined.",
-  "community_application_approve_failed": "Acceptance failed: {reason}"
+  "community_application_approve_failed": "Acceptance failed: {reason}",
+  "concord_invite_access_area": "You get access to the private area.",
+  "concord_invite_access_channels": "Channels: {names}",
+  "concord_invite_scope_hint": "This invite covers the whole private area — including access to the channel “{channel}”.",
+  "concord_syncing_title": "Syncing the area …",
+  "concord_syncing_body": "The channels are being decrypted and loaded — this only takes a moment.",
+  "inbox_invites_row_title": "{count} invitation(s) to private areas",
+  "inbox_invites_row_body": "Delivered encrypted — you'll see who invited you and where after decrypting.",
+  "inbox_invites_row_action": "View"
 }

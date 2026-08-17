@@ -554,6 +554,14 @@
           honest "locked" message instead of the generic "no channels yet"
           copy, which would otherwise wrongly imply no channel was selected. -->
         <ChannelStatePane title={m.concord_locked_title()} body={m.concord_locked_body()} />
+      {:else if concord.channels.length === 0 && concord.phase === 'syncing'}
+        <!-- Freshly accepted invite: the engine is still pulling the E2E
+          channel metadata from the relays. "No channels" here would be a
+          lie for a few seconds (journey-test 2026-08-17: an invitee saw an
+          empty group and reloaded to make the channels appear). -->
+        <ChannelStatePane title={m.concord_syncing_title()} body={m.concord_syncing_body()}>
+          <span class="loading mt-2 loading-md loading-spinner text-primary"></span>
+        </ChannelStatePane>
       {:else}
         <ChannelStatePane
           title={m.concord_no_channels_title()}
@@ -619,7 +627,11 @@
       onClose={() => (overlay = null)}
     />
   {:else if overlay === 'inbox'}
-    <InviteInboxModal onClose={() => (overlay = null)} />
+    <InviteInboxModal
+      onClose={() => (overlay = null)}
+      linkedCommunityId={concord.communityId}
+      communikeyPubkey={communikeyEvent?.pubkey}
+    />
   {:else if overlay === 'members' && concord.community && activeChannel}
     <ChannelMembersModal
       community={concord.community}

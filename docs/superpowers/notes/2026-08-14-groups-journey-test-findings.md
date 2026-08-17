@@ -227,3 +227,26 @@ filename, remaining app-wide Sie/Du outside the tested flows.
   "✉ Erhaltene Einladungen" (opens the invite inbox via ?invites=1 deep
   link), and the notification bell; group-mode attach/area-members moved
   into the overview pane (desktop-only action bar).
+
+## Sixth pass (invite UX round, 2026-08-17)
+
+- Invite card enriched: sender resolves to profile name + avatar (trust
+  decision first), then area name, then an explicit access line ("Du
+  erhältst Zugang zum privaten Bereich." + granted channel names from the
+  bundle). Description/image are NOT in the CORD-05 bundle — only name,
+  icon pointer, channels, creator — so no fake metadata is shown.
+- Accept now navigates INTO the accepted area: the hosting community's
+  Kanäle view when the modal belongs to it, else /private/<id>; the first
+  granted channel is pre-selected. Verified live (Jonas → Geheimclub,
+  landed in # Geheimtreff with messages readable).
+- Sending-side scope: the channel invite sheet states "Die Einladung gilt
+  für den gesamten privaten Bereich — inklusive Zugang zum Kanal ‚X'".
+- Surfacing (UX consult): three surfaces already existed (Termi hint,
+  dashboard card, sidebar badge) — the missing one was the GLOBAL BELL.
+  Pending invites now count into the bell badge and render as a pinned
+  row in the bell dropdown ("N Einladung(en) in private Bereiche …
+  Ansehen" → opens the global concordInvites modal). Verified live.
+- "Group but no channels" after accept: root-caused as engine sync
+  latency (client emits communities$ correctly; the E2E channel metadata
+  takes seconds). The channels pane now shows a "Bereich wird
+  synchronisiert …" state with spinner instead of claiming emptiness.

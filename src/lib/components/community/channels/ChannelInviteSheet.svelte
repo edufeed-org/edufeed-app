@@ -175,7 +175,13 @@
     <button class="btn absolute top-3 right-3 btn-circle btn-ghost btn-sm" onclick={onClose}
       >✕</button
     >
-    <h3 class="mb-3 text-lg font-extrabold">{m.concord_invite_title({ name: channel.name })}</h3>
+    <h3 class="mb-1 text-lg font-extrabold">{m.concord_invite_title({ name: channel.name })}</h3>
+    <!-- Journey-test 2026-08-17: senders could not tell whether they were
+      inviting to this channel or the whole area — say it: the invite always
+      grants AREA membership, plus this channel's access. -->
+    <p class="mb-3 text-xs text-base-content/60">
+      {m.concord_invite_scope_hint({ channel: channel.name })}
+    </p>
     <div class="tabs-boxed mb-4 tabs">
       <button class="tab {tab === 'link' ? 'tab-active' : ''}" onclick={() => (tab = 'link')}
         >{m.concord_invite_tab_link()}</button

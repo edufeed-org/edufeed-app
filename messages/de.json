@@ -3332,5 +3332,13 @@
   "community_applications_decrypt_failed": "Antwort konnte nicht entschlüsselt werden.",
   "community_application_approved_dm": "Deine Beitrittsanfrage für {community} wurde angenommen — willkommen!",
   "community_application_declined_dm": "Deine Beitrittsanfrage für {community} wurde leider abgelehnt.",
-  "community_application_approve_failed": "Aufnahme fehlgeschlagen: {reason}"
+  "community_application_approve_failed": "Aufnahme fehlgeschlagen: {reason}",
+  "concord_invite_access_area": "Du erhältst Zugang zum privaten Bereich.",
+  "concord_invite_access_channels": "Kanäle: {names}",
+  "concord_invite_scope_hint": "Die Einladung gilt für den gesamten privaten Bereich — inklusive Zugang zum Kanal „{channel}“.",
+  "concord_syncing_title": "Bereich wird synchronisiert …",
+  "concord_syncing_body": "Die Kanäle werden gerade entschlüsselt und geladen — das dauert nur einen Moment.",
+  "inbox_invites_row_title": "{count} Einladung(en) in private Bereiche",
+  "inbox_invites_row_body": "Verschlüsselt zugestellt — wer einlädt und wohin, siehst du nach dem Entschlüsseln.",
+  "inbox_invites_row_action": "Ansehen"
 }
