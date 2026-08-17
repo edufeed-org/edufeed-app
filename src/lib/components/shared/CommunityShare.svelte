@@ -8,6 +8,8 @@
   // Share surfaces list joined ∪ area-linked communities — a private area's
   // member never (publicly) follow-set-joins, but must still be able to share.
   import { useShareableCommunities } from '$lib/concord/shareable-communities.svelte.js';
+  import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
+  import * as m from '$lib/paraglide/messages';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
@@ -38,6 +40,13 @@
   // Get joined communities
   const getJoinedCommunities = useShareableCommunities();
   const joinedCommunities = $derived(getJoinedCommunities());
+  // Communities where this share would publish and then never render (the
+  // section for this kind is profile-list gated and the user is not on the
+  // list) — rows are disabled instead of letting the share vanish.
+  const getRestricted = useShareRestrictions(
+    () => event?.kind,
+    () => joinedCommunities
+  );
 
   // State management
   let selectedCommunityIds = $state(/** @type {string[]} */ ([]));
@@ -426,9 +435,15 @@
           {@const isDeletable = deletableShares.has(communityPubKey)}
           {@const isNonDeletable = isAlreadyShared && !isDeletable}
           {@const isSelected = selectedCommunityIds.includes(communityPubKey)}
+          {@const isRestricted = getRestricted().has(communityPubKey)}
           {@const getCommunityProfile = useUserProfile(communityPubKey)}
           {@const communityProfile = getCommunityProfile()}
-          <label class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200">
+          <label
+            class="flex items-center gap-3 rounded p-2 {isRestricted
+              ? 'opacity-50'
+              : 'cursor-pointer hover:bg-base-200'}"
+            title={isRestricted ? m.share_restricted_hint() : undefined}
+          >
             <!-- The checkbox shows the RESULTING state: shared communities are
                  checked; selecting a deletable share (pending unshare) unchecks
                  it, selecting an unshared one checks it. -->
@@ -436,13 +451,18 @@
               type="checkbox"
               class="checkbox checkbox-secondary {compact ? 'checkbox-sm' : ''}"
               checked={isDeletable ? !isSelected : isAlreadyShared || isSelected}
-              disabled={isProcessingShares}
+              disabled={isProcessingShares || isRestricted}
               onchange={() => toggleCommunitySelection(communityPubKey)}
             />
             <span class="font-medium {compact ? 'text-sm' : ''}">
               {getDisplayName(communityProfile) ||
                 `${communityPubKey.slice(0, 8)}...${communityPubKey.slice(-4)}`}
             </span>
+            {#if isRestricted}
+              <span class="text-xs text-base-content/60" data-testid="share-restricted-badge"
+                >🔒 {m.share_restricted_label()}</span
+              >
+            {/if}
             {#if isDeletable && isSelected}
               <span class="text-xs font-medium text-warning">(Will be unshared)</span>
             {:else if isDeletable}

@@ -3384,5 +3384,7 @@
   "publisher_window_type_wikis": "Wikis",
   "publisher_window_type_polls": "Umfragen",
   "publisher_window_type_bookmarks": "Lesezeichen",
-  "closed_window_banner_body": "Hier zeigt die Community öffentlich geteilte Inhalte ihrer Publisher. Die Mitgliedschaft selbst ist nur auf Einladung."
+  "closed_window_banner_body": "Hier zeigt die Community öffentlich geteilte Inhalte ihrer Publisher. Die Mitgliedschaft selbst ist nur auf Einladung.",
+  "share_restricted_label": "Nur Publisher",
+  "share_restricted_hint": "In diesem Bereich können nur dafür freigeschaltete Mitglieder (z. B. Publisher) öffentlich teilen — dein Beitrag würde sonst nicht angezeigt."
 }

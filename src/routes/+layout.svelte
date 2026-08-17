@@ -360,9 +360,14 @@
 
 <div class="flex h-dvh flex-col overflow-hidden">
   <Navbar hideMobileNavbar={!!getActiveUser() && isOnCommunityRoutes} />
-  {#if $navigating}
-    <progress class="progress h-1 w-full progress-primary"></progress>
-  {/if}
+  <!-- Overlay, not flow: a flow progress bar pushed the whole chrome down
+    4px on every navigation — visible as a flicker/bump (laoc, 2026-08-17).
+    The relative wrapper pins it to the navbar's bottom edge instead. -->
+  <div class="relative z-20 h-0">
+    {#if $navigating}
+      <progress class="progress absolute top-0 left-0 h-1 w-full progress-primary"></progress>
+    {/if}
+  </div>
   <ModalManager />
   <!-- Chrome row: sidebars + main as flex siblings. -->
   <div class="flex min-h-0 flex-1 overflow-hidden">

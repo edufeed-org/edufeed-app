@@ -105,6 +105,12 @@ vi.mock('$lib/concord/shareable-communities.svelte.js', () => ({
   useShareableCommunities: () => () => mockJoinedCommunities
 }));
 
+// Restriction marking pulls the address loader chain — out of scope here:
+// no community in this suite is profile-list gated, so nothing restricted.
+vi.mock('$lib/stores/share-restrictions.svelte.js', () => ({
+  useShareRestrictions: () => () => new Set()
+}));
+
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => null
 }));

@@ -3384,5 +3384,7 @@
   "publisher_window_type_wikis": "Wikis",
   "publisher_window_type_polls": "Polls",
   "publisher_window_type_bookmarks": "Bookmarks",
-  "closed_window_banner_body": "This is the community's public window — content shared by its publishers. Membership itself is invite-only."
+  "closed_window_banner_body": "This is the community's public window — content shared by its publishers. Membership itself is invite-only.",
+  "share_restricted_label": "Publishers only",
+  "share_restricted_hint": "Only members cleared for this section (e.g. publishers) can share publicly here — your post would not be displayed otherwise."
 }
