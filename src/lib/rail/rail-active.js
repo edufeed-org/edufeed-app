@@ -142,3 +142,16 @@ export function shouldBringActiveIntoView({ anchor, rowPresent, lastAnchor }) {
   if (anchor === lastAnchor) return { scroll: false, nextLast: lastAnchor };
   return { scroll: true, nextLast: anchor };
 }
+
+/**
+ * Whether the page at this route draws its own channel column, so the app's
+ * generic dashboard nav must step aside instead of becoming a third nav
+ * column beside a chat. Two such surfaces: a NIP-29 host (directory or
+ * channel — HostChannelSidebar) and a standalone unlinked private area
+ * (/private/<id> — PrivateChannelsView's own rail).
+ * @param {string | null | undefined} pathname
+ * @returns {boolean}
+ */
+export function pageOwnsNavColumn(pathname) {
+  return !!hostRouteOf(pathname) || /^\/private\/[^/]+/.test(String(pathname ?? ''));
+}

@@ -17,7 +17,7 @@
   import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
   import DashboardBottomTabBar from '$lib/components/dashboard/DashboardBottomTabBar.svelte';
-  import { hostRouteOf } from '$lib/rail/rail-active.js';
+  import { pageOwnsNavColumn } from '$lib/rail/rail-active.js';
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
@@ -62,13 +62,13 @@
   let isDashboardActive = $derived(isOnCommunityRoutes && !currentCommunityPubkey);
   let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
   let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
-  // Inside a NIP-29 host, the second column is that host's channel list —
-  // the page renders it (HostChannelSidebar), so the app's generic nav steps
-  // aside rather than making it a third nav column beside a chat. Deliberately
-  // separate from showDashboardNav, which also drives the MOBILE bottom bar
-  // and main's padding: the sidebar is desktop-only, so nothing about mobile
-  // should change here.
-  let isInsideHost = $derived(!!hostRouteOf($page.url.pathname));
+  // Where the page renders its own channel column (a NIP-29 host's
+  // HostChannelSidebar, or a standalone private area's rail), the app's
+  // generic nav steps aside rather than making it a third nav column beside
+  // a chat. Deliberately separate from showDashboardNav, which also drives
+  // the MOBILE bottom bar and main's padding: the sidebar is desktop-only,
+  // so nothing about mobile should change here.
+  let pageOwnsNav = $derived(pageOwnsNavColumn($page.url.pathname));
 
   // Pages with master/detail patterns (e.g. /c/messages) can opt in to the
   // "own bottom UI" rule reactively, so the bottom nav stays visible on the
@@ -379,8 +379,9 @@
         />
       </div>
     {/if}
-    {#if isInsideHost}
-      <!-- The page's own HostChannelSidebar is this column here. -->
+    {#if pageOwnsNav}
+      <!-- The page's own channel column (HostChannelSidebar, or the
+        standalone private area's rail) stands here. -->
     {:else if showDashboardNav}
       <DashboardNavSidebar />
     {:else if isInsideCommunity && contentNavData}

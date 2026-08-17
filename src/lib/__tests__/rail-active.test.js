@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import {
   activeRailTarget,
   hostRouteOf,
+  pageOwnsNavColumn,
   isEntryActive,
   shouldBringActiveIntoView
 } from '$lib/rail/rail-active.js';
@@ -207,5 +208,23 @@ describe('shouldBringActiveIntoView', () => {
     expect(
       shouldBringActiveIntoView({ anchor: null, rowPresent: false, lastAnchor: 'community:a' })
     ).toEqual({ scroll: false, nextLast: null });
+  });
+});
+
+// The generic dashboard nav must step aside wherever the page draws its own
+// channel column — a third nav column beside a chat is the bug (laoc,
+// 2026-08-17: /private/<id> showed the full dashboard nav next to the
+// area's KANÄLE rail).
+describe('pageOwnsNavColumn', () => {
+  it('claims host routes and standalone private areas', () => {
+    expect(pageOwnsNavColumn('/relays/relay.example.com')).toBe(true);
+    expect(pageOwnsNavColumn('/private/' + 'c'.repeat(64))).toBe(true);
+  });
+
+  it('leaves ordinary dashboard routes to the dashboard nav', () => {
+    expect(pageOwnsNavColumn('/discover')).toBe(false);
+    expect(pageOwnsNavColumn('/c/')).toBe(false);
+    expect(pageOwnsNavColumn('/private')).toBe(false);
+    expect(pageOwnsNavColumn(null)).toBe(false);
   });
 });
