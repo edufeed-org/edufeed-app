@@ -555,11 +555,14 @@
           honest "locked" message instead of the generic "no channels yet"
           copy, which would otherwise wrongly imply no channel was selected. -->
         <ChannelStatePane title={m.concord_locked_title()} body={m.concord_locked_body()} />
-      {:else if concord.channels.length === 0 && concord.phase === 'syncing'}
-        <!-- Freshly accepted invite: the engine is still pulling the E2E
-          channel metadata from the relays. "No channels" here would be a
-          lie for a few seconds (journey-test 2026-08-17: an invitee saw an
-          empty group and reloaded to make the channels appear). -->
+      {:else if concord.channels.length === 0 && (concord.phase === 'syncing' || concord.phase === 'idle')}
+        <!-- Freshly accepted invite OR client boot: the engine has not
+          caught up to the relay tip yet (phase 'idle' before the first
+          sync starts, 'syncing' during it — only 'live' means the channel
+          list is trustworthy). "No channels" here would be a lie for a few
+          seconds (journey-test 2026-08-17: an invitee saw an empty group
+          and reloaded to make the channels appear; widened same day to
+          cover the boot window where phase is still 'idle'). -->
         <ChannelStatePane title={m.concord_syncing_title()} body={m.concord_syncing_body()}>
           <span class="loading mt-2 loading-md loading-spinner text-primary"></span>
         </ChannelStatePane>

@@ -170,6 +170,14 @@
   // channel surface, so its rail-only controls needed a home here. Same
   // toggle logic as the rail's bell.
   const concordSignerHasNip44 = $derived(getConcord().signerHasNip44);
+  // Area exists but hasn't caught up to the relay tip ('idle' pre-sync,
+  // 'syncing' during; only 'live' means the row list is complete) — shown as
+  // a small spinner in the zone header so an empty-looking zone right after
+  // boot/accept reads as "loading", not "no channels".
+  const concordSyncing = $derived.by(() => {
+    const concord = getConcord();
+    return !!concord.community && (concord.phase === 'syncing' || concord.phase === 'idle');
+  });
   const notificationSupported = typeof Notification !== 'undefined';
   let permissionDenied = $state(notificationSupported && Notification.permission === 'denied');
   const toastsOn = $derived(getToastsEnabled());
@@ -275,7 +283,7 @@
       {/each}
     </nav>
 
-    {#if zones.kanaele.length > 0 || zones.showLockHint || zones.showCreateEntry}
+    {#if zones.kanaele.length > 0 || zones.showLockHint || zones.showCreateEntry || concordSyncing}
       <nav class="menu space-y-1 p-4 pt-2">
         <div
           data-testid="nav-zone-kanaele"
@@ -286,6 +294,13 @@
             unread={concordAreaFlags.unread}
             mentioned={concordAreaFlags.mentioned}
           />
+          {#if concordSyncing}
+            <span
+              class="loading loading-xs loading-spinner text-base-content/40"
+              data-testid="nav-kanaele-syncing"
+              title={m.concord_sync_title()}
+            ></span>
+          {/if}
           {#if notificationSupported && concordSignerHasNip44}
             <button
               class="btn ml-auto btn-circle btn-ghost btn-xs"
