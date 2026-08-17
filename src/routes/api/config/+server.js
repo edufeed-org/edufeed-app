@@ -165,8 +165,12 @@ export function GET() {
     dmRelays: parseArray(env.DM_RELAYS),
 
     // DM senders (hex or npub) whose conversations always count as "known" —
-    // keeps platform welcome DMs out of the requests folder
-    dmTrustedSenders: parseArray(env.DM_TRUSTED_SENDERS),
+    // keeps platform welcome DMs out of the requests folder. Defaults to the
+    // Edufeed and VocabulOER platform accounts.
+    dmTrustedSenders: parseArray(env.DM_TRUSTED_SENDERS, [
+      'bdc21f93b1e2cb75608cecd7a0a00a779779d9367dc9798bd9f213f06c95bc48', // Edufeed
+      'd2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612' // VocabulOER
+    ]),
 
     // App-specific relays (content goes here IN ADDITION to user's outbox)
     calendarRelays: parseArray(env.CALENDAR_RELAYS),
