@@ -159,7 +159,9 @@ type and is unrelated to membership. Membership exists only for moderated
 
 Section-level profile-list references (`30000:...`) and badge requirements
 (`30009:...`) are read-only legacy; clients honoring this spec MUST NOT write
-them. Kind `30222` targeted publications remain read-only legacy.
+them — with one sanctioned exception: the **publisher window** below, which
+writes exactly one profile list (`d` = `publishers`) on communities carrying a
+`concord` pointer. Kind `30222` targeted publications remain read-only legacy.
 
 Clients SHOULD NOT offer creating new profile-list gating; they MAY preserve
 existing profile-list tags when editing a legacy community. Flipping a
@@ -167,6 +169,43 @@ community to moderated MUST strip them. As a deliberate transitional
 exception, a client editing an existing legacy-gated **open** community MAY
 continue to surface that community's form-gating UI rather than tearing it
 out mid-edit.
+
+## Publisher window (Schaufenster) for concord communities
+
+A community with a `concord` pointer keeps its membership end-to-end
+encrypted — which makes publicly *verifiable* member-gating of its public
+sections structurally impossible (a reader cannot check authorship against a
+roster nobody may see). The publisher window resolves this with a **consented
+public subset** of the private membership:
+
+- **Publisher role (private).** Inside the Concord area, the owner creates a
+  CORD-04 role named `Publisher` and grants it to members. Grants are E2E;
+  the world learns nothing.
+- **Publisher consent (private).** Listing a member publicly REQUIRES that
+  member's explicit acceptance. A member accepts or revokes by publishing a
+  **kind `3320`** rumor to the area's guestbook plane with tags
+  `["t", "publisher-window"]` and `["status", "accepted"]` (or `"revoked"`).
+  Latest rumor per member wins. Consent is E2E like every guestbook rumor.
+- **Public roster.** Once BOTH the grant and the acceptance exist, the
+  community key publishes/updates a NIP-51 follow set
+  `kind 30000, d = "publishers"` listing the consenting publishers' `p` tags.
+  Revoking the role OR the consent MUST remove the pubkey on the next update.
+  Because only the community key signs this list, updates happen when a
+  key-holding client is online — acceptance-to-listing latency is expected.
+- **Section gating.** The community's public sections reference the list with
+  the standard profile-list form `["a", "30000:<community-pubkey>:publishers",
+  "<relay-url>"]`. Readers verify the public window exactly as for any
+  profile-list-gated section: only posts authored by listed publishers (or
+  the community key itself) belong to the section.
+
+Privacy properties: the public list discloses ONLY consenting publishers —
+never the membership size or any other member. A publisher self-discloses by
+authoring public posts regardless; the list adds no information beyond that.
+`access` tiers (`members`/`role`) remain moderated-only — they require the
+public NIP-29 roster and MUST NOT appear on concord-pointed communities.
+
+In-area sharing is unaffected: any member writes inside the area's channels
+(E2E); the publisher window governs only the community's public sections.
 
 ## Future extensions (recorded, not specified)
 

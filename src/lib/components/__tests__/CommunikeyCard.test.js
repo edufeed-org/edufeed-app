@@ -58,7 +58,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   communikey_card_toast_left_failed: () => 'Failed to leave',
   communikey_card_toast_error: () => 'Error',
   community_type_moderated_title: () => 'Moderated',
-  community_type_closed_title: () => 'Closed'
+  community_type_closed_title: () => 'Closed',
+  community_type_moderated_body: () => 'Moderated body',
+  community_type_closed_body: () => 'Closed body'
 }));
 
 vi.mock('$app/paths', () => ({

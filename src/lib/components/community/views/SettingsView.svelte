@@ -19,6 +19,7 @@
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
   import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
   import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
+  import PublisherWindowPane from '$lib/components/community/settings/PublisherWindowPane.svelte';
   // Community-type flips (open <-> moderated; closed never transitions) — see
   // docs/nips/communikey-groups.md and src/lib/groups/community-flips.js.
   import { deriveCommunityType, parseMembershipPointer } from '$lib/groups/community-membership.js';
@@ -400,6 +401,13 @@
              roster above (admins' roles + 'admin', deduped). -->
         {#if isOwner && communityType === 'moderated'}
           <AccessTierEditor {communikeyEvent} {communitySigner} {roleSuggestions} />
+        {/if}
+
+        <!-- Publisher window (Schaufenster) — owner-only, only when a
+          private area is linked (spec: docs/nips/communikey-groups.md
+          "Publisher window"). -->
+        {#if isOwner && concordArea.enabled && concordArea.pointer}
+          <PublisherWindowPane {communikeyEvent} />
         {/if}
 
         <!-- Private area (Concord) — owner-only create/attach/detach home -->

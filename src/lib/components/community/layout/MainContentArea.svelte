@@ -17,6 +17,7 @@
   import PrivateChannelsView from '../channels/PrivateChannelsView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
+  import PublisherOfferBanner from '../PublisherOfferBanner.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
   import { getSectionNameForContentType } from '$lib/helpers/contentTypes.js';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
@@ -74,6 +75,9 @@
       {#if userPubkey && getIsMember() && !canPublish && formRef && !profileAccess.isLoading}
         <AccessGateBanner {formRef} {sectionName} {userPubkey} />
       {/if}
+
+      <!-- Publisher-window consent step (self-gates on an open offer) -->
+      <PublisherOfferBanner {communikeyEvent} />
 
       {#if selectedContentType === 'home' && isClosedCommunity}
         <ClosedCommunityShell
