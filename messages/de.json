@@ -3383,5 +3383,6 @@
   "publisher_window_type_posts": "Forum",
   "publisher_window_type_wikis": "Wikis",
   "publisher_window_type_polls": "Umfragen",
-  "publisher_window_type_bookmarks": "Lesezeichen"
+  "publisher_window_type_bookmarks": "Lesezeichen",
+  "closed_window_banner_body": "Hier zeigt die Community öffentlich geteilte Inhalte ihrer Publisher. Die Mitgliedschaft selbst ist nur auf Einladung."
 }

@@ -14,6 +14,8 @@
   import MembersView from '../views/MembersView.svelte';
   import HomeView from '../views/HomeView.svelte';
   import ClosedCommunityShell from '../views/ClosedCommunityShell.svelte';
+  import ClosedWindowBanner from '../views/ClosedWindowBanner.svelte';
+  import { windowSectionKeys } from '$lib/concord/publisher-window.js';
   import PrivateChannelsView from '../channels/PrivateChannelsView.svelte';
   import SettingsView from '../views/SettingsView.svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
@@ -43,6 +45,14 @@
   // shell, not the activity feed. Settings stays reachable (owner-only in
   // practice, enforced by SettingsView itself).
   let isClosedCommunity = $derived(deriveCommunityType(communikeyEvent) === 'closed');
+  // Closed + window sections: the window's content is genuinely public
+  // (gates control publishing, never reading), so outsiders get the normal
+  // home over that content plus a banner — the lock-wall shell would deny
+  // the very content the window exists to show. The windowless shell shape
+  // keeps the wall: there is nothing public to render behind it.
+  let hasWindowSections = $derived(
+    windowSectionKeys(communikeyEvent?.tags ?? [], communikeyEvent?.pubkey ?? '').length > 0
+  );
 </script>
 
 <!-- Main Content Area -->
@@ -79,13 +89,16 @@
       <!-- Publisher-window consent step (self-gates on an open offer) -->
       <PublisherOfferBanner {communikeyEvent} />
 
-      {#if selectedContentType === 'home' && isClosedCommunity}
+      {#if selectedContentType === 'home' && isClosedCommunity && !hasWindowSections}
         <ClosedCommunityShell
           {communikeyEvent}
           {communityProfile}
           isInsider={!!getZoneMember?.()}
         />
       {:else if selectedContentType === 'home'}
+        {#if isClosedCommunity && !getZoneMember?.()}
+          <ClosedWindowBanner {communikeyEvent} />
+        {/if}
         <HomeView
           {communikeyEvent}
           profileEvent={communityProfile}

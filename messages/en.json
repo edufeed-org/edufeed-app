@@ -3383,5 +3383,6 @@
   "publisher_window_type_posts": "Forum",
   "publisher_window_type_wikis": "Wikis",
   "publisher_window_type_polls": "Polls",
-  "publisher_window_type_bookmarks": "Bookmarks"
+  "publisher_window_type_bookmarks": "Bookmarks",
+  "closed_window_banner_body": "This is the community's public window — content shared by its publishers. Membership itself is invite-only."
 }
