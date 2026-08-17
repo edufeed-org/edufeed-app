@@ -768,6 +768,7 @@
   "community_views_chat_load_more": "Ältere Nachrichten laden",
   "community_views_chat_login_prompt": "Melde dich an, um am Chat teilzunehmen",
   "community_views_chat_members_only": "Nur Mitglieder können hier schreiben.",
+  "community_views_chat_send_failed": "Nachricht konnte an kein Relay gesendet werden. Bitte versuch es erneut.",
   "community_profile_hero_more": "mehr",
   "community_hero_closed_hint": "Nur auf Einladung",
   "community_join_group": "Beitreten",

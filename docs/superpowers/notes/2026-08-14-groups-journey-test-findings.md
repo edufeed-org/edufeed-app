@@ -204,3 +204,26 @@ Still open (needs deeper work): stale-type flash on reload (data
 freshness), key-backup surfacing in onboarding (design decision),
 member-add name search + clipped dropdown, Concord invite dedupe, nsec
 filename, remaining app-wide Sie/Du outside the tested flows.
+
+## Fifth pass (laoc testing round, 2026-08-17)
+
+- Chat composer invisible on empty chats: the input pill was base-200 on
+  the base-200 page — now base-100 with a border (reply bar matched).
+- Chat send "failed": account npub1uvh06f6… has NO kind 10002 on any
+  relay (verified: relay.edufeed.org, purplepag.es, damus, nos.lol) —
+  publishes then target only the 4 FALLBACK_RELAYS, and in that browser
+  session several were unreachable/rejecting; on total failure the
+  optimistic publish silently REMOVES the message again. Fixes: total
+  send failure now toasts + restores the composer text, and
+  saveRelayList additionally publishes the new list to the NEW relays
+  themselves + the lookup indexers (breaking the "broken relay list
+  can't be fixed" deadlock; purplepag.es previously never received relay
+  lists at all). Note: the settings save itself reproduced FINE here
+  (10002 landed on 3 relays) — the user's error was the environment, the
+  robustness gap was real regardless.
+- Double sidebar on the channels view: PrivateChannelsView's own rail is
+  now MOBILE-ONLY; the app sidebar's KANÄLE zone is the single desktop
+  surface, gaining the rail's controls: permanent "+ Neuer Kanal" (owner),
+  "✉ Erhaltene Einladungen" (opens the invite inbox via ?invites=1 deep
+  link), and the notification bell; group-mode attach/area-members moved
+  into the overview pane (desktop-only action bar).

@@ -19,7 +19,13 @@
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { communityNavTabIds, buildSidebarZones } from './community-nav.js';
-  import { areaUnreadState, channelUnreadState } from '$lib/concord/notifications.svelte.js';
+  import {
+    areaUnreadState,
+    channelUnreadState,
+    getToastsEnabled,
+    setToastsEnabled
+  } from '$lib/concord/notifications.svelte.js';
+  import { goto } from '$app/navigation';
   import {
     getSelectedConcordChannel,
     selectConcordChannel
@@ -157,6 +163,36 @@
   function rowTestId(key) {
     return `nav-channel-row-${key.replace(/[^a-zA-Z0-9]/g, '-')}`;
   }
+
+  // Notification bell + invite-inbox entry, moved here from
+  // PrivateChannelsView's rail when that rail became mobile-only
+  // (2026-08-17, "double sidebar") — on desktop this zone is the only
+  // channel surface, so its rail-only controls needed a home here. Same
+  // toggle logic as the rail's bell.
+  const concordSignerHasNip44 = $derived(getConcord().signerHasNip44);
+  const notificationSupported = typeof Notification !== 'undefined';
+  let permissionDenied = $state(notificationSupported && Notification.permission === 'denied');
+  const toastsOn = $derived(getToastsEnabled());
+
+  async function toggleToasts() {
+    if (getToastsEnabled()) {
+      await setToastsEnabled(false);
+      return;
+    }
+    if (Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission();
+      permissionDenied = permission === 'denied';
+      if (permission !== 'granted') return;
+    }
+    await setToastsEnabled(true);
+  }
+
+  function openInviteInbox() {
+    // PrivateChannelsView reads ?invites=1 and opens its invite inbox —
+    // reachable from here because the desktop rail (its old home) is gone.
+    handleContentTypeClick('channels');
+    goto('?view=channels&invites=1');
+  }
 </script>
 
 {#snippet tabButton(/** @type {{id: string, label: string, icon: any}} */ type)}
@@ -250,6 +286,21 @@
             unread={concordAreaFlags.unread}
             mentioned={concordAreaFlags.mentioned}
           />
+          {#if notificationSupported && concordSignerHasNip44}
+            <button
+              class="btn ml-auto btn-circle btn-ghost btn-xs"
+              data-testid="nav-concord-notif-bell"
+              disabled={permissionDenied}
+              title={permissionDenied
+                ? m.concord_notif_bell_denied()
+                : toastsOn
+                  ? m.concord_notif_bell_on()
+                  : m.concord_notif_bell_off()}
+              onclick={toggleToasts}
+            >
+              {toastsOn ? '🔔' : '🔕'}
+            </button>
+          {/if}
         </div>
         {#each zones.kanaele as row (row.key)}
           {#if row.source === 'concord'}
@@ -280,14 +331,23 @@
           {/if}
         {/each}
         {#if zones.showCreateEntry}
-          <!-- Zero channels: this row is the owner's ONLY desktop path to the
-            channels view, where the create/attach flow lives. -->
+          <!-- The owner's desktop path to channel creation — the view's own
+            rail is mobile-only since the double-sidebar cleanup. -->
           <button
             data-testid="nav-channels-create"
             onclick={() => handleContentTypeClick('channels')}
             class="flex items-center gap-2 rounded-lg border border-dashed border-base-content/25 px-4 py-2 text-sm text-base-content/70 transition-all duration-200 hover:bg-base-300/60"
           >
             + {m.concord_new_channel()}
+          </button>
+        {/if}
+        {#if concordSignerHasNip44}
+          <button
+            data-testid="nav-channels-invites"
+            onclick={openInviteInbox}
+            class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-base-content/70 transition-all duration-200 hover:bg-base-300/60"
+          >
+            ✉ {m.concord_invites()}
           </button>
         {/if}
         {#if zones.showLockHint}

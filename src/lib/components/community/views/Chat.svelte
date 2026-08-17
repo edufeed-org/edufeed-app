@@ -20,6 +20,7 @@
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
+  import { showToast } from '$lib/helpers/toast';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import { extractMentionPubkeys } from '$lib/helpers/inbox.js';
 
@@ -202,7 +203,17 @@
       eventStore.add(signedEvent);
 
       publishEventOptimistic(signedEvent, [derivedCommunityPubkey], {
-        communityEvent: communikeyEvent
+        communityEvent: communikeyEvent,
+        // Total publish failure removes the optimistic message from the
+        // store again — the bubble appears, then silently vanishes
+        // (journey-test 2026-08-17, "chat send failed" with zero feedback).
+        // Surface it and give the text back for a retry.
+        onStatusChange: (status) => {
+          if (status.status === 'failed') {
+            showToast(m.community_views_chat_send_failed(), 'error');
+            if (!newMessage.trim()) newMessage = messageContent;
+          }
+        }
       });
 
       // Clear reply and custom emoji state after sending
@@ -335,7 +346,9 @@
 
       <!-- Reply preview bar -->
       {#if replyingTo}
-        <div class="flex items-center gap-2 rounded-t-2xl bg-base-200 px-4 py-2 text-sm shadow-md">
+        <div
+          class="flex items-center gap-2 rounded-t-2xl border border-b-0 border-base-300 bg-base-100 px-4 py-2 text-sm shadow-md"
+        >
           <ReplyIcon class="h-4 w-4 shrink-0 text-base-content/60" />
           <span class="font-medium text-base-content/60"
             >{getUserDisplayName(replyingTo.pubkey)}</span
@@ -347,11 +360,14 @@
         </div>
       {/if}
 
+      <!-- base-100 + border, NOT base-200: the chat sits on the page's
+        base-200 beige, so a base-200 pill was invisible on an empty chat
+        (journey-test finding — "input box is not good visible"). -->
       <form
         onsubmit={sendMessage}
         class="flex items-center gap-2 {replyingTo
           ? 'rounded-t-none rounded-b-full'
-          : 'rounded-full'} bg-base-200 px-2 py-1 shadow-md"
+          : 'rounded-full'} border border-base-300 bg-base-100 px-2 py-1 shadow-md"
       >
         <button
           type="button"

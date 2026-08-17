@@ -58,7 +58,9 @@ const notifFixture = vi.hoisted(
 );
 vi.mock('$lib/concord/notifications.svelte.js', () => ({
   areaUnreadState: () => notifFixture.area,
-  channelUnreadState: () => notifFixture.channel
+  channelUnreadState: () => notifFixture.channel,
+  getToastsEnabled: () => false,
+  setToastsEnabled: async () => {}
 }));
 
 const selectedChannelFixture = vi.hoisted(() => /** @type {{ value: string }} */ ({ value: '' }));

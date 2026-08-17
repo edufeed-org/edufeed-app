@@ -197,10 +197,13 @@ describe('buildSidebarZones', () => {
     expect(zones.showCreateEntry).toBe(false);
   });
 
-  it('owner with rows present gets no create entry (the rows already open the view)', () => {
+  it('owner with rows present ALSO gets the create entry (the zone is the only desktop surface)', () => {
+    // Since the desktop layout dropped PrivateChannelsView's own rail
+    // (2026-08-17, "double sidebar"), the zone carries channel creation
+    // regardless of how many channels already exist.
     const rows = [row({ key: 'a', worldReadable: true })];
     const zones = buildSidebarZones({ tabs, channelRows: rows, isMember: false, isOwner: true });
-    expect(zones.showCreateEntry).toBe(false);
+    expect(zones.showCreateEntry).toBe(true);
   });
 
   it('owner without a channels tab gets no create entry', () => {

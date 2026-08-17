@@ -136,6 +136,19 @@
       selectConcordChannel(cid, channelParam);
     }
   });
+
+  // ?invites=1 opens the invite inbox — the sidebar's KANÄLE zone links here
+  // since the desktop rail (the inbox's old entry point) became mobile-only.
+  // One-shot like the channel deep link, and independent of communityId so it
+  // also works before/without a founded area.
+  let invitesLinkChecked = false;
+  $effect(() => {
+    if (invitesLinkChecked) return;
+    invitesLinkChecked = true;
+    if (get(page)?.url?.searchParams.get('invites')) {
+      overlay = 'inbox';
+    }
+  });
   // Two distinct owner questions conflated as one variable would be wrong:
   // "is the active user the Communikey community's own keypair holder"
   // (relevant ONLY to the founding affordance below — you can't found a
@@ -321,17 +334,15 @@
   Concord-specific surface below. -->
 {#if concord.enabled || groupPointers.length > 0}
   <div class="flex h-full min-h-0">
-    <!-- rail — full width in mobile single-column mode (below md, only one
-      of rail/pane is ever visible at once via mobileChat), fixed 288px once
-      both show side by side. A bare `w-72` here would leave the remainder
-      of a narrow viewport blank instead of the visible pane filling it.
-      Surfaces follow the app convention (design page "Channel Surfaces"):
-      nav chrome = base-200 (this rail joins the content-nav's beige zone),
-      content = base-100 (the chat pane) — previously inverted, which put a
-      stark paper column between two beige nav zones. -->
+    <!-- rail — MOBILE ONLY (below md, only one of rail/pane is ever visible
+      at once via mobileChat). On desktop the app sidebar's KANÄLE zone is
+      the single channel surface — rendering this rail beside it produced a
+      double sidebar (laoc, 2026-08-17); its rail-only controls (create,
+      invites, notification bell) moved into that zone, and the group-mode
+      attach/members actions into the overview pane below. -->
     <aside
-      class="flex w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 md:w-72 {mobileChat
-        ? 'hidden md:flex'
+      class="w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 md:hidden {mobileChat
+        ? 'hidden'
         : 'flex'}"
     >
       <div class="flex items-center justify-between px-2 pt-2 pb-1">
@@ -452,7 +463,30 @@
           chat — but it must not be the Concord founding offer either, and a
           bare "pick a channel" placard said nothing the rail beside it did not
           already say. It is the channel overview instead (Armada parity:
-          ServerPage's welcome pane). -->
+          ServerPage's welcome pane). The attach/members actions render here
+          on desktop because the rail carrying them is mobile-only now. -->
+        {#if canAttachGroup || (groupPointers.length > 0 && isAreaMember)}
+          <div class="hidden flex-wrap gap-2 p-3 pb-0 md:flex">
+            {#if canAttachGroup}
+              <button
+                class="btn border-dashed btn-outline btn-sm"
+                data-testid="group-attach-open-pane"
+                onclick={() => (overlay = 'attach-area')}
+              >
+                + {m.groups_attach_action()}
+              </button>
+            {/if}
+            {#if groupPointers.length > 0 && isAreaMember}
+              <button
+                class="btn btn-outline btn-sm"
+                data-testid="area-members-open-pane"
+                onclick={() => (overlay = 'area-members')}
+              >
+                {m.area_members_title()}
+              </button>
+            {/if}
+          </div>
+        {/if}
         <ChannelOverview rows={channelRows} hostBadges={channelHostBadges} />
       {:else if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>

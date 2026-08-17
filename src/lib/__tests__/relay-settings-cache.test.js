@@ -31,7 +31,8 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: (...args) => publishEvent(...args)
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  invalidateRelayListCache: vi.fn()
+  invalidateRelayListCache: vi.fn(),
+  getRelayListLookupRelays: () => ['wss://lookup.example']
 }));
 vi.mock('$lib/stores/accounts.svelte.js', () => ({
   manager: { active: { pubkey: 'a'.repeat(64), signer: { signEvent: (t) => signEvent(t) } } }

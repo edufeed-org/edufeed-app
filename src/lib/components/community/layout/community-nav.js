@@ -68,10 +68,11 @@ export function communityNavTabIds({
  * component only renders the zone when it has content — so a community with
  * ZERO channels had no desktop path to the channels view at all, and its
  * owner no way to create the first channel (laoc, 2026-08-14). When the
- * owner's tab list carried 'channels' but no rows survived, `showCreateEntry`
- * asks the component to render a create row instead of hiding the zone. With
- * rows present the entry stays off — any row already opens the view, whose
- * own rail carries the create button.
+ * owner's tab list carries 'channels', `showCreateEntry` asks the component
+ * to render a create row. Not gated on empty rows: since the desktop layout
+ * dropped PrivateChannelsView's own rail (laoc, 2026-08-17 — the "double
+ * sidebar"), this zone is the ONLY desktop channel surface, so the create
+ * entry must be reachable with channels present too.
  *
  * @param {{
  *   tabs: string[],
@@ -89,7 +90,7 @@ export function buildSidebarZones({ tabs, channelRows, isMember, isOwner }) {
   const canSeeAll = isMember || isOwner;
   const kanaele = canSeeAll ? deduped : deduped.filter((row) => row.worldReadable);
   const showLockHint = !canSeeAll && kanaele.length < deduped.length;
-  const showCreateEntry = isOwner && (tabs ?? []).includes('channels') && kanaele.length === 0;
+  const showCreateEntry = isOwner && (tabs ?? []).includes('channels');
 
   return {
     inhalte,
