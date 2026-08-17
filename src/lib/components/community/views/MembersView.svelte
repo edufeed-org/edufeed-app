@@ -4,6 +4,11 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  // Concord submodules imported DIRECTLY (never the barrel) — the convention
+  // every Concord call site follows (see CLAUDE.md's Concord section).
+  import { useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { useObservable } from '$lib/concord/bridge.svelte.js';
+  import { parseConcordPointer } from '$lib/concord/pointer.js';
   import { unique } from '$lib/helpers/unique.js';
   import { roleLabel } from '$lib/groups/role-labels.js';
   import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
@@ -17,7 +22,20 @@
 
   let memberData = $derived(getVerifiedMembers(profileAccess, communikeyEvent));
 
-  const getProfiles = useProfileMap(() => memberData.allMembers);
+  // A linked private area's members (journey-test 2026-08-17: the channel
+  // header said 2 members, this view said 1). `members$` is E2E — it only
+  // populates when the VIEWER is an area member themselves; visitors get an
+  // empty set and the explanatory note below instead of a fake count.
+  let hasArea = $derived(!!parseConcordPointer(communikeyEvent));
+  const getConcordArea = useConcordCommunity(() => communikeyEvent);
+  const getAreaMemberSet = useObservable(
+    () => getConcordArea().community?.members$,
+    /** @type {Set<string>} */ (new Set())
+  );
+  let areaMembers = $derived([...getAreaMemberSet()]);
+  let mergedMembers = $derived(unique([...memberData.allMembers, ...areaMembers]));
+
+  const getProfiles = useProfileMap(() => mergedMembers);
   let profiles = $derived(getProfiles());
 
   // Moderated communities show role chips sourced from the root-group NIP-29
@@ -77,16 +95,20 @@
       <span class="loading loading-lg loading-spinner text-primary"></span>
       <p class="mt-4 text-sm text-base-content/60">{m.community_members_loading()}</p>
     </div>
-  {:else if memberData.allMembers.length <= 1 && memberData.perSection.size === 0}
+  {:else if mergedMembers.length <= 1 && memberData.perSection.size === 0}
     <!-- Only owner, no gated sections. A CLOSED community also lands here
       (its 10222 has no gated sections) — it must not claim to be open
-      (journey-test bug #8). -->
+      (journey-test bug #8). A community with a linked private area gets the
+      area note instead of "jeder kann beitragen" — its membership is real,
+      just private (journey-test 2026-08-17). -->
     <div class="card bg-base-100">
       <div class="card-body text-center">
         <p class="text-base-content/60">
           {communityType === 'closed'
             ? m.community_members_closed_community()
-            : m.community_members_open_community()}
+            : hasArea
+              ? m.community_members_area_note()
+              : m.community_members_open_community()}
         </p>
       </div>
     </div>
@@ -125,13 +147,18 @@
     {/if}
   {:else}
     <p class="mb-4 text-sm text-base-content/60">
-      {memberData.allMembers.length === 1
+      {mergedMembers.length === 1
         ? m.community_members_count_one()
-        : m.community_members_count({ count: memberData.allMembers.length })}
+        : m.community_members_count({ count: mergedMembers.length })}
     </p>
+    {#if hasArea && areaMembers.length === 0}
+      <!-- The viewer cannot decrypt the area's roster (not a member) — say
+        why the count may look smaller than the channel header's. -->
+      <p class="mb-4 text-sm text-base-content/60">{m.community_members_area_note()}</p>
+    {/if}
 
     <div class="flex max-w-2xl flex-col gap-2">
-      {#each memberData.allMembers as pubkey (pubkey)}
+      {#each mergedMembers as pubkey (pubkey)}
         {@const sections = getSectionsForPubkey(pubkey)}
         <div class="rounded-lg bg-base-100 p-2" data-testid="member-row" data-pubkey={pubkey}>
           <div class="flex flex-wrap items-center gap-2">
@@ -154,6 +181,11 @@
                   >{roleLabel(role)}</span
                 >
               {/each}
+              {#if areaMembers.includes(pubkey)}
+                <span class="badge badge-outline badge-sm" data-testid="member-area-chip"
+                  >🔒 {m.community_members_area_chip()}</span
+                >
+              {/if}
             </div>
           </div>
           {#if sections.length > 0}

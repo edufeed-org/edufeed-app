@@ -3340,5 +3340,11 @@
   "concord_syncing_body": "Die Kanäle werden gerade entschlüsselt und geladen — das dauert nur einen Moment.",
   "inbox_invites_row_title": "{count} Einladung(en) in private Bereiche",
   "inbox_invites_row_body": "Verschlüsselt zugestellt — wer einlädt und wohin, siehst du nach dem Entschlüsseln.",
-  "inbox_invites_row_action": "Ansehen"
+  "inbox_invites_row_action": "Ansehen",
+  "community_members_area_note": "Diese Community hat einen privaten Bereich — dessen Mitglieder sind nur für Bereichs-Mitglieder sichtbar.",
+  "community_members_area_chip": "Privater Bereich",
+  "community_type_conflict_title": "Widersprüchliche Einstellungen",
+  "community_type_conflict_body": "Diese Community verweist gleichzeitig auf eine Mitgliederverwaltung und einen privaten Bereich — sie wird deshalb als „Offen“ angezeigt. Wähle, was gelten soll:",
+  "community_type_conflict_keep_area": "Privaten Bereich behalten",
+  "community_type_conflict_keep_membership": "Mitgliederverwaltung behalten"
 }

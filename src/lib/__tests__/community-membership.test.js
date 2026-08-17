@@ -139,8 +139,24 @@ describe('deriveCommunityType', () => {
   it('is moderated with a membership pointer', () => {
     expect(deriveCommunityType(event([['membership', 'root1', RELAY]]))).toBe('moderated');
   });
-  it('is closed with a concord pointer', () => {
+  it('is closed with a concord pointer and no public content sections', () => {
     expect(deriveCommunityType(event([['concord', CONCORD_ID, RELAY]]))).toBe('closed');
+  });
+  it('is OPEN with a concord pointer when public content sections exist (area-linked community)', () => {
+    // An ordinary community that links/founds a private area stays a normal
+    // community "mit privatem Bereich" — only the wizard's Geschlossen type
+    // (concord pointer, ZERO sections) gets the closed shell. Without this,
+    // the demote-confirm flow (which strips membership and writes concord)
+    // would turn an open community into a shell hiding its public sections.
+    expect(
+      deriveCommunityType(
+        event([
+          ['concord', CONCORD_ID, RELAY],
+          ['content', 'Chat'],
+          ['access', 'members']
+        ])
+      )
+    ).toBe('open');
   });
   it('falls back to open on XOR violation (both pointers)', () => {
     expect(

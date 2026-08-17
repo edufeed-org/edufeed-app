@@ -124,7 +124,17 @@ export function deriveCommunityType(event) {
   const concord = parseConcordPointer(event);
   const membership = parseMembershipPointer(event);
   if (concord && membership) return 'open';
-  if (concord) return 'closed';
+  if (concord) {
+    // Concord alone is only GESCHLOSSEN for the wizard's shell shape (zero
+    // public sections). An ordinary community that links/founds a private
+    // area keeps its public content sections and stays open "mit privatem
+    // Bereich" — deriving those as closed would hide their public content
+    // behind the shell (laoc, 2026-08-17).
+    const hasPublicSections = (event.tags ?? []).some(
+      (tag) => Array.isArray(tag) && tag[0] === 'content'
+    );
+    return hasPublicSections ? 'open' : 'closed';
+  }
   if (membership) return 'moderated';
   return 'open';
 }

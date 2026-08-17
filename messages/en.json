@@ -3340,5 +3340,11 @@
   "concord_syncing_body": "The channels are being decrypted and loaded — this only takes a moment.",
   "inbox_invites_row_title": "{count} invitation(s) to private areas",
   "inbox_invites_row_body": "Delivered encrypted — you'll see who invited you and where after decrypting.",
-  "inbox_invites_row_action": "View"
+  "inbox_invites_row_action": "View",
+  "community_members_area_note": "This community has a private area — its members are only visible to area members.",
+  "community_members_area_chip": "Private area",
+  "community_type_conflict_title": "Conflicting settings",
+  "community_type_conflict_body": "This community points at BOTH a member management and a private area — it therefore displays as “Open”. Choose which one should apply:",
+  "community_type_conflict_keep_area": "Keep the private area",
+  "community_type_conflict_keep_membership": "Keep member management"
 }

@@ -21,11 +21,23 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_members_count: (/** @type {{count: number}} */ { count }) => `${count} members`,
   community_members_all_sections: () => 'All content sections',
   groups_role_admin: () => 'Admin',
-  groups_role_king: () => 'Founder'
+  groups_role_king: () => 'Founder',
+  community_members_area_note: () => 'Area members are private.',
+  community_members_area_chip: () => 'Private area'
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
+}));
+
+vi.mock('$lib/concord/community.svelte.js', () => ({
+  useConcordCommunity: () => () => ({ community: holders.areaCommunity })
+}));
+vi.mock('$lib/concord/bridge.svelte.js', () => ({
+  // Mirrors the real hook's contract: a getter returning the observable's
+  // latest value — here just the fixture set.
+  useObservable: (/** @type {any} */ _getObservable, /** @type {any} */ initial) => () =>
+    holders.areaMembers ?? initial
 }));
 
 vi.mock('$lib/components/shared/ProfileCard.svelte', () => ({
@@ -36,7 +48,11 @@ const holders = vi.hoisted(() => ({
   /** @type {{ isLoading: boolean, getMembers: (name: string) => string[] }} */
   profileAccess: { isLoading: false, getMembers: () => [] },
   /** @type {{pubkey: string, roles: string[]}[]} */
-  admins: /** @type {{pubkey: string, roles: string[]}[]} */ ([])
+  admins: /** @type {{pubkey: string, roles: string[]}[]} */ ([]),
+  /** @type {any} */
+  areaCommunity: null,
+  /** @type {Set<string> | null} */
+  areaMembers: null
 }));
 
 vi.mock('svelte', async (importOriginal) => {
@@ -85,6 +101,8 @@ const MODERATED_EVENT_WITH_SECTION = {
 beforeEach(() => {
   holders.profileAccess = { isLoading: false, getMembers: () => [] };
   holders.admins = [];
+  holders.areaCommunity = null;
+  holders.areaMembers = null;
 });
 
 describe('MembersView — open community (unchanged)', () => {
@@ -191,5 +209,39 @@ describe('MembersView — moderated community', () => {
     const chips = screen.getAllByTestId('member-role-chip').map((el) => el.textContent?.trim());
     expect(chips.filter((text) => text === 'Admin')).toHaveLength(1);
     expect(chips).toContain('reviewer');
+  });
+});
+
+describe('MembersView — community with a linked private area', () => {
+  const AREA_EVENT = {
+    pubkey: OWNER,
+    kind: 10222,
+    tags: [
+      ['concord', 'c'.repeat(64), 'wss://concord.example'],
+      ['content', 'Chat'],
+      ['access', 'members']
+    ]
+  };
+
+  it('merges decrypted area members into the list with the area chip', () => {
+    holders.areaCommunity = {};
+    holders.areaMembers = new Set([OWNER, ADMIN]);
+
+    const { container } = render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
+
+    const adminRow = /** @type {HTMLElement} */ (
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${ADMIN}"]`)
+    );
+    expect(adminRow).not.toBeNull();
+    expect(within(adminRow).getByTestId('member-area-chip')).toBeTruthy();
+    // Count includes area members (owner + admin = 2)
+    expect(screen.getByText('2 members')).toBeTruthy();
+  });
+
+  it('shows the privacy note (not "open community") when the viewer cannot decrypt the roster', () => {
+    holders.areaCommunity = null; // viewer is not an area member
+    render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
+    expect(screen.getByText('Area members are private.')).toBeTruthy();
+    expect(screen.queryByText('This is an open community.')).toBeNull();
   });
 });

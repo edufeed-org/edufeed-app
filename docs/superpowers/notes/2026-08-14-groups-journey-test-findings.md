@@ -265,3 +265,22 @@ filename, remaining app-wide Sie/Du outside the tested flows.
   Kanäle view (?channel= carried along). Verified live as laoc42:
   /private/7772cfa… → /c/npub1uvh…?view=channels with both channels in
   the zone and the chat readable.
+
+## Eighth pass (member count + type truth, 2026-08-17)
+
+- laoc tester's 10222 carries BOTH membership + concord pointers (linked
+  before the XOR enforcement existed) → fail-opens to "Offen". Settings'
+  Typ pane now shows an owner-only conflict card with two explicit
+  resolutions: keep the private area (flip-to-open semantics + concord
+  re-added) or keep member management (concord stripped). Deliberately
+  not auto-repaired — the choice is semantic.
+- deriveCommunityType refined: concord + public content sections →
+  OPEN ("mit privatem Bereich"); concord + zero sections → closed (the
+  wizard's shell shape). Required for the demote-confirm flow's own
+  promise — stripping membership previously produced a closed shell
+  hiding the community's public sections.
+- MembersView merges the linked area's decrypted members (community.
+  members$, E2E — populates only for area members) with a "Privater
+  Bereich" chip; the count now matches the channel header/Armada.
+  Non-members get an explanatory privacy note instead of a fake count,
+  and area-linked communities no longer claim "jeder kann beitragen".

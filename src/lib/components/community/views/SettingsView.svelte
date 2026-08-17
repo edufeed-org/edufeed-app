@@ -21,7 +21,12 @@
   import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
   // Community-type flips (open <-> moderated; closed never transitions) — see
   // docs/nips/communikey-groups.md and src/lib/groups/community-flips.js.
-  import { deriveCommunityType } from '$lib/groups/community-membership.js';
+  import { deriveCommunityType, parseMembershipPointer } from '$lib/groups/community-membership.js';
+  import {
+    parseConcordPointer,
+    withConcordPointer,
+    withoutConcordPointer
+  } from '$lib/concord/pointer.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import {
     buildFlipToModeratedTags,
@@ -93,6 +98,52 @@
   /** @type {'flip-to-moderated' | 'flip-to-open' | null} */
   let typeOverlay = $state(null);
   let flipping = $state(false);
+
+  // XOR conflict: BOTH a membership and a concord pointer on the 10222 —
+  // spec-illegal (fail-opens to "Offen"), reachable via the pre-enforcement
+  // area-linking path (laoc tester, 2026-08-17). The owner picks which
+  // engine survives; the loser's pointer tags are stripped in one 10222
+  // update. Which one is the right choice is a semantic decision only the
+  // owner can make, hence two explicit buttons instead of auto-repair.
+  const xorConflict = $derived(
+    !!parseConcordPointer(communikeyEvent) && !!parseMembershipPointer(communikeyEvent)
+  );
+  let resolvingConflict = $state(false);
+
+  /** @param {'area' | 'membership'} keep */
+  async function resolveConflict(keep) {
+    if (resolvingConflict || !communitySigner || !communikeyEvent) return;
+    resolvingConflict = true;
+    try {
+      // keep === 'area': flip-to-open semantics (membership, application AND
+      // the now-rosterless access tiers all go — there is no engine left to
+      // gate against), then the concord pointer is re-added on top.
+      // keep === 'membership': only the concord pointer goes; the roster and
+      // its tiers stay intact.
+      const concord = parseConcordPointer(communikeyEvent);
+      const tags =
+        keep === 'area' && concord
+          ? withConcordPointer(
+              buildFlipToOpenTags(communikeyEvent.tags ?? []),
+              concord.communityId,
+              concord.relay
+            )
+          : withoutConcordPointer(communikeyEvent.tags ?? []);
+      const template = communityUpdateTemplate(communikeyEvent, tags);
+      await publishCommunityUpdate(template, communitySigner);
+      showToast(m.community_views_settings_flip_done(), 'success');
+    } catch (error) {
+      console.error('settings: XOR conflict resolution failed', error);
+      showToast(
+        m.community_views_settings_flip_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'error'
+      );
+    } finally {
+      resolvingConflict = false;
+    }
+  }
 
   function openFlipToModerated() {
     typeOverlay = 'flip-to-moderated';
@@ -267,7 +318,32 @@
                 {/if}
               </p>
 
-              {#if communityType === 'open'}
+              {#if xorConflict}
+                <div class="mt-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
+                  <p class="text-sm font-semibold">⚠ {m.community_type_conflict_title()}</p>
+                  <p class="mt-1 text-sm text-base-content/70">
+                    {m.community_type_conflict_body()}
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button
+                      class="btn btn-sm btn-neutral"
+                      data-testid="settings-conflict-keep-area"
+                      disabled={resolvingConflict}
+                      onclick={() => resolveConflict('area')}
+                    >
+                      🔒 {m.community_type_conflict_keep_area()}
+                    </button>
+                    <button
+                      class="btn btn-outline btn-sm"
+                      data-testid="settings-conflict-keep-membership"
+                      disabled={resolvingConflict}
+                      onclick={() => resolveConflict('membership')}
+                    >
+                      🛡️ {m.community_type_conflict_keep_membership()}
+                    </button>
+                  </div>
+                </div>
+              {:else if communityType === 'open'}
                 {#if moderatedCreationAvailable()}
                   <div class="mt-3">
                     <button
