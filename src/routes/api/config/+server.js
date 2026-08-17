@@ -164,6 +164,10 @@ export function GET() {
     // NIP-17 DM relays (kind 10050) published as a default for new users
     dmRelays: parseArray(env.DM_RELAYS),
 
+    // DM senders (hex or npub) whose conversations always count as "known" —
+    // keeps platform welcome DMs out of the requests folder
+    dmTrustedSenders: parseArray(env.DM_TRUSTED_SENDERS),
+
     // App-specific relays (content goes here IN ADDITION to user's outbox)
     calendarRelays: parseArray(env.CALENDAR_RELAYS),
     communikeyRelays: parseArray(env.COMMUNIKEY_RELAYS),

@@ -401,6 +401,19 @@ async function initializeAccountPersistence() {
       cleanup();
     }
   });
+
+  // Step 11: Load the user's NIP-51 mute list (kind 10000) — consulted by the
+  // DM list, DM requests, and inbox notifications. Loaded for readonly
+  // accounts too (muting itself needs a signer, reading doesn't).
+  manager.active$.subscribe(async (account) => {
+    const { initializeMuteList, cleanupMuteList } = await import('$lib/stores/mute-list.svelte.js');
+
+    if (account) {
+      initializeMuteList(account.pubkey);
+    } else {
+      cleanupMuteList();
+    }
+  });
 }
 
 // Initialize persistence when module loads (client-side only)

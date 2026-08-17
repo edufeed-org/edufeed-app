@@ -32,6 +32,7 @@
     groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
   import { showToast } from '$lib/helpers/toast.js';
+  import { getMutedPubkeys, muteUser, unmuteUser } from '$lib/stores/mute-list.svelte.js';
   import { swipeable } from '$lib/helpers/swipe.js';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -329,6 +330,23 @@
     const others = participants.filter((p) => p !== activeUser?.pubkey);
     return others[0] || participants[0];
   }
+
+  let blockError = $state(false);
+
+  /**
+   * Add or remove the correspondent from the NIP-51 mute list (kind 10000).
+   * @param {string} pubkey
+   * @param {boolean} blocked
+   */
+  async function toggleBlock(pubkey, blocked) {
+    blockError = false;
+    try {
+      await (blocked ? unmuteUser(pubkey) : muteUser(pubkey));
+    } catch (err) {
+      console.error('[dm] failed to update mute list:', err);
+      blockError = true;
+    }
+  }
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -349,7 +367,7 @@
         showHoverCard
       />
     {/if}
-    <h3 class="truncate font-bold">
+    <h3 class="min-w-0 flex-1 truncate font-bold">
       {#if getHeaderPubkey()}
         <a href={resolve(profileLink(getHeaderPubkey() ?? ''))} class="hover:underline">
           {getHeaderName()}
@@ -358,7 +376,21 @@
         {getHeaderName()}
       {/if}
     </h3>
+    {#if getHeaderPubkey() && getHeaderPubkey() !== getActiveUser()?.pubkey}
+      {@const headerPubkey = getHeaderPubkey() ?? ''}
+      {@const blocked = getMutedPubkeys().has(headerPubkey)}
+      <button
+        class="btn shrink-0 btn-ghost btn-xs {blocked ? '' : 'text-error'}"
+        onclick={() => toggleBlock(headerPubkey, blocked)}
+      >
+        {blocked ? m.dm_unblock_sender() : m.dm_block_sender()}
+      </button>
+    {/if}
   </div>
+
+  {#if blockError}
+    <div class="px-4 py-2 text-sm text-error">{m.dm_block_failed()}</div>
+  {/if}
 
   <!-- Legacy (NIP-04) insecure notice -->
   {#if isLegacy}

@@ -10,6 +10,8 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
+import { excludeMutedAuthors } from '$lib/helpers/dm-trust.js';
+import { getMutedPubkeys } from '$lib/stores/mute-list.svelte.js';
 import {
   getCommunikeyRelays,
   getCalendarRelays,
@@ -213,11 +215,14 @@ let readItemIds = $state.raw(new Set());
 /** @type {import('rxjs').Subscription[]} */
 let subscriptions = [];
 
-// Merge main + RSVPs + poll responses, sorted by time (newest first)
+// Merge main + RSVPs + poll responses, sorted by time (newest first).
+// Muted authors (NIP-51 kind 10000) are dropped display-side — the queries
+// themselves stay ungated (issue #43).
 let notifications = $derived.by(() => {
-  return [...mainNotifications, ...rsvpNotifications, ...pollResponseNotifications].sort(
-    (a, b) => b.created_at - a.created_at
-  );
+  return excludeMutedAuthors(
+    [...mainNotifications, ...rsvpNotifications, ...pollResponseNotifications],
+    getMutedPubkeys()
+  ).sort((a, b) => b.created_at - a.created_at);
 });
 
 /**
