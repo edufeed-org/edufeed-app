@@ -3344,7 +3344,7 @@
   "community_members_area_note": "This community has a private area — its members are only visible to area members.",
   "community_members_area_chip": "Private area",
   "community_type_conflict_title": "Conflicting settings",
-  "community_type_conflict_body": "This community points at BOTH a member management and a private area — it therefore displays as “Open”. Choose which one should apply:",
-  "community_type_conflict_keep_area": "Keep the private area",
-  "community_type_conflict_keep_membership": "Keep member management"
+  "community_type_conflict_body": "This community points at BOTH a member management (type “Moderated”) and a private area. The combination is not supported — until you decide, it displays as “Open”.",
+  "community_type_conflict_keep_area": "Keep the private area → Open with private area",
+  "community_type_conflict_keep_membership": "Keep member management → Moderated"
 }

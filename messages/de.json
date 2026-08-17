@@ -3344,7 +3344,7 @@
   "community_members_area_note": "Diese Community hat einen privaten Bereich — dessen Mitglieder sind nur für Bereichs-Mitglieder sichtbar.",
   "community_members_area_chip": "Privater Bereich",
   "community_type_conflict_title": "Widersprüchliche Einstellungen",
-  "community_type_conflict_body": "Diese Community verweist gleichzeitig auf eine Mitgliederverwaltung und einen privaten Bereich — sie wird deshalb als „Offen“ angezeigt. Wähle, was gelten soll:",
-  "community_type_conflict_keep_area": "Privaten Bereich behalten",
-  "community_type_conflict_keep_membership": "Mitgliederverwaltung behalten"
+  "community_type_conflict_body": "Diese Community verweist gleichzeitig auf eine Mitgliederverwaltung (Typ „Moderiert“) und auf einen privaten Bereich. Beides zusammen ist nicht vorgesehen — bis zur Entscheidung wird sie als „Offen“ angezeigt.",
+  "community_type_conflict_keep_area": "Privaten Bereich behalten → Offen mit privatem Bereich",
+  "community_type_conflict_keep_membership": "Mitgliederverwaltung behalten → Moderiert"
 }
