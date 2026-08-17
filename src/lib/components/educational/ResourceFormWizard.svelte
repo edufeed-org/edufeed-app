@@ -87,7 +87,9 @@
   import { buildResourceData } from '$lib/helpers/educational/buildResourceData.js';
   import { attachWizardHistoryNav } from '$lib/helpers/educational/wizardHistoryNav.js';
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
-  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/concord/shareable-communities.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -368,7 +370,7 @@
   let selectedCommunityPubkeys = $state(/** @type {string[]} */ ([]));
 
   // Joined communities (reactive).
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
   const joinedCommunities = $derived(getJoinedCommunities());
 
   // Batch-load profiles for joined communities (used by the Share step to show

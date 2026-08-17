@@ -111,7 +111,15 @@ function sameRelay(/** @type {string} */ a, /** @type {string} */ b) {
  * @returns {boolean}
  */
 export function isEntryActive(entry, target) {
-  if (!entry || !target || entry.kind !== target.kind) return false;
+  if (!entry || !target) return false;
+  // Cross-kind: an area row is "where you are" on its linked community's
+  // route too. A wizard-founded area's owner IS the community keypair (the
+  // same identity /private/[id]'s reverse-lookup redirect leans on), so the
+  // owner pubkey is the join — without this, clicking the area row lands on
+  // /c/<npub> and nothing in the rail lights up.
+  if (entry.kind === 'area' && target.kind === 'community')
+    return !!entry.area?.owner && entry.area.owner === target.pubkey;
+  if (entry.kind !== target.kind) return false;
   if (entry.kind === 'community' && target.kind === 'community')
     return !!entry.pubkey && entry.pubkey === target.pubkey;
   if (entry.kind === 'area' && target.kind === 'area')

@@ -211,6 +211,37 @@ describe('shouldBringActiveIntoView', () => {
   });
 });
 
+// A wizard-founded area's owner IS its linked community's keypair — so when
+// the /private reverse-lookup redirects a member to /c/<npub>, the rail's
+// area row (the entry they clicked) must light up for that community target
+// (laoc, 2026-08-17: clicking laoc tester's area row highlighted nothing).
+describe('isEntryActive — area row on a linked community route', () => {
+  /** @type {any} */
+  const AREA = {
+    key: 'area:c',
+    kind: 'area',
+    area: { communityId: 'c'.repeat(64), owner: 'e'.repeat(64) }
+  };
+
+  it('matches a community target whose pubkey is the area owner', () => {
+    expect(isEntryActive(AREA, { kind: 'community', pubkey: 'e'.repeat(64) })).toBe(true);
+  });
+
+  it('stays inert for a different community and for ownerless areas', () => {
+    expect(isEntryActive(AREA, { kind: 'community', pubkey: 'f'.repeat(64) })).toBe(false);
+    expect(
+      isEntryActive(
+        /** @type {any} */ ({ key: 'area:c', kind: 'area', area: { communityId: 'c'.repeat(64) } }),
+        { kind: 'community', pubkey: 'e'.repeat(64) }
+      )
+    ).toBe(false);
+  });
+
+  it('still matches its own /private route target', () => {
+    expect(isEntryActive(AREA, { kind: 'area', communityId: 'c'.repeat(64) })).toBe(true);
+  });
+});
+
 // The generic dashboard nav must step aside wherever the page draws its own
 // channel column — a third nav column beside a chat is the bug (laoc,
 // 2026-08-17: /private/<id> showed the full dashboard nav next to the

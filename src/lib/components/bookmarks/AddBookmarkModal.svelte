@@ -6,7 +6,9 @@
   import CommunitySelector from '$lib/components/calendar/CommunitySelector.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/concord/shareable-communities.svelte.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { detectInputType, decodeNaddr, createBookmarkEvent } from '$lib/helpers/bookmark.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -23,7 +25,7 @@
   );
 
   // Community selector
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
   let communities = $derived(getJoinedCommunities());
   let selectedCommunityIds = $state(/** @type {string[]} */ ([]));
 

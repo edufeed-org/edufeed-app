@@ -5,7 +5,9 @@
 -->
 
 <script>
-  import { useJoinedCommunitiesList } from '../../stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/concord/shareable-communities.svelte.js';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
@@ -34,7 +36,7 @@
   let { event, activeUser, compact = false, shareButtonText = 'Apply Changes' } = $props();
 
   // Get joined communities
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
   const joinedCommunities = $derived(getJoinedCommunities());
 
   // State management

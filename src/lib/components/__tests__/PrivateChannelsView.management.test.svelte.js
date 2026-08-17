@@ -41,7 +41,9 @@ vi.mock('$lib/concord/active-channel.svelte.js', () => ({
   setActiveConcordChannel: vi.fn(),
   clearActiveConcordChannel: vi.fn(),
   selectConcordChannel: selectSpy,
-  getSelectedConcordChannel: () => 'c2' // active = CH2 (beta)
+  getSelectedConcordChannel: () => 'c2', // active = CH2 (beta)
+  getChannelCreateRequested: () => false,
+  clearChannelCreateRequest: vi.fn()
 }));
 const deleteChannel = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const concordFixture = vi.hoisted(() => /** @type {{ value: any }} */ ({ value: null }));
