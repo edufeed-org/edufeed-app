@@ -29,9 +29,15 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
   const getActiveUser = useActiveUser();
 
   // 10222s and gate lists live in the EventStore; a version counter bridges
-  // their async arrival into the $derived below without holding event
-  // references in deep-reactive state.
+  // their async arrival into the getter below. CRITICAL: the subscription
+  // callbacks run SYNCHRONOUSLY (replaceable() replays cached events) inside
+  // the $effect — `version++` would READ the $state and register it as a
+  // dependency of the effect that writes it, a self-triggered infinite loop
+  // (effect_update_depth_exceeded; same foot-gun documented in
+  // joined-communikey-events.svelte.js). The plain `tick` counter keeps the
+  // write write-ONLY.
   let version = $state(0);
+  let tick = 0;
   /** @type {Set<string>} */
   const requested = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- session dedup, never rendered
 
@@ -48,7 +54,7 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
     for (const pubkey of pubkeys) {
       subs.push(
         eventStore.replaceable(10222, pubkey).subscribe((event) => {
-          version++;
+          version = ++tick;
           const gate = sectionGateForKind(event, kind);
           const pointer = gate ? parseAddress(gate.address) : null;
           if (!pointer) return;
@@ -65,7 +71,7 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
             subs.push(
               eventStore
                 .replaceable(pointer.kind, pointer.pubkey, pointer.identifier)
-                .subscribe(() => version++)
+                .subscribe(() => (version = ++tick))
             );
           }
         })

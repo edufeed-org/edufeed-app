@@ -111,6 +111,18 @@ vi.mock('$lib/stores/share-restrictions.svelte.js', () => ({
   useShareRestrictions: () => () => new Set()
 }));
 
+// Private in-group sharing pulls the concord client chain — out of scope
+// here: no concord area exists in this suite, so the affordance never shows.
+vi.mock('$lib/concord/client.svelte.js', () => ({
+  getConcordState: () => ({ communities: [] })
+}));
+vi.mock('$lib/concord/community.svelte.js', () => ({
+  useConcordArea: () => () => ({ community: undefined, channels: [] })
+}));
+vi.mock('$lib/concord/send-message.js', () => ({
+  sendChannelMessage: vi.fn()
+}));
+
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => null
 }));

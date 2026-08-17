@@ -34,6 +34,7 @@
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -56,6 +57,14 @@
   const concordCommunityId = $derived(getConcord().pointer?.communityId);
   const concordAreaFlags = $derived(areaUnreadState(concordCommunityId));
   const isOwner = $derived(isCommunityOwner(communityEvent?.pubkey));
+  // Owner-UI appears because a key in THIS BROWSER holds the community —
+  // possibly a different account than the active one (community-signer.js's
+  // deliberate rule). The chip makes that legible instead of confusing:
+  // "why do I see admin controls?" (laoc, 2026-08-17, option C).
+  const getActiveUserForChip = useActiveUser();
+  const managesViaKey = $derived(
+    isOwner && getActiveUserForChip()?.pubkey !== communityEvent?.pubkey
+  );
 
   let communityDisplayName = $derived(
     communityProfile?.name || communityProfile?.display_name || 'Community'
@@ -260,6 +269,15 @@
         </div>
         <span class="truncate text-sm font-semibold">{communityDisplayName}</span>
       </button>
+      {#if managesViaKey}
+        <div
+          class="mx-4 mb-1 rounded-lg bg-base-300/50 px-2 py-1 text-[0.7rem] text-base-content/60"
+          data-testid="manager-chip"
+          title={m.community_manager_chip_hint()}
+        >
+          ⚙ {m.community_manager_chip()}
+        </div>
+      {/if}
     {/if}
 
     <nav class="menu w-full space-y-1 p-4 pb-0">

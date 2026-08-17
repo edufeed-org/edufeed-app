@@ -3386,5 +3386,13 @@
   "publisher_window_type_bookmarks": "Lesezeichen",
   "closed_window_banner_body": "Hier zeigt die Community öffentlich geteilte Inhalte ihrer Publisher. Die Mitgliedschaft selbst ist nur auf Einladung.",
   "share_restricted_label": "Nur Publisher",
-  "share_restricted_hint": "In diesem Bereich können nur dafür freigeschaltete Mitglieder (z. B. Publisher) öffentlich teilen — dein Beitrag würde sonst nicht angezeigt."
+  "share_restricted_hint": "In diesem Bereich können nur dafür freigeschaltete Mitglieder (z. B. Publisher) öffentlich teilen — dein Beitrag würde sonst nicht angezeigt.",
+  "share_private_action": "Privat",
+  "share_private_channel_label": "Kanal:",
+  "share_private_send": "Privat teilen",
+  "share_private_sent": "Privat in #{channel} geteilt – nur Mitglieder des Bereichs sehen das",
+  "share_private_failed": "Privates Teilen fehlgeschlagen",
+  "share_private_hint": "Wird verschlüsselt im privaten Bereich geteilt — nur Mitglieder sehen es.",
+  "community_manager_chip": "Du verwaltest diese Community",
+  "community_manager_chip_hint": "Der Schlüssel dieser Community ist in deinem Browser gespeichert — du kannst sie unabhängig vom aktiven Konto verwalten."
 }

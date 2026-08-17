@@ -3386,5 +3386,13 @@
   "publisher_window_type_bookmarks": "Bookmarks",
   "closed_window_banner_body": "This is the community's public window — content shared by its publishers. Membership itself is invite-only.",
   "share_restricted_label": "Publishers only",
-  "share_restricted_hint": "Only members cleared for this section (e.g. publishers) can share publicly here — your post would not be displayed otherwise."
+  "share_restricted_hint": "Only members cleared for this section (e.g. publishers) can share publicly here — your post would not be displayed otherwise.",
+  "share_private_action": "Private",
+  "share_private_channel_label": "Channel:",
+  "share_private_send": "Share privately",
+  "share_private_sent": "Shared privately in #{channel} – only area members can see it",
+  "share_private_failed": "Private share failed",
+  "share_private_hint": "Shared encrypted into the private area — only members can see it.",
+  "community_manager_chip": "You manage this community",
+  "community_manager_chip_hint": "This community's key is stored in your browser — you can manage it regardless of the active account."
 }
