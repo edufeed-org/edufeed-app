@@ -7,7 +7,6 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import FormLinkManager from '$lib/components/forms/FormLinkManager.svelte';
   // Concord submodules imported DIRECTLY (never the barrel) — the convention
   // every Concord call site follows (see CLAUDE.md's Concord section).
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
@@ -417,7 +416,9 @@
         <!-- Publisher window (Schaufenster) — owner-only, only when a
           private area is linked (spec: docs/nips/communikey-groups.md
           "Publisher window"). -->
-        {#if isOwner && concordArea.enabled && concordArea.pointer}
+        {#if isOwner && concordArea.enabled && concordArea.pointer && communityType === 'closed'}
+          <!-- Closed only: on "Offen mit privatem Bereich" everyone can
+            publish anyway, so a publisher roster gates nothing. -->
           <PublisherWindowPane {communikeyEvent} />
         {/if}
 
@@ -505,11 +506,6 @@
                 </p>
               </div>
             </div>
-          </div>
-
-          <!-- Form Link Manager -->
-          <div class="mt-6">
-            <FormLinkManager communityEvent={communikeyEvent} communityPubkey={communityId} />
           </div>
 
           <!-- Danger Zone -->

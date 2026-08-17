@@ -890,23 +890,9 @@
                channels replace them). The legacy form-gating ACL is retired
                from the CREATE wizard for every type (design 2026-08-12):
                open communities gate access via Task 8's settings pane after
-               creation, moderated communities via the group roster —
-               hideAccessToggle hides ContentTypesAndACL's ACL affordance
-               entirely rather than dropping the shared component (it still
-               needs to render the content-type chips), and the required-but-
-               now-inert formTemplates/showAccessConfig/defaultFormRef props
-               get inert values since the ACL section they gate can never
-               show. EditCommunityModal keeps the full ACL wiring for
-               existing gated communities. -->
+               creation, moderated communities via the group roster. -->
           {#if communityType !== 'closed'}
-            <ContentTypesAndACL
-              bind:contentTypes={communityData.contentTypes}
-              formTemplates={[]}
-              showAccessConfig={false}
-              defaultFormRef=""
-              hideAccessToggle={true}
-              {errors}
-            />
+            <ContentTypesAndACL bind:contentTypes={communityData.contentTypes} {errors} />
           {/if}
 
           {#if communityType === 'moderated'}

@@ -1,6 +1,5 @@
 <script>
   import * as m from '$lib/paraglide/messages';
-  import { manager } from '$lib/stores/accounts.svelte';
   import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -8,14 +7,12 @@
   import EditableList from './shared/EditableList.svelte';
   import LocationInput from './shared/LocationInput.svelte';
   import ContentTypesAndACL from './shared/ContentTypesAndACL.svelte';
-  import { deriveDefaultFormRef } from '$lib/helpers/communityFormDefaults.js';
   import {
     buildCommunityDefinitionTags,
     createDefaultContentTypes,
     preservePointerTags,
     applyParsedAccessTiers
   } from '$lib/helpers/communityTagBuilder.js';
-  import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
   import {
     parseCommunityContentTypes,
     parseCommunityMetadata,
@@ -25,8 +22,6 @@
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
-  import { createDefaultMembershipForm } from '$lib/helpers/forms.js';
-  import { publishEvent } from '$lib/services/publish-service.js';
 
   let { modalId } = $props();
 
@@ -47,19 +42,6 @@
   // per-content-type form-gating profile list — hide that toggle so editing
   // a moderated community can't write mixed legacy 30000 a-tags onto it.
   let isModerated = $derived(deriveCommunityType(communityEvent) === 'moderated');
-
-  // Toggle for access control configuration
-  let showAccessConfig = $state(false);
-  let defaultFormRef = $state('');
-  // Form templates for access gating (community pubkey + logged-in user)
-  const getFormTemplates = useFormTemplates(() => {
-    const communityPk = communityEvent?.pubkey;
-    const userPk = manager.active?.pubkey;
-    /** @type {string[]} */
-    const authors = communityPk ? [communityPk] : [];
-    if (userPk && userPk !== communityPk) authors.push(userPk);
-    return authors;
-  });
 
   // UI state
   let isPublishing = $state(false);
@@ -214,10 +196,6 @@
     const sections = parseCommunityContentTypes(commEvent);
     const gatedSections = sections.filter((s) => s.profileList);
 
-    if (gatedSections.length > 0) {
-      showAccessConfig = true;
-    }
-
     for (const section of gatedSections) {
       if (!section.profileList) continue;
 
@@ -250,19 +228,6 @@
     }
   }
 
-  // Derive defaultFormRef once formRefs load from network
-  let defaultDerived = $state(false);
-  $effect(() => {
-    const anyGated = Object.values(communityData.contentTypes).some(
-      (ct) => ct.enabled && ct.formRef
-    );
-    if (anyGated && !defaultDerived) {
-      defaultDerived = true;
-      defaultFormRef = deriveDefaultFormRef(communityData.contentTypes);
-      showAccessConfig = true;
-    }
-  });
-
   // Reset when modal closes
   $effect(() => {
     const dialog = /** @type {HTMLDialogElement} */ (document.getElementById(modalId));
@@ -290,9 +255,6 @@
       livekitUrl: '',
       contentTypes: createDefaultContentTypes()
     };
-    showAccessConfig = false;
-    defaultFormRef = '';
-    defaultDerived = false;
     isPublishing = false;
     errors = {};
     isInitialized = false;
@@ -312,21 +274,6 @@
     } catch {
       return m.create_community_modal_error_invalid_url();
     }
-  }
-
-  async function handleCreateDefaultForm() {
-    // Sign with the community's own signer (same as saveCommunity below), not
-    // the active account — so the template is authored by the community and
-    // shows up in FormLinkManager's authors filter (handoff #12).
-    if (!communitySigner) {
-      throw new Error(
-        m.edit_community_modal_error_not_owner?.() || 'Only the community owner can edit settings'
-      );
-    }
-    const signed = await createDefaultMembershipForm(communitySigner);
-    await publishEvent(signed);
-    eventStore.add(signed);
-    return `${signed.kind}:${signed.pubkey}:membership`;
   }
 
   function validate() {
@@ -365,13 +312,6 @@
         throw new Error(
           m.edit_community_modal_error_not_owner?.() || 'Only the community owner can edit settings'
         );
-      }
-
-      // Clear formRefs if access control is disabled
-      if (!showAccessConfig) {
-        for (const ct of Object.values(communityData.contentTypes)) {
-          ct.formRef = '';
-        }
       }
 
       // Detect old-spec: community has badge a-tags → preserve old format
@@ -547,16 +487,10 @@
           ></textarea>
         </div>
 
-        <!-- Content Types & Access Control -->
-        <ContentTypesAndACL
-          bind:contentTypes={communityData.contentTypes}
-          formTemplates={getFormTemplates()}
-          bind:showAccessConfig
-          bind:defaultFormRef
-          onCreateDefaultForm={handleCreateDefaultForm}
-          hideAccessToggle={isModerated}
-          {errors}
-        />
+        <!-- Content Types (the legacy per-section form-ACL editor is retired —
+          access is a property of the community TYPE now; legacy gated
+          sections round-trip untouched, see loadFormRefs). -->
+        <ContentTypesAndACL bind:contentTypes={communityData.contentTypes} {errors} />
 
         <!-- LiveKit URL (shown when Meet is enabled) -->
         {#if communityData.contentTypes.meet?.enabled}
