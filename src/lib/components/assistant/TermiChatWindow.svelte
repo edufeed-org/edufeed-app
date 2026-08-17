@@ -2,6 +2,7 @@
   // Termi chat window — popover (default) or side panel (expanded). Account
   // hints render as proactive bot messages with real actions; free-text input
   // is matched against canned suggestions (no LLM backend yet).
+  import { getFirstPendingInvite } from '$lib/concord/pending-invites.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -84,7 +85,13 @@
       doing: null
     },
     invites: {
-      title: m.concord_invite_hint_title(),
+      // Enriched once the invite is decrypted (auto-decrypt makes that the
+      // common case): name the area instead of a generic "private area".
+      title: getFirstPendingInvite()?.areaName
+        ? m.concord_invite_hint_title_known({
+            area: /** @type {string} */ (getFirstPendingInvite()?.areaName)
+          })
+        : m.concord_invite_hint_title(),
       body: m.concord_invite_hint_body(),
       action: m.concord_invite_hint_action(),
       secondary: null,

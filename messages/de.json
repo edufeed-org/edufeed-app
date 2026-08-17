@@ -3346,5 +3346,8 @@
   "community_type_conflict_title": "Widersprüchliche Einstellungen",
   "community_type_conflict_body": "Diese Community verweist gleichzeitig auf eine Mitgliederverwaltung (Typ „Moderiert“) und auf einen privaten Bereich. Beides zusammen ist nicht vorgesehen — bis zur Entscheidung wird sie als „Offen“ angezeigt.",
   "community_type_conflict_keep_area": "Privaten Bereich behalten → Offen mit privatem Bereich",
-  "community_type_conflict_keep_membership": "Mitgliederverwaltung behalten → Moderiert"
+  "community_type_conflict_keep_membership": "Mitgliederverwaltung behalten → Moderiert",
+  "inbox_invites_row_known": "Einladung von {inviter} in „{area}“",
+  "inbox_invites_row_more": "+ {count} weitere Einladung(en)",
+  "concord_invite_hint_title_known": "Einladung in „{area}“"
 }

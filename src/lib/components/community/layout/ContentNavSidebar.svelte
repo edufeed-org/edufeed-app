@@ -25,7 +25,6 @@
     getToastsEnabled,
     setToastsEnabled
   } from '$lib/concord/notifications.svelte.js';
-  import { goto } from '$app/navigation';
   import {
     getSelectedConcordChannel,
     selectConcordChannel
@@ -194,13 +193,6 @@
     }
     await setToastsEnabled(true);
   }
-
-  function openInviteInbox() {
-    // PrivateChannelsView reads ?invites=1 and opens its invite inbox —
-    // reachable from here because the desktop rail (its old home) is gone.
-    handleContentTypeClick('channels');
-    goto('?view=channels&invites=1');
-  }
 </script>
 
 {#snippet tabButton(/** @type {{id: string, label: string, icon: any}} */ type)}
@@ -354,15 +346,6 @@
             class="flex items-center gap-2 rounded-lg border border-dashed border-base-content/25 px-4 py-2 text-sm text-base-content/70 transition-all duration-200 hover:bg-base-300/60"
           >
             + {m.concord_new_channel()}
-          </button>
-        {/if}
-        {#if concordSignerHasNip44}
-          <button
-            data-testid="nav-channels-invites"
-            onclick={openInviteInbox}
-            class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-base-content/70 transition-all duration-200 hover:bg-base-300/60"
-          >
-            ✉ {m.concord_invites()}
           </button>
         {/if}
         {#if zones.showLockHint}

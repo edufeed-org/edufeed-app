@@ -284,3 +284,25 @@ filename, remaining app-wide Sie/Du outside the tested flows.
   Bereich" chip; the count now matches the channel header/Armada.
   Non-members get an explanatory privacy note instead of a fake count,
   and area-linked communities no longer claim "jeder kann beitragen".
+
+## Ninth pass (invite UX round 2, 2026-08-17)
+
+- ContactSearchInput (the shared npub search component, which the invite
+  flows DO use) now resolves a pasted npub to its profile: avatar + name
+  in the synthetic row instead of a generic glyph.
+- ChannelInviteSheet renders pasted-npub (non-member) invitees as rows
+  with "✓ Verschickt" — previously they vanished invisibly.
+- Invite AUTO-DECRYPT: same policy as the DM gift-wrap decrypt and the
+  community-list auto-unlock (both already automatic) — one attempt per
+  wrap in the client lifecycle; the manual "Entschlüsseln" button stays
+  as the fallback for failed/rejected attempts.
+- Surfaces enriched once decrypted (now the common case): bell row says
+  "Einladung von {inviter} in „{area}"" (+N weitere), Termi hint title
+  names the area. Locked invites keep the honest-generic copy.
+- The KANÄLE-zone "Erhaltene Einladungen" row removed (redundant with
+  bell + dashboard + Termi on desktop); the mobile rail keeps its entry
+  since mobile has no bell dropdown.
+
+Verified live: pasted npub resolves to "Fix Check" with avatar, sent row
+shows ✓ Verschickt, recipient's bell shows the enriched row with NO
+manual decrypt step.

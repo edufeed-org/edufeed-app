@@ -12,7 +12,11 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages.js';
-  import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
+  import {
+    getPendingInviteCount,
+    getFirstPendingInvite
+  } from '$lib/concord/pending-invites.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { modalStore } from '$lib/stores/modal.svelte.js';
 
   const MAX_ITEMS = 6;
@@ -53,6 +57,10 @@
     const user = getActiveUser();
     /** @type {string[]} */
     const pubkeys = [];
+    // Inviter of the first decrypted pending invite — resolved for the
+    // pinned invites row above the list.
+    const inviter = getFirstPendingInvite()?.inviter;
+    if (inviter) pubkeys.push(inviter);
     for (const item of mergedItems) {
       if (item.type === 'notification') {
         if (!pubkeys.includes(item.event.pubkey)) pubkeys.push(item.event.pubkey);
@@ -83,6 +91,12 @@
   function handleViewAll() {
     goto(resolve('/inbox'));
   }
+
+  /** @param {string | undefined} pubkey */
+  function inviterName(pubkey) {
+    if (!pubkey) return '?';
+    return getDisplayName(getProfiles().get(pubkey)) || pubkey.slice(0, 12);
+  }
 </script>
 
 <div
@@ -108,10 +122,25 @@
     >
       <span aria-hidden="true">🔒</span>
       <span class="min-w-0 flex-1">
-        <span class="block text-sm font-medium"
-          >{m.inbox_invites_row_title({ count: getPendingInviteCount() })}</span
-        >
-        <span class="block text-xs text-base-content/60">{m.inbox_invites_row_body()}</span>
+        {#if getFirstPendingInvite()}
+          {@const invite = getFirstPendingInvite()}
+          <span class="block text-sm font-medium">
+            {m.inbox_invites_row_known({
+              inviter: inviterName(invite?.inviter),
+              area: invite?.areaName ?? m.concord_invite_generic()
+            })}
+          </span>
+          {#if getPendingInviteCount() > 1}
+            <span class="block text-xs text-base-content/60"
+              >{m.inbox_invites_row_more({ count: getPendingInviteCount() - 1 })}</span
+            >
+          {/if}
+        {:else}
+          <span class="block text-sm font-medium"
+            >{m.inbox_invites_row_title({ count: getPendingInviteCount() })}</span
+          >
+          <span class="block text-xs text-base-content/60">{m.inbox_invites_row_body()}</span>
+        {/if}
       </span>
       <span class="text-sm font-semibold text-primary">{m.inbox_invites_row_action()}</span>
     </button>

@@ -3346,5 +3346,8 @@
   "community_type_conflict_title": "Conflicting settings",
   "community_type_conflict_body": "This community points at BOTH a member management (type “Moderated”) and a private area. The combination is not supported — until you decide, it displays as “Open”.",
   "community_type_conflict_keep_area": "Keep the private area → Open with private area",
-  "community_type_conflict_keep_membership": "Keep member management → Moderated"
+  "community_type_conflict_keep_membership": "Keep member management → Moderated",
+  "inbox_invites_row_known": "Invitation from {inviter} to “{area}”",
+  "inbox_invites_row_more": "+ {count} more invitation(s)",
+  "concord_invite_hint_title_known": "Invitation to “{area}”"
 }

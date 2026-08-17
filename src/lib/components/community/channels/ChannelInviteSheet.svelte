@@ -35,6 +35,7 @@
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -158,7 +159,11 @@
     const { allMembers } = getVerifiedMembers(profileAccess, communikeyEvent);
     return allMembers.filter((p) => p !== self && p !== community);
   });
-  const getProfiles = useProfileMap(() => invitable);
+  // Rows shown on the direct tab: community members PLUS anyone already
+  // invited by pasted npub — a non-member invite previously vanished with no
+  // row at all (journey-test 2026-08-17, same class as the create wizard).
+  const inviteRows = $derived(unique([...invitable, ...sent]));
+  const getProfiles = useProfileMap(() => inviteRows);
 
   // Same exclusion set for the free-text/follow search below the quick-pick
   // list — a pasted npub or search hit for the community's own pubkey must
@@ -238,9 +243,9 @@
         onselect={(/** @type {{ pubkey: string }} */ c) => directInvite(c.pubkey)}
         onrawpubkey={(/** @type {string} */ hex) => directInvite(hex)}
       />
-      {#if invitable.length > 0}
+      {#if inviteRows.length > 0}
         <div class="mt-3 flex max-h-64 flex-col gap-1 overflow-y-auto">
-          {#each invitable as pubkey (pubkey)}
+          {#each inviteRows as pubkey (pubkey)}
             <div class="flex items-center gap-2 px-2 py-1">
               <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
               <span class="flex-1 truncate text-sm"

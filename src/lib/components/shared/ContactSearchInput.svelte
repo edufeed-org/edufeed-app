@@ -8,6 +8,9 @@
 -->
 
 <script>
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import ProfileAvatar from './ProfileAvatar.svelte';
   import { nip19 } from 'nostr-tools';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { normalizePubkey } from '$lib/helpers/pubkey.js';
@@ -54,6 +57,13 @@
    * @typedef {{ kind: 'pubkey', pubkey: string, npub: string, excluded: boolean }} PubkeyNavItem
    * @typedef {ContactNavItem | PubkeyNavItem} NavItem
    */
+
+  // Resolve the profile for a pasted npub/hex so the synthetic row shows the
+  // real avatar + name instead of a generic person glyph (journey-test
+  // 2026-08-17: the invite-by-npub flow never rendered who was being added).
+  const getPubkeyProfiles = useProfileMap(() =>
+    navItems.filter((item) => item.kind === 'pubkey').map((item) => item.pubkey)
+  );
 
   let showDropdown = $state(false);
   let selectedDropdownIndex = $state(-1);
@@ -211,27 +221,37 @@
             aria-disabled={item.excluded ? 'true' : undefined}
             onclick={() => selectItem(item)}
           >
-            <div
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-base-300 text-base-content/60"
-              aria-hidden="true"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="h-5 w-5"
+            {#if getPubkeyProfiles().get(item.pubkey)}
+              <ProfileAvatar
+                pubkey={item.pubkey}
+                profile={getPubkeyProfiles().get(item.pubkey)}
+                size="sm"
+              />
+            {:else}
+              <div
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-base-300 text-base-content/60"
+                aria-hidden="true"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.25a7.5 7.5 0 0 1 15 0v.75h-15v-.75Z"
-                />
-              </svg>
-            </div>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="h-5 w-5"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.25a7.5 7.5 0 0 1 15 0v.75h-15v-.75Z"
+                  />
+                </svg>
+              </div>
+            {/if}
             <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-medium">{addPubkeyLabel}</div>
+              <div class="truncate text-sm font-medium">
+                {getDisplayName(getPubkeyProfiles().get(item.pubkey)) || addPubkeyLabel}
+              </div>
               <div class="truncate font-mono text-xs text-base-content/60">
                 {shortNpub(item.npub)}
               </div>
