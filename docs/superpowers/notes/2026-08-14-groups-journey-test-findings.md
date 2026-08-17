@@ -250,3 +250,18 @@ filename, remaining app-wide Sie/Du outside the tested flows.
   latency (client emits communities$ correctly; the E2E channel metadata
   takes seconds). The channels pane now shows a "Bereich wird
   synchronisiert …" state with spinner instead of claiming emptiness.
+
+## Seventh pass (standalone /private page, 2026-08-17)
+
+- REGRESSION from the double-sidebar cleanup: /private/<id> reuses
+  PrivateChannelsView and depended on its rail as the channel list — the
+  mobile-only rail left that page with no channels at all on desktop. The
+  rail now hides on md+ only when hosted inside a community layout
+  (communikeyEvent present); standalone keeps it.
+- The page claimed "gehört zu keiner Community" without checking. A
+  concord tag is not relay-indexable, so the reverse lookup goes through
+  the 10222s of the user's followed communities plus the area owner's;
+  on a pointer match the page replaces itself with the community's
+  Kanäle view (?channel= carried along). Verified live as laoc42:
+  /private/7772cfa… → /c/npub1uvh…?view=channels with both channels in
+  the zone and the chat readable.

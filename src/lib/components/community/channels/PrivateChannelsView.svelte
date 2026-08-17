@@ -334,16 +334,17 @@
   Concord-specific surface below. -->
 {#if concord.enabled || groupPointers.length > 0}
   <div class="flex h-full min-h-0">
-    <!-- rail — MOBILE ONLY (below md, only one of rail/pane is ever visible
-      at once via mobileChat). On desktop the app sidebar's KANÄLE zone is
-      the single channel surface — rendering this rail beside it produced a
-      double sidebar (laoc, 2026-08-17); its rail-only controls (create,
-      invites, notification bell) moved into that zone, and the group-mode
-      attach/members actions into the overview pane below. -->
+    <!-- rail — MOBILE ONLY when hosted inside a community layout (the app
+      sidebar's KANÄLE zone is the desktop channel surface there; rendering
+      this rail beside it produced a double sidebar — laoc, 2026-08-17). On
+      the STANDALONE /private/<id> route there is no community sidebar, so
+      the rail stays the desktop channel list too (regression fix, same
+      day: hiding it unconditionally left that page with no channel list
+      at all). Hosted-ness = a communikeyEvent was passed. -->
     <aside
-      class="w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 md:hidden {mobileChat
-        ? 'hidden'
-        : 'flex'}"
+      class="w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 {communikeyEvent
+        ? 'md:hidden'
+        : 'md:flex md:w-72'} {mobileChat ? 'hidden' : 'flex'}"
     >
       <div class="flex items-center justify-between px-2 pt-2 pb-1">
         <span class="text-xs font-bold tracking-wider text-base-content/60 uppercase"
