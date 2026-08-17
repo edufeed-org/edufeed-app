@@ -46,6 +46,26 @@ export function getSelectedConcordChannel(communityId) {
   return selections[communityId] ?? '';
 }
 
+// "Open the create wizard" intent. The sidebar's "+ Neuer Kanal" entry can't
+// reach PrivateChannelsView's overlay state (the view is not its child, and
+// the layout mounts 2-3 responsive instances of it — see
+// community-layout-double-mount), so the intent lives here and every mount
+// shows/hides the wizard in lockstep. Cleared by the wizard's onClose.
+let createRequested = $state(false);
+
+export function requestChannelCreate() {
+  createRequested = true;
+}
+
+/** @returns {boolean} */
+export function getChannelCreateRequested() {
+  return createRequested;
+}
+
+export function clearChannelCreateRequest() {
+  createRequested = false;
+}
+
 // Reset on account switch (called from stopConcordNotifications): without
 // this, account B inherits account A's per-community selections, and a
 // stale entry for a shared community blocks B's own deep-link seeding in

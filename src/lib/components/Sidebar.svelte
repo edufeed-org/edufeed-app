@@ -231,6 +231,14 @@
               class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
             >
           {/if}
+          {#if row.locked}
+            <span
+              aria-hidden="true"
+              data-testid="sidebar-group-locked"
+              title={m.concord_legend_private()}
+              class="shrink-0 text-[0.7rem] opacity-60">&#128274;</span
+            >
+          {/if}
         </a>
       {/each}
     </div>

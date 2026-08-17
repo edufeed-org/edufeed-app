@@ -24,6 +24,7 @@
    *   dimmed?: boolean,
    *   bold?: boolean,
    *   worldReadable?: boolean,
+   *   locked?: boolean,
    *   testid?: string | null,
    *   trailing?: import('svelte').Snippet
    * }}
@@ -37,6 +38,7 @@
     dimmed = false,
     bold = false,
     worldReadable = false,
+    locked = false,
     testid = null,
     trailing
   } = $props();
@@ -50,9 +52,7 @@
         ? 'bg-primary/10 font-semibold text-primary'
         : 'text-base-content/80 hover:bg-base-300/60')
   );
-  const glyphTitle = $derived(
-    symbol === '#' ? m.concord_legend_public() : m.concord_legend_private()
-  );
+  const glyphTitle = $derived(locked ? m.concord_legend_private() : m.concord_legend_public());
   const nameClass = $derived(
     'min-w-0 flex-1 truncate ' + (dimmed ? 'opacity-50 ' : '') + (bold ? 'font-bold' : '')
   );
@@ -69,6 +69,17 @@
       data-testid="world-readable-badge"
       title={m.groups_channel_world_readable()}
       class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
+    >
+  {/if}
+  {#if locked}
+    <!-- Invite-only: the lock trails the name (Armada's rail pattern) so the
+         row keeps its # channel affordance. Mutually exclusive with the
+         globe by construction — a channel is never both. -->
+    <span
+      aria-hidden="true"
+      data-testid="locked-badge"
+      title={m.concord_legend_private()}
+      class="shrink-0 text-[0.7rem] opacity-60">&#128274;</span
     >
   {/if}
   {#if trailing}

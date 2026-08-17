@@ -20,6 +20,7 @@ import { safeImageUrl } from './relay-directory.js';
  *   name: string,
  *   symbol: string,
  *   worldReadable: boolean,
+ *   locked: boolean,
  *   accessible: boolean,
  *   pending: boolean
  * }} ChannelRowBase
@@ -66,6 +67,7 @@ export function buildChannelRows({
       // even its "public" channel means "everyone in the area", not "everyone".
       symbol: channelGlyph(channel.private ? 'invited' : 'members').symbol,
       worldReadable: false,
+      locked: channelGlyph(channel.private ? 'invited' : 'members').locked,
       accessible: channel.accessible !== false,
       pending: false,
       source: 'concord',
@@ -84,6 +86,7 @@ export function buildChannelRows({
       name: pointer.name || metadataName(metadata) || pointer.id,
       symbol: glyph.symbol,
       worldReadable: glyph.worldReadable,
+      locked: glyph.locked,
       accessible: true,
       // The relay has not told us yet what this channel is; the row is drawn
       // locked meanwhile, and callers can show that it is still settling.

@@ -168,6 +168,7 @@
                 testid="host-channel-row"
                 symbol={row.symbol}
                 name={row.name}
+                locked={row.locked}
                 dimmed={row.pending}
                 worldReadable={row.worldReadable}
                 active={row.pointer.id === activeChannelId}

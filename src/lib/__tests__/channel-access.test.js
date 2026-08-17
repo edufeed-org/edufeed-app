@@ -67,10 +67,10 @@ describe('channelAccessLevel', () => {
 });
 
 describe('channelGlyph', () => {
-  it('uses # for both open levels and the lock only for invited', () => {
+  it('leads every level with # — the lock is a trailing badge, not the glyph', () => {
     expect(channelGlyph('world').symbol).toBe('#');
     expect(channelGlyph('members').symbol).toBe('#');
-    expect(channelGlyph('invited').symbol).toBe('\u{1F512}');
+    expect(channelGlyph('invited').symbol).toBe('#');
   });
 
   it('adds the globe only for world-readable channels', () => {
@@ -79,8 +79,14 @@ describe('channelGlyph', () => {
     expect(channelGlyph('invited').worldReadable).toBe(false);
   });
 
-  it('shows the lock while the level is unknown, never the open glyph', () => {
-    expect(channelGlyph('unknown').symbol).toBe('\u{1F512}');
+  it('marks only invited channels locked', () => {
+    expect(channelGlyph('world').locked).toBe(false);
+    expect(channelGlyph('members').locked).toBe(false);
+    expect(channelGlyph('invited').locked).toBe(true);
+  });
+
+  it('shows the lock while the level is unknown, never the open badge', () => {
+    expect(channelGlyph('unknown').locked).toBe(true);
     expect(channelGlyph('unknown').worldReadable).toBe(false);
   });
 });

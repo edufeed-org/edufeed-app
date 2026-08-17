@@ -38,12 +38,18 @@ describe('buildChannelRows', () => {
   it('keeps the concord rail working on its own', () => {
     const rows = buildChannelRows({ concordChannels: [concord('allgemein')] });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ name: 'allgemein', symbol: '#', source: 'concord' });
+    expect(rows[0]).toMatchObject({
+      name: 'allgemein',
+      symbol: '#',
+      locked: false,
+      source: 'concord'
+    });
   });
 
   it('carries the concord private flag into the lock', () => {
     const [row] = buildChannelRows({ concordChannels: [concord('leitung', { private: true })] });
-    expect(row.symbol).toBe('\u{1F512}');
+    expect(row.symbol).toBe('#');
+    expect(row.locked).toBe(true);
   });
 
   // Concord encrypts every channel, so no concord row is ever world-readable —
@@ -61,7 +67,12 @@ describe('buildChannelRows', () => {
       groupPointers: [p],
       metadataByKey: { [key(p)]: meta('allgemein', [['private']]) }
     });
-    expect(rows[0]).toMatchObject({ name: 'allgemein', symbol: '\u{1F512}', source: 'group' });
+    expect(rows[0]).toMatchObject({
+      name: 'allgemein',
+      symbol: '#',
+      locked: true,
+      source: 'group'
+    });
   });
 
   it('shows the globe for a group channel the relay leaves open', () => {
@@ -70,7 +81,7 @@ describe('buildChannelRows', () => {
       groupPointers: [p],
       metadataByKey: { [key(p)]: meta('ankuendigungen', [['restricted']]) }
     });
-    expect(rows[0]).toMatchObject({ symbol: '#', worldReadable: true });
+    expect(rows[0]).toMatchObject({ symbol: '#', worldReadable: true, locked: false });
   });
 
   it('honours the community access marker for a private group channel', () => {
@@ -83,14 +94,14 @@ describe('buildChannelRows', () => {
         [key(shut)]: meta('leitung', [['private']])
       }
     });
-    expect(rows.find((r) => r.name === 'allgemein')?.symbol).toBe('#');
-    expect(rows.find((r) => r.name === 'leitung')?.symbol).toBe('\u{1F512}');
+    expect(rows.find((r) => r.name === 'allgemein')?.locked).toBe(false);
+    expect(rows.find((r) => r.name === 'leitung')?.locked).toBe(true);
   });
 
   // A channel whose metadata has not arrived must not be guessed open.
   it('locks a group channel whose metadata has not loaded', () => {
     const rows = buildChannelRows({ groupPointers: [ptr('allgemein', { access: 'members' })] });
-    expect(rows[0]).toMatchObject({ symbol: '\u{1F512}', worldReadable: false, pending: true });
+    expect(rows[0]).toMatchObject({ locked: true, worldReadable: false, pending: true });
   });
 
   it('names a group channel from the pointer, then metadata, then the id', () => {
@@ -163,8 +174,8 @@ describe('buildChannelRows', () => {
     expect(level('neu')).toBe('unknown');
     // 'members' and 'world' share the '#' glyph, so the glyph alone could not
     // have told them apart.
-    expect(rows.find((r) => r.name === 'ankuendigungen')?.symbol).toBe(
-      rows.find((r) => r.name === 'allgemein')?.symbol
+    expect(rows.find((r) => r.name === 'ankuendigungen')?.locked).toBe(
+      rows.find((r) => r.name === 'allgemein')?.locked
     );
   });
 
@@ -244,7 +255,7 @@ describe('buildChannelRows on an auth-required host', () => {
       metadataByKey: { [key(p)]: meta('offen') },
       hostRequiresAuth: true
     });
-    expect(rows[0]).toMatchObject({ worldReadable: false, level: 'members', symbol: '#' });
+    expect(rows[0]).toMatchObject({ worldReadable: false, level: 'members', locked: false });
   });
 
   it('changes nothing on an open host', () => {

@@ -24,7 +24,9 @@
     setActiveConcordChannel,
     clearActiveConcordChannel,
     selectConcordChannel,
-    getSelectedConcordChannel
+    getSelectedConcordChannel,
+    getChannelCreateRequested,
+    clearChannelCreateRequest
   } from '$lib/concord/active-channel.svelte.js';
   // NIP-29 channels of the same community. A community is extended by ONE
   // protected area — a Concord area OR a set of NIP-29 groups — but the rail
@@ -191,6 +193,13 @@
   // owner into precisely the mixed state the design rules out.
   const extendedByGroups = $derived(groupPointers.length > 0);
   const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
+  // Same population that sees a "+ Neuer Kanal" button somewhere — the shared
+  // create intent must not open the wizard for anyone the buttons exclude.
+  const canOpenCreateWizard = $derived(
+    (concord.community && concord.canManageChannels && !concord.dissolved) ||
+      (extendedByGroups && canAttachGroup) ||
+      isCommunikeyOwner
+  );
   // Member/owner gate for the area-members-open entry (handoff #11c): a
   // visitor who merely follows the community (kind-30000, a social bookmark
   // — deliberately NOT used here, see resolveZoneMembership's own comment)
@@ -390,6 +399,7 @@
           <ChannelRailRow
             symbol={row.symbol}
             name={row.name}
+            locked={row.locked}
             active={activeChannel?.channel_id === row.channel_id}
             dimmed={!row.accessible}
             bold={flags.unread}
@@ -412,6 +422,7 @@
             testid="group-channel-row"
             symbol={row.symbol}
             name={row.name}
+            locked={row.locked}
             dimmed={row.pending}
             worldReadable={row.worldReadable}
           />
@@ -575,14 +586,21 @@
     </section>
   </div>
 
-  {#if overlay === 'create'}
+  <!-- The shared create intent (sidebar's "+ Neuer Kanal") opens the wizard
+    alongside the local overlay path; both close through the same handlers,
+    which also clear the intent so every responsive mount hides in lockstep. -->
+  {#if overlay === 'create' || (getChannelCreateRequested() && canOpenCreateWizard)}
     <ChannelCreateWizard
       {communikeyEvent}
       {communityProfile}
       community={concord.dissolved ? undefined : concord.community}
-      onClose={() => (overlay = null)}
+      onClose={() => {
+        overlay = null;
+        clearChannelCreateRequest();
+      }}
       onCreated={(/** @type {string} */ channelId) => {
         overlay = null;
+        clearChannelCreateRequest();
         // Which backend just created the channel is the same call the
         // wizard itself made (isGroupMode = groupPointers.length > 0, off
         // the same communikeyEvent) — a NIP-29 channel has its own route

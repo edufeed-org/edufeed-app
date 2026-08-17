@@ -104,6 +104,7 @@ describe('unlinkedGroups', () => {
       metadataByKey: { [`ankuendigungen@${R}/`]: { kind: 39000, tags: [['restricted']] } }
     });
     expect(row.symbol).toBe('#');
+    expect(row.locked).toBe(false);
     expect(row.worldReadable).toBe(true);
   });
 
@@ -113,13 +114,13 @@ describe('unlinkedGroups', () => {
       linkedKeys: new Set(),
       metadataByKey: { [`leitung@${R}/`]: { kind: 39000, tags: [['private']] } }
     });
-    expect(row.symbol).toBe('\u{1F512}');
+    expect(row.locked).toBe(true);
     expect(row.worldReadable).toBe(false);
   });
 
   it('draws a group whose metadata has not arrived as locked, not open', () => {
     const [row] = unlinkedGroups({ groups: [{ id: 'x', relay: R }], linkedKeys: new Set() });
-    expect(row.symbol).toBe('\u{1F512}');
+    expect(row.locked).toBe(true);
     expect(row.worldReadable).toBe(false);
   });
 

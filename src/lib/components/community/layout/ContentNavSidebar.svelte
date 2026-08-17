@@ -27,7 +27,8 @@
   } from '$lib/concord/notifications.svelte.js';
   import {
     getSelectedConcordChannel,
-    selectConcordChannel
+    selectConcordChannel,
+    requestChannelCreate
   } from '$lib/concord/active-channel.svelte.js';
   import { groupHref } from '$lib/groups/groups.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
@@ -315,6 +316,7 @@
             <ChannelRailRow
               symbol={row.symbol}
               name={row.name}
+              locked={row.locked}
               testid={rowTestId(row.key)}
               active={selectedContentType === 'channels' &&
                 getSelectedConcordChannel(concordCommunityId) === row.channel_id}
@@ -332,6 +334,7 @@
               testid={rowTestId(row.key)}
               symbol={row.symbol}
               name={row.name}
+              locked={row.locked}
               dimmed={row.pending}
               worldReadable={row.worldReadable}
             />
@@ -342,7 +345,10 @@
             rail is mobile-only since the double-sidebar cleanup. -->
           <button
             data-testid="nav-channels-create"
-            onclick={() => handleContentTypeClick('channels')}
+            onclick={() => {
+              requestChannelCreate();
+              handleContentTypeClick('channels');
+            }}
             class="flex items-center gap-2 rounded-lg border border-dashed border-base-content/25 px-4 py-2 text-sm text-base-content/70 transition-all duration-200 hover:bg-base-300/60"
           >
             + {m.concord_new_channel()}

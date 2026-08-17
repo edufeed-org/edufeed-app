@@ -1,9 +1,10 @@
 // Which access level a community channel has, and how the rail draws it.
 //
-// Three levels, two glyphs (see docs/superpowers/specs/2026-08-12-groups-architecture-design.md §1):
-//   world    #  + globe  — anyone on the network can read
-//   members  #           — everyone inside this community can read
-//   invited  🔒          — only the people put in this channel
+// Three levels, one glyph + two badges (design §1, presentation revised
+// 2026-08-17 to match Armada's rail — laoc):
+//   world    #  + trailing globe — anyone on the network can read
+//   members  #                   — everyone inside this community can read
+//   invited  #  + trailing lock  — only the people put in this channel
 //
 // Only the FIRST split is observable on the relay: a kind:39000 either carries
 // `private` or it does not. Levels "members" and "invited" are the same object
@@ -12,16 +13,14 @@
 // pointer, whose 5th element carries the community's intent.
 //
 // That marker can drift from the relay's member list. It is therefore used
-// ONLY to pick the glyph, never to decide what is fetched or shown: reading is
+// ONLY to pick the badge, never to decide what is fetched or shown: reading is
 // enforced by the relay either way. And when it is missing or unrecognised we
-// fall back to the LOCK — overstating openness is the harmful direction.
+// fall back to the lock — overstating openness is the harmful direction.
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
 
 /**
  * @typedef {'world' | 'members' | 'invited' | 'unknown'} ChannelAccessLevel
  */
-
-const LOCK = '\u{1F512}';
 
 /**
  * @param {{ kind?: number, tags?: string[][] } | null | undefined} metadata
@@ -47,12 +46,14 @@ export function channelAccessLevel(metadata, pointer, hostRequiresAuth = false) 
 }
 
 /**
- * How the channel row is drawn for a level.
+ * How the channel row is drawn for a level. Every row leads with '#' — the
+ * access level rides as trailing badges (globe for world, lock for invited),
+ * so closedness never costs the row its channel affordance.
  * @param {ChannelAccessLevel} level
- * @returns {{ symbol: string, worldReadable: boolean }}
+ * @returns {{ symbol: string, worldReadable: boolean, locked: boolean }}
  */
 export function channelGlyph(level) {
-  if (level === 'world') return { symbol: '#', worldReadable: true };
-  if (level === 'members') return { symbol: '#', worldReadable: false };
-  return { symbol: LOCK, worldReadable: false };
+  if (level === 'world') return { symbol: '#', worldReadable: true, locked: false };
+  if (level === 'members') return { symbol: '#', worldReadable: false, locked: false };
+  return { symbol: '#', worldReadable: false, locked: true };
 }

@@ -17,6 +17,7 @@ import { channelAccessLevel, channelGlyph } from './channel-access.js';
  *   name: string,
  *   symbol: string,
  *   worldReadable: boolean,
+ *   locked: boolean,
  *   pointer: {id: string, relay: string}
  * }} UnlinkedGroup
  */
@@ -121,6 +122,7 @@ export function unlinkedGroups({ groups, linkedKeys, metadataByKey = {} }) {
       name: entry.name,
       symbol: glyph.symbol,
       worldReadable: glyph.worldReadable,
+      locked: glyph.locked,
       pointer: entry.pointer
     };
   });
