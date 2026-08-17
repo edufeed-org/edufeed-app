@@ -199,31 +199,29 @@
 {#snippet tabButton(/** @type {{id: string, label: string, icon: any}} */ type)}
   {@const isActive = selectedContentType === type.id}
   {@const Icon = type.icon}
+  <!-- The access badge trails at the row's right edge (Armada's rail
+    pattern, laoc 2026-08-17) — a superscript lock floating over the label
+    read as misalignment, not as a badge. -->
   <button
     data-testid="content-nav-{type.id}"
     onclick={() => handleContentTypeClick(type.id)}
-    class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
+    class="flex w-full items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
       ? 'bg-primary text-primary-content'
       : 'hover:bg-base-300/60'}"
   >
     <Icon class_="w-5 h-5" />
-    <span class="relative">
-      <span class="text-sm font-medium">{type.label}</span>
-      {#if restrictedTabs.has(type.id)}
-        {#if accessibleTabs.has(type.id)}
-          <span class="absolute -top-1.5 -right-3" title={m.community_content_tab_access_granted()}>
-            <LockOpenIcon class_="w-2.5 h-2.5 text-success" />
-          </span>
-        {:else}
-          <span
-            class="absolute -top-1.5 -right-3 opacity-60"
-            title={m.community_content_tab_restricted()}
-          >
-            <LockIcon class_="w-2.5 h-2.5" />
-          </span>
-        {/if}
+    <span class="min-w-0 flex-1 truncate text-left text-sm font-medium">{type.label}</span>
+    {#if restrictedTabs.has(type.id)}
+      {#if accessibleTabs.has(type.id)}
+        <span class="shrink-0" title={m.community_content_tab_access_granted()}>
+          <LockOpenIcon class_="w-3 h-3 text-success" />
+        </span>
+      {:else}
+        <span class="shrink-0 opacity-60" title={m.community_content_tab_restricted()}>
+          <LockIcon class_="w-3 h-3" />
+        </span>
       {/if}
-    </span>
+    {/if}
   </button>
 {/snippet}
 
@@ -264,7 +262,7 @@
       </button>
     {/if}
 
-    <nav class="menu space-y-1 p-4 pb-0">
+    <nav class="menu w-full space-y-1 p-4 pb-0">
       <div
         data-testid="nav-zone-inhalte"
         class="px-4 pb-1 text-xs font-semibold text-base-content/50 uppercase"
@@ -277,7 +275,7 @@
     </nav>
 
     {#if zones.kanaele.length > 0 || zones.showLockHint || zones.showCreateEntry || concordSyncing}
-      <nav class="menu space-y-1 p-4 pt-2">
+      <nav class="menu w-full space-y-1 p-4 pt-2">
         <div
           data-testid="nav-zone-kanaele"
           class="flex items-center gap-1.5 px-4 pb-1 text-xs font-semibold text-base-content/50 uppercase"
