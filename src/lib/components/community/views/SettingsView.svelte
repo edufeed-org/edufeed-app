@@ -314,10 +314,7 @@
           <div class="card mb-6 bg-base-100 shadow-xl" data-testid="settings-type-card">
             <div class="card-body">
               <h2 class="card-title">{m.community_views_settings_type_title()}</h2>
-              <p class="text-xs text-base-content/60">
-                {m.community_views_settings_type_current()}
-              </p>
-              <p class="font-semibold">
+              <p class="flex items-center gap-2 font-semibold">
                 {#if communityType === 'open'}
                   {m.community_type_open_title()}
                 {:else if communityType === 'moderated'}
@@ -326,6 +323,17 @@
                   {m.community_type_closed_window_title()}
                 {:else}
                   {m.community_type_closed_title()}
+                {/if}
+                <!-- Engine badge (laoc, 2026-08-18): which protocol carries
+                  this type — Concord for private areas, NIP-29 for rosters. -->
+                {#if parseConcordPointer(communikeyEvent)}
+                  <span class="badge badge-ghost badge-sm" data-testid="type-engine-badge"
+                    >Concord</span
+                  >
+                {:else if communityType === 'moderated'}
+                  <span class="badge badge-ghost badge-sm" data-testid="type-engine-badge"
+                    >NIP-29</span
+                  >
                 {/if}
               </p>
               <p class="text-sm text-base-content/70">
@@ -394,8 +402,54 @@
                     {m.community_views_settings_flip_to_open()}
                   </button>
                 </div>
-              {:else}
-                <p class="mt-3 text-xs text-base-content/60">{m.community_type_closed_hint()}</p>
+              {/if}
+
+              <!-- Linked private area lives IN the type card now — the
+                standalone "Privater Bereich" card carried one redundant
+                button and one destructive action (laoc, 2026-08-18); the
+                destructive one (detach) moved to the Gefahrenzone. -->
+              {#if concordArea.enabled && concordArea.pointer}
+                <div
+                  class="mt-3 flex items-center gap-3 rounded-xl border border-base-300 p-3"
+                  data-testid="type-area-row"
+                >
+                  <ConcordAreaBadge
+                    name={linkedAreaName}
+                    communityId={concordArea.pointer.communityId}
+                    iconPointer={concordArea.community?.metadata?.icon}
+                    class="h-10 w-10"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-semibold">{linkedAreaName}</p>
+                    <p class="text-xs text-base-content/60">{m.concord_attach_owner_sub()}</p>
+                  </div>
+                  <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+                </div>
+              {:else if concordArea.enabled && communityType === 'open'}
+                <!-- No area yet: the create/attach entry point (was the
+                  standalone card's only irreplaceable job). -->
+                <div class="mt-3 border-t border-base-300 pt-3">
+                  <p class="text-sm text-base-content/70">{m.concord_settings_lead()}</p>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    <button
+                      class="btn btn-sm btn-neutral"
+                      data-testid="concord-settings-create"
+                      onclick={() => (concordOverlay = 'create')}
+                    >
+                      🔒 {m.concord_settings_create()}
+                    </button>
+                    <button
+                      class="btn btn-outline btn-sm"
+                      data-testid="concord-settings-attach"
+                      onclick={() => (concordOverlay = 'attach')}
+                    >
+                      🔗 {m.concord_attach_secondary()}
+                    </button>
+                  </div>
+                  <p class="mt-2 rounded-lg bg-base-200 p-2.5 text-xs text-base-content/60">
+                    🙈 {m.concord_settings_invisible_hint()}
+                  </p>
+                </div>
               {/if}
             </div>
           </div>
@@ -433,70 +487,6 @@
           <PublisherWindowPane {communikeyEvent} />
         {/if}
 
-        <!-- Private area (Concord) — owner-only create/attach/detach home -->
-        {#if isOwner && concordArea.enabled}
-          <div class="card mb-6 bg-base-100 shadow-xl" data-testid="concord-settings-card">
-            <div class="card-body">
-              <h2 class="card-title">
-                🔒 {m.concord_settings_title()}
-                <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
-              </h2>
-              <p class="mb-2 text-xs text-base-content/60">{m.concord_settings_subtitle()}</p>
-
-              {#if concordArea.pointer}
-                <div class="flex items-center gap-3 rounded-xl border border-base-300 p-3">
-                  <ConcordAreaBadge
-                    name={linkedAreaName}
-                    communityId={concordArea.pointer.communityId}
-                    iconPointer={concordArea.community?.metadata?.icon}
-                    class="h-10 w-10"
-                  />
-                  <div class="min-w-0 flex-1">
-                    <p class="truncate font-semibold">{linkedAreaName}</p>
-                    <p class="text-xs text-base-content/60">
-                      {m.concord_attach_owner_sub()}
-                    </p>
-                  </div>
-                  <button class="btn btn-sm btn-primary" onclick={() => goto('?view=channels')}>
-                    {m.concord_settings_open_channels()}
-                  </button>
-                </div>
-                <p class="mt-2 rounded-lg bg-primary/10 p-2.5 text-xs text-primary">
-                  ✓ {m.concord_settings_linked_ok()}
-                </p>
-                <button
-                  class="btn mt-1 self-start text-base-content/60 btn-ghost btn-sm hover:text-error"
-                  data-testid="concord-settings-detach"
-                  onclick={() => (concordOverlay = 'detach')}
-                >
-                  {m.concord_settings_detach()}
-                </button>
-              {:else}
-                <p class="text-sm text-base-content/70">{m.concord_settings_lead()}</p>
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <button
-                    class="btn btn-neutral"
-                    data-testid="concord-settings-create"
-                    onclick={() => (concordOverlay = 'create')}
-                  >
-                    🔒 {m.concord_settings_create()}
-                  </button>
-                  <button
-                    class="btn btn-outline"
-                    data-testid="concord-settings-attach"
-                    onclick={() => (concordOverlay = 'attach')}
-                  >
-                    🔗 {m.concord_attach_secondary()}
-                  </button>
-                </div>
-                <p class="mt-3 rounded-lg bg-base-200 p-2.5 text-xs text-base-content/60">
-                  🙈 {m.concord_settings_invisible_hint()}
-                </p>
-              {/if}
-            </div>
-          </div>
-        {/if}
-
         <!-- ── Mitgliedschaft ── (every signed-in user) -->
         <h2 class="mt-8 mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
           {m.community_settings_section_membership()}
@@ -531,6 +521,15 @@
               <p class="mb-4 text-sm text-base-content/70">
                 {m.community_views_settings_danger_description()}
               </p>
+              {#if concordArea.enabled && concordArea.pointer}
+                <button
+                  class="btn mb-3 w-full btn-outline btn-error"
+                  data-testid="concord-settings-detach"
+                  onclick={() => (concordOverlay = 'detach')}
+                >
+                  {m.concord_settings_detach()}
+                </button>
+              {/if}
               <button onclick={handleDeleteCommunity} class="btn w-full btn-outline btn-error">
                 {m.community_views_settings_delete_button()}
               </button>
