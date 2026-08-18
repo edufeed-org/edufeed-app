@@ -10,8 +10,8 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
-import { excludeMutedAuthors } from '$lib/helpers/dm-trust.js';
-import { getMutedPubkeys } from '$lib/stores/mute-list.svelte.js';
+import { excludeMuted } from '$lib/helpers/dm-trust.js';
+import { getMutedPubkeys, getMutedWords } from '$lib/stores/mute-list.svelte.js';
 import {
   getCommunikeyRelays,
   getCalendarRelays,
@@ -216,12 +216,14 @@ let readItemIds = $state.raw(new Set());
 let subscriptions = [];
 
 // Merge main + RSVPs + poll responses, sorted by time (newest first).
-// Muted authors (NIP-51 kind 10000) are dropped display-side — the queries
-// themselves stay ungated (issue #43).
+// Muted authors and muted words (NIP-51 kind 10000) are dropped display-side
+// — the queries themselves stay ungated (issue #43). Word muting is what
+// survives spam campaigns that rotate pubkeys.
 let notifications = $derived.by(() => {
-  return excludeMutedAuthors(
+  return excludeMuted(
     [...mainNotifications, ...rsvpNotifications, ...pollResponseNotifications],
-    getMutedPubkeys()
+    getMutedPubkeys(),
+    getMutedWords()
   ).sort((a, b) => b.created_at - a.created_at);
 });
 

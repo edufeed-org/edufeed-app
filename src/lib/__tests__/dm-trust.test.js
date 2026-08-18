@@ -3,7 +3,9 @@ import { describe, it, expect } from 'vitest';
 import {
   getConversationPeers,
   classifyDmConversations,
-  excludeMutedAuthors
+  excludeMutedAuthors,
+  matchesMutedWord,
+  excludeMuted
 } from '$lib/helpers/dm-trust.js';
 
 const SELF = 'a'.repeat(64);
@@ -134,5 +136,46 @@ describe('excludeMutedAuthors', () => {
 
   it('returns the same array when nothing is muted', () => {
     expect(excludeMutedAuthors(events, new Set())).toBe(events);
+  });
+});
+
+describe('matchesMutedWord', () => {
+  const words = new Set(['damus airdrop', 'damuspurple']);
+
+  it('matches case-insensitively as a substring', () => {
+    expect(matchesMutedWord('✨ Claim your tokens — Damus Airdrop is live!', words)).toBe(true);
+    expect(matchesMutedWord('visit https://DAMUSPURPLE.xyz/airdrop/', words)).toBe(true);
+  });
+
+  it('does not match unrelated content', () => {
+    expect(matchesMutedWord('Willkommen auf edufeed.org!', words)).toBe(false);
+  });
+
+  it('handles empty word set and missing content', () => {
+    expect(matchesMutedWord('anything', new Set())).toBe(false);
+    expect(matchesMutedWord(undefined, words)).toBe(false);
+  });
+});
+
+describe('excludeMuted', () => {
+  const events = [
+    { id: '1', pubkey: FRIEND, content: 'hello there' },
+    { id: '2', pubkey: SPAMMER, content: 'legit-looking text' },
+    { id: '3', pubkey: STRANGER, content: 'Damus Airdrop season 1 is LIVE' },
+    { id: '4', pubkey: STRANGER, content: 'a normal mention' }
+  ];
+
+  it('drops muted authors and word-matching content', () => {
+    const result = excludeMuted(events, new Set([SPAMMER]), new Set(['damus airdrop']));
+    expect(result.map((e) => e.id)).toEqual(['1', '4']);
+  });
+
+  it('returns the same array when nothing is muted', () => {
+    expect(excludeMuted(events, new Set(), new Set())).toBe(events);
+  });
+
+  it('works with words only', () => {
+    const result = excludeMuted(events, new Set(), new Set(['airdrop']));
+    expect(result.map((e) => e.id)).toEqual(['1', '2', '4']);
   });
 });

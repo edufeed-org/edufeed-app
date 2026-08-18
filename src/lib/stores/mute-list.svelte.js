@@ -9,7 +9,7 @@
  * v1 reads only the public p-tags — NIP-51 encrypted (hidden) entries are
  * written by other clients but deferred here.
  */
-import { MuteUser, UnmuteUser } from 'applesauce-actions/actions';
+import { MuteUser, UnmuteUser, MuteWord, UnmuteWord } from 'applesauce-actions/actions';
 import { getPublicMutedThings } from 'applesauce-common/helpers/mute';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
@@ -19,6 +19,9 @@ const MUTE_LIST_KIND = 10000;
 
 /** @type {Set<string>} */
 let mutedPubkeys = $state.raw(new Set());
+
+/** Muted words, normalized to lowercase. @type {Set<string>} */
+let mutedWords = $state.raw(new Set());
 
 /** @type {string | null} */
 let activePubkey = null;
@@ -41,6 +44,11 @@ const INITIAL_FETCH_SETTLE_MS = 5000;
 /** Reactive getter — read inside $derived/$effect for updates. */
 export function getMutedPubkeys() {
   return mutedPubkeys;
+}
+
+/** Reactive getter for muted words (lowercase). */
+export function getMutedWords() {
+  return mutedWords;
 }
 
 /**
@@ -90,8 +98,11 @@ export function initializeMuteList(pubkey) {
   subscriptions.push(
     eventStore.replaceable(MUTE_LIST_KIND, pubkey).subscribe((event) => {
       if (event) settle();
+      const things = event ? getPublicMutedThings(event) : undefined;
       // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
-      mutedPubkeys = event ? getPublicMutedThings(event).pubkeys : new Set();
+      mutedPubkeys = things ? things.pubkeys : new Set();
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
+      mutedWords = new Set([...(things ? things.words : [])].map((w) => w.toLowerCase()));
     })
   );
 }
@@ -103,6 +114,8 @@ export function cleanupMuteList() {
   activePubkey = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
   mutedPubkeys = new Set();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
+  mutedWords = new Set();
 }
 
 /**
@@ -124,4 +137,30 @@ export async function unmuteUser(pubkey) {
   await initialFetchSettled;
   const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
   await actionRunnerOptimistic.run(UnmuteUser, pubkey);
+}
+
+/**
+ * Add a word to the user's mute list (stored lowercase; matched as a
+ * case-insensitive substring against notification content).
+ * @param {string} word
+ */
+export async function muteWord(word) {
+  const normalized = word.trim().toLowerCase();
+  if (!normalized) return;
+  await initialFetchSettled;
+  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
+  await actionRunnerOptimistic.run(MuteWord, normalized);
+}
+
+/**
+ * Remove a word from the user's mute list. Passed through as stored (only
+ * trimmed) so entries written with capitals by other clients still match.
+ * @param {string} word
+ */
+export async function unmuteWord(word) {
+  const normalized = word.trim();
+  if (!normalized) return;
+  await initialFetchSettled;
+  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
+  await actionRunnerOptimistic.run(UnmuteWord, normalized);
 }

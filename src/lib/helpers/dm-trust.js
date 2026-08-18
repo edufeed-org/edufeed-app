@@ -67,3 +67,39 @@ export function excludeMutedAuthors(events, mutedPubkeys) {
   if (!mutedPubkeys || mutedPubkeys.size === 0) return events;
   return events.filter((e) => !mutedPubkeys.has(e.pubkey));
 }
+
+/**
+ * Case-insensitive substring match against NIP-51 muted words. Substring (not
+ * word-boundary) matching lets a single entry like "damus airdrop" catch a
+ * whole campaign across rotating pubkeys, domains, and phrasings.
+ * @param {string | undefined} content
+ * @param {Set<string>} mutedWords - stored lowercase (normalized on parse)
+ * @returns {boolean}
+ */
+export function matchesMutedWord(content, mutedWords) {
+  if (!content || !mutedWords || mutedWords.size === 0) return false;
+  const haystack = content.toLowerCase();
+  for (const word of mutedWords) {
+    if (word && haystack.includes(word)) return true;
+  }
+  return false;
+}
+
+/**
+ * Drop events authored by muted pubkeys or whose content matches a muted
+ * word. Returns the input array unchanged (same reference) when nothing is
+ * muted, so reactive consumers don't churn.
+ * @template {{ pubkey: string, content?: string }} T
+ * @param {T[]} events
+ * @param {Set<string>} mutedPubkeys
+ * @param {Set<string>} mutedWords
+ * @returns {T[]}
+ */
+export function excludeMuted(events, mutedPubkeys, mutedWords) {
+  const hasPubkeys = mutedPubkeys && mutedPubkeys.size > 0;
+  const hasWords = mutedWords && mutedWords.size > 0;
+  if (!hasPubkeys && !hasWords) return events;
+  return events.filter(
+    (e) => !(hasPubkeys && mutedPubkeys.has(e.pubkey)) && !matchesMutedWord(e.content, mutedWords)
+  );
+}
