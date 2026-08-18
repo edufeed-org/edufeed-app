@@ -780,8 +780,8 @@
   "community_layout_bottom_tab_bar_boards": "Boards",
   "community_layout_bottom_tab_bar_articles": "Articles",
   "community_layout_bottom_tab_bar_settings": "Settings",
-  "community_content_tab_restricted": "Requires approval",
-  "community_content_tab_access_granted": "You have access",
+  "community_content_tab_restricted": "Restricted section – only cleared members (e.g. publishers) can publish here. Everyone can read.",
+  "community_content_tab_access_granted": "You are cleared – you can publish in this section.",
   "community_layout_bottom_tab_bar_scroll_left": "Scroll left",
   "community_layout_bottom_tab_bar_scroll_right": "Scroll right",
   "community_layout_sidebar_title": "Communities",
@@ -3396,5 +3396,6 @@
   "community_manager_chip": "You manage this community",
   "community_manager_chip_hint": "This community's key is stored in your browser — you can manage it regardless of the active account.",
   "area_settings_title": "Settings",
-  "area_settings_notifications": "Notifications"
+  "area_settings_notifications": "Notifications",
+  "channel_lock_tooltip": "Private channel – only invited members can read and write."
 }

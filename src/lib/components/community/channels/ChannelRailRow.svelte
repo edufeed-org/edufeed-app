@@ -95,7 +95,7 @@
     <span
       aria-hidden="true"
       data-testid="locked-badge"
-      title={m.concord_legend_private()}
+      title={m.channel_lock_tooltip()}
       class="shrink-0 opacity-60"><LockIcon class_="w-3 h-3" /></span
     >
   {/if}

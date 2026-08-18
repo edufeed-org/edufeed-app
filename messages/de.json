@@ -734,8 +734,8 @@
   "community_layout_bottom_tab_bar_calendar": "Kalender",
   "community_layout_bottom_tab_bar_articles": "Artikel",
   "community_layout_bottom_tab_bar_settings": "Einstellungen",
-  "community_content_tab_restricted": "Genehmigung erforderlich",
-  "community_content_tab_access_granted": "Zugang gewährt",
+  "community_content_tab_restricted": "Geschützter Bereich – veröffentlichen können hier nur freigeschaltete Mitglieder (z. B. Publisher). Lesen können alle.",
+  "community_content_tab_access_granted": "Du bist freigeschaltet – du kannst in diesem Bereich veröffentlichen.",
   "community_layout_bottom_tab_bar_scroll_left": "Nach links scrollen",
   "community_layout_bottom_tab_bar_scroll_right": "Nach rechts scrollen",
   "community_layout_sidebar_title": "Communities",
@@ -3396,5 +3396,6 @@
   "community_manager_chip": "Du verwaltest diese Community",
   "community_manager_chip_hint": "Der Schlüssel dieser Community ist in deinem Browser gespeichert — du kannst sie unabhängig vom aktiven Konto verwalten.",
   "area_settings_title": "Einstellungen",
-  "area_settings_notifications": "Benachrichtigungen"
+  "area_settings_notifications": "Benachrichtigungen",
+  "channel_lock_tooltip": "Privater Kanal – nur eingeladene Mitglieder können ihn lesen und schreiben."
 }

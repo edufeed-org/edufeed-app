@@ -13,6 +13,7 @@ import ChannelRailRow from '$lib/components/community/channels/ChannelRailRow.sv
 vi.mock('$lib/paraglide/messages', () => ({
   concord_legend_public: () => 'public',
   concord_legend_private: () => 'private',
+  channel_lock_tooltip: () => 'private channel tooltip',
   groups_channel_world_readable: () => 'world-readable'
 }));
 

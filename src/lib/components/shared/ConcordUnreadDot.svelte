@@ -14,12 +14,14 @@
   <span
     data-testid="concord-mention-pill"
     class="badge h-4 min-w-4 px-1 text-[10px] font-bold badge-secondary {className}"
+    title={m.concord_notif_mentioned()}
     aria-label={m.concord_notif_mentioned()}>@</span
   >
 {:else if unread}
   <span
     data-testid="concord-unread-dot"
     class="inline-block h-2 w-2 rounded-full bg-base-content {className}"
+    title={m.concord_notif_unread()}
     aria-label={m.concord_notif_unread()}
   ></span>
 {/if}
