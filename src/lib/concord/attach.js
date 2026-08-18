@@ -7,8 +7,7 @@
 // no package imports); publish-service/eventStore/communityRelays are
 // dynamically imported so components can import this module without adding a
 // new static edge into the concord dep tree.
-import { withoutConcordPointer, isConcordCommunityId } from './pointer.js';
-import { buildPointerUpdate } from './founding.js';
+import { withoutConcordPointer } from './pointer.js';
 import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
 
 /**
@@ -29,18 +28,6 @@ export function buildPointerRemoval(communikeyEvent) {
 // NIP-29 channel pointers use exactly this path rather than a second copy.
 // Behaviour is unchanged; only the home of the function moved.
 const signAndPublish = publishCommunityUpdate;
-
-/**
- * Link an existing Concord area to a Communikey community. The caller is
- * responsible for offering only OWN areas (attachableConcordAreas) — the
- * pointer itself carries no proof of area ownership.
- * @param {{communikeyEvent: any, communityId: string, relay?: string, communitySigner: any}} args
- */
-export async function attachConcordArea({ communikeyEvent, communityId, relay, communitySigner }) {
-  if (!communitySigner) throw new Error('No signer available for this community');
-  if (!isConcordCommunityId(communityId)) throw new Error('Invalid Concord community id');
-  return signAndPublish(buildPointerUpdate(communikeyEvent, communityId, relay), communitySigner);
-}
 
 /**
  * Remove the concord pointer from a Communikey community. The area survives —

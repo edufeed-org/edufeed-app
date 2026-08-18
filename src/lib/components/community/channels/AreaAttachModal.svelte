@@ -7,8 +7,6 @@
   //
   // Imports concord submodules DIRECTLY (never the barrel) — the convention
   // every Concord component follows (see CLAUDE.md's Concord section).
-  import { attachConcordArea } from '$lib/concord/attach.js';
-  import { useAttachableConcordAreas } from '$lib/concord/unlinked-areas.svelte.js';
   import { attachableAreaModes, attachGroupChannel } from '$lib/groups/community-attach.js';
   import {
     groupAttachCandidates,
@@ -34,7 +32,6 @@
   const modes = $derived(attachableAreaModes(communikeyEvent));
 
   // --- candidate list: everything the app already knows -------------------
-  const getAreas = useAttachableConcordAreas(() => manager.active?.pubkey);
   const getMyGroups = useMyGroups();
   const getChannelMeta = useChannelMetadata(() => getMyGroups());
 
@@ -42,19 +39,10 @@
   const candidates = $derived.by(() => {
     /** @type {Candidate[]} */
     const rows = [];
-    if (modes.concord) {
-      for (const area of getAreas()) {
-        rows.push({
-          kind: 'concord',
-          key: `concord:${area.communityId}`,
-          name: area.name,
-          category: m.attach_category_encrypted(),
-          worldReadable: false,
-          disabled: !!area.linkedToJoined,
-          area
-        });
-      }
-    }
+    // Concord-area candidates removed (laoc, 2026-08-18): linking an
+    // EXISTING area is a flow nobody realistically needs yet — communities
+    // found fresh areas; existing links keep working and can be detached.
+    // This modal now only serves the NIP-29 group-channel attach.
     if (modes.group) {
       for (const row of groupAttachCandidates({
         groups: getMyGroups(),
@@ -152,18 +140,7 @@
     if (!target || busy) return;
     busy = true;
     try {
-      if (target.kind === 'concord') {
-        await attachConcordArea({
-          communikeyEvent,
-          communityId: target.area.communityId,
-          relay: target.area.relay,
-          communitySigner
-        });
-        showToast(m.concord_attach_success({ name: target.area.name }), 'success');
-      } else {
-        // Reaching here means target.kind === 'group', which always carries
-        // a pointer — narrow it explicitly since TS can't infer that across
-        // the two `target` construction sites in the $derived.by above.
+      {
         const groupPointer = /** @type {{id: string, relay: string}} */ (target.pointer);
         const pointer = target.worldReadable
           ? { id: groupPointer.id, relay: groupPointer.relay }

@@ -81,7 +81,7 @@ beforeEach(() => {
 });
 
 describe('AreaAttachModal — unified picker', () => {
-  it('renders one list mixing areas and groups with category subtitles, no tabs', () => {
+  it('renders NIP-29 group candidates only — concord-area linking is retired (laoc 2026-08-18)', () => {
     concordAreas.value = [
       { communityId: 'area-1', name: 'Team intern', relay: 'wss://c', linkedToJoined: false }
     ];
@@ -89,13 +89,9 @@ describe('AreaAttachModal — unified picker', () => {
     channelMeta.value = { byKey: { 'book@wss://g.example/': meta39000([['private']]) } };
     render(AreaAttachModal, { props: PROPS });
     const rows = screen.getAllByTestId('attach-candidate');
-    expect(rows).toHaveLength(2);
-    expect(rows.map((r) => r.textContent)).toEqual([
-      expect.stringContaining('Encrypted group'),
-      expect.stringContaining('Closed group')
-    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toEqual(expect.stringContaining('Closed group'));
     expect(screen.queryByTestId('attach-tab-concord')).toBeNull();
-    expect(screen.queryByTestId('protocol-notice')).toBeNull();
   });
 
   it('asks the access question only for a private NIP-29 selection', async () => {

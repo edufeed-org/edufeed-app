@@ -14,7 +14,6 @@
   import { detachConcordArea } from '$lib/concord/attach.js';
   import { getCommunitySigner, isCommunityOwner } from '$lib/helpers/community-signer.js';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
-  import AreaAttachModal from '$lib/components/community/channels/AreaAttachModal.svelte';
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
   import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
   import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
@@ -60,7 +59,7 @@
   // shortcut; this card is the discoverable entry point.
   const getConcord = useConcordCommunity(() => communikeyEvent);
   const concordArea = $derived(getConcord());
-  /** @type {'attach' | 'create' | 'detach' | null} */
+  /** @type {'create' | 'detach' | null} */
   let concordOverlay = $state(null);
   let detaching = $state(false);
 
@@ -430,13 +429,6 @@
                           >
                             {m.concord_settings_create()}
                           </button>
-                          <button
-                            class="btn mt-2 btn-ghost btn-sm"
-                            data-testid="concord-settings-attach"
-                            onclick={() => (concordOverlay = 'attach')}
-                          >
-                            🔗 {m.concord_attach_secondary()}
-                          </button>
                         </div>
                       {/if}
                     </div>
@@ -576,9 +568,7 @@
   </div>
 </div>
 
-{#if concordOverlay === 'attach'}
-  <AreaAttachModal {communikeyEvent} onClose={() => (concordOverlay = null)} />
-{:else if concordOverlay === 'create'}
+{#if concordOverlay === 'create'}
   <ChannelCreateWizard
     {communikeyEvent}
     communityProfile={profileEvent}

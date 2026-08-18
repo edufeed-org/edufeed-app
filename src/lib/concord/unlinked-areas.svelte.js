@@ -6,11 +6,7 @@
 import { of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { getConcordState, getConcordClient } from './client.svelte.js';
-import {
-  unlinkedConcordAreas,
-  attachableConcordAreas,
-  linkedConcordIds
-} from './unlinked-areas.js';
+import { unlinkedConcordAreas, linkedConcordIds } from './unlinked-areas.js';
 import { useObservable } from './bridge.svelte.js';
 import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -41,27 +37,6 @@ export function useUnlinkedConcordAreas() {
     unlinkedConcordAreas({
       communities: getConcordState().communities,
       linkedIds: linkedConcordIds(getCommunikeyEvents())
-    });
-}
-
-/**
- * Concord areas the active user OWNS, as candidates for the "attach existing
- * area" picker (settings card / founding pane). Same joined-10222 input as
- * {@link useUnlinkedConcordAreas} so `linkedToJoined` disabling and the
- * unlinked sidebar list can never disagree about what counts as linked.
- * @param {() => string | null | undefined} getOwnerPubkey reactive getter for the active user's pubkey
- * @returns {() => import('./unlinked-areas.js').AttachableArea[]}
- */
-export function useAttachableConcordAreas(getOwnerPubkey) {
-  // The Concord flag stays THIS side's gate: with it off there is no
-  // Concord surface to keep consistent, so nothing needs fetching.
-  const getCommunikeyEvents = useJoinedCommunikeyEvents(() => !!runtimeConfig.concord?.enabled);
-
-  return () =>
-    attachableConcordAreas({
-      communities: getConcordState().communities,
-      linkedIds: linkedConcordIds(getCommunikeyEvents()),
-      ownerPubkey: getOwnerPubkey()
     });
 }
 

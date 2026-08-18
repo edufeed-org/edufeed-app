@@ -73,49 +73,6 @@ export function unlinkedConcordAreas({ communities, linkedIds }) {
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * @typedef {{communityId: string, name: string, iconPointer: import('./blob-media.js').BlobPointerLike | undefined, relay: string | undefined, linkedToJoined: boolean}} AttachableArea
- */
-
-/**
- * Concord areas the given pubkey OWNS, as candidates for linking to a kind
- * 10222 community (settings "attach existing area" picker). Ownership is the
- * attach eligibility rule: only the area owner can moderate/invite from the
- * linked community, so pointing a 10222 at someone else's area would produce
- * a channels tab whose admin controls silently don't work.
- *
- * - Dissolved areas are excluded entirely — attaching a tombstone is nonsense.
- * - Areas already linked to a JOINED community are kept but flagged
- *   (`linkedToJoined`) so the picker can show them disabled instead of
- *   silently hiding them. `linkedIds` only covers joined communities' 10222s
- *   (same input as {@link unlinkedConcordAreas}), so a link held by a
- *   community the user never joined is not detected — acceptable: the pointer
- *   write is last-writer-wins per 10222 and never mutates the area itself.
- * - `relay` is the area's first material relay, used as the pointer's relay
- *   hint on attach.
- *
- * @param {{communities: any[] | null | undefined, linkedIds: Set<string>, ownerPubkey: string | null | undefined}} args
- * @returns {AttachableArea[]} sorted by name
- */
-export function attachableConcordAreas({ communities, linkedIds, ownerPubkey }) {
-  if (!ownerPubkey) return [];
-  /** @type {Map<string, AttachableArea>} */
-  const byId = new Map();
-  for (const state of communities ?? []) {
-    const communityId = state?.material?.community_id;
-    if (!communityId || byId.has(communityId)) continue;
-    if (state?.material?.owner !== ownerPubkey || state?.dissolved) continue;
-    byId.set(communityId, {
-      communityId,
-      name: concordAreaDisplayName(state),
-      iconPointer: state.metadata?.icon,
-      relay: state.material?.relays?.[0],
-      linkedToJoined: linkedIds.has(communityId)
-    });
-  }
-  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
 /** @typedef {'disabled'|'invalid'|'login'|'render'} PrivateAreaGate */
 
 /**

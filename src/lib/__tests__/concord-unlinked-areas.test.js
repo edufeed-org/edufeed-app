@@ -4,7 +4,6 @@ import {
   unlinkedConcordAreas,
   linkedConcordIds,
   concordAreaDisplayName,
-  attachableConcordAreas,
   privateAreaGate,
   areaAbbreviation,
   areaColorClass,
@@ -241,98 +240,5 @@ describe('areaColorClass', () => {
     ];
     const classes = new Set(ids.map(areaColorClass));
     expect(classes.size).toBeGreaterThan(1);
-  });
-});
-
-describe('attachableConcordAreas', () => {
-  const OWNER = '1'.repeat(64);
-  const OTHER = '2'.repeat(64);
-
-  /**
-   * @param {string} id
-   * @param {string} name
-   * @param {any} [overrides]
-   */
-  function owned(id, name, overrides = {}) {
-    return { material: { community_id: id, name, owner: OWNER }, ...overrides };
-  }
-
-  it('lists only areas the given pubkey owns', () => {
-    const communities = [
-      owned(A, 'Mine'),
-      { material: { community_id: B, name: 'Theirs', owner: OTHER } }
-    ];
-    const result = attachableConcordAreas({
-      communities,
-      linkedIds: new Set(),
-      ownerPubkey: OWNER
-    });
-    expect(result.map((r) => r.communityId)).toEqual([A]);
-  });
-
-  it('flags areas already linked to a joined community instead of hiding them', () => {
-    const communities = [owned(A, 'Linked'), owned(B, 'Free')];
-    const result = attachableConcordAreas({
-      communities,
-      linkedIds: new Set([A]),
-      ownerPubkey: OWNER
-    });
-    expect(result.find((r) => r.communityId === A)?.linkedToJoined).toBe(true);
-    expect(result.find((r) => r.communityId === B)?.linkedToJoined).toBe(false);
-  });
-
-  it('excludes dissolved areas entirely (attaching a tombstone is nonsense)', () => {
-    const communities = [owned(A, 'Gone', { dissolved: true }), owned(B, 'Alive')];
-    const result = attachableConcordAreas({
-      communities,
-      linkedIds: new Set(),
-      ownerPubkey: OWNER
-    });
-    expect(result.map((r) => r.communityId)).toEqual([B]);
-  });
-
-  it('uses the shared display-name fallback chain and sorts by name', () => {
-    const communities = [
-      owned(B, 'Zebra'),
-      {
-        material: { community_id: A, name: 'Aardvark', owner: OWNER },
-        metadata: { name: 'Meta A' }
-      }
-    ];
-    const result = attachableConcordAreas({
-      communities,
-      linkedIds: new Set(),
-      ownerPubkey: OWNER
-    });
-    expect(result.map((r) => r.name)).toEqual(['Meta A', 'Zebra']);
-  });
-
-  it('surfaces iconPointer and the area relays for the pointer hint', () => {
-    const communities = [
-      {
-        material: { community_id: A, name: 'Icon', owner: OWNER, relays: ['wss://c.example'] },
-        metadata: { icon: { url: 'https://x/blob' } }
-      }
-    ];
-    const result = attachableConcordAreas({
-      communities,
-      linkedIds: new Set(),
-      ownerPubkey: OWNER
-    });
-    expect(result[0].iconPointer).toEqual({ url: 'https://x/blob' });
-    expect(result[0].relay).toBe('wss://c.example');
-  });
-
-  it('returns [] without an ownerPubkey (logged out) or communities', () => {
-    expect(
-      attachableConcordAreas({ communities: null, linkedIds: new Set(), ownerPubkey: OWNER })
-    ).toEqual([]);
-    expect(
-      attachableConcordAreas({
-        communities: [owned(A, 'X')],
-        linkedIds: new Set(),
-        ownerPubkey: undefined
-      })
-    ).toEqual([]);
   });
 });

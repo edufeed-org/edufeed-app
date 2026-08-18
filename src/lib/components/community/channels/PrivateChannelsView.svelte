@@ -678,13 +678,6 @@
             >
               🔒 {m.concord_new_channel()}
             </button>
-            <button
-              class="btn btn-outline"
-              data-testid="concord-attach-open"
-              onclick={() => openAreaOverlay('attach-area')}
-            >
-              🔗 {m.concord_attach_secondary()}
-            </button>
           </div>
           <p class="mx-auto mt-3 max-w-sm text-xs text-base-content/60">
             {m.concord_attach_pane_hint()}
