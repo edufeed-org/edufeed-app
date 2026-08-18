@@ -23,6 +23,7 @@
   import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
   import { useConcordCommunity, shouldShowChannelsTab } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { parseMembershipPointer } from '$lib/groups/community-membership.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
@@ -186,7 +187,8 @@
       pointer: concord.pointer,
       isOwner: isCommunityOwner(data.pubkey),
       isMember: concord.membership === 'member',
-      hasGroupChannels: parseGroupPointers(communikeyEvent).length > 0
+      hasGroupChannels: parseGroupPointers(communikeyEvent).length > 0,
+      hasMembershipPointer: !!parseMembershipPointer(communikeyEvent)
     });
   });
   const groupPointersForNav = $derived(parseGroupPointers(communikeyEvent));

@@ -17,6 +17,7 @@
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { parseGroupPointers, sharedRelayOf, channelKey } from '$lib/groups/community-pointer.js';
+  import { parseMembershipPointer } from '$lib/groups/community-membership.js';
   import { stufe2Pointers, areaMemberRows } from '$lib/groups/area-members.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { accessChoiceToNip29 } from '$lib/groups/access-choice.js';
@@ -63,9 +64,13 @@
 
   // Area detection: once the community's 10222 lists any group pointer,
   // every channel it grows from here is a NIP-29 group too (Stufe B) — else
-  // this is the existing Concord flow, byte-for-byte.
+  // this is the existing Concord flow, byte-for-byte. A moderated community
+  // BEFORE its first channel has zero group pointers but a membership
+  // pointer — that's NIP-29 territory too; falling through to Concord
+  // founding there would bolt the wrong engine onto it (laoc, 2026-08-18).
   const groupPointers = $derived(parseGroupPointers(communikeyEvent));
-  const isGroupMode = $derived(groupPointers.length > 0);
+  const membershipPointer = $derived(parseMembershipPointer(communikeyEvent));
+  const isGroupMode = $derived(groupPointers.length > 0 || !!membershipPointer);
   // Shared glyph/derived-private for both modes: 'invited' always means
   // private/locked, regardless of backend.
   const isPrivate = $derived(tier === 'invited');
@@ -210,8 +215,11 @@
 
   async function createGroupChannel() {
     // Mixed-relay pointer lists are unaddressable — there is no single relay
-    // to create the new channel on. Abort before touching the network.
-    const relay = sharedRelayOf(groupPointers);
+    // to create the new channel on. Abort before touching the network. The
+    // FIRST channel has no group pointers to share a relay yet: it lands on
+    // the membership pointer's relay, next to the roster root group.
+    const relay =
+      groupPointers.length > 0 ? sharedRelayOf(groupPointers) : membershipPointer?.relay;
     if (!relay) {
       showToast(m.wizard_no_shared_relay(), 'error');
       return;

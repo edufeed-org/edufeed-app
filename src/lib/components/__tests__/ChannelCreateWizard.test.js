@@ -79,8 +79,9 @@ const attachGroupChannel = vi.hoisted(() => vi.fn(async (/** @type {any} */ _arg
 vi.mock('$lib/groups/community-attach.js', () => ({ attachGroupChannel }));
 
 const relayConnStub = { publish: vi.fn(), request: vi.fn() };
+const poolRelaySpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: { relay: vi.fn(() => relayConnStub) },
+  pool: { relay: poolRelaySpy.mockImplementation(() => relayConnStub) },
   // ProfileAvatar imports eventStore statically — a bare partial mock (only
   // `pool`) breaks it even though this suite never renders a profile.
   eventStore: {
@@ -386,6 +387,18 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
   /** No group pointers → Concord mode. */
   const concordCommunity = () => ({ kind: 10222, pubkey: PUBKEY, tags: [], content: '' });
 
+  /** A moderated community BEFORE its first channel: a membership pointer,
+   *  zero group pointers. Must run in NIP-29 mode (falling into Concord
+   *  founding here would bolt the wrong engine onto a NIP-29 community —
+   *  laoc, 2026-08-18) and create on the membership pointer's relay, since
+   *  there are no group pointers to share one yet. */
+  const moderatedCommunity = () => ({
+    kind: 10222,
+    pubkey: PUBKEY,
+    tags: [['membership', 'root-1', GROUP_RELAY]],
+    content: ''
+  });
+
   /** Fill the name and land on the access step for either fixture. */
   async function toAccessStep(/** @type {any} */ communikeyEvent) {
     render(ChannelCreateWizard, {
@@ -417,6 +430,34 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
     await fireEvent.click(screen.getByTestId('wizard-access-invited'));
     expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
+  });
+
+  it('moderated community with zero channels runs in NIP-29 mode', async () => {
+    await toAccessStep(moderatedCommunity());
+    // The weltoffen checkbox is the NIP-29-only affordance — its presence
+    // under 'members' proves the wizard did not fall into Concord mode.
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
+  });
+
+  it('first channel of a moderated community: creates on the membership pointer relay', async () => {
+    const onCreated = vi.fn();
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent: moderatedCommunity(), onClose: () => {}, onCreated }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    // Default 'invited' tier — no Stufe-2 rosters exist to wait for.
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    expect(poolRelaySpy).toHaveBeenCalledWith(GROUP_RELAY);
+    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
+    expect(attachGroupChannel.mock.calls[0][0].pointer).toEqual(
+      expect.objectContaining({ relay: GROUP_RELAY })
+    );
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
   });
 
   it('Concord mode: no weltoffen checkbox in either access state', async () => {

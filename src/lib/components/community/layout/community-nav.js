@@ -7,6 +7,7 @@
  */
 import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
 import { shouldShowChannelsTab } from '$lib/concord/community.svelte.js';
+import { parseMembershipPointer } from '$lib/groups/community-membership.js';
 import { uniqueBy } from '$lib/helpers/unique.js';
 
 /**
@@ -41,7 +42,10 @@ export function communityNavTabIds({
     pointer,
     isOwner,
     isMember,
-    hasGroupChannels
+    hasGroupChannels,
+    // Derived here from the event itself (not a caller input) so
+    // ContentNavSidebar/BottomTabBar didn't need a new prop for it.
+    hasMembershipPointer: !!parseMembershipPointer(communityEvent)
   });
   if (!showChannels) return base;
 

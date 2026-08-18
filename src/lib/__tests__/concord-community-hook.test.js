@@ -36,6 +36,23 @@ describe('shouldShowChannelsTab', () => {
   it('hidden for owner without pointer — founding lives in settings now', () => {
     expect(shouldShowChannelsTab({ ...base, isOwner: true })).toBe(false);
   });
+  // A moderated community (membership pointer) with zero channels: the type
+  // decision HAS been made, so its owner needs the Kanäle zone — it carries
+  // the only "+ Neuer Kanal" path to the first channel (laoc, 2026-08-18:
+  // Edufeed flipped to moderated, no way to create a channel). Independent
+  // of the Concord flag — this is NIP-29 territory.
+  it('visible for the owner of a moderated community with zero channels, flag off', () => {
+    expect(
+      shouldShowChannelsTab({ ...base, enabled: false, isOwner: true, hasMembershipPointer: true })
+    ).toBe(true);
+  });
+  // Non-owners have nothing to see there until a channel exists — mobile
+  // would otherwise grow an empty Kanäle tab.
+  it('hidden for a visitor of a moderated community with zero channels', () => {
+    expect(shouldShowChannelsTab({ ...base, enabled: false, hasMembershipPointer: true })).toBe(
+      false
+    );
+  });
   it('hidden otherwise', () => {
     expect(shouldShowChannelsTab(base)).toBe(false);
   });

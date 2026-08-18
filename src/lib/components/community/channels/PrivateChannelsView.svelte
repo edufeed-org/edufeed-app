@@ -32,6 +32,7 @@
   // protected area — a Concord area OR a set of NIP-29 groups — but the rail
   // is one list either way, so both sources are merged before rendering.
   import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { parseMembershipPointer } from '$lib/groups/community-membership.js';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { relayBadges } from '$lib/groups/group-badges.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
@@ -205,6 +206,11 @@
   // group channels the Concord founding offer has to stop — it would invite the
   // owner into precisely the mixed state the design rules out.
   const extendedByGroups = $derived(groupPointers.length > 0);
+  // Moderated community before its first channel: zero group pointers, but
+  // the membership pointer already commits it to NIP-29 — same overview
+  // pane and rail actions as extendedByGroups, never the Concord founding
+  // offer (laoc, 2026-08-18).
+  const isNip29Community = $derived(extendedByGroups || !!parseMembershipPointer(communikeyEvent));
   const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
   // Same population that sees a "+ Neuer Kanal" button somewhere — the shared
   // The locked pane's direct contact: the area owner (material.owner) —
@@ -381,7 +387,7 @@
   rail has to render for those too — otherwise the feature is invisible in
   exactly the case it was built for. The Concord flag still gates every
   Concord-specific surface below. -->
-{#if concord.enabled || groupPointers.length > 0}
+{#if concord.enabled || isNip29Community}
   <div class="flex h-full min-h-0">
     <!-- rail — MOBILE ONLY when hosted inside a community layout (the app
       sidebar's KANÄLE zone is the desktop channel surface there; rendering
@@ -480,7 +486,7 @@
           />
         {/if}
       {/each}
-      {#if extendedByGroups && canAttachGroup}
+      {#if isNip29Community && canAttachGroup}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
           data-testid="group-attach-open"
@@ -498,7 +504,7 @@
           {m.area_members_title()}
         </button>
       {/if}
-      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (extendedByGroups && canAttachGroup)}
+      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (isNip29Community && canAttachGroup)}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
           data-testid="concord-new-channel"
@@ -638,7 +644,7 @@
             </button>
           </div>
         </div>
-      {:else if extendedByGroups && !concord.community}
+      {:else if isNip29Community && !concord.community}
         <!-- Each NIP-29 channel opens its own route, so this pane never holds a
           chat — but it must not be the Concord founding offer either, and a
           bare "pick a channel" placard said nothing the rail beside it did not
@@ -784,8 +790,13 @@
         // the same communikeyEvent) — a NIP-29 channel has its own route
         // (the rail already links group rows there), while a Concord
         // channel lives inside this pane, selected via the shared store.
-        if (extendedByGroups) {
-          const relay = sharedRelayOf(groupPointers);
+        if (isNip29Community) {
+          // First-channel case: the optimistic attach normally lands the new
+          // pointer in groupPointers before this runs, but don't bet the
+          // navigation on that ordering — the membership pointer's relay is
+          // the same host.
+          const relay =
+            sharedRelayOf(groupPointers) ?? parseMembershipPointer(communikeyEvent)?.relay;
           if (relay) goto(groupHref({ id: channelId, relay }));
         } else if (concord.communityId) {
           selectConcordChannel(concord.communityId, channelId);

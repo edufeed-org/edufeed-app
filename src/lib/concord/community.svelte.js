@@ -15,25 +15,37 @@ import { memberTier } from './roles.js';
 
 /**
  * Visibility rule for the community "channels" tab (spec §7):
- * flag on AND (member OR pointer exists OR owner).
+ * flag on AND (member OR pointer exists).
  *
  * NIP-29 channels are a SECOND source for the same tab and are not Concord:
  * a community extended by groups has no Concord pointer, no Concord
  * membership and need not have the Concord flag on, so every Concord input
  * here is false for it. Its channels open the tab on their own — otherwise
- * the only list they have would be unreachable.
- * @param {{enabled: boolean, pointer: object|undefined, isOwner: boolean, isMember: boolean, hasGroupChannels?: boolean}} args
+ * the only list they have would be unreachable. Likewise a moderated
+ * community's membership pointer opens it for the OWNER even before the
+ * first channel exists.
+ * @param {{enabled: boolean, pointer: object|undefined, isOwner: boolean, isMember: boolean, hasGroupChannels?: boolean, hasMembershipPointer?: boolean}} args
  * @returns {boolean}
  */
-export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember, hasGroupChannels }) {
+export function shouldShowChannelsTab({
+  enabled,
+  pointer,
+  isOwner,
+  isMember,
+  hasGroupChannels,
+  hasMembershipPointer
+}) {
   if (hasGroupChannels) return true;
+  // A moderated community's owner needs the zone even at zero channels — it
+  // carries the only "+ Neuer Kanal" path to the FIRST one (laoc,
+  // 2026-08-18). Owner-only: everyone else has nothing to see until a
+  // channel exists (hasGroupChannels above covers them from then on).
+  // Before the Concord gate — NIP-29 doesn't depend on that flag.
+  if (hasMembershipPointer && isOwner) return true;
   if (!enabled) return false;
   // No bare-owner clause: founding an area is the settings type card's
-  // deliberate flow ("Privaten Bereich erstellen/verknüpfen"), not a side
-  // effect of a channels tab that appears before any type decision (laoc,
-  // 2026-08-18). isOwner still matters — but only alongside a pointer or a
-  // membership, both covered below.
-  void isOwner;
+  // deliberate flow ("Privaten Bereich erstellen"), not a side effect of a
+  // channels tab that appears before any type decision (laoc, 2026-08-18).
   return isMember || !!pointer;
 }
 

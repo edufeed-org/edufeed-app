@@ -87,14 +87,37 @@ describe('communityNavTabIds', () => {
     expect(ids).not.toContain('channels');
   });
 
-  it('shows channels for the owner even without a pointer or membership', () => {
+  // The bare-owner clause is gone (founding lives in the settings type
+  // card) — but once the type decision is made (membership pointer on the
+  // 10222), the owner's tab list must carry 'channels' again: it is the
+  // only path to "+ Neuer Kanal" for the FIRST channel (laoc, 2026-08-18).
+  // Derived from the event itself, so ContentNavSidebar/BottomTabBar need
+  // no extra prop.
+  it('hides channels for a bare owner — founding lives in settings now', () => {
     const ids = communityNavTabIds({
       communityEvent: openCommunityEvent(),
       ...baseArgs,
       concordEnabled: true,
       isOwner: true
     });
+    expect(ids).not.toContain('channels');
+  });
+
+  it('shows channels for the owner of a moderated community with zero channels', () => {
+    const ids = communityNavTabIds({
+      communityEvent: openCommunityEvent([['membership', 'root-1', RELAY]]),
+      ...baseArgs,
+      isOwner: true
+    });
     expect(ids).toContain('channels');
+  });
+
+  it('hides channels for a visitor of a moderated community with zero channels', () => {
+    const ids = communityNavTabIds({
+      communityEvent: openCommunityEvent([['membership', 'root-1', RELAY]]),
+      ...baseArgs
+    });
+    expect(ids).not.toContain('channels');
   });
 
   it('inserts channels before settings when the tab list has no chat tab', () => {
