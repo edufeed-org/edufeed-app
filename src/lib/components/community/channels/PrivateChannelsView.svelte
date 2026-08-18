@@ -57,6 +57,7 @@
   import ChannelMembersModal from './ChannelMembersModal.svelte';
   import ChannelExplainer from './ChannelExplainer.svelte';
   import KeyBackupModal from './KeyBackupModal.svelte';
+  import { PeopleIcon, SettingsIcon } from '$lib/components/icons';
   import InviteInboxModal from './InviteInboxModal.svelte';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
@@ -473,24 +474,28 @@
         community too, and its rail is the only chrome it has. Linked mode
         skips this (the community sidebar footer already exists there). -->
       {#if !communikeyEvent && concord.community && !concord.dissolved}
-        <div class="mt-auto flex flex-col gap-1 border-t border-base-300 pt-2">
+        <!-- Same row markup as ContentNavSidebar's footer (icons, padding,
+          hover) — the two rails must not read as different apps. -->
+        <nav class="menu mt-auto w-full space-y-1 pt-2">
           {#if activeChannel}
             <button
-              class="btn justify-start btn-ghost btn-sm"
+              class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 hover:bg-base-300/60"
               data-testid="area-footer-members"
               onclick={() => (overlay = 'members')}
             >
-              {m.community_members()}
+              <PeopleIcon class_="w-5 h-5" />
+              <span class="text-sm font-medium">{m.community_members_title()}</span>
             </button>
           {/if}
           <button
-            class="btn justify-start btn-ghost btn-sm"
+            class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 hover:bg-base-300/60"
             data-testid="area-footer-settings"
             onclick={() => (overlay = 'area-settings')}
           >
-            {m.area_settings_title()}
+            <SettingsIcon class_="w-5 h-5" />
+            <span class="text-sm font-medium">{m.area_settings_title()}</span>
           </button>
-        </div>
+        </nav>
       {/if}
     </aside>
 
