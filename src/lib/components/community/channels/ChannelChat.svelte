@@ -1,5 +1,6 @@
 <script>
   import { onMount, tick } from 'svelte';
+  import { PeopleIcon } from '$lib/components/icons';
   import { nip19 } from 'nostr-tools';
   // Imports directly from the concord submodule (not the barrel) — same
   // convention as PrivateChannelsView.svelte: bridge.svelte.js has no
@@ -452,7 +453,8 @@
     data-testid="concord-members-button"
     onclick={() => openOverlay('members')}
   >
-    👥 {getMembers().size}
+    <PeopleIcon class_="w-4 h-4" />
+    {getMembers().size}
   </button>
   <div class="dropdown dropdown-end">
     <button
@@ -549,7 +551,7 @@
     class="flex shrink-0 items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
   >
     🔑 <span class="flex-1"><b>{m.concord_keybar_title()}</b> {m.concord_keybar_body()}</span>
-    <button class="btn btn-xs btn-neutral" onclick={() => openOverlay('backup')}
+    <button class="btn btn-xs btn-primary" onclick={() => openOverlay('backup')}
       >{m.concord_keybar_action()}</button
     >
     <button class="btn btn-circle btn-ghost btn-xs" onclick={dismissKeyBar}>✕</button>

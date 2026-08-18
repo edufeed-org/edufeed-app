@@ -271,7 +271,7 @@
       </button>
       {#if managesViaKey}
         <div
-          class="mx-4 mb-1 rounded-lg bg-base-300/50 px-2 py-1 text-[0.7rem] text-base-content/60"
+          class="mx-4 mb-1 rounded-lg bg-base-300/50 px-4 py-1.5 text-[0.7rem] text-base-content/60"
           data-testid="manager-chip"
           title={m.community_manager_chip_hint()}
         >
