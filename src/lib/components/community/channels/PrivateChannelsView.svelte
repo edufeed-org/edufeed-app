@@ -57,7 +57,14 @@
   import ChannelMembersModal from './ChannelMembersModal.svelte';
   import ChannelExplainer from './ChannelExplainer.svelte';
   import KeyBackupModal from './KeyBackupModal.svelte';
-  import { BellIcon, BellSlashIcon, PeopleIcon, SettingsIcon } from '$lib/components/icons';
+  import {
+    BellIcon,
+    BellSlashIcon,
+    EnvelopeIcon,
+    KeyIcon,
+    PeopleIcon,
+    SettingsIcon
+  } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -554,32 +561,42 @@
             <h2 class="mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
               {m.area_settings_section_general()}
             </h2>
+            <!-- Same row idiom as the nav rails: w-5 icon column, gap-3,
+              px-4 py-3, hover surface — no emoji, no bare ghost buttons
+              (laoc, 2026-08-18). -->
             <div class="card mb-6 bg-base-100 shadow-xl">
-              <div class="card-body gap-1">
+              <div class="card-body gap-1 p-3">
                 <button
-                  class="btn justify-start btn-ghost btn-sm"
+                  class="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left transition-all duration-200 hover:bg-base-300/60"
                   data-testid="area-settings-backup"
                   onclick={() => (overlay = 'backup')}
                 >
-                  🔑 {m.concord_backup_title()}
+                  <KeyIcon class_="w-5 h-5" title="" />
+                  <span class="text-sm font-medium">{m.concord_backup_title()}</span>
                 </button>
                 <button
-                  class="btn justify-start btn-ghost btn-sm"
+                  class="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left transition-all duration-200 hover:bg-base-300/60"
                   data-testid="area-settings-toasts"
                   onclick={toggleAreaToasts}
                 >
                   {#if getToastsEnabled()}
-                    <BellIcon class_="w-4 h-4" title="" />
+                    <BellIcon class_="w-5 h-5" title="" />
                   {:else}
-                    <BellSlashIcon class_="w-4 h-4" title="" />
+                    <BellSlashIcon class_="w-5 h-5" title="" />
                   {/if}
-                  {m.area_settings_notifications()}
+                  <span class="min-w-0 flex-1 text-sm font-medium"
+                    >{m.area_settings_notifications()}</span
+                  >
+                  <span class="badge badge-ghost badge-sm"
+                    >{getToastsEnabled() ? m.area_settings_on() : m.area_settings_off()}</span
+                  >
                 </button>
                 <button
-                  class="btn justify-start btn-ghost btn-sm"
+                  class="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left transition-all duration-200 hover:bg-base-300/60"
                   onclick={() => (overlay = 'inbox')}
                 >
-                  ✉ {m.concord_invites()}
+                  <EnvelopeIcon class_="w-5 h-5" title="" />
+                  <span class="text-sm font-medium">{m.concord_invites()}</span>
                 </button>
               </div>
             </div>
