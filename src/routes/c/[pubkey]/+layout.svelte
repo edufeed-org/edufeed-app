@@ -225,6 +225,11 @@
   });
 
   setContext('communikeyEvent', () => communikeyEvent);
+  // The ONE availability-corrected content view (the $effect above). The
+  // child page must render from THIS, not re-derive from $page.data — a
+  // second source of truth is exactly how the sidebar hid the channels tab
+  // while the pane still rendered it (laoc, 2026-08-18).
+  setContext('resolvedContentView', () => selectedContentType);
   // Shared with MainContentArea so the closed-community shell can tell
   // insiders (owner ∪ roster ∪ Concord member) from visitors.
   setContext('zoneMember', () => zoneMember);

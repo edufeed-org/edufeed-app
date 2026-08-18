@@ -1,17 +1,24 @@
 <script>
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { getContext } from 'svelte';
   import MainContentArea from '$lib/components/community/layout/MainContentArea.svelte';
 
   /** @type {{ data: any }} */
   let { data } = $props();
 
-  // selectedContentType is driven by +page.js, which validates ?view= against the
-  // set of community content types. Do NOT fall back to the raw searchParams value —
-  // that bypasses validation and lets foreign params (e.g. ?view=list from /calendar,
-  // preserved by buildCommunityPath on cross-route navigation) through, which makes
-  // MainContentArea render no view at all.
-  let selectedContentType = $derived($page.data.contentView || 'home');
+  // The layout owns the ONE validated, availability-corrected content view
+  // (it folds +page.js's contentView, the ?view param AND whether this
+  // community actually offers the view — e.g. carried ?view=channels on an
+  // area-less community falls back to home). Rendering from $page.data here
+  // created a second source of truth that ignored the correction (laoc,
+  // 2026-08-18). The data fallback only covers the first paint before the
+  // layout context getter registers.
+  /** @type {(() => string) | undefined} */
+  const getResolvedContentView = getContext('resolvedContentView');
+  let selectedContentType = $derived(
+    getResolvedContentView?.() ?? ($page.data.contentView || 'home')
+  );
 
   /**
    * Handle navigation from content type kind number or string tab name
