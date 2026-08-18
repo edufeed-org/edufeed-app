@@ -311,8 +311,11 @@
             ></span>
           {/if}
           {#if notificationSupported && concordSignerHasNip44}
+            <!-- Plain glyph, not btn-circle: the round button chrome pushed
+              the icon ~5px off the lock-badge column the rows above end in
+              (laoc, 2026-08-18). -->
             <button
-              class="btn ml-auto btn-circle btn-ghost btn-xs"
+              class="ml-auto cursor-pointer text-sm leading-none opacity-70 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
               data-testid="nav-concord-notif-bell"
               disabled={permissionDenied}
               title={permissionDenied
