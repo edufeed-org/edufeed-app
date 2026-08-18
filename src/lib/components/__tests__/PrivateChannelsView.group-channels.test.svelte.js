@@ -158,7 +158,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     });
 
     const [row] = await screen.findAllByTestId('group-channel-row');
-    expect(row.textContent).toContain('\u{1F512}');
+    expect(row.querySelector('[data-testid="locked-badge"]')).toBeTruthy();
     expect(row.querySelector('[data-testid="world-readable-badge"]')).toBeNull();
   });
 

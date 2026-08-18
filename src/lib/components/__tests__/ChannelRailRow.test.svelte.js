@@ -20,7 +20,7 @@ describe('ChannelRailRow', () => {
   it('draws a locked row with the # glyph AND a trailing lock badge', () => {
     render(ChannelRailRow, { props: { symbol: '#', name: 'leitung', locked: true } });
     const badge = screen.getByTestId('locked-badge');
-    expect(badge.textContent).toBe('\u{1F512}');
+    expect(badge.querySelector('svg')).toBeTruthy(); // LockIcon, not an emoji
     expect(screen.getByText('#')).toBeTruthy();
   });
 

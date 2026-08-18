@@ -12,6 +12,7 @@
   `href` makes the row a link, otherwise it is a button. Nothing else changes.
 -->
 <script>
+  import { LockIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -68,6 +69,15 @@
     >{symbol}</span
   >
   <span class={nameClass}>{name}</span>
+  {#if trailing}
+    <!-- Fixed-width slot: a dot that arrives late must land in space the row
+         already reserved, not push the rail sideways. Renders BEFORE the
+         access badges so those end on the same right-edge column as the
+         INHALTE rows' locks (laoc, 2026-08-18). -->
+    <span data-testid="rail-trailing-slot" class="flex min-w-4 shrink-0 items-center justify-center"
+      >{@render trailing()}</span
+    >
+  {/if}
   {#if worldReadable}
     <!-- Weltoffen: readable from outside the community entirely. An addition
          to the # glyph, never a third category. -->
@@ -79,21 +89,14 @@
     >
   {/if}
   {#if locked}
-    <!-- Invite-only: the lock trails the name (Armada's rail pattern) so the
-         row keeps its # channel affordance. Mutually exclusive with the
-         globe by construction — a channel is never both. -->
+    <!-- Invite-only: same LockIcon as the INHALTE rows' restriction badge —
+         the amber emoji read as a different vocabulary (laoc, 2026-08-18).
+         Mutually exclusive with the globe by construction. -->
     <span
       aria-hidden="true"
       data-testid="locked-badge"
       title={m.concord_legend_private()}
-      class="shrink-0 text-[0.7rem] opacity-60">&#128274;</span
-    >
-  {/if}
-  {#if trailing}
-    <!-- Fixed-width slot: a dot that arrives late must land in space the row
-         already reserved, not push the rail sideways. -->
-    <span data-testid="rail-trailing-slot" class="flex min-w-4 shrink-0 items-center justify-center"
-      >{@render trailing()}</span
+      class="shrink-0 opacity-60"><LockIcon class_="w-3 h-3" /></span
     >
   {/if}
 {/snippet}
