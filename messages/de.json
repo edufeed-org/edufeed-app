@@ -3406,5 +3406,6 @@
   "community_basics_closed_sections_hint": "Die öffentlichen Inhaltsbereiche dieser privaten Community verwaltest du über das Schaufenster (unten unter „Typ & Zugang“).",
   "area_settings_section_general": "Sicherheit & Benachrichtigungen",
   "area_settings_on": "An",
-  "area_settings_off": "Aus"
+  "area_settings_off": "Aus",
+  "concord_dissolve_confirm_label_fallback": "Tippe zur Bestätigung: {word}"
 }

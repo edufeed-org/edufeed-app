@@ -345,11 +345,17 @@
     }
   }
 
-  // Typed confirmation for the permanent, whole-area dissolve.
+  // Typed confirmation for the permanent, whole-area dissolve. The name to
+  // re-type is the AREA's own (decrypted engine metadata) — communityProfile
+  // is a linked-mode prop the standalone /private page never passes, so
+  // reading only it made every standalone dissolve fall back to the generic
+  // word while the label still demanded "the area's name" (laoc,
+  // 2026-08-18).
   let dissolveConfirmText = $state('');
-  const dissolveExpected = $derived(
-    (communityProfile?.name || '').trim() || m.concord_dissolve_confirm_fallback()
+  const dissolveAreaName = $derived(
+    (concord.community?.metadata?.name || communityProfile?.name || '').trim()
   );
+  const dissolveExpected = $derived(dissolveAreaName || m.concord_dissolve_confirm_fallback());
   const dissolveConfirmed = $derived(
     dissolveConfirmText.trim().toLowerCase() === dissolveExpected.toLowerCase()
   );
@@ -877,7 +883,9 @@
           class="mb-1 block text-left text-xs text-base-content/60"
           for="concord-dissolve-confirm-input"
         >
-          {m.concord_dissolve_confirm_label({ name: dissolveExpected })}
+          {dissolveAreaName
+            ? m.concord_dissolve_confirm_label({ name: dissolveExpected })
+            : m.concord_dissolve_confirm_label_fallback({ word: dissolveExpected })}
         </label>
         <input
           id="concord-dissolve-confirm-input"

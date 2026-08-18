@@ -3406,5 +3406,6 @@
   "community_basics_closed_sections_hint": "This private community's public content sections are managed via the public window (below under “Type & access”).",
   "area_settings_section_general": "Security & notifications",
   "area_settings_on": "On",
-  "area_settings_off": "Off"
+  "area_settings_off": "Off",
+  "concord_dissolve_confirm_label_fallback": "Type to confirm: {word}"
 }
