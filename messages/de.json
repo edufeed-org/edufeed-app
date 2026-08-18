@@ -3403,5 +3403,6 @@
   "community_settings_section_access": "Typ & Zugang",
   "community_settings_section_membership": "Mitgliedschaft",
   "community_basics_saved": "Community-Einstellungen gespeichert",
-  "community_basics_closed_sections_hint": "Die öffentlichen Inhaltsbereiche dieser privaten Community verwaltest du über das Schaufenster (unten unter „Typ & Zugang“)."
+  "community_basics_closed_sections_hint": "Die öffentlichen Inhaltsbereiche dieser privaten Community verwaltest du über das Schaufenster (unten unter „Typ & Zugang“).",
+  "area_settings_section_general": "Sicherheit & Benachrichtigungen"
 }

@@ -525,7 +525,88 @@
     <section
       class="flex min-w-0 flex-1 flex-col bg-base-100 {mobileChat ? 'flex' : 'hidden md:flex'}"
     >
-      {#if extendedByGroups && !concord.community}
+      {#if overlay === 'area-settings'}
+        <!-- Standalone-area settings as a PANE, not a modal — same visual
+          grammar as the community settings page (grouped uppercase headers,
+          cards, Gefahrenzone last), so the two settings surfaces read as one
+          app (laoc, 2026-08-18). -->
+        <div class="overflow-y-auto p-6">
+          <div class="container mx-auto max-w-3xl">
+            <div class="mb-6 flex items-center gap-3">
+              <SettingsIcon class_="w-6 h-6 text-primary" title="" />
+              <h1 class="text-2xl font-bold">{m.area_settings_title()}</h1>
+            </div>
+
+            <h2 class="mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
+              {m.community_views_settings_type_title()}
+            </h2>
+            <div class="card mb-6 bg-base-100 shadow-xl">
+              <div class="card-body">
+                <p class="flex items-center gap-2 font-semibold">
+                  {m.community_type_closed_title()}
+                  <span class="badge badge-ghost badge-sm">Concord</span>
+                  <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
+                </p>
+                <p class="text-sm text-base-content/70">{m.concord_unlinked_note()}</p>
+              </div>
+            </div>
+
+            <h2 class="mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
+              {m.area_settings_section_general()}
+            </h2>
+            <div class="card mb-6 bg-base-100 shadow-xl">
+              <div class="card-body gap-1">
+                <button
+                  class="btn justify-start btn-ghost btn-sm"
+                  data-testid="area-settings-backup"
+                  onclick={() => (overlay = 'backup')}
+                >
+                  🔑 {m.concord_backup_title()}
+                </button>
+                <button
+                  class="btn justify-start btn-ghost btn-sm"
+                  data-testid="area-settings-toasts"
+                  onclick={toggleAreaToasts}
+                >
+                  {#if getToastsEnabled()}
+                    <BellIcon class_="w-4 h-4" title="" />
+                  {:else}
+                    <BellSlashIcon class_="w-4 h-4" title="" />
+                  {/if}
+                  {m.area_settings_notifications()}
+                </button>
+                <button
+                  class="btn justify-start btn-ghost btn-sm"
+                  onclick={() => (overlay = 'inbox')}
+                >
+                  ✉ {m.concord_invites()}
+                </button>
+              </div>
+            </div>
+
+            {#if isConcordOwner}
+              <div class="card border border-error/40 bg-base-100 shadow-xl">
+                <div class="card-body">
+                  <h2 class="mb-2 card-title text-error">
+                    {m.community_views_settings_danger_title()}
+                  </h2>
+                  <button
+                    class="btn w-full btn-outline btn-error"
+                    data-testid="area-settings-dissolve"
+                    onclick={() => (overlay = 'dissolve')}
+                  >
+                    {m.concord_dissolve_action()}
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            <button class="btn mt-6 btn-ghost btn-sm" onclick={() => (overlay = null)}>
+              ← {m.concord_cancel()}
+            </button>
+          </div>
+        </div>
+      {:else if extendedByGroups && !concord.community}
         <!-- Each NIP-29 channel opens its own route, so this pane never holds a
           chat — but it must not be the Concord founding offer either, and a
           bare "pick a channel" placard said nothing the rail beside it did not
@@ -740,53 +821,6 @@
     />
   {:else if overlay === 'explainer'}
     <ChannelExplainer onClose={() => (overlay = null)} />
-  {:else if overlay === 'area-settings'}
-    <!-- Lightweight hub: the area-level actions already exist as overlays
-      and services — this modal just gives them the one findable home the
-      linked community's settings page provides (laoc, 2026-08-18). -->
-    <div class="modal-open modal" role="dialog">
-      <div class="modal-box max-w-sm">
-        <h3 class="text-lg font-extrabold">{m.area_settings_title()}</h3>
-        <div class="mt-4 flex flex-col gap-2">
-          <button
-            class="btn justify-start btn-ghost btn-sm"
-            data-testid="area-settings-backup"
-            onclick={() => (overlay = 'backup')}
-          >
-            🔑 {m.concord_backup_title()}
-          </button>
-          <button
-            class="btn justify-start btn-ghost btn-sm"
-            data-testid="area-settings-toasts"
-            onclick={toggleAreaToasts}
-          >
-            {#if getToastsEnabled()}
-              <BellIcon class_="w-4 h-4" title="" />
-            {:else}
-              <BellSlashIcon class_="w-4 h-4" title="" />
-            {/if}
-            {m.area_settings_notifications()}
-          </button>
-          <button class="btn justify-start btn-ghost btn-sm" onclick={() => (overlay = 'inbox')}>
-            ✉ {m.concord_invites()}
-          </button>
-          {#if isConcordOwner}
-            <button
-              class="btn justify-start text-error btn-ghost btn-sm"
-              data-testid="area-settings-dissolve"
-              onclick={() => (overlay = 'dissolve')}
-            >
-              {m.concord_dissolve_action()}
-            </button>
-          {/if}
-        </div>
-        <div class="modal-action">
-          <button class="btn btn-ghost" onclick={() => (overlay = null)}
-            >{m.concord_cancel()}</button
-          >
-        </div>
-      </div>
-    </div>
   {:else if overlay === 'backup'}
     <KeyBackupModal onClose={() => (overlay = null)} />
   {:else if overlay === 'delete-channel' && concord.community && activeChannel}

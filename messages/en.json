@@ -3403,5 +3403,6 @@
   "community_settings_section_access": "Type & access",
   "community_settings_section_membership": "Membership",
   "community_basics_saved": "Community settings saved",
-  "community_basics_closed_sections_hint": "This private community's public content sections are managed via the public window (below under “Type & access”)."
+  "community_basics_closed_sections_hint": "This private community's public content sections are managed via the public window (below under “Type & access”).",
+  "area_settings_section_general": "Security & notifications"
 }
