@@ -900,7 +900,7 @@
           id="concord-dissolve-confirm-input"
           class="input-bordered input input-sm mb-3 w-full"
           data-testid="concord-dissolve-confirm-input"
-          placeholder={m.concord_dissolve_confirm_placeholder()}
+          placeholder={dissolveExpected}
           bind:value={dissolveConfirmText}
           use:focusOnMount
         />

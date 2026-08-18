@@ -3171,7 +3171,6 @@
   "concord_channel_delete_failed": "Couldn't delete the channel.",
   "concord_dissolved_recover": "Start a new area",
   "concord_dissolve_confirm_label": "Type the area name to confirm: {name}",
-  "concord_dissolve_confirm_placeholder": "Area name",
   "concord_dissolve_confirm_fallback": "DISSOLVE",
   "concord_attachment_unavailable": "Attachment unavailable",
   "concord_thread_title": "Thread",
