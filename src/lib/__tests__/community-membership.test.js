@@ -6,9 +6,6 @@ import {
   buildMembershipTag,
   withMembershipPointer,
   withoutMembershipPointer,
-  parseApplicationRef,
-  buildApplicationTag,
-  withApplicationRef,
   withoutApplicationRef,
   deriveCommunityType
 } from '$lib/groups/community-membership.js';
@@ -88,44 +85,20 @@ describe('membership tag writers', () => {
   });
 });
 
-describe('application ref', () => {
+describe('withoutApplicationRef (legacy-tag cleanup)', () => {
   const ADDR = `30168:${PK}:edufeed-membership`;
-  it('parses address and optional relay hint', () => {
-    expect(parseApplicationRef(event([['application', ADDR, RELAY]]))).toEqual({
-      address: ADDR,
-      relay: RELAY
-    });
-    expect(parseApplicationRef(event([['application', ADDR]]))).toEqual({
-      address: ADDR,
-      relay: null
-    });
+  // The application-form layer is gone (YAGNI, 2026-08-18) — this survives
+  // solely so flip-to-open strips legacy `application` tags.
+  it('strips application tags, leaves siblings', () => {
+    const out = withoutApplicationRef([
+      ['application', ADDR, RELAY],
+      ['d', 'x']
+    ]);
+    expect(out).toEqual([['d', 'x']]);
   });
-  it('rejects non-30168 or malformed addresses', () => {
-    expect(parseApplicationRef(event([['application', `30000:${PK}:x`]]))).toBeNull();
-    expect(parseApplicationRef(event([['application', '30168:notenoughparts']]))).toBeNull();
-    expect(parseApplicationRef(event([]))).toBeNull();
-  });
-  it('build/with/without round-trip', () => {
-    const ref = { address: ADDR, relay: RELAY };
-    expect(buildApplicationTag(ref)).toEqual(['application', ADDR, RELAY]);
-    expect(buildApplicationTag({ address: ADDR })).toEqual(['application', ADDR]);
-    const out = withApplicationRef([['application', `30168:${PK}:old`]], ref);
-    expect(out.filter((t) => t[0] === 'application')).toEqual([['application', ADDR, RELAY]]);
-    expect(withoutApplicationRef(out)).toEqual([]);
-  });
-  it('withoutApplicationRef never throws on malformed tags; passes through null entries', () => {
+  it('never throws on malformed tags; passes through null entries', () => {
     const out = withoutApplicationRef(/** @type {any} */ ([null, ['application', ADDR, RELAY]]));
     expect(out).toEqual([null]);
-  });
-  it('withApplicationRef never throws on malformed tags; removes application and preserves nulls', () => {
-    const out = withApplicationRef(
-      /** @type {any} */ ([null, ['application', `30168:${PK}:old`]]),
-      { address: ADDR, relay: RELAY }
-    );
-    expect(out).toContainEqual(null);
-    expect(out.filter((t) => Array.isArray(t) && t[0] === 'application')).toEqual([
-      ['application', ADDR, RELAY]
-    ]);
   });
 });
 

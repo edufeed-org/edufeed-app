@@ -12,7 +12,7 @@
 import { manager } from '$lib/stores/accounts.svelte';
 import { useProfileListAccess } from './profile-list-access.svelte.js';
 import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
-import { deriveCommunityType, parseApplicationRef } from '$lib/groups/community-membership.js';
+import { deriveCommunityType } from '$lib/groups/community-membership.js';
 import { parseCommunityContentTypes, sectionIsGated } from '$lib/helpers/communityRelays.js';
 import { sectionAllowedAuthors, canPublishSection } from '$lib/groups/roster-access.js';
 
@@ -57,9 +57,13 @@ export function useCommunityAccess(getCommunityEvent, getRelays) {
       );
     },
     getFormRef(sectionName) {
-      if (!isModerated()) return legacy.getFormRef(sectionName);
-      if (!sectionIsGated(sectionByName(sectionName))) return null;
-      return parseApplicationRef(getCommunityEvent())?.address ?? null;
+      // Moderated communities have no form-based join anymore — the
+      // application-form layer was removed as YAGNI (laoc, 2026-08-18);
+      // joining is invite-code only, so form CTAs (hero "Anfrage stellen",
+      // HomeView's gate banner) must not render for them. Legacy gated
+      // sections keep their read-side form refs.
+      if (isModerated()) return null;
+      return legacy.getFormRef(sectionName);
     }
   };
 }

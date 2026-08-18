@@ -263,12 +263,13 @@
     {/if}
 
     <!-- Moderated (NIP-29) root-group join lane — independent of the
-         kind-30000 follow above. Only for non-roster-members without a
-         structured application form (that path keeps its own button above).
-         Held back entirely while the roster is still loading: isMember()
-         defaults false until the first roster event arrives, so rendering
-         join affordances before then would flash them at an actual member. -->
-    {#if isModerated && activeUser && !isRosterMember && !getCommunityWideFormRef?.()}
+         kind-30000 follow above. Invite-code (+ bare 9021 while the root
+         group is open) is THE join path — the structured application form
+         was removed as YAGNI (laoc, 2026-08-18). Held back entirely while
+         the roster is still loading: isMember() defaults false until the
+         first roster event arrives, so rendering join affordances before
+         then would flash them at an actual member. -->
+    {#if isModerated && activeUser && !isRosterMember}
       <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
         {#if isRosterLoading}
           <span class="loading loading-xs loading-spinner text-base-content/40"></span>

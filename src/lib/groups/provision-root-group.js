@@ -78,12 +78,10 @@ async function isConfirmedGroupAdmin(relayConn, groupId, pubkey) {
 /**
  * Seat the community pubkey itself as a 39001 admin (role 'admin', signed by
  * the human creator — measured accepted on groups.0xchat.com 2026-08-14).
- * Load-bearing, not cosmetic: application copies are encrypted per reviewer
- * (= 39001 admins, community-application.js), and roster put/remove ops must
- * be signable while the community account is the ACTIVE one — the state the
- * creation wizard leaves the creator in. Without the seat, the community
- * account can neither read join requests nor approve members (journey-test
- * bugs #2/#3). A failed seat fails provisioning: a community that cannot
+ * Load-bearing, not cosmetic: roster put/remove ops must be signable while
+ * the community account is the ACTIVE one — the state the creation wizard
+ * leaves the creator in. Without the seat, the community account cannot
+ * manage its own roster (journey-test bugs #2/#3). A failed seat fails provisioning: a community that cannot
  * manage itself must not be created (the founding marker makes re-runs
  * recover and re-seat).
  * @param {any} relayConn

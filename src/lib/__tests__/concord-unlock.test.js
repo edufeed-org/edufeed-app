@@ -56,6 +56,10 @@ vi.mock('applesauce-concord', () => {
       this.pubkey = opts.signer.pubkey;
       this.communities$ = { subscribe: () => ({ unsubscribe() {} }) };
       this.phase$ = { subscribe: () => ({ unsubscribe() {} }) };
+      // Auto-read of pending direct invites (invite UX round 2) subscribes
+      // this at setup for nip44 signers; a never-emitting stub keeps it out
+      // of these tests' way.
+      this.directInviteWatcher$ = { subscribe: () => ({ unsubscribe() {} }) };
     }
     get communityList$() {
       return of(casts.communityList);

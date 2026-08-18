@@ -2,14 +2,13 @@
 /**
  * MembershipPane — Task 8. Root-group roster management (counts + a
  * "Mitglieder verwalten" button wired to GroupMembersModal via the roster
- * hook) and application-form management (select/save/remove/create-default
- * a kind 30168 template referenced by the community's `application` tag).
- * useRootRoster/useFormTemplates/GroupMembersModal internals are covered by
- * their own suites; this only proves the wiring.
+ * hook) and invite-code minting. The application-form layer was removed as
+ * YAGNI (laoc, 2026-08-18) — a legacy `application` tag on the 10222 must
+ * render NOTHING here. useRootRoster/GroupMembersModal internals are
+ * covered by their own suites; this only proves the wiring.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
-import { parseApplicationRef } from '$lib/groups/community-membership.js';
 
 const OWNER = 'a'.repeat(64);
 const ADMIN2 = 'b'.repeat(64);
@@ -26,10 +25,6 @@ const {
   communitySigner,
   isCommunityOwner,
   getCommunitySigner,
-  formTemplateFixture,
-  publishCommunityUpdate,
-  publishEvent,
-  eventStoreAdd,
   showToast,
   publishToGroupRelay
 } = vi.hoisted(() => {
@@ -56,17 +51,6 @@ const {
     communitySigner: { signEvent: vi.fn(async (t) => ({ ...t, id: 'sig', pubkey: OWNER })) },
     isCommunityOwner: vi.fn(() => true),
     getCommunitySigner: vi.fn(() => communitySigner),
-    formTemplateFixture: {
-      kind: 30168,
-      pubkey: OWNER,
-      tags: [
-        ['d', 'membership'],
-        ['name', 'Standard-Formular']
-      ]
-    },
-    publishCommunityUpdate: vi.fn(async (template) => template),
-    publishEvent: vi.fn(async () => {}),
-    eventStoreAdd: vi.fn(),
     showToast: vi.fn(),
     publishToGroupRelay: vi.fn(async () => ({}))
   };
@@ -89,21 +73,9 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => activeUserFixture.value
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: eventStoreAdd },
   pool: poolMock
 }));
 vi.mock('$lib/helpers/community-signer.js', () => ({ getCommunitySigner, isCommunityOwner }));
-vi.mock('$lib/stores/form-templates.svelte.js', () => ({
-  useFormTemplates: () => () => [formTemplateFixture]
-}));
-vi.mock('$lib/helpers/publishCommunityUpdate.js', () => ({ publishCommunityUpdate }));
-vi.mock('$lib/services/publish-service.js', () => ({ publishEvent }));
-// Inlined literal (not the outer const): vi.mock factories are hoisted
-// above regular top-level declarations, so only vi.hoisted() bindings or
-// literals are safe to reference here (see the TDZ note above).
-vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getCommunikeyRelays: () => ['wss://communikey.example/']
-}));
 vi.mock('$lib/helpers/toast', () => ({ showToast }));
 vi.mock('$lib/groups/group-management.js', async () => {
   const actual = await vi.importActual('$lib/groups/group-management.js');
@@ -116,24 +88,11 @@ vi.mock(
   '$lib/components/groups/GroupMembersModal.svelte',
   () => import('./fixtures/GroupMembersModalStub.svelte')
 );
-vi.mock(
-  '$lib/components/community/settings/ApplicationApprovals.svelte',
-  () => import('./fixtures/ApplicationApprovalsStub.svelte')
-);
 vi.mock('$lib/paraglide/messages', () => ({
   community_membership_pane_title: () => 'Mitglieder & Rollen',
   community_membership_pane_manage: () => 'Mitglieder verwalten',
   community_membership_pane_member_count: (/** @type {{count: number}} */ p) =>
     `${p.count} Mitglieder`,
-  community_membership_pane_application_title: () => 'Beitrittsformular',
-  community_membership_pane_application_lead: () => 'lead',
-  community_membership_pane_application_none: () => 'Kein Formular hinterlegt',
-  community_membership_pane_application_save: () => 'Übernehmen',
-  community_membership_pane_application_remove: () => 'Formular entfernen',
-  community_membership_pane_application_create_default: () => 'Standard-Formular erstellen',
-  community_membership_pane_application_saved: () => 'Gespeichert.',
-  community_membership_pane_application_failed: (/** @type {{reason: string}} */ p) =>
-    `Speichern fehlgeschlagen: ${p.reason}`,
   community_invite_title: () => 'Einladungscode',
   community_invite_create: () => 'Code erstellen',
   community_invite_hint: () =>
@@ -142,12 +101,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_invite_copied: () => 'Kopiert.',
   community_invite_failed: (/** @type {{reason: string}} */ p) =>
     `Code konnte nicht erstellt werden: ${p.reason}`,
-  community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar',
-  // Pulled in transitively by createDefaultMembershipForm -> getDefaultMembershipForm.
-  default_form_name: () => 'Standard-Formular',
-  default_form_field_name: () => 'Name',
-  default_form_field_email: () => 'E-Mail',
-  default_form_field_motivation: () => 'Motivation'
+  community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar'
 }));
 
 const { default: MembershipPane } = await import(
@@ -191,11 +145,6 @@ beforeEach(() => {
   };
   activeUserFixture.value = { pubkey: OWNER, signer: {} };
   isCommunityOwner.mockClear().mockReturnValue(true);
-  getCommunitySigner.mockClear().mockReturnValue(communitySigner);
-  communitySigner.signEvent.mockClear();
-  publishCommunityUpdate.mockClear();
-  publishEvent.mockClear();
-  eventStoreAdd.mockClear();
   showToast.mockClear();
   publishToGroupRelay.mockClear();
   // jsdom has no navigator.clipboard; stub it
@@ -264,12 +213,10 @@ describe('MembershipPane — roster', () => {
   });
 });
 
-// Task 3 (approvals reachability): the pane's own isAdmin gate — roster
-// admins ∪ the key-holding owner — no longer relies on SettingsView passing
-// an owner-only mount condition. These lock in the three tiers: stranger
-// (nothing), non-owner 39001 admin (roster management + approvals, but not
-// the owner-only application-form card), and the key-holding owner
-// (everything).
+// Task 3: the pane's own isAdmin gate — roster admins ∪ the key-holding
+// owner — no longer relies on SettingsView passing an owner-only mount
+// condition. These lock in the tiers: stranger (nothing), non-owner 39001
+// admin and key-holding owner (roster management + invite code).
 describe('MembershipPane — access gating', () => {
   it('renders nothing for a signed-in user who is neither a roster admin nor the owner', () => {
     isCommunityOwner.mockReturnValue(false);
@@ -279,10 +226,9 @@ describe('MembershipPane — access gating', () => {
     });
     expect(screen.queryByTestId('membership-pane')).toBeNull();
     expect(screen.queryByTestId('membership-manage-members')).toBeNull();
-    expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
   });
 
-  it('shows roster management + approvals for a non-owner 39001 admin, but not the application-form card', async () => {
+  it('shows roster management for a non-owner 39001 admin', () => {
     isCommunityOwner.mockReturnValue(false);
     activeUserFixture.value = { pubkey: ADMIN2, signer: {} };
     render(MembershipPane, {
@@ -291,14 +237,9 @@ describe('MembershipPane — access gating', () => {
 
     expect(screen.getByTestId('membership-pane')).toBeTruthy();
     expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
-    expect(await screen.findByTestId('stub-application-approvals')).toBeTruthy();
-
-    expect(screen.queryByTestId('membership-application-select')).toBeNull();
-    expect(screen.queryByTestId('membership-application-save')).toBeNull();
-    expect(screen.queryByTestId('membership-application-create-default')).toBeNull();
   });
 
-  it('shows roster management, invite code, and the application-form card for the key-holding owner', () => {
+  it('shows roster management + invite code for the key-holding owner', () => {
     render(MembershipPane, {
       props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
     });
@@ -306,142 +247,17 @@ describe('MembershipPane — access gating', () => {
     expect(screen.getByTestId('membership-pane')).toBeTruthy();
     expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
     expect(screen.getByTestId('membership-invite-create')).toBeTruthy();
-    expect(screen.getByTestId('membership-application-select')).toBeTruthy();
-    expect(screen.getByTestId('membership-application-create-default')).toBeTruthy();
-  });
-});
-
-describe('MembershipPane — application form', () => {
-  it('shows the "no form" hint when no application ref is set', () => {
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
-    });
-    expect(screen.getByText('Kein Formular hinterlegt')).toBeTruthy();
-    expect(screen.queryByTestId('membership-application-remove')).toBeNull();
   });
 
-  it('shows the remove button when an application ref is already set', () => {
+  // The removed Beitrittsformular layer: a legacy `application` tag on the
+  // 10222 must not resurrect any form UI or approvals queue.
+  it('renders no application-form UI even when a legacy application tag exists', () => {
     render(MembershipPane, {
       props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
     });
-    expect(screen.getByTestId('membership-application-remove')).toBeTruthy();
-  });
-
-  it('saving publishes a template whose parseApplicationRef matches the selected form', async () => {
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
-    });
-
-    const select = /** @type {HTMLSelectElement} */ (
-      screen.getByTestId('membership-application-select')
-    );
-    await fireEvent.change(select, { target: { value: `30168:${OWNER}:membership` } });
-    await fireEvent.click(screen.getByTestId('membership-application-save'));
-
-    await waitFor(() => expect(publishCommunityUpdate).toHaveBeenCalledOnce());
-    const [template] = /** @type {any[]} */ (publishCommunityUpdate.mock.calls[0]);
-    expect(parseApplicationRef(template)).toEqual({
-      address: `30168:${OWNER}:membership`,
-      relay: COMMUNIKEY_RELAY
-    });
-    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'success');
-  });
-
-  it('saving over an already-referenced form keeps its existing relay hint', async () => {
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
-    });
-
-    // Re-save the same address that's already referenced (with a distinct
-    // relay from getCommunikeyRelays, proving the existing ref's relay wins).
-    await fireEvent.click(screen.getByTestId('membership-application-save'));
-
-    await waitFor(() => expect(publishCommunityUpdate).toHaveBeenCalledOnce());
-    const [template] = /** @type {any[]} */ (publishCommunityUpdate.mock.calls[0]);
-    expect(parseApplicationRef(template)?.relay).toBe(COMMUNIKEY_RELAY);
-  });
-
-  it('remove publishes a template with no application ref', async () => {
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
-    });
-
-    await fireEvent.click(screen.getByTestId('membership-application-remove'));
-
-    await waitFor(() => expect(publishCommunityUpdate).toHaveBeenCalledOnce());
-    const [template] = /** @type {any[]} */ (publishCommunityUpdate.mock.calls[0]);
-    expect(parseApplicationRef(template)).toBeNull();
-  });
-
-  it('create-default publishes a new form template and selects it', async () => {
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
-    });
-
-    await fireEvent.click(screen.getByTestId('membership-application-create-default'));
-
-    await waitFor(() => expect(communitySigner.signEvent).toHaveBeenCalled());
-    await waitFor(() => expect(publishEvent).toHaveBeenCalled());
-    expect(eventStoreAdd).toHaveBeenCalled();
-
-    const select = /** @type {HTMLSelectElement} */ (
-      screen.getByTestId('membership-application-select')
-    );
-    await waitFor(() => expect(select.value).toBe(`30168:${OWNER}:membership`));
-  });
-
-  it('renders the approvals queue (with roster + community props) when an application ref exists', async () => {
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
-    });
-    const stub = await screen.findByTestId('stub-application-approvals');
-    expect(stub.dataset.communityid).toBe(OWNER);
-    expect(stub.dataset.communityname).toBe('X');
-    expect(JSON.parse(/** @type {string} */ (stub.dataset.application))).toEqual([
-      'application',
-      `30168:${OWNER}:membership`,
-      COMMUNIKEY_RELAY
-    ]);
-    expect(JSON.parse(/** @type {string} */ (stub.dataset.rosterpointer))).toEqual({
-      id: 'root1',
-      relay: GROUPS_RELAY
-    });
-  });
-
-  it('does not render the approvals queue when no application ref is set', () => {
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
-    });
+    expect(screen.queryByTestId('membership-application-select')).toBeNull();
+    expect(screen.queryByTestId('membership-application-create-default')).toBeNull();
     expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
-  });
-
-  it('does not render the approvals queue for a non-admin', () => {
-    isCommunityOwner.mockReturnValue(false);
-    rosterFixture.value = {
-      ...rosterFixture.value,
-      admins: [{ pubkey: ADMIN2, roles: ['admin'] }]
-    };
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
-    });
-    expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
-  });
-
-  it('a rejected save shows an error toast with the reason', async () => {
-    publishCommunityUpdate.mockRejectedValueOnce(new Error('relay down'));
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
-    });
-
-    const select = /** @type {HTMLSelectElement} */ (
-      screen.getByTestId('membership-application-select')
-    );
-    await fireEvent.change(select, { target: { value: `30168:${OWNER}:membership` } });
-    await fireEvent.click(screen.getByTestId('membership-application-save'));
-
-    await waitFor(() =>
-      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('relay down'), 'error')
-    );
   });
 });
 

@@ -101,8 +101,13 @@ describe('useCommunityAccess — moderated communities', () => {
     expect(access.getMembers('Forum')).toEqual([]);
   });
 
-  it('getFormRef: the community-level application address for gated sections only', () => {
-    expect(access.getFormRef('Calendar')).toBe(`30168:${OWNER}:beitritt`);
+  // The application-form layer is gone (YAGNI, 2026-08-18): moderated
+  // communities never expose a form ref — even for gated sections, even
+  // when a legacy `application` tag still sits on the 10222 — so no form
+  // CTA (hero, gate banner) can render for them. Legacy communities keep
+  // the delegated path (covered in the open/legacy describe).
+  it('getFormRef: always null for moderated communities', () => {
+    expect(access.getFormRef('Calendar')).toBeNull();
     expect(access.getFormRef('Forum')).toBeNull();
   });
 

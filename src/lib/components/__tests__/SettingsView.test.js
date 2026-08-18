@@ -278,11 +278,13 @@ describe('SettingsView — MembershipPane mount gate (Task 3: approvals reachabi
     expect(screen.queryByTestId('membership-pane')).toBeNull();
   });
 
-  it('mounts MembershipPane with application-form access for the key-holding owner', async () => {
+  it('mounts MembershipPane (roster + invite code, no form card) for the key-holding owner', async () => {
     render(SettingsView, {
       props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
     });
     expect(await screen.findByTestId('membership-pane')).toBeTruthy();
-    expect(screen.getByTestId('membership-application-select')).toBeTruthy();
+    expect(screen.getByTestId('membership-invite-create')).toBeTruthy();
+    // The Beitrittsformular card is gone with the application-form layer.
+    expect(screen.queryByTestId('membership-application-select')).toBeNull();
   });
 });

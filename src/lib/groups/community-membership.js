@@ -3,9 +3,11 @@
 // Kind-10222 membership machinery per docs/nips/communikey-groups.md:
 //   ["membership", <root-group-id>, <relay>]  — the NIP-29 root group whose
 //     roster/roles ARE the community membership (moderated communities).
-//   ["application", "30168:<pubkey>:<d>", <relay?>] — optional structured
-//     intake form for joining.
-// Both singular by design, like the concord pointer and unlike the plural
+//   ["application", "30168:<pubkey>:<d>", <relay?>] — LEGACY: the optional
+//     structured intake form was removed as YAGNI (laoc, 2026-08-18);
+//     joining is invite-code only. Old events may still carry the tag —
+//     it round-trips through saves and is stripped on flip-to-open.
+// Singular by design, like the concord pointer and unlike the plural
 // channel `group` tags (src/lib/groups/community-pointer.js).
 //
 // Community TYPE is derived, never declared: concord pointer → closed,
@@ -18,7 +20,6 @@ export const MEMBERSHIP_TAG = 'membership';
 export const APPLICATION_TAG = 'application';
 
 /** @typedef {{id: string, relay: string}} MembershipPointer */
-/** @typedef {{address: string, relay?: string | null}} ApplicationRef */
 /** @typedef {'open' | 'moderated' | 'closed'} CommunityType */
 
 /**
@@ -65,53 +66,16 @@ export function withMembershipPointer(tags, pointer) {
   return [...withoutMembershipPointer(tags), buildMembershipTag(pointer)];
 }
 
-/** @param {unknown} address @returns {address is string} */
-function isFormAddress(address) {
-  if (typeof address !== 'string' || !address.startsWith('30168:')) return false;
-  const parts = address.split(':');
-  return parts.length === 3 && parts[1].length > 0 && parts[2].length > 0;
-}
-
 /**
- * First valid application-form reference on a community event, or null.
- * @param {{tags?: string[][]} | null | undefined} event
- * @returns {{address: string, relay: string | null} | null}
- */
-export function parseApplicationRef(event) {
-  if (!event || !Array.isArray(event.tags)) return null;
-  for (const tag of event.tags) {
-    if (!Array.isArray(tag) || tag[0] !== APPLICATION_TAG) continue;
-    if (!isFormAddress(tag[1])) continue;
-    return { address: tag[1], relay: typeof tag[2] === 'string' && tag[2] ? tag[2] : null };
-  }
-  return null;
-}
-
-/**
- * @param {ApplicationRef} ref
- * @returns {string[]}
- */
-export function buildApplicationTag(ref) {
-  const tag = [APPLICATION_TAG, ref.address];
-  if (ref.relay) tag.push(ref.relay);
-  return tag;
-}
-
-/**
+ * NEW tags array with every application tag removed. The application-form
+ * layer itself was removed as YAGNI (laoc, 2026-08-18) — this survives so
+ * flip-to-open still strips legacy `application` tags off communities
+ * created before the removal.
  * @param {string[][]} tags
  * @returns {string[][]}
  */
 export function withoutApplicationRef(tags) {
   return tags.filter((tag) => !(Array.isArray(tag) && tag[0] === APPLICATION_TAG));
-}
-
-/**
- * @param {string[][]} tags
- * @param {ApplicationRef} ref
- * @returns {string[][]}
- */
-export function withApplicationRef(tags, ref) {
-  return [...withoutApplicationRef(tags), buildApplicationTag(ref)];
 }
 
 /**

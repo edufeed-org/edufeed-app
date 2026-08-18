@@ -84,14 +84,14 @@ export function createDefaultContentTypes(enabledKeys = []) {
  * Build tags array for a kind 10222 community definition event.
  *
  * @param {CommunityFormData} data - Form data from the modal
- * @param {{ communityPubkey?: string, membership?: {id: string, relay: string}, application?: {address: string, relay?: string|null} }} [opts] - When communityPubkey is set,
+ * @param {{ communityPubkey?: string, membership?: {id: string, relay: string} }} [opts] - When communityPubkey is set,
  *   writes new-spec tags (profile list a-tags, enforced relays, languages).
  *   When absent, writes old-spec tags (badge a-tags, per-section relays).
- *   membership and application are new-spec only; ignored in old-spec mode.
+ *   membership is new-spec only; ignored in old-spec mode.
  * @returns {string[][]}
  */
 export function buildCommunityDefinitionTags(data, opts = {}) {
-  const { communityPubkey, membership, application } = opts;
+  const { communityPubkey, membership } = opts;
   const isNewSpec = !!communityPubkey;
 
   /** @type {string[][]} */
@@ -143,11 +143,6 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
   // and BEFORE the sections: section parsers absorb same-key tags positionally.
   if (isNewSpec && membership) {
     tags.push(['membership', membership.id, membership.relay]);
-  }
-  if (isNewSpec && application) {
-    const applicationTag = ['application', application.address];
-    if (application.relay) applicationTag.push(application.relay);
-    tags.push(applicationTag);
   }
 
   // Strict content marker: the modals present the full content-type

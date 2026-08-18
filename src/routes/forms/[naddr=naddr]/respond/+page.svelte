@@ -15,12 +15,6 @@
     nip44EncryptWith,
     signerHasNip44
   } from '$lib/helpers/forms.js';
-  import {
-    isCommunityApplication,
-    applicationSubmitGate,
-    resolveReviewers,
-    buildApplicationCopies
-  } from '$lib/helpers/community-application.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -38,37 +32,18 @@
   // ladder branch, which replaces the ENTIRE page (including the form) with
   // a bare alert — correct for pre-submit load failures (bad naddr, no
   // template found), where there is no form to preserve. A submit-time
-  // failure (no-reviewers, unresolved community, publish failure) happens
-  // AFTER the applicant has typed into the form, so it must render above the
-  // still-mounted FormRenderer instead of tearing the whole page down and
-  // losing their input.
+  // failure happens AFTER the applicant has typed into the form, so it must
+  // render above the still-mounted FormRenderer instead of tearing the
+  // whole page down and losing their input.
   let submitError = $state('');
-  // Set when a community application copy reached some root-group reviewers
-  // but not all. Not an error — any one reviewer can act on it, mirroring
-  // MembershipApplicationForm's partialDelivery — but the applicant should
-  // know review may be slower than usual.
-  let partialDelivery = $state(/** @type {{ delivered: number, total: number } | null} */ (null));
-
   /** @type {{ pubkey: string, identifier: string } | null} */
   let decodedForm = $state(null);
-  /** @type {import('nostr-tools').NostrEvent | null} */
-  let communityEvent = $state(null);
-  // Flips true 10s after the community-event load effect (below) starts,
-  // if the 10222 still hasn't resolved by then. Distinct from `communityEvent
-  // === null` alone — see applicationSubmitGate's doc comment for why the
-  // two must never be conflated.
-  let communityEventTimedOut = $state(false);
 
   let returnTo = $derived($page.url.searchParams.get('returnTo'));
+  // Still set by legacy gated-section links (AccessGateBanner) — drives the
+  // kind-30000 auto-join after submit, nothing else.
   let communityId = $derived($page.url.searchParams.get('communityId'));
   let parsedTemplate = $derived(formEvent ? parseFormTemplate(formEvent) : null);
-  // Whether it's safe to decide the submit branch yet. 'waiting'/'unresolved'
-  // block submission (see the template and handleSubmit's own guard below) —
-  // guessing here risks silently encrypting a moderated community's
-  // application to the wrong recipient.
-  let submitGate = $derived(
-    applicationSubmitGate({ communityId, communityEvent, timedOut: communityEventTimedOut })
-  );
 
   // Decode naddr and load form template
   $effect(() => {
@@ -101,42 +76,6 @@
     };
   });
 
-  // Load the community's kind:10222 event when this form was reached via a
-  // community join flow (?communityId=) — needed to decide whether this
-  // form IS the community's own application (isCommunityApplication) and,
-  // if so, to resolve its reviewers (resolveReviewers reads the membership
-  // pointer off this event). Every other path (legacy forms, the deployment
-  // membership form) never sets communityId or never matches, so formEvent
-  // stays the only dependency for those.
-  //
-  // Bounded wait: 10s from when this load starts. If the 10222 still hasn't
-  // resolved by then, applicationSubmitGate reports 'unresolved' instead of
-  // 'waiting', and handleSubmit surfaces form_respond_community_unresolved
-  // rather than hanging the submit button forever.
-  $effect(() => {
-    if (!communityId) {
-      communityEvent = null;
-      communityEventTimedOut = false;
-      return;
-    }
-    communityEventTimedOut = false;
-    const pointer = { kind: 10222, pubkey: communityId };
-    const relays = getCommunikeyRelays();
-    const loaderSub = addressLoader({ ...pointer, relays }).subscribe();
-    const modelSub = eventStore.replaceable(pointer).subscribe((event) => {
-      communityEvent = event || null;
-    });
-    const timeoutId = setTimeout(() => {
-      communityEventTimedOut = true;
-    }, 10000);
-
-    return () => {
-      loaderSub.unsubscribe();
-      modelSub.unsubscribe();
-      clearTimeout(timeoutId);
-    };
-  });
-
   // Check if user already submitted a response
   $effect(() => {
     if (!decodedForm || !manager.active) return;
@@ -164,106 +103,44 @@
 
   /** @param {Record<string, string>} values */
   async function handleSubmit(values) {
-    // FormRenderer now stays mounted (and its Submit button clickable)
-    // through an in-flight submission — see the template: only
-    // submitGate === 'waiting' unmounts it, isSubmitting no longer does, so
-    // typed input survives a submit-time error. That trades away the old
-    // "submit button disappears while sending" affordance for a double-click
-    // guard here instead.
+    // FormRenderer stays mounted (and its Submit button clickable) through
+    // an in-flight submission, so typed input survives a submit-time error.
+    // That trades away the old "submit button disappears while sending"
+    // affordance for a double-click guard here instead.
     if (isSubmitting || !manager.active || !formEvent || !decodedForm) return;
-
-    // Gate first, before touching isSubmitting/error state: 'waiting' means
-    // the community's 10222 is still in flight and the template already
-    // blocks the submit button for this case (defensive no-op here in case
-    // it's reached anyway, e.g. a stale click queued just before the gate
-    // flipped). 'unresolved' means the bounded wait elapsed with no 10222 —
-    // surface a distinct error instead of guessing and silently falling
-    // through to the legacy single-copy path (which would encrypt a
-    // moderated community's application to the form author, not to any
-    // actual reviewer).
-    const gate = applicationSubmitGate({
-      communityId,
-      communityEvent,
-      timedOut: communityEventTimedOut
-    });
-    if (gate === 'waiting') return;
-    if (gate === 'unresolved') {
-      submitError = m.form_respond_community_unresolved();
-      return;
-    }
 
     isSubmitting = true;
     submitError = '';
-    partialDelivery = null;
 
     try {
       const { pubkey: creatorPubkey, identifier } = decodedForm;
       const formAddress = `30168:${creatorPubkey}:${identifier}`;
 
-      // A community's own application form — reached via ?communityId= and
-      // whose `application` pointer resolves to this exact address — fans
-      // out to one NIP-44 copy per root-group reviewer (39001 admins)
-      // instead of the single copy to the form author below. Every other
-      // case (legacy public/private forms, the deployment-wide membership
-      // form, or a communityId whose 10222 turned out NOT to reference this
-      // form) keeps the original single-copy path byte-identical. Safe to
-      // trust communityEvent here — the gate above already confirmed it's
-      // either irrelevant (gate 'legacy') or resolved (gate 'ready').
-      if (communityId && isCommunityApplication(formAddress, communityEvent)) {
-        const reviewers = await resolveReviewers(communityEvent);
-        const copies = await buildApplicationCopies({
-          formAddress,
-          values,
-          signer: manager.active.signer,
-          reviewers
-        });
+      const responseTags = buildResponseTags(values);
+      const isPublic = !!parsedTemplate?.isPublic;
 
-        // allSettled, not all: one reviewer's relay outcome must not cancel
-        // another's, and any single reviewer seeing the application is
-        // enough to promise review — mirrors MembershipApplicationForm.
-        const results = await Promise.allSettled(
-          copies.map((copy, i) => publishEvent(copy, [reviewers[i]]))
-        );
-        const delivered = results.filter(
-          (r) => r.status === 'fulfilled' && r.value?.success
-        ).length;
+      /** @type {string[][]} */
+      const tags = [
+        ['a', formAddress],
+        ['p', creatorPubkey]
+      ];
 
-        if (delivered === 0) throw new Error(m.forms_submit_failed());
-        if (delivered < copies.length) {
-          partialDelivery = { delivered, total: copies.length };
-        }
+      let content = '';
 
-        // Mirror into the local store only for copies that actually landed.
-        results.forEach((r, i) => {
-          if (r.status === 'fulfilled' && r.value?.success) eventStore.add(copies[i]);
-        });
+      if (isPublic) {
+        tags.push(...responseTags);
       } else {
-        const responseTags = buildResponseTags(values);
-        const isPublic = !!parsedTemplate?.isPublic;
-
-        /** @type {string[][]} */
-        const tags = [
-          ['a', formAddress],
-          ['p', creatorPubkey]
-        ];
-
-        let content = '';
-
-        if (isPublic) {
-          tags.push(...responseTags);
-        } else {
-          // Encrypt response tags with NIP-44
-          const plaintext = JSON.stringify(responseTags);
-          content = await nip44EncryptWith(manager.active.signer, creatorPubkey, plaintext);
-          tags.push(['encrypted']);
-        }
-
-        const factory = createAppEventFactory({ signer: manager.active.signer });
-        const template = await factory.build({ kind: 1069, tags, content });
-        const signed = await factory.sign(template);
-        await publishEvent(signed);
-        eventStore.add(signed);
+        // Encrypt response tags with NIP-44
+        const plaintext = JSON.stringify(responseTags);
+        content = await nip44EncryptWith(manager.active.signer, creatorPubkey, plaintext);
+        tags.push(['encrypted']);
       }
+
+      const factory = createAppEventFactory({ signer: manager.active.signer });
+      const template = await factory.build({ kind: 1069, tags, content });
+      const signed = await factory.sign(template);
+      await publishEvent(signed);
+      eventStore.add(signed);
 
       // Auto-join community if this form was reached via join flow
       if (communityId) {
@@ -274,13 +151,7 @@
 
       submitted = true;
     } catch (err) {
-      // resolveReviewers' typed error gets a dedicated message; everything
-      // else falls back to the error's own message or the generic one.
-      if (/** @type {any} */ (err)?.code === 'no-reviewers') {
-        submitError = m.form_respond_no_reviewers();
-      } else {
-        submitError = err instanceof Error ? err.message : m.forms_submit_failed();
-      }
+      submitError = err instanceof Error ? err.message : m.forms_submit_failed();
     } finally {
       isSubmitting = false;
     }
@@ -311,14 +182,6 @@
     <div class="mb-4 alert alert-success">
       {parsedTemplate?.confirmationMessage || m.forms_submit_success()}
     </div>
-    {#if partialDelivery}
-      <div class="mb-4 alert alert-warning" data-testid="community-application-partial-delivery">
-        {m.membership_submit_partial({
-          delivered: partialDelivery.delivered,
-          total: partialDelivery.total
-        })}
-      </div>
-    {/if}
     {#if returnTo}
       <a href={returnTo} class="btn btn-primary">{m.forms_back_to_community()}</a>
     {:else}
@@ -330,20 +193,14 @@
         {submitError}
       </div>
     {/if}
-    {#if submitGate === 'waiting'}
-      <div class="flex justify-center p-8">
-        <span class="loading loading-lg loading-spinner"></span>
+    <!-- Stays mounted through an in-flight submit (isSubmitting no longer
+         swaps this out for a spinner) so typed input survives a
+         submit-time error instead of being wiped by an unmount/remount. -->
+    <FormRenderer {formEvent} onsubmit={handleSubmit} />
+    {#if isSubmitting}
+      <div class="mt-2 flex justify-center">
+        <span class="loading loading-sm loading-spinner"></span>
       </div>
-    {:else}
-      <!-- Stays mounted through an in-flight submit (isSubmitting no longer
-           swaps this out for a spinner) so typed input survives a
-           submit-time error instead of being wiped by an unmount/remount. -->
-      <FormRenderer {formEvent} onsubmit={handleSubmit} />
-      {#if isSubmitting}
-        <div class="mt-2 flex justify-center">
-          <span class="loading loading-sm loading-spinner"></span>
-        </div>
-      {/if}
     {/if}
   {/if}
 </div>

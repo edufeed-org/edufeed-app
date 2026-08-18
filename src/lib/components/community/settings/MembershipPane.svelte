@@ -1,10 +1,12 @@
 <!--
-  MembershipPane — Task 8. Root-group roster management + application-form
-  management for moderated communities: member/admin counts, a "Mitglieder
-  verwalten" button that opens GroupMembersModal (Task 7) wired to the root
-  group via useRootRoster, and a card to select/save/remove/create-default
-  the community's application form (kind 30168, referenced by the
-  `application` tag — community-membership.js).
+  MembershipPane — Task 8. Root-group roster management for moderated
+  communities: member/admin counts, a "Mitglieder verwalten" button that
+  opens GroupMembersModal (Task 7) wired to the root group via
+  useRootRoster, and invite-code minting. Joining a moderated community is
+  invite-code only — the structured application-form layer (Beitritts-
+  formular, kind 30168 + encrypted 1069 copies + approvals queue) was
+  removed as YAGNI (laoc, 2026-08-18); git history has the complete
+  feature if it's ever needed.
 
   Owns its own useRootRoster subscription (called during init, per its
   header comment) rather than SettingsView hosting a second one; the roster
@@ -15,40 +17,24 @@
   Rendered by SettingsView for any signed-in user on a moderated community
   (no ownership check there — see there) — this component decides visibility
   from its own roster: isAdmin (active user in roster.admins ∪ the
-  key-holding owner via isCommunityOwner) gates roster management + the
-  approvals queue, since a 39001 admin's put-user/approve ops are personal-
-  key NIP-29 ops that need no community key. Renders nothing for a signed-in
-  user who is neither. The application-form card is narrower still — isOwner
-  (key-holding owner) alone — because saving/removing an application ref is
-  a 10222 write.
+  key-holding owner via isCommunityOwner) gates roster management, since a
+  39001 admin's put-user ops are personal-key NIP-29 ops that need no
+  community key. Renders nothing for a signed-in user who is neither.
 -->
 <script>
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { getCommunitySigner, isCommunityOwner } from '$lib/helpers/community-signer.js';
-  import { useFormTemplates } from '$lib/stores/form-templates.svelte.js';
-  import { parseFormTemplate, createDefaultMembershipForm } from '$lib/helpers/forms.js';
-  import {
-    parseApplicationRef,
-    withApplicationRef,
-    withoutApplicationRef
-  } from '$lib/groups/community-membership.js';
-  import { communityUpdateTemplate } from '$lib/groups/community-flips.js';
-  import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
-  import { publishEvent } from '$lib/services/publish-service.js';
-  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-  import { getSeenRelays, getDisplayName } from 'applesauce-core/helpers';
-  import { unique, uniqueBy } from '$lib/helpers/unique.js';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { unique } from '$lib/helpers/unique.js';
   import { showToast } from '$lib/helpers/toast';
-  import { untrack } from 'svelte';
   import {
     buildCreateInviteTemplate,
     generateInviteCode,
     publishToGroupRelay
   } from '$lib/groups/group-management.js';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
-  import ApplicationApprovals from '$lib/components/community/settings/ApplicationApprovals.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -67,12 +53,6 @@
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
 
-  const communitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
-
-  // Key-holding owner: separate from isAdmin below because the
-  // application-form card (10222 writes) is owner-only, while roster
-  // management + approvals are open to any 39001 admin (personal-key
-  // NIP-29 ops, no community key needed).
   const isOwner = $derived(isCommunityOwner(communityId));
   const isAdmin = $derived(
     (!!activeUser && roster.admins.some((admin) => admin.pubkey === activeUser.pubkey)) || isOwner
@@ -137,134 +117,6 @@
       );
     }
   }
-
-  // --- Application form management ---------------------------------------
-
-  const getFormTemplates = useFormTemplates(() => {
-    const authors = communityId ? [communityId] : [];
-    if (activeUser?.pubkey && activeUser.pubkey !== communityId) authors.push(activeUser.pubkey);
-    return authors;
-  });
-
-  /** @param {any} template */
-  function addressOf(template) {
-    return `${template.kind}:${template.pubkey}:${parseFormTemplate(template).dTag}`;
-  }
-
-  const formOptions = $derived(
-    uniqueBy(getFormTemplates(), (t) => addressOf(t)).map((t) => {
-      const parsed = parseFormTemplate(t);
-      return { address: addressOf(t), name: parsed.name || parsed.dTag };
-    })
-  );
-
-  const applicationRef = $derived(parseApplicationRef(communikeyEvent));
-
-  let selectedAddress = $state('');
-  // Plain (non-$state) ref: the last address we synced FROM the prop,
-  // mutated only inside the effect below (see CLAUDE.md's plain-let rule).
-  // null means "never synced" — forces the first sync unconditionally so
-  // the initial applicationRef is always picked up.
-  let syncedAddress = /** @type {string | null} */ (null);
-  $effect(() => {
-    const nextAddress = applicationRef?.address ?? '';
-    const current = untrack(() => selectedAddress);
-    // Only overwrite the user's selection if they haven't touched it since
-    // the last sync (current still equals what we last synced from).
-    if (syncedAddress === null || current === syncedAddress) {
-      selectedAddress = nextAddress;
-    }
-    syncedAddress = nextAddress;
-  });
-
-  /**
-   * Relay hint for the application ref. Re-saving the address already
-   * referenced keeps its known-good relay; a newly chosen address prefers
-   * where we actually saw that template, else the community's own relay
-   * (never GROUPS_RELAYS — the form must be findable where the community
-   * lives, not on the NIP-29 groups relay).
-   * @param {string} address
-   * @returns {string | undefined}
-   */
-  function resolveApplicationRelay(address) {
-    if (applicationRef?.address === address && applicationRef.relay) return applicationRef.relay;
-    const template = getFormTemplates().find((t) => addressOf(t) === address);
-    const seenRelays = template && getSeenRelays(template);
-    return (seenRelays && [...seenRelays][0]) || getCommunikeyRelays()[0] || undefined;
-  }
-
-  let saving = $state(false);
-
-  async function handleSaveApplication() {
-    if (!communitySigner || !communikeyEvent || saving || !selectedAddress) return;
-    saving = true;
-    try {
-      const template = communityUpdateTemplate(
-        communikeyEvent,
-        withApplicationRef(communikeyEvent.tags ?? [], {
-          address: selectedAddress,
-          relay: resolveApplicationRelay(selectedAddress)
-        })
-      );
-      await publishCommunityUpdate(template, communitySigner);
-      showToast(m.community_membership_pane_application_saved(), 'success');
-    } catch (error) {
-      console.error('settings: application form save failed', error);
-      showToast(
-        m.community_membership_pane_application_failed({
-          reason: error instanceof Error ? error.message : String(error)
-        }),
-        'error'
-      );
-    } finally {
-      saving = false;
-    }
-  }
-
-  async function handleRemoveApplication() {
-    if (!communitySigner || !communikeyEvent || saving) return;
-    saving = true;
-    try {
-      const template = communityUpdateTemplate(
-        communikeyEvent,
-        withoutApplicationRef(communikeyEvent.tags ?? [])
-      );
-      await publishCommunityUpdate(template, communitySigner);
-      selectedAddress = '';
-      showToast(m.community_membership_pane_application_saved(), 'success');
-    } catch (error) {
-      console.error('settings: application form remove failed', error);
-      showToast(
-        m.community_membership_pane_application_failed({
-          reason: error instanceof Error ? error.message : String(error)
-        }),
-        'error'
-      );
-    } finally {
-      saving = false;
-    }
-  }
-
-  async function handleCreateDefault() {
-    if (!communitySigner || saving) return;
-    saving = true;
-    try {
-      const signed = await createDefaultMembershipForm(communitySigner);
-      await publishEvent(signed);
-      eventStore.add(signed);
-      selectedAddress = addressOf(signed);
-    } catch (error) {
-      console.error('settings: default application form creation failed', error);
-      showToast(
-        m.community_membership_pane_application_failed({
-          reason: error instanceof Error ? error.message : String(error)
-        }),
-        'error'
-      );
-    } finally {
-      saving = false;
-    }
-  }
 </script>
 
 {#if isAdmin}
@@ -321,74 +173,8 @@
           </div>
         {/if}
       </div>
-
-      <!-- Application-form card (10222 writes) — key-holding owner only,
-           unlike everything else in this pane which is open to any
-           39001 admin (see the isOwner/isAdmin split above). -->
-      {#if isOwner}
-        <div class="divider"></div>
-
-        <h3 class="text-sm font-bold">{m.community_membership_pane_application_title()}</h3>
-        <p class="text-sm text-base-content/70">
-          {m.community_membership_pane_application_lead()}
-        </p>
-        {#if !applicationRef}
-          <p class="text-xs text-base-content/60">
-            {m.community_membership_pane_application_none()}
-          </p>
-        {/if}
-
-        <div class="mt-2 flex flex-wrap items-center gap-2">
-          <select
-            class="select-bordered select select-sm"
-            data-testid="membership-application-select"
-            value={selectedAddress}
-            onchange={(e) => (selectedAddress = /** @type {HTMLSelectElement} */ (e.target).value)}
-          >
-            <option value="">—</option>
-            {#each formOptions as option (option.address)}
-              <option value={option.address}>{option.name}</option>
-            {/each}
-          </select>
-          <button
-            class="btn btn-sm btn-primary"
-            data-testid="membership-application-save"
-            disabled={!selectedAddress || saving}
-            onclick={handleSaveApplication}
-          >
-            {m.community_membership_pane_application_save()}
-          </button>
-          {#if applicationRef}
-            <button
-              class="btn text-error btn-ghost btn-sm"
-              data-testid="membership-application-remove"
-              disabled={saving}
-              onclick={handleRemoveApplication}
-            >
-              {m.community_membership_pane_application_remove()}
-            </button>
-          {/if}
-          <button
-            class="btn btn-outline btn-sm"
-            data-testid="membership-application-create-default"
-            disabled={!communitySigner || saving}
-            onclick={handleCreateDefault}
-          >
-            {m.community_membership_pane_application_create_default()}
-          </button>
-        </div>
-      {/if}
     </div>
   </div>
-
-  {#if applicationRef}
-    <ApplicationApprovals
-      {communikeyEvent}
-      {communityId}
-      communityName={getDisplayName(profileEvent) || communityId}
-      {roster}
-    />
-  {/if}
 
   {#if showMembersModal && roster.pointer}
     <GroupMembersModal

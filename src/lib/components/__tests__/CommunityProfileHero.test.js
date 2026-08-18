@@ -194,13 +194,16 @@ describe('CommunityProfileHero — moderated join lane', () => {
     expect(screen.queryByText('Redeem invite code')).toBeNull();
   });
 
-  it('non-member with an application form ref: keeps the existing Apply to Join button', () => {
+  // The application-form join path is gone (YAGNI, 2026-08-18):
+  // useCommunityAccess returns no form ref for moderated communities, and
+  // the moderated lane no longer defers to one — even a stale context value
+  // (e.g. mid-flight state) must not suppress the invite-code affordance.
+  it('non-member with a (stale) form ref: the moderated join lane renders anyway', () => {
     formRefHolder.value = '30168:' + 'c'.repeat(64) + ':membership';
     renderModerated();
 
-    expect(screen.getAllByText('Apply to Join').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Join')).toBeNull();
-    expect(screen.queryByText('Redeem invite code')).toBeNull();
+    expect(screen.getAllByText('Join').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
   });
 
   it('non-member, no application ref, root group not closed: shows the group Join button', () => {

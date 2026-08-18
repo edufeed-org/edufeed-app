@@ -2,9 +2,10 @@
 /** @vitest-environment node */
 /**
  * inbox-service's membership-application collision guard (Plan 5 Task 1,
- * item 7). A community's own application form (community-application.js)
- * can share the exact same 30168 address as the deployment's membership
- * form when a community reuses that template — isMembershipApplication only
+ * item 7). A community's own application form (the Beitrittsformular layer,
+ * removed 2026-08-18 — copies from before that still live on relays) can
+ * share the exact same 30168 address as the deployment's membership form
+ * when a community reused that template — isMembershipApplication only
  * matches on the `a` tag, so it can't tell the two apart on its own.
  * `mainNotifications`'s derived filter (inbox-service.svelte.js) resolves
  * the ambiguity by pubkey: only hide the response when it is p-tagged to a
