@@ -218,7 +218,7 @@
       ? 'bg-primary text-primary-content'
       : 'hover:bg-base-300/60'}"
   >
-    <Icon class_="w-5 h-5" />
+    <Icon class_="w-5 h-5" title="" />
     <span class="min-w-0 flex-1 truncate text-left text-sm font-medium">{type.label}</span>
     {#if restrictedTabs.has(type.id)}
       {#if accessibleTabs.has(type.id)}
@@ -393,7 +393,7 @@
             ? 'bg-primary text-primary-content'
             : 'hover:bg-base-300/60'}"
         >
-          <Icon class_="w-5 h-5" />
+          <Icon class_="w-5 h-5" title="" />
           <span class="text-sm font-medium">{type.label}</span>
         </button>
       {/each}

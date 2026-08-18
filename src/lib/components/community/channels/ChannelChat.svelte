@@ -453,7 +453,7 @@
     data-testid="concord-members-button"
     onclick={() => openOverlay('members')}
   >
-    <PeopleIcon class_="w-4 h-4" />
+    <PeopleIcon class_="w-4 h-4" title="" />
     {getMembers().size}
   </button>
   <div class="dropdown dropdown-end">

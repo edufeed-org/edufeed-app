@@ -483,7 +483,7 @@
               data-testid="area-footer-members"
               onclick={() => (overlay = 'members')}
             >
-              <PeopleIcon class_="w-5 h-5" />
+              <PeopleIcon class_="w-5 h-5" title="" />
               <span class="text-sm font-medium">{m.community_members_title()}</span>
             </button>
           {/if}
@@ -492,7 +492,7 @@
             data-testid="area-footer-settings"
             onclick={() => (overlay = 'area-settings')}
           >
-            <SettingsIcon class_="w-5 h-5" />
+            <SettingsIcon class_="w-5 h-5" title="" />
             <span class="text-sm font-medium">{m.area_settings_title()}</span>
           </button>
         </nav>
