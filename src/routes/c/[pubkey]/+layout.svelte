@@ -21,7 +21,7 @@
   import { useCommunityAccess } from '$lib/stores/community-access.svelte.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
-  import { useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { useConcordCommunity, shouldShowChannelsTab } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
@@ -52,17 +52,22 @@
   // rendered content (a local copy here once omitted 'channels').
   $effect(() => {
     const childContentView = $page.data.contentView;
-    if (childContentView && VALID_CONTENT_VIEWS.has(childContentView)) {
-      selectedContentType = childContentView;
-      return;
-    }
-
     const viewParam = $page.url.searchParams.get('view');
-    if (viewParam && VALID_CONTENT_VIEWS.has(viewParam)) {
-      selectedContentType = viewParam;
-    } else {
-      selectedContentType = 'home';
-    }
+    const requested =
+      childContentView && VALID_CONTENT_VIEWS.has(childContentView)
+        ? childContentView
+        : viewParam && VALID_CONTENT_VIEWS.has(viewParam)
+          ? viewParam
+          : 'home';
+
+    // ?view= travels across community switches (buildCommunityPath keeps it,
+    // and +page.js echoes it as contentView), so a globally-valid view can
+    // still be one THIS community does not offer — arriving on an area-less
+    // community with ?view=channels rendered the founding pane out of
+    // nowhere (laoc, 2026-08-18). Fall back to home once the event is
+    // loaded and says no.
+    selectedContentType =
+      requested === 'channels' && communikeyLoaded && !communityOffersChannels ? 'home' : requested;
   });
 
   // Load community's kind:10222 event for content type configuration
@@ -171,6 +176,19 @@
   // double-subscribe. PrivateChannelsView keeps its own instances this plan
   // (known duplication — a future pass should unify them).
   const getConcordForNav = useConcordCommunity(() => communikeyEvent);
+  // Whether THIS community has any channels surface at all — same rule the
+  // sidebar's KANÄLE zone uses (shouldShowChannelsTab), evaluated here for
+  // the carried-?view=channels fallback above.
+  const communityOffersChannels = $derived.by(() => {
+    const concord = getConcordForNav();
+    return shouldShowChannelsTab({
+      enabled: concord.enabled,
+      pointer: concord.pointer,
+      isOwner: isCommunityOwner(data.pubkey),
+      isMember: concord.membership === 'member',
+      hasGroupChannels: parseGroupPointers(communikeyEvent).length > 0
+    });
+  });
   const groupPointersForNav = $derived(parseGroupPointers(communikeyEvent));
   const getChannelMetaForNav = useChannelMetadata(() => groupPointersForNav);
   const getNavRelayInfo = useRelayInformation(() => sharedRelayOf(groupPointersForNav));
