@@ -85,7 +85,7 @@ vi.mock(
   () => import('./fixtures/PollMessageStub.svelte')
 );
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub }));
 
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',

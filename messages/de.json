@@ -3398,5 +3398,10 @@
   "area_settings_title": "Einstellungen",
   "area_settings_notifications": "Benachrichtigungen",
   "channel_lock_tooltip": "Privater Kanal – nur eingeladene Mitglieder können ihn lesen und schreiben.",
-  "concord_locked_contact_lead": "Frag nach einer Einladung bei:"
+  "concord_locked_contact_lead": "Frag nach einer Einladung bei:",
+  "community_settings_section_profile": "Profil & Inhalte",
+  "community_settings_section_access": "Typ & Zugang",
+  "community_settings_section_membership": "Mitgliedschaft",
+  "community_basics_saved": "Community-Einstellungen gespeichert",
+  "community_basics_closed_sections_hint": "Die öffentlichen Inhaltsbereiche dieser privaten Community verwaltest du über das Schaufenster (unten unter „Typ & Zugang“)."
 }

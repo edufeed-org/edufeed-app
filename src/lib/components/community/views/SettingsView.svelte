@@ -18,6 +18,7 @@
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
   import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
   import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
+  import CommunityBasicsForm from '$lib/components/community/settings/CommunityBasicsForm.svelte';
   import PublisherWindowPane from '$lib/components/community/settings/PublisherWindowPane.svelte';
   import { windowSectionKeys } from '$lib/concord/publisher-window.js';
   // Community-type flips (open <-> moderated; closed never transitions) — see
@@ -237,10 +238,6 @@
   // Check if current user is the community owner
   let isOwner = $derived(isCommunityOwner(communikeyEvent?.pubkey));
 
-  function handleEditCommunity() {
-    modalStore.openModal('editCommunity', { communityEvent: communikeyEvent });
-  }
-
   function handleDeleteCommunity() {
     modalStore.openModal('deleteCommunity', {
       communityEvent: communikeyEvent,
@@ -286,14 +283,28 @@
       </div>
 
       {#if communikeyEvent}
-        <!-- Community Description -->
-        {#if communikeyEvent?.content}
+        <!-- ── Profil & Inhalte ──
+          Everything the old Edit-Community MODAL held now lives inline:
+          no more page -> modal -> profile-modal chain with a lost-changes
+          confirm between them (settings redesign, laoc 2026-08-18). -->
+        {#if isOwner}
+          <h2 class="mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
+            {m.community_settings_section_profile()}
+          </h2>
+          <CommunityBasicsForm {communikeyEvent} />
+        {:else if communikeyEvent?.content}
           <div class="card mb-6 bg-base-100 shadow-xl">
             <div class="card-body">
               <h2 class="mb-2 card-title">{m.community_views_settings_info_title()}</h2>
               <p class="text-base-content/80">{communikeyEvent.content}</p>
             </div>
           </div>
+        {/if}
+
+        {#if isOwner || (communityType === 'moderated' && activeUser)}
+          <h2 class="mt-8 mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
+            {m.community_settings_section_access()}
+          </h2>
         {/if}
 
         <!-- Community-Typ (open <-> moderated flips) — owner-only, shown
@@ -486,30 +497,33 @@
           </div>
         {/if}
 
-        <!-- Admin Settings -->
-        {#if isOwner}
-          <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-              <h2 class="mb-4 card-title">
-                {m.community_views_settings_admin_title()}
-              </h2>
-              <p class="mb-4 text-sm text-base-content/70">
-                {m.community_views_settings_admin_description()}
-              </p>
-
-              <div class="space-y-3">
-                <button onclick={handleEditCommunity} class="btn w-full btn-primary">
-                  {m.community_views_settings_edit_button()}
-                </button>
-                <p class="text-center text-xs text-base-content/60">
-                  {m.community_views_settings_edit_help()}
-                </p>
-              </div>
-            </div>
+        <!-- ── Mitgliedschaft ── (every signed-in user) -->
+        <h2 class="mt-8 mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
+          {m.community_settings_section_membership()}
+        </h2>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <button
+              onclick={handleLeaveClick}
+              disabled={isLeaving || !getJoined()}
+              class="btn w-full btn-outline btn-error"
+            >
+              {#if isLeaving}
+                <span class="loading loading-xs loading-spinner"></span>
+                {m.community_views_settings_leaving()}
+              {:else}
+                {m.community_views_settings_leave_button()}
+              {/if}
+            </button>
+            <p class="text-center text-xs text-base-content/60">
+              {m.community_views_settings_leave_help()}
+            </p>
           </div>
+        </div>
 
-          <!-- Danger Zone -->
-          <div class="card mt-6 border border-error/40 bg-base-100 shadow-xl">
+        <!-- ── Gefahrenzone ── -->
+        {#if isOwner}
+          <div class="card mt-8 border border-error/40 bg-base-100 shadow-xl">
             <div class="card-body">
               <h2 class="mb-2 card-title text-error">
                 {m.community_views_settings_danger_title()}
@@ -523,31 +537,6 @@
             </div>
           </div>
         {/if}
-
-        <!-- Community Actions -->
-        <div class="card mt-6 bg-base-100 shadow-xl">
-          <div class="card-body">
-            <h2 class="mb-4 card-title">{m.community_views_settings_actions_title()}</h2>
-
-            <div class="space-y-3">
-              <button
-                onclick={handleLeaveClick}
-                disabled={isLeaving || !getJoined()}
-                class="btn w-full btn-outline btn-error"
-              >
-                {#if isLeaving}
-                  <span class="loading loading-xs loading-spinner"></span>
-                  {m.community_views_settings_leaving()}
-                {:else}
-                  {m.community_views_settings_leave_button()}
-                {/if}
-              </button>
-              <p class="text-center text-xs text-base-content/60">
-                {m.community_views_settings_leave_help()}
-              </p>
-            </div>
-          </div>
-        </div>
       {:else}
         <div class="flex items-center justify-center py-12">
           <div class="loading loading-lg loading-spinner text-primary"></div>

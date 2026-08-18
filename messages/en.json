@@ -3398,5 +3398,10 @@
   "area_settings_title": "Settings",
   "area_settings_notifications": "Notifications",
   "channel_lock_tooltip": "Private channel – only invited members can read and write.",
-  "concord_locked_contact_lead": "Ask for an invitation from:"
+  "concord_locked_contact_lead": "Ask for an invitation from:",
+  "community_settings_section_profile": "Profile & content",
+  "community_settings_section_access": "Type & access",
+  "community_settings_section_membership": "Membership",
+  "community_basics_saved": "Community settings saved",
+  "community_basics_closed_sections_hint": "This private community's public content sections are managed via the public window (below under “Type & access”)."
 }
