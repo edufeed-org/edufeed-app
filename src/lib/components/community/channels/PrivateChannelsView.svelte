@@ -62,6 +62,7 @@
     BellSlashIcon,
     EnvelopeIcon,
     KeyIcon,
+    LockIcon,
     PeopleIcon,
     SettingsIcon
   } from '$lib/components/icons';
@@ -394,40 +395,52 @@
         ? 'md:hidden'
         : 'md:flex md:w-72'} {mobileChat ? 'hidden' : 'flex'}"
     >
-      <div class="flex items-center justify-between px-2 pt-2 pb-1">
-        <span class="text-xs font-bold tracking-wider text-base-content/60 uppercase"
-          >{m.concord_rail_channels()}</span
-        >
-        <span class="flex items-center gap-1">
-          {#if concord.phase === 'syncing'}
-            <span
-              class="loading loading-xs loading-spinner text-base-content/40"
-              title={m.concord_sync_title()}
-            ></span>
-          {/if}
-          {#if notificationSupported}
-            <button
-              class="btn btn-circle btn-ghost btn-xs"
-              data-testid="concord-notif-bell"
-              disabled={permissionDenied}
-              title={permissionDenied
-                ? m.concord_notif_bell_denied()
-                : toastsOn
-                  ? m.concord_notif_bell_on()
-                  : m.concord_notif_bell_off()}
-              onclick={toggleToasts}
-            >
-              {toastsOn ? '🔔' : '🔕'}
-            </button>
-          {/if}
-          <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
-        </span>
+      <!-- Same header grammar as the linked sidebar's KANÄLE zone: px-4
+        inset matching the rows, plain bell glyph on the badge column, no
+        BETA badge (the page header above already carries one) — laoc,
+        2026-08-18. -->
+      <div
+        class="flex items-center gap-1.5 px-4 pt-2 pb-1 text-xs font-bold tracking-wider text-base-content/50 uppercase"
+      >
+        <span>{m.concord_rail_channels()}</span>
+        {#if concord.phase === 'syncing'}
+          <span
+            class="loading loading-xs loading-spinner text-base-content/40"
+            title={m.concord_sync_title()}
+          ></span>
+        {/if}
+        {#if notificationSupported}
+          <button
+            class="ml-auto cursor-pointer text-sm leading-none opacity-70 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+            data-testid="concord-notif-bell"
+            disabled={permissionDenied}
+            title={permissionDenied
+              ? m.concord_notif_bell_denied()
+              : toastsOn
+                ? m.concord_notif_bell_on()
+                : m.concord_notif_bell_off()}
+            onclick={toggleToasts}
+          >
+            {#if toastsOn}
+              <BellIcon class_="w-3.5 h-3.5" title="" />
+            {:else}
+              <BellSlashIcon class_="w-3.5 h-3.5" title="" />
+            {/if}
+          </button>
+        {/if}
       </div>
       {#if channels.length > 0}
-        <p class="px-2 pb-1 text-[0.65rem] leading-tight text-base-content/50">
-          <span class="block">{m.concord_legend_public()}</span>
-          <span class="block">{m.concord_legend_private()}</span>
-        </p>
+        <!-- Legend glyphs sit in the same w-5 icon column as the rows below. -->
+        <div class="px-4 pb-1 text-[0.65rem] leading-tight text-base-content/50">
+          <span class="flex items-center gap-3">
+            <span class="flex w-5 shrink-0 justify-center">#</span>{m.concord_legend_public()}
+          </span>
+          <span class="flex items-center gap-3">
+            <span class="flex w-5 shrink-0 justify-center"
+              ><LockIcon class_="w-3 h-3" title="" /></span
+            >{m.concord_legend_private()}
+          </span>
+        </div>
       {/if}
       <!-- Tighter, list-style rows (Armada-parity cleanup). The row markup
         itself lives in ChannelRailRow, shared with the host sidebar — the two
