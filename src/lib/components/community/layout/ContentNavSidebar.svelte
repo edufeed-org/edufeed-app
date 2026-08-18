@@ -12,6 +12,8 @@
     BookmarkShareIcon,
     MeetIcon,
     PollIcon,
+    BellIcon,
+    BellSlashIcon,
     LockIcon,
     LockOpenIcon,
     PeopleIcon
@@ -325,7 +327,11 @@
                   : m.concord_notif_bell_off()}
               onclick={toggleToasts}
             >
-              {toastsOn ? '🔔' : '🔕'}
+              {#if toastsOn}
+                <BellIcon class_="w-3.5 h-3.5" title="" />
+              {:else}
+                <BellSlashIcon class_="w-3.5 h-3.5" title="" />
+              {/if}
             </button>
           {/if}
         </div>

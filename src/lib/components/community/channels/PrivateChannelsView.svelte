@@ -57,7 +57,11 @@
   import ChannelMembersModal from './ChannelMembersModal.svelte';
   import ChannelExplainer from './ChannelExplainer.svelte';
   import KeyBackupModal from './KeyBackupModal.svelte';
-  import { PeopleIcon, SettingsIcon } from '$lib/components/icons';
+  import { BellIcon, BellSlashIcon, PeopleIcon, SettingsIcon } from '$lib/components/icons';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getUserDisplayName } from '$lib/helpers/message-utils.js';
+  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import InviteInboxModal from './InviteInboxModal.svelte';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
@@ -195,6 +199,23 @@
   const extendedByGroups = $derived(groupPointers.length > 0);
   const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
   // Same population that sees a "+ Neuer Kanal" button somewhere — the shared
+  // The locked pane's direct contact: the area owner (material.owner) —
+  // always known, always able to invite.
+  const lockedContactPubkey = $derived(concord.community?.material?.owner ?? null);
+  const lockedContactHref = $derived.by(() => {
+    const npub = lockedContactPubkey ? hexToNpub(lockedContactPubkey) : null;
+    return npub ? `/p/${npub}` : null;
+  });
+  const getLockedContactProfiles = useProfileMap(() =>
+    lockedContactPubkey ? [lockedContactPubkey] : []
+  );
+  function getLockedContactName() {
+    return getUserDisplayName(
+      lockedContactPubkey ?? '',
+      getLockedContactProfiles().get(lockedContactPubkey ?? '')
+    );
+  }
+
   async function toggleAreaToasts() {
     await setToastsEnabled(!getToastsEnabled());
   }
@@ -599,7 +620,24 @@
           from public metadata) but we don't hold its key — give this an
           honest "locked" message instead of the generic "no channels yet"
           copy, which would otherwise wrongly imply no channel was selected. -->
-        <ChannelStatePane title={m.concord_locked_title()} body={m.concord_locked_body()} />
+        <ChannelStatePane title={m.concord_locked_title()} body={m.concord_locked_body()}>
+          {#if lockedContactPubkey && lockedContactHref}
+            <!-- Direct path instead of "ask an admin" homework (laoc,
+              2026-08-18): the area owner is always known from material.owner
+              and is always able to invite. -->
+            <div class="mt-4 flex flex-col items-center gap-2">
+              <span class="text-xs text-base-content/60">{m.concord_locked_contact_lead()}</span>
+              <a
+                class="btn btn-outline btn-sm"
+                data-testid="locked-contact-owner"
+                href={lockedContactHref}
+              >
+                <ProfileAvatar pubkey={lockedContactPubkey} size="xs" />
+                {getLockedContactName()}
+              </a>
+            </div>
+          {/if}
+        </ChannelStatePane>
       {:else if concord.channels.length === 0 && (concord.phase === 'syncing' || concord.phase === 'idle')}
         <!-- Freshly accepted invite OR client boot: the engine has not
           caught up to the relay tip yet (phase 'idle' before the first
@@ -722,7 +760,11 @@
             data-testid="area-settings-toasts"
             onclick={toggleAreaToasts}
           >
-            {getToastsEnabled() ? '🔔' : '🔕'}
+            {#if getToastsEnabled()}
+              <BellIcon class_="w-4 h-4" title="" />
+            {:else}
+              <BellSlashIcon class_="w-4 h-4" title="" />
+            {/if}
             {m.area_settings_notifications()}
           </button>
           <button class="btn justify-start btn-ghost btn-sm" onclick={() => (overlay = 'inbox')}>

@@ -3397,5 +3397,6 @@
   "community_manager_chip_hint": "Der Schlüssel dieser Community ist in deinem Browser gespeichert — du kannst sie unabhängig vom aktiven Konto verwalten.",
   "area_settings_title": "Einstellungen",
   "area_settings_notifications": "Benachrichtigungen",
-  "channel_lock_tooltip": "Privater Kanal – nur eingeladene Mitglieder können ihn lesen und schreiben."
+  "channel_lock_tooltip": "Privater Kanal – nur eingeladene Mitglieder können ihn lesen und schreiben.",
+  "concord_locked_contact_lead": "Frag nach einer Einladung bei:"
 }
