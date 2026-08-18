@@ -429,3 +429,35 @@ describe('CommunitySidebar — which container you are in', () => {
     expect(renderWithGeometry({ rowTop: 20 })).toEqual([]);
   });
 });
+
+// Dissolved areas leave the arrangeable list and render as the dimmed
+// archive cluster at the rail's bottom (laoc, 2026-08-18) — read-only
+// history has no business between the living containers.
+describe('dissolved-area archive cluster', () => {
+  it('splits dissolved areas out of the rail into the archive cluster', async () => {
+    holders.communities = [];
+    holders.groups = [];
+    holders.areas = [
+      { communityId: 'c'.repeat(64), name: 'Lebendig', dissolved: false, iconPointer: undefined },
+      { communityId: 'd'.repeat(64), name: 'Vergangen', dissolved: true, iconPointer: undefined }
+    ];
+    render(CommunitySidebar, { props: PROPS });
+    // The living area is a rail entry; the dissolved one is not.
+    expect(anchors().filter((/** @type {string} */ a) => a.startsWith('area:'))).toEqual([
+      'area:' + 'c'.repeat(64)
+    ]);
+    const archived = screen.getAllByTestId('rail-dissolved-area');
+    expect(archived.length).toBeGreaterThan(0);
+    expect(archived[0].getAttribute('title')).toContain('Vergangen');
+  });
+
+  it('no cluster without dissolved areas', () => {
+    holders.communities = [];
+    holders.groups = [];
+    holders.areas = [
+      { communityId: 'c'.repeat(64), name: 'Lebendig', dissolved: false, iconPointer: undefined }
+    ];
+    render(CommunitySidebar, { props: PROPS });
+    expect(screen.queryAllByTestId('rail-dissolved-area')).toEqual([]);
+  });
+});

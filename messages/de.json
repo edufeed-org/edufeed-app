@@ -3407,5 +3407,6 @@
   "area_settings_section_general": "Sicherheit & Benachrichtigungen",
   "area_settings_on": "An",
   "area_settings_off": "Aus",
-  "concord_dissolve_confirm_label_fallback": "Tippe zur Bestätigung: {word}"
+  "concord_dissolve_confirm_label_fallback": "Tippe zur Bestätigung: {word}",
+  "rail_dissolved_tooltip": "Aufgelöst – Verlauf für Mitglieder weiterhin lesbar"
 }

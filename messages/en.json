@@ -3407,5 +3407,6 @@
   "area_settings_section_general": "Security & notifications",
   "area_settings_on": "On",
   "area_settings_off": "Off",
-  "concord_dissolve_confirm_label_fallback": "Type to confirm: {word}"
+  "concord_dissolve_confirm_label_fallback": "Type to confirm: {word}",
+  "rail_dissolved_tooltip": "Dissolved – history stays readable for members"
 }

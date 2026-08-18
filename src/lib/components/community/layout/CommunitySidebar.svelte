@@ -116,10 +116,16 @@
   const getActiveUser = useActiveUser();
   const me = $derived(getActiveUser()?.pubkey ?? null);
 
+  // Dissolved areas leave the arrangeable list: read-only history has no
+  // business between the living containers (laoc, 2026-08-18) — they render
+  // as a dimmed archive cluster at the rail's bottom instead.
+  const activeAreas = $derived(unlinkedAreas.filter((area) => !area.dissolved));
+  const dissolvedAreas = $derived(unlinkedAreas.filter((area) => area.dissolved));
+
   const railEntries = $derived(
     buildRailEntries({
       communityPubkeys: sortedCommunities,
-      areas: unlinkedAreas,
+      areas: activeAreas,
       groups: unlinkedGroupRows
     })
   );
@@ -442,6 +448,28 @@
     >
       <PlusIcon class_="h-6 w-6" />
     </button>
+
+    {#if dissolvedAreas.length > 0}
+      <!-- Archive cluster (Armada's ARCHIVED parity): dissolved areas,
+        dimmed and greyscale, still clickable — the history stays readable
+        for members, new messages are impossible. -->
+      <div class="w-8 border-b border-base-300"></div>
+      {#each dissolvedAreas as area (area.communityId)}
+        <a
+          title="{area.name} · {m.rail_dissolved_tooltip()}"
+          href={resolve(`/private/${area.communityId}`)}
+          data-testid="rail-dissolved-area"
+          class="btn btn-circle h-10 w-10 shrink-0 p-0 opacity-40 btn-ghost grayscale transition-all duration-200 hover:opacity-70"
+        >
+          <ConcordAreaBadge
+            name={area.name}
+            communityId={area.communityId}
+            iconPointer={area.iconPointer}
+            class="h-10 w-10"
+          />
+        </a>
+      {/each}
+    {/if}
 
     {#if showUnlockAffordance}
       <!-- The unlock TOOL keeps its divider: it is an action, not an entry,
