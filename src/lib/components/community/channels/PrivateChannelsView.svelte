@@ -634,7 +634,7 @@
             {/if}
 
             <button class="btn mt-6 btn-ghost btn-sm" onclick={() => (overlay = null)}>
-              ← {m.concord_cancel()}
+              {m.concord_cancel()}
             </button>
           </div>
         </div>
