@@ -374,19 +374,75 @@
                   </div>
                 </div>
               {:else if communityType === 'open'}
-                {#if moderatedCreationAvailable()}
-                  <div class="mt-3">
-                    <button
-                      class="btn btn-neutral"
-                      data-testid="settings-flip-to-moderated"
-                      disabled={!activeUser || flipping}
-                      onclick={openFlipToModerated}
-                    >
-                      {m.community_views_settings_flip_to_moderated()}
-                    </button>
-                    {#if !activeUser}
-                      <p class="mt-1 text-xs text-warning">
-                        {m.community_views_settings_flip_needs_account()}
+                {#if !concordArea.pointer && (moderatedCreationAvailable() || concordArea.enabled)}
+                  <!-- The one-of-two expansion chooser (laoc, 2026-08-18):
+                    the old stacked layout — a lone dark flip button, a
+                    divider, then a text block with two more buttons — never
+                    said these are ALTERNATIVES. Two equal option cards with
+                    outcome-focused copy (the engine badge covers the tech),
+                    and the exclusivity said out loud. -->
+                  <div class="mt-4 border-t border-base-300 pt-4">
+                    <p class="text-sm font-semibold">{m.community_expand_lead()}</p>
+                    <div class="mt-3 grid gap-3 md:grid-cols-2">
+                      {#if moderatedCreationAvailable()}
+                        <div
+                          class="flex flex-col rounded-xl border border-base-300 p-4"
+                          data-testid="expand-option-moderated"
+                        >
+                          <p class="font-semibold">🛡️ {m.community_expand_moderated_title()}</p>
+                          <p class="mt-1 flex-1 text-sm text-base-content/70">
+                            {m.community_expand_moderated_body()}
+                          </p>
+                          <p class="mt-2 text-xs text-base-content/50">
+                            {m.community_expand_moderated_usecase()}
+                          </p>
+                          <button
+                            class="btn mt-3 btn-outline btn-sm"
+                            data-testid="settings-flip-to-moderated"
+                            disabled={!activeUser || flipping}
+                            onclick={openFlipToModerated}
+                          >
+                            {m.community_views_settings_flip_to_moderated()}
+                          </button>
+                          {#if !activeUser}
+                            <p class="mt-1 text-xs text-warning">
+                              {m.community_views_settings_flip_needs_account()}
+                            </p>
+                          {/if}
+                        </div>
+                      {/if}
+                      {#if concordArea.enabled}
+                        <div
+                          class="flex flex-col rounded-xl border border-base-300 p-4"
+                          data-testid="expand-option-private"
+                        >
+                          <p class="font-semibold">🔒 {m.community_expand_private_title()}</p>
+                          <p class="mt-1 flex-1 text-sm text-base-content/70">
+                            {m.community_expand_private_body()}
+                          </p>
+                          <p class="mt-2 text-xs text-base-content/50">
+                            {m.community_expand_private_usecase()}
+                          </p>
+                          <button
+                            class="btn mt-3 btn-outline btn-sm"
+                            data-testid="concord-settings-create"
+                            onclick={() => (concordOverlay = 'create')}
+                          >
+                            {m.concord_settings_create()}
+                          </button>
+                          <button
+                            class="btn mt-2 btn-ghost btn-sm"
+                            data-testid="concord-settings-attach"
+                            onclick={() => (concordOverlay = 'attach')}
+                          >
+                            🔗 {m.concord_attach_secondary()}
+                          </button>
+                        </div>
+                      {/if}
+                    </div>
+                    {#if moderatedCreationAvailable() && concordArea.enabled}
+                      <p class="mt-2 text-xs text-base-content/60">
+                        ⚖ {m.community_expand_xor_hint()}
                       </p>
                     {/if}
                   </div>
@@ -424,31 +480,6 @@
                     <p class="text-xs text-base-content/60">{m.concord_attach_owner_sub()}</p>
                   </div>
                   <span class="badge badge-xs font-bold uppercase badge-accent">Beta</span>
-                </div>
-              {:else if concordArea.enabled && communityType === 'open'}
-                <!-- No area yet: the create/attach entry point (was the
-                  standalone card's only irreplaceable job). -->
-                <div class="mt-3 border-t border-base-300 pt-3">
-                  <p class="text-sm text-base-content/70">{m.concord_settings_lead()}</p>
-                  <div class="mt-2 flex flex-wrap gap-2">
-                    <button
-                      class="btn btn-sm btn-neutral"
-                      data-testid="concord-settings-create"
-                      onclick={() => (concordOverlay = 'create')}
-                    >
-                      🔒 {m.concord_settings_create()}
-                    </button>
-                    <button
-                      class="btn btn-outline btn-sm"
-                      data-testid="concord-settings-attach"
-                      onclick={() => (concordOverlay = 'attach')}
-                    >
-                      🔗 {m.concord_attach_secondary()}
-                    </button>
-                  </div>
-                  <p class="mt-2 rounded-lg bg-base-200 p-2.5 text-xs text-base-content/60">
-                    🙈 {m.concord_settings_invisible_hint()}
-                  </p>
                 </div>
               {/if}
             </div>

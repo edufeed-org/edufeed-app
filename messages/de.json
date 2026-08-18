@@ -3407,5 +3407,13 @@
   "area_settings_on": "An",
   "area_settings_off": "Aus",
   "concord_dissolve_confirm_label_fallback": "Tippe zur Bestätigung: {word}",
-  "rail_dissolved_tooltip": "Aufgelöst – Verlauf für Mitglieder weiterhin lesbar"
+  "rail_dissolved_tooltip": "Aufgelöst – Verlauf für Mitglieder weiterhin lesbar",
+  "community_expand_lead": "Deine Community erweitern – wähle einen Weg:",
+  "community_expand_moderated_title": "Moderierte Community",
+  "community_expand_moderated_body": "Wer beitreten möchte, bewirbt sich – du entscheidest, wer Mitglied wird. Alle Inhalte bleiben öffentlich sichtbar.",
+  "community_expand_moderated_usecase": "Gut für Gruppen mit Aufnahmeprozess, z. B. Vereine, Kollegien oder Kurse.",
+  "community_expand_private_title": "Privater Bereich",
+  "community_expand_private_body": "Ende-zu-Ende-verschlüsselte Kanäle nur für Eingeladene – nach außen komplett unsichtbar. Deine öffentlichen Inhalte bleiben wie bisher.",
+  "community_expand_private_usecase": "Gut für vertrauliche Absprachen im engeren Kreis.",
+  "community_expand_xor_hint": "Eine Community kann nur einen dieser Wege gehen – beides zusammen ist nicht möglich."
 }

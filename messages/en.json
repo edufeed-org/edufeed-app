@@ -3407,5 +3407,13 @@
   "area_settings_on": "On",
   "area_settings_off": "Off",
   "concord_dissolve_confirm_label_fallback": "Type to confirm: {word}",
-  "rail_dissolved_tooltip": "Dissolved – history stays readable for members"
+  "rail_dissolved_tooltip": "Dissolved – history stays readable for members",
+  "community_expand_lead": "Extend your community – choose one path:",
+  "community_expand_moderated_title": "Moderated community",
+  "community_expand_moderated_body": "People apply to join – you decide who becomes a member. All content stays publicly visible.",
+  "community_expand_moderated_usecase": "Good for groups with an admission process, e.g. clubs, staff rooms or courses.",
+  "community_expand_private_title": "Private area",
+  "community_expand_private_body": "End-to-end encrypted channels for invitees only – completely invisible from the outside. Your public content stays as it is.",
+  "community_expand_private_usecase": "Good for confidential conversations in a smaller circle.",
+  "community_expand_xor_hint": "A community can take only one of these paths – both together is not possible."
 }
