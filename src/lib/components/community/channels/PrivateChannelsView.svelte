@@ -494,14 +494,10 @@
           + {m.concord_new_channel()}
         </button>
       {/if}
-      {#if concord.signerHasNip44}
-        <button
-          class="btn justify-start text-base-content/70 btn-ghost btn-sm"
-          onclick={() => (overlay = 'inbox')}
-        >
-          ✉ {m.concord_invites()}
-        </button>
-      {/if}
+      <!-- Invites moved into the Einstellungen pane (laoc, 2026-08-18) —
+        the rail row was the linked sidebar's already-removed redundancy,
+        surviving here. The ?invites=1 deep link and the global inbox still
+        reach the same overlay. -->
 
       <!-- Standalone-area footer (laoc, 2026-08-18): mirror the community
         sidebar's Mitglieder/Einstellungen entries — an unlinked area is a
