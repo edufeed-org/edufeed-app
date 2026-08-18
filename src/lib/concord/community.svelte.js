@@ -28,7 +28,13 @@ import { memberTier } from './roles.js';
 export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember, hasGroupChannels }) {
   if (hasGroupChannels) return true;
   if (!enabled) return false;
-  return isMember || !!pointer || isOwner;
+  // No bare-owner clause: founding an area is the settings type card's
+  // deliberate flow ("Privaten Bereich erstellen/verknüpfen"), not a side
+  // effect of a channels tab that appears before any type decision (laoc,
+  // 2026-08-18). isOwner still matters — but only alongside a pointer or a
+  // membership, both covered below.
+  void isOwner;
+  return isMember || !!pointer;
 }
 
 /**

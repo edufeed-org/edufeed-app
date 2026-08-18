@@ -29,8 +29,12 @@ describe('shouldShowChannelsTab', () => {
   it('visible when pointer exists (non-member sees invite inbox)', () => {
     expect(shouldShowChannelsTab({ ...base, pointer: { communityId: 'x' } })).toBe(true);
   });
-  it('visible for owner without pointer (founding affordance)', () => {
-    expect(shouldShowChannelsTab({ ...base, isOwner: true })).toBe(true);
+  // The founding affordance moved to the settings type card ("Privaten
+  // Bereich erstellen/verknüpfen") — a bare owner with no area must NOT see
+  // a channels tab, or "+ Neuer Kanal" founds an E2E area as a side effect
+  // before any type decision (laoc, 2026-08-18: the Edufeed community).
+  it('hidden for owner without pointer — founding lives in settings now', () => {
+    expect(shouldShowChannelsTab({ ...base, isOwner: true })).toBe(false);
   });
   it('hidden otherwise', () => {
     expect(shouldShowChannelsTab(base)).toBe(false);
