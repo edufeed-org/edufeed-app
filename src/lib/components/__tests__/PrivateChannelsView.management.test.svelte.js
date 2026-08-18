@@ -185,3 +185,37 @@ describe('PrivateChannelsView management — area-members-open is member/owner-g
     expect(screen.queryByTestId('area-members-open')).toBeNull();
   });
 });
+
+describe('standalone-area footer (Mitglieder/Einstellungen parity, laoc 2026-08-18)', () => {
+  it('unlinked area: renders both entries; settings opens the hub', async () => {
+    concordFixture.value = base();
+    render(PrivateChannelsView, {
+      props: { communityId: 'cid', communityProfile: { name: 'Area' } }
+    });
+    expect(await screen.findByTestId('area-footer-members')).toBeTruthy();
+    await fireEvent.click(screen.getByTestId('area-footer-settings'));
+    expect(await screen.findByTestId('area-settings-backup')).toBeTruthy();
+    // OWNER sees the dissolve entry (base() makes the active user the owner)
+    expect(screen.getByTestId('area-settings-dissolve')).toBeTruthy();
+  });
+
+  it('linked mode: no footer — the community sidebar already provides one', () => {
+    concordFixture.value = base();
+    render(PrivateChannelsView, {
+      props: {
+        communikeyEvent: { kind: 10222, pubkey: OWNER, tags: [] },
+        communityProfile: { name: 'Area' }
+      }
+    });
+    expect(screen.queryByTestId('area-footer-members')).toBeNull();
+    expect(screen.queryByTestId('area-footer-settings')).toBeNull();
+  });
+
+  it('dissolved area: no footer (nothing left to manage)', () => {
+    concordFixture.value = base({ dissolved: true });
+    render(PrivateChannelsView, {
+      props: { communityId: 'cid', communityProfile: { name: 'Area' } }
+    });
+    expect(screen.queryByTestId('area-footer-settings')).toBeNull();
+  });
+});

@@ -3394,5 +3394,7 @@
   "share_private_failed": "Private share failed",
   "share_private_hint": "Shared encrypted into the private area — only members can see it.",
   "community_manager_chip": "You manage this community",
-  "community_manager_chip_hint": "This community's key is stored in your browser — you can manage it regardless of the active account."
+  "community_manager_chip_hint": "This community's key is stored in your browser — you can manage it regardless of the active account.",
+  "area_settings_title": "Settings",
+  "area_settings_notifications": "Notifications"
 }

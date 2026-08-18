@@ -194,6 +194,10 @@
   const extendedByGroups = $derived(groupPointers.length > 0);
   const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
   // Same population that sees a "+ Neuer Kanal" button somewhere — the shared
+  async function toggleAreaToasts() {
+    await setToastsEnabled(!getToastsEnabled());
+  }
+
   // create intent must not open the wizard for anyone the buttons exclude.
   const canOpenCreateWizard = $derived(
     (concord.community && concord.canManageChannels && !concord.dissolved) ||
@@ -463,6 +467,31 @@
           ✉ {m.concord_invites()}
         </button>
       {/if}
+
+      <!-- Standalone-area footer (laoc, 2026-08-18): mirror the community
+        sidebar's Mitglieder/Einstellungen entries — an unlinked area is a
+        community too, and its rail is the only chrome it has. Linked mode
+        skips this (the community sidebar footer already exists there). -->
+      {#if !communikeyEvent && concord.community && !concord.dissolved}
+        <div class="mt-auto flex flex-col gap-1 border-t border-base-300 pt-2">
+          {#if activeChannel}
+            <button
+              class="btn justify-start btn-ghost btn-sm"
+              data-testid="area-footer-members"
+              onclick={() => (overlay = 'members')}
+            >
+              {m.community_members()}
+            </button>
+          {/if}
+          <button
+            class="btn justify-start btn-ghost btn-sm"
+            data-testid="area-footer-settings"
+            onclick={() => (overlay = 'area-settings')}
+          >
+            {m.area_settings_title()}
+          </button>
+        </div>
+      {/if}
     </aside>
 
     <!-- pane — the paper content surface (base-100), matching the public
@@ -668,6 +697,49 @@
     />
   {:else if overlay === 'explainer'}
     <ChannelExplainer onClose={() => (overlay = null)} />
+  {:else if overlay === 'area-settings'}
+    <!-- Lightweight hub: the area-level actions already exist as overlays
+      and services — this modal just gives them the one findable home the
+      linked community's settings page provides (laoc, 2026-08-18). -->
+    <div class="modal-open modal" role="dialog">
+      <div class="modal-box max-w-sm">
+        <h3 class="text-lg font-extrabold">{m.area_settings_title()}</h3>
+        <div class="mt-4 flex flex-col gap-2">
+          <button
+            class="btn justify-start btn-ghost btn-sm"
+            data-testid="area-settings-backup"
+            onclick={() => (overlay = 'backup')}
+          >
+            🔑 {m.concord_backup_title()}
+          </button>
+          <button
+            class="btn justify-start btn-ghost btn-sm"
+            data-testid="area-settings-toasts"
+            onclick={toggleAreaToasts}
+          >
+            {getToastsEnabled() ? '🔔' : '🔕'}
+            {m.area_settings_notifications()}
+          </button>
+          <button class="btn justify-start btn-ghost btn-sm" onclick={() => (overlay = 'inbox')}>
+            ✉ {m.concord_invites()}
+          </button>
+          {#if isConcordOwner}
+            <button
+              class="btn justify-start text-error btn-ghost btn-sm"
+              data-testid="area-settings-dissolve"
+              onclick={() => (overlay = 'dissolve')}
+            >
+              {m.concord_dissolve_action()}
+            </button>
+          {/if}
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-ghost" onclick={() => (overlay = null)}
+            >{m.concord_cancel()}</button
+          >
+        </div>
+      </div>
+    </div>
   {:else if overlay === 'backup'}
     <KeyBackupModal onClose={() => (overlay = null)} />
   {:else if overlay === 'delete-channel' && concord.community && activeChannel}

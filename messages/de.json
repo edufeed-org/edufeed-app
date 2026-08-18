@@ -3394,5 +3394,7 @@
   "share_private_failed": "Privates Teilen fehlgeschlagen",
   "share_private_hint": "Wird verschlüsselt im privaten Bereich geteilt — nur Mitglieder sehen es.",
   "community_manager_chip": "Du verwaltest diese Community",
-  "community_manager_chip_hint": "Der Schlüssel dieser Community ist in deinem Browser gespeichert — du kannst sie unabhängig vom aktiven Konto verwalten."
+  "community_manager_chip_hint": "Der Schlüssel dieser Community ist in deinem Browser gespeichert — du kannst sie unabhängig vom aktiven Konto verwalten.",
+  "area_settings_title": "Einstellungen",
+  "area_settings_notifications": "Benachrichtigungen"
 }
