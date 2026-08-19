@@ -11,6 +11,13 @@
   closed groups that close the REQ with auth-required are surfaced as a
   banner v1 (join first, then reload).
 -->
+<script module>
+  // Roster re-request "heal" delays — exported so a future test can shrink
+  // them rather than fight the real-time waits (laoc, 2026-08-19).
+  export const ROSTER_HEAL_DELAY_MS = 800;
+  export const JOIN_ROSTER_HEAL_DELAY_MS = 1500;
+</script>
+
 <script>
   import { goto } from '$app/navigation';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -409,39 +416,44 @@
   // settings sheet (Task 8) mount here once they exist.
   let membersOpen = $state(false);
   let settingsOpen = $state(false);
-  // Wired to GroupMembersModal's onRosterChanged prop below. Bumps rosterSeq
-  // immediately for a snappy UI, then schedules one more bump ~800ms later:
+  // Bumps rosterSeq immediately for a snappy UI, then schedules one more
+  // bump `delayMs` later into `ref.timer` (a plain mutable holder, not
+  // `$state` — see CLAUDE.md on internal timer refs). Two call sites below
+  // use this with different delays for different reasons, so the delay and
+  // the timer handle are both parameters rather than baked in.
+  /**
+   * @param {number} delayMs
+   * @param {{timer: ReturnType<typeof setTimeout> | undefined}} ref
+   */
+  function bumpRoster(delayMs, ref) {
+    rosterSeq++;
+    clearTimeout(ref.timer);
+    ref.timer = setTimeout(() => {
+      rosterSeq++;
+    }, delayMs);
+  }
+  // Wired to GroupMembersModal's onRosterChanged prop below. ROSTER_HEAL_DELAY_MS:
   // the relay's OK for a 9000/9001/9002 admin op doesn't guarantee the
   // 39001/39002 addressables it materialises are already updated by the time
   // the immediate re-request lands, so a stale roster from that first
   // request would otherwise never self-heal.
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let rosterHealTimer;
-  const onRosterChanged = () => {
-    rosterSeq++;
-    clearTimeout(rosterHealTimer);
-    rosterHealTimer = setTimeout(() => {
-      rosterSeq++;
-    }, 800);
+  const rosterHeal = {
+    timer: /** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined)
   };
+  const onRosterChanged = () => bumpRoster(ROSTER_HEAL_DELAY_MS, rosterHeal);
   // A self-join gets its own, longer follow-up bump: on pyramid the relay's
-  // put-user lands within ~100ms of an accepted 9021, but the 800ms
-  // admin-op heal above is tuned for a different case and some relays are
-  // slower still — 1500ms gives the composer a real second chance to unlock
-  // without a reload (laoc, 2026-08-19).
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let joinRosterHealTimer;
-  const onJoinAccepted = () => {
-    rosterSeq++;
-    clearTimeout(joinRosterHealTimer);
-    joinRosterHealTimer = setTimeout(() => {
-      rosterSeq++;
-    }, 1500);
+  // put-user lands within ~100ms of an accepted 9021, but ROSTER_HEAL_DELAY_MS
+  // above is tuned for a different case and some relays are slower still —
+  // JOIN_ROSTER_HEAL_DELAY_MS gives the composer a real second chance to
+  // unlock without a reload (laoc, 2026-08-19).
+  const joinRosterHeal = {
+    timer: /** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined)
   };
+  const onJoinAccepted = () => bumpRoster(JOIN_ROSTER_HEAL_DELAY_MS, joinRosterHeal);
   $effect(() => {
     return () => {
-      clearTimeout(rosterHealTimer);
-      clearTimeout(joinRosterHealTimer);
+      clearTimeout(rosterHeal.timer);
+      clearTimeout(joinRosterHeal.timer);
     };
   });
 

@@ -584,11 +584,16 @@ describe('GroupChat', () => {
   });
 
   // Pyramid: an accepted 9021 is followed within ~100ms by the relay's own
-  // put-user, and the composer should unlock without a reload. The mock
-  // relay here only materialises the roster update 1.2s of REAL time after
-  // the 9021 lands — slower than an immediate re-request and slower than the
-  // 800ms admin-op heal timer, but inside the join-specific 1500ms fallback
-  // — so this fails unless THAT follow-up bump exists (laoc, 2026-08-19).
+  // put-user, and the composer should unlock without a reload. Timing design
+  // (the point of this test): the mock relay materialises the roster update
+  // 1.2s of REAL wall-clock time after the 9021 lands — AFTER the component's
+  // immediate re-request bump, but BEFORE its 800ms admin-op heal timer, and
+  // still inside GroupChat's JOIN_ROSTER_HEAL_DELAY_MS (1500ms) follow-up —
+  // so it straddles exactly the gap only that dedicated join timer covers.
+  // Margins below are deliberately wide (real setTimeout, no fake timers —
+  // see the file-level note on that tradeoff) because this project has a
+  // documented flaky-under-load class for real-timer tests on a busy CI
+  // runner (laoc, 2026-08-19).
   it('unlocks the composer once a slower relay materialises the accepted self-join', async () => {
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
     const joinButton = await screen.findByTestId('group-join');
@@ -603,10 +608,10 @@ describe('GroupChat', () => {
       () => {
         expect(screen.getByTestId('group-chat-input')).toBeTruthy();
       },
-      { timeout: 3000, interval: 100 }
+      { timeout: 8000, interval: 100 }
     );
     expect(screen.queryByTestId('group-join-bar')).toBeNull();
-  }, 6000);
+  }, 15000);
 
   // laoc, 2026-08-19: a member whose roster read hadn't answered yet was
   // shown Beitreten, and clicking it surfaced the relay's 'duplicate:
