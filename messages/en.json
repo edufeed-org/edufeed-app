@@ -3233,6 +3233,7 @@
   "group_invite_dm_body": "You're invited to join {name}. Open this link to join:",
   "group_invite_dm_sent": "Invite sent via DM.",
   "group_invite_dm_failed": "Invite failed: {reason}",
+  "group_invite_dm_failed_after_mint": "Invite created but the DM could not be sent — code: {code}",
   "area_members_title": "Members of this area",
   "area_members_lead": "Everyone here is in the community's shared channels. Selected-members channels manage their own lists.",
   "area_members_missing": "missing in {count} channels",

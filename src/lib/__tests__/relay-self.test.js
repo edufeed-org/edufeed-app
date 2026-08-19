@@ -70,6 +70,21 @@ describe('fetchRelaySelf', () => {
     await expect(fetchRelaySelf('wss://relay-err.example/')).resolves.toBeNull();
   });
 
+  it('does NOT cache a failure: a later call for the same relay retries the fetch', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ self: 'c'.repeat(64) }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await fetchRelaySelf('wss://relay-retry.example/');
+    expect(first).toBeNull();
+
+    const second = await fetchRelaySelf('wss://relay-retry.example/');
+    expect(second).toBe('c'.repeat(64));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('resolves null when the request times out', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn(

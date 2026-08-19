@@ -18,17 +18,17 @@ describe('buildGroupInviteMessage', () => {
   it('includes the greeting sentence and the join URL', () => {
     const message = buildGroupInviteMessage({
       communityName: 'Bee Chat',
-      joinUrl: 'https://edufeed.org/c/npub1abc?view=channels&join=CODE123'
+      joinUrl: 'https://edufeed.org/c/npub1abc?join=CODE123'
     });
 
     expect(message).toContain("You're invited to join Bee Chat. Open this link to join:");
-    expect(message).toContain('https://edufeed.org/c/npub1abc?view=channels&join=CODE123');
+    expect(message).toContain('https://edufeed.org/c/npub1abc?join=CODE123');
   });
 
   it('omits the nostr: line entirely when no naddr is given', () => {
     const message = buildGroupInviteMessage({
       communityName: 'Bee Chat',
-      joinUrl: 'https://edufeed.org/c/npub1abc?view=channels&join=CODE123'
+      joinUrl: 'https://edufeed.org/c/npub1abc?join=CODE123'
     });
 
     expect(message).not.toContain('nostr:');
@@ -37,7 +37,7 @@ describe('buildGroupInviteMessage', () => {
   it('appends a nostr:naddr…?invite= line on its own line when naddr is present', () => {
     const message = buildGroupInviteMessage({
       communityName: 'Bee Chat',
-      joinUrl: 'https://edufeed.org/c/npub1abc?view=channels&join=CODE123',
+      joinUrl: 'https://edufeed.org/c/npub1abc?join=CODE123',
       naddr: 'naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq?invite=CODE123'
     });
 

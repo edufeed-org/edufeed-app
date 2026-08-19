@@ -108,7 +108,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   group_invite_dm_body: (/** @type {{name: string}} */ { name }) =>
     `You're invited to join ${name}.`,
   group_invite_dm_sent: () => 'Invite sent via DM.',
-  group_invite_dm_failed: (/** @type {{reason: string}} */ { reason }) => `Invite failed: ${reason}`
+  group_invite_dm_failed: (/** @type {{reason: string}} */ { reason }) =>
+    `Invite failed: ${reason}`,
+  group_invite_dm_failed_after_mint: (/** @type {{code: string}} */ { code }) =>
+    `Invite created but the DM could not be sent — code: ${code}`
 }));
 
 const { default: GroupMembersModal } = await import(
@@ -467,7 +470,25 @@ describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('Invite sent via DM.', 'success'));
   });
 
-  it('a failing publish/send toasts the reason and does not send a DM', async () => {
+  // Controller ruling (supersedes the brief's URL shape): ?view=channels
+  // routes to PrivateChannelsView, which never mounts CommunityProfileHero —
+  // the ?join= reader lives only in HomeView's hero, so the join link must
+  // land on the plain home view.
+  it('the join URL in the DM has no view param and carries ?join=<code>', async () => {
+    renderModal();
+
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    const input = screen.getByTestId('dm-invite-npub-input');
+    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
+    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+
+    await waitFor(() => expect(sendWrappedDm).toHaveBeenCalled());
+    const [, message] = /** @type {any[]} */ (sendWrappedDm.mock.calls[0]);
+    expect(message).not.toContain('view=channels');
+    expect(message).toMatch(/\?join=INVITECODE123(\s|$)/);
+  });
+
+  it('a failing invite-code mint toasts the generic failure and does not send a DM', async () => {
     publishToGroupRelay.mockRejectedValueOnce(new Error('relay says no'));
     renderModal();
 
@@ -480,5 +501,49 @@ describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
       expect(showToast).toHaveBeenCalledWith('Invite failed: relay says no', 'error')
     );
     expect(sendWrappedDm).not.toHaveBeenCalled();
+  });
+
+  // Important 3: the 9009 mint happens before the DM send. If the mint
+  // succeeded but the DM send fails afterward, the code is real and
+  // single-use — a generic "invite failed" toast would strand it. The admin
+  // needs the code to hand over manually instead.
+  it('a mint that succeeds but a DM send that fails surfaces the orphaned code, not the generic failure', async () => {
+    sendWrappedDm.mockRejectedValueOnce(new Error('no relays'));
+    renderModal();
+
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    const input = screen.getByTestId('dm-invite-npub-input');
+    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
+    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        'Invite created but the DM could not be sent — code: INVITECODE123',
+        'error'
+      )
+    );
+    expect(showToast).not.toHaveBeenCalledWith('Invite failed: no relays', 'error');
+  });
+
+  it('without a communityId, the DM-invite toggle is hidden entirely — direct-add is the only option', () => {
+    renderModal({ communityId: null });
+
+    expect(screen.getByTestId('add-mode-direct')).toBeTruthy();
+    expect(screen.queryByTestId('add-mode-dm')).toBeNull();
+    expect(screen.queryByTestId('dm-invite-npub-input')).toBeNull();
+    // Direct-add (ContactSearchInput stub) is still there.
+    expect(screen.getByTestId('stub-select-a')).toBeTruthy();
+  });
+
+  it('the new pane uses plain btn (modal-form rule), not btn-sm', () => {
+    const { container } = renderModal();
+    const directBtn = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="add-mode-direct"]')
+    );
+    const dmBtn = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="add-mode-dm"]')
+    );
+    expect(directBtn.className).not.toContain('btn-sm');
+    expect(dmBtn.className).not.toContain('btn-sm');
   });
 });

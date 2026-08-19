@@ -156,46 +156,68 @@
       return;
     }
     const user = getActiveUser();
-    if (!user) return;
+    // communityId is required to build the join URL's npub — the toggle
+    // that reaches this pane is hidden without one (see template), so this
+    // is a defensive no-op, not a user-facing path.
+    if (!user || !communityId) return;
     inviteError = '';
     sendingInvite = true;
     try {
-      // A fresh code per send — single-use, one code = one person.
-      const code = generateInviteCode();
-      await publishToGroupRelay(
-        pool.relay(pointer.relay),
-        buildCreateInviteTemplate(pointer.id, code),
-        user
-      );
+      // Mint first: a failure here means nothing was created — the generic
+      // failure toast is correct and there is no code to hand over.
+      /** @type {string} */
+      let code;
+      try {
+        // A fresh code per send — single-use, one code = one person.
+        code = generateInviteCode();
+        await publishToGroupRelay(
+          pool.relay(pointer.relay),
+          buildCreateInviteTemplate(pointer.id, code),
+          user
+        );
+      } catch (err) {
+        console.error('groups: invite code mint failed', err);
+        const reason = err instanceof Error ? err.message : String(err);
+        showToast(m.group_invite_dm_failed({ reason }), 'error');
+        return;
+      }
 
-      const npub = nip19.npubEncode(communityId ?? '');
-      const joinUrl = `${location.origin}/c/${npub}?view=channels&join=${code}`;
+      // The mint above already succeeded — the code is real and single-use.
+      // A failure past this point must NOT reuse the generic failure toast:
+      // that code is now orphaned (minted but never delivered), and the
+      // admin needs it to hand over manually.
+      try {
+        // ?view=channels was dropped (controller ruling, 2026-08-19):
+        // CommunityProfileHero — the only place reading ?join= — mounts
+        // inside HomeView, not the channels view that param would route to.
+        const npub = nip19.npubEncode(communityId);
+        const joinUrl = `${location.origin}/c/${npub}?join=${code}`;
 
-      // Cross-client naddr line is best-effort: a relay that won't answer
-      // NIP-11 (or has no `self`) just means the DM ships without it — the
-      // join URL alone is still a complete invite.
-      const self = await fetchRelaySelf(pointer.relay);
-      const naddr = self
-        ? `${nip19.naddrEncode({
-            kind: 39000,
-            pubkey: self,
-            identifier: pointer.id,
-            relays: [pointer.relay]
-          })}?invite=${code}`
-        : null;
+        // Cross-client naddr line is best-effort: a relay that won't answer
+        // NIP-11 (or has no `self`) just means the DM ships without it —
+        // the join URL alone is still a complete invite.
+        const self = await fetchRelaySelf(pointer.relay);
+        const naddr = self
+          ? `${nip19.naddrEncode({
+              kind: 39000,
+              pubkey: self,
+              identifier: pointer.id,
+              relays: [pointer.relay]
+            })}?invite=${code}`
+          : null;
 
-      const message = buildGroupInviteMessage({
-        communityName: metadata?.name || '',
-        joinUrl,
-        naddr
-      });
-      await sendWrappedDm([hex], message);
-      showToast(m.group_invite_dm_sent(), 'success');
-      inviteNpub = '';
-    } catch (err) {
-      console.error('groups: dm invite failed', err);
-      const reason = err instanceof Error ? err.message : String(err);
-      showToast(m.group_invite_dm_failed({ reason }), 'error');
+        const message = buildGroupInviteMessage({
+          communityName: metadata?.name || '',
+          joinUrl,
+          naddr
+        });
+        await sendWrappedDm([hex], message);
+        showToast(m.group_invite_dm_sent(), 'success');
+        inviteNpub = '';
+      } catch (err) {
+        console.error('groups: dm invite send failed after a successful mint', err);
+        showToast(m.group_invite_dm_failed_after_mint({ code }), 'error');
+      }
     } finally {
       sendingInvite = false;
     }
@@ -369,31 +391,30 @@
       <div class="mt-3">
         <div class="mb-2 flex gap-2">
           <button
-            class="btn btn-sm {addMode === 'direct' ? 'btn-primary' : 'btn-ghost'}"
+            class="btn {addMode === 'direct' ? 'btn-primary' : 'btn-ghost'}"
             data-testid="add-mode-direct"
             onclick={() => (addMode = 'direct')}
           >
             {m.groups_members_add_direct_action()}
           </button>
-          <button
-            class="btn btn-sm {addMode === 'dm' ? 'btn-primary' : 'btn-ghost'}"
-            data-testid="add-mode-dm"
-            onclick={() => (addMode = 'dm')}
-          >
-            {m.group_invite_dm_action()}
-          </button>
+          {#if communityId}
+            <!-- Minting is root-group-only (a create-invite on an open
+                 channel is rejected by the relay) — GroupMembersModal is
+                 also used per-channel (GroupChat.svelte), which passes no
+                 communityId. Hiding the toggle there, rather than trying to
+                 detect root-vs-channel, keeps a channel context down to
+                 direct-add only. -->
+            <button
+              class="btn {addMode === 'dm' ? 'btn-primary' : 'btn-ghost'}"
+              data-testid="add-mode-dm"
+              onclick={() => (addMode = 'dm')}
+            >
+              {m.group_invite_dm_action()}
+            </button>
+          {/if}
         </div>
 
-        {#if addMode === 'direct'}
-          <ContactSearchInput
-            acceptPubkeyInput
-            disabled={busy}
-            placeholder={m.groups_members_add_placeholder()}
-            exclude={[...members]}
-            onselect={(/** @type {{ pubkey: string }} */ c) => addMember(c.pubkey)}
-            onrawpubkey={(/** @type {string} */ hex) => addMember(hex)}
-          />
-        {:else}
+        {#if addMode === 'dm' && communityId}
           <div class="flex flex-col gap-2">
             <input
               type="text"
@@ -409,7 +430,7 @@
               <span class="text-xs text-error" data-testid="dm-invite-error">{inviteError}</span>
             {/if}
             <button
-              class="btn btn-sm btn-primary"
+              class="btn btn-primary"
               data-testid="dm-invite-send"
               disabled={sendingInvite || !inviteNpub.trim()}
               onclick={sendInvite}
@@ -420,6 +441,15 @@
               {m.group_invite_dm_send()}
             </button>
           </div>
+        {:else}
+          <ContactSearchInput
+            acceptPubkeyInput
+            disabled={busy}
+            placeholder={m.groups_members_add_placeholder()}
+            exclude={[...members]}
+            onselect={(/** @type {{ pubkey: string }} */ c) => addMember(c.pubkey)}
+            onrawpubkey={(/** @type {string} */ hex) => addMember(hex)}
+          />
         {/if}
       </div>
     {/if}

@@ -25,7 +25,11 @@ function toHttpUrl(/** @type {string} */ relayUrl) {
 /**
  * Fetch a relay's NIP-11 `self` pubkey. Null on ANY failure (bad status,
  * network error, timeout, missing/non-string field) — callers treat that as
- * "omit the naddr line", never as an error worth surfacing.
+ * "omit the naddr line", never as an error worth surfacing. A failure is NOT
+ * cached: a relay mid-outage would otherwise disable the naddr line for the
+ * rest of the session — only a resolved `self` is kept, so the next invite
+ * gets a fresh chance once the relay recovers. In-flight calls still share
+ * one promise (dedupe), the eviction just happens after it settles.
  * @param {string} relayUrl
  * @returns {Promise<string | null>}
  */
@@ -50,7 +54,10 @@ export function fetchRelaySelf(relayUrl) {
     } finally {
       clearTimeout(timer);
     }
-  })();
+  })().then((resolved) => {
+    if (resolved === null) cache.delete(key);
+    return resolved;
+  });
 
   cache.set(key, promise);
   return promise;

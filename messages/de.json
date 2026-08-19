@@ -3233,6 +3233,7 @@
   "group_invite_dm_body": "Du bist eingeladen, {name} beizutreten. Öffne diesen Link, um beizutreten:",
   "group_invite_dm_sent": "Einladung per DM gesendet.",
   "group_invite_dm_failed": "Einladung fehlgeschlagen: {reason}",
+  "group_invite_dm_failed_after_mint": "Einladung erstellt, aber die DM konnte nicht gesendet werden — Code: {code}",
   "area_members_title": "Mitglieder des Bereichs",
   "area_members_lead": "Alle hier sind in den gemeinsamen Kanälen der Community. Kanäle für ausgewählte Mitglieder verwalten ihre Listen selbst.",
   "area_members_missing": "fehlt in {count} Kanälen",
