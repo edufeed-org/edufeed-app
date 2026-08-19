@@ -173,7 +173,10 @@
   // its own.
   /** @type {any[]} */
   let joinRequestEvents = $state.raw([]);
-  let dismissedIds = $state.raw(readDismissedJoinRequests(communityId));
+  let dismissedIds = $state.raw(/** @type {Set<string>} */ (new Set()));
+  $effect(() => {
+    dismissedIds = readDismissedJoinRequests(communityId);
+  });
   let requestsSeq = $state(0);
 
   $effect(() => {

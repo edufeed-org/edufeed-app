@@ -11,7 +11,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 
 // REAL keys + signatures: the mock feeds a real applesauce EventStore, which
@@ -46,12 +46,15 @@ const metadataEvent = signWith(
   },
   RELAY_SK
 );
+// ME is on the roster: the composer only renders for members now (the
+// join-bar tests below cover the non-member view via openchat/ghostchat).
 const membersEvent = signWith(
   {
     kind: 39002,
     tags: [
       ['d', 'beechat'],
-      ['p', getPublicKey(OTHER_SK)]
+      ['p', getPublicKey(OTHER_SK)],
+      ['p', getPublicKey(MY_SK)]
     ]
   },
   RELAY_SK
@@ -180,6 +183,9 @@ const nestedReply = signWith(
 
 const publishMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
 const requestCalls = vi.hoisted(() => /** @type {any[]} */ ([]));
+// The viewer's own stored join request, served to the own-9021 filter that
+// rides along with the roster REQ (pending-state persistence).
+const relayOwn9021 = vi.hoisted(() => ({ value: /** @type {any[]} */ ([]) }));
 const relayCalls = vi.hoisted(() => /** @type {string[]} */ ([]));
 // Mutable holder for the relay's NIP-11 document (finding 2's test needs to
 // flip auth_required per test) — same pattern as joinedCommunikeyEventsHolder
@@ -219,8 +225,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // The roster request keys on `#d`; route each fixture group's `#d`
           // to its own metadata/members pair and leave every other pointer
           // (including the kind:0 profile requests, which carry no `#d`) on
-          // `beechat`.
-          const d = filters?.['#d']?.[0];
+          // `beechat`. The real REQ is an ARRAY since the own-9021 filter
+          // rides along — normalize and read the `#d` off whichever filter
+          // carries one.
+          const filterList = Array.isArray(filters) ? filters : [filters];
+          const d = filterList.find((f) => f?.['#d'])?.['#d']?.[0];
+          const own = filterList.some((f) => f?.kinds?.includes(9021)) ? relayOwn9021.value : [];
+          if (own.length && d === 'ghostchat') return rxOf(...own);
           // Roster REQ that never answers (gated relay, pre-auth): the join
           // button must not flash at a possible member meanwhile.
           if (d === 'silentchat') return rxNever;
@@ -324,6 +335,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_leave: () => 'Leave',
   groups_join_sent: () => 'Join request sent',
   groups_join_already: () => 'You are already a member.',
+  groups_composer_join_note: () => 'Join to write here.',
+  community_join_request: () => 'Request to join',
+  community_join_pending: () => 'Request sent — waiting for approval.',
   groups_leave_sent: () => 'Leave request sent',
   groups_join_failed: () => 'Request failed',
   groups_send_failed: () => 'Message could not be sent',
@@ -361,6 +375,7 @@ describe('GroupChat', () => {
     signEvent.mockClear();
     relayCalls.length = 0;
     requestCalls.length = 0;
+    relayOwn9021.value = [];
     joinedCommunikeyEventsHolder.events = [];
     relayInfoHolder.info = {
       limitation: { auth_required: true },
@@ -410,6 +425,42 @@ describe('GroupChat', () => {
       expect(screen.getByTestId('group-restricted-note')).toBeTruthy();
     });
     expect(screen.queryByTestId('group-chat-input')).toBeNull();
+  });
+
+  // A readable group the viewer hasn't joined: the relay would reject every
+  // send ('blocked: unknown member'), so the composer gives way to a join
+  // bar (laoc, 2026-08-19: an enabled input whose sends silently bounced).
+  it('non-member of a readable group: join bar instead of composer', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+    const bar = await screen.findByTestId('group-join-bar');
+    expect(bar.textContent).toContain('Join to write here.');
+    expect(screen.queryByTestId('group-chat-input')).toBeNull();
+  });
+
+  // A closed group stores the 9021 for the admin queue — after sending, the
+  // join affordances flip to the pending note instead of a Join button that
+  // looks ignored (laoc, 2026-08-19: 'the join button kept there').
+  it('closed group: request wording, and pending note after sending', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'ghostchat' } } });
+    const bar = await screen.findByTestId('group-join-bar');
+    const button = within(bar).getByTestId('group-join-bar-button');
+    expect(button.textContent).toContain('Request to join');
+
+    await fireEvent.click(button);
+    await waitFor(() =>
+      expect(screen.getByTestId('group-join-bar').textContent).toContain(
+        'Request sent — waiting for approval.'
+      )
+    );
+    expect(await screen.findByTestId('group-join-pending')).toBeTruthy();
+    expect(screen.queryByTestId('group-join')).toBeNull();
+  });
+
+  it('a stored 9021 of mine keeps the pending state across a reload', async () => {
+    relayOwn9021.value = [signWith({ kind: 9021, content: '', tags: [['h', 'ghostchat']] }, MY_SK)];
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'ghostchat' } } });
+    expect(await screen.findByTestId('group-join-pending')).toBeTruthy();
+    expect(screen.queryByTestId('group-join')).toBeNull();
   });
 
   it('sends a kind-9 h-tagged message to the group relay only', async () => {
@@ -476,20 +527,20 @@ describe('GroupChat', () => {
   });
 
   it('join publishes a 9021 to the group relay and mirrors the group into the 10009 list', async () => {
-    render(GroupChat, { props: { pointer } });
-    // I'm not in the members list -> Join button shows
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+    // I'm not in openchat's members list -> Join button shows
     const joinButton = await screen.findByTestId('group-join');
     await fireEvent.click(joinButton);
 
     await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
     const joinEvent = publishMock.mock.calls[0][0];
     expect(joinEvent.kind).toBe(9021);
-    expect(joinEvent.tags).toEqual([['h', 'beechat']]);
+    expect(joinEvent.tags).toEqual([['h', 'openchat']]);
 
     await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalledTimes(1));
     const listEvent = publishOptimisticMock.mock.calls[0][0];
     expect(listEvent.kind).toBe(10009);
-    expect(listEvent.tags).toContainEqual(['group', 'beechat', GROUP_RELAY]);
+    expect(listEvent.tags).toContainEqual(['group', 'openchat', GROUP_RELAY]);
   });
 
   // laoc, 2026-08-19: a member whose roster read hadn't answered yet was
@@ -507,7 +558,7 @@ describe('GroupChat', () => {
   it("an 'already a member' refusal is a friendly no-op, not an error", async () => {
     publishMock.mockRejectedValueOnce(new Error('duplicate: already a member'));
     const { showToast } = await import('$lib/helpers/toast');
-    render(GroupChat, { props: { pointer } });
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
     const joinButton = await screen.findByTestId('group-join');
     await fireEvent.click(joinButton);
     await waitFor(() =>
@@ -552,7 +603,7 @@ describe('GroupChat', () => {
     // reading (see access-choice.js), but the count is the same roster
     // either way: `membersEvent` carries exactly one member.
     const line = await screen.findByTestId('disclosure-line');
-    expect(line.textContent).toBe('Readable by 1 selected members.');
+    expect(line.textContent).toBe('Readable by 2 selected members.');
   });
 
   it('shows the world-readable disclosure line for a group without `private`', async () => {
@@ -613,7 +664,7 @@ describe('GroupChat', () => {
     await screen.findByTestId('group-name');
 
     const line = await screen.findByTestId('disclosure-line');
-    expect(line.textContent).toBe('Readable by all 1 members.');
+    expect(line.textContent).toBe('Readable by all 2 members.');
   });
 
   // A channel opened from a host directory used to be a dead end: the chat

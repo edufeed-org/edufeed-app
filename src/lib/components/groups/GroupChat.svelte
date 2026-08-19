@@ -165,14 +165,25 @@
     // gated hosts the first metadata REQ can race the handshake and come up
     // empty (missing name/badges/roster), and it had no second chance.
     rosterAnswered = false;
+    const me = getActiveUser()?.pubkey;
     const sub = pool
       .relay(pointer.relay)
       .request(
-        { kinds: [GROUP_METADATA_KIND, GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND], '#d': [pointer.id] },
+        [
+          {
+            kinds: [GROUP_METADATA_KIND, GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND],
+            '#d': [pointer.id]
+          },
+          // My own stored join request, so "pending" survives a reload.
+          ...(me ? [{ kinds: [9021], authors: [me], '#h': [pointer.id], limit: 1 }] : [])
+        ],
         { timeout: 8000 }
       )
       .subscribe({
         next: (/** @type {any} */ event) => {
+          if (event.kind === 9021) {
+            hasStoredJoinRequest = true;
+          }
           if (event.kind === GROUP_METADATA_KIND) {
             metadata = getGroupMetadata(event);
             metadataEvent = event;
@@ -375,6 +386,23 @@
   );
   const myPubkey = $derived(getActiveUser()?.pubkey);
   const isMember = $derived(!!myPubkey && members.has(myPubkey));
+  // 39001 admins are writers even when the relay's 39002 omits them.
+  const canWrite = $derived(isMember || (!!myPubkey && admins.some((a) => a.pubkey === myPubkey)));
+  // NIP-29 `closed` marker: a bare 9021 does NOT auto-join — it is stored
+  // for the admins' Beitrittsanfragen queue. Missing metadata counts as
+  // closed (same lock direction as everywhere else). Wizard-created
+  // channels are always closed; foreign open groups auto-add on join.
+  const groupClosed = $derived(
+    !metadataEvent || !!metadataEvent.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed')
+  );
+  // My own stored 9021 (loaded with the roster REQ) or a request sent this
+  // session: the join affordances flip to a pending note instead of a Join
+  // button that looks ignored (laoc, 2026-08-19).
+  let joinRequestedNow = $state(false);
+  let hasStoredJoinRequest = $state(false);
+  const joinPending = $derived(
+    groupClosed && !isMember && (joinRequestedNow || hasStoredJoinRequest)
+  );
   const isAdmin = $derived(!!myPubkey && admins.some((a) => a.pubkey === myPubkey));
 
   // Management entry points: the members modal (Task 7) and the admin-only
@@ -543,6 +571,7 @@
       // The relay adds you to 39002 on an open group — refresh the roster so
       // the button flips to Leave without a reload (laoc, 2026-08-11).
       onRosterChanged();
+      joinRequestedNow = true;
       showToast(m.groups_join_sent(), 'success');
     } catch (err) {
       if (isAlreadyMemberError(err)) {
@@ -655,14 +684,20 @@
         >
           {m.groups_leave()}
         </button>
+      {:else if joinPending}
+        <span class="text-xs text-base-content/60" data-testid="group-join-pending"
+          >{m.community_join_pending()}</span
+        >
       {:else}
+        <!-- Closed group: the 9021 lands in the admins' queue — say
+          "anfragen", not "beitreten" (open groups auto-add on join). -->
         <button
           type="button"
           class="btn btn-xs btn-primary"
           data-testid="group-join"
           onclick={join}
         >
-          {m.groups_join()}
+          {groupClosed ? m.community_join_request() : m.groups_join()}
         </button>
       {/if}
     {/if}
@@ -794,7 +829,28 @@
         >
           <span>{m.groups_restricted_note()}</span>
           {#if myPubkey && !isMember}
-            <button class="btn btn-sm btn-primary" onclick={join}>{m.groups_join()}</button>
+            <button class="btn btn-sm btn-primary" onclick={join}
+              >{groupClosed ? m.community_join_request() : m.groups_join()}</button
+            >
+          {/if}
+        </div>
+      {:else if myPubkey && rosterAnswered && !canWrite}
+        <!-- Readable, but not a member: the relay would reject every send
+          ("blocked: unknown member") — offer the join instead of a composer
+          whose messages silently vanish (laoc, 2026-08-19). -->
+        <div
+          class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+          data-testid="group-join-bar"
+        >
+          {#if joinPending}
+            <span>{m.community_join_pending()}</span>
+          {:else}
+            <span>{m.groups_composer_join_note()}</span>
+            <button
+              class="btn btn-sm btn-primary"
+              data-testid="group-join-bar-button"
+              onclick={join}>{groupClosed ? m.community_join_request() : m.groups_join()}</button
+            >
           {/if}
         </div>
       {:else}
