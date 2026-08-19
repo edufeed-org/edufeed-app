@@ -110,6 +110,31 @@ describe('authenticateOnce', () => {
     expect(res.ok).toBe(false);
   });
 
+  // The CLOSED auth-required error can arrive BEFORE the relay's AUTH frame —
+  // giving up on "no challenge" left the chat permanently blank until some
+  // other flow (the join button) happened to authenticate (laoc, 2026-08-19).
+  it('waits for a late challenge instead of giving up', async () => {
+    const { BehaviorSubject } = await import('rxjs');
+    const relay = fakeRelay({ challenge: null });
+    relay.challenge$ = new BehaviorSubject(null);
+    setTimeout(() => {
+      relay.challenge = 'late-chal';
+      relay.challenge$.next('late-chal');
+    }, 30);
+    const res = await authenticateOnce(relay, SIGNER);
+    expect(relay.authenticate).toHaveBeenCalledTimes(1);
+    expect(res.ok).toBe(true);
+  });
+
+  it('still gives up when no challenge ever arrives (bounded wait)', async () => {
+    const { BehaviorSubject } = await import('rxjs');
+    const relay = fakeRelay({ challenge: null });
+    relay.challenge$ = new BehaviorSubject(null);
+    const res = await authenticateOnce(relay, SIGNER, { challengeTimeoutMs: 50 });
+    expect(relay.authenticate).not.toHaveBeenCalled();
+    expect(res.ok).toBe(false);
+  });
+
   it('reports a thrown error as ok:false instead of rejecting', async () => {
     const relay = fakeRelay();
     relay.authenticate = vi.fn(async () => {

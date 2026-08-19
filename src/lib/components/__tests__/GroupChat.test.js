@@ -198,7 +198,12 @@ const relayInfoHolder = vi.hoisted(() => ({
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   const { EventStore } = await import('applesauce-core');
   await import('applesauce-common'); // registers models, same as the real module
-  const { of: rxOf, NEVER: rxNever, merge: rxMerge } = await import('rxjs');
+  const {
+    of: rxOf,
+    NEVER: rxNever,
+    merge: rxMerge,
+    Observable: rxObservable
+  } = await import('rxjs');
   const eventStore = new EventStore();
   // applesauce's default verifier (its own nostr-tools 2.19.4 / @noble 1.3.1)
   // does an `instanceof Uint8Array` that fails CROSS-REALM under jsdom, so
@@ -225,11 +230,21 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           return rxOf(metadataEvent, membersEvent);
         },
         // keep the subscription open after replay so unsubscribe paths run
-        subscription: () =>
-          rxMerge(
+        subscription: (/** @type {any} */ filters) => {
+          // A private group the active user is NOT a member of: the relay
+          // answers the chat REQ with CLOSED restricted (NIP-29) — modelled
+          // as an erroring observable, same as applesauce surfaces it.
+          const h = Array.isArray(filters) ? filters[0]?.['#h']?.[0] : filters?.['#h']?.[0];
+          if (h === 'restrictedchat') {
+            return new rxObservable((/** @type {any} */ sub) =>
+              sub.error(new Error('restricted: not a member'))
+            );
+          }
+          return rxMerge(
             rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply, legacyNested),
             rxNever
-          ),
+          );
+        },
         publish: publishMock,
         authenticate: vi.fn().mockResolvedValue({ ok: true }),
         // The header's badges (and the disclosure line's auth cap) read the
@@ -302,6 +317,7 @@ vi.mock(
 
 vi.mock('$lib/paraglide/messages', () => ({
   groups_join: () => 'Join',
+  groups_restricted_note: () => 'Only members can read and write in this channel.',
   groups_leave: () => 'Leave',
   groups_join_sent: () => 'Join request sent',
   groups_leave_sent: () => 'Leave request sent',
@@ -378,6 +394,18 @@ describe('GroupChat', () => {
       expect(screen.getByTestId('group-name').textContent).toContain('willkommen');
     });
     expect(screen.getByTestId('group-name').textContent).not.toContain('ghostchat');
+  });
+
+  // NIP-29: only members read/write a private group — the relay refuses the
+  // chat REQ with CLOSED restricted. That must become a visible state, not
+  // an empty chat with a live composer whose sends silently vanish
+  // (laoc, 2026-08-19).
+  it('a restricted refusal hides the composer behind a members-only notice', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'restrictedchat' } } });
+    await waitFor(() => {
+      expect(screen.getByTestId('group-restricted-note')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('group-chat-input')).toBeNull();
   });
 
   it('sends a kind-9 h-tagged message to the group relay only', async () => {

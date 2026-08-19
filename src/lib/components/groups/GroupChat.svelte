@@ -45,7 +45,7 @@
   } from '$lib/helpers/scroll-memory.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
-  import { authenticateOnce } from '$lib/groups/relay-auth.js';
+  import { authenticateOnce, isRestrictedError } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
@@ -135,6 +135,12 @@
   /** @type {import('applesauce-common/helpers/groups').GroupAdmin[]} */
   let admins = $state.raw([]);
   let authRequired = $state(false);
+  // Authenticated but not on the (private) group's roster: the relay closes
+  // the chat REQ `restricted` (NIP-29). Rendered as a members-only notice in
+  // place of the composer — an empty chat with a live composer whose sends
+  // the relay silently rejects read as "my message vanished"
+  // (laoc, 2026-08-19).
+  let restricted = $state(false);
   let isLoading = $state(true);
   /** @type {any[]} */ let messages = $state([]);
   /** @type {any[]} */ let reactionEvents = $state([]);
@@ -187,6 +193,7 @@
     retrySeq; // re-run after a successful NIP-42 authenticate
     isLoading = true;
     authRequired = false;
+    restricted = false;
     const filter = { kinds: [9], '#h': [pointer.id] };
     const fallbackTimer = setTimeout(() => (isLoading = false), 4000);
 
@@ -200,6 +207,10 @@
       .subscribe({
         error: (/** @type {any} */ err) => {
           isLoading = false;
+          if (isRestrictedError(err)) {
+            restricted = true;
+            return;
+          }
           if (String(err?.message ?? err).includes('auth-required')) {
             authRequired = true;
             const user = getActiveUser();
@@ -750,16 +761,28 @@
           {/if}
         </p>
       {/if}
-      <ChatComposer
-        bind:value={text}
-        placeholder={m.groups_input_placeholder({ name: displayTitle })}
-        disabled={!myPubkey}
-        {sending}
-        onSubmit={send}
-        {replyTo}
-        onCancelReply={() => (replyTo = null)}
-        testid="group-chat-input"
-      />
+      {#if restricted}
+        <div
+          class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+          data-testid="group-restricted-note"
+        >
+          <span>{m.groups_restricted_note()}</span>
+          {#if myPubkey && !isMember}
+            <button class="btn btn-sm btn-primary" onclick={join}>{m.groups_join()}</button>
+          {/if}
+        </div>
+      {:else}
+        <ChatComposer
+          bind:value={text}
+          placeholder={m.groups_input_placeholder({ name: displayTitle })}
+          disabled={!myPubkey}
+          {sending}
+          onSubmit={send}
+          {replyTo}
+          onCancelReply={() => (replyTo = null)}
+          testid="group-chat-input"
+        />
+      {/if}
     </div>
 
     {#if openThreadRoot}

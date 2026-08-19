@@ -19,6 +19,18 @@ export function isAuthRequiredError(err) {
   return message.includes('auth-required');
 }
 
+/**
+ * NIP-29's other refusal: authenticated, but not a member of the (private)
+ * group — khatru closes the REQ with `restricted: not a member`. Distinct
+ * from auth-required: authenticating again cannot fix it, joining can.
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isRestrictedError(err) {
+  const message = String(/** @type {any} */ (err)?.message ?? err ?? '');
+  return message.includes('restricted');
+}
+
 // ---------------------------------------------------------------------------
 // One AUTH per challenge, per relay.
 //
@@ -49,42 +61,84 @@ export function __resetAuthAttempts() {
 }
 
 /**
+ * Wait (bounded) for the relay's AUTH challenge. The CLOSED `auth-required`
+ * error routinely arrives BEFORE the AUTH frame does, so "no challenge right
+ * now" usually means "not yet", not "never" — giving up immediately left the
+ * chat permanently blank until some other flow happened to authenticate
+ * (laoc, 2026-08-19). `challenge$` is a BehaviorSubject on applesauce's
+ * Relay; a fake without it resolves null at once.
+ * @param {any} relay
+ * @param {number} timeoutMs
+ * @returns {Promise<string | null>}
+ */
+function waitForChallenge(relay, timeoutMs) {
+  if (relay?.challenge) return Promise.resolve(relay.challenge);
+  const challenge$ = relay?.challenge$;
+  if (!challenge$?.subscribe) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let done = false;
+    /** @type {{unsubscribe: () => void} | undefined} */
+    let sub;
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    /** @param {string | null} value */
+    function finish(value) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      // BehaviorSubject replays synchronously — `sub` may not be assigned
+      // yet, so defer the unsubscribe past the assignment below.
+      queueMicrotask(() => sub?.unsubscribe());
+      resolve(value);
+    }
+    sub = challenge$.subscribe((/** @type {string | null} */ value) => {
+      if (value) finish(value);
+    });
+    if (done) sub?.unsubscribe();
+  });
+}
+
+/**
  * Authenticate with a relay at most once per challenge.
  *
  * Never throws and never resolves ambiguously: callers get `ok:false` for a
  * refusal, a thrown signer error and a missing challenge alike, so none of
- * them can read a refusal as success.
+ * them can read a refusal as success. When the challenge hasn't arrived yet
+ * it is awaited (bounded) rather than treated as missing.
  *
  * @param {any} relay an applesauce Relay
  * @param {any} signer
+ * @param {{challengeTimeoutMs?: number}} [opts]
  * @returns {Promise<{ok: boolean, message?: string}>}
  */
-export function authenticateOnce(relay, signer) {
+export function authenticateOnce(relay, signer, { challengeTimeoutMs = 5000 } = {}) {
   // Already authenticated: the challenge in hand is one we (or another
   // component) have answered. Asking again is what breaks the connection.
   if (relay?.authenticated) return Promise.resolve({ ok: true });
-
-  const challenge = relay?.challenge;
-  // applesauce THROWS synchronously without one, so this is a guard, not
-  // politeness.
-  if (!challenge) return Promise.resolve({ ok: false, message: 'no challenge' });
   if (!signer) return Promise.resolve({ ok: false, message: 'no signer' });
 
-  const key = `${relay.url} ${challenge}`;
-  const existing = attempts.get(key);
-  // Share the in-flight promise rather than starting a second handshake: two
-  // components mounting on the same route would otherwise race.
-  if (existing) return existing;
+  return waitForChallenge(relay, challengeTimeoutMs).then((challenge) => {
+    // applesauce's authenticate() THROWS synchronously without a challenge,
+    // so this stays a hard guard even after the wait.
+    if (!challenge) return { ok: false, message: 'no challenge' };
+    // The wait may have crossed another component's successful handshake.
+    if (relay?.authenticated) return { ok: true };
 
-  const pending = Promise.resolve()
-    .then(() => relay.authenticate(signer))
-    .then((/** @type {any} */ response) =>
-      response?.ok === false
-        ? { ok: false, message: String(response.message ?? 'refused') }
-        : { ok: true }
-    )
-    .catch((/** @type {any} */ err) => ({ ok: false, message: String(err?.message ?? err) }));
+    const key = `${relay.url} ${challenge}`;
+    const existing = attempts.get(key);
+    // Share the in-flight promise rather than starting a second handshake:
+    // two components mounting on the same route would otherwise race.
+    if (existing) return existing;
 
-  attempts.set(key, pending);
-  return pending;
+    const pending = Promise.resolve()
+      .then(() => relay.authenticate(signer))
+      .then((/** @type {any} */ response) =>
+        response?.ok === false
+          ? { ok: false, message: String(response.message ?? 'refused') }
+          : { ok: true }
+      )
+      .catch((/** @type {any} */ err) => ({ ok: false, message: String(err?.message ?? err) }));
+
+    attempts.set(key, pending);
+    return pending;
+  });
 }

@@ -3370,5 +3370,6 @@
   "community_expand_private_title": "Privater Bereich",
   "community_expand_private_body": "Ende-zu-Ende-verschlüsselte Kanäle nur für Eingeladene – nach außen komplett unsichtbar. Deine öffentlichen Inhalte bleiben wie bisher.",
   "community_expand_private_usecase": "Gut für vertrauliche Absprachen im engeren Kreis.",
-  "community_expand_xor_hint": "Eine Community kann nur einen dieser Wege gehen – beides zusammen ist nicht möglich."
+  "community_expand_xor_hint": "Eine Community kann nur einen dieser Wege gehen – beides zusammen ist nicht möglich.",
+  "groups_restricted_note": "Nur Mitglieder können diesen Kanal lesen und schreiben."
 }
