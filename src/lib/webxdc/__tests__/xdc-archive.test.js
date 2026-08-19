@@ -21,7 +21,10 @@ function makeXdc(extra = {}) {
   });
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 describe('xdc-archive', () => {
   it('unzips with normalized paths and skips directories', () => {
@@ -34,6 +37,17 @@ describe('xdc-archive', () => {
     const files = unzipXdc(makeXdc());
     const again = unzipXdc(zipXdc(files));
     expect([...again.keys()].sort()).toEqual([...files.keys()].sort());
+  });
+
+  it('zipXdc is deterministic for identical input', async () => {
+    const files = new Map([['index.html', strToU8('<p>x</p>')]]);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2020-01-01T00:00:00Z'));
+    const a = await sha256Bytes(zipXdc(files));
+    vi.setSystemTime(new Date('2030-06-15T12:34:56Z'));
+    const b = await sha256Bytes(zipXdc(files));
+    vi.useRealTimers();
+    expect(a).toBe(b);
   });
 
   it('extracts manifest name and icon', () => {

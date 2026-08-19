@@ -23,9 +23,24 @@ export function unzipXdc(bytes) {
   return files;
 }
 
+// Pinned to the earliest date the ZIP/DOS timestamp format supports (1980)
+// so identical file contents always produce an identical archive (and thus
+// an identical SHA-256 hash) regardless of when zipXdc runs — fflate's
+// zipSync otherwise stamps each entry's mtime header with the current time,
+// which breaks hash-based dedup/license reuse. (new Date(0) — the Unix
+// epoch — is before 1980 and fflate rejects it with "date not in range".)
+const DETERMINISTIC_MTIME = new Date('1980-01-01T00:00:00Z');
+
 /** @param {Map<string, Uint8Array>} files @returns {Uint8Array} */
 export function zipXdc(files) {
-  return zipSync(Object.fromEntries(files));
+  const entries = [...files].map(
+    ([path, data]) =>
+      /** @type {[string, [Uint8Array, import('fflate').ZipOptions]]} */ ([
+        path,
+        [data, { mtime: DETERMINISTIC_MTIME }]
+      ])
+  );
+  return zipSync(Object.fromEntries(entries));
 }
 
 /** @param {Map<string, Uint8Array>} files */
