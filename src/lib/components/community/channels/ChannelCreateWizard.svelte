@@ -313,8 +313,13 @@
           (/** @type {string} */ a) => putUserOn({ id, relay }, a, ['admin'], user)
         );
         if (adminAggregate.failed.length > 0) {
+          // Dedicated key — area_members_fanout_partial's "{failed} of
+          // {total} channels refused" is worded for the OTHER axis (one
+          // member across many channels); this fan-out is one channel
+          // across many admins, so reusing it would misreport counts as
+          // channels instead of admins.
           showToast(
-            m.area_members_fanout_partial({
+            m.channel_admins_fanout_partial({
               failed: adminAggregate.failed.length,
               total: otherAdmins.length
             }),

@@ -3237,6 +3237,7 @@
   "area_members_fanout_partial_removed": "{failed} von {total} Kanälen lehnten die Entfernung ab — {names}",
   "area_members_removed": "Aus {count} Kanälen entfernt",
   "area_members_admin_only_note": "Admin-Rechte in {channels} können hier nicht entzogen werden.",
+  "channel_admins_fanout_partial": "{failed} von {total} Admins konnten dem Kanal nicht hinzugefügt werden.",
   "groups_settings_title": "Gruppeneinstellungen",
   "groups_settings_save": "Änderungen speichern",
   "groups_settings_saved": "Gruppe aktualisiert",

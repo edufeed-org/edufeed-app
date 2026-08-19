@@ -751,4 +751,50 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
       )
     ).toBe(false);
   });
+
+  // Controller ruling: area_members_fanout_partial is worded for the OTHER
+  // fan-out axis (one member across many channels — "{failed} of {total}
+  // channels refused"); reusing it here would misreport admin failures as
+  // channel failures. This axis (one channel across many admins) gets its
+  // own key.
+  it('warns with channel_admins_fanout_partial (not area_members_fanout_partial) when an admin put-user fails', async () => {
+    const OK_ADMIN = 'd'.repeat(64);
+    const FAILING_ADMIN = 'f'.repeat(64);
+    const onCreated = vi.fn();
+    const communikeyEvent = nip29Community();
+    publishToGroupRelay.mockImplementation(
+      async (/** @type {any} */ _conn, /** @type {any} */ template) => {
+        const pTag = template.tags.find((/** @type {string[]} */ t) => t[0] === 'p');
+        if (pTag?.[1] === FAILING_ADMIN) throw new Error('relay rejected');
+        return {};
+      }
+    );
+
+    render(ChannelCreateWizard, {
+      props: {
+        communikeyEvent,
+        adminPubkeys: [mockManager.active.pubkey, OK_ADMIN, FAILING_ADMIN],
+        onClose: () => {},
+        onCreated
+      }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-group-id'));
+
+    const warningToast = toastSpy.mock.calls.find(([, type]) => type === 'warning');
+    expect(warningToast).toBeTruthy();
+    const [message] = /** @type {[string, string]} */ (warningToast);
+    // "1 of 2 admins could not be added to the channel." — names ADMINS as
+    // the failed/total axis, never area_members_fanout_partial's "{failed}
+    // of {total} channels refused" wording (which would misreport 1 failed
+    // ADMIN as 1 failed CHANNEL out of 2).
+    expect(message.toLowerCase()).toContain('admin');
+    expect(message.toLowerCase()).not.toContain('refused');
+    expect(message.toLowerCase()).not.toContain('abgelehnt');
+  });
 });
