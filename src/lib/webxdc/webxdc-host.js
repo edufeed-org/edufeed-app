@@ -146,6 +146,9 @@ function generateBridgeScript({ selfAddr, selfName }) {
       return {
         setListener: function (cb) { realtimeListener = cb; },
         send: function (data) {
+          if (data.length > ${REALTIME_MAX_BYTES}) {
+            throw new Error('Realtime payload exceeds ${REALTIME_MAX_BYTES} byte limit');
+          }
           request('webxdc.realtimeChannel.send', { data: Array.prototype.slice.call(data) });
         },
         leave: function () {

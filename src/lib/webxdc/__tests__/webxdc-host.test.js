@@ -36,6 +36,7 @@ describe('createWebxdcHost', () => {
     expect(host.bridgeScript).toContain('"Tester"');
     expect(host.bridgeScript).toContain('window.webxdc');
     expect(host.bridgeScript).toContain('65536');
+    expect(host.bridgeScript).toContain('128000');
   });
 
   it('sendUpdate forwards payload and meta to sync', async () => {
