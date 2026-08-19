@@ -499,7 +499,8 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
     const createArgs = createGroupOnRelay.mock.calls[0][0];
     expect(createArgs.relayConn).toBe(relayConnStub);
-    expect(createArgs.metadata).toEqual(expect.objectContaining({ isPublic: true, isOpen: false }));
+    // members + worldReadable = world channel: open to self-join (bare 9021).
+    expect(createArgs.metadata).toEqual(expect.objectContaining({ isPublic: true, isOpen: true }));
     expect(createArgs.user).toBe(mockManager.active);
 
     await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));

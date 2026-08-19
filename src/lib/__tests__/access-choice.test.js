@@ -10,10 +10,10 @@ describe('accessChoiceToNip29', () => {
       access: 'members'
     });
   });
-  it('weltoffen: public to READ, still closed to join', () => {
+  it('weltoffen: public to READ and open to self-join (world channel)', () => {
     expect(accessChoiceToNip29({ tier: 'members', worldReadable: true })).toEqual({
       isPublic: true,
-      isOpen: false,
+      isOpen: true,
       access: 'members'
     });
   });
@@ -23,5 +23,13 @@ describe('accessChoiceToNip29', () => {
       isOpen: false,
       access: 'invited'
     });
+  });
+
+  it('world channels are open groups — bare 9021 self-join, no admin approval', () => {
+    const world = accessChoiceToNip29({ tier: 'members', worldReadable: true });
+    expect(world).toMatchObject({ isPublic: true, isOpen: true });
+    // members-only and invited channels stay closed (join needs relay policy or code)
+    expect(accessChoiceToNip29({ tier: 'members', worldReadable: false }).isOpen).toBe(false);
+    expect(accessChoiceToNip29({ tier: 'invited' }).isOpen).toBe(false);
   });
 });
