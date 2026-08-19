@@ -435,6 +435,11 @@ export function GET() {
     // upload). Only exposes whether it's enabled — the URL stays server-side.
     metadataCleaner: {
       enabled: Boolean(env.METADATA_CLEANER_URL)
+    },
+
+    // Webxdc sandbox host (interactive resources player)
+    webxdc: {
+      sandboxDomain: env.SANDBOX_DOMAIN || 'iframe.diy'
     }
   };
 

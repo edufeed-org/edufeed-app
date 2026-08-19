@@ -218,6 +218,9 @@ const defaultConfig = {
   // Metadata cleaner availability (service URL stays server-side)
   metadataCleaner: {
     enabled: false
+  },
+  webxdc: {
+    sandboxDomain: 'iframe.diy'
   }
 };
 
@@ -392,7 +395,8 @@ export function initializeConfig(runtimeConfig) {
     metadataCleaner: {
       ...defaultConfig.metadataCleaner,
       ...runtimeConfig.metadataCleaner
-    }
+    },
+    webxdc: { ...defaultConfig.webxdc, ...runtimeConfig.webxdc }
   };
 
   // Signal that config is ready for dependent code
@@ -509,5 +513,8 @@ export const runtimeConfig = {
   },
   get metadataCleaner() {
     return config.metadataCleaner;
+  },
+  get webxdc() {
+    return config.webxdc;
   }
 };
