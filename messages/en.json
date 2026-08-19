@@ -3371,5 +3371,6 @@
   "community_expand_private_body": "End-to-end encrypted channels for invitees only – completely invisible from the outside. Your public content stays as it is.",
   "community_expand_private_usecase": "Good for confidential conversations in a smaller circle.",
   "community_expand_xor_hint": "A community can take only one of these paths – both together is not possible.",
-  "groups_restricted_note": "Only members can read and write in this channel."
+  "groups_restricted_note": "Only members can read and write in this channel.",
+  "groups_join_already": "You are already a member."
 }

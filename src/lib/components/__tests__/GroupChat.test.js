@@ -221,6 +221,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // (including the kind:0 profile requests, which carry no `#d`) on
           // `beechat`.
           const d = filters?.['#d']?.[0];
+          // Roster REQ that never answers (gated relay, pre-auth): the join
+          // button must not flash at a possible member meanwhile.
+          if (d === 'silentchat') return rxNever;
           if (d === 'openchat') return rxOf(metadataEventOpen, membersEventOpen);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
@@ -320,6 +323,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_restricted_note: () => 'Only members can read and write in this channel.',
   groups_leave: () => 'Leave',
   groups_join_sent: () => 'Join request sent',
+  groups_join_already: () => 'You are already a member.',
   groups_leave_sent: () => 'Leave request sent',
   groups_join_failed: () => 'Request failed',
   groups_send_failed: () => 'Message could not be sent',
@@ -486,6 +490,30 @@ describe('GroupChat', () => {
     const listEvent = publishOptimisticMock.mock.calls[0][0];
     expect(listEvent.kind).toBe(10009);
     expect(listEvent.tags).toContainEqual(['group', 'beechat', GROUP_RELAY]);
+  });
+
+  // laoc, 2026-08-19: a member whose roster read hadn't answered yet was
+  // shown Beitreten, and clicking it surfaced the relay's 'duplicate:
+  // already a member' as a raw error. Two guards: no join/leave until the
+  // roster REQ has ANSWERED, and the duplicate refusal is a friendly no-op.
+  it('offers neither Join nor Leave while the roster has not answered', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'silentchat' } } });
+    // Give effects a beat — the button must not appear at all.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('group-join')).toBeNull();
+    expect(screen.queryByTestId('group-leave')).toBeNull();
+  });
+
+  it("an 'already a member' refusal is a friendly no-op, not an error", async () => {
+    publishMock.mockRejectedValueOnce(new Error('duplicate: already a member'));
+    const { showToast } = await import('$lib/helpers/toast');
+    render(GroupChat, { props: { pointer } });
+    const joinButton = await screen.findByTestId('group-join');
+    await fireEvent.click(joinButton);
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('You are already a member.', 'info')
+    );
+    expect(showToast).not.toHaveBeenCalledWith('Request failed', 'error');
   });
 
   // The header's small labels, end to end: what the RELAY announces about

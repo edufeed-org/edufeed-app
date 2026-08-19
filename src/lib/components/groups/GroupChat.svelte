@@ -31,7 +31,8 @@
     buildGroupMessageTemplate,
     buildJoinRequestTemplate,
     buildLeaveRequestTemplate,
-    isMembershipRefusal
+    isMembershipRefusal,
+    isAlreadyMemberError
   } from '$lib/groups/groups.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { publishToGroupRelay } from '$lib/groups/group-management.js';
@@ -148,6 +149,11 @@
   // Bump to re-run the roster request below (e.g. after an admin action
   // changes the 39001/39002 events) without touching the chat subscription.
   let rosterSeq = $state(0);
+  // Whether the metadata/roster REQ has ANSWERED (EOSE or error) at least
+  // once for the current channel. Join/Leave stay hidden until then — a
+  // member whose roster is still in flight must not be offered Beitreten
+  // (laoc, 2026-08-19: clicking it earned 'duplicate: already a member').
+  let rosterAnswered = $state(false);
 
   // Group metadata/roster: relay-authored addressables with d = group id,
   // requested from the group's own relay only.
@@ -157,6 +163,7 @@
     retrySeq; // a successful NIP-42 authenticate re-runs this REQ too — on
     // gated hosts the first metadata REQ can race the handshake and come up
     // empty (missing name/badges/roster), and it had no second chance.
+    rosterAnswered = false;
     const sub = pool
       .relay(pointer.relay)
       .request(
@@ -176,7 +183,12 @@
             members = new Set(getGroupMembers(event) ?? []);
           }
         },
-        error: () => {}
+        error: () => {
+          rosterAnswered = true;
+        },
+        complete: () => {
+          rosterAnswered = true;
+        }
       });
     return () => sub.unsubscribe();
   });
@@ -532,6 +544,14 @@
       onRosterChanged();
       showToast(m.groups_join_sent(), 'success');
     } catch (err) {
+      if (isAlreadyMemberError(err)) {
+        // Membership is exactly what the click wanted — the button only
+        // showed because the roster read lagged. Refresh it and say so.
+        await updateGroupsList({ add: pointer }).catch(() => {});
+        onRosterChanged();
+        showToast(m.groups_join_already(), 'info');
+        return;
+      }
       console.error('join request failed', err);
       showToast(m.groups_join_failed(), 'error');
     }
@@ -619,7 +639,7 @@
         ⚙
       </button>
     {/if}
-    {#if myPubkey}
+    {#if myPubkey && rosterAnswered}
       {#if isMember}
         <button
           type="button"

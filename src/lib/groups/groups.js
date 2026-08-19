@@ -248,3 +248,16 @@ export function isMembershipRefusal(error) {
   const message = String(/** @type {any} */ (error)?.message ?? '');
   return /unknown member|not a member|membership required/i.test(message);
 }
+
+/**
+ * A join request refused because the requester is ALREADY on the roster —
+ * khatru answers 'duplicate: already a member'. Not a failure: membership is
+ * exactly the state the click wanted (laoc, 2026-08-19 — a member whose
+ * roster read lagged saw the join button and got a raw error for using it).
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isAlreadyMemberError(error) {
+  const message = String(/** @type {any} */ (error)?.message ?? '');
+  return /already a member/i.test(message);
+}
