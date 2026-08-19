@@ -168,6 +168,27 @@ describe('GroupSettingsSheet save', () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('Group updated', 'success'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
+
+  it('preserves an existing parent tag verbatim on save — a 9002 without one DETACHES the group per NIP-29 Subgroups', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['public'], ['parent', 'root-1']]) });
+
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
+      'grp1',
+      expect.objectContaining({ parent: 'root-1' })
+    );
+  });
+
+  it('passes no parent when the group metadata carries none', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['public']]) });
+
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate.mock.calls[0][1].parent).toBeUndefined();
+  });
 });
 
 describe('GroupSettingsSheet delete (two-step confirm)', () => {

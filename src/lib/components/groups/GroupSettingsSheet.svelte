@@ -47,6 +47,14 @@
   );
   // svelte-ignore state_referenced_locally
   let isOpen = $state(!!metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'open'));
+  // NIP-29 Subgroups: a 9002 with no `parent` tag DETACHES the group
+  // (promotes it back to root) — read the existing tag off the raw event so
+  // every save preserves it verbatim. No UI to change/detach it here. Same
+  // one-time-prefill deliberateness as isPublic/isOpen above.
+  // svelte-ignore state_referenced_locally
+  const existingParent = metadataEvent?.tags?.find(
+    (/** @type {string[]} */ t) => t[0] === 'parent'
+  )?.[1];
 
   let busy = $state(false);
   let confirmingDelete = $state(false);
@@ -58,7 +66,14 @@
     try {
       await publishToGroupRelay(
         pool.relay(pointer.relay),
-        buildEditGroupMetadataTemplate(pointer.id, { name, about, picture, isPublic, isOpen }),
+        buildEditGroupMetadataTemplate(pointer.id, {
+          name,
+          about,
+          picture,
+          isPublic,
+          isOpen,
+          parent: existingParent
+        }),
         user
       );
       showToast(m.groups_settings_saved(), 'success');
