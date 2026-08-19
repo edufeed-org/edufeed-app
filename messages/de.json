@@ -3142,5 +3142,15 @@
   "groups_auth_required": "Dieses Relay verlangt eine Authentifizierung für diese Gruppe — erst beitreten, dann neu laden.",
   "groups_reply": "Antworten",
   "groups_input_placeholder": "Nachricht an {name}",
-  "groups_invalid_pointer": "Keine gültige Gruppenadresse"
+  "groups_invalid_pointer": "Keine gültige Gruppenadresse",
+  "webxdc_launch": "Starten",
+  "webxdc_close": "Schließen",
+  "webxdc_fullscreen": "Vollbild",
+  "webxdc_loading": "App wird geladen…",
+  "webxdc_app_type": "Interaktive App",
+  "webxdc_error_fetch": "Das App-Paket konnte nicht heruntergeladen werden.",
+  "webxdc_error_integrity": "Das heruntergeladene Paket stimmt nicht mit der veröffentlichten Prüfsumme überein. Es wurde nicht gestartet.",
+  "webxdc_error_invalid": "Dieses Paket ist keine gültige App (index.html fehlt).",
+  "webxdc_error_timeout": "Die App ist nicht rechtzeitig gestartet.",
+  "webxdc_retry": "Erneut versuchen"
 }

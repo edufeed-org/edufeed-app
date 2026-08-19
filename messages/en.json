@@ -3142,5 +3142,15 @@
   "groups_auth_required": "This relay requires authentication for this group — join first, then reload.",
   "groups_reply": "Reply",
   "groups_input_placeholder": "Message {name}",
-  "groups_invalid_pointer": "Not a valid group address"
+  "groups_invalid_pointer": "Not a valid group address",
+  "webxdc_launch": "Launch",
+  "webxdc_close": "Close",
+  "webxdc_fullscreen": "Fullscreen",
+  "webxdc_loading": "Loading app…",
+  "webxdc_app_type": "Interactive app",
+  "webxdc_error_fetch": "The app package could not be downloaded.",
+  "webxdc_error_integrity": "The downloaded package does not match its published checksum. It was not started.",
+  "webxdc_error_invalid": "This package is not a valid app (missing index.html).",
+  "webxdc_error_timeout": "The app did not start in time.",
+  "webxdc_retry": "Retry"
 }
