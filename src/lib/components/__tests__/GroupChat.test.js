@@ -13,6 +13,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
+// Real module (not mocked): the walledchat auth-required retry exercises the
+// actual one-AUTH-per-challenge guard, so its attempt cache must be cleared
+// between tests the same way a fresh page load would start clean.
+import { __resetAuthAttempts } from '$lib/groups/relay-auth.js';
 
 // REAL keys + signatures: the mock feeds a real applesauce EventStore, which
 // rejects events whose id/sig don't verify — fakes would silently vanish and
@@ -209,6 +213,14 @@ const relayOwn9021 = vi.hoisted(() => ({ value: /** @type {any[]} */ ([]) }));
 // (whose Math.floor(Date.now()/1000) is only 1-second precise).
 const openchatJoinPublishedAt = vi.hoisted(() => ({ ms: /** @type {number | null} */ (null) }));
 const relayCalls = vi.hoisted(() => /** @type {string[]} */ ([]));
+// `walledchat`: a members-tier group on a relay that gates reads — the live
+// finding. Both the roster REQ and the chat subscription reject the FIRST
+// attempt auth-required (the shared authenticateOnce retry handles that,
+// see the `challenge`/`url` fields added to the fake relay below), then
+// reject every attempt AFTER that restricted: authenticated, but not on the
+// roster. Two independent counters because the roster (`request`) and the
+// chat+reactions (`subscription`) calls are separate pool methods.
+const walledChatCalls = vi.hoisted(() => ({ roster: 0, messages: 0 }));
 // Mutable holder for the relay's NIP-11 document (finding 2's test needs to
 // flip auth_required per test) — same pattern as joinedCommunikeyEventsHolder
 // below. Defaults to auth-required, matching the badges test's expectation
@@ -272,6 +284,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // A group whose metadata REQ yields nothing (relay hiccup, race
           // with NIP-42) — the fallback-name test renders this one.
           if (d === 'ghostchat') return rxOf();
+          // walledchat: bundled 39000/39001/39002(+9021) REQ, auth-required
+          // on the first attempt, restricted on every retry after that.
+          if (d === 'walledchat') {
+            walledChatCalls.roster++;
+            const message =
+              walledChatCalls.roster === 1
+                ? 'auth-required: please authenticate'
+                : "restricted: you're trying to access a private group";
+            return new rxObservable((/** @type {any} */ sub) => sub.error(new Error(message)));
+          }
           return rxOf(metadataEvent, membersEvent);
         },
         // keep the subscription open after replay so unsubscribe paths run
@@ -284,6 +306,21 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
             return new rxObservable((/** @type {any} */ sub) =>
               sub.error(new Error('restricted: not a member'))
             );
+          }
+          if (h === 'walledchat') {
+            // Only the FIRST attempt needs auth (drives the shared retry);
+            // the retried read comes back a normal empty stream, unlike the
+            // roster's request() above — isolating the assertion to the
+            // roster's OWN restricted routing, the actual gap under test
+            // (a relay where the chat log settles empty/open rather than
+            // restricted is exactly the case a messages-only fix would miss).
+            walledChatCalls.messages++;
+            if (walledChatCalls.messages === 1) {
+              return new rxObservable((/** @type {any} */ sub) =>
+                sub.error(new Error('auth-required: please authenticate'))
+              );
+            }
+            return rxNever;
           }
           return rxMerge(
             rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply, legacyNested),
@@ -300,6 +337,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           return publishMock(event);
         },
         authenticate: vi.fn().mockResolvedValue({ ok: true }),
+        // authenticateOnce (relay-auth.js) needs a challenge to answer and a
+        // `url` to key its per-relay attempt cache — both real applesauce
+        // Relay exposes; a fake without them resolves 'no challenge' and the
+        // walledchat retry would never fire.
+        url,
+        challenge: 'test-challenge',
+        authenticated: false,
         // The header's badges (and the disclosure line's auth cap) read the
         // relay's NIP-11 document. A fake relay without it is not a relay:
         // applesauce's Relay always exposes this, and leaving it out only
@@ -416,6 +460,9 @@ describe('GroupChat', () => {
     requestCalls.length = 0;
     relayOwn9021.value = [];
     openchatJoinPublishedAt.ms = null;
+    walledChatCalls.roster = 0;
+    walledChatCalls.messages = 0;
+    __resetAuthAttempts();
     joinedCommunikeyEventsHolder.events = [];
     relayInfoHolder.info = {
       limitation: { auth_required: true },
@@ -465,6 +512,57 @@ describe('GroupChat', () => {
       expect(screen.getByTestId('group-restricted-note')).toBeTruthy();
     });
     expect(screen.queryByTestId('group-chat-input')).toBeNull();
+  });
+
+  // The live finding: a non-member on a relay that gates every read hits
+  // auth-required FIRST, then restricted on the retry — the retried
+  // rejection has to land in the same members-only state as an immediate
+  // one, AND still offer a way in (the relay accepts pending 9021s to a
+  // closed group even while reads stay restricted).
+  it('a restricted refusal on the post-auth retry still shows the notice and a join affordance', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'walledchat' } } });
+
+    const note = await screen.findByTestId('group-restricted-note');
+    expect(note.textContent).toContain('Only members can read and write in this channel.');
+    expect(note.textContent).toContain('Request to join');
+    expect(screen.queryByTestId('group-chat-input')).toBeNull();
+    // Both bundled REQs actually retried post-auth, not just answered once.
+    expect(walledChatCalls.roster).toBeGreaterThanOrEqual(2);
+  });
+
+  it('clicking the join affordance in the restricted notice sends the 9021 and flips to pending', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'walledchat' } } });
+    const note = await screen.findByTestId('group-restricted-note');
+
+    await fireEvent.click(within(note).getByRole('button', { name: 'Request to join' }));
+
+    await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+    const joinEvent = publishMock.mock.calls[0][0];
+    expect(joinEvent.kind).toBe(9021);
+    expect(joinEvent.tags).toContainEqual(['h', 'walledchat']);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('group-restricted-note').textContent).toContain(
+        'Request sent — waiting for approval.'
+      );
+    });
+    expect(
+      within(screen.getByTestId('group-restricted-note')).queryByRole('button', {
+        name: 'Request to join'
+      })
+    ).toBeNull();
+  });
+
+  // While the roster read is still in flight (no answer, no error — the
+  // relay just never closes the REQ), a non-member must never see a live,
+  // enabled input: sends into it would be silently rejected the moment the
+  // relay actually answers.
+  it('shows no enabled composer while the roster has not answered', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'silentchat' } } });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const input = /** @type {HTMLInputElement | null} */ (screen.queryByTestId('group-chat-input'));
+    expect(input === null || input.disabled).toBe(true);
   });
 
   // A readable group the viewer hasn't joined: the relay would reject every

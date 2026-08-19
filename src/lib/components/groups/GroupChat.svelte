@@ -145,11 +145,21 @@
   let admins = $state.raw([]);
   let authRequired = $state(false);
   // Authenticated but not on the (private) group's roster: the relay closes
-  // the chat REQ `restricted` (NIP-29). Rendered as a members-only notice in
-  // place of the composer — an empty chat with a live composer whose sends
-  // the relay silently rejects read as "my message vanished"
-  // (laoc, 2026-08-19).
-  let restricted = $state(false);
+  // a REQ `restricted` (NIP-29). Rendered as a members-only notice in place
+  // of the composer — an empty chat with a live composer whose sends the
+  // relay silently rejects reads as "my message vanished" (laoc, 2026-08-19).
+  // Two independent flags, one per REQ that can be refused this way — the
+  // roster (bundled 39000/39001/39002+9021) and the messages/reactions
+  // subscription — because on some relays only ONE of the two comes back
+  // restricted while the other settles quietly empty (no error at all), and
+  // a single shared flag owned by whichever effect happened to touch it last
+  // would get clobbered back to false by the other effect's own reset
+  // (laoc, 2026-08-19: a non-member's roster-only restriction rendered the
+  // softer "join to write" bar instead of the members-only notice, because
+  // only the messages side ever set the flag).
+  let messagesRestricted = $state(false);
+  let rosterRestricted = $state(false);
+  const restricted = $derived(messagesRestricted || rosterRestricted);
   let isLoading = $state(true);
   /** @type {any[]} */ let messages = $state([]);
   /** @type {any[]} */ let reactionEvents = $state([]);
@@ -172,6 +182,7 @@
     // gated hosts the first metadata REQ can race the handshake and come up
     // empty (missing name/badges/roster), and it had no second chance.
     rosterAnswered = false;
+    rosterRestricted = false;
     const me = getActiveUser()?.pubkey;
     const sub = pool
       .relay(pointer.relay)
@@ -202,7 +213,12 @@
             members = new Set(getGroupMembers(event) ?? []);
           }
         },
-        error: () => {
+        error: (/** @type {any} */ err) => {
+          // NIP-29: authenticated, but not on this (private) group's roster
+          // — the relay closes the REQ `restricted`. The relay HAS answered
+          // ("you're not a member"), so this counts as answered too, not as
+          // still-loading.
+          if (isRestrictedError(err)) rosterRestricted = true;
           rosterAnswered = true;
         },
         complete: () => {
@@ -224,7 +240,7 @@
     retrySeq; // re-run after a successful NIP-42 authenticate
     isLoading = true;
     authRequired = false;
-    restricted = false;
+    messagesRestricted = false;
     const filter = { kinds: [9], '#h': [pointer.id] };
     const fallbackTimer = setTimeout(() => (isLoading = false), 4000);
 
@@ -239,7 +255,7 @@
         error: (/** @type {any} */ err) => {
           isLoading = false;
           if (isRestrictedError(err)) {
-            restricted = true;
+            messagesRestricted = true;
             return;
           }
           if (String(err?.message ?? err).includes('auth-required')) {
@@ -857,7 +873,12 @@
           data-testid="group-restricted-note"
         >
           <span>{m.groups_restricted_note()}</span>
-          {#if myPubkey && !isMember}
+          {#if joinPending}
+            <!-- The relay accepts a pending 9021 to a closed group even
+              while reads stay restricted (verified live) — the same pending
+              wording as the header/join-bar, not a dead end. -->
+            <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
+          {:else if myPubkey && !isMember}
             <button class="btn btn-sm btn-primary" onclick={join}
               >{groupClosed ? m.community_join_request() : m.groups_join()}</button
             >
@@ -883,10 +904,14 @@
           {/if}
         </div>
       {:else}
+        <!-- disabled while the roster hasn't answered yet, not just while
+          logged out: canWrite is unknown until then, and an enabled input a
+          non-member could type into is a dead end the moment the roster
+          finally does answer restricted (laoc, 2026-08-19). -->
         <ChatComposer
           bind:value={text}
           placeholder={m.groups_input_placeholder({ name: displayTitle })}
-          disabled={!myPubkey}
+          disabled={!myPubkey || !rosterAnswered}
           {sending}
           onSubmit={send}
           {replyTo}
