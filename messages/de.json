@@ -3367,6 +3367,7 @@
   "community_settings_section_access": "Typ & Zugang",
   "community_settings_section_membership": "Mitgliedschaft",
   "community_basics_saved": "Community-Einstellungen gespeichert",
+  "community_group_metadata_sync_failed": "Community gespeichert, aber die Gruppen-Metadaten konnten nicht aktualisiert werden.",
   "community_basics_closed_sections_hint": "Die öffentlichen Inhaltsbereiche dieser privaten Community verwaltest du über das Schaufenster (unten unter „Typ & Zugang“).",
   "area_settings_section_general": "Sicherheit & Benachrichtigungen",
   "area_settings_on": "An",
