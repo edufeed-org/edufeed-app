@@ -133,6 +133,31 @@ const metadataEventEmptyRoster = signWith(
   RELAY_SK
 );
 const membersEventEmptyRoster = signWith({ kind: 39002, tags: [['d', 'emptychat']] }, RELAY_SK);
+// A FIFTH group, `hangchat`: the live pyramid shape for an AUTHENTICATED
+// NON-MEMBER of a members-tier channel (groups.edufeed.org, reproduced four
+// times). The roster REQ hands over the 39000 and a 39002 that simply does
+// not list me, and then NEVER terminates — no CLOSE `restricted`, no error,
+// no completion applesauce surfaces; its own REQ timeout tears the
+// subscription down silently. The messages subscription hangs the same way.
+// Nothing in either stream ever says "you are not a member", so only a
+// bounded floor in the component can answer this.
+const metadataEventHang = signWith(
+  {
+    kind: 39000,
+    tags: [['d', 'hangchat'], ['name', 'Hang Chat'], ['private'], ['closed']]
+  },
+  RELAY_SK
+);
+const membersEventHang = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'hangchat'],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
 // The two live reply shapes, both hanging off `chatEvent`: the 872-event form
 // (a lone `reply` marker pointing at the root) and the 3-event form (the
 // conformant root+reply pair). The nested one answers `firstReply`, so a
@@ -286,6 +311,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
               Date.now() - openchatJoinPublishedAt.ms >= 1200;
             return rxOf(metadataEventOpen, joined ? membersEventOpenJoined : membersEventOpen);
           }
+          // hangchat: metadata + a roster I'm not on, then silence forever —
+          // the live non-member hang (no CLOSE, no error, no completion).
+          if (d === 'hangchat') return rxMerge(rxOf(metadataEventHang, membersEventHang), rxNever);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
           // A group whose metadata REQ yields nothing (relay hiccup, race
@@ -345,6 +373,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // rosteronlychat: never answers, never errors — only the roster
           // REQ above ever refuses anything for this id.
           if (h === 'rosteronlychat') return rxNever;
+          // hangchat: the chat read hangs exactly like the roster read does.
+          if (h === 'hangchat') return rxNever;
           return rxMerge(
             rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply, legacyNested),
             rxNever
@@ -594,6 +624,38 @@ describe('GroupChat', () => {
     const input = /** @type {HTMLInputElement | null} */ (screen.queryByTestId('group-chat-input'));
     expect(input === null || input.disabled).toBe(true);
   });
+
+  // The live hang (laoc, 2026-08-19, four reproductions on
+  // groups.edufeed.org): an AUTHENTICATED non-member of a members-tier
+  // channel. The roster REQ answers with metadata and a roster I'm not on and
+  // then never terminates — no CLOSE `restricted`, no error, no completion —
+  // so every "the relay told us something" path stays cold and the composer
+  // sat greyed out forever with no notice and no way in. Real timers on
+  // purpose (this file takes that tradeoff elsewhere too, see the
+  // slower-relay join test): the floor is a wall-clock deadline.
+  it('answers a roster REQ that never terminates, and offers the join instead of a dead composer', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'hangchat' } } });
+    await screen.findByTestId('group-name');
+    // Before the floor elapses nothing is claimed: no join bar yet, and the
+    // composer — if rendered at all — is disabled.
+    expect(screen.queryByTestId('group-join-bar')).toBeNull();
+    const earlyInput = /** @type {HTMLInputElement | null} */ (
+      screen.queryByTestId('group-chat-input')
+    );
+    expect(earlyInput === null || earlyInput.disabled).toBe(true);
+
+    const bar = await waitFor(() => screen.getByTestId('group-join-bar'), {
+      timeout: 10000,
+      interval: 100
+    });
+    expect(within(bar).getByTestId('group-join-bar-button').textContent).toContain(
+      'Request to join'
+    );
+    // Still no enabled composer, and no members-only notice either: silence
+    // is not proof of restriction, so the softer join bar is what shows.
+    expect(screen.queryByTestId('group-chat-input')).toBeNull();
+    expect(screen.queryByTestId('group-restricted-note')).toBeNull();
+  }, 20000);
 
   // Regression for the coordinator's live-relay finding: a relay that
   // refuses ONLY the roster REQ (auth-required, then restricted on the

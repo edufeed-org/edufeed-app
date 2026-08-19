@@ -16,6 +16,10 @@
   // them rather than fight the real-time waits (laoc, 2026-08-19).
   export const ROSTER_HEAL_DELAY_MS = 800;
   export const JOIN_ROSTER_HEAL_DELAY_MS = 1500;
+  // Floor under the relay's own answer to the roster REQ (see the roster
+  // effect). Not tied to the REQ's own timeout: this is how long a reader may
+  // be left staring at a composer that cannot yet be enabled or explained.
+  export const ROSTER_ANSWER_TIMEOUT_MS = 5000;
 </script>
 
 <script>
@@ -202,6 +206,28 @@
     // empty (missing name/badges/roster), and it had no second chance.
     rosterAnswered = false;
     rosterRestricted = false;
+    // A FLOOR under the relay's answer, because on pyramid
+    // (groups.edufeed.org) there is none: for an AUTHENTICATED non-member of
+    // a members-tier group the roster REQ delivers no 39002 for me, no
+    // CLOSE `restricted`, and no terminal signal at all — applesauce's own
+    // request timeout tears the subscription down WITHOUT calling
+    // error/complete, so neither branch below ever ran and `rosterAnswered`
+    // stayed false forever: a permanently greyed composer, no members-only
+    // notice, no way in (laoc, 2026-08-19, reproduced live four times).
+    // Only a FLOOR, never a delay: whichever answer lands first wins, and a
+    // member's real roster answer still unlocks the composer immediately.
+    // Deliberately does NOT set `rosterRestricted` — silence is not proof of
+    // restriction, and "answered but not a member" already renders the join
+    // bar, which is the right affordance for a non-member of a closed group.
+    // Re-armed on every effect run, so the post-auth retry (retrySeq) gets a
+    // fresh window rather than inheriting an already-fired one.
+    const answerTimer = setTimeout(() => {
+      rosterAnswered = true;
+    }, ROSTER_ANSWER_TIMEOUT_MS);
+    const rosterAnswer = () => {
+      clearTimeout(answerTimer);
+      rosterAnswered = true;
+    };
     const me = getActiveUser()?.pubkey;
     const sub = pool
       .relay(pointer.relay)
@@ -247,13 +273,16 @@
           // unauthenticated answer forever.
           if (isRestrictedError(err)) rosterRestricted = true;
           else if (isAuthRequiredError(err)) tryAuthRetry();
-          rosterAnswered = true;
+          rosterAnswer();
         },
         complete: () => {
-          rosterAnswered = true;
+          rosterAnswer();
         }
       });
-    return () => sub.unsubscribe();
+    return () => {
+      clearTimeout(answerTimer);
+      sub.unsubscribe();
+    };
   });
 
   // One-shot NIP-42 retry: when the relay closes a REQ auth-required,
