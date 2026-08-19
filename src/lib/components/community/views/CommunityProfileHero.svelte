@@ -53,6 +53,23 @@
   let inviteCode = $state('');
   let isSendingInvite = $state(false);
 
+  // Task A6: a DM invite link carries `?view=channels&join=<code>` — open
+  // the invite-code modal prefilled with it. Redeeming still requires the
+  // recipient's explicit submit click below (consent on arrival); this
+  // effect never calls handleJoinWithCode itself. Read $page first (so the
+  // effect keeps a dependency even on the early-return path — see CLAUDE.md
+  // "Svelte effect early-return goes dead"), then strip the param via
+  // replaceState so a reload doesn't re-open the modal.
+  $effect(() => {
+    const code = $page.url.searchParams.get('join');
+    if (!code) return;
+    inviteCode = code;
+    showInviteInput = true;
+    const url = new URL($page.url);
+    url.searchParams.delete('join');
+    goto(url, { replaceState: true, noScroll: true, keepFocus: true });
+  });
+
   /** Navigate to the form respond page for join request */
   function handleRequestJoin() {
     const formRef = getCommunityWideFormRef?.();

@@ -13,8 +13,13 @@
   import {
     buildPutUserTemplate,
     buildRemoveUserTemplate,
+    buildCreateInviteTemplate,
+    generateInviteCode,
     publishToGroupRelay
   } from '$lib/groups/group-management.js';
+  import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
+  import { buildGroupInviteMessage } from '$lib/groups/invite-message.js';
+  import { fetchRelaySelf } from '$lib/groups/relay-self.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -24,12 +29,14 @@
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { showToast } from '$lib/helpers/toast';
+  import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
 
   /**
    * @type {{
    *   pointer: {id: string, relay: string},
    *   metadata: any,
+   *   communityId?: string | null,
    *   admins: {pubkey: string, roles: string[]}[],
    *   members: Set<string>,
    *   myPubkey: string | null | undefined,
@@ -43,6 +50,7 @@
   let {
     pointer,
     metadata,
+    communityId = null,
     admins,
     members,
     myPubkey,
@@ -115,6 +123,82 @@
     const role = (roleDrafts[pubkey] ?? '').trim();
     if (!role) return;
     putUser(pubkey, [role]);
+  }
+
+  // Task A6: a second, consent-based way to add someone besides the instant
+  // put-user above — mint a single-use NIP-29 invite code (9009, legal only
+  // on a CLOSED group — the root group, always the case at this modal's real
+  // call site) and deliver it as a NIP-17 DM. The recipient accepts by
+  // clicking join on the community page (prefilled code), not by us
+  // put-user'ing them on their behalf.
+  /** @type {'direct' | 'dm'} */
+  let addMode = $state('direct');
+  let inviteNpub = $state('');
+  let inviteError = $state('');
+  let sendingInvite = $state(false);
+
+  /** @param {string} value @returns {string | null} hex pubkey, or null if not a valid npub */
+  function decodeNpub(value) {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+      const decoded = nip19.decode(trimmed);
+      return decoded.type === 'npub' ? /** @type {string} */ (decoded.data) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function sendInvite() {
+    const hex = decodeNpub(inviteNpub);
+    if (!hex) {
+      inviteError = m.group_invite_dm_invalid_npub();
+      return;
+    }
+    const user = getActiveUser();
+    if (!user) return;
+    inviteError = '';
+    sendingInvite = true;
+    try {
+      // A fresh code per send — single-use, one code = one person.
+      const code = generateInviteCode();
+      await publishToGroupRelay(
+        pool.relay(pointer.relay),
+        buildCreateInviteTemplate(pointer.id, code),
+        user
+      );
+
+      const npub = nip19.npubEncode(communityId ?? '');
+      const joinUrl = `${location.origin}/c/${npub}?view=channels&join=${code}`;
+
+      // Cross-client naddr line is best-effort: a relay that won't answer
+      // NIP-11 (or has no `self`) just means the DM ships without it — the
+      // join URL alone is still a complete invite.
+      const self = await fetchRelaySelf(pointer.relay);
+      const naddr = self
+        ? `${nip19.naddrEncode({
+            kind: 39000,
+            pubkey: self,
+            identifier: pointer.id,
+            relays: [pointer.relay]
+          })}?invite=${code}`
+        : null;
+
+      const message = buildGroupInviteMessage({
+        communityName: metadata?.name || '',
+        joinUrl,
+        naddr
+      });
+      await sendWrappedDm([hex], message);
+      showToast(m.group_invite_dm_sent(), 'success');
+      inviteNpub = '';
+    } catch (err) {
+      console.error('groups: dm invite failed', err);
+      const reason = err instanceof Error ? err.message : String(err);
+      showToast(m.group_invite_dm_failed({ reason }), 'error');
+    } finally {
+      sendingInvite = false;
+    }
   }
 
   /** @param {string} pubkey */
@@ -283,14 +367,60 @@
 
     {#if isAdmin}
       <div class="mt-3">
-        <ContactSearchInput
-          acceptPubkeyInput
-          disabled={busy}
-          placeholder={m.groups_members_add_placeholder()}
-          exclude={[...members]}
-          onselect={(/** @type {{ pubkey: string }} */ c) => addMember(c.pubkey)}
-          onrawpubkey={(/** @type {string} */ hex) => addMember(hex)}
-        />
+        <div class="mb-2 flex gap-2">
+          <button
+            class="btn btn-sm {addMode === 'direct' ? 'btn-primary' : 'btn-ghost'}"
+            data-testid="add-mode-direct"
+            onclick={() => (addMode = 'direct')}
+          >
+            {m.groups_members_add_direct_action()}
+          </button>
+          <button
+            class="btn btn-sm {addMode === 'dm' ? 'btn-primary' : 'btn-ghost'}"
+            data-testid="add-mode-dm"
+            onclick={() => (addMode = 'dm')}
+          >
+            {m.group_invite_dm_action()}
+          </button>
+        </div>
+
+        {#if addMode === 'direct'}
+          <ContactSearchInput
+            acceptPubkeyInput
+            disabled={busy}
+            placeholder={m.groups_members_add_placeholder()}
+            exclude={[...members]}
+            onselect={(/** @type {{ pubkey: string }} */ c) => addMember(c.pubkey)}
+            onrawpubkey={(/** @type {string} */ hex) => addMember(hex)}
+          />
+        {:else}
+          <div class="flex flex-col gap-2">
+            <input
+              type="text"
+              class="input-bordered input input-sm w-full"
+              placeholder={m.group_invite_dm_npub_placeholder()}
+              aria-label={m.group_invite_dm_npub_placeholder()}
+              data-testid="dm-invite-npub-input"
+              disabled={sendingInvite}
+              value={inviteNpub}
+              oninput={(e) => (inviteNpub = /** @type {HTMLInputElement} */ (e.target).value)}
+            />
+            {#if inviteError}
+              <span class="text-xs text-error" data-testid="dm-invite-error">{inviteError}</span>
+            {/if}
+            <button
+              class="btn btn-sm btn-primary"
+              data-testid="dm-invite-send"
+              disabled={sendingInvite || !inviteNpub.trim()}
+              onclick={sendInvite}
+            >
+              {#if sendingInvite}
+                <span class="loading loading-xs loading-spinner"></span>
+              {/if}
+              {m.group_invite_dm_send()}
+            </button>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>

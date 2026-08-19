@@ -17,22 +17,29 @@ const {
   ADMIN_OTHER,
   MEMBER_A,
   MEMBER_B,
+  COMMUNITY_ID,
   relaySentinel,
   activeUser,
   buildPutUserTemplate,
   buildRemoveUserTemplate,
+  buildCreateInviteTemplate,
+  generateInviteCode,
   publishToGroupRelay,
+  sendWrappedDm,
+  fetchRelaySelf,
   showToast
 } = vi.hoisted(() => {
   const ADMIN_SELF = 'a'.repeat(64);
   const ADMIN_OTHER = 'b'.repeat(64);
   const MEMBER_A = 'c'.repeat(64);
   const MEMBER_B = 'd'.repeat(64);
+  const COMMUNITY_ID = 'e'.repeat(64);
   return {
     ADMIN_SELF,
     ADMIN_OTHER,
     MEMBER_A,
     MEMBER_B,
+    COMMUNITY_ID,
     relaySentinel: { __sentinel: 'relay-conn' },
     activeUser: { pubkey: ADMIN_SELF, signer: {} },
     buildPutUserTemplate: vi.fn((groupId, pubkey, roles) => ({
@@ -46,7 +53,15 @@ const {
       groupId,
       pubkey
     })),
+    buildCreateInviteTemplate: vi.fn((groupId, code) => ({
+      __sentinel: 'create-invite',
+      groupId,
+      code
+    })),
+    generateInviteCode: vi.fn(() => 'INVITECODE123'),
     publishToGroupRelay: vi.fn(() => Promise.resolve({ id: 'signed' })),
+    sendWrappedDm: vi.fn(() => Promise.resolve()),
+    fetchRelaySelf: vi.fn(() => Promise.resolve(null)),
     showToast: vi.fn()
   };
 });
@@ -54,8 +69,12 @@ const {
 vi.mock('$lib/groups/group-management.js', () => ({
   buildPutUserTemplate,
   buildRemoveUserTemplate,
+  buildCreateInviteTemplate,
+  generateInviteCode,
   publishToGroupRelay
 }));
+vi.mock('$lib/services/wrapped-dm.js', () => ({ sendWrappedDm }));
+vi.mock('$lib/groups/relay-self.js', () => ({ fetchRelaySelf }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: vi.fn(() => relaySentinel) }
 }));
@@ -73,6 +92,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_admins_heading: () => 'Admins',
   groups_members_members_heading: () => 'Members',
   groups_members_add_placeholder: () => 'Add member by name or npub',
+  groups_members_add_direct_action: () => 'Add directly',
   groups_members_promote: () => 'Make admin',
   groups_members_demote: () => 'Remove admin',
   groups_members_remove: () => 'Remove',
@@ -80,12 +100,21 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_assign_role: () => 'Assign role',
   groups_members_role_placeholder: () => 'Role',
   groups_role_admin: () => 'Admin',
-  groups_role_king: () => 'Founder'
+  groups_role_king: () => 'Founder',
+  group_invite_dm_action: () => 'Invite via DM',
+  group_invite_dm_npub_placeholder: () => 'Member npub',
+  group_invite_dm_invalid_npub: () => 'Invalid npub',
+  group_invite_dm_send: () => 'Send invite',
+  group_invite_dm_body: (/** @type {{name: string}} */ { name }) =>
+    `You're invited to join ${name}.`,
+  group_invite_dm_sent: () => 'Invite sent via DM.',
+  group_invite_dm_failed: (/** @type {{reason: string}} */ { reason }) => `Invite failed: ${reason}`
 }));
 
 const { default: GroupMembersModal } = await import(
   '$lib/components/groups/GroupMembersModal.svelte'
 );
+const { nip19 } = await import('nostr-tools');
 
 const pointer = { id: 'grp1', relay: 'wss://relay.example/' };
 const metadata = { name: 'Bee Chat' };
@@ -97,6 +126,7 @@ function renderModal(overrides = {}) {
   const props = {
     pointer,
     metadata,
+    communityId: COMMUNITY_ID,
     admins: [
       { pubkey: ADMIN_SELF, roles: [] },
       { pubkey: ADMIN_OTHER, roles: ['admin', 'custom-role'] }
@@ -115,8 +145,15 @@ function renderModal(overrides = {}) {
 beforeEach(() => {
   buildPutUserTemplate.mockClear();
   buildRemoveUserTemplate.mockClear();
+  buildCreateInviteTemplate.mockClear();
+  generateInviteCode.mockClear();
+  generateInviteCode.mockReturnValue('INVITECODE123');
   publishToGroupRelay.mockClear();
   publishToGroupRelay.mockResolvedValue({ id: 'signed' });
+  sendWrappedDm.mockClear();
+  sendWrappedDm.mockResolvedValue(undefined);
+  fetchRelaySelf.mockClear();
+  fetchRelaySelf.mockResolvedValue(null);
   showToast.mockClear();
 });
 
@@ -369,5 +406,79 @@ describe('GroupMembersModal error handling', () => {
       expect(showToast).toHaveBeenCalledWith('The relay refused the change', 'error')
     );
     expect(onRosterChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
+  const RECIPIENT_HEX = 'f'.repeat(64);
+  const RECIPIENT_NPUB = nip19.npubEncode(RECIPIENT_HEX);
+
+  it('direct-add is the default mode; the DM pane is hidden until toggled', () => {
+    renderModal();
+    expect(screen.getByTestId('add-mode-direct')).toBeTruthy();
+    expect(screen.getByTestId('add-mode-dm')).toBeTruthy();
+    expect(screen.queryByTestId('dm-invite-npub-input')).toBeNull();
+  });
+
+  it('an invalid npub shows an inline error and publishes/sends nothing', async () => {
+    renderModal();
+
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    const input = screen.getByTestId('dm-invite-npub-input');
+    await fireEvent.input(input, { target: { value: 'not-an-npub' } });
+    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('dm-invite-error').textContent).toBe('Invalid npub')
+    );
+    expect(buildCreateInviteTemplate).not.toHaveBeenCalled();
+    expect(publishToGroupRelay).not.toHaveBeenCalled();
+    expect(sendWrappedDm).not.toHaveBeenCalled();
+  });
+
+  it('a valid npub mints a fresh invite code on the group relay and DMs the recipient the code', async () => {
+    renderModal();
+
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    const input = screen.getByTestId('dm-invite-npub-input');
+    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
+    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+
+    await waitFor(() => expect(generateInviteCode).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(buildCreateInviteTemplate).toHaveBeenCalledWith('grp1', 'INVITECODE123')
+    );
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({
+          __sentinel: 'create-invite',
+          groupId: 'grp1',
+          code: 'INVITECODE123'
+        }),
+        activeUser
+      )
+    );
+    await waitFor(() => expect(sendWrappedDm).toHaveBeenCalled());
+    const [recipients, message] = /** @type {any[]} */ (sendWrappedDm.mock.calls[0]);
+    expect(recipients).toEqual([RECIPIENT_HEX]);
+    expect(message).toContain('INVITECODE123');
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Invite sent via DM.', 'success'));
+  });
+
+  it('a failing publish/send toasts the reason and does not send a DM', async () => {
+    publishToGroupRelay.mockRejectedValueOnce(new Error('relay says no'));
+    renderModal();
+
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    const input = screen.getByTestId('dm-invite-npub-input');
+    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
+    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('Invite failed: relay says no', 'error')
+    );
+    expect(sendWrappedDm).not.toHaveBeenCalled();
   });
 });

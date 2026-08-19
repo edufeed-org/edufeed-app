@@ -195,6 +195,7 @@
     <GroupMembersModal
       pointer={roster.pointer}
       metadata={{ name: getDisplayName(profileEvent) }}
+      {communityId}
       admins={roster.admins}
       members={roster.members}
       myPubkey={activeUser?.pubkey}

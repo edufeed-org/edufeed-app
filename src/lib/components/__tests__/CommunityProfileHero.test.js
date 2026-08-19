@@ -41,7 +41,19 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/stores', () => ({ page: { subscribe: () => () => {} } }));
+// A real (if minimal) store contract instead of the previous no-op stub: the
+// ?join= prefill effect (Task A6) reads $page.url.searchParams on mount, so
+// tests need a subscribe that actually delivers a value. Tests that care set
+// pageUrlHolder.url before render(); everything else gets the plain default.
+const pageUrlHolder = vi.hoisted(() => ({ url: new URL('http://localhost/c/test') }));
+vi.mock('$app/stores', () => ({
+  page: {
+    subscribe: (/** @type {(value: any) => void} */ fn) => {
+      fn({ url: pageUrlHolder.url, data: {} });
+      return () => {};
+    }
+  }
+}));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 
 const holders = vi.hoisted(() => ({
@@ -186,6 +198,7 @@ describe('CommunityProfileHero — moderated join lane', () => {
     // loading/unloaded/closed edges override this explicitly.
     holders.metadataByKey = { [ROOT_KEY]: OPEN_ROOT_METADATA };
     formRefHolder.value = null;
+    pageUrlHolder.url = new URL('http://localhost/c/test');
   });
 
   it('roster member: shows the Member badge, no join affordances', () => {
@@ -336,6 +349,26 @@ describe('CommunityProfileHero — moderated join lane', () => {
 
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith('Join failed: rate limited', 'error')
+    );
+  });
+
+  // Task A6: a DM invite link carries `?join=<code>` — the modal opens and
+  // prefills, but redeeming stays the recipient's explicit click (consent
+  // on arrival), never automatic on page load.
+  it('a ?join= param prefills and opens the invite-code modal; submit is still the explicit consent', async () => {
+    pageUrlHolder.url = new URL('http://localhost/c/test?join=CODE123');
+    const service = /** @type {import('vitest').Mock} */ (joinCommunityGroup);
+    service.mockResolvedValueOnce(undefined);
+    renderModerated();
+
+    const input = /** @type {HTMLInputElement} */ (screen.getByLabelText('Code'));
+    expect(input.value).toBe('CODE123');
+    expect(service).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByText('Redeem'));
+
+    await waitFor(() =>
+      expect(service).toHaveBeenCalledWith({ pointer: ROOT_POINTER, code: 'CODE123', user: USER })
     );
   });
 });
