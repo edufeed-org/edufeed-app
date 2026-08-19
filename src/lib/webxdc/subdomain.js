@@ -9,6 +9,8 @@ import { sha256 } from '@noble/hashes/sha256';
 const SEED_KEY = 'edufeed:webxdc-sandbox-seed';
 const LABEL_LENGTH = 50; // base36 of 32 bytes, zero-padded; fits the 63-char DNS label limit
 
+let ephemeralSeed; // per-session fallback when storage is unavailable
+
 function getSeed() {
   try {
     const stored = localStorage.getItem(SEED_KEY);
@@ -17,7 +19,8 @@ function getSeed() {
     localStorage.setItem(SEED_KEY, seed);
     return seed;
   } catch {
-    return 'edufeed-ephemeral-sandbox-seed'; // private mode fallback: per-session only
+    ephemeralSeed ??= globalThis.crypto.randomUUID();
+    return ephemeralSeed;
   }
 }
 
