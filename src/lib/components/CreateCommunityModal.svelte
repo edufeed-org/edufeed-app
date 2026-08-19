@@ -47,6 +47,7 @@
     writeRootGroupMarker,
     clearRootGroupMarker
   } from '$lib/groups/provision-root-group.js';
+  import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
   import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
@@ -472,9 +473,11 @@
           });
           writeRootGroupMarker(communityPk, rootGroupPointer.id);
         } catch (err) {
-          errors.publishing = m.community_type_provisioning_error({
-            reason: err instanceof Error ? err.message : String(err)
-          });
+          errors.publishing = isRelayMembershipRequired(err)
+            ? m.community_groups_relay_membership_required()
+            : m.community_type_provisioning_error({
+                reason: err instanceof Error ? err.message : String(err)
+              });
           isPublishing = false;
           return;
         }

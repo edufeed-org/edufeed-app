@@ -637,6 +637,7 @@
   "community_access_members": "Nur Mitglieder",
   "community_access_members_hint": "Nur Mitglieder dürfen veröffentlichen. Feinabstimmung pro Inhaltstyp folgt in den Einstellungen.",
   "community_type_provisioning_error": "Die Gruppe für die Mitgliederverwaltung konnte nicht angelegt werden: {reason}",
+  "community_groups_relay_membership_required": "Dieser Gruppen-Relay nimmt nur freigeschaltete Konten an. Bitte beim Betreiber freischalten lassen.",
   "community_type_closed_confirm_note": "Geschlossene Community — keine öffentlichen Inhaltsbereiche.",
   "create_community_modal_keypair_selection_title": "Schlüsselpaar für Community wählen",
   "create_community_modal_current_keypair_title": "Aktuelles Schlüsselpaar verwenden",

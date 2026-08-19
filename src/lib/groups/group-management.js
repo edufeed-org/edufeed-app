@@ -135,22 +135,43 @@ async function publishAnsweringChallenge(relayConn, signed, signer) {
 }
 
 /**
+ * True when a group-relay rejection means the account isn't on the pyramid's
+ * create-group whitelist (groups.edufeed.org: "restricted: only members of
+ * this relay can create a group"). Kept distinct from other `restricted:`
+ * reasons so the UI can show a friendly ask-the-operator message instead of
+ * the raw relay text.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isRelayMembershipRequired(error) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /only members of this relay can create a group/i.test(message);
+}
+
+/**
  * Sign as `user` and publish to the group relay ONLY. One NIP-42 retry when
  * the relay answers auth-required — or answers nothing at all (applesauce
- * reports the withheld OK as a `Timeout` NAK after 10s); every other rejection
- * throws with the relay's reason so the UI can show it.
+ * reports the withheld OK as a `Timeout` NAK after 10s). One re-sign+retry
+ * when the relay answers "too old" — the pyramid rejects moderation actions
+ * (9000-9009) whose created_at is more than 60s in the past, which a slow
+ * NIP-46 bunker approval can trip since created_at is stamped at template
+ * build time, before the user approves. Every other rejection throws with
+ * the relay's reason so the UI can show it.
  * @param {any} relayConn a pool.relay(url) connection
  * @param {any} template
  * @param {{pubkey: string, signer: any}} user
  */
 export async function publishToGroupRelay(relayConn, template, user) {
-  const signed = await user.signer.signEvent({ ...template, pubkey: user.pubkey });
+  let signed = await user.signer.signEvent({ ...template, pubkey: user.pubkey });
   let response = await publishAnsweringChallenge(relayConn, signed, user.signer);
   if (response?.ok === false) {
     const reason = String(response.message ?? '');
     if (reason.startsWith('auth-required') || reason === 'Timeout') {
       const auth = await authenticateOnce(relayConn, user.signer);
       if (auth.ok) response = await relayConn.publish(signed);
+    } else if (/too old/i.test(reason)) {
+      signed = await user.signer.signEvent({ ...template, created_at: now(), pubkey: user.pubkey });
+      response = await publishAnsweringChallenge(relayConn, signed, user.signer);
     }
   }
   if (response && response.ok === false) {

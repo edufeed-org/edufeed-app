@@ -226,6 +226,26 @@ describe('SettingsView — Community-Typ pane', () => {
     expect(clearRootGroupMarker).not.toHaveBeenCalled();
   });
 
+  it('flip-to-moderated: a whitelist rejection shows the friendly relay-membership message, not the raw reason', async () => {
+    provisionRootGroup.mockRejectedValueOnce(
+      new Error('restricted: only members of this relay can create a group')
+    );
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: openEvent, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-flip-to-moderated'));
+    await fireEvent.click(await screen.findByTestId('settings-flip-confirm'));
+    const m = await import('$lib/paraglide/messages');
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(m.community_groups_relay_membership_required(), 'error')
+    );
+    expect(toastSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('only members of this relay'),
+      'error'
+    );
+    expect(publishCommunityUpdate).not.toHaveBeenCalled();
+  });
+
   it('disables flip-to-moderated with a hint when there is no active account', async () => {
     mockManager.active = null;
     render(SettingsView, {

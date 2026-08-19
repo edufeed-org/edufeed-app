@@ -680,6 +680,7 @@
   "community_access_members": "Members only",
   "community_access_members_hint": "Only members can publish. Fine-tuning per content type follows in the settings.",
   "community_type_provisioning_error": "The group for membership management could not be created: {reason}",
+  "community_groups_relay_membership_required": "This groups relay only accepts approved accounts. Please ask the operator to approve yours.",
   "community_type_closed_confirm_note": "Closed community — no public content sections.",
   "create_community_modal_keypair_selection_title": "Choose Keypair for Community",
   "create_community_modal_current_keypair_title": "Use Current Keypair",

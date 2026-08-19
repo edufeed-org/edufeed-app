@@ -9,7 +9,8 @@ import {
   generateGroupId,
   publishToGroupRelay,
   createGroupOnRelay,
-  confirmGroupAdmins
+  confirmGroupAdmins,
+  isRelayMembershipRequired
 } from '$lib/groups/group-management.js';
 import { getGroupAdmins } from 'applesauce-common/helpers/groups';
 import { of, EMPTY } from 'rxjs';
@@ -151,6 +152,80 @@ describe('publishToGroupRelay', () => {
       publishToGroupRelay(relayConn, buildDeleteGroupTemplate(ID), user)
     ).rejects.toThrow('restricted: no');
     expect(relayConn.publish).toHaveBeenCalledOnce(); // no retry on non-auth reasons
+  });
+});
+
+describe('publishToGroupRelay against a stale-signature guard (groups.edufeed.org pyramid)', () => {
+  // The pyramid rejects moderation actions (9000-9009) whose created_at is
+  // more than 60s old ("too old"). A NIP-46 bunker approval can take longer
+  // than that between template build and relay receipt — re-stamp and
+  // re-sign once, then republish, instead of surfacing the raw rejection.
+
+  it('re-stamps created_at and republishes once after a "too old" rejection', async () => {
+    user.signer.signEvent.mockClear();
+    const relayConn = {
+      publish: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          message: 'moderation action is too old (older than 1 minute ago)'
+        })
+        .mockResolvedValueOnce({ ok: true })
+    };
+    await publishToGroupRelay(relayConn, buildDeleteGroupTemplate(ID), user);
+    expect(relayConn.publish).toHaveBeenCalledTimes(2);
+    const [firstSigned] = user.signer.signEvent.mock.calls[0];
+    const [secondSigned] = user.signer.signEvent.mock.calls[1];
+    expect(secondSigned.created_at).toBeGreaterThanOrEqual(firstSigned.created_at);
+  });
+
+  it('resolves with the re-signed event after the stale retry succeeds', async () => {
+    const relayConn = {
+      publish: vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, message: 'too old, try again' })
+        .mockResolvedValueOnce({ ok: true })
+    };
+    const signed = await publishToGroupRelay(relayConn, buildDeleteGroupTemplate(ID), user);
+    expect(signed.id).toBe('signed');
+  });
+
+  it('does not loop — throws after exactly one retry when the relay keeps rejecting as too old', async () => {
+    const relayConn = {
+      publish: vi.fn(async () => ({ ok: false, message: 'moderation action is too old' }))
+    };
+    await expect(
+      publishToGroupRelay(relayConn, buildDeleteGroupTemplate(ID), user)
+    ).rejects.toThrow(/too old/i);
+    // One initial attempt + exactly one retry — never a third call.
+    expect(relayConn.publish).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('isRelayMembershipRequired', () => {
+  it('matches the pyramid whitelist rejection', () => {
+    expect(
+      isRelayMembershipRequired(
+        new Error('restricted: only members of this relay can create a group')
+      )
+    ).toBe(true);
+  });
+
+  it('is case-insensitive', () => {
+    expect(
+      isRelayMembershipRequired(new Error('Only Members Of This Relay Can Create A Group'))
+    ).toBe(true);
+  });
+
+  it('does not match unrelated rejections', () => {
+    expect(isRelayMembershipRequired(new Error('restricted: no'))).toBe(false);
+    expect(isRelayMembershipRequired(new Error('moderation action is too old'))).toBe(false);
+    expect(isRelayMembershipRequired(new Error('Timeout'))).toBe(false);
+  });
+
+  it('handles non-Error inputs without throwing', () => {
+    expect(isRelayMembershipRequired(undefined)).toBe(false);
+    expect(isRelayMembershipRequired('only members of this relay can create a group')).toBe(true);
   });
 });
 

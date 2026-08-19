@@ -40,6 +40,7 @@
     writeRootGroupMarker,
     clearRootGroupMarker
   } from '$lib/groups/provision-root-group.js';
+  import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
@@ -193,9 +194,11 @@
     } catch (error) {
       console.error('settings: flip to moderated failed', error);
       showToast(
-        m.community_views_settings_flip_failed({
-          reason: error instanceof Error ? error.message : String(error)
-        }),
+        isRelayMembershipRequired(error)
+          ? m.community_groups_relay_membership_required()
+          : m.community_views_settings_flip_failed({
+              reason: error instanceof Error ? error.message : String(error)
+            }),
         'error'
       );
     } finally {
