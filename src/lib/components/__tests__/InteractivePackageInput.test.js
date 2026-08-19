@@ -3,6 +3,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { zipSync, strToU8 } from 'fflate';
+import * as m from '$lib/paraglide/messages';
 import InteractivePackageInput from '../educational/InteractivePackageInput.svelte';
 
 vi.mock('$lib/helpers/image-license.js', async (importOriginal) => ({
@@ -59,5 +60,28 @@ describe('InteractivePackageInput', () => {
     // A fresh pick still works after cancelling.
     await pick(container, new File(['<p>hi again</p>'], 'redo.html', { type: 'text/html' }));
     expect(await findByText(/redo\.xdc/)).toBeTruthy();
+  });
+
+  it('renders a restored value (no local bytes) without a dead Preview button', () => {
+    // Mirrors a draft-restored/edit-mode `interactivePackage`: name/size are
+    // known but pendingBytes was never populated (no file was picked in this
+    // session), so there is nothing for WebxdcPlayer to preview.
+    const { getByText, queryByText } = render(InteractivePackageInput, {
+      props: {
+        value: {
+          url: 'https://blossom/quiz.xdc',
+          name: 'Quiz',
+          type: 'application/x-webxdc',
+          size: 2 * 1024 * 1024,
+          sha256: 'aa',
+          licenseEvent: { id: 'e' },
+          iconUrl: ''
+        }
+      }
+    });
+    expect(getByText('Quiz')).toBeTruthy();
+    expect(getByText(/2\.0 MB/)).toBeTruthy();
+    expect(queryByText(m.interactive_input_preview())).toBeNull();
+    expect(getByText(m.interactive_input_replace())).toBeTruthy();
   });
 });

@@ -96,6 +96,7 @@
   import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
   import { inferBildungsbereich } from '$lib/helpers/educational/inferBildungsbereich.js';
   import { parseKonfiTagsToFormData } from '$lib/helpers/educational/parseKonfiTagsToFormData.js';
+  import { seedInteractivePackageFromEncodings } from '$lib/helpers/educational/interactiveResource.js';
   import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
   import {
     advanceStepOrSubStep,
@@ -210,6 +211,16 @@
    * @type {InteractivePackage | null}
    */
   let interactivePackage = $state(null);
+  // Tracks whether `formData.encodings` currently reflects a package this
+  // effect itself projected — plain `let`, not `$state` (bookkeeping only,
+  // never read by the template; see "$state() vs Plain let" in CLAUDE.md).
+  // Without it, "interactivePackage is falsy" is ambiguous between "never
+  // set yet" (fresh mount, or a draft/edit rehydration that hasn't run
+  // yet) and "the user explicitly cleared it" (Replace-package button).
+  // Only the latter should wipe `formData.encodings` — clearing on every
+  // falsy read wiped a draft-restored package before its own effect had a
+  // chance to seed `interactivePackage` back from `formData.encodings`.
+  let hasProjectedInteractivePackage = false;
   $effect(() => {
     if (variantId !== 'interactive') return;
     if (interactivePackage) {
@@ -224,8 +235,10 @@
         }
       ];
       formData.identifier = interactivePackage.url;
-    } else {
+      hasProjectedInteractivePackage = true;
+    } else if (hasProjectedInteractivePackage) {
       formData.encodings = [];
+      hasProjectedInteractivePackage = false;
     }
   });
 
@@ -477,6 +490,13 @@
       if (Array.isArray(extras.selectedCommunityPubkeys))
         selectedCommunityPubkeys = extras.selectedCommunityPubkeys;
       if (typeof extras.hasNoUrl === 'boolean') hasNoUrl = extras.hasNoUrl;
+      // Interactive-variant rehydration: the draft only persists formData
+      // (encodings + identifier), not the wizard-local interactivePackage
+      // state, so step 2's file input would otherwise render empty and the
+      // mapping $effect above would then wipe the just-restored encodings.
+      if (variantId === 'interactive') {
+        interactivePackage = seedInteractivePackageFromEncodings(formData.encodings);
+      }
       draftRestoredAt = draft.savedAt || Date.now();
     }
     draftRestoreDone = true;

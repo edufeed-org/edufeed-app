@@ -199,9 +199,11 @@
         <p class="truncate text-sm font-semibold">{value.name}</p>
         <p class="text-xs text-base-content/60">{(value.size / 1024 / 1024).toFixed(1)} MB</p>
       </div>
-      <button type="button" class="btn btn-sm" onclick={() => (showPreview = !showPreview)}
-        >{m.interactive_input_preview()}</button
-      >
+      {#if pendingBytes}
+        <button type="button" class="btn btn-sm" onclick={() => (showPreview = !showPreview)}
+          >{m.interactive_input_preview()}</button
+        >
+      {/if}
       <button
         type="button"
         class="btn btn-sm"
