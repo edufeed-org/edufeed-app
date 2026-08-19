@@ -29,6 +29,7 @@
   } from '$lib/groups/group-management.js';
   import { attachGroupChannel } from '$lib/groups/community-attach.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
+  import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { unique } from '$lib/helpers/unique.js';
   import { normalizeURL } from 'applesauce-core/helpers/url';
@@ -41,6 +42,11 @@
     communikeyEvent,
     communityProfile = null,
     community = undefined,
+    // Root-group admins (hex pubkeys), passed by the parent view (Task A3:
+    // "admins are pre-joined") — every fresh NIP-29 channel gets them
+    // put-user'd with the admin role, so a community admin is never locked
+    // out of a channel someone else just created.
+    adminPubkeys = [],
     onClose,
     onCreated
   } = $props();
@@ -292,6 +298,29 @@
         console.error('groups: attach failed after group creation', error);
         showToast(m.wizard_attach_failed({ id }), 'warning');
         return;
+      }
+      // Task A3: admins are pre-joined. The relay already made the CREATOR
+      // an admin as part of createGroupOnRelay — only the OTHER root-group
+      // admins need an explicit put-user, granted the admin role so they
+      // can manage the channel they didn't create. Best-effort, same
+      // fan-out machinery (retry-once + partial-failure toast) as
+      // MembershipPane's fanOutNewMember.
+      const otherAdmins = adminPubkeys.filter((/** @type {string} */ a) => a !== user.pubkey);
+      if (otherAdmins.length > 0) {
+        const adminAggregate = await fanOut(
+          otherAdmins,
+          (/** @type {string} */ a) => a,
+          (/** @type {string} */ a) => putUserOn({ id, relay }, a, ['admin'], user)
+        );
+        if (adminAggregate.failed.length > 0) {
+          showToast(
+            m.area_members_fanout_partial({
+              failed: adminAggregate.failed.length,
+              total: otherAdmins.length
+            }),
+            'warning'
+          );
+        }
       }
       // Fan out put-user to every explicitly selected invitee, plus — for a
       // members-tier channel only — the area's current member union

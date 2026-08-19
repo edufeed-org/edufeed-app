@@ -820,6 +820,7 @@
       {communikeyEvent}
       {communityProfile}
       community={concord.dissolved ? undefined : concord.community}
+      adminPubkeys={getRootRoster().admins.map((a) => a.pubkey)}
       onClose={() => {
         overlay = null;
         clearChannelCreateRequest();

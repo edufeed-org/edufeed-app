@@ -60,13 +60,16 @@ const { createGroupOnRelay, generateGroupId, publishToGroupRelay, buildPutUserTe
         /** @type {any} */ _user
       ) => ({})
     ),
-    buildPutUserTemplate: vi.fn((/** @type {string} */ groupId, /** @type {string} */ pubkey) => ({
-      kind: 9000,
-      tags: [
-        ['h', groupId],
-        ['p', pubkey]
-      ]
-    }))
+    buildPutUserTemplate: vi.fn(
+      (
+        /** @type {string} */ groupId,
+        /** @type {string} */ pubkey,
+        /** @type {string[]} */ roles = []
+      ) => ({
+        kind: 9000,
+        tags: [['h', groupId], roles.length > 0 ? ['p', pubkey, ...roles] : ['p', pubkey]]
+      })
+    )
   }));
 vi.mock('$lib/groups/group-management.js', () => ({
   createGroupOnRelay,
@@ -701,5 +704,51 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     expect(createGroupOnRelay).toHaveBeenCalledTimes(1);
     expect(publishToGroupRelay).not.toHaveBeenCalled();
     expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  // Task A3: root-group admins are pre-joined into every fresh channel — the
+  // relay already made the CREATOR an admin at group-create time, so only
+  // the OTHER admins need an explicit put-user (roster-fanout.js's
+  // putUserOn/fanOut, same pattern as MembershipPane's fanOutNewMember).
+  it('pre-joins root admins (except the creator) into the new channel with the admin role', async () => {
+    const OTHER_ADMIN = 'd'.repeat(64);
+    const onCreated = vi.fn();
+    const communikeyEvent = nip29Community();
+    render(ChannelCreateWizard, {
+      props: {
+        communikeyEvent,
+        adminPubkeys: [mockManager.active.pubkey, OTHER_ADMIN],
+        onClose: () => {},
+        onCreated
+      }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    // Default 'invited' tier — one Next reaches the final (invite/Create) step.
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-group-id'));
+
+    const adminPutUserCalls = publishToGroupRelay.mock.calls.filter(
+      ([, /** @type {any} */ template]) =>
+        template.tags.some((/** @type {string[]} */ t) => t[0] === 'p' && t[2] === 'admin')
+    );
+    expect(adminPutUserCalls).toHaveLength(1);
+    const [, template] = adminPutUserCalls[0];
+    expect(template.tags).toContainEqual(['p', OTHER_ADMIN, 'admin']);
+    expect(template.tags).toContainEqual(['h', 'new-group-id']);
+
+    // The creator never gets a put-user of their own — the relay already
+    // made them admin at group-create time.
+    expect(
+      publishToGroupRelay.mock.calls.some(([, /** @type {any} */ t]) =>
+        t.tags.some(
+          (/** @type {string[]} */ tag) =>
+            tag[0] === 'p' && tag[1] === mockManager.active.pubkey && tag[2] === 'admin'
+        )
+      )
+    ).toBe(false);
   });
 });
