@@ -31,7 +31,12 @@
   // NIP-29 channels of the same community. A community is extended by ONE
   // protected area — a Concord area OR a set of NIP-29 groups — but the rail
   // is one list either way, so both sources are merged before rendering.
-  import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { parseGroupPointers, sharedRelayOf, channelKey } from '$lib/groups/community-pointer.js';
+  import {
+    selectGroupChannel,
+    getSelectedGroupChannel
+  } from '$lib/groups/group-channel-selection.svelte.js';
+  import GroupChat from '$lib/components/groups/GroupChat.svelte';
   import { parseMembershipPointer } from '$lib/groups/community-membership.js';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { relayBadges } from '$lib/groups/group-badges.js';
@@ -39,12 +44,10 @@
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
-  import { groupHref } from '$lib/groups/groups.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
   import ChannelRailRow from './ChannelRailRow.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
@@ -151,6 +154,22 @@
     }
   });
 
+  // Same one-shot seeding for NIP-29 channels: ?channel=<group id> picks the
+  // matching group pointer. Separate flag — a community has either engine,
+  // but the concord effect above only ever runs once an area id exists.
+  let groupDeepLinkChecked = false;
+  $effect(() => {
+    const communityPubkey = communikeyEvent?.pubkey;
+    const pointers = groupPointers;
+    if (!communityPubkey || pointers.length === 0 || groupDeepLinkChecked) return;
+    groupDeepLinkChecked = true;
+    const channelParam = get(page)?.url?.searchParams.get('channel');
+    if (!channelParam || getSelectedGroupChannel(communityPubkey)) return;
+    const match = pointers.find((pointer) => pointer.id === channelParam);
+    const key = match ? channelKey(match) : null;
+    if (key) selectGroupChannel(communityPubkey, key);
+  });
+
   // ?invites=1 opens the invite inbox — the sidebar's KANÄLE zone links here
   // since the desktop rail (the inbox's old entry point) became mobile-only.
   // One-shot like the channel deep link, and independent of communityId so it
@@ -209,6 +228,16 @@
   // pane and rail actions as extendedByGroups, never the Concord founding
   // offer (laoc, 2026-08-18).
   const isNip29Community = $derived(extendedByGroups || !!parseMembershipPointer(communikeyEvent));
+  // The community's picked NIP-29 channel (shared store — see its header for
+  // why community channels render HERE instead of the standalone /groups
+  // route). Validated against the CURRENT pointer list, so a stale or
+  // cross-account selection falls back to the overview, never to a foreign
+  // chat.
+  const selectedGroupPointer = $derived.by(() => {
+    const key = getSelectedGroupChannel(communikeyEvent?.pubkey);
+    if (!key) return null;
+    return groupPointers.find((pointer) => channelKey(pointer) === key) ?? null;
+  });
   // Same population that sees a "+ Neuer Kanal" button somewhere — the shared
   // The locked pane's direct contact: the area owner (material.owner) —
   // always known, always able to invite.
@@ -467,17 +496,26 @@
             {/snippet}
           </ChannelRailRow>
         {:else}
-          <!-- A NIP-29 channel is a group of its own, and the group chat that
-            renders it already exists at /groups/<host'id> — so the rail links
-            there rather than duplicating the chat stack. -->
+          <!-- A NIP-29 channel opens IN the community pane (selection store),
+            not on the standalone /groups route: that route's sidebar is the
+            host's ENTIRE directory, which on a big public relay is a wall of
+            foreign groups and a frozen tab (laoc, 2026-08-19). -->
           <ChannelRailRow
-            href={groupHref(row.pointer)}
             testid="group-channel-row"
             symbol={row.symbol}
             name={row.name}
             locked={row.locked}
+            active={!!selectedGroupPointer &&
+              channelKey(selectedGroupPointer) === channelKey(row.pointer)}
             dimmed={row.pending}
             worldReadable={row.worldReadable}
+            onclick={() => {
+              if (communikeyEvent?.pubkey) {
+                const key = channelKey(row.pointer);
+                if (key) selectGroupChannel(communikeyEvent.pubkey, key);
+              }
+              mobileChat = true;
+            }}
           />
         {/if}
       {/each}
@@ -631,24 +669,53 @@
           </div>
         </div>
       {:else if isNip29Community && !concord.community}
-        <!-- Each NIP-29 channel opens its own route, so this pane never holds a
-          chat — but it must not be the Concord founding offer either, and a
-          bare "pick a channel" placard said nothing the rail beside it did not
-          already say. It is the channel overview instead (Armada parity:
-          ServerPage's welcome pane). The members action renders here on
-          desktop because the rail carrying it is mobile-only now. -->
-        {#if groupPointers.length > 0 && isAreaMember}
-          <div class="hidden flex-wrap gap-2 p-3 pb-0 md:flex">
-            <button
-              class="btn btn-outline btn-sm"
-              data-testid="area-members-open-pane"
-              onclick={() => (overlay = 'area-members')}
-            >
-              {m.area_members_title()}
-            </button>
-          </div>
+        {#if selectedGroupPointer}
+          <!-- The picked channel's chat, IN the community layout — the
+            standalone /groups route stays reserved for directory browsing
+            (see group-channel-selection.svelte.js). Keyed on the channel:
+            switching must remount the chat, or a draft typed in one would
+            still be in the composer of the next (same rule as the /groups
+            route). -->
+          <!-- Mobile-only back to the rail: GroupChat has no onBack of its
+            own (the /groups route never needed one), and without this the
+            rail would be unreachable once mobileChat flips. -->
+          <button
+            class="flex items-center gap-2 border-b border-base-300 px-4 py-2 text-sm text-base-content/70 md:hidden"
+            data-testid="group-chat-back"
+            onclick={() => (mobileChat = false)}
+          >
+            ← {m.concord_rail_channels()}
+          </button>
+          {#key channelKey(selectedGroupPointer)}
+            <GroupChat pointer={selectedGroupPointer} />
+          {/key}
+        {:else}
+          <!-- No channel picked: the channel overview (Armada parity:
+            ServerPage's welcome pane). The members action renders here on
+            desktop because the rail carrying it is mobile-only now. -->
+          {#if groupPointers.length > 0 && isAreaMember}
+            <div class="hidden flex-wrap gap-2 p-3 pb-0 md:flex">
+              <button
+                class="btn btn-outline btn-sm"
+                data-testid="area-members-open-pane"
+                onclick={() => (overlay = 'area-members')}
+              >
+                {m.area_members_title()}
+              </button>
+            </div>
+          {/if}
+          <ChannelOverview
+            rows={channelRows}
+            hostBadges={channelHostBadges}
+            onSelect={(/** @type {{id: string, relay: string}} */ pointer) => {
+              if (communikeyEvent?.pubkey) {
+                const key = channelKey(pointer);
+                if (key) selectGroupChannel(communikeyEvent.pubkey, key);
+              }
+              mobileChat = true;
+            }}
+          />
         {/if}
-        <ChannelOverview rows={channelRows} hostBadges={channelHostBadges} />
       {:else if !concord.community && isCommunikeyOwner}
         <ChannelStatePane title={m.concord_found_title()} body={m.concord_found_body()}>
           <div class="mt-4 flex flex-wrap justify-center gap-2">
@@ -763,13 +830,17 @@
         // (the rail already links group rows there), while a Concord
         // channel lives inside this pane, selected via the shared store.
         if (isNip29Community) {
-          // First-channel case: the optimistic attach normally lands the new
-          // pointer in groupPointers before this runs, but don't bet the
-          // navigation on that ordering — the membership pointer's relay is
-          // the same host.
+          // Select the fresh channel IN the community pane (no goto: the
+          // standalone /groups route is for directory browsing and drowns
+          // on big public hosts — laoc, 2026-08-19). The membership
+          // pointer's relay is the fallback for the very first channel,
+          // where the optimistic attach may not have landed yet.
           const relay =
             sharedRelayOf(groupPointers) ?? parseMembershipPointer(communikeyEvent)?.relay;
-          if (relay) goto(groupHref({ id: channelId, relay }));
+          const key = relay ? channelKey({ id: channelId, relay }) : null;
+          if (key && communikeyEvent?.pubkey) {
+            selectGroupChannel(communikeyEvent.pubkey, key);
+          }
         } else if (concord.communityId) {
           selectConcordChannel(concord.communityId, channelId);
         }

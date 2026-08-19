@@ -106,7 +106,9 @@ describe('PrivateChannelsView — a community extended by NIP-29 groups', () => 
     });
     const cards = screen.getAllByTestId('channel-card');
     expect(cards).toHaveLength(1);
-    expect(cards[0].getAttribute('href')).toBe("/groups/groups.example'allgemein");
+    // In the community pane the card selects in place (button), it does not
+    // link out to the standalone /groups route (laoc, 2026-08-19).
+    expect(cards[0].getAttribute('href')).toBeNull();
     expect(screen.getByTestId('channel-card-topic').textContent).toBe('Alles Weitere');
   });
 

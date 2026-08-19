@@ -65,7 +65,8 @@ vi.mock('$lib/components/community/channels/ChannelCreateWizard.svelte', async (
 const { default: PrivateChannelsView } = await import(
   '$lib/components/community/channels/PrivateChannelsView.svelte'
 );
-const { groupHref } = await import('$lib/groups/groups.js');
+const { channelKey } = await import('$lib/groups/community-pointer.js');
+const { getSelectedGroupChannel } = await import('$lib/groups/group-channel-selection.svelte.js');
 
 function base(overrides = {}) {
   return {
@@ -138,7 +139,7 @@ describe('PrivateChannelsView management — navigate into a freshly created cha
     expect(gotoSpy).not.toHaveBeenCalled();
   });
 
-  it('NIP-29 group creation: navigates into the new channel instead of selecting a concord channel', async () => {
+  it('NIP-29 group creation: selects the new channel in the pane, no goto, no concord select', async () => {
     concordFixture.value = base({ community: undefined, enabled: false });
     const communikeyEvent = {
       kind: 10222,
@@ -150,7 +151,11 @@ describe('PrivateChannelsView management — navigate into a freshly created cha
     });
     await fireEvent.click(await screen.findByTestId('concord-new-channel'));
     await fireEvent.click(await screen.findByTestId('stub-fire-created'));
-    expect(gotoSpy).toHaveBeenCalledWith(groupHref({ id: 'new-id', relay: RELAY }));
+    // The chat opens IN the community pane via the group selection store —
+    // leaving for /groups would load the host's entire directory
+    // (laoc, 2026-08-19).
+    expect(getSelectedGroupChannel(OWNER)).toBe(channelKey({ id: 'new-id', relay: RELAY }));
+    expect(gotoSpy).not.toHaveBeenCalled();
     expect(selectSpy).not.toHaveBeenCalled();
   });
 });

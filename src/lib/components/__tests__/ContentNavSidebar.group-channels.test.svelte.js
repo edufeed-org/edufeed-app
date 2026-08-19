@@ -15,7 +15,6 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
-import { groupHref } from '$lib/groups/groups.js';
 
 const OWNER = 'a'.repeat(64);
 const STRANGER = 'b'.repeat(64);
@@ -253,11 +252,18 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     expect(onContentTypeSelect).toHaveBeenCalledWith('channels', 'random');
   });
 
-  it('a NIP-29 row links out to the group route', () => {
+  // Community channels select IN PLACE (group-channel-selection store) and
+  // render inside the community pane — the standalone /groups route with its
+  // full host directory is for browsing a relay, not for a community's own
+  // channels (laoc, 2026-08-19).
+  it('a NIP-29 row selects in place and switches to the channels view', async () => {
     const row = worldReadableGroupRow();
-    renderNav({ channelRows: [row], isMember: true });
-    const link = screen.getByTestId(`nav-channel-row-${sanitize(row.key)}`);
-    expect(link.getAttribute('href')).toBe(groupHref(row.pointer));
+    const onContentTypeSelect = vi.fn();
+    renderNav({ channelRows: [row], isMember: true, onContentTypeSelect });
+    const el = screen.getByTestId(`nav-channel-row-${sanitize(row.key)}`);
+    expect(el.getAttribute('href')).toBeNull();
+    await fireEvent.click(el);
+    expect(onContentTypeSelect).toHaveBeenCalledWith('channels', undefined);
   });
 
   it('the channels tab id never renders as a row in the Inhalte zone', () => {

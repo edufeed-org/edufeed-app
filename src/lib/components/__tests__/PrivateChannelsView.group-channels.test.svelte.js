@@ -9,7 +9,7 @@
  * a reader sees is the one the access rules produced.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 
 const OWNER = 'a'.repeat(64);
 const RELAY = 'wss://groups.example';
@@ -29,6 +29,9 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 }));
 vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: { concord: { enabled: true } } }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+// The real GroupChat opens relay subscriptions — the pane tests only care
+// WHICH pointer it was handed.
+vi.mock('$lib/components/groups/GroupChat.svelte', () => import('./fixtures/GroupChatStub.svelte'));
 
 const holders = vi.hoisted(() => ({
   concord: /** @type {any} */ ({
@@ -110,7 +113,11 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     expect(rows[0].textContent).toContain('allgemein');
   });
 
-  it('links a group channel to the group chat that already renders it', async () => {
+  // Community channels open IN the community pane (selection store), not on
+  // the standalone /groups route — that route's sidebar is the host's
+  // ENTIRE directory, a wall of foreign groups on a big public relay
+  // (laoc, 2026-08-19).
+  it('clicking a group row renders its chat in the pane instead of leaving for /groups', async () => {
     holders.concord = { ...holders.concord, enabled: false };
     holders.events = { [RELAY_N]: [meta('allgemein', [['private']])] };
 
@@ -119,8 +126,11 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     });
 
     const [row] = await screen.findAllByTestId('group-channel-row');
-    expect(row.getAttribute('href')).toContain('/groups/');
-    expect(decodeURIComponent(row.getAttribute('href') ?? '')).toContain('allgemein');
+    expect(row.getAttribute('href')).toBeNull();
+    await fireEvent.click(row);
+
+    const chat = await screen.findByTestId('group-chat-stub');
+    expect(chat.textContent).toContain('allgemein');
   });
 
   // The globe is the whole point of the world-readable level: it says the

@@ -59,7 +59,11 @@ vi.mock('applesauce-concord', () => {
       // Auto-read of pending direct invites (invite UX round 2) subscribes
       // this at setup for nip44 signers; a never-emitting stub keeps it out
       // of these tests' way.
-      this.directInviteWatcher$ = { subscribe: () => ({ unsubscribe() {} }) };
+      this.directInviteWatcher$ = {
+        subscribe: () => ({ unsubscribe() {} }),
+        // pending-invites.svelte.js pipes this before subscribing.
+        pipe: () => ({ subscribe: () => ({ unsubscribe() {} }) })
+      };
     }
     get communityList$() {
       return of(casts.communityList);

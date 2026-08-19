@@ -32,7 +32,11 @@
     selectConcordChannel,
     requestChannelCreate
   } from '$lib/concord/active-channel.svelte.js';
-  import { groupHref } from '$lib/groups/groups.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
+  import {
+    selectGroupChannel,
+    getSelectedGroupChannel
+  } from '$lib/groups/group-channel-selection.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
@@ -163,6 +167,19 @@
   function selectConcordRow(channelId) {
     if (concordCommunityId) selectConcordChannel(concordCommunityId, channelId);
     handleContentTypeClick('channels', channelId);
+  }
+
+  /**
+   * A NIP-29 row click — same shape as selectConcordRow, against the group
+   * selection store (keyed by the communikey pubkey). The chat renders in
+   * the community pane; the standalone /groups route is for directory
+   * browsing only (see group-channel-selection.svelte.js).
+   * @param {{id: string, relay: string}} pointer
+   */
+  function selectGroupRow(pointer) {
+    const key = channelKey(pointer);
+    if (key && communityEvent?.pubkey) selectGroupChannel(communityEvent.pubkey, key);
+    handleContentTypeClick('channels');
   }
 
   /**
@@ -355,13 +372,15 @@
             </ChannelRailRow>
           {:else}
             <ChannelRailRow
-              href={groupHref(row.pointer)}
               testid={rowTestId(row.key)}
               symbol={row.symbol}
               name={row.name}
               locked={row.locked}
+              active={selectedContentType === 'channels' &&
+                getSelectedGroupChannel(communityEvent?.pubkey) === channelKey(row.pointer)}
               dimmed={row.pending}
               worldReadable={row.worldReadable}
+              onclick={() => selectGroupRow(row.pointer)}
             />
           {/if}
         {/each}

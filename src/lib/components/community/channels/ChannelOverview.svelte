@@ -28,20 +28,27 @@
    *   titleIcon?: string,
    *   title?: string,
    *   lead?: string,
-   *   empty?: string
+   *   empty?: string,
+   *   onSelect?: ((pointer: {id: string, relay: string}) => void) | null
    * }}
    */
   // The relay directory renders the same grid under a different heading — a
   // host is not a community, and saying "in this community" over a relay's
   // channel list would name the wrong container. Defaults keep every existing
   // call site unchanged.
+  //
+  // onSelect: the community pane picks channels in place (selection store)
+  // instead of leaving for /groups — cards become buttons there. Without it
+  // (the relay directory), cards stay links to the standalone route, which
+  // is exactly what browsing a host is for.
   let {
     rows = [],
     hostBadges = [],
     titleIcon = '',
     title = m.groups_overview_title(),
     lead = m.groups_overview_lead(),
-    empty = m.groups_overview_empty()
+    empty = m.groups_overview_empty(),
+    onSelect = null
   } = $props();
 
   const channels = $derived(/** @type {any[]} */ (rows).filter((row) => row.source === 'group'));
@@ -89,10 +96,13 @@
     {:else}
       <div class="grid gap-3 sm:grid-cols-2">
         {#each channels as row (row.key)}
-          <a
-            href={groupHref(row.pointer)}
+          <svelte:element
+            this={onSelect ? 'button' : 'a'}
+            role={onSelect ? 'button' : undefined}
+            href={onSelect ? undefined : groupHref(row.pointer)}
+            onclick={onSelect ? () => onSelect(row.pointer) : undefined}
             data-testid="channel-card"
-            class="flex flex-col gap-2 rounded-2xl border border-base-300 bg-base-100 p-4 transition-colors hover:border-primary/50"
+            class="flex flex-col gap-2 rounded-2xl border border-base-300 bg-base-100 p-4 text-left transition-colors hover:border-primary/50"
           >
             <span class="flex items-center gap-2">
               {#if row.picture}
@@ -130,7 +140,7 @@
             <span class="badge badge-outline badge-xs" data-testid="channel-card-access"
               >{accessLabel(row.level)}</span
             >
-          </a>
+          </svelte:element>
         {/each}
       </div>
     {/if}

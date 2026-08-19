@@ -7,8 +7,8 @@
  * reader sees for a given relay state, and a hand-written row could describe a
  * state the builder never produces.
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import ChannelOverview from '$lib/components/community/channels/ChannelOverview.svelte';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
@@ -50,6 +50,25 @@ describe('ChannelOverview', () => {
       "/groups/groups.example'ankuendigungen",
       "/groups/groups.example'leitung"
     ]);
+  });
+
+  // With onSelect (the community pane), cards pick the channel in place —
+  // buttons, not links: leaving for /groups would drop the community frame
+  // and load the host's whole directory (laoc, 2026-08-19).
+  it('with onSelect, cards are buttons that hand back the pointer', async () => {
+    const open = { id: 'ankuendigungen', relay: RELAY };
+    const rows = buildChannelRows({
+      groupPointers: [open],
+      metadataByKey: {
+        [key(open)]: meta('ankuendigungen', [['name', 'Ankündigungen'], ['restricted']])
+      }
+    });
+    const onSelect = vi.fn();
+    render(ChannelOverview, { props: { rows, onSelect } });
+    const [card] = screen.getAllByTestId('channel-card');
+    expect(card.getAttribute('href')).toBeNull();
+    await fireEvent.click(card);
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'ankuendigungen' }));
   });
 
   // The rail's glyph is '#' for BOTH world-readable and members-only, so a
