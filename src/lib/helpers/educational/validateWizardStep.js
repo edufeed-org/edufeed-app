@@ -58,13 +58,11 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
     case 2:
       if (ctx.variantId === 'interactive') {
         // Interactive resources carry their content as a single licensed
-        // webxdc package (InteractivePackageInput), not a URL. `m` may be
-        // absent in tests that only exercise this branch; fall back to a
-        // plain truthy error so the check still gates publish.
+        // webxdc package (InteractivePackageInput), not a URL.
         const pkg = (formData.encodings ?? []).find(
           (/** @type {any} */ f) => f?.type === 'application/x-webxdc'
         );
-        if (!pkg || !pkg.licenseEvent) errors.attachments = m?.noUrlNeedsFile?.() ?? true;
+        if (!pkg || !pkg.licenseEvent) errors.attachments = m.noUrlNeedsFile();
         break;
       }
       if (!ctx.hasNoUrl) {

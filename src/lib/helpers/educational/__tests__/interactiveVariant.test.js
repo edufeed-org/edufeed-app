@@ -30,16 +30,38 @@ describe('appendInteractiveTags', () => {
 });
 
 describe('validateWizardStep interactive step 2', () => {
+  // Mirrors the fixture pattern in src/lib/__tests__/validateWizardStep.test.js:
+  // predictable string-id messages + a full ctx (isEkw/hasSubjectVocab/
+  // subjectsCount included even though step 2 doesn't read them, for parity
+  // with how every other suite builds its ctx).
+  const messages = {
+    bildungsbereich: () => 'ERR_BILDUNGSBEREICH',
+    urlRequired: () => 'ERR_URL_REQUIRED',
+    identifier: () => 'ERR_IDENTIFIER_FORMAT',
+    title: () => 'ERR_TITLE',
+    description: () => 'ERR_DESCRIPTION',
+    resourceType: () => 'ERR_RESOURCE_TYPE',
+    subject: () => 'ERR_SUBJECT',
+    noUrlNeedsFile: () => 'needs file',
+    license: () => 'ERR_LICENSE',
+    imageLicenseMissing: () => 'ERR_IMAGE_LICENSE_MISSING',
+    encodingLicenseMissing: () => 'ERR_ENCODING_LICENSE_MISSING'
+  };
+
   const ctx = {
+    isEkw: false,
     hasNoUrl: false,
     isEditMode: false,
+    hasSubjectVocab: true,
+    subjectsCount: 0,
     isValidUrl: () => true,
+    messages,
     variantId: 'interactive'
   };
 
   it('requires a licensed package', () => {
     const errors = validateWizardStep(2, { encodings: [] }, ctx);
-    expect(errors.attachments).toBeTruthy();
+    expect(errors.attachments).toBe('needs file');
   });
 
   it('passes with a licensed x-webxdc encoding and set identifier', () => {
