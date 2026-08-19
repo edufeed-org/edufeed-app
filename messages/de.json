@@ -3382,5 +3382,6 @@
   "community_join_request_approved": "Aufgenommen.",
   "community_join_request_approve_failed": "Aufnahme fehlgeschlagen: {reason}",
   "community_join_request": "Beitritt anfragen",
-  "groups_composer_join_note": "Tritt bei, um hier zu schreiben."
+  "groups_composer_join_note": "Tritt bei, um hier zu schreiben.",
+  "community_join_requests_empty": "Keine offenen Anfragen."
 }

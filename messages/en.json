@@ -3382,5 +3382,6 @@
   "community_join_request_approved": "Approved.",
   "community_join_request_approve_failed": "Approval failed: {reason}",
   "community_join_request": "Request to join",
-  "groups_composer_join_note": "Join to write here."
+  "groups_composer_join_note": "Join to write here.",
+  "community_join_requests_empty": "No open requests."
 }

@@ -13,6 +13,9 @@
   import { roleLabel } from '$lib/groups/role-labels.js';
   import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
+  import JoinRequestsPanel from '$lib/components/community/settings/JoinRequestsPanel.svelte';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import * as m from '$lib/paraglide/messages';
 
   let { communikeyEvent } = $props();
@@ -46,6 +49,20 @@
   let communityType = $derived(deriveCommunityType(communikeyEvent));
   let isModerated = $derived(communityType === 'moderated');
   const getRootRoster = useRootRoster(() => communikeyEvent);
+
+  // Beitrittsanfragen ride along for whoever can act on them — the
+  // key-holding owner or a root-group admin (laoc, 2026-08-19: "I would
+  // expect it also for relevant actors under Mitglieder").
+  const getActiveUserForQueue = useActiveUser();
+  const canModerateJoins = $derived.by(() => {
+    if (!isModerated) return false;
+    const me = getActiveUserForQueue()?.pubkey;
+    if (!me) return false;
+    return (
+      isCommunityOwner(communikeyEvent?.pubkey) ||
+      getRootRoster().admins.some((admin) => admin.pubkey === me)
+    );
+  });
 
   // Moderated: the ROOT-group roster IS the community membership — it must
   // be listed even when no content section is gated (laoc, 2026-08-19: an
@@ -97,6 +114,16 @@
 
 <div class="container mx-auto max-w-4xl px-4 py-8">
   <h2 class="mb-6 text-xl font-bold">{m.community_members_title()}</h2>
+
+  {#if canModerateJoins && communikeyEvent?.pubkey}
+    <div class="mb-6">
+      <JoinRequestsPanel
+        {communikeyEvent}
+        communityId={communikeyEvent.pubkey}
+        roster={getRootRoster()}
+      />
+    </div>
+  {/if}
 
   {#if profileAccess.isLoading}
     <div class="flex flex-col items-center justify-center py-12">

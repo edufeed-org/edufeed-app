@@ -141,6 +141,7 @@ vi.mock('$lib/paraglide/messages', () => ({
     `Code konnte nicht erstellt werden: ${p.reason}`,
   community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar',
   community_join_requests_title: () => 'Beitrittsanfragen',
+  community_join_requests_empty: () => 'Keine offenen Anfragen.',
   community_join_requests_lead: () => 'lead',
   community_join_requests_approve: () => 'Aufnehmen',
   community_join_requests_ignore: () => 'Ignorieren',

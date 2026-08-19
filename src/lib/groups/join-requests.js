@@ -6,7 +6,7 @@
 // unlike the removed Beitrittsformular layer.
 
 /**
- * @typedef {{id: string, pubkey: string, reason: string, createdAt: number}} JoinRequestRow
+ * @typedef {{id: string, pubkey: string, reason: string, createdAt: number, groupId: string}} JoinRequestRow
  */
 
 /**
@@ -38,11 +38,17 @@ export function pendingJoinRequests({ events, members, dismissed }) {
     if (members.has(pubkey)) continue;
     const current = newestByPubkey.get(pubkey);
     if (current && current.createdAt >= createdAt) continue;
+    // Which group the applicant knocked on (root or a channel) — approval
+    // honors a channel-specific request on top of the community admission.
+    const groupId = /** @type {any} */ (event).tags?.find(
+      (/** @type {string[]} */ t) => Array.isArray(t) && t[0] === 'h'
+    )?.[1];
     newestByPubkey.set(pubkey, {
       id,
       pubkey,
       reason: typeof event.content === 'string' ? event.content : '',
-      createdAt
+      createdAt,
+      groupId: typeof groupId === 'string' ? groupId : ''
     });
   }
   return [...newestByPubkey.values()]
