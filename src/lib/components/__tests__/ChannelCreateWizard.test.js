@@ -96,18 +96,6 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 
-// Controllable roster fixture for the (tier==='members') fan-out union —
-// real stufe2Pointers/areaMemberRows run on top of this, only the network
-// subscription itself is stubbed.
-const rosterState = vi.hoisted(() => ({ membersByKey: /** @type {any} */ ({}) }));
-vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
-  useChannelRosters: () => () => ({
-    membersByKey: rosterState.membersByKey,
-    adminsByKey: {},
-    refresh: () => {}
-  })
-}));
-
 vi.mock(
   '$lib/components/shared/ContactSearchInput.svelte',
   () => import('./fixtures/ContactSearchInputStub.svelte')
@@ -128,7 +116,6 @@ vi.mock('$lib/helpers/contentTypes.js', () => ({
   getVerifiedMembers: (/** @type {any[]} */ ...args) => getVerifiedMembersMock(...args)
 }));
 
-import { channelKey } from '$lib/groups/community-pointer.js';
 import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
 
 /** Fill the name, walk to step 3, acknowledge the disclosure. */
@@ -372,11 +359,6 @@ describe('ChannelCreateWizard visibility + picker', () => {
 describe('ChannelCreateWizard — NIP-29 groups', () => {
   const GROUP_RELAY = 'wss://groups.example/';
   const GROUP_RELAY_B = 'wss://groups-b.example/';
-  // channelKey() returns `string | null`; the `?? ''` keeps this a plain
-  // string for use as a computed object property key below — for these
-  // fixtures it is never actually null.
-  const CHAN_A_KEY = channelKey({ id: 'chan-a', relay: GROUP_RELAY }) ?? '';
-  const CHAN_B_KEY = channelKey({ id: 'chan-b', relay: GROUP_RELAY }) ?? '';
 
   /** A 10222 already carrying group pointers → NIP-29 mode. */
   const nip29Community = (extraTags = /** @type {string[][]} */ ([])) => ({
@@ -420,7 +402,6 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    rosterState.membersByKey = {};
   });
 
   it('NIP-29 mode: shows both access radios, weltoffen checkbox only while members is selected', async () => {
@@ -453,7 +434,6 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     });
     const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
     await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    // Default 'invited' tier — no Stufe-2 rosters exist to wait for.
     await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
     await fireEvent.click(screen.getByTestId('concord-wizard-create'));
 
@@ -475,7 +455,6 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     // elsewhere is meaningless to this relay's Subgroups handling.
     const onCreated = vi.fn();
     const communikeyEvent = nip29Community([['membership', 'root-1', GROUP_RELAY_B]]);
-    rosterState.membersByKey = { [CHAN_A_KEY]: new Set(), [CHAN_B_KEY]: new Set() };
     render(ChannelCreateWizard, {
       props: { communikeyEvent, onClose: () => {}, onCreated }
     });
@@ -503,10 +482,6 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
   it('creates a NIP-29 group on the shared relay, attaches it, and fans out put-user', async () => {
     const onCreated = vi.fn();
     const communikeyEvent = nip29Community();
-    // BOTH Stufe-2 rosters answered (empty) — the gate now requires EVERY
-    // channelKey, not just one — clears the loading gate without adding
-    // anyone to the union, keeping this test's assertions narrow.
-    rosterState.membersByKey = { [CHAN_A_KEY]: new Set(), [CHAN_B_KEY]: new Set() };
     render(ChannelCreateWizard, {
       props: { communikeyEvent, onClose: () => {}, onCreated }
     });
@@ -567,57 +542,14 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     expect(createGroupOnRelay).not.toHaveBeenCalled();
   });
 
-  // Reviewer finding 1: useChannelRosters debounces + round-trips relays —
-  // a fast user must not be able to hit Create before any existing Stufe-2
-  // roster has answered, which would silently ship a members-tier channel
-  // missing every implicit member (with a SUCCESS toast, no failure count
-  // to warn them).
-  it('disables Create while an existing members-tier roster has not loaded yet', async () => {
-    const communikeyEvent = nip29Community(); // two Stufe-2 pointers, no roster answered yet
-    render(ChannelCreateWizard, {
-      props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
-    });
-
-    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
-    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
-
-    const create = /** @type {HTMLButtonElement} */ (screen.getByTestId('concord-wizard-create'));
-    expect(create.disabled).toBe(true);
-    expect(screen.getByTestId('wizard-rosters-loading')).toBeTruthy();
-  });
-
-  // Finding 4: the gate used to unblock on SOME loaded roster — a community
-  // with two Stufe-2 channels where only one has answered would let Create
-  // through and silently drop the other channel's implicit members. It must
-  // require EVERY Stufe-2 channelKey to be answered.
-  it('keeps Create disabled while only SOME of several members-tier rosters have loaded', async () => {
-    const communikeyEvent = nip29Community(); // two Stufe-2 pointers: chan-a, chan-b
-    rosterState.membersByKey = { [CHAN_A_KEY]: new Set() }; // chan-b still unanswered
-    render(ChannelCreateWizard, {
-      props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
-    });
-
-    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
-    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
-
-    const create = /** @type {HTMLButtonElement} */ (screen.getByTestId('concord-wizard-create'));
-    expect(create.disabled).toBe(true);
-    expect(screen.getByTestId('wizard-rosters-loading')).toBeTruthy();
-  });
-
-  it('fans out put-user to the existing members-tier roster union, deduping the explicit invitee and excluding self', async () => {
+  // A4 ruling (final-review fix, 2026-08-19): a fresh members-tier channel no
+  // longer seeds the community's existing member union at creation time —
+  // members self-join via their own 9021. put-user goes out ONLY for
+  // explicitly selected invitees (plus the admin pre-join, covered
+  // separately below); no roster subscription is even consulted, so there is
+  // nothing to wait for either.
+  it('fans out put-user only to explicitly selected invitees for a members-tier create — no roster-union seeding', async () => {
     const communikeyEvent = nip29Community();
-    // MEMBER_B is already in the Stufe-2 roster, and so — implausibly, but
-    // exercising the exclusion — is the acting user themselves. Both
-    // channelKeys must be answered for the "every" gate to clear.
-    rosterState.membersByKey = {
-      [CHAN_A_KEY]: new Set([MEMBER_B, mockManager.active.pubkey]),
-      [CHAN_B_KEY]: new Set()
-    };
     render(ChannelCreateWizard, {
       props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
     });
@@ -626,53 +558,18 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
     await fireEvent.click(screen.getByTestId('wizard-access-members'));
     await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
-    // Also explicitly select MEMBER_B — already in the roster union.
+    // Create is never gated on any roster answer for a members-tier channel.
+    expect(
+      /** @type {HTMLButtonElement} */ (screen.getByTestId('concord-wizard-create')).disabled
+    ).toBe(false);
     await fireEvent.click(screen.getByRole('button', { name: new RegExp(MEMBER_B.slice(0, 12)) }));
 
     await fireEvent.click(screen.getByTestId('concord-wizard-create'));
 
     await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
     const putUserTargets = buildPutUserTemplate.mock.calls.map((args) => args[1]);
-    // MEMBER_B appears exactly once despite being both explicitly selected
-    // AND present in the roster union (dedup).
-    expect(putUserTargets.filter((pubkey) => pubkey === MEMBER_B)).toHaveLength(1);
-    // Self never gets a put-user, even though present in the roster union.
-    expect(putUserTargets).not.toContain(mockManager.active.pubkey);
-  });
-
-  // Finding 1 (CRITICAL): attachGroupChannel's optimistic 10222 echo updates
-  // communikeyEvent synchronously — a naive read of the member union AFTER
-  // the attach would see the NEW pointer already listed, invalidate the
-  // roster hook's key, and read an empty union. Simulate exactly that
-  // invalidation from inside the mocked attach and prove the fan-out still
-  // carries the member captured before it happened.
-  it('keeps the pre-attach member union even when attach invalidates the roster mid-flight', async () => {
-    const communikeyEvent = nip29Community();
-    rosterState.membersByKey = {
-      [CHAN_A_KEY]: new Set([MEMBER_B]),
-      [CHAN_B_KEY]: new Set()
-    };
-    attachGroupChannel.mockImplementationOnce(async () => {
-      // Simulate the optimistic-echo invalidation: the roster hook's
-      // pointersKey changed underneath it, wiping every loaded roster.
-      rosterState.membersByKey = {};
-      return {};
-    });
-    render(ChannelCreateWizard, {
-      props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
-    });
-
-    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
-    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
-
-    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
-
-    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(buildPutUserTemplate).toHaveBeenCalledWith('new-group-id', MEMBER_B)
-    );
+    // Exactly the explicitly selected invitee — no community-member union.
+    expect(putUserTargets).toEqual([MEMBER_B]);
   });
 
   // Finding 3 (IMPORTANT): a createGroupOnRelay success followed by an
@@ -682,7 +579,6 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
   // the id, the wizard stays open (no onCreated), and no put-user goes out.
   it('warns with the group id and keeps the wizard open when attach fails after the group is created', async () => {
     const communikeyEvent = nip29Community();
-    rosterState.membersByKey = { [CHAN_A_KEY]: new Set(), [CHAN_B_KEY]: new Set() };
     attachGroupChannel.mockRejectedValueOnce(new Error('publish failed'));
     const onCreated = vi.fn();
     render(ChannelCreateWizard, {

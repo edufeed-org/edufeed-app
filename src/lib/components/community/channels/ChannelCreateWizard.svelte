@@ -16,10 +16,8 @@
   import { showToast } from '$lib/helpers/toast';
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { parseGroupPointers, sharedRelayOf, channelKey } from '$lib/groups/community-pointer.js';
+  import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
   import { parseMembershipPointer } from '$lib/groups/community-membership.js';
-  import { stufe2Pointers, areaMemberRows } from '$lib/groups/area-members.js';
-  import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { accessChoiceToNip29 } from '$lib/groups/access-choice.js';
   import {
     createGroupOnRelay,
@@ -125,39 +123,6 @@
   const inviteRows = $derived(unique([...invitable, ...selected]));
   const getProfiles = useProfileMap(() => inviteRows);
 
-  // Rosters of the community's existing Stufe-2 ("members"-tier) group
-  // channels — the fan-out union a fresh members-tier channel must also
-  // reach (Task 2/3). Called at component INIT, per the project's hooks rule.
-  const getRosters = useChannelRosters(() => stufe2Pointers(communikeyEvent));
-
-  // useChannelRosters debounces (300ms) + round-trips relays before any
-  // roster answers; areaMemberRows excludes a channel's members until its
-  // roster is heard from at all ("we have not heard" vs "not a member" are
-  // different sentences). A user who hits Create before EVERY existing
-  // Stufe-2 roster has loaded would otherwise ship a members-tier channel
-  // silently missing implicit members from whichever channel hadn't answered
-  // yet — with a SUCCESS toast, since there's no failure to count. Gate
-  // Create on EVERY Stufe-2 channelKey being present in membersByKey (not
-  // just one — a partial answer is still a partial union); a community with
-  // no existing Stufe-2 channels has nothing to wait for.
-  const stufe2ChannelKeys = $derived(
-    stufe2Pointers(communikeyEvent)
-      .map((pointer) => channelKey(pointer))
-      .filter((key) => key !== null)
-  );
-  // $derived.by (a real function boundary), not a bare $derived(expr): TS's
-  // control-flow narrowing otherwise treats `tier` as permanently 'invited'
-  // at this point in the script (it only ever sees the reassignments that
-  // live inside template event handlers, a different closure) and flags
-  // `tier === 'members'` below as a comparison with no overlap.
-  const waitingForMemberRosters = $derived.by(
-    () =>
-      isGroupMode &&
-      tier === 'members' &&
-      stufe2ChannelKeys.length > 0 &&
-      !stufe2ChannelKeys.every((key) => getRosters().membersByKey[key] !== undefined)
-  );
-
   // Resolve the signer that can edit this community's 10222 (same pattern as
   // EditCommunityModal.svelte:404-412): current-keypair → own signer;
   // new-keypair → the community account's signer registered in the manager.
@@ -235,22 +200,6 @@
       showToast(m.wizard_no_shared_relay(), 'error');
       return;
     }
-    // Snapshot the Stufe-2 member union BEFORE any network call. attachGroupChannel
-    // below writes the community's 10222 optimistically to the EventStore,
-    // which flows straight back into the `communikeyEvent` prop; that changes
-    // stufe2Pointers(communikeyEvent) synchronously (the new pointer is now
-    // in the list) and therefore the roster hook's channelKeys — wiping
-    // membersByKey back to `{}` right as this function needs it. Reading it
-    // once, up front, keeps the fan-out honest even though the read happens
-    // to be against the OLD pointer set (the new channel isn't in it yet
-    // anyway, so nothing is lost by reading early).
-    const memberUnion =
-      tier === 'members'
-        ? areaMemberRows({
-            pointers: stufe2Pointers(communikeyEvent),
-            membersByKey: getRosters().membersByKey
-          }).map((row) => row.pubkey)
-        : [];
     try {
       // Narrowed to a local so TS carries the non-null check through the
       // whole flow — `manager.active` is a getter, so re-reading it inline
@@ -327,13 +276,11 @@
           );
         }
       }
-      // Fan out put-user to every explicitly selected invitee, plus — for a
-      // members-tier channel only — the area's current member union
-      // (snapshotted above, before the attach could invalidate it). Self
-      // never needs a grant.
-      const targets = unique([...selected, ...memberUnion]).filter(
-        (pubkey) => pubkey !== user.pubkey
-      );
+      // Fan out put-user to every explicitly selected invitee. Members-tier
+      // channels no longer seed the community's existing member union at
+      // creation time — members self-join those channels themselves via
+      // their own 9021 (A4, 2026-08-19). Self never needs a grant.
+      const targets = unique(selected).filter((pubkey) => pubkey !== user.pubkey);
       let failed = 0;
       for (const pubkey of targets) {
         try {
@@ -503,18 +450,10 @@
         >
       {:else}
         <div class="flex flex-col items-end gap-1">
-          {#if waitingForMemberRosters}
-            <p class="text-xs text-base-content/60" data-testid="wizard-rosters-loading">
-              {m.wizard_members_loading()}
-            </p>
-          {/if}
           <button
             class="btn btn-neutral"
             data-testid="concord-wizard-create"
-            disabled={(!isGroupMode && !acknowledged) ||
-              (isGroupMode && !communitySigner) ||
-              waitingForMemberRosters ||
-              busy}
+            disabled={(!isGroupMode && !acknowledged) || (isGroupMode && !communitySigner) || busy}
             onclick={create}
           >
             {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}

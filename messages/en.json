@@ -3025,7 +3025,6 @@
   "wizard_access_worldreadable": "Readable from outside (weltoffen)",
   "wizard_access_worldreadable_hint": "Anyone on the network can read along — writing stays members-only.",
   "wizard_no_shared_relay": "This community's channels live on different relays — cannot create here.",
-  "wizard_members_loading": "Loading members…",
   "wizard_attach_failed": "Channel created, but linking to the community failed — attach it via 'Attach existing' with id {id}.",
   "wizard_invite_lead": "Add people who should be in this channel from the start — members can be managed any time later.",
   "concord_locked_title": "No key for this channel",
