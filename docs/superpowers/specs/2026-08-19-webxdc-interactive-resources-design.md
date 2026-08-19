@@ -78,7 +78,8 @@ Published through the normal resource wizard/publish path:
 
 - Resource `id` (AMB) = the Blossom package URL.
 - Default `learningResourceType` = hcrt *application* concept
-  (educator-overridable).
+  (educator-overridable). (Deferred to a follow-up — the wizard currently
+  requires a manual pick.)
 - NIP-32 labels: `["L","metadata-form"]` + `["l","interactive","metadata-form"]`
   so edit flows reopen the right variant (`resolveVariantFromEvent`).
 - Additional tags: `["m","application/x-webxdc"]` (the launchability
@@ -175,8 +176,11 @@ restricted, deploy the equivalent shim on `*.sandbox.edufeed.org`
 5. Re-zip → `.xdc` → normal upload path.
 
 Guards: size warning above ~50 MB (archive is fetched + unzipped in
-memory per launch); mandatory **pre-publish preview launch** in the
-wizard so the educator verifies the package runs before signing.
+memory per launch); optional **pre-publish preview launch** in the
+wizard so the educator can verify the package runs before signing.
+Relaxed from mandatory during implementation (controller ruling): the
+license disclosure is the publish gate; forcing a launch was judged
+educator-hostile.
 
 ## Section 4 — UI surfaces (Phase 1)
 
@@ -258,6 +262,12 @@ event building/ordering against a mocked pool.
 - **iframe.diy terms & uptime** — verify before Phase 1 ships;
   fallback: self-hosted shim on `*.sandbox.edufeed.org` (config flip).
 - **h5p-standalone coverage** — some exotic H5P libraries may misbehave
-  offline; the mandatory preview launch is the safety net.
+  offline; the (now optional, not mandatory) preview launch is the
+  best-effort safety net.
 - **Archive size in memory** — accepted for Phase 1 (warning at 50 MB);
   streaming/caching optimizations only if real usage demands them.
+- **Popup exfiltration (accepted):** `allow-popups-to-escape-sandbox` +
+  user gesture lets a malicious package exfiltrate its own state via
+  window.open URL params despite the no-network CSP. Same trade-off
+  Armada makes; the sandbox protects the host app, not the package's own
+  data.
