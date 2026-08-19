@@ -6,8 +6,6 @@
  */
 import { buildManifest } from './xdc-archive.js';
 
-const ASSETS = ['main.bundle.js', 'frame.bundle.js', 'styles/h5p.css'];
-
 /** @param {Map<string, Uint8Array>} files */
 export function isH5pArchive(files) {
   return files.has('h5p.json');
@@ -31,7 +29,12 @@ export async function wrapH5p(files, fallbackName) {
   out.set('index.html', new TextEncoder().encode(buildIndexHtml(name)));
   out.set('manifest.toml', new TextEncoder().encode(buildManifest(name)));
 
-  for (const asset of ASSETS) {
+  const manifestRes = await fetch('/h5p-standalone/manifest.json');
+  if (!manifestRes.ok) throw new Error('Missing player asset: manifest.json');
+  /** @type {string[]} */
+  const assets = await manifestRes.json();
+
+  for (const asset of assets) {
     const res = await fetch(`/h5p-standalone/${asset}`);
     if (!res.ok) throw new Error(`Missing player asset: ${asset}`);
     out.set(`h5p-standalone/${asset}`, new Uint8Array(await res.arrayBuffer()));

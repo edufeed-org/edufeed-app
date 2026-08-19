@@ -13,10 +13,15 @@ function fakeH5p() {
   ]);
 }
 
+const FAKE_MANIFEST = ['main.bundle.js', 'frame.bundle.js', 'styles/h5p.css', 'fonts/h5p.woff2'];
+
 function stubAssets() {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url) => new Response(`/* asset ${url} */`))
+    vi.fn(async (url) => {
+      if (String(url).endsWith('manifest.json')) return Response.json(FAKE_MANIFEST);
+      return new Response(`/* asset ${url} */`);
+    })
   );
 }
 
@@ -35,6 +40,7 @@ describe('h5p-wrap', () => {
     expect(files.get('h5p-standalone/main.bundle.js')).toBeTruthy();
     expect(files.get('h5p-standalone/frame.bundle.js')).toBeTruthy();
     expect(files.get('h5p-standalone/styles/h5p.css')).toBeTruthy();
+    expect(files.get('h5p-standalone/fonts/h5p.woff2')).toBeTruthy();
     expect(files.get('h5p/h5p.json')).toBeTruthy();
     expect(files.get('h5p/content/content.json')).toBeTruthy();
   });
